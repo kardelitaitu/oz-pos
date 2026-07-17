@@ -106,10 +106,11 @@ describe('StockTransfersScreen', () => {
     expect(screen.getByRole('button', { name: /new transfer/i })).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton while fetching transfers', async () => {
     mockListTransfers.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<StockTransfersScreen />, stockTransfersFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(document.querySelector('.stock-transfers-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no transfers exist', async () => {

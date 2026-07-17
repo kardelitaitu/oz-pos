@@ -28,6 +28,9 @@ pub mod queue;
 pub mod replication;
 pub mod transport;
 
+#[cfg(test)]
+pub(crate) mod test_helpers;
+
 use oz_core::db::Store;
 use oz_core::sync_client::SyncConfig;
 
@@ -69,6 +72,15 @@ pub enum SyncError {
     AnchorExpired {
         /// ISO-8601 timestamp of the oldest retained row on the server.
         oldest_available: Option<String>,
+    },
+
+    /// The sync server has been permanently migrated to a new URL
+    /// (ADR #11). The client should update its local `sync_server_url`
+    /// setting and reconnect on the next cycle.
+    #[error("server migrated to {new_url}")]
+    ServerMigrated {
+        /// The new server URL to connect to.
+        new_url: String,
     },
 
     /// Database error from the underlying oz-core store.
@@ -219,6 +231,27 @@ mod tests {
     }
 
     #[test]
+    fn sync_error_server_migrated_display() {
+        let err = SyncError::ServerMigrated {
+            new_url: "https://new.example.com".into(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "server migrated to https://new.example.com"
+        );
+    }
+
+    #[test]
+    fn sync_error_server_migrated_debug() {
+        let err = SyncError::ServerMigrated {
+            new_url: "https://new.example.com".into(),
+        };
+        let debug = format!("{err:?}");
+        assert!(debug.contains("ServerMigrated"));
+        assert!(debug.contains("https://new.example.com"));
+    }
+
+    #[test]
     fn sync_error_debug() {
         let err = SyncError::Transport("e".into());
         assert!(!format!("{err:?}").is_empty());
@@ -272,6 +305,76 @@ mod tests {
             result.unwrap_err().to_string(),
             "configuration error: bad config"
         );
+    }
+
+    // ── ADR #11: run_sync_cycle snapshot redirect propagation ─
+
+    #[tokio::test]
+    async fn run_sync_cycle_propagates_snapshot_server_migrated() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+
+        let new_url = "https://snapshot-propagated.example.com";
+        // Server returns 410 on pull → triggers AnchorExpired → snapshot
+        // path. Snapshot returns 421 → ServerMigrated should propagate.
+        let server_url = crate::test_helpers::spawn_anchor_then_redirect_server(new_url).await;
+
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+        // Enqueue one item so push succeeds (server accepts everything),
+        // then pull gets 410 → snapshot gets 421.
+        store
+            .enqueue_offline("test_action", r#"{"val":1}"#)
+            .unwrap();
+
+        let config = SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        };
+        let engine = SyncEngine::new(config);
+
+        let result = engine.run_sync_cycle(&store).await;
+
+        match result {
+            Err(SyncError::ServerMigrated { new_url: url }) => {
+                assert_eq!(url, new_url, "ServerMigrated should carry the new_url");
+            }
+            other => panic!(
+                "expected SyncError::ServerMigrated from snapshot path, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[tokio::test]
+    async fn run_sync_cycle_propagates_pull_server_migrated() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+
+        let new_url = "https://pull-propagated.example.com";
+        // Server returns 421 on all endpoints — pull gets it directly.
+        let server_url = crate::test_helpers::spawn_redirect_server(new_url).await;
+
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        let config = SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        };
+        let engine = SyncEngine::new(config);
+
+        let result = engine.run_sync_cycle(&store).await;
+
+        match result {
+            Err(SyncError::ServerMigrated { new_url: url }) => {
+                assert_eq!(url, new_url, "ServerMigrated should carry the new_url");
+            }
+            other => panic!(
+                "expected SyncError::ServerMigrated from pull path, got {:?}",
+                other
+            ),
+        }
     }
 }
 
@@ -564,6 +667,11 @@ impl SyncEngine {
                             );
                         }
                         Err(e) => {
+                            // ADR #11: Propagate server migration redirect so
+                            // the daemon can update the local sync_server_url.
+                            if matches!(&e, SyncError::ServerMigrated { .. }) {
+                                return Err(e);
+                            }
                             tracing::error!(
                                 error = %e,
                                 "snapshot fetch failed after anchor expiry; will retry next cycle"

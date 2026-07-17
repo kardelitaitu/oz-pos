@@ -57,13 +57,21 @@ function Step {
     }
 }
 
-# --- Rust (mirrors CI rust job) -------------------------------------------
-Step -Name "cargo fmt (format)" -ScriptBlock { cargo fmt --all }
-Step -Name "cargo fmt (check)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock { cargo fmt --all -- --check }
+# --- Phase 1: auto-fix --------------------------------------------------
+# Best-effort fixes so the strict pass below doesn't waste time on
+# trivial issues. `--allow-dirty` handles both clean and dirty trees;
+# `--allow warnings` means non-auto-fixable lints don't kill this pass —
+# they'll be caught by the `-D warnings` check in phase 2.
+Step -Name "clippy auto-fix" -RetryCommand "cargo clippy --fix --allow-dirty -- --allow warnings" -ScriptBlock {
+    cargo clippy --fix --allow-dirty -- --allow warnings
+}
+Step -Name "cargo fmt" -RetryCommand "cargo fmt --all" -ScriptBlock { cargo fmt --all }
 
-# Workspace-wide clippy (single compilation pass instead of N per-package invocations).
-# Uses default features only — the `slow-tests` feature gates integration tests
-# that don't need linting, and clippy doesn't benefit from compiling them.
+# --- Phase 2: strict verify (mirrors CI rust job) -----------------------
+# Read-only checks that exit non-zero on any remaining issue.
+Step -Name "cargo fmt (verify)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock {
+    cargo fmt --all -- --check
+}
 Step -Name "clippy workspace" -RetryCommand "cargo clippy --workspace --all-targets -- -D warnings" -ScriptBlock {
     cargo clippy --workspace --all-targets -- -D warnings
 }
@@ -88,32 +96,28 @@ Step -Name "test workspace" -RetryCommand "cargo test --workspace --all-features
 }
 
 # --- Migration (mirrors CI migration job) ---------------------------------
-if (-not $Fast) {
-    Step -Name "migration smoke test" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
-    Step -Name "migration idempotency" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
-    Remove-Item -LiteralPath "oz-pos.db", "oz-pos.db-wal", "oz-pos.db-shm" -ErrorAction Ignore
-}
+Step -Name "migration smoke test" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
+Step -Name "migration idempotency" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
+Remove-Item -LiteralPath "oz-pos.db", "oz-pos.db-wal", "oz-pos.db-shm" -ErrorAction Ignore
 
 # --- Skill drift guard (extra local guard; CI doesn't run this) -----------
-if (-not $Fast) {
-    $gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
-        "C:\Program Files\Git\bin\bash.exe"
-    } elseif (Get-Command "bash" -ErrorAction SilentlyContinue) {
-        (Get-Command "bash").Source
-    } else {
-        $null
+$gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
+    "C:\Program Files\Git\bin\bash.exe"
+} elseif (Get-Command "bash" -ErrorAction SilentlyContinue) {
+    (Get-Command "bash").Source
+} else {
+    $null
+}
+if ($gitBash) {
+    Step -Name "skill-drift-guard" -RetryCommand "& '$gitBash' .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
+        & "C:\Program Files\Git\bin\bash.exe" .agents/skills/skill-drift-guard/scripts/detect.sh --report
     }
-    if ($gitBash) {
-        Step -Name "skill-drift-guard" -RetryCommand "& '$gitBash' .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
-            & "C:\Program Files\Git\bin\bash.exe" .agents/skills/skill-drift-guard/scripts/detect.sh --report
-        }
-    } else {
-        Write-Host "SKIP skill-drift-guard (bash not available)"
-    }
+} else {
+    Write-Host "SKIP skill-drift-guard (bash not available)"
 }
 
 # --- UI (mirrors CI ui job - auto-detected) -------------------------------
-if (-not $Fast -and (Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
+if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
     Push-Location ui
     Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" -ScriptBlock { npm ci --no-audit --no-fund }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
@@ -122,23 +126,16 @@ if (-not $Fast -and (Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test
     # Skip `npm run build` in local check: typecheck + vitest already cover
     # correctness; the Vite production bundle is validated by CI independently.
     Pop-Location
-} elseif ($Fast) {
-    Write-Host "SKIP UI checks (--Fast mode)"
 } else {
     Write-Host "SKIP UI checks (npm not available or ui/package-lock.json missing)"
 }
 
 # --- Generate stats.json (for shields.io badges) --------------------------
-if (-not $Fast) {
-    Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.ps1" -ScriptBlock {
-        & powershell -File scripts\stats.ps1
-    }
+Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.ps1" -ScriptBlock {
+    & powershell -File scripts\stats.ps1
 }
 
 # --- Done -----------------------------------------------------------------
 $totalElapsed = (Get-Date) - $totalStart
-if ($Fast) {
-    Write-Host ("fast checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
-} else {
-    Write-Host ("all checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
-}
+$label = if ($Fast) { "fast" } else { "all" }
+Write-Host ("$label checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")

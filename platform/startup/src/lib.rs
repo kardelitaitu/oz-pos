@@ -146,6 +146,36 @@ pub fn init_module_system(
     Ok(())
 }
 
+/// Spawn a background daemon with a watchdog that logs on panic or
+/// unexpected exit.
+///
+/// Uses `tauri::async_runtime::spawn` (which is available during
+/// synchronous Tauri `setup`, unlike bare `tokio::spawn`).  Panic
+/// detection is done via a `oneshot` channel: if the daemon future
+/// panics, the channel sender is dropped during unwind and the
+/// watchdog sees a `RecvError`.
+pub fn spawn_daemon(
+    name: &'static str,
+    fut: impl std::future::Future<Output = ()> + Send + 'static,
+) {
+    tauri::async_runtime::spawn(async move {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
+        // Watchdog: fired when the daemon future resolves or panics.
+        tauri::async_runtime::spawn(async move {
+            match rx.await {
+                Ok(()) => tracing::warn!("{name} exited unexpectedly"),
+                Err(_) => tracing::error!("{name} panicked"),
+            }
+        });
+
+        // Run the daemon.  If it panics, the `tx` drop during unwind
+        // causes the watchdog to receive `Err(RecvError)`.
+        fut.await;
+        let _ = tx.send(());
+    });
+}
+
 /// Initialise and start the exchange rate auto-sync daemon.
 ///
 /// Spawns a background task that periodically fetches exchange rates

@@ -6,6 +6,7 @@ import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactElement, ReactNode } from 'react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
+import { checkUsername } from '@/api/staff';
 
 const mockLogin = vi.fn();
 const mockLogout = vi.fn();
@@ -57,6 +58,9 @@ staff-login-backspace-aria =
     .aria-label = Backspace
 staff-login-back = \u2190 Back
 staff-login-submit = Login
+staff-login-error-deactivated = Account is deactivated
+staff-login-error-not-found = User not found
+staff-login-error-connection = Could not verify username. Check your connection.
 `));
   const l10n = new ReactLocalization([bundle]);
   return <LocalizationProvider l10n={l10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
@@ -106,5 +110,21 @@ describe('StaffLoginScreen', () => {
     await user.click(card);
 
     expect(document.activeElement).toBe(pinWrap);
+  });
+
+  it('shows deactivated toast and stays on username step when account is inactive', async () => {
+    vi.mocked(checkUsername).mockResolvedValueOnce({ found: true, is_active: false });
+    const user = userEvent.setup();
+    renderScreen();
+
+    const input = screen.getByRole('textbox', { name: /username/i });
+    await user.type(input, 'deactivated_user');
+    await user.click(screen.getByRole('button', { name: /next/i }));
+
+    const toast = await screen.findByRole('alert');
+    expect(toast).toHaveTextContent('Account is deactivated');
+
+    // should NOT advance to PIN step
+    expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
   });
 });

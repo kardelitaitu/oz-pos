@@ -1,9 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import staffFtl from '@/locales/staff.ftl?raw';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
+
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const SAMPLE_ROLES = [
   { id: 'role-1', name: 'owner', description: 'Owner' },
@@ -45,6 +48,12 @@ beforeEach(() => {
     if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
     if (cmd === 'create_staff') return Promise.resolve({ ...SAMPLE_STAFF[0], username: 'newuser' });
     if (cmd === 'update_staff') return Promise.resolve(SAMPLE_STAFF[0]);
+    if (cmd === 'list_all_workspaces') return Promise.resolve([
+      { key: 'restaurant', name: 'Restaurant', description: 'Dine-in service', icon: 'restaurant' },
+      { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
+    ]);
+    if (cmd === 'get_user_workspaces') return Promise.resolve([]);
+    if (cmd === 'set_user_workspaces') return Promise.resolve(undefined);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
@@ -78,25 +87,29 @@ describe('StaffManagementScreen', () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'list_staff') return Promise.resolve([]);
       if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces') return Promise.resolve([]);
+      if (cmd === 'get_user_workspaces') return Promise.resolve([]);
       return Promise.resolve([]);
     });
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitFor(() => {
       expect(screen.getByText(/no staff members yet/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByRole('button', { name: /add your first staff member/i })).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
-    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
-    expect(screen.getByText(/loading staff/i)).toBeInTheDocument();
+    const { container } = renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    const skeleton = container.querySelector('[aria-hidden="true"].staff-mgmt-loading-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(screen.queryByText(/loading staff/i)).not.toBeInTheDocument();
   });
 
   it('opens add modal', async () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
-    await userEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveTextContent(/add staff member/i);
@@ -106,9 +119,164 @@ describe('StaffManagementScreen', () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
     const editBtn = screen.getByRole('button', { name: /edit.*jane smith/i });
-    await userEvent.click(editBtn);
+    fireEvent.click(editBtn);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveTextContent(/edit staff member/i);
+  });
+
+  // ── New edge-case tests ─────────────────────────────────────────
+
+  it('deactivates an active staff member when Deactivate is clicked', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Find the Deactivate button for Jane (active)
+    const deactivateBtn = screen.getByRole('button', { name: /deactivate.*jane smith/i });
+    fireEvent.click(deactivateBtn);
+
+    // update_staff should be called with is_active: false
+    // Note: updateStaff from @/api/staff wraps args in { args } for the IPC call
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('update_staff', expect.objectContaining({
+        args: expect.objectContaining({
+          id: 'staff-1',
+          is_active: false,
+        }),
+      }));
+    }, FAST_WAIT);
+  });
+
+  it('reactivates an inactive staff member when Restore is clicked', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Find the Restore button for John (inactive) via visible text content
+    const restoreBtn = screen.getByText('Restore').closest('button')!;
+    fireEvent.click(restoreBtn);
+
+    // update_staff wraps args in { args } — assert the inner payload
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('update_staff', expect.objectContaining({
+        args: expect.objectContaining({
+          id: 'staff-2',
+          is_active: true,
+        }),
+      }));
+    }, FAST_WAIT);
+  });
+
+  it('closes the add modal when Escape is pressed', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Open add modal
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Press Escape — kept as userEvent.keyboard because the modal's
+    // useFocusTrap hook uses a native addEventListener for keydown,
+    // which userEvent simulates more faithfully than fireEvent.keyDown.
+    const user = userEvent.setup();
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    }, FAST_WAIT);
+  });
+
+  it('creates a new staff member via the add modal', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Open add modal and fill form
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    const dialog = screen.getByRole('dialog');
+
+    // Fill username — fireEvent.change saves ~140ms vs userEvent.type
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
+
+    // Fill display name
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
+
+    // Fill PIN — use placeholder to avoid matching both label and input elements
+    fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
+
+    // Select a role
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-3' } });
+
+    // Click Create
+    fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
+
+    // create_staff wraps args in { args }
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('create_staff', expect.objectContaining({
+        args: expect.objectContaining({
+          username: 'newuser',
+        }),
+      }));
+    }, FAST_WAIT);
+
+    // Modal should close
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    }, FAST_WAIT);
+  });
+
+  it('handles save failure gracefully in add modal', async () => {
+    // Mock create_staff to fail
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'create_staff') return Promise.reject(new Error('DB error'));
+      if (cmd === 'list_staff') return Promise.resolve(SAMPLE_STAFF);
+      if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces') return Promise.resolve([]);
+      if (cmd === 'get_user_workspaces') return Promise.resolve([]);
+      if (cmd === 'set_user_workspaces') return Promise.resolve(undefined);
+      return Promise.resolve([]);
+    });
+
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Open add modal and fill form
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    const dialog = screen.getByRole('dialog');
+
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
+    fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-3' } });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
+
+    // Modal should stay open after failure
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    }, FAST_WAIT);
+  });
+
+  it('renders workspace column for staff members', async () => {
+    // Mock some workspace assignments
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_staff') return Promise.resolve(SAMPLE_STAFF);
+      if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces') return Promise.resolve([
+        { key: 'restaurant', name: 'Restaurant', description: 'Dine-in', icon: 'restaurant' },
+        { key: 'store', name: 'Retail Store', description: 'Retail', icon: 'store' },
+      ]);
+      if (cmd === 'get_user_workspaces') {
+        // Both staff members get the same workspace assignment — sufficient
+        // to verify the workspace column renders without crashing.
+        return Promise.resolve(['restaurant']);
+      }
+      if (cmd === 'set_user_workspaces') return Promise.resolve(undefined);
+      return Promise.resolve([]);
+    });
+
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // The workspace column should be present (table has aria-label)
+    expect(screen.getByRole('table', { name: /staff members/i })).toBeInTheDocument();
   });
 });

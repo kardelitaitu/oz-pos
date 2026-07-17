@@ -122,7 +122,9 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
   const [pin, setPin] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exiting, setExiting] = useState(false);
   const usernameInputRef = useRef<HTMLInputElement>(null);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinSubmitted = useRef(false);
 
   // ── Reset state on open ──────────────────────────────────────
@@ -148,18 +150,46 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
     }
   }, [open, step]);
 
+  // ── Cleanup exit timer on unmount ─────────────────────────-
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== null) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── Animated close (sets exiting, delays unmount) ───────────
+
+  const handleClose = useCallback(() => {
+    if (loading) return;
+    setExiting(true);
+    exitTimerRef.current = setTimeout(() => {
+      setExiting(false);
+      exitTimerRef.current = null;
+      onClose();
+    }, 200);
+  }, [onClose, loading]);
+
   // ── Escape key closes ───────────────────────────────────────
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
+      if (e.key === "Escape" && !exiting) {
+        setExiting(true);
+        exitTimerRef.current = setTimeout(() => {
+          setExiting(false);
+          exitTimerRef.current = null;
+          onClose();
+        }, 200);
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open, onClose, exiting]);
 
   // ── Verify PIN and swap session ─────────────────────────────
 
@@ -182,7 +212,7 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
       // but the same scope (store, instance, terminal).
       await swapSessionToken(newSession.user_id, newSession.role_id);
 
-      // Step 4: Dismiss the overlay.
+      // Step 4: Dismiss the overlay (after successful verify — snap close intentional).
       onClose();
     } catch (err) {
       const message =
@@ -374,19 +404,20 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
 
   // ── Render ────────────────────────────────────────────────────────
 
-  if (!open) return null;
+  if (!open && !exiting) return null;
 
+  // Escape key is handled via document-level keydown listener
+  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
   return (
     <div
-      className="fastpin-overlay"
-      role="presentation"
+      className={`fastpin-overlay${exiting ? ' fastpin-overlay--exiting' : ''}`}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !loading) onClose();
+        if (e.target === e.currentTarget && !loading) handleClose();
       }}
     >
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
-        className="fastpin-card"
+        className={`fastpin-card${exiting ? ' fastpin-card--exiting' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={l10n.getString("staff-login-pin-section-aria")}
@@ -396,7 +427,7 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
         <button
           type="button"
           className="fastpin-close-btn"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label={l10n.getString("modal-close-aria")}
           disabled={loading}
         >
@@ -427,6 +458,8 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
                     ref={usernameInputRef}
                     type="text"
                     className="fastpin-input"
+                    id="fastpin-username"
+                    name="fastpin-username"
                     placeholder="Username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -531,7 +564,7 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
           <button
             type="button"
             className="fastpin-cancel-btn"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={loading}
           >
             <Localized id="cancel">Cancel</Localized>

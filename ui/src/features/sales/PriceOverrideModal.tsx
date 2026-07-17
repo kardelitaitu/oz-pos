@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { animDuration } from '@/utils/animation';
 import { staffLogin } from '@/api/staff';
 import { formatMoney, type Money } from '@/types/domain';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
+import './PriceOverrideModal.css';
 
 /** Props for the PriceOverrideModal — requires staff PIN verification before applying a manual price change. */
 export interface PriceOverrideModalProps {
@@ -19,6 +22,29 @@ export default function PriceOverrideModal({
   onConfirm,
   onClose,
 }: PriceOverrideModalProps) {
+  const ANIM_MS = animDuration(200);
+  const [exiting, setExiting] = useState(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== null) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setExiting(true);
+    exitTimerRef.current = setTimeout(() => {
+      setExiting(false);
+      exitTimerRef.current = null;
+      onClose();
+    }, ANIM_MS);
+  }, [onClose, ANIM_MS]);
+
   const [step, setStep] = useState<'price' | 'username' | 'pin'>('price');
   const [newPriceMinor, setNewPriceMinor] = useState<number>(currentPrice.minor_units);
   const [username, setUsername] = useState('');
@@ -26,6 +52,7 @@ export default function PriceOverrideModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const usernameInputRef = useRef<HTMLInputElement>(null);
+  const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
 
   const MAX_PIN_LENGTH = 4;
@@ -33,6 +60,8 @@ export default function PriceOverrideModal({
   useEffect(() => {
     if (step === 'username') {
       usernameInputRef.current?.focus();
+    } else if (step === 'pin') {
+      pinWrapRef.current?.focus();
     }
   }, [step]);
 
@@ -97,7 +126,28 @@ export default function PriceOverrideModal({
   }, []);
 
 
+  // ── Hardware keyboard handler for PIN step ──────────────────
+
+  const handlePinKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (loading) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handlePinDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handlePinBackspace();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (pin.length >= 1 && !pinSubmitted.current) attemptVerify();
+      }
+    },
+    [loading, handlePinDigit, handlePinBackspace, attemptVerify, pin.length],
+  );
+
   const handleGoBack = useCallback(() => {
+    setError(null);
     if (step === 'username') {
       setStep('price');
     } else if (step === 'pin') {
@@ -107,7 +157,10 @@ export default function PriceOverrideModal({
     }
   }, [step]);
 
-  if (!open) return null;
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────
+  useFocusTrap(panelRef, open && !exiting && !loading, handleClose);
+
+  if (!open && !exiting) return null;
 
   const renderPinDots = (length: number) => (
     <div className="price-override-pin-dots" aria-label={`PIN entry: ${length} of ${MAX_PIN_LENGTH} digits`}>
@@ -124,27 +177,27 @@ export default function PriceOverrideModal({
   const renderPinPad = () => (
     <div className="price-override-pin-pad" role="group" aria-label="Numeric keypad">
       {[7, 8, 9].map((d) => (
-        <button key={d} className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
+        <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
       {[4, 5, 6].map((d) => (
-        <button key={d} className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
+        <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
       {[1, 2, 3].map((d) => (
-        <button key={d} className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
+        <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
-      <button className="price-override-pin-key price-override-pin-key--clear" onClick={handlePinClear} disabled={loading || pin.length === 0}>Clear</button>
-      <button className="price-override-pin-key" onClick={() => handlePinDigit('0')} disabled={loading}>0</button>
-      <button className="price-override-pin-key price-override-pin-key--backspace" onClick={handlePinBackspace} disabled={loading || pin.length === 0}>⌫</button>
+      <button type="button" className="price-override-pin-key price-override-pin-key--clear" onClick={handlePinClear} disabled={loading || pin.length === 0}>Clear</button>
+      <button type="button" className="price-override-pin-key" onClick={() => handlePinDigit('0')} disabled={loading}>0</button>
+      <button type="button" className="price-override-pin-key price-override-pin-key--backspace" onClick={handlePinBackspace} disabled={loading || pin.length === 0}>⌫</button>
     </div>
   );
 
   return (
-    <div className="price-override-overlay" role="dialog" aria-modal="true" aria-label="Price override">
-      <div className="price-override-modal">
+    <div className={`price-override-overlay${exiting ? ' price-override-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Price override">
+      <div className={`price-override-modal${exiting ? ' price-override-modal--exiting' : ''}`} ref={panelRef}>
         <button
           type="button"
           className="price-override-close"
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close"
         >
           &times;
@@ -172,7 +225,7 @@ export default function PriceOverrideModal({
               aria-label="Enter new price in minor units"
             />
             <div className="price-override-actions">
-              <button type="button" className="price-override-cancel-btn" onClick={onClose}>Cancel</button>
+              <button type="button" className="price-override-cancel-btn" onClick={handleClose}>Cancel</button>
               <button
                 type="button"
                 className="price-override-next-btn"
@@ -214,7 +267,15 @@ export default function PriceOverrideModal({
         )}
 
         {step === 'pin' && (
-          <div className="price-override-pin-step">
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+          <div
+            className="price-override-pin-step"
+            ref={pinWrapRef}
+            tabIndex={-1}
+            onKeyDown={handlePinKeyDown}
+            role="application"
+            aria-label="PIN entry"
+          >
             <p className="price-override-step-label">Enter manager PIN</p>
             {renderPinDots(pin.length)}
             {renderPinPad()}

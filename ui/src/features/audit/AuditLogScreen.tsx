@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './AuditLogScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -137,11 +138,15 @@ export default function AuditLogScreen() {
         <Localized id="audit-log-title">
           <h1 className="audit-log-title"><span>Audit Log</span></h1>
         </Localized>
-        <Localized id="audit-log-refresh">
-          <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+        <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+          </svg>
+          <Localized id="audit-log-refresh">
             <span>Refresh</span>
-          </Button>
-        </Localized>
+          </Localized>
+        </Button>
       </div>
 
       {/* Filters */}
@@ -154,6 +159,8 @@ export default function AuditLogScreen() {
           <input
             type="search"
             className="audit-log-search"
+            id="audit-log-search"
+            name="audit-log-search"
             placeholder={l10n.getString('audit-log-search-placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -187,9 +194,40 @@ export default function AuditLogScreen() {
 
       {/* Content */}
       {loading && entries.length === 0 ? (
-        <Localized id="audit-log-loading-text">
-          <div className="audit-log-loading"><span>Loading audit log…</span></div>
-        </Localized>
+        <div className="audit-log-loading-skeleton">
+          {/* Filters skeleton */}
+          <div className="audit-log-skeleton-filters">
+            <Skeleton variant="block" width="100%" height="2.25rem" />
+            <Skeleton variant="block" width="10rem" height="2rem" />
+          </div>
+          {/* Table skeleton */}
+          <div className="audit-log-table-wrap">
+            <table className="audit-log-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>User ID</th>
+                  <th>Outcome</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i}>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="9rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.25rem" /></td>
+                    <td><Skeleton variant="text" width="8rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error && entries.length === 0 ? (
         <Card shadow="sm">
           <div className="audit-log-error">

@@ -14,7 +14,10 @@
     Run with: powershell -NoProfile -Command "Invoke-Pester scripts\sync-branding.Integration.Tests.ps1"
 #>
 
-# Shadow exit once globally to prevent exit 1 from killing the test runner
+# Shadow exit once globally to prevent exit 1 from killing the test runner.
+# WARNING: This shadow is TEST-ONLY — it silently discards all exit codes.
+# Never dot-source this file outside Pester; the global `exit` override
+# would suppress real failures in production scripts.
 function global:exit { param([int]$code = 0) }
 
 # ---------------------------------------------------------------------------

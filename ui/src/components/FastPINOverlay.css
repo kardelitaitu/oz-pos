@@ -14,10 +14,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  animation: fastpin-fade-in var(--duration-200, 200ms)
-    var(--ease-out, ease-out);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fastpin-overlay {
+    animation: fastpin-fade-in var(--duration-200, 200ms)
+      var(--ease-out, ease-out);
+  }
 }
 
 @keyframes fastpin-fade-in {
@@ -26,6 +34,28 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes fastpin-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.fastpin-overlay--exiting {
+  animation: fastpin-fade-out var(--duration-200, 200ms)
+    var(--ease-in, ease-in) forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fastpin-overlay--exiting {
+    animation: none;
+    opacity: 0;
   }
 }
 
@@ -44,8 +74,13 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-4, 16px);
-  animation: fastpin-slide-up var(--duration-300, 300ms)
-    var(--ease-out, ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fastpin-card {
+    animation: fastpin-slide-up var(--duration-300, 300ms)
+      var(--ease-out, ease-out);
+  }
 }
 
 @keyframes fastpin-slide-up {
@@ -59,6 +94,29 @@
   }
 }
 
+@keyframes fastpin-slide-down {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+
+.fastpin-card--exiting {
+  animation: fastpin-slide-down var(--duration-200, 200ms)
+    var(--ease-in, ease-in) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fastpin-card--exiting {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* ── Close button ─────────────────────────────────────── */
 
 .fastpin-close-btn {
@@ -68,8 +126,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
   border: none;
   border-radius: var(--radius-full, 9999px);
   background: transparent;
@@ -171,12 +229,14 @@
   color: var(--color-fg);
   font-size: var(--text-base, 16px);
   font-family: inherit;
+  /* outline suppressed — focus ring provided by box-shadow on :focus-visible */
   outline: none;
   transition: border-color var(--duration-100, 100ms) var(--ease-out, ease-out);
 }
 
-.fastpin-input:focus {
+.fastpin-input:focus-visible {
   border-color: var(--color-border-focus);
+  box-shadow: inset 0 0 0 1px var(--color-accent-subtle);
 }
 
 .fastpin-input:disabled {
@@ -235,7 +295,12 @@
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-top-color: #fff;
   border-radius: 50%;
-  animation: fastpin-spin 0.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fastpin-btn-spinner {
+    animation: fastpin-spin var(--duration-600) var(--ease-linear) infinite;
+  }
 }
 
 @keyframes fastpin-spin {
@@ -287,7 +352,7 @@
   align-items: center;
   justify-content: center;
   width: 64px;
-  height: 52px;
+  height: var(--touch-target-comfortable);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md, 8px);
   background: var(--color-bg);
@@ -341,13 +406,19 @@
   font-size: var(--text-sm, 14px);
   font-family: inherit;
   cursor: pointer;
-  padding: var(--space-1, 4px) var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-2, 8px);
+  min-height: var(--touch-target-min);
   border-radius: var(--radius-sm, 4px);
   transition: color var(--duration-100, 100ms) var(--ease-out, ease-out);
 }
 
 .fastpin-back-btn:hover:not(:disabled) {
   color: var(--color-fg);
+}
+
+.fastpin-back-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .fastpin-back-btn:disabled {
@@ -387,7 +458,8 @@
   font-size: var(--text-sm, 14px);
   font-family: inherit;
   cursor: pointer;
-  padding: var(--space-1, 4px) var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  min-height: var(--touch-target-min);
   border-radius: var(--radius-sm, 4px);
   transition:
     color var(--duration-100, 100ms) var(--ease-out, ease-out),
@@ -397,6 +469,11 @@
 .fastpin-cancel-btn:hover:not(:disabled) {
   color: var(--color-fg);
   background: var(--color-bg-surface);
+}
+
+.fastpin-cancel-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .fastpin-cancel-btn:disabled {

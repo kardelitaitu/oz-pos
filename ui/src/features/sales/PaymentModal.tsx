@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
+import { Skeleton } from '@/components/Skeleton';
 import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
@@ -16,6 +17,7 @@ import {
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { animDuration } from '@/utils/animation';
 import './PaymentModal.css';
 
@@ -92,6 +94,7 @@ export default function PaymentModal({
   const allCustomersRef = useRef<CustomerDto[]>([]);
   const [leaving, setLeaving] = useState(false);
   const leaveCb = useRef<(() => void) | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const MS_200 = animDuration(200);
 
@@ -234,7 +237,7 @@ export default function PaymentModal({
   }, [selectedCustomer]);
 
   useEffect(() => {
-    if (loyaltyAccount && loyaltyAccount.account.points > 0) {
+    if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
       getPointsValue(loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
         .catch(() => setPointsWorthMinor(null));
@@ -687,6 +690,11 @@ export default function PaymentModal({
     return () => clearTimeout(timer);
   }, [leaving, handleLeaveEnd, MS_200]);
 
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────
+  useFocusTrap(panelRef, open && !leaving && !processing && !done, () => {
+    if (!showCustomerSearch && !showQr) animateLeave(onClose);
+  });
+
   if (!open && !leaving) return null;
 
   const stateClass = leaving ? 'payment-overlay--exit' : 'payment-overlay--enter';
@@ -704,7 +712,7 @@ export default function PaymentModal({
         onPaymentConfirmed={handleQrConfirmed}
       />
 
-      <div className={`payment-modal ${modalStateClass}`}>
+      <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
         {done ? (
           <div className="payment-done">
             <svg className="payment-done-checkmark" viewBox="0 0 64 64" aria-hidden="true">
@@ -973,6 +981,7 @@ export default function PaymentModal({
                       <button
                         type="button"
                         className="payment-quick-btn"
+                        aria-label={l10n.getString('payment-tender-exact')}
                         onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
                       >
                         <Localized id="payment-tender-exact">
@@ -1006,10 +1015,10 @@ export default function PaymentModal({
                         Generate a QRIS QR code for the customer to scan with their payment app.
                       </p>
                     </Localized>
-                    <Localized id="payment-qris-btn-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-qris-btn"
+                      aria-label={l10n.getString('payment-qris-pay')}
                       onClick={handleQrPay}
                       disabled={processing}
                     >
@@ -1017,7 +1026,6 @@ export default function PaymentModal({
                         <span>Pay with QR</span>
                       </Localized>
                     </button>
-                    </Localized>
                   </div>
                 )}
               </>
@@ -1030,28 +1038,26 @@ export default function PaymentModal({
                     <span className="payment-section-title">Split Payments</span>
                   </Localized>
                   <div className="payment-split-actions">
-                    <Localized id="payment-split-evenly-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-split-btn"
+                      aria-label={l10n.getString('payment-split-evenly')}
                       onClick={autoSplitEvenly}
                     >
                       <Localized id="payment-split-evenly">
                         <span>Split Evenly</span>
                       </Localized>
                     </button>
-                    </Localized>
-                    <Localized id="payment-split-add-aria" attrs={{ 'aria-label': true }}>
                     <button
                       type="button"
                       className="payment-split-btn"
+                      aria-label={l10n.getString('payment-split-add')}
                       onClick={addSplit}
                     >
                       <Localized id="payment-split-add">
                         <span>+ Add Split</span>
                       </Localized>
                     </button>
-                    </Localized>
                   </div>
                 </div>
 
@@ -1084,6 +1090,7 @@ export default function PaymentModal({
                             <input
                               type="text"
                               className="payment-split-other-input"
+                              aria-label="Payment method name"
                               placeholder="Other"
                               value={s.otherLabel}
                               onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
@@ -1108,16 +1115,15 @@ export default function PaymentModal({
                         </Localized>
                         </Localized>
                       </div>
-                      <Localized id="payment-split-remove-aria" attrs={{ 'aria-label': true }}>
                       <button
                         type="button"
                         className="payment-split-remove"
+                        aria-label={l10n.getString('payment-split-remove-aria')}
                         onClick={() => removeSplit(s.id)}
                         disabled={splits.length <= 1}
                       >
                         &times;
                       </button>
-                      </Localized>
                     </div>
                   ))}
                 </div>
@@ -1141,8 +1147,9 @@ export default function PaymentModal({
             )}
 
             <div className="payment-split-toggle">
-              <label className="payment-split-toggle-label">
+              <label className="payment-split-toggle-label" htmlFor="payment-split-toggle-cb">
                 <input
+                  id="payment-split-toggle-cb"
                   type="checkbox"
                   checked={splitMode}
                   onChange={(e) => setSplitMode(e.target.checked)}
@@ -1259,25 +1266,45 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-              /* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */
-              <div className="payment-customer-search-overlay" role="presentation" onClick={() => setShowCustomerSearch(false)}>
-                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
-                <div className="payment-customer-search-modal" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}>
+              /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape key provides keyboard dismissal, role=button for AT */
+              <div
+                className="payment-customer-search-overlay"
+                onClick={() => setShowCustomerSearch(false)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
+                role="button"
+                tabIndex={-1}
+                aria-label={l10n.getString('modal-close-aria') || 'Close customer search'}
+              >
+                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onClick stops propagation to backdrop, Escape provides keyboard dismissal */}
+                <div
+                  className="payment-customer-search-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  tabIndex={-1}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
+                >
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>
                   </Localized>
                   <input
                     className="payment-customer-search-input"
                     type="text"
+                    aria-label="Search customers"
                     placeholder="Search by name, phone, or email..."
                     value={customerSearchQuery}
                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
                   />
                   <div className="payment-customer-search-list">
                     {loadingCustomers ? (
-                      <Localized id="payment-customer-search-loading">
-                        <div className="payment-customer-search-loading">Loading...</div>
-                      </Localized>
+                      <div className="payment-customer-search-list-skeleton" aria-hidden="true">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                          <div key={i} className="payment-customer-search-item">
+                            <Skeleton width="8rem" height="1rem" />
+                            <Skeleton width="5rem" height="0.75rem" style={{ marginTop: '2px' }} />
+                          </div>
+                        ))}
+                      </div>
                     ) : customerSearchResults.length === 0 ? (
                       <Localized id="payment-customer-search-empty">
                         <div className="payment-customer-search-empty">No customers found</div>

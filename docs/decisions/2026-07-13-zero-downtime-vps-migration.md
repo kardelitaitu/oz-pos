@@ -1,7 +1,8 @@
 # ADR #11: Zero-Downtime VPS Migration Strategy
 
-**Status:** Proposed
+**Status:** Implemented (2026-07-15)
 **Date:** 2026-07-13
+**Updated:** 2026-07-15 (all layers shipped — 22 tests, 6 commits, redirect-only mode, deployment docs)
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** vps, migration, dns, routing, fallback, server-redirection, client-config
 
@@ -58,6 +59,65 @@ if response.error == "server_migrated" {
 
 ### Negative
 - **Old Server Costs**: The old VPS must be kept active for a brief period (e.g., 15–30 days) to run the redirection service until all active terminals have checked in and migrated.
+
+---
+
+## Implementation Summary
+
+### Layer 1 — DNS-Based Routing
+- **Status**: Operational (no code — update DNS A/AAAA record at the domain provider)
+- Clients connect via domain name (e.g., `https://sync.ozpos.com`), never hardcoded IPs.
+
+### Layer 2 — Server Auto-Redirection (6 commits, 22 tests)
+
+**Server-side** (`apps/cloud-server/`):
+- `src/redirect.rs` — Redirect middleware gated by `OZ_SYNC_REDIRECT_URL` env var.
+  Intercepts all `/api/sync/*` requests and returns HTTP 421 (Misdirected Request)
+  with `{"error":"server_migrated","new_url":"<url>"}`. 421 chosen over 301/308
+  because `reqwest` follows redirects and would never expose the response body.
+  4 tests with `Mutex`-serialized env var isolation.
+- `src/main.rs` — Middleware wired into the router. `OZ_REDIRECT_ONLY=true` mode
+  skips all infrastructure (DB, prune, metrics, API) and runs a minimal redirect
+  service (~5 MB RAM) for the 15–30 day migration window.
+
+**Client-side** (`platform/sync/`):
+- `src/lib.rs` — `SyncError::ServerMigrated { new_url }` variant. `run_sync_cycle`
+  propagates `ServerMigrated` from all three paths: pull, snapshot (via anchor
+  expiry), and push.
+- `src/transport.rs` — `parse_server_migrated()` helper detects the redirect JSON
+  in push, pull, and snapshot error responses. 11 tests (6 parser + 3 integration
+  + 2 snapshot struct).
+- `src/daemon.rs` — Push and pull `ServerMigrated` handlers call
+  `Settings::set_sync_server_url()` via `spawn_blocking` and log the migration.
+  3 integration tests including push-only and pull-only paths.
+- `src/test_helpers.rs` — Shared test module with `spawn_redirect_server` (421 on
+  all endpoints) and `spawn_anchor_then_redirect_server` (410 on pull, 421 on
+  snapshot) for E2E testing.
+
+**Test coverage** (22 tests across 4 modules + 1 shared helper):
+| Module | Tests | Focus |
+|--------|-------|-------|
+| `transport.rs` | 11 | `parse_server_migrated` (6) + push/pull/snapshot redirect (3) + snapshot struct (3) |
+| `redirect.rs` | 4 | Middleware env set/pass-through/non-sync/pull endpoints |
+| `lib.rs` | 4 | `ServerMigrated` display/debug + E2E pull/snapshot propagation |
+| `daemon.rs` | 3 | E2E push path + pull-only path + spawn helper |
+
+### Layer 3 — Manual UI Configuration
+- **Status**: Pre-existing. Settings → Cloud Sync → Server URL input field.
+  If a terminal was offline past the redirection window, a store manager can
+  manually enter the new domain.
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `platform/sync/src/lib.rs` | `ServerMigrated` variant + propagation in `run_sync_cycle` + tests |
+| `platform/sync/src/transport.rs` | `parse_server_migrated()` + redirect detection in 3 methods + tests |
+| `platform/sync/src/daemon.rs` | Push/pull `ServerMigrated` handlers + tests |
+| `platform/sync/src/test_helpers.rs` | **New** — shared test helpers |
+| `apps/cloud-server/src/redirect.rs` | **New** — redirect middleware + tests |
+| `apps/cloud-server/src/main.rs` | Middleware wiring + `OZ_REDIRECT_ONLY` mode |
+| `docs/operations/vps-migration.md` | **New** — step-by-step migration guide |
+| `docs/decisions/2026-07-13-zero-downtime-vps-migration.md` | This document |
 
 ---
 

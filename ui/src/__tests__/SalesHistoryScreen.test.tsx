@@ -95,10 +95,12 @@ describe('SalesHistoryScreen', () => {
     });
   });
 
-  it('shows loading state', async () => {
+  it('shows loading skeleton', async () => {
     mockListSales.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
-    expect(screen.getByText(/loading sales/i)).toBeInTheDocument();
+    const { container } = renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+    const skeleton = container.querySelector('.sales-history-loading-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(skeleton?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('shows empty state when no sales exist', async () => {

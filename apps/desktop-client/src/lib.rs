@@ -66,6 +66,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             let state = AppState::new(app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -75,44 +76,68 @@ pub fn run() {
 
             app.manage(state);
 
+            // ── Show the main window after state restore ────────────
+            // The window starts with visible:false to prevent initial
+            // position flash while window-state restores its position/size.
+            // After setup completes we explicitly show it. If the window
+            // is not found (e.g. headless/CI), this is a no-op.
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.show();
+            }
+
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
+            platform_startup::spawn_daemon("sync daemon", async move {
                 let state = app_handle.state::<AppState>();
                 state.sync_daemon.start(db).await;
             });
 
             // ── Background prune daemon (ADR #6 Q4 / P-1 Ledger Retention) ─
             let prune_db = app.state::<AppState>().db.clone();
-            tauri::async_runtime::spawn(async move {
+            platform_startup::spawn_daemon("prune daemon", async move {
                 platform_sync::daemon::SyncDaemon::start_prune_task(prune_db);
             });
 
             // ── LAN event forwarder ────────────────────────────────────
             let forwarder = crate::lan_server::LanEventForwarder::new();
             let handle = forwarder.handle();
-            tauri::async_runtime::spawn(forwarder.run());
+            platform_startup::spawn_daemon("LAN event forwarder", forwarder.run());
 
             // Subscribe event bus handlers for LAN forwarding.
-            // Use try_lock() because .setup() is synchronous.
+            // .setup() is synchronous, so we can't use .await.
+            // A single try_lock() could silently skip LAN handler
+            // registration if the kernel lock is momentarily held
+            // during startup. Use a bounded retry loop to give the
+            // lock holder time to finish without risking a deadlock.
+            const LAN_LOCK_RETRIES: usize = 10;
             {
                 let state = app.state::<AppState>();
-                if let Ok(kernel) = state.kernel.try_lock() {
-                    let bus = kernel.event_bus();
-                    bus.subscribe(
-                        "sale.completed",
-                        Box::new(handle.sale_completed_handler()),
+                let mut registered = false;
+                for _ in 0..LAN_LOCK_RETRIES {
+                    if let Ok(kernel) = state.kernel.try_lock() {
+                        let bus = kernel.event_bus();
+                        bus.subscribe(
+                            "sale.completed",
+                            Box::new(handle.sale_completed_handler()),
+                        );
+                        bus.subscribe(
+                            "order.course_fired",
+                            Box::new(handle.course_fired_handler()),
+                        );
+                        tracing::info!(
+                            "LAN event forwarder handlers registered for sale.completed and order.course_fired"
+                        );
+                        registered = true;
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                if !registered {
+                    tracing::warn!(
+                        "kernel lock contended after 100ms, LAN handlers not registered — \
+                         LAN event forwarding disabled for this session"
                     );
-                    bus.subscribe(
-                        "order.course_fired",
-                        Box::new(handle.course_fired_handler()),
-                    );
-                    tracing::info!(
-                        "LAN event forwarder handlers registered for sale.completed and order.course_fired"
-                    );
-                } else {
-                    tracing::warn!("kernel lock contended, LAN handlers not registered");
                 }
             }
 
@@ -153,7 +178,6 @@ pub fn run() {
             commands::data::export_data,
             commands::data::import_preview,
             commands::data::import_data,
-            commands::staff::list_staff,
             commands::staff::list_staff,
             commands::staff::list_roles,
             commands::staff::create_staff,
@@ -377,8 +401,9 @@ pub fn run() {
             commands::sync::update_sync_settings,
             commands::sync::sync_run,
             commands::sync::sync_pull,
-            commands::sync::sync_pull,
             commands::sync::pending_sync_count,
+            commands::sync::test_sync_connection,
+            commands::sync::request_sync_token,
             commands::refunds::process_refund,
             commands::refunds::process_refund_scoped,
             commands::refunds::list_refunds,

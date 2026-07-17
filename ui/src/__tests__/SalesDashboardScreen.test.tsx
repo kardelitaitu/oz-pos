@@ -67,7 +67,8 @@ describe('SalesDashboardScreen', () => {
   it('shows loading state initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
     renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
-    expect(screen.getAllByText(/loading/i).length).toBeGreaterThan(0);
+    // Widgets render skeleton placeholders during loading
+    expect(document.querySelectorAll('.skeleton').length).toBeGreaterThan(0);
   });
 
   it('displays hourly data', async () => {

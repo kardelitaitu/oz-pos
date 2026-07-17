@@ -28,6 +28,11 @@ pub trait Cache: Send + Sync {
 
     /// Start a background listener for inventory change notifications.
     ///
+    /// `terminal_id` identifies this terminal for pub/sub filtering —
+    /// the subscriber will skip messages tagged with its own terminal_id.
+    /// Pass `None` if terminal identity is unknown (all messages will
+    /// be processed).
+    ///
     /// Returns a shutdown sender that can be used to stop the listener.
     /// Returns `None` when the backend does not support pub/sub (e.g.
     /// no-op cache). The `_cache` Arc is passed through so the spawned
@@ -35,17 +40,26 @@ pub trait Cache: Send + Sync {
     fn start_inventory_pubsub(
         &self,
         _cache: Arc<dyn Cache>,
+        _terminal_id: Option<String>,
     ) -> Option<std::sync::mpsc::Sender<()>> {
-        let _ = _cache;
+        let _ = (_cache, _terminal_id);
         None
     }
 
     /// Publish an inventory change notification.
     ///
-    /// Called after stock adjustments so other terminals subscribed to the
-    /// pub/sub channel can invalidate their local cache. Default impl is a
-    /// no-op; `RedisCache` overrides this to publish to `inventory:updates`.
-    fn publish_inventory_change(&self, _product_id: &str, _sku: &str, _new_qty: i64) {}
+    /// `terminal_id` identifies this terminal so other subscribers can
+    /// skip their own messages. Called after stock adjustments.
+    /// Default impl is a no-op; `RedisCache` overrides this to publish
+    /// to `inventory:updates`.
+    fn publish_inventory_change(
+        &self,
+        _product_id: &str,
+        _sku: &str,
+        _new_qty: i64,
+        _terminal_id: Option<&str>,
+    ) {
+    }
 }
 
 /// No-op cache that always misses.
@@ -71,8 +85,9 @@ impl Cache for NoopCache {
     fn start_inventory_pubsub(
         &self,
         _cache: Arc<dyn Cache>,
+        _terminal_id: Option<String>,
     ) -> Option<std::sync::mpsc::Sender<()>> {
-        let _ = _cache;
+        let _ = (_cache, _terminal_id);
         None
     }
 }
@@ -128,6 +143,7 @@ pub mod redis_cache {
         fn subscribe_inventory_changes(
             client: redis::Client,
             cache: Arc<dyn Cache>,
+            terminal_id: Option<String>,
         ) -> Result<std::sync::mpsc::Sender<()>, redis::RedisError> {
             let (tx, rx) = std::sync::mpsc::channel::<()>();
 
@@ -161,6 +177,7 @@ pub mod redis_cache {
 
                 tracing::info!("subscribed to inventory:updates channel");
 
+                let own_id = terminal_id.unwrap_or_default();
                 loop {
                     // Check if we should stop (non-blocking check).
                     if rx.try_recv().is_ok() {
@@ -175,12 +192,10 @@ pub mod redis_cache {
                             if let Ok(notification) =
                                 serde_json::from_str::<serde_json::Value>(&payload)
                             {
-                                let terminal_id =
+                                let msg_terminal_id =
                                     notification["terminal_id"].as_str().unwrap_or("");
                                 // Skip own messages.
-                                if terminal_id
-                                    == std::env::var("OZ_TERMINAL_ID").unwrap_or_default()
-                                {
+                                if own_id == msg_terminal_id {
                                     continue;
                                 }
                                 if let Some(pid) = notification["product_id"].as_str() {
@@ -277,9 +292,10 @@ pub mod redis_cache {
         fn start_inventory_pubsub(
             &self,
             cache: Arc<dyn Cache>,
+            terminal_id: Option<String>,
         ) -> Option<std::sync::mpsc::Sender<()>> {
             let client = self.client.clone();
-            match Self::subscribe_inventory_changes(client, cache) {
+            match Self::subscribe_inventory_changes(client, cache, terminal_id) {
                 Ok(tx) => Some(tx),
                 Err(e) => {
                     tracing::warn!(
@@ -291,13 +307,19 @@ pub mod redis_cache {
             }
         }
 
-        fn publish_inventory_change(&self, product_id: &str, sku: &str, new_qty: i64) {
+        fn publish_inventory_change(
+            &self,
+            product_id: &str,
+            sku: &str,
+            new_qty: i64,
+            terminal_id: Option<&str>,
+        ) {
             let key = "inventory:updates";
             let payload = serde_json::json!({
                 "product_id": product_id,
                 "sku": sku,
                 "new_qty": new_qty,
-                "terminal_id": std::env::var("OZ_TERMINAL_ID").unwrap_or_default(),
+                "terminal_id": terminal_id.unwrap_or(""),
                 "timestamp": chrono::Utc::now().to_rfc3339_opts(
                     chrono::SecondsFormat::Millis, true,
                 ),
@@ -466,7 +488,7 @@ mod tests {
     fn noop_cache_start_inventory_pubsub_returns_none() {
         let cache = NoopCache;
         let arc_cache: Arc<dyn Cache> = Arc::new(NoopCache);
-        assert!(cache.start_inventory_pubsub(arc_cache).is_none());
+        assert!(cache.start_inventory_pubsub(arc_cache, None).is_none());
     }
 
     #[test]

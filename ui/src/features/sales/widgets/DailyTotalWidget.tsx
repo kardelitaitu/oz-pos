@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Localized } from '@fluent/react';
 import { exportDailySummary, type DailySummaryRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
+import { Skeleton } from '@/components/Skeleton';
 /**
  * Daily Total Widget — shows revenue, sales count, and item count
  * for the current day. Registered with the WidgetRegistry so it
@@ -35,11 +36,14 @@ export default function DailyTotalWidget() {
 
   if (loading) {
     return (
-      <div className="reporting-widget">
-        <div className="reporting-widget-kpi">
-          <Localized id="sales-dashboard-loading">
-            <span className="reporting-widget-kpi-label">Loading&hellip;</span>
-          </Localized>
+      <div className="reporting-widget" aria-hidden="true">
+        <div className="reporting-widget-kpi-row">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="reporting-widget-kpi">
+              <Skeleton width="4rem" height="0.75rem" />
+              <Skeleton width="5rem" height="1.5rem" style={{ marginTop: '4px' }} />
+            </div>
+          ))}
         </div>
       </div>
     );

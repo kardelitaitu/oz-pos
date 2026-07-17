@@ -21,12 +21,16 @@ function AsyncBrokenComponent() {
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('ErrorBoundary', () => {
+  const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+
   beforeEach(() => {
     // Suppress console.error during tests that intentionally throw.
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    window.addEventListener('error', preventJsdomError);
   });
 
   afterEach(() => {
+    window.removeEventListener('error', preventJsdomError);
     vi.restoreAllMocks();
   });
 

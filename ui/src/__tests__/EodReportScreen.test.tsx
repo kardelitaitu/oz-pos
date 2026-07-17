@@ -97,12 +97,14 @@ describe('EodReportScreen', () => {
     });
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton initially', () => {
     mockEodReport.mockImplementation(() => new Promise(() => {}));
     mockListShifts.mockImplementation(() => new Promise(() => {}));
-    renderScreen();
+    const { container } = renderScreen();
 
-    expect(screen.getByText('Loading report…')).toBeTruthy();
+    const skeleton = container.querySelector('.eod-report-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(skeleton?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('shows error state with retry button', async () => {

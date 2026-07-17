@@ -462,6 +462,52 @@ impl Settings {
         Ok(platform_core::settings::Settings::set_rate_sync_base_currency(conn, currency)?)
     }
 
+    // ── Global Currency display settings ────────────────────────
+
+    /// Get the currency display format: `"symbol"` or `"code"`.
+    pub fn get_currency_format(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_currency_format(
+            conn,
+        )?)
+    }
+
+    /// Set the currency display format.
+    pub fn set_currency_format(conn: &Connection, fmt: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_currency_format(
+            conn, fmt,
+        )?)
+    }
+
+    /// Get the currency symbol position: `"prefix"` or `"suffix"`.
+    pub fn get_currency_symbol_position(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_currency_symbol_position(conn)?)
+    }
+
+    /// Set the currency symbol position.
+    pub fn set_currency_symbol_position(conn: &Connection, pos: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_currency_symbol_position(conn, pos)?)
+    }
+
+    /// Get the decimal separator: `"dot"` or `"comma"`.
+    pub fn get_currency_decimal_separator(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_currency_decimal_separator(conn)?)
+    }
+
+    /// Set the decimal separator.
+    pub fn set_currency_decimal_separator(conn: &Connection, sep: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_currency_decimal_separator(conn, sep)?)
+    }
+
+    /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
+    pub fn get_currency_thousands_separator(conn: &Connection) -> Result<String, CoreError> {
+        Ok(platform_core::settings::Settings::get_currency_thousands_separator(conn)?)
+    }
+
+    /// Set the thousands separator.
+    pub fn set_currency_thousands_separator(conn: &Connection, sep: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_currency_thousands_separator(conn, sep)?)
+    }
+
     /// Check if sync is enabled.
     pub fn is_sync_enabled(conn: &Connection) -> Result<bool, CoreError> {
         Ok(platform_core::settings::Settings::is_sync_enabled(conn)?)

@@ -4,7 +4,6 @@
  * Layout:
  *   .cat-mgmt           → page wrapper
  *   .cat-mgmt-grid      → responsive card grid
- *   .cat-mgmt-modal     → create category dialog
  * ============================================================ */
 
 .cat-mgmt {
@@ -25,9 +24,18 @@
   color: var(--color-fg);
 }
 
-.cat-mgmt-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
+.cat-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cat-mgmt-loading-skeleton .cat-mgmt-header {
+  margin-bottom: 0;
+}
+
+.cat-mgmt-loading-skeleton .cat-mgmt-grid {
+  pointer-events: none;
 }
 
 .cat-mgmt-empty {
@@ -43,7 +51,7 @@
 .cat-mgmt-empty-desc {
   font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
-  max-width: 320px;
+  max-width: 20rem;
   line-height: var(--leading-normal);
 }
 
@@ -63,8 +71,8 @@
 
 /* Coloured circle badge that holds the icon SVG */
 .cat-mgmt-icon-badge {
-  width: 44px;
-  height: 44px;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 50%;
   flex-shrink: 0;
   display: flex;
@@ -75,8 +83,8 @@
 }
 
 .cat-mgmt-icon-badge-empty {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.4);
   display: block;
@@ -116,8 +124,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: var(--radius-md);
   color: var(--color-fg-tertiary);
   background: transparent;
@@ -137,16 +145,15 @@
 }
 
 .cat-mgmt-edit-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 .cat-mgmt-delete-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: var(--radius-md);
   color: var(--color-fg-tertiary);
   background: transparent;
@@ -166,8 +173,7 @@
 }
 
 .cat-mgmt-delete-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 .cat-mgmt-delete-btn:disabled {
@@ -175,81 +181,7 @@
   cursor: not-allowed;
 }
 
-/* ── Modal ──────────────────────────────────────────── */
-.cat-mgmt-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-bg-overlay);
-  animation: cat-fade-in var(--duration-200) var(--ease-out);
-}
-
-@keyframes cat-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.cat-mgmt-modal {
-  width: 420px;
-  max-width: 92vw;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-  animation: cat-slide-up var(--duration-200) var(--ease-out);
-}
-
-@keyframes cat-slide-up {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.cat-mgmt-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.cat-mgmt-modal-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-fg);
-}
-
-.cat-mgmt-modal-close {
-  background: none;
-  border: none;
-  font-size: 24px;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--color-fg-tertiary);
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-}
-
-.cat-mgmt-modal-close:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
-}
-
-.cat-mgmt-modal-body {
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
+/* ── Form fields (inside SettingsPopup) ───────────── */
 .cat-mgmt-field {
   display: flex;
   flex-direction: column;
@@ -269,15 +201,14 @@
   background: var(--color-bg-input);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  outline: none;
   transition:
     border-color var(--duration-150) var(--ease-out),
     box-shadow var(--duration-150) var(--ease-out);
 }
 
-.cat-mgmt-input:focus {
+.cat-mgmt-input:focus-visible {
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent-subtle);
 }
 
 .cat-mgmt-input::placeholder {
@@ -292,7 +223,7 @@
 .cat-mgmt-hint code {
   font-family: var(--font-mono);
   background: var(--color-bg-surface);
-  padding: 1px 4px;
+  padding: 0.0625rem 0.25rem;
   border-radius: var(--radius-sm);
 }
 
@@ -304,15 +235,14 @@
 }
 
 .cat-mgmt-colour-swatch {
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   border-radius: var(--radius-lg);
   border: 2px solid transparent;
   cursor: pointer;
   transition:
     transform var(--duration-100) var(--ease-out),
     border-color var(--duration-100) var(--ease-out);
-  outline: none;
 }
 
 .cat-mgmt-colour-swatch:hover {
@@ -320,8 +250,8 @@
 }
 
 .cat-mgmt-colour-swatch:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  transform: translateY(0);
 }
 
 .cat-mgmt-colour-swatch--selected {
@@ -337,8 +267,8 @@
 }
 
 .cat-mgmt-icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: var(--radius-lg);
   border: 2px solid var(--color-border);
   background: var(--color-bg-surface);
@@ -352,7 +282,6 @@
     transform var(--duration-100) var(--ease-out),
     background-color var(--duration-100) var(--ease-out),
     color var(--duration-100) var(--ease-out);
-  outline: none;
 }
 
 .cat-mgmt-icon-btn:hover {
@@ -361,8 +290,7 @@
 }
 
 .cat-mgmt-icon-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 .cat-mgmt-icon-btn--selected {
@@ -389,27 +317,10 @@
   align-self: flex-start;
 }
 
-/* ── Error ──────────────────────────────────────────── */
-.cat-mgmt-error {
-  font-size: var(--text-sm);
-  color: var(--color-danger);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-danger-bg);
-  border-radius: var(--radius-lg);
-}
-
-/* ── Actions ────────────────────────────────────────── */
+/* ── Delete warning text ──────────────────────────── */
 .cat-mgmt-delete-warning {
   font-size: var(--text-sm);
   color: var(--color-fg-secondary);
   line-height: var(--leading-relaxed);
   margin: 0;
-}
-
-.cat-mgmt-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--color-border);
 }

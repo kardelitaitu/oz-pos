@@ -6,7 +6,7 @@
 //! `PATCH /api/v1/products/:sku/stock` — adjust stock quantity.
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -17,6 +17,7 @@ use oz_core::db::Store;
 use oz_core::{CoreError, ProductWithDetails};
 
 use crate::AppState;
+use crate::auth::ApiTokenClaims;
 
 // ── Error mapping ─────────────────────────────────────────────────────
 
@@ -118,11 +119,16 @@ pub async fn get_product(State(state): State<AppState>, Path(sku): Path<String>)
 /// Accepts a `CreateProductRequest` JSON body. Validation (empty SKU,
 /// empty name, negative price, negative stock) is handled by the Store,
 /// returning 400 on failure. Returns 201 with the created product.
+///
+/// The `tenant_id` from the JWT claims is stamped on the product row
+/// so the cloud server's snapshot endpoint can scope products per tenant.
 pub async fn create_product(
     State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateProductRequest>,
 ) -> Response {
     let initial_stock = body.initial_stock.unwrap_or(0);
+    let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -137,6 +143,18 @@ pub async fn create_product(
         None,
     ) {
         Ok(product) => {
+            // Stamp tenant_id from the JWT so snapshot filtering works.
+            if let Err(e) = db.execute(
+                "UPDATE products SET tenant_id = ?1 WHERE sku = ?2",
+                rusqlite::params![tenant_id, body.sku],
+            ) {
+                tracing::warn!(
+                    tenant_id = tenant_id,
+                    sku = %body.sku,
+                    error = %e,
+                    "failed to stamp tenant_id on product — snapshot scoping may be affected"
+                );
+            }
             let detail = ProductWithDetails {
                 product,
                 category_name: None,

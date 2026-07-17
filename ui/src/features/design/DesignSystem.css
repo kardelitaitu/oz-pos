@@ -7,7 +7,7 @@
  * ============================================================ */
 
 .ds-page {
-  max-width: 960px;
+  max-width: 60rem;
   margin: 0 auto;
   padding: var(--space-8);
 }
@@ -46,7 +46,7 @@
 .ds-swatch-row-label {
   font-size: var(--text-sm);
   color: var(--color-fg-secondary);
-  min-width: 120px;
+  min-width: 7.5rem;
   flex-shrink: 0;
 }
 .ds-swatch-group {
@@ -61,8 +61,8 @@
   gap: var(--space-1);
 }
 .ds-swatch-box {
-  width: 32px;
-  height: 32px;
+  width: 2rem;
+  height: 2rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
 }
@@ -114,10 +114,10 @@
   gap: var(--space-3);
 }
 .ds-space-bar {
-  height: 12px;
+  height: 0.75rem;
   background: var(--color-accent);
   border-radius: var(--radius-sm);
-  min-width: 2px;
+  min-width: 0.125rem;
 }
 .ds-space-label {
   font-size: var(--text-xs);
@@ -140,7 +140,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 80px;
+  min-height: 5rem;
 }
 .ds-shadow-card code {
   font-size: var(--text-xs);
@@ -154,8 +154,8 @@
   flex-wrap: wrap;
 }
 .ds-radius-box {
-  width: 64px;
-  height: 64px;
+  width: 4rem;
+  height: 4rem;
   background: var(--color-accent-subtle);
   border: 2px solid var(--color-accent);
   display: flex;
@@ -243,7 +243,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 400px;
+  max-width: 25rem;
 }
 .ds-field {
   display: flex;

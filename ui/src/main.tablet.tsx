@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { LocalizationProvider } from '@fluent/react';
 import { createEnUsLocalization } from './locales';
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
@@ -101,6 +102,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <LocalizationProvider l10n={l10n}>
       <ThemeProvider>
+        <CurrencyProvider>
         <AuthProvider>
           <WorkspaceProvider>
             <ToastProvider>
@@ -108,6 +110,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             </ToastProvider>
           </WorkspaceProvider>
         </AuthProvider>
+        </CurrencyProvider>
       </ThemeProvider>
     </LocalizationProvider>
   </React.StrictMode>,

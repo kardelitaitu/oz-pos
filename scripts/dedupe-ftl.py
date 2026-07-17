@@ -170,7 +170,7 @@ def main() -> int:
         f"{len(changed)} file(s)"
     )
     for name, before, after in changed:
-        print(f"  {name}: {before} \u2192 {after} lines ({before - after} removed)")
+        print(f"  {name}: {before} -> {after} lines ({before - after} removed)")
     # In --dry-run mode, exit non-zero whenever there is real work to
     # do so callers (pre-commit, CI) can gate on `$?` without coupling
     # to the exact wording of the diagnostic above. In apply mode,

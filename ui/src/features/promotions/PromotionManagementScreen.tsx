@@ -9,8 +9,10 @@ import {
   type CreatePromotionArgs,
 } from '@/api/promotions';
 import { useAuth } from '@/contexts/AuthContext';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './PromotionManagementScreen.css';
 
 type ModalMode = 'add' | 'edit' | null;
@@ -53,6 +55,8 @@ export default function PromotionManagementScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
+  const deleteExit = useExitAnimation(!!deleteTarget, () => setDeleteTarget(null));
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -80,6 +84,8 @@ export default function PromotionManagementScreen() {
   const closeModal = useCallback(() => {
     setModalMode(null);
   }, []);
+
+  const modalExit = useExitAnimation(!!modalMode, closeModal);
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) return;
@@ -148,7 +154,39 @@ export default function PromotionManagementScreen() {
       </div>
 
       {loading ? (
-        <p className="promo-mgmt-loading"><Localized id="loading"><span>Loading…</span></Localized></p>
+        <div className="promo-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="promo-mgmt-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="9rem" height="2.25rem" />
+          </div>
+          <div className="promo-mgmt-table-wrap">
+            <table className="promo-mgmt-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Name', 'Type', 'Value', 'Active', 'Starts', 'Ends', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 6 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="2.5rem" height="1.375rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td className="promo-mgmt-actions">
+                      <Skeleton variant="block" width="3rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : promotions.length === 0 ? (
         <Card shadow="sm">
           <div className="promo-mgmt-empty">
@@ -175,6 +213,7 @@ export default function PromotionManagementScreen() {
               {promotions.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <td>
                     <Localized id={PROMO_TYPE_LABELS[p.promo_type]!}>
                       <span>{p.promo_type}</span>
@@ -209,14 +248,14 @@ export default function PromotionManagementScreen() {
       )}
 
       {/* ── Delete confirmation modal ── */}
-      {deleteTarget && (
-        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('promotions-modal-delete-label')}>
-          <div className="promo-mgmt-modal">
+      {deleteExit.shouldRender && deleteTarget && (
+        <div className={`promo-mgmt-overlay${deleteExit.exiting ? ' promo-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('promotions-modal-delete-label')}>
+          <div className={`promo-mgmt-modal${deleteExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
             <div className="promo-mgmt-modal-header">
               <Localized id="promotions-delete-confirm-title">
                 <h2 className="promo-mgmt-modal-title">Delete Promotion</h2>
               </Localized>
-              <button type="button" className="promo-mgmt-modal-close" onClick={() => setDeleteTarget(null)} aria-label={l10n.getString('close')}>&times;</button>
+              <button type="button" className="promo-mgmt-modal-close" onClick={deleteExit.requestClose} aria-label={l10n.getString('close')}>&times;</button>
             </div>
             <div className="promo-mgmt-modal-body">
               <Localized id="promotions-delete-confirm" vars={{ name: deleteTarget.name }}>
@@ -225,7 +264,7 @@ export default function PromotionManagementScreen() {
             </div>
             <div className="promo-mgmt-modal-actions">
               <Localized id="cancel">
-                <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting !== null}>Cancel</Button>
+                <Button variant="ghost" onClick={deleteExit.requestClose} disabled={deleting !== null}>Cancel</Button>
               </Localized>
               <Localized id="delete">
                 <Button variant="danger" loading={deleting !== null} onClick={confirmDelete}>Delete</Button>
@@ -236,85 +275,95 @@ export default function PromotionManagementScreen() {
       )}
 
       {/* ── Add / Edit modal ── */}
-      {modalMode && (
-        <div className="promo-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString(modalMode === 'add' ? 'promotions-modal-add-label' : 'promotions-modal-edit-label')}>
-          <div className="promo-mgmt-modal promo-mgmt-modal--wide">
+      {modalExit.shouldRender && modalMode && (
+        <div className={`promo-mgmt-overlay${modalExit.exiting ? ' promo-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString(modalMode === 'add' ? 'promotions-modal-add-label' : 'promotions-modal-edit-label')}>
+          <div className={`promo-mgmt-modal promo-mgmt-modal--wide${modalExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
             <div className="promo-mgmt-modal-header">
               <Localized id={modalMode === 'add' ? 'promotions-add' : 'promotions-edit'}>
                 <h2 className="promo-mgmt-modal-title">{modalMode === 'add' ? 'Add Promotion' : 'Edit Promotion'}</h2>
               </Localized>
-              <button type="button" className="promo-mgmt-modal-close" onClick={closeModal} aria-label={l10n.getString('close')}>&times;</button>
+              <button type="button" className="promo-mgmt-modal-close" onClick={modalExit.requestClose} aria-label={l10n.getString('close')}>&times;</button>
             </div>
 
             <div className="promo-mgmt-modal-body">
               <div className="promo-mgmt-form">
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-name"><span>Name</span></Localized>
-                  <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required aria-label={l10n.getString('promotions-field-name')} />
-                </label>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-name"><Localized id="promotions-name"><span>Name</span></Localized></label>
+                  <input id="promo-field-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required aria-label={l10n.getString('promotions-field-name')} />
+                </div>
 
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-type"><span>Type</span></Localized>
-                  <select value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-type"><Localized id="promotions-type"><span>Type</span></Localized></label>
+                  <select id="promo-field-type" value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
                     {PROMO_TYPES.map((t) => (
                       <option key={t} value={t}>
                         {l10n.getString(PROMO_TYPE_LABELS[t]!) || t}
                       </option>
                     ))}
-
                   </select>
-                </label>
+                </div>
 
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-value"><span>Value</span></Localized>
-                  <input type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-value')} />
-                </label>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-value"><Localized id="promotions-value"><span>Value</span></Localized></label>
+                  <input id="promo-field-value" type="number" value={form.value_minor} onChange={(e) => setForm({ ...form, value_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-value')} />
+                </div>
 
                 {form.promo_type === 'buy_x_get_y' && (
                   <>
-                    <label className="promo-mgmt-field">
-                      <Localized id="promotions-min-qty"><span>Min Qty</span></Localized>
-                      <input type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-min-qty')} />
-                    </label>
-                    <label className="promo-mgmt-field">
-                      <Localized id="promotions-trigger-sku"><span>Trigger SKU</span></Localized>
-                      <input type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-trigger-sku')} />
-                    </label>
-                    <label className="promo-mgmt-field">
-                      <Localized id="promotions-reward-sku"><span>Reward SKU</span></Localized>
-                      <input type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-reward-sku')} />
-                    </label>
-                    <label className="promo-mgmt-field">
-                      <Localized id="promotions-reward-qty"><span>Reward Qty</span></Localized>
-                      <input type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-reward-qty')} />
-                    </label>
+                    <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label htmlFor="promo-field-min-qty"><Localized id="promotions-min-qty"><span>Min Qty</span></Localized></label>
+                      <input id="promo-field-min-qty" type="number" value={form.min_qty ?? ''} onChange={(e) => setForm({ ...form, min_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-min-qty')} />
+                    </div>
+                    <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label htmlFor="promo-field-trigger-sku"><Localized id="promotions-trigger-sku"><span>Trigger SKU</span></Localized></label>
+                      <input id="promo-field-trigger-sku" type="text" value={form.trigger_sku ?? ''} onChange={(e) => setForm({ ...form, trigger_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-trigger-sku')} />
+                    </div>
+                    <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label htmlFor="promo-field-reward-sku"><Localized id="promotions-reward-sku"><span>Reward SKU</span></Localized></label>
+                      <input id="promo-field-reward-sku" type="text" value={form.reward_sku ?? ''} onChange={(e) => setForm({ ...form, reward_sku: e.target.value || null })} aria-label={l10n.getString('promotions-field-reward-sku')} />
+                    </div>
+                    <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label htmlFor="promo-field-reward-qty"><Localized id="promotions-reward-qty"><span>Reward Qty</span></Localized></label>
+                      <input id="promo-field-reward-qty" type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm({ ...form, reward_qty: e.target.value ? parseInt(e.target.value) : null })} aria-label={l10n.getString('promotions-field-reward-qty')} />
+                    </div>
                   </>
                 )}
 
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-field-starts-at"><span>Starts At</span></Localized>
-                  <input type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-starts-at')} />
-                </label>
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-field-ends-at"><span>Ends At</span></Localized>
-                  <input type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-ends-at')} />
-                </label>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-starts-at"><Localized id="promotions-field-starts-at"><span>Starts At</span></Localized></label>
+                  <input id="promo-field-starts-at" type="datetime-local" value={form.starts_at ? form.starts_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, starts_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-starts-at')} />
+                </div>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-ends-at"><Localized id="promotions-field-ends-at"><span>Ends At</span></Localized></label>
+                  <input id="promo-field-ends-at" type="datetime-local" value={form.ends_at ? form.ends_at.substring(0, 16) : ''} onChange={(e) => setForm({ ...form, ends_at: e.target.value ? new Date(e.target.value).toISOString() : null })} aria-label={l10n.getString('promotions-field-ends-at')} />
+                </div>
 
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-min-order"><span>Min Order</span></Localized>
-                  <input type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-min-order')} />
-                </label>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-min-order"><Localized id="promotions-min-order"><span>Min Order</span></Localized></label>
+                  <input id="promo-field-min-order" type="number" value={form.min_order_minor} onChange={(e) => setForm({ ...form, min_order_minor: parseInt(e.target.value) || 0 })} aria-label={l10n.getString('promotions-field-min-order')} />
+                </div>
 
-                <label className="promo-mgmt-field">
-                  <Localized id="promotions-category"><span>Category</span></Localized>
-                  <input type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} aria-label={l10n.getString('promotions-field-category')} />
-                </label>
+                <div className="promo-mgmt-field promo-mgmt-field--horizontal">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label htmlFor="promo-field-category"><Localized id="promotions-category"><span>Category</span></Localized></label>
+                  <input id="promo-field-category" type="text" value={form.category_id ?? ''} onChange={(e) => setForm({ ...form, category_id: e.target.value || null })} aria-label={l10n.getString('promotions-field-category')} />
+                </div>
               </div>
             </div>
 
             <div className="promo-mgmt-modal-actions">
               <Localized id="cancel">
-                <Button variant="ghost" onClick={closeModal} disabled={saving}>Cancel</Button>
+                <Button variant="ghost" onClick={modalExit.requestClose} disabled={saving}>Cancel</Button>
               </Localized>
               <Localized id="save">
                 <Button variant="primary" loading={saving} disabled={!form.name.trim()} onClick={handleSave}>Save</Button>

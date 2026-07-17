@@ -15,8 +15,19 @@
   font-weight: var(--font-weight-bold);
 }
 
-.exchange-rate-loading {
-  color: var(--color-fg-secondary);
+.exchange-rate-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  pointer-events: none;
+}
+
+.exchange-rate-loading-skeleton .exchange-rate-header {
+  pointer-events: none;
+}
+
+.exchange-rate-loading-skeleton .exchange-rate-table thead {
+  opacity: 0.5;
 }
 
 .exchange-rate-error {
@@ -92,58 +103,22 @@
 .exchange-rate-action-btn--danger:hover {
   background: var(--color-danger-bg);
 }
-
-.exchange-rate-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--color-bg-overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-}
-
-.exchange-rate-modal {
-  background: var(--color-bg);
-  border-radius: var(--radius-lg);
-  width: 90%;
-  max-width: 480px;
-  box-shadow: var(--shadow-lg);
-}
-
-.exchange-rate-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.exchange-rate-modal-header h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-weight-semibold);
-}
-
-.exchange-rate-modal-close {
-  background: none;
-  border: none;
-  font-size: var(--text-xl);
-  cursor: pointer;
-  color: var(--color-fg-secondary);
-  padding: var(--space-1);
-  line-height: 1;
-}
-
-.exchange-rate-modal-body {
-  padding: var(--space-4);
-}
-
 .exchange-rate-field {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   margin-bottom: var(--space-3);
+}
+
+.exchange-rate-field--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.exchange-rate-field--horizontal > .exchange-rate-label {
+  min-width: 7rem;
+  flex-shrink: 0;
 }
 
 .exchange-rate-label {
@@ -161,20 +136,11 @@
   color: var(--color-fg);
 }
 
-.exchange-rate-input:focus {
-  outline: none;
+.exchange-rate-input:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent-subtle);
 }
 
 .exchange-rate-select {
   appearance: auto;
-}
-
-.exchange-rate-modal-actions {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
-  padding: var(--space-4);
-  border-top: 1px solid var(--color-border);
 }

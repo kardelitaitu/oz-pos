@@ -10,6 +10,8 @@ import {
 } from '@/api/currency';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
+import { SettingsPopup } from '@/frontend/shared';
 import './ExchangeRateScreen.css';
 
 function todayStr(): string {
@@ -131,9 +133,35 @@ export default function ExchangeRateScreen() {
       </div>
 
       {loading ? (
-        <Localized id="currency-loading">
-          <p className="exchange-rate-loading">Loading exchange rates&hellip;</p>
-        </Localized>
+        <div className="exchange-rate-loading-skeleton" aria-hidden="true">
+          <div className="exchange-rate-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="4rem" height="2.25rem" />
+          </div>
+          <div className="exchange-rate-table-wrap">
+            <table className="exchange-rate-table">
+              <thead>
+                <tr>
+                  {['From', 'To', 'Rate', 'Source', 'Effective Date', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width="4rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="3rem" /></td>
+                    <td><Skeleton variant="text" width="3rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="block" width="3.5rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="exchange-rate-error">
@@ -195,124 +223,112 @@ export default function ExchangeRateScreen() {
         </div>
       )}
 
-      {showModal && (
-        <div className="exchange-rate-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('currency-modal-add-label')}>
-          <div className="exchange-rate-modal">
-            <div className="exchange-rate-modal-header">
-              <Localized id="currency-modal-title">
-                <h2>Add Exchange Rate</h2>
-              </Localized>
-              <button
-                type="button"
-                className="exchange-rate-modal-close"
-                onClick={() => setShowModal(false)}
-                aria-label={l10n.getString('close')}
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="exchange-rate-modal-body">
-              <label className="exchange-rate-field" htmlFor="er-field-from" aria-label={l10n.getString('currency-field-from')}>
-                <Localized id="currency-field-from">
-                  <span className="exchange-rate-label">From Currency</span>
-                </Localized>
-                <select
-                  className="exchange-rate-input exchange-rate-select"
-                  id="er-field-from"
-                  value={form.fromCurrency}
-                  onChange={(e) => setForm({ ...form, fromCurrency: e.target.value })}
-                >
-                  <Localized id="currency-select-placeholder">
-                    <option value="">Select currency&hellip;</option>
-                  </Localized>
-                  {currencyOptions}
-                </select>
-              </label>
-
-              <label className="exchange-rate-field" htmlFor="er-field-to" aria-label={l10n.getString('currency-field-to')}>
-                <Localized id="currency-field-to">
-                  <span className="exchange-rate-label">To Currency</span>
-                </Localized>
-                <select
-                  className="exchange-rate-input exchange-rate-select"
-                  id="er-field-to"
-                  value={form.toCurrency}
-                  onChange={(e) => setForm({ ...form, toCurrency: e.target.value })}
-                >
-                  <Localized id="currency-select-placeholder">
-                    <option value="">Select currency&hellip;</option>
-                  </Localized>
-                  {currencyOptions}
-                </select>
-              </label>
-
-              <label className="exchange-rate-field" htmlFor="er-field-rate" aria-label={l10n.getString('currency-field-rate')}>
-                <Localized id="currency-field-rate">
-                  <span className="exchange-rate-label">Rate</span>
-                </Localized>
-                <Localized id="currency-rate-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="exchange-rate-input"
-                    type="number"
-                    id="er-field-rate"
-                    min="0"
-                    step="any"
-                    value={form.rate}
-                    onChange={(e) => setForm({ ...form, rate: e.target.value })}
-                    placeholder="1.25"
-                  />
-                </Localized>
-              </label>
-
-              <label className="exchange-rate-field" htmlFor="er-field-source" aria-label={l10n.getString('currency-field-source')}>
-                <Localized id="currency-field-source">
-                  <span className="exchange-rate-label">Source (optional)</span>
-                </Localized>
-                <Localized id="currency-source-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="exchange-rate-input"
-                    type="text"
-                    id="er-field-source"
-                    value={form.source}
-                    onChange={(e) => setForm({ ...form, source: e.target.value })}
-                    placeholder="e.g. ECB"
-                  />
-                </Localized>
-              </label>
-
-              <label className="exchange-rate-field" htmlFor="er-field-date" aria-label={l10n.getString('currency-field-date')}>
-                <Localized id="currency-field-date">
-                  <span className="exchange-rate-label">Effective Date</span>
-                </Localized>
-                <input
-                  className="exchange-rate-input"
-                  type="date"
-                  id="er-field-date"
-                  value={form.effectiveDate}
-                  onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })}
-                />
-              </label>
-            </div>
-
-            <div className="exchange-rate-modal-actions">
-              <Localized id="currency-btn-cancel">
-                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
-              </Localized>
-              <Button
-                variant="primary"
-                loading={saving}
-                disabled={!formValid}
-                onClick={handleSave}
-              >
-                <Localized id="currency-btn-save">
-                  <span>Save</span>
-                </Localized>
-              </Button>
-            </div>
-          </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={l10n.getString('currency-modal-title')}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel={l10n.getString('currency-btn-save')}
+        saveDisabled={!formValid}
+        cancelLabel={l10n.getString('currency-btn-cancel')}
+      >
+        <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+          <label htmlFor="er-field-from" className="exchange-rate-label">
+            <Localized id="currency-field-from">
+              <span>From Currency</span>
+            </Localized>
+          </label>
+          <select
+            className="exchange-rate-input exchange-rate-select"
+            id="er-field-from"
+            value={form.fromCurrency}
+            onChange={(e) => setForm({ ...form, fromCurrency: e.target.value })}
+          >
+            <Localized id="currency-select-placeholder">
+              <option value="">Select currency&hellip;</option>
+            </Localized>
+            {currencyOptions}
+          </select>
         </div>
-      )}
+
+        <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+          <label htmlFor="er-field-to" className="exchange-rate-label">
+            <Localized id="currency-field-to">
+              <span>To Currency</span>
+            </Localized>
+          </label>
+          <select
+            className="exchange-rate-input exchange-rate-select"
+            id="er-field-to"
+            value={form.toCurrency}
+            onChange={(e) => setForm({ ...form, toCurrency: e.target.value })}
+          >
+            <Localized id="currency-select-placeholder">
+              <option value="">Select currency&hellip;</option>
+            </Localized>
+            {currencyOptions}
+          </select>
+        </div>
+
+        <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+          <label htmlFor="er-field-rate" className="exchange-rate-label">
+            <Localized id="currency-field-rate">
+              <span>Rate</span>
+            </Localized>
+          </label>
+          <Localized id="currency-rate-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="exchange-rate-input"
+              type="number"
+              id="er-field-rate"
+              min="0"
+              step="any"
+              value={form.rate}
+              onChange={(e) => setForm({ ...form, rate: e.target.value })}
+              placeholder="1.25"
+            />
+          </Localized>
+        </div>
+
+        <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+          <label htmlFor="er-field-source" className="exchange-rate-label">
+            <Localized id="currency-field-source">
+              <span>Source (optional)</span>
+            </Localized>
+          </label>
+          <Localized id="currency-source-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="exchange-rate-input"
+              type="text"
+              id="er-field-source"
+              value={form.source}
+              onChange={(e) => setForm({ ...form, source: e.target.value })}
+              placeholder="e.g. ECB"
+            />
+          </Localized>
+        </div>
+
+        <div className="exchange-rate-field exchange-rate-field--horizontal">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+          <label htmlFor="er-field-date" className="exchange-rate-label">
+            <Localized id="currency-field-date">
+              <span>Effective Date</span>
+            </Localized>
+          </label>
+          <input
+            className="exchange-rate-input"
+            type="date"
+            id="er-field-date"
+            value={form.effectiveDate}
+            onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })}
+          />
+        </div>
+      </SettingsPopup>
     </div>
   );
 }

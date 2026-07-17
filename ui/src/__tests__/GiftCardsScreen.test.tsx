@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import giftCardsFtl from '@/locales/gift-cards.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -16,8 +15,8 @@ vi.mock('@/api/giftCards', () => ({
 vi.mock('@/features/gift-cards/IssueGiftCardModal', () => ({
   default: ({ onClose, onIssued }: { onClose: () => void; onIssued: () => void }) => (
     <div role="dialog" aria-label="issue-modal">
-      <button onClick={onClose}>Close Issue</button>
-      <button onClick={onIssued}>Card Issued</button>
+      <button type="button" onClick={onClose}>Close Issue</button>
+      <button type="button" onClick={onIssued}>Card Issued</button>
     </div>
   ),
 }));
@@ -30,7 +29,9 @@ const mockFreezeGiftCard = freezeGiftCard as ReturnType<typeof vi.fn>;
 const mockUnfreezeGiftCard = unfreezeGiftCard as ReturnType<typeof vi.fn>;
 const mockTopUpGiftCard = topUpGiftCard as ReturnType<typeof vi.fn>;
 
-
+// ── FAST_WAIT: 5ms polling for async assertions ────────────────────────
+// Reduces waitFor overhead from 50ms (default) to 5ms per poll cycle.
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const sampleCards = [
   {
@@ -71,6 +72,27 @@ const sampleCards = [
   },
 ];
 
+// ── Helpers ────────────────────────────────────────────────────────────
+// All helpers use fireEvent for synchronous interaction. Tests that need
+// to wait for async state updates (API data, expand/collapse re-render)
+// use await waitFor(..., FAST_WAIT) after the fireEvent call.
+
+/** Wait for a card to appear in the list, then click it to expand details. */
+async function expandCard(cardNumber: string) {
+  await waitFor(() => {
+    expect(screen.getByText(cardNumber)).toBeInTheDocument();
+  }, FAST_WAIT);
+  fireEvent.click(screen.getByText(cardNumber));
+}
+
+/** Wait for a button by name to appear, then click it. */
+async function waitAndClickButton(name: RegExp) {
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name })).toBeInTheDocument();
+  }, FAST_WAIT);
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
 describe('GiftCardsScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and Issue New Card button', async () => {
@@ -86,16 +108,19 @@ describe('GiftCardsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByText('GC-002')).toBeInTheDocument();
     expect(screen.getByText('GC-003')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     mockListGiftCards.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    const { container } = renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+
+    const skeleton = container.querySelector('[aria-hidden="true"].gift-cards-loading-skeleton');
+    expect(skeleton).toBeInTheDocument();
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no cards exist', async () => {
@@ -103,7 +128,7 @@ describe('GiftCardsScreen', () => {
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/no gift cards found/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('renders status badges for each card', async () => {
@@ -112,7 +137,7 @@ describe('GiftCardsScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('active')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByText('redeemed')).toBeInTheDocument();
     expect(screen.getByText('frozen')).toBeInTheDocument();
   });
@@ -129,326 +154,227 @@ describe('GiftCardsScreen', () => {
 
   // ── Expand/collapse ──────────────────────────────────────────
   it('expands card details when summary is clicked', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
+    await expandCard('GC-001');
 
     await waitFor(() => {
       expect(screen.getByText('Initial Balance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByText('Issued')).toBeInTheDocument();
     expect(screen.getByText('Expires')).toBeInTheDocument();
   });
 
   it('shows transaction table in expanded detail', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
+    await expandCard('GC-001');
 
     await waitFor(() => {
       expect(screen.getByText('Recent Transactions')).toBeInTheDocument();
       expect(screen.getByText('redeem')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('collapses detail when summary is clicked again', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
+    await expandCard('GC-001');
     await waitFor(() => {
       expect(screen.getByText('Initial Balance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByText('GC-001'));
+    fireEvent.click(screen.getByText('GC-001'));
     await waitFor(() => {
       expect(screen.queryByText('Initial Balance')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('does not show transaction section for cards with no transactions', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([sampleCards[2]!]);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-003')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-003'));
+    await expandCard('GC-003');
 
     await waitFor(() => {
       expect(screen.queryByText('Recent Transactions')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Freeze/Unfreeze ──────────────────────────────────────────
   it('shows Freeze button for active cards in expanded view', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
+    await expandCard('GC-001');
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /freeze/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('calls freezeGiftCard when Freeze is clicked', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockFreezeGiftCard.mockResolvedValue({});
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /freeze/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /freeze/i }));
+    await expandCard('GC-001');
+    await waitAndClickButton(/freeze/i);
 
     await waitFor(() => {
       expect(mockFreezeGiftCard).toHaveBeenCalledWith('GC-001');
-    });
+    }, FAST_WAIT);
   });
 
   it('shows Unfreeze button for frozen cards', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-003')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-003'));
+    await expandCard('GC-003');
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /unfreeze/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('calls unfreezeGiftCard when Unfreeze is clicked', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockUnfreezeGiftCard.mockResolvedValue({});
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-003')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-003'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /unfreeze/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /unfreeze/i }));
+    await expandCard('GC-003');
+    await waitAndClickButton(/unfreeze/i);
 
     await waitFor(() => {
       expect(mockUnfreezeGiftCard).toHaveBeenCalledWith('GC-003');
-    });
+    }, FAST_WAIT);
   });
 
   it('does not show Freeze/Unfreeze for redeemed cards', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([sampleCards[1]!]);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-002')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-002'));
+    await expandCard('GC-002');
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /freeze/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /unfreeze/i })).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Top-up ───────────────────────────────────────────────────
   it('shows Top Up button for active cards', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
+    await expandCard('GC-001');
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /top up/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('opens top-up form when Top Up is clicked', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /top up/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /top up/i }));
+    await expandCard('GC-001');
+    await waitAndClickButton(/top up/i);
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/amount/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /confirm top-up/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('submits top-up and refreshes the list', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockTopUpGiftCard.mockResolvedValue({});
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
+    await expandCard('GC-001');
+    await waitAndClickButton(/top up/i);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /top up/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /top up/i }));
+      expect(screen.getByPlaceholderText(/amount/i)).toBeInTheDocument();
+    }, FAST_WAIT);
 
     const amountInput = screen.getByPlaceholderText(/amount/i);
-    await user.type(amountInput, '50000');
+    fireEvent.change(amountInput, { target: { value: '50000' } });
 
     await waitFor(() => {
       expect(mockListGiftCards).toHaveBeenCalledTimes(1);
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('button', { name: /confirm top-up/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm top-up/i }));
 
     await waitFor(() => {
       expect(mockTopUpGiftCard).toHaveBeenCalledWith('GC-001', 50000);
-    });
+    }, FAST_WAIT);
   });
 
   it('shows error when top-up amount is invalid', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
+    await expandCard('GC-001');
+    await waitAndClickButton(/top up/i);
 
-    await user.click(screen.getByText('GC-001'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /top up/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /top up/i }));
-
-    await user.click(screen.getByRole('button', { name: /confirm top-up/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm top-up/i }));
 
     await waitFor(() => {
-      // The Fluent key is now resolved from the bundle.
       expect(screen.getByText(/top-up amount must be positive/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(mockTopUpGiftCard).not.toHaveBeenCalled();
   });
 
   it('closes top-up form when Cancel is clicked', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue(sampleCards);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('GC-001')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('GC-001'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /top up/i })).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('button', { name: /top up/i }));
+    await expandCard('GC-001');
+    await waitAndClickButton(/top up/i);
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/amount/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
     await waitFor(() => {
       expect(screen.queryByPlaceholderText(/amount/i)).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Issue modal ──────────────────────────────────────────────
   it('opens IssueGiftCardModal when Issue New Card is clicked', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([]);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await user.click(screen.getByRole('button', { name: /issue new card/i }));
+    fireEvent.click(screen.getByRole('button', { name: /issue new card/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: /issue-modal/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('refreshes list when issue modal reports onIssued', async () => {
-    const user = userEvent.setup();
     mockListGiftCards.mockResolvedValue([]);
     renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
 
-    await user.click(screen.getByRole('button', { name: /issue new card/i }));
+    fireEvent.click(screen.getByRole('button', { name: /issue new card/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: /issue-modal/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('button', { name: /card issued/i }));
+    fireEvent.click(screen.getByRole('button', { name: /card issued/i }));
 
     await waitFor(() => {
       expect(mockListGiftCards).toHaveBeenCalledTimes(2);
-    });
+    }, FAST_WAIT);
   });
 });

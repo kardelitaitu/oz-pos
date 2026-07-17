@@ -7,5 +7,11 @@ suppliers-search =
     .aria-label = Search suppliers
 suppliers-loading = Loading suppliers…
 
+suppliers-add-title = Add Supplier
+suppliers-edit-title = Edit Supplier
+suppliers-btn-create = Create
+suppliers-btn-update = Update
+suppliers-btn-cancel = Cancel
+
 po-title = Purchase Orders
 po-add = New Purchase Order

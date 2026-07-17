@@ -5,8 +5,10 @@
 // enable/disable, dependency display, and group headers.
 
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
+
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 import { renderWithFluent } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -48,12 +50,14 @@ const sampleFeaturesResult = { features: sampleFeatures };
 describe('FeatureToggleScreen', () => {
   // ── Loading state ────────────────────────────────────────────
 
-  it('renders loading spinner while fetching features', async () => {
+  it('renders loading skeleton while fetching features', async () => {
     mockInvoke.mockReturnValue(new Promise(() => {}));
 
     await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
-    expect(screen.getByText(/loading features/i)).toBeInTheDocument();
+    // Skeleton container should render instead of text
+    expect(document.querySelector('.feature-toggle-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText(/loading features/i)).not.toBeInTheDocument();
   });
 
   // ── Error state ──────────────────────────────────────────────
@@ -65,7 +69,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('IPC error')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
@@ -77,13 +81,13 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Empty state ──────────────────────────────────────────────
@@ -95,7 +99,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/No features found/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Main render ──────────────────────────────────────────────
@@ -107,7 +111,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Feature Toggles')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     // 3 of 5 enabled
     expect(screen.getByText(/3 \/ 5 enabled/)).toBeInTheDocument();
   });
@@ -119,7 +123,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     // Use heading role to disambiguate from LSP nav chips that share group names
     expect(screen.getByRole('heading', { name: /core/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /payments/i })).toBeInTheDocument();
@@ -135,7 +139,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByText('Accept cash payments')).toBeInTheDocument();
     expect(screen.getByText('Card Payment')).toBeInTheDocument();
   });
@@ -147,7 +151,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Core: cash_payment is enabled → "1/1".
     const coreHeading = screen.getByRole('heading', { name: /core/i });
@@ -165,7 +169,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Each group with features gets Enable All / Disable All buttons
     const enableButtons = screen.getAllByText(/enable all/i);
@@ -183,7 +187,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     expect(screen.getByPlaceholderText(/search features/i)).toBeInTheDocument();
   });
@@ -198,11 +202,11 @@ describe('FeatureToggleScreen', () => {
     });
 
     const searchInput = screen.getByPlaceholderText(/search features/i);
-    await userEvent.type(searchInput, 'card');
+    fireEvent.change(searchInput, { target: { value: 'card' } });
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.queryByText('Cash Payment')).not.toBeInTheDocument();
   });
 
@@ -216,11 +220,11 @@ describe('FeatureToggleScreen', () => {
     });
 
     const searchInput = screen.getByPlaceholderText(/search features/i);
-    await userEvent.type(searchInput, 'zzzznotfound');
+    fireEvent.change(searchInput, { target: { value: 'zzzznotfound' } });
 
     await waitFor(() => {
       expect(screen.getByText(/No features match your search/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('shows clear button when search has a value', async () => {
@@ -233,12 +237,12 @@ describe('FeatureToggleScreen', () => {
     });
 
     const searchInput = screen.getByPlaceholderText(/search features/i);
-    await userEvent.type(searchInput, 'card');
+    fireEvent.change(searchInput, { target: { value: 'card' } });
 
     const clearBtn = screen.getByRole('button', { name: /clear search/i });
     expect(clearBtn).toBeInTheDocument();
 
-    await userEvent.click(clearBtn);
+    fireEvent.click(clearBtn);
     expect(searchInput).toHaveValue('');
   });
 
@@ -256,7 +260,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Find the Card Payment toggle checkbox and click it
     const cardRow = screen.getByText('Card Payment').closest('.feature-toggle-item') as HTMLElement;
@@ -264,7 +268,7 @@ describe('FeatureToggleScreen', () => {
     expect(toggle).not.toBeNull();
     expect(toggle!.checked).toBe(false);
 
-    await userEvent.click(toggle!);
+    fireEvent.click(toggle!);
 
     await waitFor(() => {
       // After toggle, the feature list updates and card_payment should be enabled
@@ -272,7 +276,7 @@ describe('FeatureToggleScreen', () => {
         'set_feature',
         expect.objectContaining({ args: { key: 'card_payment', enabled: true } }),
       );
-    });
+    }, FAST_WAIT);
   });
 
   it('shows auto-enabled dependency toast when toggle enables dependencies', async () => {
@@ -291,16 +295,16 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const autoCardRow = screen.getByText('Card Payment').closest('.feature-toggle-item') as HTMLElement;
     const autoToggle = autoCardRow.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(autoToggle).not.toBeNull();
-    await userEvent.click(autoToggle!);
+    fireEvent.click(autoToggle!);
 
     await waitFor(() => {
       expect(screen.getByText(/auto-enabled dependencies/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   // ── Bulk toggle ───────────────────────────────────────────────
@@ -317,12 +321,12 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Barcode Scanner')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Find Hardware group's Enable All button and click it
     const hardwareGroup = screen.getByRole('heading', { name: /hardware/i }).closest('.feature-toggle-group') as HTMLElement;
     const enableAllBtn = within(hardwareGroup).getByText(/enable all/i);
-    await userEvent.click(enableAllBtn);
+    fireEvent.click(enableAllBtn);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith(
@@ -331,7 +335,7 @@ describe('FeatureToggleScreen', () => {
           args: expect.objectContaining({ keys: ['barcode_scanning'], enabled: true }),
         }),
       );
-    });
+    }, FAST_WAIT);
   });
 
   it('bulk-disables all features in a group', async () => {
@@ -346,12 +350,12 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Find Core group's Disable All button and click it
     const coreGroup = screen.getByRole('heading', { name: /core/i }).closest('.feature-toggle-group') as HTMLElement;
     const disableAllBtn = within(coreGroup).getByText(/disable all/i);
-    await userEvent.click(disableAllBtn);
+    fireEvent.click(disableAllBtn);
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith(
@@ -360,7 +364,7 @@ describe('FeatureToggleScreen', () => {
           args: expect.objectContaining({ keys: ['cash_payment'], enabled: false }),
         }),
       );
-    });
+    }, FAST_WAIT);
   });
 
   // ── Dependency display ────────────────────────────────────────
@@ -372,7 +376,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Card Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Card Payment depends on Cash Payment
     expect(screen.getByText(/requires: cash payment/i)).toBeInTheDocument();
@@ -385,7 +389,7 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // Cash Payment has no dependencies — the requires text should not appear in its row
     const cashRow = screen.getByText('Cash Payment').closest('.feature-toggle-item') as HTMLElement;
@@ -405,14 +409,14 @@ describe('FeatureToggleScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cash Payment')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     const disabledCashRow = screen.getByText('Cash Payment').closest('.feature-toggle-item') as HTMLElement;
     const disabledToggle = disabledCashRow.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(disabledToggle).not.toBeNull();
 
     // Click to start toggling
-    await userEvent.click(disabledToggle!);
+    fireEvent.click(disabledToggle!);
 
     // Toggle should be disabled while in progress
     expect(disabledToggle!).toBeDisabled();

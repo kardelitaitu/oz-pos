@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useBrand } from '@/contexts/BrandContext';
-import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
+import { deriveAccentPalette, applyAccentPalette, applyThemeContrasts } from '@/utils/color';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -82,6 +82,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       timeoutRef.current = null;
     }, 300);
 
+    // Reconcile foreground contrast colours after theme change.
+    requestAnimationFrame(() => applyThemeContrasts());
+
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
@@ -95,6 +98,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       const palette = deriveAccentPalette(brandSettings.primary_colour);
       applyAccentPalette(palette);
     }
+    // Reconcile foreground contrasts when brand colour (or any theme token) changes.
+    requestAnimationFrame(() => applyThemeContrasts());
   }, [brandSettings.primary_colour]);
 
   const toggleTheme = useCallback(() => {

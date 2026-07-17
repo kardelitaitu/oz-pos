@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Localized } from '@/frontend/shared/Localized';
 import { processRefund, type SaleDetail } from '@/api/sales';
@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
 import { Button } from '@/components/Button';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './RefundModal.css';
 
 interface RefundModalProps {
@@ -25,6 +26,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<{ refundId: string; totalMinor: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const toggleLine = useCallback((lineId: string, _sku: string, maxQty: number) => {
     setSelectedLines((prev) => {
@@ -110,6 +112,8 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
     exit.requestClose();
   }, [onRefunded, exit]);
 
+  // ── Focus trap (Escape + Tab cycling) ─────────────────────
+  useFocusTrap(panelRef, open && !exit.exiting && !processing, () => exit.requestClose());
 
   if (!exit.shouldRender) return null;
 
@@ -129,6 +133,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
     >
       <div
         className={`refund-modal${exit.exiting ? ' refund-modal--exiting' : ''}`}
+        ref={panelRef}
       >
         {result ? (
           <div className="refund-done">

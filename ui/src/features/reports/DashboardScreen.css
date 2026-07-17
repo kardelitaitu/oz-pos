@@ -10,7 +10,7 @@
 
 .dashboard-kpi-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-6);
 }
@@ -55,7 +55,7 @@
 
 .dashboard-weekly-bar-row {
   display: grid;
-  grid-template-columns: 36px 1fr 100px;
+  grid-template-columns: 2.25rem 1fr 6.25rem;
   gap: var(--space-2);
   align-items: center;
 }
@@ -68,7 +68,7 @@
 }
 
 .dashboard-weekly-bar-track {
-  height: 20px;
+  height: 1.25rem;
   background: var(--color-bg-hover, var(--color-border));
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -78,7 +78,7 @@
   height: 100%;
   border-radius: var(--radius-sm);
   background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary, var(--color-accent)));
-  min-width: 4px;
+  min-width: 0.25rem;
 }
 
 .dashboard-weekly-bar-value {
@@ -129,6 +129,6 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .dashboard-weekly-bar {
-    transition: width 0.4s ease;
+    transition: width var(--duration-400) var(--ease-out);
   }
 }

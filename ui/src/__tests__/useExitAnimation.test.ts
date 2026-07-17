@@ -167,4 +167,67 @@ describe('useExitAnimation', () => {
     });
     expect(result.current.exiting).toBe(false);
   });
+
+  it('uses latest onClose callback when it changes during the exit animation', () => {
+    const onClose1 = vi.fn();
+    const onClose2 = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ cb }) => useExitAnimation(true, cb, 200),
+      { initialProps: { cb: onClose1 } },
+    );
+
+    act(() => {
+      result.current.requestClose();
+    });
+
+    // Change the onClose callback mid-animation
+    rerender({ cb: onClose2 });
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    expect(onClose1).not.toHaveBeenCalled();
+    expect(onClose2).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels the timer on unmount during exit animation', () => {
+    const onClose = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useExitAnimation(true, onClose, 200),
+    );
+
+    act(() => {
+      result.current.requestClose();
+    });
+
+    // Unmount before the timer fires
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    // onClose must NOT be called after unmount
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('fires onClose immediately when duration is 0', () => {
+    const onClose = vi.fn();
+    const { result } = renderHook(() =>
+      useExitAnimation(true, onClose, 0),
+    );
+
+    act(() => {
+      result.current.requestClose();
+    });
+
+    // With 0 duration, onClose should fire immediately
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(result.current.exiting).toBe(false);
+  });
 });

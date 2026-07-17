@@ -74,8 +74,7 @@
 }
 
 .pos-cart-discount-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .pos-cart-discount-row {
@@ -101,8 +100,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 1.75rem;
+  height: 1.75rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -116,6 +115,11 @@
 .pos-cart-discount-clear:hover {
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+
+.pos-cart-discount-clear:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .pos-cart-discount-form {
@@ -142,7 +146,7 @@
 }
 
 .pos-cart-discount-pct {
-  width: 56px;
+  width: 3.5rem;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -150,26 +154,24 @@
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
   text-align: center;
-  outline: none;
 }
 
-.pos-cart-discount-pct:focus {
+.pos-cart-discount-pct:focus-visible {
   border-color: var(--color-accent);
 }
 
 .pos-cart-discount-name {
   flex: 1;
-  min-width: 80px;
+  min-width: 5rem;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-primary);
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
-  outline: none;
 }
 
-.pos-cart-discount-name:focus {
+.pos-cart-discount-name:focus-visible {
   border-color: var(--color-accent);
 }
 
@@ -197,6 +199,12 @@
 .pos-cart-discount-apply:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.pos-cart-discount-apply:focus-visible,
+.pos-cart-discount-cancel:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .pos-cart-discount-cancel {
@@ -272,8 +280,7 @@
 }
 
 .pos-cart-tip-segment:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .pos-cart-tip-segment[aria-pressed='true'] {
@@ -325,14 +332,13 @@
 }
 
 .pos-cart-service-toggle:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 /* iOS-style switch knob. */
 .pos-cart-service-toggle-knob {
-  width: 28px;
-  height: 16px;
+  width: 1.75rem;
+  height: 1rem;
   border-radius: var(--radius-full);
   background: var(--color-border);
   position: relative;
@@ -343,10 +349,10 @@
 .pos-cart-service-toggle-knob::after {
   content: '';
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: var(--radius-full);
   background: var(--color-bg-elevated);
   transition: transform var(--duration-150) var(--ease-out);
@@ -357,7 +363,7 @@
 }
 
 .pos-cart-service-toggle--on .pos-cart-service-toggle-knob::after {
-  transform: translateX(12px);
+  transform: translateX(0.75rem);
 }
 
 /* ── Responsive: tablet tip-bar 2×2 grid ────────────────────
@@ -394,8 +400,7 @@
 }
 
 .pos-cart-options-toggle:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .pos-cart-options-toggle .pos-cart-subtotal-label {
@@ -406,8 +411,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   font-size: var(--text-lg);
   font-weight: var(--font-weight-bold);
   color: var(--color-fg-tertiary);

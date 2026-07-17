@@ -127,6 +127,9 @@ update-banner-installing-aria =
 update-banner-dismiss-aria =
     .aria-label = Tutup notifikasi pembaruan
 
+# Accessibility
+a11y-skip-to-content = Lewati ke konten utama
+
 # Navigation section labels
 nav-section-operations = Operasional
 nav-section-sales = Penjualan

@@ -125,6 +125,13 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
   return (
     <div className="app-layout">
+      {/* ── Skip-to-content link (keyboard-only, first focusable element) ── */}
+      <a
+        href="#app-main-content"
+        className="skip-to-content"
+      >
+        {l10n.getString('a11y-skip-to-content') ?? 'Skip to main content'}
+      </a>
       {/* ── Body (sidebar + content) ──────────────────── */}
       <div className="app-layout-body">
         {/* ── Sidebar ──────────────────────────────── */}
@@ -167,6 +174,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
               const isExpanded = expandedSection === section;
               return (
                 <div key={section} className="app-sidebar-section">
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <button
                     type="button"
                     className="app-sidebar-section-header"
@@ -249,7 +257,7 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
         </aside>
 
         {/* ── Content area ─────────────────────────── */}
-        <main className="app-content">
+        <main className="app-content" id="app-main-content">
           {!ADMIN_ROUTES.has(route) && (
             <div className="app-topbar" role="banner">
               <div className="app-topbar-left">

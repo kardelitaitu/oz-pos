@@ -99,8 +99,8 @@ export interface WorkspaceScope {
 
 const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
 
-// eslint-disable-next-line react-refresh/only-export-components
 /** Access the current workspace scope (storeId, instanceId, typeKey), or null. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspaceScope(): WorkspaceScope | null {
   return useContext(WorkspaceScopeContext);
 }
@@ -109,6 +109,7 @@ export function useWorkspaceScope(): WorkspaceScope | null {
 
 // eslint-disable-next-line react-refresh/only-export-components
 /** Full workspace context value exposed to consumers. */
+// eslint-disable-next-line react-refresh/only-export-components
 export interface WorkspaceContextValue {
   /** Workspace type key (backward compat). Same as activeInstance?.type_key. */
   activeWorkspace: string | null;
@@ -517,8 +518,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 /** Access the workspace context. Must be used within a `<WorkspaceProvider>`. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWorkspace(): WorkspaceContextValue {
   const ctx = useContext(WorkspaceContext);
   if (!ctx)

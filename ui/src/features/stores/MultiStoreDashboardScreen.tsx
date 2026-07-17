@@ -4,6 +4,7 @@ import { listStores, setPrimaryStore, deleteStore, type StoreProfile } from '@/a
 import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { Skeleton } from '@/components/Skeleton';
 import TerminalStatusPanel from './TerminalStatusPanel';
 import './MultiStoreDashboardScreen.css';
 
@@ -84,7 +85,34 @@ export default function MultiStoreDashboardScreen() {
       </div>
 
       {loading ? (
-        <p className="multi-store-dashboard-loading"><Localized id="multi-store-dashboard-loading">Loading dashboard…</Localized></p>
+        <div className="multi-store-dashboard-loading-skeleton">
+          <div className="multi-store-stat-grid">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="multi-store-stat-card">
+                <Skeleton variant="block" width="3rem" height="2.5rem" />
+                <Skeleton variant="text" width="6rem" />
+              </div>
+            ))}
+          </div>
+          <Skeleton variant="block" width="8rem" height="1.25rem" style={{ marginBottom: 'var(--space-4)' }} />
+          <div className="multi-store-card-grid">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} shadow="sm" padding="md" className="multi-store-card">
+                <div className="multi-store-card-header">
+                  <Skeleton variant="text" width="8rem" />
+                </div>
+                <div className="multi-store-card-body">
+                  {Array.from({ length: 4 }).map((_, j) => (
+                    <div key={j} className="multi-store-card-row">
+                      <Skeleton variant="text" width="4rem" />
+                      <Skeleton variant="text" width="5rem" />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="multi-store-dashboard-error">

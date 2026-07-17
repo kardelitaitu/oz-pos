@@ -9,7 +9,8 @@
   font-size: 0.75rem;
   color: var(--color-fg);
   opacity: 1;
-  transition: all 0.2s;
+  appearance: none;
+  transition: all var(--duration-200);
   user-select: none;
 }
 
@@ -27,7 +28,12 @@
 
 .status-indicator.checking {
   background-color: #f59e0b; /* Amber */
-  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .status-indicator.checking {
+    animation: pulse var(--duration-1500) infinite var(--ease-in-out);
+  }
 }
 
 .status-indicator.online {

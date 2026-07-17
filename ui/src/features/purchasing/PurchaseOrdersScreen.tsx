@@ -8,6 +8,7 @@ import {
 } from '@/api/purchasing';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import PurchaseOrderForm from './PurchaseOrderForm';
 import './PurchaseOrdersScreen.css';
 
@@ -109,7 +110,45 @@ export default function PurchaseOrdersScreen() {
       </div>
 
       {loading ? (
-        <p className="po-loading">Loading purchase orders…</p>
+        <div className="po-loading-skeleton" aria-hidden="true">
+          <div className="po-header">
+            <Skeleton variant="block" width="12rem" height="1.75rem" />
+            <Skeleton variant="block" width="11rem" height="2.25rem" />
+          </div>
+          <div className="po-filters">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} variant="block" width="4.5rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+            ))}
+          </div>
+          <div className="po-table-wrap">
+            <table className="po-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['PO #', 'Supplier', 'Status', 'Order Date', 'Expected', 'Total', 'Items', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 7 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="4.5rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="2rem" height="0.875rem" /></td>
+                    <td className="po-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
           <div className="po-empty">

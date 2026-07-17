@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
@@ -427,8 +428,50 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
   if (!storeLoaded || !receiptLoaded || !creditLoaded || !hardwareLoaded) {
     return (
       <div className="retail-pos">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--color-fg-tertiary)', fontSize: 14 }}>
-          {l10n.getString('loading')}
+        {/* ── Header skeleton ── */}
+        <header className="retail-header">
+          <div className="retail-header-store">
+            <Skeleton width="12rem" height="0.9375rem" />
+          </div>
+          <div className="retail-header-right">
+            <Skeleton width="5rem" height="0.75rem" />
+          </div>
+        </header>
+
+        {/* ── Body skeleton ── */}
+        <div className="retail-options-loading-skeleton" aria-hidden="true">
+          {/* Sidebar tabs */}
+          <div className="retail-options-sidebar">
+            {Array.from({ length: 11 }, (_, i) => (
+              <div key={i} className="retail-options-skeleton-tab">
+                <Skeleton width="80%" height="0.75rem" />
+              </div>
+            ))}
+            <div style={{ flex: 1 }} />
+            <div className="retail-options-skeleton-tab">
+              <Skeleton width="50%" height="0.75rem" />
+            </div>
+          </div>
+
+          {/* Content area */}
+          <div className="retail-options-content">
+            <div className="retail-options-section">
+              <Skeleton width="12rem" height="0.9375rem" style={{ marginBottom: '1rem' }} />
+              {/* Form field skeletons */}
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="retail-options-skeleton-field">
+                  <Skeleton width="6rem" height="0.6875rem" style={{ marginBottom: '0.1875rem' }} />
+                  <Skeleton width="22.5rem" height="2rem" />
+                </div>
+              ))}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="retail-options-skeleton-footer">
+              <Skeleton width="6rem" height="2rem" />
+              <Skeleton width="6rem" height="2rem" />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -452,6 +495,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         <div className="retail-options-sidebar">
           {TABS.map((tab) => (
             <button
+              type="button"
               key={tab.id}
               className={`retail-options-tab${activeTab === tab.id ? ' retail-options-tab--active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
@@ -461,6 +505,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
           ))}
           <div style={{ flex: 1 }} />
           <button
+            type="button"
             className="retail-options-tab retail-options-tab--danger"
             onClick={onClose}
           >
@@ -612,10 +657,10 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
                 </div>
               </div>
             </div>
-              <div className="retail-options-preview" role="button" tabIndex={0} onClick={() => setShowPreview(true)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(true); } }}>
+              <button type="button" className="retail-options-preview" onClick={() => setShowPreview(true)}>
                 <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={taxRates} />
                 <span className="retail-options-preview-hint">{l10n.getString('settings-click-preview')}</span>
-              </div>
+              </button>
             </div>
           )}
 
@@ -892,7 +937,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <h3 className="retail-options-heading">{l10n.getString('settings-system-heading')}</h3>
               <div className="retail-options-field">
                 <label htmlFor="system-app-version">{l10n.getString('settings-app-version-label')}</label>
-                <input id="system-app-version" value="0.0.8" disabled className="retail-options-input-disabled" />
+                <input id="system-app-version" value="0.0.9" disabled className="retail-options-input-disabled" />
               </div>
               <div className="retail-options-field">
                 <label htmlFor="system-cashier">{l10n.getString('settings-cashier-label')}</label>
@@ -1153,10 +1198,10 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
 
           {/* ── Save / Close buttons ────────────── */}
           <div className="retail-options-footer">
-            <button className="retail-options-btn retail-options-btn--primary" onClick={handleSave} disabled={saving}>
+            <button type="button" className="retail-options-btn retail-options-btn--primary" onClick={handleSave} disabled={saving}>
               {saving ? l10n.getString('settings-saving-btn') : l10n.getString('save')}
             </button>
-            <button className="retail-options-btn" onClick={onClose}>
+            <button type="button" className="retail-options-btn" onClick={onClose}>
               {l10n.getString('close')}
             </button>
           </div>
@@ -1165,14 +1210,12 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
       {showPreview && (
         <div
           className="retail-preview-overlay"
-          role="button"
-          tabIndex={0}
+          role="presentation"
           onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false); }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowPreview(false); } }}
         >
           <div className="retail-preview-modal" role="dialog" aria-modal="true" aria-label={l10n.getString('settings-receipt-heading')}>
-            <button className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
-            <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={[]} scale={SCALE} />
+            <button type="button" className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
+            <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={taxRates} scale={SCALE} />
           </div>
         </div>
       )}

@@ -59,11 +59,11 @@ describe('OfflineQueueScreen', () => {
     });
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton initially', () => {
     mockListAllOffline.mockImplementation(() => new Promise(() => {}));
     renderScreen();
 
-    expect(screen.getByText('Loading queue…')).toBeTruthy();
+    expect(document.querySelector('.offline-queue-loading-skeleton')).toBeTruthy();
   });
 
   it('shows empty state when no items', async () => {

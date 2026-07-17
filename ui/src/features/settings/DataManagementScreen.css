@@ -1,6 +1,5 @@
 .data-mgmt {
   padding: var(--space-6);
-  max-width: 700px;
 }
 
 .data-mgmt-header {
@@ -25,15 +24,15 @@
 }
 
 .data-mgmt-tab {
+  position: relative;
   padding: var(--space-2) var(--space-6);
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-fg-secondary);
   background: none;
   border: none;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color var(--duration-150) var(--ease-out), background var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-tab:hover {
@@ -41,18 +40,41 @@
   background: var(--color-bg-hover);
 }
 
+.data-mgmt-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -0.0625rem;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: var(--color-accent);
+  border-radius: 1px;
+  transition: width var(--duration-200) var(--ease-out),
+              left var(--duration-200) var(--ease-out);
+}
+
 .data-mgmt-tab--active {
   color: var(--color-accent);
-  border-bottom: 2px solid var(--color-accent);
   font-weight: 600;
+}
+
+.data-mgmt-tab--active::after {
+  width: 80%;
+  left: 10%;
+}
+
+.data-mgmt-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
 }
 
 .data-mgmt-tab-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   vertical-align: middle;
 }
 
@@ -98,7 +120,7 @@
   padding: var(--space-2);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-type-checkbox:hover {
@@ -112,16 +134,16 @@
 }
 
 .data-mgmt-type-checkbox input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.125rem;
   accent-color: var(--color-accent);
 }
 
 .data-mgmt-type-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
 }
 
 .data-mgmt-type-label {
@@ -154,6 +176,18 @@
   gap: var(--space-1);
 }
 
+.data-mgmt-field--horizontal {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.data-mgmt-field--horizontal > .data-mgmt-label {
+  min-width: 8rem;
+  padding-top: var(--space-2);
+  flex-shrink: 0;
+}
+
 .data-mgmt-label {
   font-size: var(--text-sm);
   font-weight: 500;
@@ -172,13 +206,12 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border, rgba(128, 128, 128, 0.2));
   border-radius: var(--radius-sm);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
 }
 
-.data-mgmt-input:focus {
-  outline: none;
+.data-mgmt-input:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .data-mgmt-form {
@@ -220,11 +253,36 @@
   font-size: 2rem;
   color: var(--color-success);
   line-height: 1;
+  animation: data-mgmt-pop 0.35s var(--ease-out) both;
 }
 
 .data-mgmt-progress-done svg {
   width: 1em;
   height: 1em;
+  animation: data-mgmt-checkmark-draw 0.4s var(--ease-out) both;
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .data-mgmt-progress-done {
+    animation: data-mgmt-pop 0.35s var(--ease-out) both;
+  }
+
+  .data-mgmt-progress-done svg {
+    animation: data-mgmt-checkmark-draw 0.4s var(--ease-out) both;
+  }
+
+  @keyframes data-mgmt-pop {
+    0% { transform: scale(0.8); opacity: 0; }
+    60% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes data-mgmt-checkmark-draw {
+    0% { stroke-dashoffset: 24; }
+    100% { stroke-dashoffset: 0; }
+  }
 }
 
 /* ── Done state ──────────────────────────────────────────────────── */
@@ -238,9 +296,9 @@
 .data-mgmt-done-text code {
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
-  padding: 1px 4px;
+  padding: 0.0625rem 0.25rem;
   background: var(--color-bg-surface);
-  border-radius: 3px;
+  border-radius: 0.1875rem;
 }
 
 /* ── File picker ─────────────────────────────────────────────────── */
@@ -258,14 +316,15 @@
   border: 2px dashed var(--color-border, rgba(128, 128, 128, 0.25));
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color var(--duration-150) var(--ease-out), background var(--duration-150) var(--ease-out);
 }
 
 .data-mgmt-file-dropzone:hover {
   border-color: var(--color-accent);
   background: var(--color-accent-subtle);
 }
+
+
 
 .data-mgmt-file-dropzone p {
   font-size: var(--text-sm);
@@ -327,22 +386,31 @@
 
 .data-mgmt-dry-run-grid {
   display: flex;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 .data-mgmt-dry-run-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  font-size: var(--text-xs);
-  color: var(--color-fg-tertiary);
+  gap: 0.125rem;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  min-width: 5rem;
 }
 
 .data-mgmt-dry-run-count {
   font-size: var(--text-xl);
   font-weight: 700;
   color: var(--color-accent);
+}
+
+.data-mgmt-dry-run-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
 }
 
 /* ── Backup status ───────────────────────────────────────────────── */
@@ -356,10 +424,104 @@
   border-radius: var(--radius-sm);
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .data-mgmt-backup-status {
+    animation: data-mgmt-backup-fade-in var(--duration-300) var(--ease-out);
+  }
+
+  @keyframes data-mgmt-backup-fade-in {
+    from { opacity: 0; transform: translateY(0.25rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
 .data-mgmt-backup-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: var(--text-sm);
+  padding: var(--space-1) 0;
 }
+
+/* ── Password visibility toggle ──────────────────────────────────── */
+
+.data-mgmt-password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.data-mgmt-password-wrapper .data-mgmt-input {
+  flex: 1;
+  padding-right: 2.25rem;
+}
+
+.data-mgmt-password-wrapper .data-mgmt-input--no-toggle {
+  padding-right: var(--space-4);
+}
+
+.data-mgmt-password-toggle {
+  position: absolute;
+  right: 0.375rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  background: transparent;
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-150) var(--ease-out),
+              background-color var(--duration-150) var(--ease-out);
+}
+
+.data-mgmt-password-toggle:hover {
+  color: var(--color-fg-primary);
+  background: var(--color-bg-hover);
+}
+
+.data-mgmt-password-toggle:focus-visible {
+  box-shadow: inset 0 0 0 0.125rem var(--color-accent);
+}
+
+/* ── Tab panel fade-in ──────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  .data-mgmt-tabpanel {
+    animation: data-mgmt-fade-in var(--duration-200) var(--ease-out);
+  }
+
+  @keyframes data-mgmt-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.25rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* ── Row flash animation ───────────────────────────────────────────
+ * Brief green background pulse on updated data rows. */
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes data-mgmt-flash-updated {
+    0%, 100% { background-color: transparent; }
+    20% { background-color: rgba(34, 197, 94, 0.10); }
+    50% { background-color: rgba(34, 197, 94, 0.06); }
+  }
+
+  .data-mgmt-backup-status--flash,
+  .data-mgmt-meta--flash,
+  .data-mgmt-dry-run--flash {
+    animation: data-mgmt-flash-updated var(--duration-1200) var(--ease-out) forwards;
+    border-radius: var(--radius-sm);
+  }
+}
+
+
 

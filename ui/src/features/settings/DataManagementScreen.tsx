@@ -6,6 +6,9 @@
 //! - **Backup status**: last backup timestamp, one-click snapshot
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+
+/** Duration (ms) for the row flash animation. */
+const FLASH_DURATION = 1_400;
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -31,6 +34,23 @@ type DataType =
   | 'customers'
   | 'users'
   | 'settings';
+
+// ── SVG icon helpers ──────────────────────────────────────────────
+
+const eyeIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const eyeOffIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+);
 
 const DATA_TYPES: { key: DataType; label: string; description: string }[] = [
   { key: 'products', label: 'Products', description: 'SKU, name, price, barcode, stock' },
@@ -131,7 +151,43 @@ export default function DataManagementScreen() {
     backingUp: false,
   });
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'backup'>('export');
+  const [showExportPw, setShowExportPw] = useState(false);
+  const [showImportPw, setShowImportPw] = useState(false);
   const { addToast } = useToast();
+
+  // ── Row flash animation ─────────────────────────────────────────
+  // Track recently-updated sections for a brief green background pulse.
+  const [flashRows, setFlashRows] = useState<Map<string, 'updated'>>(new Map());
+  const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const triggerFlash = useCallback((key: string) => {
+    setFlashRows((prev) => {
+      const next = new Map(prev);
+      next.set(key, 'updated');
+      return next;
+    });
+    const existing = flashTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setFlashRows((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      flashTimeoutsRef.current.delete(key);
+    }, FLASH_DURATION);
+    flashTimeoutsRef.current.set(key, tid);
+  }, []);
+
+  // Cleanup flash timeouts on unmount.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    return () => {
+      flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
+      flashTimeoutsRef.current.clear();
+    };
+  }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   // ── Refs to hold latest form state so callbacks don't depend on
   //     keystroke-level state (which would defeat useCallback).
@@ -139,6 +195,9 @@ export default function DataManagementScreen() {
   exportStateRef.current = exportState;
   const importStateRef = useRef(importState);
   importStateRef.current = importState;
+
+  // Guard ref to prevent double-clicks during export.
+  const exportingRef = useRef(false);
 
   // ── Load backup status on mount ─────────────────────────────────
 
@@ -153,7 +212,10 @@ export default function DataManagementScreen() {
       })
       .catch(() => {
         setBackup((prev) => ({ ...prev, lastBackup: null }));
+        addToast({ message: l10n.getString('data-mgmt-toast-backup-status-fail'), type: 'error' });
       });
+    // Effect runs once on mount; addToast and l10n are stable references.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Backup handlers ─────────────────────────────────────────────
@@ -167,12 +229,13 @@ export default function DataManagementScreen() {
         lastBackupSize: `${(result.sizeBytes / 1024 / 1024).toFixed(1)} MB`,
         backingUp: false,
       });
+      triggerFlash('backup');
       addToast({ message: l10n.getString('data-mgmt-toast-backup-success'), type: 'success' });
     } catch {
       setBackup((prev) => ({ ...prev, backingUp: false }));
       addToast({ message: l10n.getString('data-mgmt-toast-backup-fail'), type: 'error' });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   // ── Toggle data type selection ──────────────────────────────────
 
@@ -217,6 +280,9 @@ export default function DataManagementScreen() {
       return;
     }
 
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+
     setExportState((prev) => ({ ...prev, step: 'exporting', progress: 10, error: null }));
 
     try {
@@ -242,6 +308,7 @@ export default function DataManagementScreen() {
         progress: 100,
         outputFile: result.path,
       }));
+      triggerFlash('export-done');
       addToast({ message: l10n.getString('data-mgmt-toast-export-success'), type: 'success' });
     } catch (err) {
       setExportState((prev) => ({
@@ -250,8 +317,10 @@ export default function DataManagementScreen() {
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-export-fail'),
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
+    } finally {
+      exportingRef.current = false;
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   const resetExport = useCallback(() => {
     setExportState(INITIAL_EXPORT);
@@ -314,6 +383,7 @@ export default function DataManagementScreen() {
           skipped: 0,
         },
       }));
+      triggerFlash('import-preview');
     } catch (err) {
       setImportState((prev) => ({
         ...prev,
@@ -321,7 +391,7 @@ export default function DataManagementScreen() {
         error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
       }));
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   const startImport = useCallback(async () => {
     const is = importStateRef.current;
@@ -352,6 +422,7 @@ export default function DataManagementScreen() {
         },
         step: 'done',
       }));
+      triggerFlash('import-done');
       addToast({ message: l10n.getString('data-mgmt-toast-import-success'), type: 'success' });
     } catch (err) {
       setImportState((prev) => ({
@@ -361,7 +432,7 @@ export default function DataManagementScreen() {
       }));
       addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   const resetImport = useCallback(() => {
     setImportState(INITIAL_IMPORT);
@@ -399,7 +470,7 @@ export default function DataManagementScreen() {
 
       {/* ── Export tab ─────────────────────────────── */}
       {activeTab === 'export' && (
-        <div role="tabpanel" aria-label={l10n.getString('data-mgmt-export-wizard-aria')}>
+        <div key="export" className="data-mgmt-tabpanel" role="tabpanel" aria-label={l10n.getString('data-mgmt-export-wizard-aria')}>
           {exportState.step === 'select' && (
             <Card shadow="sm">
               <div className="data-mgmt-section">
@@ -408,35 +479,44 @@ export default function DataManagementScreen() {
                 </Localized>
 
                 <div className="data-mgmt-types" role="group" aria-label={l10n.getString('data-mgmt-export-types-aria')}>
-                  <div className="data-mgmt-type-checkbox data-mgmt-type-checkbox--all">
+                  <label
+                    className="data-mgmt-type-checkbox data-mgmt-type-checkbox--all"
+                    htmlFor="type-select-all"
+                  >
                     <input
                       id="type-select-all"
                       type="checkbox"
+                      aria-label="Select all / none"
                       checked={exportState.selectedTypes.size === DATA_TYPES.length}
                       onChange={toggleAll}
                     />
                     <Localized id="data-mgmt-export-select-all">
-                      <label className="data-mgmt-type-label" htmlFor="type-select-all">Select all / none</label>
+                      <span className="data-mgmt-type-label">Select all / none</span>
                     </Localized>
-                  </div>
+                  </label>
 
                   {DATA_TYPES.map((dt) => (
-                    <div key={dt.key} className="data-mgmt-type-checkbox">
+                    <label
+                      key={dt.key}
+                      className="data-mgmt-type-checkbox"
+                      htmlFor={`type-${dt.key}`}
+                    >
                       <input
                         id={`type-${dt.key}`}
                         type="checkbox"
+                        aria-label={dt.label}
                         checked={exportState.selectedTypes.has(dt.key)}
                         onChange={() => toggleType(dt.key)}
                       />
                       <div className="data-mgmt-type-info">
                         <Localized id={`data-mgmt-type-${dt.key}`}>
-                          <label className="data-mgmt-type-label" htmlFor={`type-${dt.key}`}>{dt.label}</label>
+                          <span className="data-mgmt-type-label">{dt.label}</span>
                         </Localized>
                         <Localized id={`data-mgmt-type-${dt.key}-desc`}>
                           <span className="data-mgmt-type-desc">{dt.description}</span>
                         </Localized>
                       </div>
-                    </div>
+                    </label>
                   ))}
                 </div>
 
@@ -490,33 +570,45 @@ export default function DataManagementScreen() {
                 </Localized>
 
                 <div className="data-mgmt-form">
-                  <div className="data-mgmt-field">
+                  <div className="data-mgmt-field data-mgmt-field--horizontal">
                     <Localized id="data-mgmt-encrypt-password">
                       <label className="data-mgmt-label" htmlFor="export-password">Password</label>
                     </Localized>
-                    <input
-                      id="export-password"
-                      className="data-mgmt-input"
-                      type="password"
-                      autoComplete="off"
-                      placeholder={l10n.getString('data-mgmt-encrypt-password-placeholder')}
-                      value={exportState.password}
-                      onChange={(e) => setExportState((prev) => ({ ...prev, password: e.target.value }))}
-                    />
+                    <div className="data-mgmt-password-wrapper">
+                      <input
+                        id="export-password"
+                        className="data-mgmt-input"
+                        type={showExportPw ? 'text' : 'password'}
+                        autoComplete="off"
+                        placeholder={l10n.getString('data-mgmt-encrypt-password-placeholder')}
+                        value={exportState.password}
+                        onChange={(e) => setExportState((prev) => ({ ...prev, password: e.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        className="data-mgmt-password-toggle"
+                        onClick={() => setShowExportPw((p) => !p)}
+                        aria-label={l10n.getString(showExportPw ? 'data-mgmt-password-hide-aria' : 'data-mgmt-password-show-aria')}
+                      >
+                        {showExportPw ? eyeOffIcon() : eyeIcon()}
+                      </button>
+                    </div>
                   </div>
-                  <div className="data-mgmt-field">
+                  <div className="data-mgmt-field data-mgmt-field--horizontal">
                     <Localized id="data-mgmt-encrypt-confirm">
                       <label className="data-mgmt-label" htmlFor="export-password-confirm">Confirm password</label>
                     </Localized>
-                    <input
-                      id="export-password-confirm"
-                      className="data-mgmt-input"
-                      type="password"
-                      autoComplete="off"
-                      placeholder={l10n.getString('data-mgmt-encrypt-confirm-placeholder')}
-                      value={exportState.passwordConfirm}
-                      onChange={(e) => setExportState((prev) => ({ ...prev, passwordConfirm: e.target.value }))}
-                    />
+                    <div className="data-mgmt-password-wrapper">
+                      <input
+                        id="export-password-confirm"
+                        className="data-mgmt-input data-mgmt-input--no-toggle"
+                        type={showExportPw ? 'text' : 'password'}
+                        autoComplete="off"
+                        placeholder={l10n.getString('data-mgmt-encrypt-confirm-placeholder')}
+                        value={exportState.passwordConfirm}
+                        onChange={(e) => setExportState((prev) => ({ ...prev, passwordConfirm: e.target.value }))}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -581,7 +673,7 @@ export default function DataManagementScreen() {
 
       {/* ── Import tab ─────────────────────────────── */}
       {activeTab === 'import' && (
-        <div role="tabpanel" aria-label={l10n.getString('data-mgmt-import-wizard-aria')}>
+        <div key="import" className="data-mgmt-tabpanel" role="tabpanel" aria-label={l10n.getString('data-mgmt-import-wizard-aria')}>
           {importState.step === 'select' && (
             <Card shadow="sm">
               <div className="data-mgmt-section">
@@ -598,9 +690,6 @@ export default function DataManagementScreen() {
                 <div className="data-mgmt-file-picker">
                   <div className="data-mgmt-file-dropzone">
                     <span className="data-mgmt-file-icon">{folderIcon()}</span>
-                    <Localized id="data-mgmt-import-drop-text">
-                      <p>Drag & drop a .ozpkg file here, or</p>
-                    </Localized>
                     <Button variant="secondary" onClick={handleFileSelect}>
                       <Localized id="data-mgmt-import-browse">Browse files…</Localized>
                     </Button>
@@ -626,19 +715,29 @@ export default function DataManagementScreen() {
                   </div>
                 </div>
 
-                <div className="data-mgmt-field">
+                <div className="data-mgmt-field data-mgmt-field--horizontal">
                   <Localized id="data-mgmt-import-password">
                     <label className="data-mgmt-label" htmlFor="import-password">Decryption password</label>
                   </Localized>
-                  <input
-                    id="import-password"
-                    className="data-mgmt-input"
-                    type="password"
-                    autoComplete="off"
-                    placeholder={l10n.getString('data-mgmt-import-password-placeholder')}
-                    value={importState.password}
-                    onChange={(e) => setImportState((prev) => ({ ...prev, password: e.target.value }))}
-                  />
+                  <div className="data-mgmt-password-wrapper">
+                    <input
+                      id="import-password"
+                      className="data-mgmt-input"
+                      type={showImportPw ? 'text' : 'password'}
+                      autoComplete="off"
+                      placeholder={l10n.getString('data-mgmt-import-password-placeholder')}
+                      value={importState.password}
+                      onChange={(e) => setImportState((prev) => ({ ...prev, password: e.target.value }))}
+                    />
+                    <button
+                      type="button"
+                      className="data-mgmt-password-toggle"
+                      onClick={() => setShowImportPw((p) => !p)}
+                      aria-label={l10n.getString(showImportPw ? 'data-mgmt-password-hide-aria' : 'data-mgmt-password-show-aria')}
+                    >
+                      {showImportPw ? eyeOffIcon() : eyeIcon()}
+                    </button>
+                  </div>
                 </div>
 
                 {importState.error && (
@@ -664,7 +763,7 @@ export default function DataManagementScreen() {
                   <h2 className="data-mgmt-section-title">Preview import</h2>
                 </Localized>
 
-                <div className="data-mgmt-meta">
+                <div className={`data-mgmt-meta${flashRows.has('import-preview') ? ' data-mgmt-meta--flash' : ''}`}>
                   <div className="data-mgmt-meta-row">
                     <Localized id="data-mgmt-import-meta-file">
                       <span className="data-mgmt-meta-label">File</span>
@@ -731,7 +830,7 @@ export default function DataManagementScreen() {
                 </div>
 
                 {importState.dryRun && (
-                  <div className="data-mgmt-dry-run">
+                  <div className={`data-mgmt-dry-run${flashRows.has('import-preview') ? ' data-mgmt-dry-run--flash' : ''}`}>
                     <Localized id="data-mgmt-import-dry-run-title">
                       <h3 className="data-mgmt-dry-run-title">Changes to be applied</h3>
                     </Localized>
@@ -739,19 +838,19 @@ export default function DataManagementScreen() {
                       <div className="data-mgmt-dry-run-item">
                         <span className="data-mgmt-dry-run-count">{importState.dryRun.added}</span>
                         <Localized id="data-mgmt-import-dry-run-added">
-                          <span>New items</span>
+                          <span className="data-mgmt-dry-run-label">New items</span>
                         </Localized>
                       </div>
                       <div className="data-mgmt-dry-run-item">
                         <span className="data-mgmt-dry-run-count">{importState.dryRun.updated}</span>
                         <Localized id="data-mgmt-import-dry-run-updated">
-                          <span>Updated</span>
+                          <span className="data-mgmt-dry-run-label">Updated</span>
                         </Localized>
                       </div>
                       <div className="data-mgmt-dry-run-item">
                         <span className="data-mgmt-dry-run-count">{importState.dryRun.skipped}</span>
                         <Localized id="data-mgmt-import-dry-run-skipped">
-                          <span>Skipped</span>
+                          <span className="data-mgmt-dry-run-label">Skipped</span>
                         </Localized>
                       </div>
                     </div>
@@ -794,7 +893,7 @@ export default function DataManagementScreen() {
 
       {/* ── Backup tab ─────────────────────────────── */}
       {activeTab === 'backup' && (
-        <div role="tabpanel" aria-label={l10n.getString('data-mgmt-backup-status-aria')}>
+        <div key="backup" className="data-mgmt-tabpanel" role="tabpanel" aria-label={l10n.getString('data-mgmt-backup-status-aria')}>
           <Card shadow="sm">
             <div className="data-mgmt-section">
               <Localized id="data-mgmt-backup-title">
@@ -807,7 +906,7 @@ export default function DataManagementScreen() {
                 </p>
               </Localized>
 
-              <div className="data-mgmt-backup-status">
+              <div className={`data-mgmt-backup-status${flashRows.has('backup') ? ' data-mgmt-backup-status--flash' : ''}`}>
                 <div className="data-mgmt-backup-row">
                   <Localized id="data-mgmt-backup-label-last">
                     <span className="data-mgmt-label">Last backup</span>

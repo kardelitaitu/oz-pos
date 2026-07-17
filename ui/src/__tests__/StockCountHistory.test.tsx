@@ -38,11 +38,14 @@ const sampleAdjustments = [
 
 describe('StockCountHistory', () => {
   // ── Loading / empty ──────────────────────────────────────────
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     mockListCounts.mockReturnValue(new Promise(() => {}));
     mockListAdjustments.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    const { container } = renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    const skeleton = container.querySelector('[aria-hidden="true"].sc-hist-screen');
+    expect(skeleton).toBeInTheDocument();
+    // Verify old loading text is not present
+    expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no completed/cancelled counts exist', async () => {

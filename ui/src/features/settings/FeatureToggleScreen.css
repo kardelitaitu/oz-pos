@@ -1,6 +1,5 @@
 .feature-toggle {
   padding: var(--space-6);
-  max-width: 700px;
 }
 
 .feature-toggle-header {
@@ -36,7 +35,7 @@
 
 .feature-toggle-search:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .feature-toggle-search-icon {
@@ -50,7 +49,6 @@
   background: transparent;
   font-size: var(--text-base);
   color: var(--color-fg-primary);
-  outline: none;
   padding: var(--space-1) 0;
   font-family: var(--font-sans);
 }
@@ -63,8 +61,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 1.5rem;
+  height: 1.5rem;
   border: none;
   background: transparent;
   color: var(--color-fg-tertiary);
@@ -79,13 +77,24 @@
   color: var(--color-fg-primary);
 }
 
-.feature-toggle-loading {
+.feature-toggle-loading-skeleton {
   display: flex;
   flex-direction: column;
+  gap: var(--space-6);
+}
+
+.feature-toggle-loading-skeleton .feature-toggle-header {
+  margin-bottom: 0;
+}
+
+.feature-toggle-skeleton-search {
+  display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-12) 0;
-  color: var(--color-fg-secondary);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-2);
 }
 
 .feature-toggle-error {
@@ -185,16 +194,54 @@
   background: var(--color-bg-elevated);
 }
 
+/* ── Group count badge pop ─────────────────────────────────────────
+ * When a toggle changes, the count badge briefly pops (scale bounce)
+ * to draw attention to the updated count. */
+
+@keyframes count-pop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.25); }
+  60% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
 .feature-toggle-group-count {
   margin-left: auto;
-  font-size: var(--text-sm);
-  font-weight: 400;
-  color: var(--color-fg-tertiary);
+  display: inline-flex;
+  align-items: center;
+  height: 1.375rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-bg-surface);
+  color: var(--color-fg-secondary);
+  border: 1px solid var(--color-border);
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out);
 }
+
 
 .feature-toggle-list {
   display: flex;
   flex-direction: column;
+}
+
+/* ── Row flash animation ────────────────────────────────────────────
+ * Brief background pulse on the toggled row to draw attention to
+ * the change. Green flash for enabled, amber for disabled. */
+
+@keyframes flash-enabled {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: rgba(34, 197, 94, 0.10); }
+  50% { background-color: rgba(34, 197, 94, 0.06); }
+}
+
+@keyframes flash-disabled {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: rgba(245, 158, 11, 0.10); }
+  50% { background-color: rgba(245, 158, 11, 0.06); }
 }
 
 .feature-toggle-item {
@@ -204,6 +251,25 @@
   padding: var(--space-4);
   border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.15));
   gap: var(--space-4);
+  transition: background-color var(--duration-200) var(--ease-out);
+}
+
+.feature-toggle-item--flash-enabled {
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .feature-toggle-item--flash-enabled {
+    animation: flash-enabled var(--duration-1200) var(--ease-out) forwards;
+  }
+}
+
+.feature-toggle-item--flash-disabled {
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .feature-toggle-item--flash-disabled {
+    animation: flash-disabled var(--duration-1200) var(--ease-out) forwards;
+  }
 }
 
 .feature-toggle-item:last-child {
@@ -213,7 +279,7 @@
 .feature-toggle-item-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
   min-width: 0;
 }
 
@@ -240,8 +306,8 @@
 .feature-toggle-switch {
   position: relative;
   display: inline-block;
-  width: 44px;
-  height: 24px;
+  width: 2.75rem;
+  height: 1.5rem;
   flex-shrink: 0;
 }
 
@@ -256,21 +322,21 @@
   cursor: pointer;
   inset: 0;
   background: var(--color-border-hover);
-  border-radius: 24px;
-  transition: background 0.2s ease;
+  border-radius: 1.5rem;
+  transition: background var(--duration-200) var(--ease-out);
 }
 
 .feature-toggle-slider::before {
   content: '';
   position: absolute;
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
+  height: 1.125rem;
+  width: 1.125rem;
+  left: 0.1875rem;
+  bottom: 0.1875rem;
   background: var(--color-bg-elevated);
   border-radius: 50%;
-  transition: transform 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform var(--duration-200) var(--ease-out);
+  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.15);
 }
 
 .feature-toggle-switch input:checked + .feature-toggle-slider {
@@ -278,7 +344,7 @@
 }
 
 .feature-toggle-switch input:checked + .feature-toggle-slider::before {
-  transform: translateX(20px);
+  transform: translateX(1.25rem);
 }
 
 .feature-toggle-switch input:disabled + .feature-toggle-slider {
@@ -286,9 +352,72 @@
   cursor: not-allowed;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .feature-toggle-switch input:disabled + .feature-toggle-slider {
+    animation: toggle-pulse var(--duration-1200) var(--ease-in-out) infinite;
+  }
+}
+
+/* ── Toggle checkmark overlay ─────────────────────────────────────
+ * A small checkmark (or X for disabled) icon that briefly overlays
+ * the toggle switch after a successful IPC toggle, then fades out. */
+
+@keyframes checkmark-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+.feature-toggle-checkmark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .feature-toggle-checkmark {
+    animation: checkmark-pop var(--duration-1500) var(--ease-out) forwards;
+  }
+}
+
+.feature-toggle-checkmark--enabled svg {
+  color: var(--color-bg-elevated);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.feature-toggle-checkmark--disabled svg {
+  color: var(--color-bg-elevated);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+/* ── Toggle loading pulse ────────────────────────────────────────────
+ * When toggling via IPC, the checkbox is disabled and the slider
+ * gets a subtle pulse animation to indicate background activity. */
+
+@keyframes toggle-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.75; }
+}
+
 .feature-toggle-switch input:focus-visible + .feature-toggle-slider {
-  outline: 2px solid var(--color-accent, #6366f1);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 /* ── Dark mode overrides ─────────────────────────────────────────── */
@@ -299,7 +428,7 @@
 
 [data-theme='dark'] .feature-toggle-slider::before {
   background: var(--color-bg-elevated);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.3);
 }
 
 [data-theme='dark'] .feature-toggle-item {

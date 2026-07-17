@@ -5,7 +5,7 @@
 // based access control, and per-workspace accent colors.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluent } from '@/__tests__/test-utils/render';
 import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
@@ -560,13 +560,17 @@ describe('WorkspaceHome', () => {
 
       // Click confirm in the modal
       await waitFor(() => {
-        expect(screen.getByText(/Logout\?/i)).toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
       });
 
-      const confirmBtn = document.querySelector('.logout-confirm-confirm') as HTMLButtonElement;
+      // Scope confirm button to the dialog to avoid the toolbar "Logout" button.
+      const dialog = screen.getByRole('dialog');
+      const confirmBtn = within(dialog).getByRole('button', { name: /Logout/i });
       await userEvent.click(confirmBtn);
 
-      expect(mockLogout).toHaveBeenCalledTimes(1);
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('does not call logout when cancelled in modal', async () => {

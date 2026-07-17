@@ -15,7 +15,9 @@ import { listCurrencies, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import VariantManagementScreen from './VariantManagementScreen';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './ProductManagementScreen.css';
 
 interface FormData {
@@ -68,6 +70,8 @@ export default function ProductManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSku, setEditingSku] = useState<string | null>(null);
+
+  const modalExit = useExitAnimation(showModal, () => setShowModal(false));
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -181,9 +185,41 @@ export default function ProductManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="product-mgmt-loading">
-          <p className="product-mgmt-loading">Loading products…</p>
-        </Localized>
+        <div className="product-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="product-mgmt-header">
+            <Skeleton variant="block" width="8rem" height="1.75rem" />
+            <Skeleton variant="block" width="8rem" height="2.25rem" />
+          </div>
+          <div className="product-mgmt-table-wrap">
+            <table className="product-mgmt-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['SKU', 'Name', 'Category', 'Price', 'Barcode', 'Type', 'Stock', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 7 ? '4rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="text" width="8rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" height="0.875rem" style={{ textAlign: 'right' }} /></td>
+                    <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
+                    <td className="product-mgmt-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : products.length === 0 ? (
         <Card shadow="sm">
           <div className="product-mgmt-empty">
@@ -291,9 +327,9 @@ export default function ProductManagementScreen() {
         </div>
       )}
 
-      {showModal && (
-        <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
-          <div className="product-mgmt-modal">
+      {modalExit.shouldRender && showModal && (
+        <div className={`product-mgmt-overlay${modalExit.exiting ? ' product-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
+          <div className={`product-mgmt-modal${modalExit.exiting ? ' product-mgmt-modal--exiting' : ''}`}>
             <div className="product-mgmt-modal-header">
               <Localized id={editingSku ? 'product-mgmt-modal-edit-title' : 'product-mgmt-modal-add-title'}>
                 <h2>{editingSku ? 'Edit Product' : 'Add Product'}</h2>
@@ -302,7 +338,7 @@ export default function ProductManagementScreen() {
                 <button
                   type="button"
                   className="product-mgmt-modal-close"
-                  onClick={() => setShowModal(false)}
+                  onClick={modalExit.requestClose}
                   aria-label="Close"
                 >
                   &times;
@@ -473,7 +509,7 @@ export default function ProductManagementScreen() {
 
             <div className="product-mgmt-modal-actions">
               <Localized id="product-mgmt-btn-cancel">
-                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
+                <Button variant="ghost" onClick={modalExit.requestClose} disabled={saving}>Cancel</Button>
               </Localized>
               <Button
                 variant="primary"

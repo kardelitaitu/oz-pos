@@ -18,8 +18,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { Skeleton } from '@/components/Skeleton';
+import { SettingsPopup } from '@/frontend/shared';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
+import SettingsSelect from '@/features/settings/SettingsSelect';
 import './StaffManagementScreen.css';
 
 // ── SVG icon props ────────────────────────────────────────────────
@@ -243,6 +246,12 @@ export default function StaffManagementScreen() {
       }
 
       closeModal();
+      addToast({
+        type: 'success',
+        message: editingId
+          ? l10n.getString('staff-toast-updated', { name: displayName })
+          : l10n.getString('staff-toast-created', { name: displayName }),
+      });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : l10n.getString('staff-error-save-failed'));
@@ -262,6 +271,12 @@ export default function StaffManagementScreen() {
         role_id: member.role_id,
         is_active: !member.is_active,
         caller_user_id: callerUserId,
+      });
+      addToast({
+        type: 'success',
+        message: member.is_active
+          ? l10n.getString('staff-toast-deactivated', { name: member.display_name })
+          : l10n.getString('staff-toast-restored', { name: member.display_name }),
       });
       await load();
     } catch {
@@ -294,7 +309,7 @@ export default function StaffManagementScreen() {
   const hasRoleSelected = roles.length > 0;
 
   return (
-    <div className="staff-mgmt">
+    <div className="staff-mgmt" onContextMenu={(e) => e.preventDefault()}>
       <div className="staff-mgmt-header">
         <Localized id="staff-title">
           <h1 className="staff-mgmt-title">Staff</h1>
@@ -305,9 +320,35 @@ export default function StaffManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="staff-loading">
-          <p className="staff-mgmt-loading">Loading staff…</p>
-        </Localized>
+        <div className="staff-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="staff-mgmt-header">
+            <Skeleton variant="block" width="6rem" height="1.75rem" />
+            <Skeleton variant="block" width="6rem" height="2.25rem" />
+          </div>
+          <div className="staff-mgmt-table-wrap">
+            <table className="staff-mgmt-table">
+              <thead>
+                <tr>
+                  {['Role', 'Workspace', 'Name', 'Username', 'Status', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width="4rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="block" width="5rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="6rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td><Skeleton variant="text" width="3.5rem" /></td>
+                    <td><Skeleton variant="block" width="5rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : staff.length === 0 ? (
         <Card shadow="sm">
           <div className="staff-mgmt-empty">
@@ -334,11 +375,11 @@ export default function StaffManagementScreen() {
           <table className="staff-mgmt-table" aria-label={l10n.getString('staff-table-aria')}>
             <thead>
               <tr>
+                <Localized id="staff-col-role"><th>Role</th></Localized>
+                <Localized id="staff-col-workspace"><th>Workspace</th></Localized>
                 <Localized id="staff-col-name"><th>Name</th></Localized>
                 <Localized id="staff-col-username"><th>Username</th></Localized>
-                <Localized id="staff-col-role"><th>Role</th></Localized>
                 <Localized id="staff-col-status"><th>Status</th></Localized>
-                <Localized id="staff-col-workspace"><th>Workspace</th></Localized>
                 <Localized id="staff-col-actions" attrs={{ "aria-label": true }}>
                   <th aria-label="Actions"> </th>
                 </Localized>
@@ -347,23 +388,24 @@ export default function StaffManagementScreen() {
             <tbody>
               {staff.map((member) => (
                 <tr key={member.id} className={!member.is_active ? 'staff-mgmt-row--inactive' : ''}>
-                  <td>
-                    <div className="staff-mgmt-cell-name">
-                      <div className="staff-mgmt-avatar">
-                        {member.display_name.charAt(0).toUpperCase()}
-                      </div>
-                      <span>{member.display_name}</span>
-                    </div>
-                  </td>
-                  <td className="staff-mgmt-cell-username">{member.username}</td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <td>
                     <Badge variant={roleVariant(member.role_name)}>
                       <span className="staff-mgmt-role-badge-content">
-                        <RoleIcon role={member.role_name} size={12} className="staff-mgmt-role-icon" />
+                        <RoleIcon role={member.role_name} size={16} className="staff-mgmt-role-icon" />
                         <span>{member.role_name}</span>
                       </span>
                     </Badge>
                   </td>
+                  <td className="staff-mgmt-cell-username">
+                    {(staffWorkspaces.get(member.id) ?? [])
+                      .map((k) => workspaceNameMap.get(k) ?? k)
+                      .join(', ') || '—'}
+                  </td>
+                  <td>
+                    <span>{member.display_name}</span>
+                  </td>
+                  <td className="staff-mgmt-cell-username">{member.username}</td>
                   <td>
                     {member.is_active ? (
                       <Localized id="staff-status-active">
@@ -375,11 +417,7 @@ export default function StaffManagementScreen() {
                       </Localized>
                     )}
                   </td>
-                  <td className="staff-mgmt-cell-username">
-                    {(staffWorkspaces.get(member.id) ?? [])
-                      .map((k) => workspaceNameMap.get(k) ?? k)
-                      .join(', ') || '—'}
-                  </td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                   <td>
                     <div className="staff-mgmt-cell-actions">
                     <Localized id="staff-edit-aria" attrs={{ "aria-label": true }} vars={{ name: member.display_name }}>
@@ -414,72 +452,74 @@ export default function StaffManagementScreen() {
       )}
 
       {/* ── Add/Edit Modal ──────────────────────────────────────── */}
-      {showModal && (
-        <Localized id={isEditing ? 'staff-modal-edit-aria' : 'staff-modal-add-aria'} attrs={{ "aria-label": true }}>
-          <div className="staff-mgmt-overlay" role="dialog" aria-modal="true" aria-label={isEditing ? 'Edit staff member' : 'Add staff member'}>
-            <div className="staff-mgmt-modal">
-              <div className="staff-mgmt-modal-header">
-                <Localized id={isEditing ? 'staff-modal-edit-title' : 'staff-modal-add-title'}>
-                  <h2>{isEditing ? 'Edit Staff Member' : 'Add Staff Member'}</h2>
-                </Localized>
-                <Localized id="staff-modal-close" attrs={{ "aria-label": true }}>
-                  <button
-                    type="button"
-                    className="staff-mgmt-modal-close"
-                    onClick={closeModal}
-                    aria-label="Close"
-                  >
-                    &times;
-                  </button>
-                </Localized>
-              </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={closeModal}
+        title={l10n.getString(isEditing ? 'staff-modal-edit-title' : 'staff-modal-add-title')}
+        error={error}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel={l10n.getString(isEditing ? 'staff-btn-update' : 'staff-btn-create')}
+        saveDisabled={
+          !form.username.trim() ||
+          !form.displayName.trim() ||
+          !form.roleId ||
+          (!isEditing && (!form.pin || form.pin.length < 4)) ||
+          (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
+        }
+        cancelLabel={l10n.getString('staff-btn-cancel')}
+      >
+        {/* Username */}
+        <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-username" aria-label={l10n.getString('staff-field-username-aria')}>
+          <Localized id="staff-field-username-label">
+            <span className="staff-mgmt-label">Username *</span>
+          </Localized>
+          <Localized id="staff-username-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-username"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              placeholder="e.g. jane"
+              disabled={isEditing}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-gramm="false"
+            />
+          </Localized>
+        </label>
 
-              <div className="staff-mgmt-modal-body">
-                {/* Username */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-username" aria-label={l10n.getString('staff-field-username-aria')}>
-                  <Localized id="staff-field-username-label">
-                    <span className="staff-mgmt-label">Username *</span>
-                  </Localized>
-                  <Localized id="staff-username-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="staff-mgmt-input"
-                      type="text"
-                      id="staff-field-username"
-                      value={form.username}
-                      onChange={(e) => setForm({ ...form, username: e.target.value })}
-                      placeholder="e.g. jane"
-                      disabled={isEditing}
-                      autoComplete="off"
-                    />
-                  </Localized>
-                </label>
+        {/* Display name */}
+        <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-name" aria-label={l10n.getString('staff-field-name-aria')}>
+          <Localized id="staff-field-name-label">
+            <span className="staff-mgmt-label">Display Name *</span>
+          </Localized>
+          <Localized id="staff-name-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="staff-mgmt-input"
+              type="text"
+              id="staff-field-name"
+              value={form.displayName}
+              onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+              placeholder="e.g. Jane Smith"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-gramm="false"
+            />
+          </Localized>
+        </label>
 
-                {/* Display name */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-name" aria-label={l10n.getString('staff-field-name-aria')}>
-                  <Localized id="staff-field-name-label">
-                    <span className="staff-mgmt-label">Display Name *</span>
-                  </Localized>
-                  <Localized id="staff-name-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="staff-mgmt-input"
-                      type="text"
-                      id="staff-field-name"
-                      value={form.displayName}
-                      onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                      placeholder="e.g. Jane Smith"
-                      autoComplete="off"
-                    />
-                  </Localized>
-                </label>
-
-                {/* PIN */}
-                <label className="staff-mgmt-field" htmlFor="staff-field-pin" aria-label={l10n.getString('staff-field-pin-aria')}>
-                  <Localized id={isEditing ? 'staff-field-pin-edit-label' : 'staff-field-pin-label'}>
-                    <span className="staff-mgmt-label">
-                      {isEditing ? 'New PIN (leave blank to keep current)' : 'PIN * (4+ characters)'}
-                    </span>
-                  </Localized>
-                  <Localized id={isEditing ? 'staff-pin-edit-placeholder' : 'staff-pin-placeholder'} attrs={{ placeholder: true }}>
+        {/* PIN */}
+        <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-pin" aria-label={l10n.getString('staff-field-pin-aria')}>
+          <Localized id={isEditing ? 'staff-field-pin-edit-label' : 'staff-field-pin-label'}>
+            <span className="staff-mgmt-label">
+              {isEditing ? 'New PIN (leave blank to keep current)' : 'PIN * (4+ characters)'}
+            </span>
+          </Localized>
+          <Localized id={isEditing ? 'staff-pin-edit-placeholder' : 'staff-pin-placeholder'} attrs={{ placeholder: true }}>
                     <input
                       className="staff-mgmt-input"
                       type="password"
@@ -488,136 +528,90 @@ export default function StaffManagementScreen() {
                       onChange={(e) => setForm({ ...form, pin: e.target.value })}
                       placeholder={isEditing ? 'Leave blank to keep current' : 'Enter PIN'}
                       autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-gramm="false"
                     />
-                  </Localized>
-                </label>
+          </Localized>
+        </label>
 
                 {/* Role selector */}
                 {hasRoleSelected && (
-                  <label className="staff-mgmt-field" htmlFor="staff-field-role">
+                  <label className="staff-mgmt-field staff-mgmt-field--horizontal" htmlFor="staff-field-role">
                     <Localized id="staff-field-role-label">
                       <span className="staff-mgmt-label">Role *</span>
                     </Localized>
-                    <select
-                      className="staff-mgmt-input staff-mgmt-select"
+                    <SettingsSelect
                       id="staff-field-role"
                       value={form.roleId}
-                      onChange={(e) => setForm({ ...form, roleId: e.target.value })}
-                    >
-                      <Localized id="staff-role-select-default">
-                        <option value="">Select a role…</option>
-                      </Localized>
-                      {roles.map((role) => (
-                        <option key={role.id} value={role.id}>
-                          {role.name} — {role.description}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(value) => setForm({ ...form, roleId: value })}
+                      options={roles.map((r) => ({ value: r.id, label: `${r.name} — ${r.description}` }))}
+                      placeholder={l10n.getString('staff-role-select-default')}
+                      ariaLabel={l10n.getString('staff-field-role-label')}
+                    />
                   </label>
                 )}
 
-                {/* ── Workspace Access Section (edit only) ──────── */}
-                {isEditing && allWorkspaces.length > 0 && (
-                  <fieldset className="staff-mgmt-ws-section">
-                    <Localized id="staff-ws-section-label">
-                      <legend className="staff-mgmt-label">Workspace Access</legend>
-                    </Localized>
+        {/* ── Workspace Access Section (edit only) ──────── */}
+        {isEditing && allWorkspaces.length > 0 && (
+          <fieldset className="staff-mgmt-ws-section">
+            <Localized id="staff-ws-section-label">
+              <legend className="staff-mgmt-label">Workspace Access</legend>
+            </Localized>
 
-                    <div className="staff-mgmt-radio">
-                      <input
-                        type="radio"
-                        name="wsMode"
-                        value="default"
-                        checked={form.wsMode === 'default'}
-                        onChange={() => setForm({ ...form, wsMode: 'default', wsKeys: [] })}
-                        aria-label={l10n.getString('staff-ws-role-defaults')}
-                      />
-                      <Localized id="staff-ws-role-defaults">
-                        <span>Use role defaults</span>
-                      </Localized>
-                    </div>
-
-                    <div className="staff-mgmt-radio">
-                      <input
-                        type="radio"
-                        name="wsMode"
-                        value="custom"
-                        checked={form.wsMode === 'custom'}
-                        onChange={() => setForm({ ...form, wsMode: 'custom' })}
-                        aria-label={l10n.getString('staff-ws-custom')}
-                      />
-                      <Localized id="staff-ws-custom">
-                        <span>Custom</span>
-                      </Localized>
-                    </div>
-
-                    {form.wsMode === 'custom' && (
-                      <div className="staff-mgmt-ws-checkboxes">
-                        {allWorkspaces.map((ws) => (
-                          <label key={ws.key} className="staff-mgmt-ws-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={form.wsKeys.includes(ws.key)}
-                              onChange={() => toggleWsKey(ws.key)}
-                            />
-                            <span className="staff-mgmt-ws-checkbox-label">
-                              {ws.icon && (
-                                <span className="staff-mgmt-ws-icon" aria-hidden="true">
-                                  {wsIcon(ws.icon)}
-                                </span>
-                              )}
-                              {ws.name}
-                            </span>
-                            <span className="staff-mgmt-ws-desc">{ws.description}</span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </fieldset>
-                )}
-
-                {/* Error */}
-                {error && (
-                  <div className="staff-mgmt-error" role="alert">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="15" y1="9" x2="9" y2="15" />
-                      <line x1="9" y1="9" x2="15" y2="15" />
-                    </svg>
-                    <Localized id="staff-error-generic" vars={{ message: error }}>
-                      <span>{error}</span>
-                    </Localized>
-                  </div>
-                )}
-              </div>
-
-              <div className="staff-mgmt-modal-actions">
-                <Localized id="staff-btn-cancel">
-                  <Button variant="ghost" onClick={closeModal} disabled={saving}>
-                    Cancel
-                  </Button>
-                </Localized>
-                <Button
-                  variant="primary"
-                  loading={saving}
-                  disabled={
-                    !form.username.trim() ||
-                    !form.displayName.trim() ||
-                    !form.roleId ||
-                    (!isEditing && (!form.pin || form.pin.length < 4)) ||
-                    (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
-                  }
-                  onClick={handleSave}
-                >
-                  <Localized id={isEditing ? 'staff-btn-update' : 'staff-btn-create'}>
-                    <span>{isEditing ? 'Update' : 'Create'}</span>
-                  </Localized>
-                </Button>
-              </div>
+            <div className="staff-mgmt-radio">
+              <input
+                type="radio"
+                name="wsMode"
+                value="default"
+                checked={form.wsMode === 'default'}
+                onChange={() => setForm({ ...form, wsMode: 'default', wsKeys: [] })}
+                aria-label={l10n.getString('staff-ws-role-defaults')}
+              />
+              <Localized id="staff-ws-role-defaults">
+                <span>Use role defaults</span>
+              </Localized>
             </div>
-          </div>
-        </Localized>
-      )}
+
+            <div className="staff-mgmt-radio">
+              <input
+                type="radio"
+                name="wsMode"
+                value="custom"
+                checked={form.wsMode === 'custom'}
+                onChange={() => setForm({ ...form, wsMode: 'custom' })}
+                aria-label={l10n.getString('staff-ws-custom')}
+              />
+              <Localized id="staff-ws-custom">
+                <span>Custom</span>
+              </Localized>
+            </div>
+
+            {form.wsMode === 'custom' && (
+              <div className="staff-mgmt-ws-checkboxes">
+                {allWorkspaces.map((ws) => (
+                  <label key={ws.key} className="staff-mgmt-ws-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={form.wsKeys.includes(ws.key)}
+                      onChange={() => toggleWsKey(ws.key)}
+                    />
+                    <span className="staff-mgmt-ws-checkbox-label">
+                      {ws.icon && (
+                        <span className="staff-mgmt-ws-icon" aria-hidden="true">
+                          {wsIcon(ws.icon)}
+                        </span>
+                      )}
+                      {ws.name}
+                    </span>
+                    <span className="staff-mgmt-ws-desc">{ws.description}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
+        )}
+      </SettingsPopup>
     </div>
   );
 }

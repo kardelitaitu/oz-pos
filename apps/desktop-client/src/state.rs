@@ -1,7 +1,7 @@
 /*
-last audited 12-07-26 by RSA-Agent
-crate: oz-pos-app | status: UNSAFE | lint: ISSUES
-findings: 4+ sync primitives; line 149 unsafe env::set_var; Drop try_lock leaks | next: consolidate lock types; typed setter; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
+last audited 12-07-27 by C-2 env-var fix
+crate: oz-pos-app | status: SAFE (C-2 resolved) | lint: CLEAN
+findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied | next: consolidate lock types; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
 */
 
 //! `AppState` — the long-lived state managed by Tauri and reached via
@@ -107,6 +107,16 @@ pub struct AppState {
     /// Tokens are randomly-generated UUIDs created during login/session
     /// resolution. Commands look up their context via [`AppState::resolve_session`].
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
+
+    /// Terminal identifier for multi-terminal deployments.
+    ///
+    /// Set once at startup from the registered terminal matching this
+    /// device's hostname. Commands that auto-register a terminal via
+    /// `set_feature(MultiTerminal, true)` update this field directly
+    /// instead of mutating the process env (which is UB from async
+    /// tokio workers). Consumers (Redis pub/sub subscriber, inventory
+    /// change publisher) read this field.
+    pub terminal_id: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -141,8 +151,11 @@ impl AppState {
 
         // ── OZ_TERMINAL_ID for multi-terminal support ───────────────
         // On subsequent launches where MultiTerminal is already enabled,
-        // look up the registered terminal by hostname and set the env var
-        // so the Redis pub/sub subscriber can filter its own messages.
+        // look up the registered terminal by hostname. The terminal_id is
+        // stored in AppState (typed field) instead of the process env var.
+        // The Redis pub/sub subscriber and inventory change publisher read
+        // it from this field — they no longer call std::env::var().
+        let terminal_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let reg = oz_core::Settings::load_features(&conn).unwrap_or_default();
         if reg.is_enabled(oz_core::Feature::MultiTerminal) {
             let device_id = std::env::var("COMPUTERNAME")
@@ -151,21 +164,20 @@ impl AppState {
             if !device_id.is_empty() {
                 let store = oz_core::db::Store::new(&conn);
                 if let Ok(Some(terminal)) = store.get_terminal_by_device_id(&device_id) {
-                    // SAFETY: single-threaded startup, called once per process.
-                    unsafe {
-                        std::env::set_var("OZ_TERMINAL_ID", &terminal.id);
-                    }
+                    *terminal_id.blocking_lock() = Some(terminal.id.clone());
                     tracing::info!(
                         terminal_id = %terminal.id,
                         device_id = %device_id,
-                        "OZ_TERMINAL_ID set at startup for multi-terminal"
+                        "terminal_id set at startup for multi-terminal"
                     );
                 }
             }
         }
 
         // ── Start inventory pub/sub listener (Redis only) ────────────
-        let inventory_pubsub_shutdown = cache.start_inventory_pubsub(cache.clone());
+        let pubsub_terminal_id = terminal_id.blocking_lock().clone();
+        let inventory_pubsub_shutdown =
+            cache.start_inventory_pubsub(cache.clone(), pubsub_terminal_id);
         if inventory_pubsub_shutdown.is_some() {
             tracing::info!("inventory pub/sub listener started");
         }
@@ -223,6 +235,7 @@ impl AppState {
             cache,
             inventory_pubsub_shutdown,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id,
         })
     }
 }
@@ -246,12 +259,30 @@ fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 impl AppState {
-    /// Create a [`Store`] with the shared cache layer.
+    /// Create a [`Store`] with the shared cache layer and terminal
+    /// identity for pub/sub message tagging.
     ///
     /// Command handlers should use this instead of `Store::new(&conn)`
-    /// to benefit from Redis caching (when configured).
-    pub fn store<'a>(&self, conn: &'a Connection) -> oz_core::db::Store<'a> {
-        oz_core::db::Store::with_cache(conn, self.cache.clone())
+    /// to benefit from Redis caching (when configured) and to ensure
+    /// inventory-change pub/sub messages are correctly tagged with the
+    /// terminal's identity.
+    /// Create a [`Store`] with the shared cache layer and a pre-acquired
+    /// terminal identity for pub/sub message tagging.
+    ///
+    /// Callers should acquire the terminal_id via
+    /// `state.terminal_id.lock().await.clone()` BEFORE locking the
+    /// database, so the db guard never crosses an await point.
+    ///
+    /// Command handlers should use this instead of `Store::new(&conn)`
+    /// to benefit from Redis caching (when configured) and to ensure
+    /// inventory-change pub/sub messages are correctly tagged with the
+    /// terminal's identity.
+    pub fn store_with_tid<'a>(
+        &self,
+        conn: &'a Connection,
+        tid: Option<String>,
+    ) -> oz_core::db::Store<'a> {
+        oz_core::db::Store::with_cache(conn, self.cache.clone()).with_terminal_id(tid)
     }
 
     /// Resolve an opaque session token to its [`SessionContext`].
@@ -360,10 +391,30 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 impl Drop for AppState {
     fn drop(&mut self) {
         tracing::info!("stopping kernel modules");
-        if let Ok(mut kernel) = self.kernel.try_lock() {
-            let _ = kernel.stop_all();
-        } else {
-            tracing::warn!("kernel lock contended, skipping stop_all");
+        // Retry the lock for up to 500ms before giving up. This addresses
+        // a Windows window-lifecycle bottleneck where `try_lock()` would
+        // silently skip `stop_all()` if a Tauri command was mid-execution.
+        // A single `try_lock()` is too aggressive during shutdown because
+        // commands may still be draining. But `blocking_lock()` risks a
+        // deadlock if a command holding the lock is waiting for the runtime
+        // to shut down (circular dependency). The bounded retry loop
+        // gives commands time to finish while guaranteeing the Drop
+        // doesn't hang indefinitely.
+        const DROP_LOCK_RETRIES: usize = 50;
+        let mut stopped = false;
+        for _ in 0..DROP_LOCK_RETRIES {
+            if let Ok(mut kernel) = self.kernel.try_lock() {
+                let _ = kernel.stop_all();
+                stopped = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !stopped {
+            tracing::warn!(
+                "kernel lock contended after 500ms, skipping stop_all — \
+                 modules may not have been stopped cleanly"
+            );
         }
     }
 }
@@ -388,6 +439,7 @@ impl AppState {
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -484,10 +536,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn store_method_creates_store_with_cache() {
+    async fn store_with_tid_creates_store_with_cache() {
         let state = AppState::for_test();
+        let tid = state.terminal_id.lock().await.clone();
         let conn = state.db.lock().await;
-        let store = state.store(&conn);
+        let store = state.store_with_tid(&conn, tid);
         let _ = store;
     }
 

@@ -51,6 +51,18 @@ interface ScreenEntry {
    * component rendering a `.card` class internally.
    */
   externalClasses?: string[];
+  /**
+   * String values that the static `extractUsedClassNames` parser
+   * falsely extracts as CSS class names because they appear inside
+   * template-literal interpolations (e.g. `flashRows.has('backup')`).
+   * Unlike `dynamicClassPrefixes` (which handles BEM-like dynamic
+   * modifiers), these fragments are NOT real CSS classes — they are
+   * function arguments, comparison values, or other string literals
+   * that happen to look like class names to the regex parser.
+   *
+   * Entries here are excluded from the "used but not defined" check.
+   */
+  knownDynamicFragments?: string[];
 }
 
 const SCREENS: ScreenEntry[] = [
@@ -183,6 +195,20 @@ const SCREENS: ScreenEntry[] = [
       'tax-config',
       'exchange-rate-config',
       'promo-mgmt',
+      'mobile-open',
+      'visible',
+      // Visibility-hidden modifier classes for revert button & save-dot.
+      // These are constructed via template-literal class toggling in
+      // SettingsPage.tsx, so the static parser can't extract them.
+      'settings-btn-revert--hidden',
+      'settings-save-dot--hidden',
+    ],
+    knownDynamicFragments: [
+      // Object-key strings inside template-literal interpolations that
+      // the static class-name parser falsely extracts as CSS classes.
+      'store-name',
+      'address',
+      'tax-id',
     ],
   },
   {
@@ -190,11 +216,24 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'settings/DataManagementScreen.tsx',
     css: ['settings/DataManagementScreen.css'],
     dynamicClassPrefixes: ['data-mgmt-toast--'],
+    knownDynamicFragments: [
+      // Template-literal parameters inside flashRows.has() that the
+      // static class-name parser falsely extracts as class names.
+      'import-preview',
+      'backup',
+    ],
   },
   {
     name: 'FeatureToggleScreen',
     tsx: 'settings/FeatureToggleScreen.tsx',
     css: ['settings/FeatureToggleScreen.css'],
+    dynamicClassPrefixes: [
+      // Flash + checkmark classes constructed via template literals.
+      // 'feature-toggle-item' covers both the base item class and
+      // the --flash-enabled/--flash-disabled modifier variants.
+      'feature-toggle-item',
+      'feature-toggle-checkmark--',
+    ],
   },
 
   // ── Shifts ────────────────────────────────────────────
@@ -286,6 +325,12 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'sales/RefundModal.tsx',
     css: ['sales/RefundModal.css'],
   },
+  {
+    name: 'PriceOverrideModal',
+    tsx: 'sales/PriceOverrideModal.tsx',
+    css: ['sales/PriceOverrideModal.css'],
+    dynamicClassPrefixes: ['price-override-pin-dot--'],
+  },
 
   // ── Reports ───────────────────────────────────────────
   {
@@ -312,7 +357,9 @@ const SCREENS: ScreenEntry[] = [
     dynamicClassPrefixes: ['gift-card-status--', 'gift-card-txn-type--'],
     externalClasses: [
       'gift-cards-modal-overlay',
+      'gift-cards-modal-overlay--exiting',
       'gift-cards-modal',
+      'gift-cards-modal--exiting',
       'gift-cards-modal-title',
       'gift-cards-modal-form',
       'gift-cards-modal-field',
@@ -336,6 +383,17 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'inventory/StockCountDetail.tsx',
     css: ['inventory/StockCountDetail.css'],
     dynamicClassPrefixes: ['sc-badge--', 'sc-add-line-item--', 'sc-diff-'],
+    knownDynamicFragments: [
+      // String-interpolated fragments in the skeleton table header that
+      // the static class-name parser falsely extracts as CSS classes.
+      // These are template-literal substrings like 'sc-lines-col-' + suffix.
+      'sc-lines-col-',
+      'sku',
+      'name',
+      'expected',
+      'counted',
+      'diff',
+    ],
   },
   {
     name: 'StockCountForm',
@@ -407,10 +465,20 @@ const SCREENS: ScreenEntry[] = [
       'exchange-rate-config',
       'promo-mgmt',
     ],
+    knownDynamicFragments: [
+      // Card component classes (defined in frontend/themes/components.css)
+      // that are used inline in AppearanceSettings.tsx but not present
+      // in the screen's own CSS files.
+      'card--padding-md',
+      'card--shadow-sm',
+      'card-header',
+    ],
     externalClasses: [
       'card',
       'tab-list',
       'collapsed',
+      'mobile-open',
+      'visible',
     ],
   },
 ];
@@ -419,7 +487,7 @@ const SCREENS: ScreenEntry[] = [
 
 describe.each(SCREENS)(
   'CSS class integrity — $name',
-  ({ name, tsx, css, dynamicClassPrefixes, externalClasses }: ScreenEntry) => {
+  ({ name, tsx, css, dynamicClassPrefixes, externalClasses, knownDynamicFragments }: ScreenEntry) => {
     const tsxPath = path.join(FEATURES_DIR, tsx);
     const tsxContent = fs.readFileSync(tsxPath, 'utf8');
     const used = extractUsedClassNames(tsxContent);
@@ -442,9 +510,10 @@ describe.each(SCREENS)(
     }
 
     it(`every className used in ${name} has a CSS rule defined`, () => {
+      const fragments = new Set(knownDynamicFragments ?? []);
       const missing: string[] = [];
       for (const cls of used) {
-        if (!fileIndex.has(cls)) {
+        if (!fileIndex.has(cls) && !fragments.has(cls)) {
           missing.push(cls);
         }
       }

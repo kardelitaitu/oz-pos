@@ -8,6 +8,7 @@ import {
   type StockCountLineDto,
   type StockAdjustmentDto,
 } from '@/api/inventoryCounts';
+import { Skeleton } from '@/components/Skeleton';
 import './StockCountHistory.css';
 
 /** Stock count history screen — lists completed and cancelled counts alongside stock adjustments with drill-down into individual count lines. */
@@ -54,7 +55,44 @@ export default function StockCountHistory() {
   }, [adjustments, selectedCount]);
 
   if (loading) {
-    return <p className="sc-hist-loading"><Localized id="sc-loading"><span>Loading…</span></Localized></p>;
+    return (
+      <div className="sc-hist-screen" aria-hidden="true">
+        <div className="sc-hist-header">
+          <Skeleton variant="block" width="14rem" height="1.5rem" />
+        </div>
+        <div className="sc-hist-layout">
+          <div className="sc-hist-list">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="sc-hist-item">
+                <Skeleton variant="text" width={`${5 + (i % 3) * 2}rem`} height="0.875rem" />
+                <Skeleton variant="block" width="4rem" height="1rem" style={{ borderRadius: 'var(--radius-sm)' }} />
+                <Skeleton variant="text" width="6rem" height="0.75rem" />
+              </div>
+            ))}
+          </div>
+          <div className="sc-hist-detail">
+            <div className="sc-hist-table">
+              <div className="sc-hist-tr sc-hist-th">
+                <span><Skeleton variant="text" width="3rem" height="0.75rem" /></span>
+                <span><Skeleton variant="text" width="4rem" height="0.75rem" /></span>
+                <span><Skeleton variant="text" width="3rem" height="0.75rem" /></span>
+                <span><Skeleton variant="text" width="3rem" height="0.75rem" /></span>
+                <span><Skeleton variant="text" width="3rem" height="0.75rem" /></span>
+              </div>
+              {[0, 1, 2, 3].map((r) => (
+                <div key={r} className="sc-hist-tr">
+                  <span><Skeleton variant="text" width="4rem" height="0.75rem" /></span>
+                  <span><Skeleton variant="text" width="7rem" height="0.875rem" /></span>
+                  <span><Skeleton variant="text" width="3rem" height="0.75rem" /></span>
+                  <span><Skeleton variant="text" width="3rem" height="0.75rem" /></span>
+                  <span><Skeleton variant="text" width="5rem" height="0.75rem" /></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

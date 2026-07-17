@@ -1,26 +1,49 @@
 # ADR #3: Frontend Restructure
 
-**Status:** Accepted
+**Status:** Implemented (2026-07-15)
 **Date:** 2026-03-01
 **Author:** Architecture Team
 **Tags:** architecture, frontend, ui, registries
 
 ---
 
+## Implementation Summary
+
+The registry-driven shell architecture is fully implemented. The four migration steps
+are complete:
+
+1. **`frontend/shell/`** — `AppShell`, `AppLayout`, `TabletAppShell`, `TabletAppLayout`,
+   registry-driven routing with `type_key`-based component dispatch.
+2. **`frontend/shared/`** — 15 shared components (Badge, Button, Card, EmptyState,
+   ErrorState, Input, Localized, Modal, PermissionDenied, Skeleton, Spinner, Toast, useSound).
+3. **`frontend/themes/`** — `tokens.css`, `components.css`, `reset.css`, `responsive.css`.
+4. **Registries** — `PageRegistry` (`registerPage`, `getEnabledPages`), `MenuRegistry`
+   (`registerNavItem`, `getNavItems` with 10 sections), `WidgetRegistry` (`registerWidget`,
+   `getWidgets`). All three support feature-toggle and role-based filtering.
+
+Both `App.tsx` (desktop) and `main.tablet.tsx` (tablet) use the registries — 30+ page
+registrations and nav items are declared via `registerPage()`/`registerNavItem()` calls
+rather than a hardcoded switch statement.
+
+**Deferred:** Module-owned `ui/` directories (`modules/<name>/ui/`). Features live in
+`ui/src/features/` as a flat directory. Per-module locales live in `ui/src/locales/`.
+Moving files into module-owned directories would be a large, mechanical reorganization
+that provides no architectural benefit beyond what the registries already deliver —
+modules are already decoupled from the shell via the registry pattern.
+
+---
+
 ## Context
 
-The current OZ-POS frontend in `ui/src/` has a flat structure where all features, components, API calls, and styles live in top-level directories. As the number of features grows, this leads to:
+The original OZ-POS frontend in `ui/src/` had a flat structure where all features, components, API calls, and styles lived in top-level directories. The primary goals were:
 
-- API calls for all domains in a single file (`api/pos.ts` — 1085 lines, already split).
-- Features scattered across a single `features/` directory with no module boundaries.
-- Components in a single `components/` directory with no indication of which feature owns them.
-- Hardcoded navigation, routing, and menu structures in `App.tsx`.
+- Replace the hardcoded navigation, routing, and menu structures in `App.tsx`.
+- Extract shared components into `frontend/shared/`.
+- Extract theming into `frontend/themes/`.
+- Shell (`frontend/shell/`) is registry-driven — pages, menus, and widgets are registered declaratively.
 
-The target architecture in `ARCHITECTURE.md` requires:
-- Each module owns its UI (pages, components, widgets) within `modules/<name>/ui/`.
-- The shell (`frontend/shell/`) is registry-driven — pages, menus, and widgets are registered by modules.
-- Shared components live in `frontend/shared/`.
-- Theming lives in `frontend/themes/`.
+The aspirational goal of module-owned `ui/` directories (`modules/<name>/ui/`)
+was deferred — see Implementation Summary above.
 
 The target directory structure is:
 
@@ -201,14 +224,15 @@ Routes derived from the file system (like Next.js pages router).
 
 ## Migration Plan
 
-The restructure happens in 4 steps (tracked in `RESTRUCTURING.md` Phase 4):
+All four steps are complete (2026-07-15):
 
-1. **Extract `frontend/shell/`** — Create `AppLayout`, `AppShell`, routing from `App.tsx`.
-2. **Extract `frontend/shared/`** — Move `components/` to `frontend/shared/`.
-3. **Extract `frontend/themes/`** — Move `styles/` to `frontend/themes/`.
-4. **Build registries** — Implement PageRegistry, MenuRegistry, WidgetRegistry, then refactor `App.tsx`.
+1. ✅ **Extract `frontend/shell/`** — `AppLayout`, `AppShell`, `TabletAppShell`, `TabletAppLayout`.
+2. ✅ **Extract `frontend/shared/`** — 15 shared components.
+3. ✅ **Extract `frontend/themes/`** — `tokens.css`, `components.css`, `reset.css`, `responsive.css`.
+4. ✅ **Build registries** — PageRegistry, MenuRegistry, WidgetRegistry. `App.tsx` uses `registerPage()`/`registerNavItem()` instead of a hardcoded switch.
 
-Steps 1-3 are pure moves (no behavior change). Step 4 is the behavioral change to registry-driven rendering.
+Module-owned `ui/` directories (`modules/<name>/ui/`) were deferred — the registries provide
+the same decoupling without reorganizing 30 feature directories.
 
 ---
 

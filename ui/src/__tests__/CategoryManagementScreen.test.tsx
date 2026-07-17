@@ -66,10 +66,11 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
   });
 
-  it('shows loading state', () => {
+  it('shows loading skeleton while fetching categories', () => {
     mockListCategories.mockReturnValue(new Promise(() => {}));
     renderScreen();
-    expect(screen.getByText('Loading categories…')).toBeDefined();
+    expect(document.querySelector('.cat-mgmt-loading-skeleton')).toBeDefined();
+    expect(screen.queryByText('Loading categories…')).toBeNull();
   });
 
   it('shows empty state', async () => {
@@ -139,10 +140,9 @@ describe('CategoryManagementScreen', () => {
     await userEvent.click(document.querySelector('.cat-mgmt-delete-btn')!);
     await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
 
-    // Confirm delete — click the danger Delete button in modal.
-    // The Button variant="danger" renders class "btn btn--danger btn--md".
-    const modalDeleteBtn = document.querySelector('.cat-mgmt-modal-actions .btn--danger') as HTMLElement;
-    expect(modalDeleteBtn).toBeTruthy();
+    // Confirm delete — click the danger Delete button in the SettingsPopup footer.
+    // Card delete buttons have aria-label="Delete category {name}", modal has exact "Delete".
+    const modalDeleteBtn = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(modalDeleteBtn);
 
     await waitFor(() => expect(mockDeleteCategory).toHaveBeenCalledWith('cat-bakery'));

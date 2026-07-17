@@ -205,6 +205,11 @@ settings-category-management = Management
 settings-sidebar-nav-aria = Settings navigation
 settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar
+settings-sidebar-collapse-all-aria = Collapse all categories
+settings-sidebar-search-clear-aria =
+    .aria-label = Clear search
+settings-sidebar-no-results = No matching sections
+settings-sidebar-clear-results = Clear search
 settings-theme-toggle-dark-aria = Switch to dark mode
 settings-theme-toggle-light-aria = Switch to light mode
 settings-loading = Loading settings…
@@ -212,6 +217,7 @@ settings-load-failed = Failed to load settings
 settings-load-partial = Some settings could not be loaded. Try again.
 settings-section-store = Store
 settings-section-currency = Currency
+settings-currency-loading = Loading currencies…
 settings-section-display = Display
 settings-section-receipt = Receipt
 settings-field-store-name = Store name
@@ -220,7 +226,6 @@ settings-field-tax-id = Tax / VAT ID
 settings-field-default-currency = Default currency
 settings-field-decimal-separator = Decimal separator
 settings-field-paper-width = Paper width
-settings-field-language = Language
 settings-field-footer = Receipt footer
 
 # ── Display sub-section fields ──
@@ -245,6 +250,11 @@ settings-toggle-show-table-number = Show table number on cart and receipts
 settings-toggle-show-table-number-aria =
     .aria-label = Show table number on cart and receipts
 settings-btn-save = Save
+settings-btn-revert = Revert
+
+settings-btn-revert-aria =
+    .aria-label = Revert settings to last saved state
+
 settings-saved = Saved!
 settings-section-sync = Cloud Sync
 settings-sync-server-url = Server URL
@@ -253,8 +263,33 @@ settings-sync-enabled = Enable Cloud Sync
 settings-sync-enabled-aria = Toggle cloud sync
 settings-sync-sync-now = Sync Now
 settings-sync-syncing = Syncing…
+settings-sync-test-connection = Test Connection
+settings-sync-testing = Testing…
+settings-sync-test-failed = Connection test failed
+settings-sync-token-request-failed = Token request failed — check server URL
+settings-sync-request-token = Request Token
+settings-sync-requesting = Requesting…
 settings-sync-error = Sync failed
+
+# ── Token expiry badge ──────────────────────────────────
+settings-sync-expiry-expired = Expired
+settings-sync-expiry-in-days = { $count ->
+    [one] Expires in 1 day
+   *[other] Expires in { $count } days
+}
+settings-sync-expiry-in-hours = { $count ->
+    [one] Expires in 1 hour
+   *[other] Expires in { $count } hours
+}
+settings-sync-expiry-in-minutes = { $count ->
+    [one] Expires in 1 minute
+   *[other] Expires in { $count } minutes
+}
+settings-sync-expiry-less-than-minute = Expires in less than a minute
+settings-sync-expiry-fallback = Expires { $iso }
 settings-sync-result = Last sync: { $synced } synced, { $failed } failed
+settings-sync-success = Sync complete: { $synced } synced, { $failed } failed
+settings-sync-nothing = Nothing to sync — all caught up
 settings-store-name-placeholder = OZ-POS Store
 settings-address-placeholder = 123 Main Street
 settings-tax-id-placeholder = 12-3456789
@@ -262,6 +297,8 @@ settings-footer-placeholder = Thank you for shopping!
 settings-server-url-placeholder = https://api.example.com
 settings-api-key-placeholder = Enter API key
 settings-api-key-masked = ••••••••
+settings-api-key-show-aria = Show API key
+settings-api-key-hide-aria = Hide API key
 settings-btn-save-aria =
     .aria-label = { $state ->
         [saved] Saved!
@@ -271,6 +308,14 @@ settings-save-error = Failed to save settings. Please try again.
 settings-save-partial = Some settings could not be saved. Try again.
 settings-retry = Retry
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
+settings-sync-status-idle = Ready
+settings-sync-status-ok = Connected
+settings-sync-status-error = Connection error
+settings-sync-pending-count = { $count } pending
+settings-sync-pull = Pull from Server
+settings-sync-pulling = Pulling…
+settings-sync-pull-empty = Server returned empty snapshot — nothing to pull
+settings-sync-pull-result = Last pull: { $products } products, { $tax_rates } tax rates, { $users } users
 settings-font-smoothing-antialiased = Antialiased (crisp)
 settings-font-smoothing-subpixel = Subpixel (smooth)
 
@@ -316,6 +361,18 @@ settings-license-ws-franchise = Franchise
 settings-license-ws-warehouse = Warehouse
 settings-license-server-status-retrieved = Server license status retrieved.
 settings-license-server-check-failed = Server check failed
+settings-license-server-status = Server Status
+settings-license-live-online = Live
+settings-license-live-offline = Offline
+settings-license-live-inactive = Inactive
+settings-license-live-checking = Checking…
+settings-license-last-checked = Last checked: { $when }
+settings-license-just-now = just now
+settings-license-seconds-ago = { $seconds }s ago
+settings-license-minutes-ago = { $minutes }m ago
+settings-license-refresh = Refresh
+settings-license-refresh-aria = Refresh license status
+settings-license-poll-offline = Server unreachable
 settings-license-load-failed = Failed to load license info
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. All rights reserved.
 
@@ -326,6 +383,9 @@ appearance-primary-colour-picker-aria =
     .aria-label = Primary colour picker
 appearance-colour-hex-aria =
     .aria-label = Colour hex value
+appearance-reset-colour-aria =
+    .aria-label = Reset colour to default
+appearance-reset-colour = Reset to default
 appearance-logo = Store Logo
 appearance-logo-alt = Store logo
 appearance-choose-logo = Choose Logo
@@ -338,13 +398,30 @@ appearance-zoom-100 = 100% (Default)
 appearance-zoom-125 = 125%
 appearance-zoom-150 = 150%
 appearance-zoom-200 = 200%
+appearance-branding = Branding
+appearance-interface = Interface
+appearance-preview-heading = Preview
 appearance-store-name-fallback = OZ-POS
+appearance-hw-accel = Hardware Acceleration
+appearance-hw-accel-aria =
+    .aria-label = Toggle hardware acceleration
+appearance-hw-accel-on = On
+appearance-hw-accel-off = Off
+appearance-hw-accel-hint = Disable if UI animations feel janky on low-end devices. Restart the app for the change to take full effect.
 appearance-preview = Preview
 appearance-preview-btn-label = Primary Button
 appearance-preview-btn-outline-label = Secondary
 appearance-preview-badge-label = Live
+appearance-reset-all-aria =
+    .aria-label = Reset all to defaults
+appearance-reset-all = Reset all to defaults
+appearance-reset-all-confirm = Reset all appearance settings to their defaults? This cannot be undone.
+appearance-reset-all-success = Appearance settings reset to defaults
+appearance-reset-all-failed = Failed to reset appearance settings
 appearance-save-aria =
     .aria-label = Save appearance
+appearance-save-success = Appearance settings saved
+appearance-save-failed = Failed to save appearance settings
 
 # Settings option labels
 settings-decimal-separator-dot = 1.00 (dot)
@@ -460,6 +537,7 @@ data-mgmt-toast-import-no-file = No file selected
 data-mgmt-toast-import-success = Import complete
 data-mgmt-toast-import-fail = Import failed
 data-mgmt-toast-file-picker-fail = Failed to open file picker
+data-mgmt-toast-backup-status-fail = Failed to load backup status
 
 # Aria labels
 data-mgmt-dismiss-aria = Dismiss notification
@@ -500,6 +578,10 @@ feature-toggle-requires = Requires: { $deps }
 feature-toggle-group-aria = { $group } features
 feature-toggle-toggle-aria = Toggle { $name }
 feature-toggle-dismiss-aria = Dismiss notification
+
+# ── Data Management ──
+data-mgmt-password-show-aria = Show password
+data-mgmt-password-hide-aria = Hide password
 
 # ── Settings screen ──
 settings-general-tab = General
@@ -685,3 +767,23 @@ settings-sync-pull-toast-success = Pulled { $products } products, { $tax_rates }
 settings-sync-pull-toast-empty = Server snapshot was empty — nothing to pull
 settings-sync-pull-toast-fail = Pull failed — check server URL and token
 settings-toast-failed-sync = Failed to load sync settings
+settings-field-language = Language
+
+# ── Field validation ──
+settings-store-name-required = Store name is required
+settings-tax-id-pattern-error = Only letters, numbers, dashes, dots, and slashes allowed
+settings-tax-id-pattern-hint = Letters, numbers, dashes, dots, and slashes only, max 20 characters
+
+# ── Updates ──
+settings-updates-heading = Updates
+settings-current-version = Current Version
+settings-check-for-updates = Check for Updates
+settings-checking-for-updates = Checking…
+settings-up-to-date = ✓ You're up to date
+settings-update-available = { $version } is available
+settings-install-update = Install Now
+settings-installing-update = Installing…
+settings-update-status-label = Status
+settings-update-not-checked = Not checked
+settings-update-check-error = Update check failed
+settings-update-retry = Retry

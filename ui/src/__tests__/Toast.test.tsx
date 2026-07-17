@@ -140,7 +140,10 @@ describe('ToastProvider + useToast', () => {
 
   it('throws when useToast is used outside a ToastProvider', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', preventJsdomError);
     expect(() => render(<TestConsumer />)).toThrow('useToast must be used within a ToastProvider');
+    window.removeEventListener('error', preventJsdomError);
     spy.mockRestore();
   });
 

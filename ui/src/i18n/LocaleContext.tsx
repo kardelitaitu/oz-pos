@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useState, useCallback } from 'react';
+import { createContext, useState, useCallback, useMemo } from 'react';
 
 import type { ReactNode } from 'react';
 import type { FluentBundle } from '@fluent/bundle';
@@ -49,6 +49,8 @@ export function LocaleProvider({ children }: LocaleProviderProps) {
     localStorage.setItem(STORAGE_KEY, code);
   }, []);
 
+  const l10n = useMemo(() => new ReactLocalization([bundle]), [bundle]);
+
   const value: LocaleContextValue = {
     locale,
     setLocale,
@@ -58,7 +60,7 @@ export function LocaleProvider({ children }: LocaleProviderProps) {
 
   return (
     <LocaleContext.Provider value={value}>
-      <LocalizationProvider l10n={new ReactLocalization([bundle])}>
+      <LocalizationProvider l10n={l10n}>
         {children}
       </LocalizationProvider>
     </LocaleContext.Provider>

@@ -64,10 +64,13 @@ button {
   font-family: inherit;
   font-size: inherit;
   font-weight: var(--font-weight-medium, 500);
+  line-height: inherit;
   cursor: pointer;
+  appearance: none;
   border: none;
   background: none;
   color: inherit;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -99,9 +102,10 @@ textarea {
     box-shadow var(--duration-150, 150ms) var(--ease-out);
 }
 
-input:focus,
-select:focus,
-textarea:focus {
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
   border-color: var(--color-border-focus, #10b981);
   box-shadow: 0 0 0 3px var(--color-accent-subtle, #d1fae5);
 }
@@ -112,7 +116,7 @@ textarea:focus {
   outline-offset: 2px;
 }
 
-:focus:not(:focus-visible) {
+:focus-visible:not(:focus-visible) {
   outline: none;
 }
 

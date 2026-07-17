@@ -16,8 +16,10 @@ import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
 
@@ -69,6 +71,7 @@ function SwipeableOrderRow({ sale, isManager, onView, onVoid, cashierName }: Swi
       <td>{new Date(sale.createdAt).toLocaleString()}</td>
       <td className="sales-history-cell-total">{formatMoney(sale.total)}</td>
       <td>{sale.lineCount}</td>
+      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
       <td>
         <Badge variant={statusBadgeVariant(sale.status)}>
           <Localized id={statusFluentId(sale.status)}>
@@ -192,6 +195,8 @@ export default function SalesHistoryScreen() {
     setVoidError(null);
   }, []);
 
+  const voidExit = useExitAnimation(!!voidTarget, handleCloseVoid);
+
   const handleConfirmVoid = useCallback(async () => {
     if (!voidTarget) return;
     setVoiding(true);
@@ -294,6 +299,8 @@ export default function SalesHistoryScreen() {
     setDetail(null);
     setRefunds([]);
   }, []);
+
+  const detailExit = useExitAnimation(!!detail, closeDetail);
 
   const handleReprint = useCallback(async () => {
     if (!detail) return;
@@ -548,9 +555,59 @@ export default function SalesHistoryScreen() {
 
       {/* ── Table ───────────────────────────────────────────────── */}
       {loading ? (
-        <Localized id="sales-history-loading">
-          <p className="sales-history-loading">Loading sales&hellip;</p>
-        </Localized>
+        <div className="sales-history-loading-skeleton" aria-hidden="true">
+          <div className="sales-history-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="7rem" height="2rem" />
+          </div>
+          <div className="sales-history-filters">
+            <div className="sales-history-filter-group">
+              <Skeleton width="3rem" height="0.75rem" />
+              <Skeleton variant="block" width="12.5rem" height="2.125rem" style={{ borderRadius: 'var(--radius-md)' }} />
+            </div>
+            <div className="sales-history-filter-group">
+              <Skeleton width="3rem" height="0.75rem" />
+              <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} variant="block" width="4rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                ))}
+              </div>
+            </div>
+            {[0, 1, 2].map((g) => (
+              <div key={g} className="sales-history-filter-group">
+                <Skeleton width="2.5rem" height="0.75rem" />
+                <Skeleton variant="block" width="7rem" height="2.125rem" style={{ borderRadius: 'var(--radius-md)' }} />
+              </div>
+            ))}
+          </div>
+          <div className="sales-history-table-wrap">
+            <table className="sales-history-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Sale ID', 'Date', 'Total', 'Items', 'Status', 'Payment', 'Cashier', ''].map((_, i) => (
+                    <th key={i}><Skeleton width="4rem" height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 5 }, (_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton width="4rem" height="0.875rem" /></td>
+                    <td><Skeleton width="2rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="4.5rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton width="4rem" height="0.875rem" /></td>
+                    <td><Skeleton width="5rem" height="0.875rem" /></td>
+                    <td className="sales-history-cell-actions">
+                      <Skeleton variant="block" width="3rem" height="1.375rem" style={{ borderRadius: 'var(--radius-md)' }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : filteredSales.length === 0 ? (
         <Card shadow="sm">
           <div className="sales-history-empty">
@@ -723,10 +780,10 @@ export default function SalesHistoryScreen() {
       )}
 
       {/* ── Void Confirmation Modal ──────────────────────────── */}
-      {voidTarget && (
+      {voidExit.shouldRender && voidTarget && (
         <Localized id="sales-history-void-overlay-aria" attrs={{ 'aria-label': true }}>
-        <div className="sales-history-overlay" role="dialog" aria-modal="true" aria-label="Void order">
-          <div className="sales-history-modal sales-history-void-modal">
+        <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Void order">
+          <div className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-void-title">
                 <h2><span>Void Order</span></h2>
@@ -735,7 +792,7 @@ export default function SalesHistoryScreen() {
                 <button
                   type="button"
                   className="sales-history-modal-close"
-                  onClick={handleCloseVoid}
+                  onClick={voidExit.requestClose}
                   aria-label="Close void dialog"
                 >
                   &times;
@@ -780,7 +837,7 @@ export default function SalesHistoryScreen() {
 
               <div className="sales-history-modal-actions">
                 <Localized id="sales-history-void-cancel">
-                  <Button variant="ghost" onClick={handleCloseVoid} disabled={voiding}>
+                  <Button variant="ghost" onClick={voidExit.requestClose} disabled={voiding}>
                     <span>Cancel</span>
                   </Button>
                 </Localized>
@@ -801,10 +858,10 @@ export default function SalesHistoryScreen() {
       )}
 
       {/* ── Detail modal ────────────────────────────────────────── */}
-      {detail && (
+      {detailExit.shouldRender && detail && (
         <Localized id="sales-history-detail-overlay-aria" attrs={{ 'aria-label': true }}>
-        <div className="sales-history-overlay" role="dialog" aria-modal="true" aria-label="Sale detail">
-          <div className="sales-history-modal">
+        <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Sale detail">
+          <div className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-detail-title">
                 <h2>Sale Detail</h2>
@@ -814,7 +871,7 @@ export default function SalesHistoryScreen() {
                 <button
                   type="button"
                   className="sales-history-modal-close"
-                  onClick={closeDetail}
+                  onClick={detailExit.requestClose}
                   aria-label="Close"
                 >
                   &times;
@@ -822,9 +879,36 @@ export default function SalesHistoryScreen() {
               </Localized>
               </Localized>
             </div>            {detailLoading ? (
-              <Localized id="sales-history-detail-loading">
-                <p><span>Loading&hellip;</span></p>
-              </Localized>
+              <div className="sales-history-detail-skeleton" aria-hidden="true">
+                <div className="sales-history-detail-meta">
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <div key={i}>
+                      <Skeleton width="3rem" height="0.75rem" />
+                      <Skeleton width="70%" height="0.875rem" style={{ marginTop: '0.25rem' }} />
+                    </div>
+                  ))}
+                </div>
+                <table className="sales-history-lines-table" aria-hidden="true">
+                  <thead>
+                    <tr>
+                      {['SKU', 'Name', 'Qty', 'Unit Price', 'Total'].map((_, i) => (
+                        <th key={i}><Skeleton width="3rem" height="0.75rem" /></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: 4 }, (_, r) => (
+                      <tr key={r}>
+                        <td><Skeleton width="4rem" height="0.875rem" /></td>
+                        <td><Skeleton width="6rem" height="0.875rem" /></td>
+                        <td><Skeleton width="2rem" height="0.875rem" /></td>
+                        <td><Skeleton width="3rem" height="0.875rem" /></td>
+                        <td><Skeleton width="3rem" height="0.875rem" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <div className="sales-history-modal-body">
                 <div className="sales-history-detail-meta">
@@ -965,7 +1049,7 @@ export default function SalesHistoryScreen() {
 
                 <div className="sales-history-modal-actions">
                   <Localized id="sales-history-detail-close">
-                    <Button variant="ghost" onClick={closeDetail}>Close</Button>
+                    <Button variant="ghost" onClick={detailExit.requestClose}>Close</Button>
                   </Localized>
                   {detail.status === 'Completed' && session && (
                     <Localized id="refund-action-refund">

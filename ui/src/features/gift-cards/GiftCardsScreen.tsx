@@ -10,6 +10,7 @@ import {
 } from '@/api/giftCards';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import IssueGiftCardModal from './IssueGiftCardModal';
 import './GiftCardsScreen.css';
 
@@ -101,15 +102,16 @@ export default function GiftCardsScreen() {
         </Button>
       </div>
 
-      <div className="gift-cards-toolbar">
-        <input
-          type="text"
-          className="gift-cards-search"
-          placeholder={l10n.getString('gift-cards-search-placeholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label={l10n.getString('gift-cards-search-aria')}
-        />
+      <div className="gift-cards-toolbar">          <input
+            type="text"
+            className="gift-cards-search"
+            id="gift-cards-search"
+            name="gift-cards-search"
+            placeholder={l10n.getString('gift-cards-search-placeholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label={l10n.getString('gift-cards-search-aria')}
+          />
         <select
           className="gift-cards-status-filter"
           value={statusFilter}
@@ -125,7 +127,33 @@ export default function GiftCardsScreen() {
       </div>
 
       {loading ? (
-        <Localized id="gift-cards-loading"><p className="gift-cards-loading">Loading...</p></Localized>
+        <div className="gift-cards-loading-skeleton" aria-hidden="true">
+          <div className="gift-cards-header">
+            <Skeleton variant="block" width="7rem" height="1.75rem" />
+            <Skeleton variant="block" width="8rem" height="2.25rem" />
+          </div>
+          <div className="gift-cards-toolbar">
+            <Skeleton variant="block" width="100%" height="2.25rem" />
+            <Skeleton variant="block" width="8.75rem" height="2.25rem" />
+          </div>
+          <div className="gift-cards-list">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} shadow="sm" className="gift-card-card">
+                <div className="gift-card-summary">
+                  <div className="gift-card-summary-left">
+                    <Skeleton variant="text" width={`${7 + (i % 3) * 2}rem`} />
+                    <Skeleton variant="text" width="4rem" />
+                  </div>
+                  <div className="gift-card-summary-right">
+                    <Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                    <Skeleton variant="text" width="5rem" />
+                    <Skeleton variant="text" width="0.625rem" />
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
       ) : cards.length === 0 ? (
         <Card shadow="sm">
           <div className="gift-cards-empty">
@@ -138,12 +166,10 @@ export default function GiftCardsScreen() {
         <div className="gift-cards-list">
           {cards.map((gc) => (
             <Card key={gc.card.id} shadow="sm" className="gift-card-card">
-              <div
+              <button
+                type="button"
                 className="gift-card-summary"
-                role="button"
-                tabIndex={0}
                 onClick={() => setExpandedId(expandedId === gc.card.id ? null : gc.card.id)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === gc.card.id ? null : gc.card.id); } }}
               >
                 <div className="gift-card-summary-left">
                   <span className="gift-card-number">{gc.card.card_number}</span>
@@ -162,7 +188,7 @@ export default function GiftCardsScreen() {
                     &#9660;
                   </span>
                 </div>
-              </div>
+              </button>
 
               {expandedId === gc.card.id && (
                 <div className="gift-card-detail">
@@ -208,6 +234,8 @@ export default function GiftCardsScreen() {
                       <input
                         type="number"
                         className="gift-card-topup-input"
+                        id="gift-card-topup-amount"
+                        name="gift-card-topup-amount"
                         placeholder="Amount (minor units)"
                         value={topUpAmount}
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}

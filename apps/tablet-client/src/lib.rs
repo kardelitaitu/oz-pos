@@ -62,6 +62,7 @@ pub fn run() {
     {
         let result: Result<(), AppError> = tauri::Builder::default()
             .plugin(tauri_plugin_clipboard_manager::init())
+            .plugin(tauri_plugin_window_state::Builder::default().build())
             .setup(|app| {
                 let state = AppState::new(app.handle())
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -69,31 +70,107 @@ pub fn run() {
                 // ── Module system lifecycle (shared startup) ──────────────
                 platform_startup::init_module_system(&state.kernel, &state.db_path)?;
 
-                // ── Background sync daemon ────────────────────────────────
+                // ── Manage state BEFORE spawning background daemons ───────
+                // Daemons access AppState via try_state(), which only works
+                // after the state is managed. Managing first avoids the
+                // daemon's first tick silently skipping because the state
+                // isn't available yet.
                 let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
+                app.manage(state);
+
+                // ── Background sync daemon ────────────────────────────────
+                // Uses the same 3-phase split as the Tauri commands:
+                // read DB → async HTTP → write DB, so the DB lock is never
+                // held during the network round-trip.
+                platform_startup::spawn_daemon("tablet sync daemon", async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
                         interval.tick().await;
-                        if let Some(state) = app_handle.try_state::<AppState>() {
-                            let db = state.db.lock().await;
-                            let store = Store::new(&db);
-                            match SyncConfig::from_settings(&store) {
-                                Ok(Some(config)) => {
-                                    if let Err(e) =
-                                        oz_core::sync_client::sync_pending(&store, &config)
-                                    {
-                                        tracing::error!(error = %e, "sync cycle failed");
+                        match app_handle.try_state::<AppState>() {
+                            Some(state) => {
+                                // Phase 1: Read config + pending items (brief lock).
+                                let (config_opt, pending_items) = {
+                                    let db = state.db.lock().await;
+                                    let store = Store::new(&db);
+                                    let config = match SyncConfig::from_settings(&store) {
+                                        Ok(c) => c,
+                                        Err(e) => {
+                                            tracing::error!(
+                                                error = %e,
+                                                "tablet sync daemon: failed to load sync config"
+                                            );
+                                            None
+                                        }
+                                    };
+                                    let pending =
+                                        store.list_pending_offline().unwrap_or_else(|e| {
+                                            tracing::error!(
+                                                error = %e,
+                                                "tablet sync daemon: failed to list pending offline"
+                                            );
+                                            vec![]
+                                        });
+                                    (config, pending)
+                                };
+
+                                let Some(config) = config_opt else {
+                                    continue;
+                                };
+
+                                if pending_items.is_empty() {
+                                    continue;
+                                }
+
+                                // Phase 2: Async HTTP push (no DB lock).
+                                let outcomes = oz_core::sync_client::send_items_to_server(
+                                    &config,
+                                    &pending_items,
+                                )
+                                .await;
+
+                                // Phase 3: Apply outcomes (brief lock).
+                                {
+                                    let db = state.db.lock().await;
+                                    let store = Store::new(&db);
+                                    match outcomes {
+                                        Ok(outcomes) => {
+                                            if let Err(e) =
+                                                oz_core::sync_client::apply_sync_outcomes(
+                                                    &store,
+                                                    &pending_items,
+                                                    &outcomes,
+                                                )
+                                            {
+                                                tracing::error!(
+                                                    error = %e,
+                                                    "tablet sync daemon: failed to apply outcomes"
+                                                );
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let _ = oz_core::sync_client::mark_all_failed(
+                                                &store,
+                                                &pending_items,
+                                                &e.to_string(),
+                                            );
+                                            tracing::error!(
+                                                error = %e,
+                                                "tablet sync daemon: HTTP push failed"
+                                            );
+                                        }
                                     }
                                 }
-                                Ok(None) => {}
-                                Err(e) => tracing::error!(error = %e, "failed to load sync config"),
+                            }
+                            None => {
+                                tracing::warn!(
+                                    "tablet sync daemon: AppState not available — \
+                                     skipping sync cycle (shutting down?)"
+                                );
                             }
                         }
                     }
                 });
 
-                app.manage(state);
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![
@@ -126,7 +203,6 @@ pub fn run() {
                 commands::loyalty::get_points_value,
                 commands::loyalty::get_or_create_loyalty_account,
                 commands::staff::list_staff,
-                commands::staff::list_staff,
                 commands::staff::list_roles,
                 commands::staff::create_staff,
                 commands::staff::update_staff,
@@ -142,6 +218,7 @@ pub fn run() {
                 commands::exchange_rates::create_exchange_rate,
                 commands::exchange_rates::delete_exchange_rate,
                 commands::features::list_all_features,
+                commands::features::set_features_bulk,
                 commands::features::set_feature,
                 commands::gift_cards::issue_gift_card,
                 commands::gift_cards::get_gift_card,
@@ -188,8 +265,16 @@ pub fn run() {
                 commands::settings::set_receipt_settings,
                 commands::settings::get_store_settings,
                 commands::settings::set_store_settings,
+                commands::settings::get_credit_settings,
+                commands::settings::set_credit_settings,
+                commands::settings::list_credit_sales,
+                commands::settings::settle_credit,
+                commands::settings::get_hardware_settings,
+                commands::settings::set_hardware_settings,
                 commands::settings::get_user_preferences,
                 commands::settings::set_user_preferences,
+                commands::settings::get_setting,
+                commands::settings::set_setting,
                 commands::setup::get_enabled_features,
                 commands::setup::complete_setup,
                 commands::setup::dismiss_setup_wizard,
@@ -240,6 +325,8 @@ pub fn run() {
                 commands::sync::sync_run,
                 commands::sync::sync_pull,
                 commands::sync::pending_sync_count,
+                commands::sync::test_sync_connection,
+                commands::sync::request_sync_token,
                 commands::refunds::process_refund,
                 commands::refunds::list_refunds,
                 commands::refunds::lookup_sale_by_receipt_barcode,

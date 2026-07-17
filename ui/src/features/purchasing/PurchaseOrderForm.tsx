@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   createPurchaseOrder,
   listSuppliers,
@@ -6,6 +6,7 @@ import {
   type CreatePurchaseOrderArgs,
 } from '@/api/purchasing';
 import { Button } from '@/components/Button';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './PurchaseOrderForm.css';
 
 interface LineItem {
@@ -33,6 +34,9 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(panelRef, !saving, onClose);
 
   useEffect(() => {
     listSuppliers().then(setSuppliers).catch(() => {});
@@ -86,7 +90,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
 
   return (
     <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label="Purchase Order Form">
-      <div className="po-form-modal">
+      <div className="po-form-modal" ref={panelRef}>
         <div className="po-form-header">
           <h2>{editingId ? 'Edit Purchase Order' : 'New Purchase Order'}</h2>
           <button type="button" className="po-form-close" onClick={onClose} aria-label="Close">&times;</button>
@@ -144,6 +148,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                       <input
                         className="po-form-input po-form-input--sm"
                         type="text"
+                        aria-label="SKU"
                         value={line.sku}
                         onChange={(e) => updateLine(idx, 'sku', e.target.value)}
                         placeholder="SKU"
@@ -153,6 +158,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                       <input
                         className="po-form-input po-form-input--sm"
                         type="text"
+                        aria-label="Product name"
                         value={line.product_name}
                         onChange={(e) => updateLine(idx, 'product_name', e.target.value)}
                         placeholder="Product name"
@@ -163,6 +169,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         className="po-form-input po-form-input--sm po-form-input--num"
                         type="number"
                         min={0}
+                        aria-label="Quantity"
                         value={line.qty}
                         onChange={(e) => updateLine(idx, 'qty', parseInt(e.target.value) || 0)}
                       />
@@ -172,6 +179,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         className="po-form-input po-form-input--sm po-form-input--num"
                         type="number"
                         min={0}
+                        aria-label="Unit cost"
                         value={line.unit_cost_minor}
                         onChange={(e) => updateLine(idx, 'unit_cost_minor', parseInt(e.target.value) || 0)}
                         placeholder="in cents"
@@ -192,6 +200,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                 <tr>
                   <td colSpan={4} className="po-form-total-label">Subtotal</td>
                   <td className="po-form-total-value">{(subtotal / 100).toFixed(2)}</td>
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- role=alert with text content */}
                   <td />
                 </tr>
               </tfoot>

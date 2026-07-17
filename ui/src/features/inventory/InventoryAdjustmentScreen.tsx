@@ -8,6 +8,7 @@ import {
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './InventoryAdjustmentScreen.css';
 
 // ── Reason options ──────────────────────────────────────────────────
@@ -229,11 +230,19 @@ export default function InventoryAdjustmentScreen() {
             </div>
 
             {loading ? (
-              <p className="inv-adjust-loading">
-                <Localized id="inv-loading">
-                  <span>Loading products…</span>
-                </Localized>
-              </p>
+              <div className="inv-adjust-loading-skeleton" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="inv-adjust-product-item">
+                    <div className="inv-adjust-product-item-info">
+                      <Skeleton variant="text" width={`${5 + (i % 3) * 3}rem`} height="0.875rem" />
+                      <Skeleton variant="text" width="4rem" height="0.75rem" />
+                    </div>
+                    <div className="inv-adjust-product-item-meta">
+                      <Skeleton variant="text" width="3rem" height="0.75rem" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : searchQuery && filteredProducts.length === 0 ? (
               <p className="inv-adjust-no-results">
                 <Localized id="inv-no-results">

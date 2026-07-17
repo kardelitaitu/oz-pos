@@ -103,12 +103,20 @@ pub struct Store<'a> {
     /// Uses `Arc` so multiple `Store` instances can share the same
     /// cache backend (e.g. Redis).
     pub cache: Option<Arc<dyn Cache>>,
+    /// Terminal ID for pub/sub message tagging (multi-terminal).
+    /// Passed through to `Cache::publish_inventory_change` so other
+    /// terminals can skip their own messages.
+    pub terminal_id: Option<String>,
 }
 
 impl<'a> Store<'a> {
     /// Wrap an existing connection with no cache.
     pub fn new(conn: &'a Connection) -> Self {
-        Self { conn, cache: None }
+        Self {
+            conn,
+            cache: None,
+            terminal_id: None,
+        }
     }
 
     /// Wrap an existing connection with a cache backend.
@@ -116,7 +124,14 @@ impl<'a> Store<'a> {
         Self {
             conn,
             cache: Some(cache),
+            terminal_id: None,
         }
+    }
+
+    /// Set the terminal ID for pub/sub message tagging.
+    pub fn with_terminal_id(mut self, terminal_id: Option<String>) -> Self {
+        self.terminal_id = terminal_id;
+        self
     }
 
     /// Return a reference to the underlying connection.

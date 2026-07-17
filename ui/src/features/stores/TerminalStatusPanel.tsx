@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { Card } from '@/components/Card';
+import { Skeleton } from '@/components/Skeleton';
 import './TerminalStatusPanel.css';
 
 const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -68,7 +69,22 @@ export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPa
       }
     >
       {loading ? (
-        <p className="terminal-status-loading">Loading terminals…</p>
+        <div className="terminal-status-loading-skeleton" aria-hidden="true">
+          <div className="terminal-status-skeleton-header">
+            <Skeleton width="8rem" height="1.25rem" />
+            <Skeleton width="5rem" height="0.875rem" />
+          </div>
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="terminal-status-skeleton-row">
+              <Skeleton variant="circle" width="0.625rem" height="0.625rem" />
+              <div className="terminal-status-skeleton-info">
+                <Skeleton width="80%" height="0.875rem" />
+                <Skeleton width="60%" height="0.75rem" />
+              </div>
+              <Skeleton width="2.5rem" height="0.75rem" />
+            </div>
+          ))}
+        </div>
       ) : error ? (
         <p className="terminal-status-error">{error}</p>
       ) : terminals.length === 0 ? (

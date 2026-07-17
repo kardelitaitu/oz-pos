@@ -6,6 +6,7 @@ import {
 import { listShifts, type ShiftDto } from '@/api/shifts';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
+import { Skeleton } from '@/components/Skeleton';
 import { Localized } from '@/components/Localized';
 import { useLocalization } from '@fluent/react';
 import { printReceipt } from '@/api/hardware';
@@ -415,11 +416,70 @@ export default function EodReportScreen() {
       )}
 
       {loading && !report ? (
-        <div className="eod-report-loading">
-          <div className="eod-report-spinner" />
-          <Localized id="eod-loading">
-            <span>Loading report…</span>
-          </Localized>
+        <div className="eod-report-loading-skeleton" aria-hidden="true">
+          {/* KPI row: 4 cards */}
+          <div className="eod-report-kpi-row">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} shadow="sm" className="eod-report-kpi-card">
+                <div className="eod-report-kpi">
+                  <Skeleton width="5rem" height="0.75rem" />
+                  <Skeleton width="7rem" height="1.75rem" style={{ marginTop: 'var(--space-1)' }} />
+                  <Skeleton width="4rem" height="0.75rem" style={{ marginTop: 'var(--space-1)' }} />
+                </div>
+              </Card>
+            ))}
+          </div>
+          {/* Two-column layout */}
+          <div className="eod-report-columns">
+            {/* Left: Payment Breakdown */}
+            <Card shadow="sm" className="eod-report-section-card">
+              <Skeleton width="8rem" height="1.25rem" />
+              <div className="eod-report-payment-list" style={{ marginTop: 'var(--space-3)' }}>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="eod-report-payment-row">
+                    <div className="eod-report-payment-info">
+                      <Skeleton width="5rem" height="0.875rem" />
+                      <Skeleton width="4rem" height="0.75rem" />
+                    </div>
+                    <div className="eod-report-payment-bar-wrap">
+                      <Skeleton width="100%" height="0.5rem" style={{ borderRadius: 'var(--radius-full)' }} />
+                    </div>
+                    <div className="eod-report-payment-amount">
+                      <Skeleton width="4rem" height="0.875rem" />
+                      <Skeleton width="2rem" height="0.75rem" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            {/* Right: Hourly Sales */}
+            <Card shadow="sm" className="eod-report-section-card">
+              <Skeleton width="7rem" height="1.25rem" />
+              <div className="eod-report-hourly-chart" style={{ marginTop: 'var(--space-3)' }}>
+                {['60%', '40%', '80%', '30%', '70%', '50%', '90%', '45%'].map((w, i) => (
+                  <div key={i} className="eod-report-hour-bar-row">
+                    <Skeleton width="1.75rem" height="0.75rem" />
+                    <div className="eod-report-hour-bar-track">
+                      <Skeleton width={w} height="0.875rem" style={{ borderRadius: 'var(--radius-sm)' }} />
+                    </div>
+                    <Skeleton width="3rem" height="0.75rem" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+          {/* Summary grid: 6 items */}
+          <Card shadow="sm" className="eod-report-section-card">
+            <Skeleton width="7rem" height="1.25rem" />
+            <div className="eod-report-summary-grid" style={{ marginTop: 'var(--space-3)' }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="eod-report-summary-item">
+                  <Skeleton width="4rem" height="0.75rem" />
+                  <Skeleton width="3rem" height="1rem" />
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
       ) : error ? (
         <Card shadow="sm">

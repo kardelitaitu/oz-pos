@@ -1,14 +1,50 @@
 //! Cloud sync client — pushes pending offline queue items to a remote server.
 //!
-//! The sync client reads from the local offline queue, sends each item to the
-//! configured remote server via REST API, and marks the item as synced (or
-//! failed) in the local database.
+//! The sync client reads from the local offline queue, sends items as a batch
+//! to the configured remote server via `POST /api/sync/push`, and marks each
+//! item as synced or failed based on the server's per-item outcomes.
+//!
+//! Pull (`GET /api/sync/snapshot`) fetches the server's authoritative
+//! reference data (products, tax rates, users) and upserts it locally.
+//!
+//! ## Runtime safety
+//!
+//! The public API (`ping_server`, `request_token`, `send_items_to_server`,
+//! `fetch_snapshot_from_server`) is **async** using `reqwest::Client` so
+//! Tauri v2 command handlers can call them with `.await` without nesting
+//! Tokio runtimes. The legacy blocking helpers (`sync_pending`,
+//! `send_items_to_server_blocking`) remain available only for
+//! `tokio::task::spawn_blocking` or non-async contexts.
 
 use serde::{Deserialize, Serialize};
 
 use crate::db::Store;
 use crate::error::CoreError;
 use crate::offline::OfflineQueueItem;
+
+/// Per-item outcome returned by the server's `POST /api/sync/push`.
+///
+/// Mirrors `platform_sync::transport::PushOutcome` without depending on that
+/// crate (oz-core is a foundational crate).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum PushOutcome {
+    /// Item was accepted and applied by the server.
+    Accepted,
+    /// Item conflicted with the server version.
+    Conflict(OfflineQueueItem),
+    /// Item was rejected with a reason.
+    Rejected {
+        /// Human-readable rejection reason from the server.
+        reason: String,
+    },
+}
+
+/// Server response envelope for push.
+#[derive(Debug, Clone, Deserialize)]
+struct PushResponse {
+    results: Vec<PushOutcome>,
+}
 
 /// Result of a single sync attempt.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,12 +76,224 @@ pub struct PullResult {
     pub error: Option<String>,
 }
 
+/// Result of a health-check ping to the cloud server.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PingResult {
+    /// Whether the server responded successfully.
+    pub ok: bool,
+    /// Status text (e.g. "Connected", "Connection refused", etc.).
+    pub status: String,
+    /// Round-trip latency in milliseconds, if the ping succeeded.
+    pub latency_ms: Option<u64>,
+}
+
+/// Format an ISO-8601 expiry timestamp as a human-readable relative duration.
+///
+/// Returns strings like "in 2 hours", "in 3 days", "in 5 minutes", or
+/// the raw timestamp if parsing fails.
+#[cfg(feature = "sync-http")]
+fn format_expiry(iso: &str) -> String {
+    // Try RFC 3339 first (the most common ISO-8601 variant from APIs).
+    let expiry = match chrono::DateTime::parse_from_rfc3339(iso) {
+        Ok(dt) => dt,
+        Err(_) => return format!("expires {iso}"),
+    };
+    let now = chrono::Utc::now();
+    let dur = expiry.signed_duration_since(now);
+
+    if dur.num_seconds() <= 0 {
+        return "expired".into();
+    }
+
+    let mins = dur.num_minutes();
+    let hours = dur.num_hours();
+    let days = dur.num_days();
+
+    if days >= 2 {
+        format!("expires in {days} days")
+    } else if days == 1 {
+        "expires in 1 day".into()
+    } else if hours >= 2 {
+        format!("expires in {hours} hours")
+    } else if hours == 1 {
+        "expires in 1 hour".into()
+    } else if mins >= 2 {
+        format!("expires in {mins} minutes")
+    } else if mins == 1 {
+        "expires in 1 minute".into()
+    } else {
+        "expires in less than a minute".into()
+    }
+}
+
+/// Result of requesting a new API token from the cloud server.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenResult {
+    /// Whether the token was successfully obtained.
+    pub ok: bool,
+    /// The JWT token string (only present on success).
+    pub token: Option<String>,
+    /// Human-readable status or error message.
+    pub status: String,
+    /// Token expiry in ISO-8601 format, if the server returned one.
+    pub expires_at: Option<String>,
+}
+
+/// Request a new JWT API token from the cloud server's
+/// `POST /api/v1/tokens` endpoint (async — safe to call from
+/// Tauri async command handlers).
+#[cfg(feature = "sync-http")]
+pub async fn request_token(url: &str) -> TokenResult {
+    let token_url = format!("{}/api/v1/tokens", url.trim_end_matches('/'));
+    let body = serde_json::json!({"label": "pos-terminal"});
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return TokenResult {
+                ok: false,
+                token: None,
+                status: format!("Failed to build HTTP client: {e}"),
+                expires_at: None,
+            };
+        }
+    };
+
+    match client
+        .post(&token_url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                #[derive(Deserialize)]
+                struct TokenPayload {
+                    token: String,
+                    #[serde(default)]
+                    expires_at: Option<String>,
+                }
+                #[derive(Deserialize)]
+                struct TokenResponse {
+                    token: TokenPayload,
+                }
+                match resp.json::<TokenResponse>().await {
+                    Ok(tr) => {
+                        let expires = tr.token.expires_at.clone();
+                        TokenResult {
+                            ok: true,
+                            status: expires
+                                .as_ref()
+                                .map(|e| format!("Token obtained — {}", format_expiry(e)))
+                                .unwrap_or_else(|| "Token obtained".into()),
+                            token: Some(tr.token.token),
+                            expires_at: tr.token.expires_at,
+                        }
+                    }
+                    Err(e) => TokenResult {
+                        ok: false,
+                        token: None,
+                        status: format!("Failed to parse token response: {e}"),
+                        expires_at: None,
+                    },
+                }
+            } else {
+                let status = resp.status();
+                let body = resp.text().await.unwrap_or_default();
+                TokenResult {
+                    ok: false,
+                    token: None,
+                    status: format!("Server returned {status}: {body}"),
+                    expires_at: None,
+                }
+            }
+        }
+        Err(e) => TokenResult {
+            ok: false,
+            token: None,
+            status: format!("Request failed: {e}"),
+            expires_at: None,
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub async fn request_token(_url: &str) -> TokenResult {
+    TokenResult {
+        ok: false,
+        token: None,
+        status: "sync-http feature is disabled".into(),
+        expires_at: None,
+    }
+}
+
+/// Ping the cloud server's `/health` endpoint to verify connectivity
+/// (async — safe to call from Tauri async command handlers).
+#[cfg(feature = "sync-http")]
+pub async fn ping_server(url: &str) -> PingResult {
+    let health_url = format!("{}/health", url.trim_end_matches('/'));
+    let start = std::time::Instant::now();
+    match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(client) => match client.get(&health_url).send().await {
+            Ok(resp) => {
+                let latency = start.elapsed().as_millis() as u64;
+                if resp.status().is_success() {
+                    PingResult {
+                        ok: true,
+                        status: format!("Connected ({latency}ms)"),
+                        latency_ms: Some(latency),
+                    }
+                } else {
+                    let status = resp.status();
+                    PingResult {
+                        ok: false,
+                        status: format!("Server returned {status}"),
+                        latency_ms: Some(latency),
+                    }
+                }
+            }
+            Err(e) => PingResult {
+                ok: false,
+                status: format!("Connection failed: {e}"),
+                latency_ms: None,
+            },
+        },
+        Err(e) => PingResult {
+            ok: false,
+            status: format!("Failed to build HTTP client: {e}"),
+            latency_ms: None,
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub async fn ping_server(_url: &str) -> PingResult {
+    PingResult {
+        ok: false,
+        status: "sync-http feature is disabled".into(),
+        latency_ms: None,
+    }
+}
+
 /// Sync client configuration.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {
     /// Remote server base URL (e.g. "http://localhost:3099").
     pub server_url: String,
-    /// API key for authentication.
+    /// API key for authentication (sent as `Authorization: Bearer {key}`).
+    /// This should be a JWT token generated by the cloud server's
+    /// `POST /api/v1/tokens` endpoint.
     pub api_key: Option<String>,
 }
 
@@ -61,7 +309,8 @@ impl SyncConfig {
             Some(u) if !u.is_empty() => u,
             _ => return Ok(None),
         };
-        let api_key = crate::settings::Settings::get_sync_api_key(store.conn())?;
+        let api_key =
+            crate::settings::Settings::get_sync_api_key(store.conn())?.filter(|k| !k.is_empty());
         Ok(Some(Self {
             server_url,
             api_key,
@@ -69,35 +318,40 @@ impl SyncConfig {
     }
 }
 
-/// Attempt to sync all pending offline items to the remote server.
-///
-/// Returns a `SyncAttemptResult` with counts of synced/failed items.
-/// When the server is unreachable the entire batch fails with an error.
-pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptResult, CoreError> {
-    let pending = store.list_pending_offline()?;
-    if pending.is_empty() {
-        return Ok(SyncAttemptResult {
-            synced: 0,
-            failed: 0,
-            error: None,
-        });
-    }
-
+/// Apply per-item sync outcomes to the offline queue (mark items as
+/// synced or failed). This is the DB-only post-processing phase that
+/// runs after the async HTTP call completes, so no Store reference
+/// is held during the network round-trip.
+pub fn apply_sync_outcomes(
+    store: &Store,
+    pending: &[OfflineQueueItem],
+    outcomes: &[PushOutcome],
+) -> Result<SyncAttemptResult, CoreError> {
     let mut synced = 0usize;
     let mut failed = 0usize;
     let mut global_error: Option<String> = None;
 
-    for item in &pending {
-        match send_item_to_server(config, item) {
-            Ok(()) => {
+    for (item, outcome) in pending.iter().zip(outcomes.iter()) {
+        match outcome {
+            PushOutcome::Accepted => {
                 store.mark_offline_synced(&item.id)?;
                 synced += 1;
             }
-            Err(e) => {
-                let err_msg = e.to_string();
-                store.mark_offline_failed(&item.id, &err_msg)?;
+            PushOutcome::Rejected { reason } => {
+                store.mark_offline_failed(&item.id, reason)?;
                 failed += 1;
-                global_error = Some(err_msg);
+                global_error = Some(reason.clone());
+            }
+            PushOutcome::Conflict(server_item) => {
+                tracing::warn!(
+                    item_id = %item.id,
+                    server_action = %server_item.action,
+                    "sync conflict: item already exists on server with different data"
+                );
+                let msg = "server conflict: item already exists with different data";
+                store.mark_offline_failed(&item.id, msg)?;
+                failed += 1;
+                global_error = Some(msg.into());
             }
         }
     }
@@ -109,29 +363,67 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
     })
 }
 
-/// Send a single offline queue item to the remote server via HTTP POST.
-#[cfg(feature = "sync-http")]
-fn send_item_to_server(
-    config: &SyncConfig,
-    item: &OfflineQueueItem,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let url = format!("{}/api/events", config.server_url.trim_end_matches('/'));
-    let payload = serde_json::json!({
-        "id": item.id,
-        "action": item.action,
-        "payload": item.payload,
-    });
+/// Mark all pending items as failed with the given error message.
+pub fn mark_all_failed(
+    store: &Store,
+    pending: &[OfflineQueueItem],
+    err_msg: &str,
+) -> Result<SyncAttemptResult, CoreError> {
+    for item in pending {
+        store.mark_offline_failed(&item.id, err_msg)?;
+    }
+    Ok(SyncAttemptResult {
+        synced: 0,
+        failed: pending.len(),
+        error: Some(err_msg.into()),
+    })
+}
 
-    let mut headers = reqwest::blocking::Client::new()
+/// Attempt to sync all pending offline items to the remote server.
+///
+/// Uses blocking HTTP — only safe when called from a non-async context
+/// or inside `tokio::task::spawn_blocking`. For async Tauri commands,
+/// prefer the split read/HTTP/write pattern using `send_items_to_server`
+/// (async) + `apply_sync_outcomes`.
+pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptResult, CoreError> {
+    let pending = store.list_pending_offline()?;
+    if pending.is_empty() {
+        return Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: None,
+        });
+    }
+
+    // This still uses reqwest::blocking — only safe from spawn_blocking or
+    // non-async contexts. The Tauri commands use the split async path instead.
+    match send_items_to_server_blocking(config, &pending) {
+        Ok(outcomes) => apply_sync_outcomes(store, &pending, &outcomes),
+        Err(e) => mark_all_failed(store, &pending, &e.to_string()),
+    }
+}
+
+/// Blocking variant of send_items_to_server — only for spawn_blocking contexts.
+#[cfg(feature = "sync-http")]
+fn send_items_to_server_blocking(
+    config: &SyncConfig,
+    items: &[OfflineQueueItem],
+) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error>> {
+    let url = format!("{}/api/sync/push", config.server_url.trim_end_matches('/'));
+
+    let mut request = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("failed to build HTTP client: {e}"))?
         .post(&url)
         .header("Content-Type", "application/json");
 
     if let Some(ref key) = config.api_key {
-        headers = headers.header("Authorization", &format!("Bearer {key}"));
+        request = request.header("Authorization", &format!("Bearer {key}"));
     }
 
-    let resp = headers
-        .json(&payload)
+    let resp = request
+        .json(items)
         .send()
         .map_err(|e| format!("sync HTTP request failed: {e}"))?;
 
@@ -141,38 +433,89 @@ fn send_item_to_server(
         return Err(format!("sync server returned {status}: {body}").into());
     }
 
+    let push_resp: PushResponse = resp
+        .json()
+        .map_err(|e| format!("sync response parse failed: {e}"))?;
+
     tracing::info!(
-        item_id = %item.id,
-        action = %item.action,
+        item_count = items.len(),
         server = %config.server_url,
-        "synced item to server"
+        "synced batch to server"
     );
-    Ok(())
+    Ok(push_resp.results)
+}
+
+#[cfg(not(feature = "sync-http"))]
+fn send_items_to_server_blocking(
+    config: &SyncConfig,
+    items: &[OfflineQueueItem],
+) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error>> {
+    tracing::info!(
+        item_count = items.len(),
+        server = %config.server_url,
+        "sync-http feature disabled; would sync batch to server"
+    );
+    Ok(vec![PushOutcome::Accepted; items.len()])
+}
+
+/// Send a batch of offline queue items to the remote server via
+/// `POST /api/sync/push` and return per-item outcomes (async).
+#[cfg(feature = "sync-http")]
+pub async fn send_items_to_server(
+    config: &SyncConfig,
+    items: &[OfflineQueueItem],
+) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!("{}/api/sync/push", config.server_url.trim_end_matches('/'));
+
+    let mut request = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("failed to build HTTP client: {e}"))?
+        .post(&url)
+        .header("Content-Type", "application/json");
+
+    if let Some(ref key) = config.api_key {
+        request = request.header("Authorization", &format!("Bearer {key}"));
+    }
+
+    let resp = request
+        .json(items)
+        .send()
+        .await
+        .map_err(|e| format!("sync HTTP request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("sync server returned {status}: {body}").into());
+    }
+
+    let push_resp: PushResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("sync response parse failed: {e}"))?;
+
+    tracing::info!(
+        item_count = items.len(),
+        server = %config.server_url,
+        "synced batch to server"
+    );
+    Ok(push_resp.results)
 }
 
 /// Stub used when `sync-http` feature is disabled — just logs the intent.
 #[cfg(not(feature = "sync-http"))]
-fn send_item_to_server(
+pub async fn send_items_to_server(
     config: &SyncConfig,
-    item: &OfflineQueueItem,
-) -> Result<(), Box<dyn std::error::Error>> {
+    items: &[OfflineQueueItem],
+) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!(
-        item_id = %item.id,
-        action = %item.action,
+        item_count = items.len(),
         server = %config.server_url,
-        "sync-http feature disabled; would sync item to server"
+        "sync-http feature disabled; would sync batch to server"
     );
-    Ok(())
-}
-
-/// Send a single offline queue item to the remote server (async version).
-///
-/// This is the async counterpart used by the background daemon.
-pub async fn sync_pending_async(
-    store: &Store<'_>,
-    config: &SyncConfig,
-) -> Result<SyncAttemptResult, CoreError> {
-    sync_pending(store, config)
+    // Pretend all items were accepted when HTTP is compiled out.
+    Ok(vec![PushOutcome::Accepted; items.len()])
 }
 
 // ── Pull (snapshot import) ───────────────────────────────────────────
@@ -189,7 +532,7 @@ pub async fn sync_pending_async(
 /// / `users` tables in the migrations) so the client can upsert
 /// directly without remapping.
 #[derive(Debug, Default, Deserialize)]
-struct Snapshot {
+pub struct Snapshot {
     /// Products to upsert, keyed by `sku`.
     #[serde(default)]
     products: Vec<SnapshotProduct>,
@@ -277,11 +620,16 @@ fn default_true() -> bool {
     true
 }
 
-/// Fetch a snapshot from the server via `GET /api/snapshot`.
+/// Fetch a snapshot from the server via `GET /api/sync/snapshot` (async).
 #[cfg(feature = "sync-http")]
-fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot, Box<dyn std::error::Error>> {
-    let url = format!("{}/api/snapshot", config.server_url.trim_end_matches('/'));
-    let mut request = reqwest::blocking::Client::new()
+pub async fn fetch_snapshot_from_server(
+    config: &SyncConfig,
+) -> Result<Snapshot, Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!(
+        "{}/api/sync/snapshot",
+        config.server_url.trim_end_matches('/')
+    );
+    let mut request = reqwest::Client::new()
         .get(&url)
         .header("Accept", "application/json");
 
@@ -291,50 +639,35 @@ fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot, Box<dyn s
 
     let resp = request
         .send()
+        .await
         .map_err(|e| format!("snapshot HTTP request failed: {e}"))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let body = resp.text().unwrap_or_default();
+        let body = resp.text().await.unwrap_or_default();
         return Err(format!("snapshot server returned {status}: {body}").into());
     }
 
     let snapshot: Snapshot = resp
         .json()
+        .await
         .map_err(|e| format!("snapshot JSON decode failed: {e}"))?;
 
     Ok(snapshot)
 }
 
-/// Stub used when `sync-http` feature is disabled — surfaces a clear
-/// error so the UI knows the request could not be made.
+/// Stub used when `sync-http` feature is disabled.
 #[cfg(not(feature = "sync-http"))]
-fn fetch_snapshot_from_server(
+pub async fn fetch_snapshot_from_server(
     _config: &SyncConfig,
-) -> Result<Snapshot, Box<dyn std::error::Error>> {
+) -> Result<Snapshot, Box<dyn std::error::Error + Send + Sync>> {
     Err("sync-http feature is disabled; cannot pull snapshot from server".into())
 }
 
-/// Pull a snapshot from the server and upsert the rows into the local
-/// database inside a single transaction.
-///
-/// Network and decode failures populate `PullResult.error` so the UI
-/// can surface them inline; database failures (e.g. constraint
-/// violation on a malformed row) bubble up as `CoreError` since they
-/// indicate a snapshot / schema mismatch the developer needs to see.
-pub fn pull_snapshot(store: &Store, config: &SyncConfig) -> Result<PullResult, CoreError> {
-    let snapshot = match fetch_snapshot_from_server(config) {
-        Ok(s) => s,
-        Err(e) => {
-            return Ok(PullResult {
-                products_pulled: 0,
-                tax_rates_pulled: 0,
-                users_pulled: 0,
-                error: Some(e.to_string()),
-            });
-        }
-    };
-
+/// Apply a fetched snapshot to the local database inside a single
+/// transaction. This is the DB-only phase that runs after the async
+/// `fetch_snapshot_from_server` call completes.
+pub fn apply_snapshot(store: &Store, snapshot: &Snapshot) -> Result<PullResult, CoreError> {
     let tx = store.conn.unchecked_transaction()?;
 
     let products_pulled = upsert_products(&tx, &snapshot.products)?;
@@ -347,8 +680,7 @@ pub fn pull_snapshot(store: &Store, config: &SyncConfig) -> Result<PullResult, C
         products = products_pulled,
         tax_rates = tax_rates_pulled,
         users = users_pulled,
-        server = %config.server_url,
-        "pulled snapshot from server"
+        "applied server snapshot to local db"
     );
 
     Ok(PullResult {
@@ -637,5 +969,66 @@ mod tests {
             error: None,
         };
         assert!(result.error.is_none());
+    }
+
+    // ── format_expiry tests ────────────────────────────────────
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_exactly_one_hour() {
+        // Small buffer (+5s) accounts for sub-second drift between the
+        // timestamp construction and format_expiry's internal now() call.
+        let ts = (chrono::Utc::now() + chrono::Duration::hours(1) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 hour");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_exactly_one_day() {
+        let ts = (chrono::Utc::now() + chrono::Duration::days(1) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 day");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_already_expired() {
+        let ts = (chrono::Utc::now() - chrono::Duration::hours(1))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expired");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_less_than_a_minute() {
+        let ts = (chrono::Utc::now() + chrono::Duration::seconds(30))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in less than a minute");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_ninety_minutes() {
+        // Small buffer (+5s) prevents sub-second drift from pushing the
+        // duration below 60 minutes (which would display as "59 minutes").
+        let ts =
+            (chrono::Utc::now() + chrono::Duration::minutes(90) + chrono::Duration::seconds(5))
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 hour");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_twenty_five_hours() {
+        let ts = (chrono::Utc::now() + chrono::Duration::hours(25) + chrono::Duration::seconds(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        assert_eq!(format_expiry(&ts), "expires in 1 day");
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn format_expiry_unparseable_fallback() {
+        assert_eq!(format_expiry("not-a-timestamp"), "expires not-a-timestamp");
     }
 }

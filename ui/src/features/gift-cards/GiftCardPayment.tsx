@@ -110,6 +110,8 @@ export default function GiftCardPayment({
         <input
           type="text"
           className="gift-card-payment-input"
+          id="gift-card-payment-input"
+          name="gift-card-payment-input"
           placeholder="Scan or enter gift card number"
           value={cardInput}
           onChange={(e) => { setCardInput(e.target.value); setCardBalance(null); setError(''); }}

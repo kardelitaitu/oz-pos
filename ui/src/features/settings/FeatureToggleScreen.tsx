@@ -10,15 +10,18 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
-import { Spinner } from '@/components/Spinner';
+import { Skeleton } from '@/components/Skeleton';
 import { Localized, useLocalization } from '@fluent/react';
-import { useToast } from '@/frontend/shared/Toast';
+import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import './FeatureToggleScreen.css';
 
+/** Duration (ms) for both the row flash and checkmark overlay to persist after a toggle. */
+const FLASH_DURATION = 1_400;
+
 // ── Types ──────────────────────────────────────────────────────────
 
-interface FeatureInfo {
+export interface FeatureInfo {
   key: string;
   name: string;
   description: string;
@@ -123,6 +126,51 @@ export default function FeatureToggleScreen() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [togglingBatch, setTogglingBatch] = useState<string | null>(null);
   const { addToast } = useToast();
+  const cm = useContextMenu();
+  const cmInput = useMemo(() => ({
+    autoComplete: 'off' as const,
+    autoCorrect: 'off' as const,
+    spellCheck: false as const,
+    'data-gramm': 'false' as const,
+    onContextMenu: (e: React.MouseEvent<HTMLInputElement>) => cm.open(e, e.currentTarget),
+  }), [cm]);
+
+  // Track recently-toggled features for row flash + checkmark animation.
+  // Map<featureKey, 'enabled' | 'disabled'>
+  const [flashRows, setFlashRows] = useState<Map<string, 'enabled' | 'disabled'>>(new Map());
+  // Auto-cleanup ref for flash timeouts.
+  const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  /** Trigger row flash + checkmark on a feature key with a given result type. */
+  const triggerFlash = useCallback((key: string, kind: 'enabled' | 'disabled') => {
+    setFlashRows((prev) => {
+      const next = new Map(prev);
+      next.set(key, kind);
+      return next;
+    });
+    // Clear any existing timeout for this key.
+    const existing = flashTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setFlashRows((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      flashTimeoutsRef.current.delete(key);
+    }, FLASH_DURATION);
+    flashTimeoutsRef.current.set(key, tid);
+  }, []);
+
+  // Cleanup flash timeouts on unmount.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    return () => {
+      flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
+      flashTimeoutsRef.current.clear();
+    };
+  }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -145,6 +193,7 @@ export default function FeatureToggleScreen() {
     try {
       const result = await setFeature(key, newValue);
       setFeatures(result.features);
+      triggerFlash(key, newValue ? 'enabled' : 'disabled');
 
       if (newValue && result.auto_enabled.length > 0) {
         addToast({
@@ -162,8 +211,10 @@ export default function FeatureToggleScreen() {
         message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
         type: 'error',
       });
+    } finally {
+      setToggling(null);
     }
-  }, [l10n, addToast]);
+  }, [l10n, addToast, triggerFlash]);
 
   // ── Active feature set for preview ───────────────────────────
 
@@ -214,6 +265,8 @@ export default function FeatureToggleScreen() {
       // set_features_bulk — avoids N individual IPC round-trips.
       const result = await setFeaturesBulk(keys, enable);
       setFeatures(result.features);
+      // Trigger flash on each toggled feature.
+      keys.forEach((k) => triggerFlash(k, enable ? 'enabled' : 'disabled'));
       addToast({
         message: l10n.getString(
           enable ? 'feature-toggle-bulk-enabled' : 'feature-toggle-bulk-disabled',
@@ -229,12 +282,21 @@ export default function FeatureToggleScreen() {
     } finally {
       setTogglingBatch(null);
     }
-  }, [l10n, addToast]);
+  }, [l10n, addToast, triggerFlash]);
 
   // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="feature-toggle">
+      {cm.menu && (
+        <ContextMenu
+          menu={cm.menu}
+          menuRef={cm.menuRef}
+          onCopy={cm.handleCopy}
+          onPaste={cm.handlePaste}
+          onClose={cm.close}
+        />
+      )}
       <div className="feature-toggle-header">
         <Localized id="feature-toggle-title"><h1 className="feature-toggle-title">Feature Toggles</h1></Localized>
         {features.length > 0 && (
@@ -248,9 +310,48 @@ export default function FeatureToggleScreen() {
       </div>
 
       {loading && (
-        <div className="feature-toggle-loading">
-          <Spinner size="md" />
-          <Localized id="feature-toggle-loading"><p>Loading features…</p></Localized>
+        <div className="feature-toggle-loading-skeleton" aria-hidden="true">
+          {/* Header skeleton: title + subtitle */}
+          <div className="feature-toggle-header">
+            <Skeleton variant="block" width="14rem" height="1.75rem" />
+            <Skeleton variant="text" width="6rem" height="1rem" />
+          </div>
+
+          {/* Search bar skeleton */}
+          <div className="feature-toggle-skeleton-search">
+            <Skeleton variant="text" width="1rem" height="1rem" />
+            <Skeleton variant="text" width="100%" height="1.25rem" />
+          </div>
+
+          {/* Group card skeletons */}
+          {[0, 1, 2].map((g) => (
+            <div key={g} className="feature-toggle-group">
+              <div className="feature-toggle-group-header">
+                <div className="feature-toggle-group-title">
+                  <Skeleton variant="circle" width="1.25rem" height="1.25rem" />
+                  <Skeleton variant="text" width="8rem" height="1.25rem" />
+                  <Skeleton variant="text" width="3rem" height="1.125rem" />
+                </div>
+                <div className="feature-toggle-bulk-actions">
+                  <Skeleton variant="block" width="5rem" height="1.5rem" />
+                  <Skeleton variant="block" width="5rem" height="1.5rem" />
+                </div>
+              </div>
+              <Card shadow="xs">
+                <div className="feature-toggle-list">
+                  {[0, 1, 2, 3].map((r) => (
+                    <div key={r} className="feature-toggle-item">
+                      <div className="feature-toggle-item-info">
+                        <Skeleton variant="text" width="8rem" height="0.875rem" />
+                        <Skeleton variant="text" width="14rem" height="0.75rem" />
+                      </div>
+                      <Skeleton variant="block" width="2.75rem" height="1.5rem" style={{ borderRadius: '1.5rem' }} />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          ))}
         </div>
       )}
 
@@ -278,7 +379,7 @@ export default function FeatureToggleScreen() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('feature-toggle-search-aria')}
-              autoComplete="off"
+              {...cmInput}
             />
           </Localized>
           {searchQuery && (
@@ -324,7 +425,7 @@ export default function FeatureToggleScreen() {
             <h2 className="feature-toggle-group-title">
               <span className="feature-toggle-group-icon" aria-hidden="true">{getGroupIcon(group)}</span>
               <Localized id={GROUP_L10N_IDS[group] ?? ''}>{group}</Localized>
-              <span className="feature-toggle-group-count">
+              <span className="feature-toggle-group-count" key={`${group}-${groupFeatures.filter((f) => f.enabled).length}`}>
                 {groupFeatures.filter((f) => f.enabled).length}/{groupFeatures.length}
               </span>
             </h2>
@@ -356,11 +457,16 @@ export default function FeatureToggleScreen() {
                 const depNames = feat.dependencies
                   .map((dk) => features.find((f) => f.key === dk)?.name ?? dk)
                   .join(', ');
+                const flashKind = flashRows.get(feat.key);
 
                 return (
-                  <div key={feat.key} className="feature-toggle-item">
+                  <div
+                    key={feat.key}
+                    className={`feature-toggle-item${flashKind ? ` feature-toggle-item--flash-${flashKind}` : ''}`}
+                  >
                     <div className="feature-toggle-item-info">
-                      <span className="feature-toggle-item-name">{feat.name}</span>                        <span id={`desc-${feat.key}`} className="feature-toggle-item-desc">{feat.description}</span>
+                      <span className="feature-toggle-item-name">{feat.name}</span>
+                      <span id={`desc-${feat.key}`} className="feature-toggle-item-desc">{feat.description}</span>
                       {feat.dependencies.length > 0 && (
                         <span className="feature-toggle-item-deps">
                           {l10n.getString('feature-toggle-requires', { deps: depNames })}
@@ -376,6 +482,24 @@ export default function FeatureToggleScreen() {
                         aria-describedby={`desc-${feat.key}`}
                       />
                       <span className="feature-toggle-slider" />
+                      {/* Success checkmark overlay — appears briefly after toggle */}
+                      {flashKind && (
+                        <span
+                          className={`feature-toggle-checkmark feature-toggle-checkmark--${flashKind}`}
+                          aria-hidden="true"
+                        >
+                          {flashKind === 'enabled' ? (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          )}
+                        </span>
+                      )}
                     </label>
                   </div>
                 );

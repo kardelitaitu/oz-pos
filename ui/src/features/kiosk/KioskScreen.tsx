@@ -90,12 +90,12 @@ export default function KioskScreen() {
 
   if (idle) {
     return (
-      <div className="kiosk-attract" role="button" aria-label={l10n.getString('kiosk-attract-label')} tabIndex={0} onClick={resetIdle} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') resetIdle(); }}>
+      <button type="button" className="kiosk-attract" aria-label={l10n.getString('kiosk-attract-label')} onClick={resetIdle}>
         <div className="kiosk-attract-content">
           <h1 className="kiosk-attract-title">OZ-POS</h1>
           <p className="kiosk-attract-subtitle"><Localized id="kiosk-tap-to-start">Tap to start</Localized></p>
         </div>
-      </div>
+      </button>
     );
   }
 
@@ -115,14 +115,14 @@ export default function KioskScreen() {
           <span><Localized id="kiosk-total">Total</Localized></span>
           <span>${(totalMinor / 100).toFixed(2)}</span>
         </div>
-        <button className="kiosk-checkout-pay" onClick={() => {
+        <button type="button" className="kiosk-checkout-pay" onClick={() => {
           alert('Payment processed! (simulated)');
           setCart([]);
           setCheckout(false);
         }} aria-label={l10n.getString('kiosk-pay')}>
           <Localized id="kiosk-pay">Pay</Localized>
         </button>
-        <button className="kiosk-checkout-back" onClick={() => setCheckout(false)} aria-label={l10n.getString('back')}>
+        <button type="button" className="kiosk-checkout-back" onClick={() => setCheckout(false)} aria-label={l10n.getString('back')}>
           <Localized id="back">Back</Localized>
         </button>
       </div>
@@ -132,7 +132,7 @@ export default function KioskScreen() {
   return (
     <div className="kiosk" role="region" aria-label={l10n.getString('kiosk-section-kiosk')}>
       <div className="kiosk-categories" role="tablist" aria-label={l10n.getString('kiosk-section-categories')}>
-        <button
+        <button type="button"
           className={`kiosk-cat-chip ${activeCategory === null ? 'active' : ''}`}
           onClick={() => setActiveCategory(null)}
           role="tab"
@@ -141,7 +141,7 @@ export default function KioskScreen() {
           <Localized id="kiosk-all">All</Localized>
         </button>
         {categories.map((cat) => (
-          <button
+          <button type="button"
             key={cat.id}
             className={`kiosk-cat-chip ${activeCategory === cat.id ? 'active' : ''}`}
             onClick={() => setActiveCategory(cat.id)}
@@ -155,7 +155,7 @@ export default function KioskScreen() {
 
       <div className="kiosk-grid" role="list" aria-label={l10n.getString('kiosk-section-products')}>
         {filtered.map((p) => (
-          <button
+          <button type="button"
             key={p.sku}
             className="kiosk-product-card"
             onClick={() => addToCart(p)}
@@ -178,9 +178,9 @@ export default function KioskScreen() {
               <div key={c.product.sku} className="kiosk-cart-item">
                 <span className="kiosk-cart-name">{c.product.name}</span>
                 <div className="kiosk-cart-controls">
-                  <button onClick={() => updateQty(c.product.sku, -1)} aria-label={l10n.getString('kiosk-decrease')}>&minus;</button>
+                  <button type="button" onClick={() => updateQty(c.product.sku, -1)} aria-label={l10n.getString('kiosk-decrease')}>&minus;</button>
                   <span>{c.qty}</span>
-                  <button onClick={() => updateQty(c.product.sku, 1)} aria-label={l10n.getString('kiosk-increase')}>+</button>
+                  <button type="button" onClick={() => updateQty(c.product.sku, 1)} aria-label={l10n.getString('kiosk-increase')}>+</button>
                 </div>
                 <span className="kiosk-cart-price">${((c.product.price.minor_units * c.qty) / 100).toFixed(2)}</span>
               </div>
@@ -190,7 +190,7 @@ export default function KioskScreen() {
             <span><Localized id="kiosk-total">Total</Localized></span>
             <span>${(totalMinor / 100).toFixed(2)}</span>
           </div>
-          <button className="kiosk-checkout-btn" onClick={() => setCheckout(true)} aria-label={l10n.getString('kiosk-checkout')}>
+          <button type="button" className="kiosk-checkout-btn" onClick={() => setCheckout(true)} aria-label={l10n.getString('kiosk-checkout')}>
             <Localized id="kiosk-checkout">Checkout</Localized>
           </button>
         </div>

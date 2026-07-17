@@ -63,6 +63,13 @@ pub struct AppState {
     /// In-memory session store mapping opaque session tokens to resolved
     /// [`SessionContext`] values. ADR #4 / ADR #7.
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
+
+    /// Terminal identifier for multi-terminal deployments.
+    ///
+    /// Set once at startup or via set_feature(MultiTerminal, true).
+    /// Consumers (Redis pub/sub subscriber, inventory change publisher)
+    /// read this field instead of calling std::env::var().
+    pub terminal_id: tokio::sync::Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -97,6 +104,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: Mutex::new(None),
         })
     }
 
@@ -125,10 +133,30 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 impl Drop for AppState {
     fn drop(&mut self) {
         tracing::info!("stopping kernel modules");
-        if let Ok(mut kernel) = self.kernel.try_lock() {
-            let _ = kernel.stop_all();
-        } else {
-            tracing::warn!("kernel lock contended, skipping stop_all");
+        // Retry the lock for up to 500ms before giving up. This addresses
+        // a Windows window-lifecycle bottleneck where `try_lock()` would
+        // silently skip `stop_all()` if a Tauri command was mid-execution.
+        // A single `try_lock()` is too aggressive during shutdown because
+        // commands may still be draining. But `blocking_lock()` risks a
+        // deadlock if a command holding the lock is waiting for the runtime
+        // to shut down (circular dependency). The bounded retry loop
+        // gives commands time to finish while guaranteeing the Drop
+        // doesn't hang indefinitely.
+        const DROP_LOCK_RETRIES: usize = 50;
+        let mut stopped = false;
+        for _ in 0..DROP_LOCK_RETRIES {
+            if let Ok(mut kernel) = self.kernel.try_lock() {
+                let _ = kernel.stop_all();
+                stopped = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !stopped {
+            tracing::warn!(
+                "kernel lock contended after 500ms, skipping stop_all — \
+                 modules may not have been stopped cleanly"
+            );
         }
     }
 }
@@ -146,6 +174,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: Mutex::new(None),
         }
     }
 
@@ -160,6 +189,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: Mutex::new(None),
         }
     }
 }

@@ -193,9 +193,8 @@ For **security issues**, do **not** open a public issue. Email the maintainers d
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License (see [`LICENSE`](./LICENSE) — created at the first release).
+By contributing, you agree that your contributions will be licensed under the same proprietary license as the project (see [`LICENSE`](./LICENSE)). OZ-POS is proprietary and confidential — copyright remains with the OZ-POS Contributors.
 
 ---
 
-> last audited 28-06-26 by project-scaffold
-> last audited 09-07-26 by docs-auditor
+> last audited 17-07-26 by docs-auditor

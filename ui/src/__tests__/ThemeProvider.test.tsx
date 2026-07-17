@@ -178,9 +178,12 @@ describe('ThemeProvider', () => {
   it('useTheme throws when used outside ThemeProvider', () => {
     // Suppress console.error for the expected React error boundary output.
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', preventJsdomError);
     expect(() => renderHook(() => useTheme())).toThrow(
       'useTheme must be used within a ThemeProvider',
     );
+    window.removeEventListener('error', preventJsdomError);
     consoleSpy.mockRestore();
   });
 });

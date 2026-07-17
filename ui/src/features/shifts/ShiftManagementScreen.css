@@ -11,7 +11,7 @@
 
 .shift-mgmt {
   padding: var(--space-4);
-  max-width: 1200px;
+  max-width: 75rem;
 }
 
 /* ── Header ───────────────────────────────────────────── */
@@ -29,10 +29,19 @@
   font-weight: var(--font-weight-bold);
 }
 
-.shift-mgmt-loading {
-  padding: var(--space-8) 0;
-  text-align: center;
-  color: var(--color-fg-secondary);
+/* ── Skeleton loading ───────────────────────────────────── */
+.shift-mgmt-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.shift-mgmt-loading-skeleton .shift-mgmt-active-header {
+  min-height: 2.5rem;
+}
+
+.shift-mgmt-loading-skeleton .shift-mgmt-table thead {
+  pointer-events: none;
 }
 
 /* ── Active shift card ───────────────────────────────── */
@@ -60,15 +69,15 @@
 
 .shift-mgmt-active-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
+  width: 0.625rem;
+  height: 0.625rem;
   border-radius: 50%;
   background: var(--color-success);
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .shift-mgmt-active-dot {
-    animation: shift-pulse 1.5s ease-in-out infinite;
+    animation: shift-pulse var(--duration-1500) var(--ease-in-out) infinite;
   }
 
   @keyframes shift-pulse {
@@ -101,8 +110,7 @@
 }
 
 .shift-mgmt-close-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 .shift-mgmt-active-details {
@@ -309,8 +317,7 @@
 }
 
 .shift-mgmt-view-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 /* ── Modals (shared) ────────────────────────────────── */
@@ -321,7 +328,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  will-change: backdrop-filter;
   z-index: var(--z-modal);
   padding: var(--space-4);
 }
@@ -339,13 +349,9 @@
     animation: shift-overlay-out var(--duration-200) var(--ease-in) forwards;
   }
 
-  .shift-modal-exit {
-    animation: shift-modal-out var(--duration-200) var(--ease-in) forwards;
-  }
-
   @keyframes shift-overlay-in {
     from { opacity: 0; }
-    to { opacity: 1; }
+    to { opacity: 1;
   }
 
   @keyframes shift-overlay-out {
@@ -353,14 +359,30 @@
     to { opacity: 0; }
   }
 
-  @keyframes shift-modal-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+  .shift-modal-exit {
+    animation: shift-modal-out var(--duration-200) var(--ease-in) forwards;
   }
 
   @keyframes shift-modal-out {
     from { opacity: 1; transform: translateY(0); }
-    to { opacity: 0; transform: translateY(4px); }
+    to { opacity: 0; transform: translateY(0.25rem); }
+  }
+
+  .shift-mgmt-modal {
+    animation: shift-modal-in var(--duration-200) var(--ease-out) both;
+  }
+
+  @keyframes shift-modal-in {
+    from { opacity: 0; transform: translateY(0.5rem); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shift-mgmt-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    will-change: auto;
   }
 }
 
@@ -369,7 +391,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   width: 100%;
-  max-width: 460px;
+  max-width: 28.75rem;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -394,8 +416,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -404,6 +426,13 @@
   font-size: var(--text-lg);
   cursor: pointer;
   transition: all var(--duration-100) var(--ease-out);
+}
+
+@media (pointer: coarse) {
+  .shift-mgmt-modal-close {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
 
 .shift-mgmt-modal-close:hover:not(:disabled) {
@@ -450,6 +479,22 @@
   gap: var(--space-1_5);
 }
 
+.shift-mgmt-field--horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shift-mgmt-field--horizontal > .shift-mgmt-label {
+  min-width: 7rem;
+  flex-shrink: 0;
+}
+
+/* Textarea fields should keep label top-aligned. */
+.shift-mgmt-field--horizontal:has(textarea) {
+  align-items: flex-start;
+}
+
 .shift-mgmt-label {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
@@ -465,12 +510,13 @@
   color: var(--color-fg-primary);
   font-size: var(--text-base);
   font-family: var(--font-mono);
-  outline: none;
   box-sizing: border-box;
 }
 
-.shift-mgmt-input:focus {
+.shift-mgmt-input:focus-visible {
+  outline: none;
   border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .shift-mgmt-input:disabled {
@@ -487,13 +533,14 @@
   color: var(--color-fg-primary);
   font-size: var(--text-sm);
   font-family: var(--font-sans);
-  outline: none;
   resize: vertical;
   box-sizing: border-box;
 }
 
-.shift-mgmt-textarea:focus {
+.shift-mgmt-textarea:focus-visible {
+  outline: none;
   border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .shift-mgmt-textarea:disabled {
@@ -600,7 +647,7 @@
 /* ── Wide modal variant ─────────────────────────────── */
 
 .shift-mgmt-modal--wide {
-  max-width: 600px;
+  max-width: 37.5rem;
 }
 
 /* ── Shift report sections in detail modal ──────────── */
@@ -648,12 +695,16 @@
   color: var(--color-fg);
 }
 
-.shift-mgmt-report-loading {
+.shift-mgmt-report-skeleton {
   margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--color-fg-tertiary);
-  text-align: center;
-  padding: var(--space-4);
+  pointer-events: none;
+}
+
+.shift-mgmt-report-skeleton-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
 }
 
 /* ── Active shift actions (payout + close) ──────────── */
@@ -682,8 +733,7 @@
 }
 
 .shift-mgmt-payout-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 /* ── Payout modal hint ─────────────────────────────── */

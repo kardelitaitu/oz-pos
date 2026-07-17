@@ -1,6 +1,13 @@
+// ── PriceOverrideModal interaction tests ──────────────────────────
+//
+// Covers: price step navigation, username/PIN flow, PIN digit entry,
+// error handling, loading state.
+// Uses fireEvent for navigation clicks (Next, Back, Cancel, digit keys,
+// Clear, ⌫) and fireEvent.change for username form field.
+// 11 tests (4 sync render tests moved to PriceOverrideModalSync.test.tsx).
+
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import type { PriceOverrideModalProps } from '@/features/sales/PriceOverrideModal';
 
 vi.mock('@/api/staff', () => ({
@@ -24,156 +31,99 @@ function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
   return render(<PriceOverrideModal {...defaultProps} {...props} />);
 }
 
+// ── Navigation helpers (fireEvent ~1ms vs userEvent ~60ms) ────────
+
+function clickNext() {
+  fireEvent.click(screen.getByText('Next'));
+}
+
+function clickBack() {
+  fireEvent.click(screen.getByText('Back'));
+}
+
+function clickCancel() {
+  fireEvent.click(screen.getByText('Cancel'));
+}
+
+function typeUsername(value: string) {
+  const input = screen.getByPlaceholderText('Username');
+  fireEvent.change(input, { target: { value } });
+}
+
+function typePin(digits: string) {
+  for (const d of digits) {
+    fireEvent.click(screen.getByText(d));
+  }
+}
+
+/** Navigate from price step → username step → PIN step. */
+function advanceToPinStep(username = 'manager') {
+  clickNext();                                           // price → username
+  const input = screen.getByPlaceholderText('Username'); // sync after fireEvent.click
+  expect(input).toBeInTheDocument();
+  typeUsername(username);
+  clickNext();                                           // username → PIN (form submit)
+  expect(screen.getByText('Enter manager PIN')).toBeInTheDocument(); // sync
+}
+
 describe('PriceOverrideModal', () => {
-  // ── Closed state ─────────────────────────────────────────────
-
-  it('renders nothing when open is false', () => {
-    render(<PriceOverrideModal {...defaultProps} open={false} />);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  // ── Price step ───────────────────────────────────────────────
-
-  it('renders the modal with title and current price', () => {
-    renderModal();
-    expect(screen.getByText('Price Override')).toBeInTheDocument();
-    expect(screen.getByText('Widget x 2')).toBeInTheDocument();
-    expect(screen.getByText('Current price')).toBeInTheDocument();
-  });
-
-  it('shows price input with current value pre-filled', () => {
-    renderModal();
-    const input = screen.getByLabelText('Enter new price in minor units') as HTMLInputElement;
-    expect(input.value).toBe('50000');
-  });
-
-  it('disables Next button when price is zero or negative', () => {
-    renderModal();
-    const nextBtn = screen.getByText('Next');
-
-    // Initially enabled (50000 > 0).
-    expect(nextBtn).toBeEnabled();
-  });
+  // ── Price step navigation ──────────────────────────────────────
 
   it('closes modal when Cancel is clicked on price step', async () => {
-    const user = userEvent.setup();
     renderModal();
-    await user.click(screen.getByText('Cancel'));
-    expect(defaultProps.onClose).toHaveBeenCalled();
-  });
-
-  // ── Username step ────────────────────────────────────────────
-
-  it('advances to username step when Next is clicked with valid price', async () => {
-    const user = userEvent.setup();
-    renderModal();
-    await user.click(screen.getByText('Next'));
-
+    clickCancel();
+    // handleClose uses setTimeout(ANIM_MS), so onClose fires after the timer.
     await waitFor(() => {
-      expect(screen.getByText('Enter manager username')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+      expect(defaultProps.onClose).toHaveBeenCalled();
     });
   });
 
-  it('disables username Next when username is empty', async () => {
-    const user = userEvent.setup();
+  it('advances to username step when Next is clicked with valid price', () => {
     renderModal();
-    await user.click(screen.getByText('Next'));
+    clickNext();
+    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+    expect(screen.getByText('Enter manager username')).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    });
+  it('disables username Next when username is empty', () => {
+    renderModal();
+    clickNext();
+    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
 
-    // Next on username step should be disabled when empty.
     const nextBtns = screen.getAllByText('Next');
     expect(nextBtns[nextBtns.length - 1]).toBeDisabled();
   });
 
-  it('goes back to price step when Back is clicked', async () => {
-    const user = userEvent.setup();
+  it('goes back to price step when Back is clicked', () => {
     renderModal();
-    await user.click(screen.getByText('Next'));
+    clickNext();
+    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText('Back'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Current price')).toBeInTheDocument();
-    });
+    clickBack();
+    expect(screen.getByText('Current price')).toBeInTheDocument();
   });
 
-  // ── PIN step ─────────────────────────────────────────────────
+  // ── PIN step ───────────────────────────────────────────────────
 
-  it('advances to PIN step after entering username', async () => {
-    const user = userEvent.setup();
+  it('advances to PIN step after entering username', () => {
     renderModal();
-
-    // Step 1: price.
-    await user.click(screen.getByText('Next'));
-
-    // Step 2: username.
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    });
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
-
-    // Step 3: PIN.
-    await waitFor(() => {
-      expect(screen.getByText('Enter manager PIN')).toBeInTheDocument();
-      // Should show 4 PIN dots.
-      const dots = document.querySelectorAll('.price-override-pin-dot');
-      expect(dots.length).toBe(4);
-    });
+    advanceToPinStep();
   });
 
-  it('fills PIN dots when digits are pressed', async () => {
-    const user = userEvent.setup();
+  it('fills PIN dots when digits are pressed', () => {
     renderModal();
-    await user.click(screen.getByText('Next'));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    });
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
-
-    await waitFor(() => {
-      expect(screen.getByText('Enter manager PIN')).toBeInTheDocument();
-    });
-
-    // Press some PIN digits.
-    await user.click(screen.getByText('1'));
-    await user.click(screen.getByText('2'));
-    await user.click(screen.getByText('3'));
+    advanceToPinStep();
+    typePin('123');
 
     const filledDots = document.querySelectorAll('.price-override-pin-dot--filled');
     expect(filledDots.length).toBe(3);
   });
 
   it('calls onConfirm when PIN reaches 4 digits and login succeeds', async () => {
-    const user = userEvent.setup();
     mockStaffLogin.mockResolvedValue({ session: { user_id: 'user-99' } });
     renderModal();
-
-    await user.click(screen.getByText('Next'));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
-    });
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
-
-    await waitFor(() => {
-      expect(screen.getByText('Enter manager PIN')).toBeInTheDocument();
-    });
-
-    // Enter 4-digit PIN.
-    await user.click(screen.getByText('1'));
-    await user.click(screen.getByText('2'));
-    await user.click(screen.getByText('3'));
-    await user.click(screen.getByText('4'));
+    advanceToPinStep();
+    typePin('1234');
 
     await waitFor(() => {
       expect(mockStaffLogin).toHaveBeenCalledWith({ username: 'manager', pin: '1234' });
@@ -182,21 +132,10 @@ describe('PriceOverrideModal', () => {
   });
 
   it('shows error when PIN login fails', async () => {
-    const user = userEvent.setup();
     mockStaffLogin.mockRejectedValue(new Error('Invalid PIN'));
     renderModal();
-
-    await user.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
-
-    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
-
-    // Enter full 4-digit PIN.
-    for (const d of ['1', '2', '3', '4']) {
-      await user.click(screen.getByText(d));
-    }
+    advanceToPinStep();
+    typePin('1234');
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -204,59 +143,35 @@ describe('PriceOverrideModal', () => {
     });
   });
 
-  it('clears PIN with Clear button', async () => {
-    const user = userEvent.setup();
+  it('clears PIN with Clear button', () => {
     renderModal();
-    await user.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
-
-    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
-
-    await user.click(screen.getByText('1'));
-    await user.click(screen.getByText('2'));
+    advanceToPinStep();
+    typePin('12');
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(2);
 
-    await user.click(screen.getByText('Clear'));
+    fireEvent.click(screen.getByText('Clear'));
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(0);
   });
 
-  it('removes last digit with backspace', async () => {
-    const user = userEvent.setup();
+  it('removes last digit with backspace', () => {
     renderModal();
-    await user.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
+    advanceToPinStep();
+    typePin('12');
+    expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(2);
 
-    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
-
-    await user.click(screen.getByText('1'));
-    await user.click(screen.getByText('2'));
-    await user.click(screen.getByText('⌫'));
+    fireEvent.click(screen.getByText('\u232B')); // ⌫ Unicode
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(1);
   });
 
   it('shows verifying status while login is in progress', async () => {
-    const user = userEvent.setup();
     mockStaffLogin.mockReturnValue(new Promise(() => {})); // never resolves
     renderModal();
-
-    await user.click(screen.getByText('Next'));
-    await waitFor(() => expect(screen.getByPlaceholderText('Username')).toBeInTheDocument());
-    await user.type(screen.getByPlaceholderText('Username'), 'manager');
-    await user.click(screen.getAllByText('Next').at(-1)!);
-
-    await waitFor(() => expect(screen.getByText('Enter manager PIN')).toBeInTheDocument());
-
-    for (const d of ['1', '2', '3', '4', '5', '6']) {
-      await user.click(screen.getByText(d));
-    }
+    advanceToPinStep();
+    typePin('123456');
 
     await waitFor(() => {
       expect(screen.getByRole('status')).toBeInTheDocument();
-      expect(screen.getByText('Verifying…')).toBeInTheDocument();
+      expect(screen.getByText('Verifying\u2026')).toBeInTheDocument(); // \u2026 = …
     });
   });
 });

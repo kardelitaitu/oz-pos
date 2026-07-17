@@ -69,16 +69,39 @@ impl CartLine {
 
     /// Total for this line: `unit_price * qty`, in minor units.
     /// If [`overridden_price`](Self::overridden_price) is set, uses that instead.
+    ///
+    /// # Panics (debug only)
+    ///
+    /// In debug builds, panics if `overridden_price` is set but its currency
+    /// does not match `unit_price.currency`. This guards against direct field
+    /// mutation bypassing [`set_overridden_price`](Self::set_overridden_price).
+    ///
     /// Returns `None` on `i64` overflow.
     #[must_use]
     pub fn total(&self) -> Option<Money> {
         let price = self.overridden_price.unwrap_or(self.unit_price);
+        debug_assert!(
+            price.currency == self.unit_price.currency,
+            "CartLine::total: overridden_price currency ({}) does not match unit_price currency ({})",
+            price.currency,
+            self.unit_price.currency
+        );
         price.checked_mul(self.qty)
     }
 
     /// Override the unit price for this line.
-    pub fn set_overridden_price(&mut self, price: Money) {
+    ///
+    /// Returns `Err(CartError::CurrencyMismatch)` if `price.currency`
+    /// does not match `self.unit_price.currency`.
+    pub fn set_overridden_price(&mut self, price: Money) -> Result<(), CartError> {
+        if price.currency != self.unit_price.currency {
+            return Err(CartError::CurrencyMismatch {
+                cart: self.unit_price.currency.to_string(),
+                line: price.currency.to_string(),
+            });
+        }
         self.overridden_price = Some(price);
+        Ok(())
     }
 }
 
@@ -196,11 +219,25 @@ impl Cart {
         }
     }
 
-    /// Sum of all line totals, minus any discount. Returns `None` on overflow.
+    /// Sum of all line totals, minus any discount.
+    ///
+    /// # Panics (debug only)
+    ///
+    /// In debug builds, panics if any line's effective currency (unit_price
+    /// or overridden_price) does not match the cart's currency.
+    ///
+    /// Returns `None` on overflow or currency mismatch (the latter is
+    /// caught by [`Money::checked_add`] in release builds).
     #[must_use]
     pub fn total(&self) -> Option<Money> {
         let mut acc = Money::zero(self.currency);
         for line in &self.lines {
+            debug_assert!(
+                line.unit_price.currency == self.currency,
+                "Cart::total: line unit_price currency ({}) does not match cart currency ({})",
+                line.unit_price.currency,
+                self.currency
+            );
             let t = line.total()?;
             acc = acc.checked_add(t)?;
         }
@@ -211,6 +248,13 @@ impl Cart {
     }
 
     /// The discount amount in minor units, or 0 if no discount.
+    ///
+    /// # Panics (debug only)
+    ///
+    /// In debug builds, panics if any line's effective currency does not
+    /// match the cart's currency.
+    ///
+    /// Returns `None` on overflow or currency mismatch.
     #[must_use]
     pub fn discount_amount(&self) -> Option<Money> {
         if self.discount_percent.get() == 0 {
@@ -218,6 +262,12 @@ impl Cart {
         }
         let mut subtotal = Money::zero(self.currency);
         for line in &self.lines {
+            debug_assert!(
+                line.unit_price.currency == self.currency,
+                "Cart::discount_amount: line unit_price currency ({}) does not match cart currency ({})",
+                line.unit_price.currency,
+                self.currency
+            );
             let t = line.total()?;
             subtotal = subtotal.checked_add(t)?;
         }
@@ -595,7 +645,8 @@ mod tests {
         line.set_overridden_price(Money {
             minor_units: 100,
             currency: usd(),
-        });
+        })
+        .unwrap();
         assert_eq!(line.overridden_price.unwrap().minor_units, 100);
     }
 
@@ -615,7 +666,8 @@ mod tests {
         line.set_overridden_price(Money {
             minor_units: 150,
             currency: usd(),
-        });
+        })
+        .unwrap();
         assert_eq!(line.total().unwrap().minor_units, 450);
     }
 
@@ -632,7 +684,8 @@ mod tests {
         line.set_overridden_price(Money {
             minor_units: 400,
             currency: usd(),
-        });
+        })
+        .unwrap();
         let clone = line.clone();
         assert_eq!(clone.sku, line.sku);
         assert_eq!(clone.qty, line.qty);
@@ -657,6 +710,101 @@ mod tests {
         assert_eq!(back.unit_price, line.unit_price);
     }
 
+    #[test]
+    fn cartline_set_overridden_price_currency_mismatch_returns_error() {
+        let mut line = CartLine::new(
+            Sku::new("TEA"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        let eur_price = Money {
+            minor_units: 90,
+            currency: eur(),
+        };
+        let result = line.set_overridden_price(eur_price);
+        assert!(matches!(result, Err(CartError::CurrencyMismatch { .. })));
+        // The original price should not have been overwritten
+        assert!(line.overridden_price.is_none());
+    }
+    #[test]
+    fn cartline_total_debug_assert_currency_mismatch_on_direct_mutation() {
+        // set_overridden_price now validates currency, but the fields are pub
+        // so a caller could bypass it with direct mutation. The debug_assert!
+        // in total() catches this in debug/test builds.
+        let mut line = CartLine::new(
+            Sku::new("TEA"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        );
+        // Direct mutation bypasses set_overridden_price validation
+        line.overridden_price = Some(Money {
+            minor_units: 90,
+            currency: eur(),
+        });
+        // debug_assert! should fire — verify with catch_unwind
+        let result = std::panic::catch_unwind(|| {
+            let _ = line.total();
+        });
+        assert!(
+            result.is_err(),
+            "debug_assert! should have panicked on currency mismatch from direct field mutation"
+        );
+    }
+
+    #[test]
+    fn cart_total_debug_assert_on_line_currency_mismatch() {
+        // Cart::total() checks every line's unit_price.currency matches the cart.
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        // Direct mutation: change unit_price currency via pub field
+        cart.lines_mut()[0].unit_price.currency = eur();
+        let result = std::panic::catch_unwind(|| {
+            let _ = cart.total();
+        });
+        assert!(
+            result.is_err(),
+            "debug_assert! should have panicked on line currency mismatch in Cart::total()"
+        );
+    }
+
+    #[test]
+    fn cart_discount_amount_debug_assert_on_line_currency_mismatch() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            1,
+            Money {
+                minor_units: 100,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.set_discount(Percentage::new(10).unwrap(), None);
+        // Direct mutation
+        cart.lines_mut()[0].unit_price.currency = eur();
+        let result = std::panic::catch_unwind(|| {
+            let _ = cart.discount_amount();
+        });
+        assert!(
+            result.is_err(),
+            "debug_assert! should have panicked on line currency mismatch in Cart::discount_amount()"
+        );
+    }
+
     // ── Cart accessors & serialization ──
 
     #[test]
@@ -679,10 +827,12 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(cart.lines().len(), 1);
-        cart.lines_mut()[0].set_overridden_price(Money {
-            minor_units: 50,
-            currency: usd(),
-        });
+        cart.lines_mut()[0]
+            .set_overridden_price(Money {
+                minor_units: 50,
+                currency: usd(),
+            })
+            .unwrap();
         assert_eq!(cart.lines()[0].overridden_price.unwrap().minor_units, 50);
     }
 

@@ -59,10 +59,12 @@ describe('AuditLogScreen', () => {
     await waitFor(() => expect(screen.getByText('Refresh')).toBeDefined());
   });
 
-  it('shows loading state initially', async () => {
+  it('shows loading skeleton initially', async () => {
     mockListAuditLog.mockReturnValue(new Promise(() => {}));
     await renderScreen();
-    expect(screen.getByText('Loading audit log…')).toBeDefined();
+    const skeleton = document.querySelector('.audit-log-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(screen.queryByText('Loading audit log…')).toBeNull();
   });
 
   it('shows empty state with no entries yet', async () => {

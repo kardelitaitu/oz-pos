@@ -1,13 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for the OZ-POS main window. Add new commands here as they are introduced.",
-  "windows": ["main"],
+  "description": "Default permissions for the OZ-POS tablet app.",
   "permissions": [
     "core:default",
-    "core:window:allow-is-fullscreen",
-    "core:window:allow-set-fullscreen",
-    "updater:default",
-    "clipboard-manager:allow-read-text"
+    "window-state:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text"
   ]
 }

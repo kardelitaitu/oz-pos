@@ -12,6 +12,43 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* ── Primary list skeleton ───────────────────────────────────────── */
+
+.void-orders-loading-skeleton {
+  pointer-events: none;
+}
+
+.void-orders-loading-skeleton .void-orders-table tbody tr td {
+  border-bottom: none;
+}
+
+.void-orders-loading-skeleton .void-orders-filters {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.void-orders-loading-skeleton .void-orders-header {
+  margin-bottom: var(--space-3);
+}
+
+/* ── Detail skeleton ─────────────────────────────────────────────── */
+
+.void-orders-detail-skeleton {
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.void-orders-detail-skeleton .void-orders-lines-table tbody tr td {
+  border-bottom: none;
+}
+
+.void-orders-detail-skeleton .void-orders-section-title {
+  margin-bottom: var(--space-3);
+}
+
 /* ── Back button ──────────────────────────────────────────────────── */
 
 .void-orders-back-btn {
@@ -32,8 +69,7 @@
   background: var(--color-bg-hover);
 }
 .void-orders-back-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 /* ── Filters ──────────────────────────────────────────────────────── */
@@ -54,8 +90,8 @@
 .void-orders-search-icon {
   position: absolute;
   left: var(--space-3);
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   color: var(--color-fg-tertiary);
   pointer-events: none;
 }
@@ -70,10 +106,9 @@
   font-size: var(--text-sm);
 }
 
-.void-orders-search:focus {
-  outline: none;
+.void-orders-search:focus-visible {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-dim);
+  box-shadow: inset 0 0 0 1px var(--color-accent-dim);
 }
 
 .void-orders-status-filters {
@@ -98,8 +133,7 @@
 }
 
 .void-orders-status-chip:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 .void-orders-status-chip--active {
@@ -109,12 +143,6 @@
 }
 
 /* ── Loading / Empty / Error ──────────────────────────────────────── */
-
-.void-orders-loading {
-  text-align: center;
-  padding: var(--space-12) var(--space-4);
-  color: var(--color-fg-secondary);
-}
 
 .void-orders-empty {
   text-align: center;
@@ -199,8 +227,7 @@
 }
 
 .void-orders-action-btn:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
 .void-orders-action-btn--void {
@@ -351,9 +378,8 @@
 }
 
 .void-orders-reason-select:focus-visible {
-  outline: none;
   border-color: var(--color-danger);
-  box-shadow: 0 0 0 3px var(--color-danger-dim);
+  box-shadow: inset 0 0 0 1px var(--color-danger-dim);
 }
 
 .void-orders-reason-input {
@@ -366,9 +392,8 @@
 }
 
 .void-orders-reason-input:focus-visible {
-  outline: none;
   border-color: var(--color-danger);
-  box-shadow: 0 0 0 3px var(--color-danger-dim);
+  box-shadow: inset 0 0 0 1px var(--color-danger-dim);
 }
 
 .void-orders-void-error {

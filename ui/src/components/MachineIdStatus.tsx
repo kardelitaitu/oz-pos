@@ -40,18 +40,12 @@ export default function MachineIdStatus() {
     : machineId ?? 'unavailable';
 
   return (
-    <div
+    <button
+      type="button"
       className={`connection-status machine-id-chip${machineId ? ' machine-id-chip--ready' : ''}${loading ? ' machine-id-chip--loading' : ''}`}
       onClick={handleCopy}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleCopy();
-        }
-      }}
       tabIndex={machineId ? 0 : -1}
       title={machineId ? `Hardware ID: ${machineId} — Click to copy` : 'Hardware ID unavailable'}
-      role="button"
       aria-label={`Hardware ID: ${displayId}. Click to copy.`}
       style={{ cursor: machineId ? 'pointer' : 'default' }}
     >
@@ -74,6 +68,6 @@ export default function MachineIdStatus() {
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
         </svg>
       )}
-    </div>
+    </button>
   );
 }

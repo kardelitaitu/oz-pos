@@ -58,7 +58,7 @@
   min-height: var(--tablet-tap-target);
   padding: 4px 12px;
   border-radius: var(--tablet-radius);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
   color: var(--color-fg-tertiary);
   background: transparent;
@@ -202,13 +202,21 @@
 
 /* ── Scrollbar styling for touch ──────────────────── */
 .tablet-shell ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 6px;
+  height: 6px;
+}
+
+.tablet-shell ::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .tablet-shell ::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
-  border-radius: 2px;
+  border-radius: 3px;
+}
+
+.tablet-shell ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-tertiary);
 }
 
 /* ── Prevent text selection during rapid taps ─────── */

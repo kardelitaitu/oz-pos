@@ -40,10 +40,13 @@ describe('TerminalStatusPanel', () => {
 
   // ── States ─────────────────────────────────────────────────────
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton initially', () => {
     mockListTerminals.mockReturnValue(new Promise(() => {}));
-    renderPanel();
-    expect(screen.getByText('Loading terminals…')).toBeDefined();
+    const { container } = renderPanel();
+    const skeleton = container.querySelector('.terminal-status-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(skeleton?.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.queryByText('Loading terminals…')).toBeNull();
   });
 
   it('shows error state on failure', async () => {

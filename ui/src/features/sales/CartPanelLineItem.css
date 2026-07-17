@@ -114,8 +114,7 @@
 
 /* Focused cart line (keyboard navigation ring) */
 .pos-cart-line:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
   border-color: var(--color-accent);
 }
 
@@ -126,8 +125,8 @@
 
 .pos-cart-line-thumb {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -177,7 +176,7 @@
 }
 
 .pos-cart-line-price {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--color-fg-secondary);
   white-space: nowrap;
 }
@@ -221,7 +220,7 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  height: 32px;
+  height: 2rem;
   overflow: hidden;
   position: relative;
 }
@@ -235,7 +234,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  width: 2rem;
   height: 100%;
   padding: 0;
   border: none;
@@ -247,8 +246,8 @@
 }
 
 .pos-cart-qty-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .pos-cart-qty-btn:hover:not(:disabled) {
@@ -262,16 +261,17 @@
 }
 
 .pos-cart-qty-btn:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
 }
 
 .pos-cart-qty-value {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
+  min-width: 1.5rem;
   height: 100%;
-  padding: 0 2px;
+  padding: 0 0.125rem;
   font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
@@ -286,8 +286,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -309,8 +309,7 @@
 }
 
 .pos-cart-line-remove:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 /* ── Revealed swipe-action (background delete button) ── */
@@ -321,7 +320,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: 80px;
+  width: 5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -356,17 +355,16 @@
 }
 
 .pos-cart-line-swipe-remove:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 /* ── Price override button (inside cart line) ───────────────── */
 
 .pos-cart-line-override {
   display: inline-block;
-  padding: 2px 8px;
-  margin-top: 4px;
-  font-size: 11px;
+  padding: 0.125rem 0.5rem;
+  margin-top: 0.25rem;
+  font-size: var(--text-2xs);
   font-weight: var(--font-weight-medium);
   color: var(--color-accent);
   background: var(--color-accent-subtle);
@@ -381,14 +379,19 @@
   color: var(--color-accent-fg);
 }
 
+.pos-cart-line-override:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 /* ── Responsive: tablet thumbnail shrink ────────────────────
  * On narrower viewports the right-side panel reflows below the
  * menu (see CartPanel.css @media) and we trim the thumbnail so
  * more lines fit vertically. */
 @media (max-width: 1023px) {
   .pos-cart-line-thumb {
-    width: 40px;
-    height: 40px;
+    width: 2.5rem;
+    height: 2.5rem;
   }
 }
 

@@ -4,6 +4,187 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.9] — 2026-07-17
+
+### Added
+- **useWorkspaceNavShortcuts test suite**: 6 isolated tests covering Escape-to-go-back, aria-modal gating, Ctrl+Shift+Escape bypass, non-Escape key rejection, no listener when active=null, and listener cleanup on unmount. Duplicates the private hook logic from AppShell.tsx in the test file for direct coverage.
+- **useFullscreen Tauri onToggle(false) test**: Added missing symmetric test for exiting Tauri fullscreen — previously only the entering-Tauri-fullscreen case was tested.
+- **Smart foreground colour system** (`contrastFg` / `applyThemeContrasts` in `color.ts`): Every accent and semantic colour token now has a companion `--*-fg` variable that automatically flips between `#0a0a0a` and `#ffffff` based on WCAG-compatible luminance calculation. Wired into `ThemeProvider` on mount and on every theme / brand-colour change. Badge and alert consumers fall back to the legacy colour when the companion var is absent.
+- **Hardware Acceleration toggle (Appearance settings)**: New `HardwareAccelContext` + `useHardwareAccel` hook that manages a `data-hw-accel="disabled"` attribute on `<html>`, persisted to localStorage. When disabled, all CSS `backdrop-filter`, `will-change`, and `transform: translateZ(0)` hints are overridden via a dedicated `HardwareAccel.css` file — covers 10 selectors across 7 CSS files (modal-overlay, workspace cards, dropdown, QRIS/FastPIN/license/PIN overlays). Toggle uses `role="switch"` with proper ARIA attributes. Added 5 Fluent keys in both EN and ID locales. Test mocks added for `HardwareAccelContext` in `AppearanceSettings.test.tsx` and `SettingsPage.test.tsx`.
+- **Updater UI (About settings)**: State machine (idle → checking → up-to-date/available/error → installing) with `@tauri-apps/plugin-updater`. Check for updates button, install button with loading states, version display, and localized status hints. 7 Fluent keys in both EN and ID locales.
+- **ConfirmDialog shared component**: Extracted from inline WorkspaceHome LogoutModal. Reusable `ConfirmDialog` with `variant` prop (info/warning/danger), icon SVG, title, message, confirm/cancel labels, and configurable confirm button variant. Exported through `@/frontend/shared`.
+- **Row flash animation**: Brief green background pulse (`@keyframes data-mgmt-flash-updated`, 1.2s) on DataManagement backup/import/export sections after successful operations. Same pattern (`@keyframes license-flash-updated`/`@keyframes license-section-flash`) for LicenseSettings server-status row after poll or manual refresh.
+- **Visual toggle feedback**: Row flash + checkmark overlay + count badge pop animations on FeatureToggleScreen.
+- **Real-time activation status polling**: 30-second polling interval in LicenseSettings with exponential backoff on failure, last-checked timestamp display, manual refresh button with loading state.
+- **Settings page UX passes 2–5**: Toggle switches, password eye toggle, revert-to-saved snapshot, scroll-to-top on section navigation, sticky content header, count badges with pop animation, stagger card entrance animation (60ms per card, up to 5), improved empty search state, collapsed tooltips for sidebar, save dirty dot indicator with pulse, saved checkmark animation with SVG stroke-draw.
+- **Settings footer keyboard shortcut hint**: KBD element showing Ctrl+S with localized label.
+- **Sidebar search result count badge**: Number pill showing matching items count.
+- **Auto-expand category on navigation**: Clicking a section in the breadcrumb or navigating via keyboard auto-expands the parent accordion category.
+- **Section content fade-in animation**: `.settings-section-content` now fades in on navigation (0.2s), repurposing the previously dead `settings-section-fade-in` keyframe. `prefers-reduced-motion` guards added for card stagger, section content, and sidebar section animations.
+- **Sidebar nav icon color transition**: Smooth 0.2s transition when switching active section.
+
+### Changed
+- **Version bump**: Codebase version bumped from 0.0.8 to 0.0.9 across 5 files (Cargo.toml, Cargo.lock, tauri.conf.json ×2, package.json).
+- **ADR Audit & Documentation Sync**: Reviewed all 12 ADRs in `docs/decisions/`. Updated ADRs #1 (Module System), #2 (Event Bus), and #3 (Frontend Restructure) from "Accepted" to "Implemented" — all three were already fully wired in the codebase but the ADR statuses hadn't been updated. Resolved 3 open questions in ADR #5 (Subscription Tier). Cleaned inconsistent headers in ADR #9 (License Server) and ADR #11 (VPS Migration). All 12 ADRs now have consistent `Implemented (YYYY-MM-DD)` status lines.
+- **Script audit & repair (7 issues)**: Audited all 15 scripts in `scripts/` for correctness, robustness, and cross-platform compatibility.
+  - `check.ps1`: Removed redundant `cargo fmt --all` (write mode) — only `--check` remains.
+  - `coverage_top.py`: Hardcoded path → CLI arg or auto-scan `coverage/rust/` for newest `.json`. Added `is_dir()` guard.
+  - `sync-branding.Integration.Tests.ps1`: Added WARNING comment on `global:exit` shadow.
+  - `sync-branding.Tests.ps1`: Replaced fragile `Should -Match` → exact `Should -Be`.
+  - `lint-i18n.sh`: Now fails on infrastructure crashes (OOM, config error).
+  - `stats.ps1`: Removed unnecessary `Get-Unique` call.
+  - `bump-version.ps1`: Removed dead `health.rs` version replacements (migrated to `CARGO_PKG_VERSION`).
+- **VPS Migration docs rewrite**: Restructured `docs/operations/vps-migration.md` from scenario-based (A/B/C) to operator-focused step-by-step with clear "On Old Server" / "On New Server" ownership labels. Added DuckDNS free dynamic DNS section, PostgreSQL data transfer section, pre-migration preparation checklist, and troubleshooting guide.
+- **Settings page sidebar UX overhaul**: 12 UX improvements across the settings page.
+  - **Sidebar search bar**: Real-time filtering of all 17 nav items + 4 categories. Arrow key navigation respects the current search filter.
+  - **Recently used sections**: Last 3 visited sections shown at top of sidebar, persisted to localStorage, auto-deduplicated.
+  - **Collapse-all categories button**: Chevron-up icon in sidebar header collapses all 4 accordion categories at once.
+  - **Breadcrumb category path**: Section header now shows clickable category label (e.g., "Business › General"), clicking expands that category in the sidebar.
+  - **Keyboard shortcuts**: Ctrl+S/Cmd+S saves, Escape closes mobile sidebar, ↑/↓ navigates all sections.
+  - **`beforeunload` guard**: Warns when closing tab with unsaved settings changes.
+  - **Unsaved changes dot indicator**: Animated accent dot on Save button when settings are dirty.
+  - **Mobile responsive sidebar overlay**: Fixed-position overlay with backdrop for small screens.
+  - **Content fade-in animation**: All 17 sections (inline + external) now have a consistent `opacity + translateY` fade-in via `@keyframes settings-section-fade-in`.
+- **AppearanceSettings polish**:
+  - Hex colour validation (`normaliseHex()`): Accepts `#fff`, `ffffff`, strips invalid chars, expands shorthand, pads to 6 chars.
+  - Individual colour reset button (undo icon) to restore `#10b981` default.
+  - **"Reset all to defaults" button**: Danger-styled button in the form section that resets colour + logo + store name simultaneously, persists via all three backend APIs, refreshes brand context, applies default palette. Uses `window.confirm()` with localized message + success/error toasts.
+  - Preview hover fix: Both primary and outline preview buttons now use `--preview-colour-alpha-20` instead of `--color-accent-dim`.
+  - Preview box transitions: Border-color fades on colour change (300ms), preview box border tints to match colour on hover.
+- **FeatureToggleScreen polish**:
+  - Fluid layout: Removed `max-width: 43.75rem` — content fills the settings panel.
+  - Toggle pulse animation: `@keyframes toggle-pulse` (opacity 0.5→0.75, 1.2s) on disabled toggle slider during IPC.
+  - Group count redesigned as pill/chip badge: `border-radius: var(--radius-full)`, semibold weight, `bg-surface` + border.
+- **DataManagementScreen polish**:
+  - Fluid layout: Removed `max-width: 43.75rem`.
+  - Animated tab underline: Static `border-bottom` replaced with `::after` pseudo-element that slides from center (width: 0 → 80%) on active tab.
+  - Password visibility toggle: Eye/eye-off SVG buttons on both export password and import password fields, separate state per field. Confirm password field uses `.data-mgmt-input--no-toggle` to avoid visual gap.
+  - Dry-run results redesigned: Plain text → card-style pill badges with border, `bg-elevated`, accent color count numbers, and `.data-mgmt-dry-run-label` class.
+  - Tab panel fade-in: `@keyframes data-mgmt-fade-in` (opacity + translateY, 200ms) on tab switch via `key` props.
+  - Dropzone cursor fix: Removed misleading `cursor: pointer` (clicking the dropzone does nothing — Browse button is the action).
+- **LicenseSettings polish**:
+  - Skeleton loading: Replaced "Loading…" text with 4 animated skeleton rows using `@keyframes license-skeleton-pulse` with staggered delays and `role="status"` + `aria-live="polite"`.
+  - Empty state icon: Added padlock SVG icon centered above the "no license" message.
+  - Server results fade-in: `@keyframes license-fade-in` (opacity + translateY, 200ms) on `.settings-license-server-section`.
+  - Tier badge hover: Added `transition` on opacity + box-shadow; hover shows 85% opacity + inset `currentColor` border.
+  - CSS cleanup: Removed redundant `.settings-license-value--medium` class, converted hardcoded hex → `rgb()` values.
+
+- **Horizontal layout conversion — ALL settings pages**: Every form field across all settings pages now uses a consistent label-left/control-right pattern via `.xxx-field--horizontal` CSS variants.
+  - **General (Business)**: Store name, address, tax ID, language, default currency — all label left, input/select right.
+  - **Appearance (Business)**: Display card (card size, font size, font smoothing), Interface (zoom select, HW accel toggle), Branding (colour picker, logo, store name).
+  - **Receipt (Operations)**: Show currency (toggle), decimal separator (select), show tax (toggle), paper width (select), footer (input), show table number (toggle).
+  - **Cloud Sync (Operations)**: Server URL (input), API key (password), enable cloud sync (toggle).
+  - **Data Management (System)**: Export password, confirm password, import decryption password.
+  - **Staff Management**: Username, display name, PIN, role.
+  - **Terminal Management**: Name, device ID, secret, metadata, bind store, bind instance.
+  - **Shift Management**: Opening balance, payout amount, payout reason, close balance, close notes (textarea).
+  - **Tax Configuration**: Tax name, rate (w/ hint below), tax type (radio group).
+  - **Exchange Rates**: From currency, to currency, rate, source, effective date.
+  - **Promotion Management**: Name, type, value, min qty, trigger SKU, reward SKU, reward qty, starts at, ends at, min order, category.
+  - All fields have proper `htmlFor`/`id` pairing, consistent `min-width: 7–8rem` label widths, and `flex-direction: row` layout.
+- **Custom SettingsSelect dropdown**: Replaces native `<select>` with fully theme-styled button + portal-based popover list. Supports keyboard navigation (Enter/Space/Arrow/Home/End/Escape/Tab) and touchscreen. Dropdown renders via `createPortal` to `<body>` to avoid z-index clipping by parent containers. Now self-contains its CSS (`SettingsSelect.css` import).
+- **Appearance layout → card-based**: Appearance page now uses `<div className="card card--padding-md card--shadow-sm">` with `<div className="card-header">` for each section (Display, Interface, Branding).
+- **Input validation**: `maxLength`, `pattern`, `required`, and `onBlur` validation with inline error hints for store name, address, and tax ID fields in General settings.
+- **Currency dropdown guard**: Empty currencies array now shows a disabled placeholder option instead of an empty select.
+- **Toggle switch redesign**: When OFF — accent color with transparency background. When ON — accent color solid background. Slider thumb animates left/right with 0.3s ease-out. Uses `role="switch"` with proper ARIA.
+- **Textarea alignment fix**: `:has(textarea)` selector applied in both Terminal Management and Shift Management horizontal fields to keep labels top-aligned with multi-row textareas (`align-items: flex-start`).
+- **Tax rate field style**: Replaced inline styles with `.tax-config-field-input-wrap` CSS class.
+
+### Fixed
+- **Clippy — `MutexGuard` held across `await`**: Replaced `std::sync::Mutex` with `tokio::sync::Mutex` for `ENV_LOCK` in `apps/cloud-server/src/redirect.rs` test module. The `Send`-safe guard can be held across `.await` points, preventing race conditions on process-global env vars between concurrent tests.
+- **Clippy — unused import**: Removed unused `response::IntoResponse` import from `platform/sync/src/daemon.rs`.
+- **Stale version string in test**: Updated hardcoded `0.0.8` → `0.0.9` in `ui/src/__tests__/RetailOptionsScreen.test.tsx` (slipped through `bump-version.ps1`).
+- **Health endpoint test**: Replaced hardcoded `"0.0.8"` version assertion with `env!("CARGO_PKG_VERSION")` in `crates/oz-api/src/routes/health.rs` test — now immune to version bumps.
+- **Duplicate `#[cfg_attr]` on sync auth tests**: Removed duplicate attribute annotations on `push_unauthorized_401` and `push_forbidden_403` in `platform/sync/tests/integration_test.rs`.
+- **AppearanceSettings tests (28 failures)**: Added `useToast` mock. Changed 3 hex-input tests from `user.type` to `fireEvent.change` because `normaliseHex()` rejects leading `#` on character-by-character typing.
+- **LicenseSettings tests (2 failures)**: Updated loading test to check for `.settings-license-skeleton` CSS class instead of "Loading…" text. Updated empty-state test to match new `div[role="status"]` structure with lock icon.
+- **screenExtraction test (2 failures)**: Removed dead `.settings-section-header-subtitle` CSS class (removed from TSX during breadcrumb refactoring). Added `mobile-open` and `visible` as `externalClasses` — these are template-literal constructed classes that the static extraction utility can't parse.
+- **Dead CSS classes removed**:
+  - `.settings-section-header-subtitle` from SettingsPage.css.
+  - `.settings-select` standalone block (native `<select>` styling — no longer used).
+  - `.ssel-*` custom dropdown classes from SettingsPage.css (moved to `SettingsSelect.css`).
+  - `.settings-select` theme overrides (dark/light/prefers-color-scheme).
+  - `.appearance-preview-heading` from AppearanceSettings.css.
+  - `.staff-mgmt-cell-name`, `.staff-mgmt-avatar`, `.staff-mgmt-select` + dark theme variant from StaffManagementScreen.css.
+- **CSS class integrity tests**: Added `knownDynamicFragments` for SettingsPage (`store-name`, `address`, `tax-id`) and AppearanceSettings (`card--padding-md`, `card--shadow-sm`, `card-header`) to suppress false-positive class name extractions from template literals.
+- **HW accel toggle clickability**: Restored by moving text from `<span>` to `<label htmlFor="hw-accel-checkbox">` and adding `id` to the hidden checkbox input.
+- **Dropdown z-index clipping**: Changed from relative-positioned child to portal-rendered overlay to avoid being clipped by parent `overflow: hidden`.
+- **Dropdown broken after CSS cleanup**: `.ssel-*` CSS removed from SettingsPage.css broke the dropdown. Fixed by creating dedicated `SettingsSelect.css` and importing it from the component.
+- **Double focus outline on search input**: Removed redundant `outline: none` conflict.
+- **Missing `id`/`name` on inputs**: Fixed "form field has neither an id nor a name" warnings across all settings inputs (store name, address, tax ID, colour hex, search, and 30+ other fields). Added `autoComplete="off"` consistently.
+- **Duplicate 'Language' label**: Removed parent `<span>` wrapper, `LanguageSelector` now controls its own label.
+- **ScreenExtraction test (2 failures)**: Added `settings-btn-revert--hidden` and `settings-save-dot--hidden` to `externalClasses` for the `SettingsPage` entry — these template-literal constructed classes were falsely flagged as dead by the static CSS parser.
+- **Input focus indicators (7 CSS files)**: Fixed inputs that had `border-color` only on focus with no visible focus ring. Added `box-shadow: inset 0 0 0 1px var(--color-accent)` + `outline: none` per `UX_GUIDELINES.md` mandate. Fixed in FastPINOverlay, CreatePinScreen, GiftCardsScreen, PaymentModal, SalesHistoryScreen, CartPanel, and ShiftManagementScreen.
+- **CreatePinScreen hardcoded colors**: Replaced hardcoded `#6366f1` and `rgba(99, 102, 241, 0.1)` with token variables (`var(--color-border-focus)`, `var(--color-accent-subtle)`).
+- **Exit animations — StockTransfersScreen (3 modals)**: Added symmetric exit keyframes (`stock-overlay-fade-out`, `stock-modal-out`) mirroring entry animations for all 3 modals (detail, create, receive). Exit rules use `animation-fill-mode: both` and `pointer-events: none`. Updated TSX with exiting state, timer-based dismiss, and conditional `--exiting` classes.
+- **Exit animations — IssueGiftCardModal**: Added entry + exit keyframes (`gift-overlay-in/out`, `gift-modal-in/out`) with `@media (prefers-reduced-motion: reduce)` overrides. Updated TSX with `animDuration`, exiting state, and `handleClose` wrapper.
+- **PriceOverrideModal CSS (new file)**: Created complete stylesheet for the previously unstyled price override modal. Includes overlay/modal with entry/exit animations, two-step form (price entry → username → PIN pad), focus indicators using `box-shadow: inset`, and PIN dot/key styling.
+- **Touch target roles extended**: Enhanced `@media (pointer: coarse)` rule in `components.css` to cover `[role="tab"]`, `[role="radio"]`, `[role="switch"]`, `summary`, and `label` with `min-height: var(--touch-target-min)` (44px). Added `[role="tablist"] [role="tab"]` to the comfortable 48px group.
+- **Shared SettingsPopup component**: New `SettingsPopup` component (`ui/src/frontend/shared/SettingsPopup.tsx`) that standardises settings CRUD modals across all pages. Self-contained overlay + panel via `createPortal` with keyboard trap (Escape/Tab), focus management, body scroll lock, error display with SVG icon, default Cancel/Save footer with loading state, and size variants (sm/md/lg). Migrated StaffManagementScreen and TerminalManagementScreen (both add/edit + delete modals) from inline overlay/Modal implementations to `SettingsPopup`. Removed ~150 lines of dead modal CSS (`staff-mgmt-error`, `terminal-mgmt-overlay`, `terminal-mgmt-modal`, `terminal-mgmt-modal-header`, `terminal-mgmt-modal-close`, `terminal-mgmt-modal-body`, `terminal-mgmt-modal-actions`).
+- **CustomerManagementScreen → SettingsPopup**: Migrated inline modal to SettingsPopup. Removed 6 dead CSS classes (overlay, modal, header, close, body, actions, error). 15/15 tests pass.
+- **SuppliersScreen → SettingsPopup**: Migrated inline modal to SettingsPopup. Added 5 new FTL keys (EN + ID). Removed dead CSS. 16/16 tests pass.
+- **VariantManagementScreen → SettingsPopup**: Migrated nested add/edit + delete confirmation modals to SettingsPopup.
+- **BundleManagementScreen → SettingsPopup**: Migrated add/edit modal with dynamic bundle item rows to SettingsPopup `size=lg`.
+- **CategoryManagementScreen → SettingsPopup**: Migrated all 3 modals (create, edit, delete) to SettingsPopup. Memoized `onClose` handlers to prevent focus-trap effect re-runs.
+- **TaxConfigurationScreen → SettingsPopup**: Migrated both add/edit tax rate modal and category tax rates modal from inline overlay implementation to SettingsPopup. Removed dead CSS classes. All 6 tests passing.
+- **ShiftManagementScreen overlay backdrop**: Upgraded all 5 modal overlays from plain `var(--color-bg-overlay)` to `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)`, matching Modal/SettingsPopup pattern. Added reduced-motion blur disable. Exit animations preserved.
+- **SettingsPopup reduced-motion cleanup**: Added `backdrop-filter: none` to reduced-motion media query, matching `components.css` pattern.
+- **About page polish**: Migrated System & License Ownership card from old `.settings-license-row` pattern to the standard `.settings-field--horizontal` layout for visual consistency with General/Receipt/Sync sections. Updates card now shows inline status states (Up to date, version available, Check failed, Checking…, Not checked) with color-coded modifiers (`--active` green, `--inactive` muted, `--warning` orange). Removed dead CSS classes (`.settings-license-section`, `.settings-license-row`, `.settings-license-row--last`, `.settings-license-label`). Added `settings-update-status-label` and `settings-update-not-checked` Fluent keys to both EN/ID locales.
+- **SettingsSelect dropdown background**: Fixed from `var(--color-bg)` to `var(--color-bg-elevated)` to match Modal/SettingsPopup pattern and avoid subtle color mismatch with trigger.
+- **StockTransfersScreen overlay backdrop**: Upgraded from plain `var(--color-bg-overlay)` to `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with will-change hint, matching ShiftManagementScreen and SettingsPopup dark blur pattern. Added fade-in animation for overlay and slide-up animation for modal with `prefers-reduced-motion` guard. Modal background upgraded from `var(--color-bg)` to `var(--color-bg-elevated)` and border-radius from `radius-lg` to `radius-xl`.
+- **ProductManagementScreen overlay backdrop**: Same dark blur upgrade for `.product-mgmt-overlay` — `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with fade-in/slide-up animations and reduced-motion guard.
+- **PromotionManagementScreen overlay backdrop**: Same dark blur upgrade for `.promo-mgmt-overlay` — `rgba(0,0,0,0.65) + backdrop-filter: blur(3px)` with fade-in/slide-up animations and reduced-motion guard.
+- **Skeleton loading (28 screens + 3 secondary states)**: Replaced plain text loading messages with proper skeleton structures matching real layout across all settings-adjacent and sales screens:
+  - **AuditLogScreen**: Filters skeleton (search bar + outcome chips) + 6-row table skeleton.
+  - **OfflineQueueScreen**: Header skeleton + 5-row table skeleton (7 columns).
+  - **ShiftManagementScreen**: Shift card skeleton + 4-row table skeleton (9 columns).
+  - **MultiStoreDashboardScreen**: 4 stat card skeletons + 3 store card skeletons.
+  - **FeatureToggleScreen**: Header + search bar + 3 group card skeletons.
+  - **TaxConfigurationScreen**: Header + 5-column table with 4 skeleton rows.
+  - **CustomerManagementScreen**: Header + search bar + 5-column table with 4 skeleton rows.
+  - **SuppliersScreen**: Header + search bar + 7-column table with 4 skeleton rows.
+  - **PromotionManagementScreen**: Header + 7-column table (Name, Type, Value, Active, Starts, Ends, Actions) with 4 skeleton rows.
+  - **TerminalManagementScreen**: Header + 6-column table with 4 skeleton rows.
+  - **LoyaltyManagementScreen**: Header with tabs + 7-column table with 4 skeleton rows.
+  - **CategoryManagementScreen**: Header + 6 card grid skeletons.
+  - **ProductManagementScreen**: Header + 8-column table with 4 skeleton rows.
+  - **PurchaseOrdersScreen**: Header + 6 filter pill skeletons + 8-column table with 4 skeleton rows.
+  - **VariantManagementScreen**: Inline skeleton inside modal — 6-column table (Name, SKU, Price, Barcode, Status, Actions) with 4 rows, using existing product-mgmt-table CSS.
+  - **StockCountsScreen**: Header + 5 filter buttons + 4 card skeletons (number+status badge, type+date, view link).
+  - **StockTransfersScreen**: Header + 6 filter tab pills + 6-column table (Transfer#, Status, Source, Destination, Created, Actions) with 4 rows.
+  - **InventoryAdjustmentScreen**: 5 product-item skeletons inside search area replacing 'Loading products…' text.
+  - **StockCountDetail**: Full layout skeleton — back button, title, meta row (badge, type, date), actions button, 6-column lines table with 4 skeleton rows.
+  - **StockCountHistory**: Header + 4 list item skeletons + detail panel with 5-column table and 4 skeleton rows.
+  - **ExchangeRateScreen**: Header + 6-column table (From, To, Rate, Source, Effective Date, Actions) with 4 skeleton rows.
+  - **BundleManagementScreen**: Header + 6-column table (Name, SKU, Price, Items, Active pill, Actions) with 4 skeleton rows.
+  - **GiftCardsScreen**: Header + toolbar (search+filter) + 3 card skeletons with status badge pills via Card component.
+  - **StaffManagementScreen**: Header + 6-column table (Role pill, Workspace, Name, Username, Status, Actions) with 4 skeleton rows.
+  - **TerminalStatusPanel**: Header (title + count skeleton) + 4 rows mimicking real list items — circle dot (0.625rem), name (80% width), device (60% width), time (2.5rem).
+  - **TerminalManagementScreen (secondary — overrides + binding)**: 3 feature group sections with header + 2 toggle rows each replacing 'Loading overrides…' plus binding info area + 2 select field skeletons + button skeleton replacing 'Loading binding…'.
+  - **StockTransfersScreen (secondary — detail modal)**: 6 info field skeletons (2-column grid) + 4-column lines table (SKU, Product, Qty, Received) with 4 skeleton rows + actions button replacing 'Loading…'.
+  - **ShiftManagementScreen (secondary — report modal)**: Title skeleton + 4 flex rows (flex space-between) replacing 'Loading report…'.
+  - **SalesHistoryScreen (primary + detail)**: Header (title + export btn) + filter bar (search input, 4 status chips, 3 date/cashier fields) + 8-column table (Sale ID, Date, Total, Items, Status pill, Payment, Cashier, Actions) with 5 skeleton rows. Detail modal: 6 meta info fields grid + 5-column lines table (SKU, Name, Qty, Unit Price, Total) with 4 skeleton rows. Replaced 'Loading sales…' and 'Loading…' text.
+  - **VoidOrdersScreen (list + detail)**: Header + filter bar (search input + 5 status chips) + 7-column table (Order ID, Date, Status pill, Total, Items, Payment, Actions) with 5 skeleton rows. Detail view: back button + summary card (heading + badge pill + 4 meta items grid) + line items card (5-column SKU/Name/Qty/Unit Price/Total table) with 4 skeleton rows. Replaced 'Loading orders…' and 'Loading order details…' text.
+  - **EodReportScreen (full report)**: 4 KPI card skeletons (label + large value + sub each) + two-column layout (left: Payment Breakdown card with 3 method rows with bar track + amount; right: Hourly Sales card with 8 bar rows using fixed alternating widths) + summary grid (6 items). Replaced spinner + 'Loading report…' text.
+  - **PaymentModal (customer search)**: 3 skeleton items inside customer search overlay that mirror the search result layout — name skeleton (8rem × 1rem) + detail skeleton (5rem × 0.75rem) each. Replaced 'Loading...' text. Dead `.payment-customer-search-loading` CSS class removed.
+  - **SalesReportScreen (full report)**: Header (title + 5 control button skeletons) + revenue card (title + 300px chart block via Skeleton variant=block with pulse) + two-column layout (left: category pie with 250px block, right: top products with 4-column header + 4 skeleton rows) + heatmap card (title only). Replaced `<Spinner>`.
+  - **InventoryReportScreen (table)**: Header (title + 3 control button skeletons) + table card (3-column table header + 6 skeleton rows). Replaced `<Spinner>`.
+  - All skeletons use `aria-hidden="true"` parent containers, `pointer-events: none`, and mirror real table/grid layouts.
+  - Removed dead CSS classes (`-loading` variants) from all converted screens.
+- **Receipt footer textarea**: Changed from single-line `<input>` to `<textarea rows=3 maxLength=500>` with character count hint.
+- **MultiStoreDashboardScreen hover polish**: Added `transition` + `:hover` border-color/shadow to stat cards.
+- **OfflineQueueScreen table polish**: Wrapped table in bordered/rounded container with thead styling (uppercase, bg-secondary), row hover states, last-row border cleanup.
+- **Responsive mobile layout**: Settings form fields now stack vertically at ≤768px (`.settings-field--horizontal` → `flex-direction: column`) to prevent label/input overflow on small screens.
+- **SettingsPage tests (3 failures)**: Added `Element.prototype.scrollIntoView = vi.fn()` mock for jsdom compatibility (used by `SettingsSelect`). Updated 3 tests (`renders Currency section`, `changes default currency`, `changes decimal separator`) to interact with the custom `SettingsSelect` component (click trigger button → click `role="option"` in portal) instead of native `<select>` API.
+- **Tenant-scoped cloud sync snapshot (migration 076)**: The `GET /api/sync/snapshot` endpoint on the cloud server now filters products, tax rates, and users by `tenant_id` from the JWT claims. Previously all tenants saw every tenant's reference data. Added `tenant_id` columns + indexes to `products`, `tax_rates`, and `users` tables via migration 076. `oz-api` `create_product` stamps `tenant_id` from JWT on newly created products. Includes `snapshot_tenant_isolation` test verifying tenant-A's data is invisible to tenant-B. End-to-end verified with rebuilt Docker container.
+
+### Fixed
+- **Token request toast message**: The Request Token catch block was incorrectly showing "Connection test failed" instead of the proper "Token request failed — check server URL" message. Added `settings-sync-token-request-failed` Fluent key (EN + ID).
+- **Lint errors (18 → 0)**: Removed 3 unused variables (`TokenResult` in SettingsPage, `rerender` in FastPINOverlayKeyboard test, `barcodeInput` in ProductLookupScreen test). Fixed 12 `@typescript-eslint/no-explicit-any` violations in RetailPos test files. Fixed invalid eslint-disable comment format in `useProducts.ts`.
+- **Doc audit dates**: Fixed `CONTRIBUTING.md` and `ui/README.md` audit footer dates from `YYYY-MM-DD` to `DD-MM-YY` convention per skill-drift-guard.
+- **TypeScript errors in changed files**: Fixed `Property 'args' comes from an index signature` (4 sites in CloudSyncSettings.test.tsx) and `FluentVariable` type mismatch in SettingsPage.tsx.
+
+
 ## [0.0.8] — 2026-07-15
 
 ### Changed
@@ -270,7 +451,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.5...v0.0.6

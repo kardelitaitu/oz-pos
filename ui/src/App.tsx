@@ -4,6 +4,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { LocaleProvider } from './i18n/LocaleContext';
 import { ZoomProvider } from '@/contexts/ZoomContext';
+import { HardwareAccelProvider } from '@/contexts/HardwareAccelContext';
 import AppShell from '@/frontend/shell/AppShell';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
@@ -211,6 +212,7 @@ registerNavItem({ route: 'stock-transfers', label: 'Stock Transfers', feature: '
  * them dynamically from the page-registry instead of a hardcoded switch.
  */
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 
 export default function App() {
@@ -219,7 +221,9 @@ export default function App() {
       <LocaleProvider>
         <BrandProvider>
           <ZoomProvider>
-            <ThemeProvider>
+            <HardwareAccelProvider>
+              <ThemeProvider>
+              <CurrencyProvider>
               <AuthProvider>
                 <ToastProvider>
                   <WorkspaceProvider>
@@ -227,7 +231,8 @@ export default function App() {
                   </WorkspaceProvider>
                 </ToastProvider>
               </AuthProvider>
-            </ThemeProvider>
+              </CurrencyProvider>              </ThemeProvider>
+            </HardwareAccelProvider>
           </ZoomProvider>
         </BrandProvider>
       </LocaleProvider>

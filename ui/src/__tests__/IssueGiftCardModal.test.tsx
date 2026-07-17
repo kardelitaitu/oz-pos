@@ -61,7 +61,9 @@ describe('IssueGiftCardModal', () => {
     const onClose = vi.fn();
     renderWithFluentSync(<IssueGiftCardModal onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('calls issueGiftCard and onIssued on successful submit', async () => {

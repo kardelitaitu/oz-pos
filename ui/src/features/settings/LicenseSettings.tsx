@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { getLicenseStatus, checkLicenseStatus, type ServerLicenseStatus } from '@/api/license';
 import { Card } from '@/components/Card';
@@ -48,9 +48,31 @@ function workspaceTypeLabel(type: string, l10n: ReturnType<typeof useLocalizatio
   return v !== key ? v : type;
 }
 
+/** Format a relative time (ms since epoch) into a human-friendly string. */
+function relativeTime(ms: number, l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  const seconds = Math.floor((Date.now() - ms) / 1000);
+  if (seconds < 5) return l10n.getString('settings-license-just-now');
+  if (seconds < 60) return l10n.getString('settings-license-seconds-ago', { seconds: String(seconds) });
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return l10n.getString('settings-license-minutes-ago', { minutes: String(minutes) });
+  const d = new Date(ms);
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Duration (ms) for row flash after a server status update. */
+const FLASH_DURATION = 1_400;
+
+/** Default 30-second polling interval for server status checks. */
+const POLL_INTERVAL_MS = 30_000;
+
+/** Maximum consecutive failures before showing offline indicator. */
+const MAX_POLL_FAILURES = 3;
+
 /** License settings section — displays tier, expiry, grace period, and quotas. */
 export default function LicenseSettings() {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -58,6 +80,78 @@ export default function LicenseSettings() {
   const [payload, setPayload] = useState<LicensePayload | null>(null);
   const [serverStatus, setServerStatus] = useState<ServerLicenseStatus | null>(null);
   const [checkingServer, setCheckingServer] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null);
+  const [pollFailures, setPollFailures] = useState(0);
+  const [pollError, setPollError] = useState<string | null>(null);
+
+  // Track the interval ID so we can clear it on unmount.
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Row flash animation ─────────────────────────────────────────
+  // Track recently-updated rows for a brief green background pulse.
+  const [flashRows, setFlashRows] = useState<Map<string, 'updated'>>(new Map());
+  const flashTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const triggerFlash = useCallback((key: string) => {
+    setFlashRows((prev) => {
+      const next = new Map(prev);
+      next.set(key, 'updated');
+      return next;
+    });
+    const existing = flashTimeoutsRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    const tid = setTimeout(() => {
+      setFlashRows((prev) => {
+        const next = new Map(prev);
+        next.delete(key);
+        return next;
+      });
+      flashTimeoutsRef.current.delete(key);
+    }, FLASH_DURATION);
+    flashTimeoutsRef.current.set(key, tid);
+  }, []);
+
+  // Cleanup flash timeouts on unmount.
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    return () => {
+      flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
+      flashTimeoutsRef.current.clear();
+    };
+  }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  // Track mount state to avoid setState after unmount.
+  const mountedRef = useRef(true);
+
+  // On unmount, mark as unmounted (separate from polling cleanup to
+  // avoid timing bug where re-running the polling effect's cleanup
+  // would set mountedRef=false before the new effect starts).
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  /** Single poll tick — calls checkLicenseStatus silently (no toast). */
+  const pollTick = useCallback(async () => {
+    try {
+      const status = await checkLicenseStatus();
+      if (!mountedRef.current) return;
+      setServerStatus(status);
+      setLastCheckedAt(Date.now());
+      setPollFailures(0);
+      setPollError(null);
+      triggerFlash('server-status');
+    } catch {
+      if (!mountedRef.current) return;
+      setPollFailures((prev) => {
+        const next = prev + 1;
+        if (next >= MAX_POLL_FAILURES) {
+          setPollError(l10nRef.current.getString('settings-license-poll-offline'));
+        }
+        return next;
+      });
+    }
+  }, [triggerFlash]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,19 +163,43 @@ export default function LicenseSettings() {
         setPayload(parsed);
       }
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : l10n.getString('settings-license-load-failed'));
+      setLoadError(err instanceof Error ? err.message : l10nRef.current.getString('settings-license-load-failed'));
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, []);
 
+  // Initial load.
   useEffect(() => { load(); }, [load]);
 
-  const handleCheckServer = useCallback(async () => {
+  // Start polling after initial load succeeds and user has a payload.
+  // Polling only begins once payload is set (license activated).
+  useEffect(() => {
+    if (!payload) return;
+
+    // Fire first poll immediately.
+    void pollTick();
+
+    intervalRef.current = setInterval(pollTick, POLL_INTERVAL_MS);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [payload, pollTick]);
+
+  /** Manual refresh — calls checkLicenseStatus with a toast. */
+  const handleRefresh = useCallback(async () => {
     setCheckingServer(true);
     try {
       const status = await checkLicenseStatus();
       setServerStatus(status);
+      setLastCheckedAt(Date.now());
+      setPollFailures(0);
+      setPollError(null);
+      triggerFlash('server-status');
       addToast({ type: 'info', message: l10n.getString('settings-license-server-status-retrieved') });
     } catch (err) {
       const msg = err instanceof Error ? err.message : l10n.getString('settings-license-server-check-failed');
@@ -89,14 +207,29 @@ export default function LicenseSettings() {
     } finally {
       setCheckingServer(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, triggerFlash]);
 
   // ── Loading / Error states ──────────────────────────────────
   if (loading) {
     return (
       <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
-        <div className="settings-form" role="status" aria-live="polite" aria-label={l10n.getString('settings-loading')}>
-          <Localized id="settings-loading"><p>Loading&hellip;</p></Localized>
+        <div className="settings-license-skeleton" role="status" aria-live="polite" aria-label={l10n.getString('settings-loading')}>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
+          <div className="settings-license-skeleton-row">
+            <span className="settings-license-skeleton-label" />
+            <span className="settings-license-skeleton-value" />
+          </div>
         </div>
       </Card>
     );
@@ -120,12 +253,14 @@ export default function LicenseSettings() {
   if (!payload) {
     return (
       <Card shadow="sm" header={<Localized id="settings-section-license"><h2 className="settings-section-title">License</h2></Localized>}>
-        <div className="settings-form">
-          <p className="settings-hint" role="status">
-            <Localized id="settings-license-not-activated">
-              <span>No license activated. Activate a license to see details here.</span>
-            </Localized>
-          </p>
+        <div className="settings-license-empty" role="status">
+          <svg className="settings-license-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          <Localized id="settings-license-not-activated">
+            <p className="settings-license-empty-text">No license activated. Activate a license to see details here.</p>
+          </Localized>
         </div>
       </Card>
     );
@@ -159,7 +294,7 @@ export default function LicenseSettings() {
           <span className="settings-license-label">
             <Localized id="settings-license-expires"><span>Expires</span></Localized>
           </span>
-          <span className="settings-license-value settings-license-value--medium">
+          <span className="settings-license-value">
             {formatDate(payload.expires_at)}
           </span>
         </div>
@@ -168,7 +303,7 @@ export default function LicenseSettings() {
           <span className="settings-license-label">
             <Localized id="settings-license-grace"><span>Grace Period Until</span></Localized>
           </span>
-          <span className="settings-license-value settings-license-value--medium">
+          <span className="settings-license-value">
             {formatDate(payload.grace_until)}
           </span>
         </div>
@@ -211,22 +346,58 @@ export default function LicenseSettings() {
           </span>
         </div>
 
-        {/* ── Server status check ── */}
-        <div className="settings-license-row settings-license-row--actions">
-          <Button
-            variant="secondary"
-            loading={checkingServer}
-            onClick={handleCheckServer}
-            aria-label={l10n.getString('settings-license-check-server')}
-          >
-            <Localized id="settings-license-check-server">
-              <span>Check Server Status</span>
-            </Localized>
-          </Button>
+        {/* ── Live status indicator ── */}
+        <div className={`settings-license-row settings-license-row--status${flashRows.has('server-status') ? ' settings-license-row--flash-updated' : ''}`}>
+          <span className="settings-license-label">
+            <Localized id="settings-license-server-status"><span>Server Status</span></Localized>
+          </span>
+          <span className="settings-license-value settings-license-value--status">
+            <span
+              className={`settings-license-live-dot ${pollError || (lastCheckedAt !== null && pollFailures >= MAX_POLL_FAILURES) ? 'settings-license-live-dot--offline' : serverStatus ? 'settings-license-live-dot--online' : 'settings-license-live-dot--unknown'}`}
+              aria-hidden="true"
+            />
+            {pollError ? (
+              <Localized id="settings-license-live-offline"><span>Offline</span></Localized>
+            ) : serverStatus?.active ? (
+              <Localized id="settings-license-live-online"><span>Live</span></Localized>
+            ) : serverStatus && !serverStatus.active ? (
+              <Localized id="settings-license-live-inactive"><span>Inactive</span></Localized>
+            ) : (
+              <Localized id="settings-license-live-checking"><span>Checking…</span></Localized>
+            )}
+          </span>
         </div>
 
+        {/* ── Last checked timestamp ── */}
+        {lastCheckedAt !== null && (
+          <div className="settings-license-row settings-license-row--last-checked">
+            <span className="settings-license-label" aria-live="polite">
+              <Localized
+                id="settings-license-last-checked"
+                vars={{ when: relativeTime(lastCheckedAt, l10n) }}
+              >
+                <span>Last checked: {relativeTime(lastCheckedAt, l10n)}</span>
+              </Localized>
+            </span>
+            <span className="settings-license-value">
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={checkingServer}
+                onClick={handleRefresh}
+                aria-label={l10n.getString('settings-license-refresh-aria')}
+              >
+                <Localized id="settings-license-refresh">
+                  <span>Refresh</span>
+                </Localized>
+              </Button>
+            </span>
+          </div>
+        )}
+
+        {/* ── Server results (shown automatically after first poll) ── */}
         {serverStatus && (
-          <div className="settings-license-server-section" role="region" aria-label={l10n.getString('settings-license-server-results')}>
+          <div className={`settings-license-server-section${flashRows.has('server-status') ? ' settings-license-server-section--flash' : ''}`} role="region" aria-label={l10n.getString('settings-license-server-results')}>
             <div className="settings-license-row">
               <span className="settings-license-label">
                 <Localized id="settings-license-server-tier"><span>Server Tier</span></Localized>
@@ -248,7 +419,7 @@ export default function LicenseSettings() {
                 <span className="settings-license-label">
                   <Localized id="settings-license-server-expires"><span>Server Expires</span></Localized>
                 </span>
-                <span className="settings-license-value settings-license-value--medium">
+                <span className="settings-license-value">
                   {formatDate(serverStatus.expiresAt)}
                 </span>
               </div>

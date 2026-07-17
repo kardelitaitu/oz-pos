@@ -101,3 +101,34 @@ export const pendingSyncCount = (): Promise<number> =>
 /** Pull data (products, tax rates, users) from the cloud server. */
 export const syncPull = (): Promise<PullResult> =>
   invoke<PullResult>('sync_pull');
+
+// ── Connection Test ──────────────────────────────────────────────
+
+/** Result of pinging the cloud server's health endpoint. */
+export interface PingResult {
+  ok: boolean;
+  status: string;
+  latencyMs: number | null;
+}
+
+/** Test connectivity to the configured cloud server.
+ *  Pass the in-progress URL from the text field so users can
+ *  test before saving. Falls back to saved settings if empty. */
+export const testSyncConnection = (url?: string): Promise<PingResult> =>
+  invoke<PingResult>('test_sync_connection', { url: url || null });
+
+// ── Token Request ────────────────────────────────────────────────
+
+/** Result of requesting a new JWT API token from the cloud server. */
+export interface TokenResult {
+  ok: boolean;
+  token: string | null;
+  status: string;
+  expiresAt: string | null;
+}
+
+/** Request a new JWT token from the cloud server's
+ *  POST /api/v1/tokens endpoint. Pass the in-progress URL
+ *  so users can request a token before saving. */
+export const requestSyncToken = (url?: string): Promise<TokenResult> =>
+  invoke<TokenResult>('request_sync_token', { url: url || null });

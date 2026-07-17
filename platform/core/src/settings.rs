@@ -79,7 +79,9 @@ pub mod keys {
     /// Store tax / VAT registration number.
     pub const STORE_TAX_ID: &str = "store.tax_id";
     /// Default ISO-4217 currency code. Default: `"USD"`.
-    pub const DEFAULT_CURRENCY: &str = "store.default_currency";
+    pub const DEFAULT_CURRENCY: &str = "currency.default";
+    /// Old store-specific key — used as fallback for backward compatibility.
+    pub(crate) const OLD_DEFAULT_CURRENCY: &str = "store.default_currency";
     /// Store branch name (e.g. "Downtown", "Mall Branch").
     pub const STORE_BRANCH: &str = "store.branch";
     /// Store logo (base64-encoded PNG). Empty string = no logo.
@@ -113,6 +115,16 @@ pub mod keys {
     pub const RECEIPT_MARGIN_LEFT: &str = "receipt.margin_left";
     /// Right margin in mm. Default `"0"`.
     pub const RECEIPT_MARGIN_RIGHT: &str = "receipt.margin_right";
+
+    // ── Global Currency settings ─────────────────────────────────
+    /// Currency display format: `"symbol"` (use symbol like $) or `"code"` (use code like USD). Default `"symbol"`.
+    pub const CURRENCY_FORMAT: &str = "currency.format";
+    /// Currency symbol position: `"prefix"` ($10) or `"suffix"` (10$). Default `"prefix"`.
+    pub const CURRENCY_SYMBOL_POSITION: &str = "currency.symbol_position";
+    /// Decimal separator: `"dot"` (1.50) or `"comma"` (1,50). Default `"dot"`.
+    pub const CURRENCY_DECIMAL_SEPARATOR: &str = "currency.decimal_separator";
+    /// Thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`. Default `"comma"`.
+    pub const CURRENCY_THOUSANDS_SEPARATOR: &str = "currency.thousands_separator";
 
     // ── Printer settings ──────────────────────────────────────────
     /// Printer connection type: `"auto"`, `"usb"`, `"serial"`, `"network"`.
@@ -215,13 +227,25 @@ impl Settings {
     }
 
     /// Get the default currency code (ISO-4217).
+    ///
+    /// Prefers the new global `currency.default` key and falls back to the
+    /// old `store.default_currency` key for databases that haven't been
+    /// migrated yet.
     pub fn get_default_currency(conn: &Connection) -> Result<Option<String>, PlatformError> {
-        Self::get(conn, keys::DEFAULT_CURRENCY)
+        if let Some(val) = Self::get(conn, keys::DEFAULT_CURRENCY)? {
+            return Ok(Some(val));
+        }
+        Self::get(conn, keys::OLD_DEFAULT_CURRENCY)
     }
 
     /// Set the default currency code.
+    ///
+    /// Writes to the new global `currency.default` key and cleans up the
+    /// old `store.default_currency` key.
     pub fn set_default_currency(conn: &Connection, code: &str) -> Result<(), PlatformError> {
-        Self::set(conn, keys::DEFAULT_CURRENCY, code)
+        Self::set(conn, keys::DEFAULT_CURRENCY, code)?;
+        let _ = Self::remove(conn, keys::OLD_DEFAULT_CURRENCY);
+        Ok(())
     }
 
     /// Get the store branch name.
@@ -664,6 +688,54 @@ impl Settings {
     ) -> Result<(), PlatformError> {
         Self::set(conn, keys::RATE_SYNC_BASE_CURRENCY, currency)
     }
+
+    // ── Global Currency display settings ───────────────────────────
+
+    /// Get the currency display format: `"symbol"` or `"code"`.
+    pub fn get_currency_format(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::CURRENCY_FORMAT)?.unwrap_or_else(|| "symbol".into()))
+    }
+
+    /// Set the currency display format.
+    pub fn set_currency_format(conn: &Connection, fmt: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CURRENCY_FORMAT, fmt)
+    }
+
+    /// Get the currency symbol position: `"prefix"` or `"suffix"`.
+    pub fn get_currency_symbol_position(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::CURRENCY_SYMBOL_POSITION)?.unwrap_or_else(|| "prefix".into()))
+    }
+
+    /// Set the currency symbol position.
+    pub fn set_currency_symbol_position(conn: &Connection, pos: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CURRENCY_SYMBOL_POSITION, pos)
+    }
+
+    /// Get the decimal separator: `"dot"` or `"comma"`.
+    pub fn get_currency_decimal_separator(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::CURRENCY_DECIMAL_SEPARATOR)?.unwrap_or_else(|| "dot".into()))
+    }
+
+    /// Set the decimal separator.
+    pub fn set_currency_decimal_separator(
+        conn: &Connection,
+        sep: &str,
+    ) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CURRENCY_DECIMAL_SEPARATOR, sep)
+    }
+
+    /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
+    pub fn get_currency_thousands_separator(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::CURRENCY_THOUSANDS_SEPARATOR)?.unwrap_or_else(|| "comma".into()))
+    }
+
+    /// Set the thousands separator.
+    pub fn set_currency_thousands_separator(
+        conn: &Connection,
+        sep: &str,
+    ) -> Result<(), PlatformError> {
+        Self::set(conn, keys::CURRENCY_THOUSANDS_SEPARATOR, sep)
+    }
 }
 
 #[cfg(test)]
@@ -841,6 +913,117 @@ mod tests {
     fn get_default_currency_default_none() {
         let conn = fresh();
         assert_eq!(Settings::get_default_currency(&conn).unwrap(), None);
+    }
+
+    // ── Global Currency settings tests ──────────────────────────
+
+    #[test]
+    fn currency_format_default_is_symbol() {
+        let conn = fresh();
+        assert_eq!(Settings::get_currency_format(&conn).unwrap(), "symbol");
+    }
+
+    #[test]
+    fn set_and_get_currency_format() {
+        let conn = fresh();
+        Settings::set_currency_format(&conn, "code").unwrap();
+        assert_eq!(Settings::get_currency_format(&conn).unwrap(), "code");
+    }
+
+    #[test]
+    fn currency_symbol_position_default_is_prefix() {
+        let conn = fresh();
+        assert_eq!(
+            Settings::get_currency_symbol_position(&conn).unwrap(),
+            "prefix"
+        );
+    }
+
+    #[test]
+    fn set_and_get_currency_symbol_position() {
+        let conn = fresh();
+        Settings::set_currency_symbol_position(&conn, "suffix").unwrap();
+        assert_eq!(
+            Settings::get_currency_symbol_position(&conn).unwrap(),
+            "suffix"
+        );
+    }
+
+    #[test]
+    fn currency_decimal_separator_default_is_dot() {
+        let conn = fresh();
+        assert_eq!(
+            Settings::get_currency_decimal_separator(&conn).unwrap(),
+            "dot"
+        );
+    }
+
+    #[test]
+    fn set_and_get_currency_decimal_separator() {
+        let conn = fresh();
+        Settings::set_currency_decimal_separator(&conn, "comma").unwrap();
+        assert_eq!(
+            Settings::get_currency_decimal_separator(&conn).unwrap(),
+            "comma"
+        );
+    }
+
+    #[test]
+    fn currency_thousands_separator_default_is_comma() {
+        let conn = fresh();
+        assert_eq!(
+            Settings::get_currency_thousands_separator(&conn).unwrap(),
+            "comma"
+        );
+    }
+
+    #[test]
+    fn set_and_get_currency_thousands_separator() {
+        let conn = fresh();
+        Settings::set_currency_thousands_separator(&conn, "space").unwrap();
+        assert_eq!(
+            Settings::get_currency_thousands_separator(&conn).unwrap(),
+            "space"
+        );
+    }
+
+    #[test]
+    fn get_default_currency_falls_back_to_old_key() {
+        let conn = fresh();
+        // Write old key, new key absent
+        Settings::set(&conn, keys::OLD_DEFAULT_CURRENCY, "JPY").unwrap();
+        assert_eq!(
+            Settings::get_default_currency(&conn).unwrap(),
+            Some("JPY".into())
+        );
+    }
+
+    #[test]
+    fn get_default_currency_prefers_new_key() {
+        let conn = fresh();
+        Settings::set(&conn, keys::DEFAULT_CURRENCY, "EUR").unwrap();
+        Settings::set(&conn, keys::OLD_DEFAULT_CURRENCY, "JPY").unwrap();
+        // New key takes precedence
+        assert_eq!(
+            Settings::get_default_currency(&conn).unwrap(),
+            Some("EUR".into())
+        );
+    }
+
+    #[test]
+    fn set_default_currency_cleans_up_old_key() {
+        let conn = fresh();
+        Settings::set(&conn, keys::OLD_DEFAULT_CURRENCY, "GBP").unwrap();
+        Settings::set_default_currency(&conn, "USD").unwrap();
+        assert_eq!(
+            Settings::get_default_currency(&conn).unwrap(),
+            Some("USD".into())
+        );
+        // Old key should be gone
+        assert_eq!(
+            Settings::get(&conn, keys::OLD_DEFAULT_CURRENCY).unwrap(),
+            None
+        );
     }
 
     // ── Receipt settings ─────────────────────────────────────────
@@ -1086,6 +1269,11 @@ mod tests {
         assert!(!keys::STORE_ADDRESS.is_empty());
         assert!(!keys::STORE_TAX_ID.is_empty());
         assert!(!keys::DEFAULT_CURRENCY.is_empty());
+        assert!(!keys::OLD_DEFAULT_CURRENCY.is_empty());
+        assert!(!keys::CURRENCY_FORMAT.is_empty());
+        assert!(!keys::CURRENCY_SYMBOL_POSITION.is_empty());
+        assert!(!keys::CURRENCY_DECIMAL_SEPARATOR.is_empty());
+        assert!(!keys::CURRENCY_THOUSANDS_SEPARATOR.is_empty());
         assert!(!keys::STORE_PRESET.is_empty());
         assert!(!keys::SETUP_COMPLETE.is_empty());
         assert!(!keys::SHOW_SETUP_WIZARD.is_empty());

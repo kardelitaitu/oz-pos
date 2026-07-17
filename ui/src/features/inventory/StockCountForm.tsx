@@ -60,6 +60,7 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
           </div>
           <div className="sc-type-options">
             {typeOptions.map((opt) => (
+              /* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set directly */
               <button
                 key={opt.value}
                 type="button"
@@ -81,8 +82,8 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
             <Localized id="sc-notes-label">
               <span>Notes (optional)</span>
             </Localized>
-          </div>
-          <textarea
+          </div>            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label provided */}
+            <textarea
             id="sc-notes"
             className="sc-form-textarea"
             value={notes}

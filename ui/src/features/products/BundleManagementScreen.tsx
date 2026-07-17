@@ -10,6 +10,8 @@ import {
 } from '@/api/bundles';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
+import { SettingsPopup } from '@/frontend/shared';
 import './BundleManagementScreen.css';
 
 interface BundleItemForm {
@@ -47,6 +49,8 @@ export default function BundleManagementScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+
+  const closeModal = useCallback(() => setShowModal(false), []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,9 +194,35 @@ export default function BundleManagementScreen() {
       </div>
 
       {loading ? (
-        <Localized id="bundles-loading">
-          <p className="bundle-mgmt-loading">Loading bundles...</p>
-        </Localized>
+        <div className="bundle-mgmt-loading-skeleton" aria-hidden="true">
+          <div className="bundle-mgmt-header">
+            <Skeleton variant="block" width="10rem" height="1.75rem" />
+            <Skeleton variant="block" width="7rem" height="2.25rem" />
+          </div>
+          <div className="bundle-mgmt-table-wrap">
+            <table className="bundle-mgmt-table">
+              <thead>
+                <tr>
+                  {['Name', 'SKU', 'Price', 'Items', 'Active', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width="4rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 4 }).map((_, r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="7rem" /></td>
+                    <td><Skeleton variant="text" width="5rem" /></td>
+                    <td><Skeleton variant="text" width="4rem" /></td>
+                    <td style={{ textAlign: 'center' }}><Skeleton variant="text" width="1.5rem" /></td>
+                    <td><Skeleton variant="block" width="4rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="block" width="5rem" height="1.5rem" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : bundles.length === 0 ? (
         <Card shadow="sm">
           <div className="bundle-mgmt-empty">
@@ -278,162 +308,133 @@ export default function BundleManagementScreen() {
         </div>
       )}
 
-      {showModal && (
-        <div className="bundle-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('bundles-modal-aria', { mode: editingId ? 'edit' : 'add' })}>
-          <div className="bundle-mgmt-modal">
-            <div className="bundle-mgmt-modal-header">
-              <Localized id={editingId ? 'bundles-edit' : 'bundles-add'}>
-                <h2>{editingId ? 'Edit Bundle' : 'Add Bundle'}</h2>
-              </Localized>
-              <Localized id="bundles-close-aria" attrs={{ 'aria-label': true }}>
-                <button
-                  type="button"
-                  className="bundle-mgmt-modal-close"
-                  onClick={() => setShowModal(false)}
-                  aria-label="Close"
-                >
-                  &times;
-                </button>
-              </Localized>
-            </div>
+      <SettingsPopup
+        open={showModal}
+        onClose={closeModal}
+        title={l10n.getString(editingId ? 'bundles-edit' : 'bundles-add')}
+        saving={saving}
+        onSave={handleSave}
+        saveLabel={l10n.getString(editingId ? 'bundles-save' : 'bundles-create')}
+        saveDisabled={!form.bundle_sku.trim() || !form.name.trim() || form.items.every((i) => !i.sku.trim())}
+        cancelLabel={l10n.getString('bundles-cancel')}
+        size="lg"
+      >
+        <label className="bundle-mgmt-field" htmlFor="bundle-field-sku">
+          {l10n.getString('bundles-sku')}
+          <Localized id="bundles-sku-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="bundle-mgmt-input"
+              type="text"
+              id="bundle-field-sku"
+              value={form.bundle_sku}
+              onChange={(e) => setForm({ ...form, bundle_sku: e.target.value })}
+              disabled={!!editingId}
+              placeholder="e.g. GIFT-BOX"
+            />
+          </Localized>
+        </label>
 
-            <div className="bundle-mgmt-modal-body">
-              <label className="bundle-mgmt-field" htmlFor="bundle-field-sku">
-                {l10n.getString('bundles-sku')}
-                <Localized id="bundles-sku-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="bundle-mgmt-input"
-                    type="text"
-                    id="bundle-field-sku"
-                    value={form.bundle_sku}
-                    onChange={(e) => setForm({ ...form, bundle_sku: e.target.value })}
-                    disabled={!!editingId}
-                    placeholder="e.g. GIFT-BOX"
-                  />
-                </Localized>
-              </label>
+        <label className="bundle-mgmt-field" htmlFor="bundle-field-name">
+          {l10n.getString('bundles-name')}
+          <Localized id="bundles-name-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="bundle-mgmt-input"
+              type="text"
+              id="bundle-field-name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Gift Box"
+            />
+          </Localized>
+        </label>
 
-              <label className="bundle-mgmt-field" htmlFor="bundle-field-name">
-                {l10n.getString('bundles-name')}
-                <Localized id="bundles-name-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="bundle-mgmt-input"
-                    type="text"
-                    id="bundle-field-name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="e.g. Gift Box"
-                  />
-                </Localized>
-              </label>
+        <label className="bundle-mgmt-field" htmlFor="bundle-field-description">
+          {l10n.getString('bundles-description')}
+          <Localized id="bundles-description-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="bundle-mgmt-input"
+              type="text"
+              id="bundle-field-description"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Optional description"
+            />
+          </Localized>
+        </label>
 
-              <label className="bundle-mgmt-field" htmlFor="bundle-field-description">
-                {l10n.getString('bundles-description')}
-                <Localized id="bundles-description-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="bundle-mgmt-input"
-                    type="text"
-                    id="bundle-field-description"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    placeholder="Optional description"
-                  />
-                </Localized>
-              </label>
+        <label className="bundle-mgmt-field" htmlFor="bundle-field-price">
+          {l10n.getString('bundles-price')}
+          <Localized id="bundles-price-placeholder" attrs={{ placeholder: true }}>
+            <input
+              className="bundle-mgmt-input"
+              type="number"
+              id="bundle-field-price"
+              min="0"
+              value={form.bundle_price_minor}
+              onChange={(e) => setForm({ ...form, bundle_price_minor: e.target.value })}
+              placeholder="Leave empty to use sum of items"
+            />
+          </Localized>
+        </label>
 
-              <label className="bundle-mgmt-field" htmlFor="bundle-field-price">
-                {l10n.getString('bundles-price')}
-                <Localized id="bundles-price-placeholder" attrs={{ placeholder: true }}>
-                  <input
-                    className="bundle-mgmt-input"
-                    type="number"
-                    id="bundle-field-price"
-                    min="0"
-                    value={form.bundle_price_minor}
-                    onChange={(e) => setForm({ ...form, bundle_price_minor: e.target.value })}
-                    placeholder="Leave empty to use sum of items"
-                  />
-                </Localized>
-              </label>
-
-              <fieldset className="bundle-mgmt-field">
-                <Localized id="bundles-items">
-                  <legend className="bundle-mgmt-label">Items</legend>
-                </Localized>
-                <div className="bundle-mgmt-items-list">
+        <fieldset className="bundle-mgmt-field">
+          <Localized id="bundles-items">
+            <legend className="bundle-mgmt-label">Items</legend>
+          </Localized>              <div className="bundle-mgmt-items-list">
                   {form.items.map((item, idx) => (
                     <div key={idx} className="bundle-mgmt-item-row">
-                      <Localized id="bundles-item-sku-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
-                        <input
-                          className="bundle-mgmt-input bundle-mgmt-item-sku"
-                          type="text"
-                          value={item.sku}
-                          onChange={(e) => updateItem(idx, 'sku', e.target.value)}
-                          placeholder="SKU"
-                          aria-label={`Item ${idx + 1} SKU`}
-                        />
-                      </Localized>
-                      <Localized id="bundles-item-qty-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
-                        <input
-                          className="bundle-mgmt-input bundle-mgmt-item-qty"
-                          type="number"
-                          min="1"
-                          value={item.qty}
-                          onChange={(e) => updateItem(idx, 'qty', e.target.value)}
-                          placeholder="Qty"
-                          aria-label={`Item ${idx + 1} quantity`}
-                        />
-                      </Localized>
-                      <Localized id="bundles-item-price-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
-                        <input
-                          className="bundle-mgmt-input bundle-mgmt-item-price"
-                          type="number"
-                          min="0"
-                          value={item.unitPriceMinor}
-                          onChange={(e) => updateItem(idx, 'unitPriceMinor', e.target.value)}
-                          placeholder="Price override"
-                          aria-label={`Item ${idx + 1} unit price override`}
-                        />
-                      </Localized>
-                      {form.items.length > 1 && (
-                        <Localized id="bundles-item-remove-aria" attrs={{ 'aria-label': true }} vars={{ number: idx + 1 }}>
-                          <button
-                            type="button"
-                            className="bundle-mgmt-item-remove"
-                            onClick={() => removeItemRow(idx)}
-                            aria-label={`Remove item ${idx + 1}`}
-                          >
-                            &times;
-                          </button>
-                        </Localized>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <Localized id="bundles-add-item">
-                  <Button variant="ghost" size="sm" onClick={addItemRow}>+ Add Item</Button>
+                <Localized id="bundles-item-sku-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
+                  <input
+                    className="bundle-mgmt-input bundle-mgmt-item-sku"
+                    type="text"
+                    value={item.sku}
+                    onChange={(e) => updateItem(idx, 'sku', e.target.value)}
+                    placeholder="SKU"
+                    aria-label={`Item ${idx + 1} SKU`}
+                  />
                 </Localized>
-              </fieldset>
-            </div>
-
-            <div className="bundle-mgmt-modal-actions">
-              <Localized id="bundles-cancel">
-                <Button variant="ghost" onClick={() => setShowModal(false)} disabled={saving}>Cancel</Button>
-              </Localized>
-              <Button
-                variant="primary"
-                loading={saving}
-                disabled={!form.bundle_sku.trim() || !form.name.trim() || form.items.every((i) => !i.sku.trim())}
-                onClick={handleSave}
-              >
-                <Localized id={editingId ? 'bundles-save' : 'bundles-create'}>
-                  <span>{editingId ? 'Update' : 'Create'}</span>
+                <Localized id="bundles-item-qty-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
+                  <input
+                    className="bundle-mgmt-input bundle-mgmt-item-qty"
+                    type="number"
+                    min="1"
+                    value={item.qty}
+                    onChange={(e) => updateItem(idx, 'qty', e.target.value)}
+                    placeholder="Qty"
+                    aria-label={`Item ${idx + 1} quantity`}
+                  />
                 </Localized>
-              </Button>
-            </div>
+                <Localized id="bundles-item-price-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
+                  <input
+                    className="bundle-mgmt-input bundle-mgmt-item-price"
+                    type="number"
+                    min="0"
+                    value={item.unitPriceMinor}
+                    onChange={(e) => updateItem(idx, 'unitPriceMinor', e.target.value)}
+                    placeholder="Price override"
+                    aria-label={`Item ${idx + 1} unit price override`}
+                  />
+                </Localized>
+                {form.items.length > 1 && (
+                  <Localized id="bundles-item-remove-aria" attrs={{ 'aria-label': true }} vars={{ number: idx + 1 }}>
+                    <button
+                      type="button"
+                      className="bundle-mgmt-item-remove"
+                      onClick={() => removeItemRow(idx)}
+                      aria-label={`Remove item ${idx + 1}`}
+                    >
+                      &times;
+                    </button>
+                  </Localized>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+          <Localized id="bundles-add-item">
+            <Button variant="ghost" size="sm" onClick={addItemRow}>+ Add Item</Button>
+          </Localized>
+        </fieldset>
+      </SettingsPopup>
     </div>
   );
 }

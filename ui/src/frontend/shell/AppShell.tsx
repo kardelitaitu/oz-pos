@@ -35,7 +35,7 @@ function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
         // Ctrl+Shift+Escape always returns to the picker, bypassing modals.
         if (e.ctrlKey && e.shiftKey) {
           onBack();
-        } else if (!document.querySelector('.modal-overlay')) {
+        } else if (!document.querySelector('[aria-modal="true"]')) {
           onBack();
         }
       }
@@ -311,6 +311,7 @@ export default function AppShell() {
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
             <div className="kds-workspace-header">
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
               <button
                 className="kds-workspace-back"
                 onClick={() => handleNavigate('sales')}
@@ -340,6 +341,7 @@ export default function AppShell() {
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
             <div className="kds-workspace-header">
+              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
               <button
                 className="kds-workspace-back"
                 onClick={() => handleNavigate('products')}

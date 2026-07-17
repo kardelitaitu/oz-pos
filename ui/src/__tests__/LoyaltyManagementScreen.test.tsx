@@ -81,12 +81,13 @@ describe('LoyaltyManagementScreen', () => {
     expect(screen.getByText('Tiers')).toBeInTheDocument();
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton while fetching data', () => {
     mockListAccounts.mockReturnValue(new Promise(() => {}));
     mockListTiers.mockReturnValue(new Promise(() => {}));
     mockListCustomers.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(document.querySelector('.loyalty-mgmt-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
   // ── Accounts tab (default) ────────────────────────────────────

@@ -14,6 +14,7 @@ import {
 import { type ProductDto, listProducts } from '@/api/products';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './StockCountDetail.css';
 
 interface Props {
@@ -144,7 +145,42 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const totalDiff = lines.reduce((s, l) => s + l.difference, 0);
 
   if (loading) {
-    return <p className="sc-detail-loading"><Localized id="sc-loading"><span>Loading…</span></Localized></p>;
+    return (
+      <div className="sc-detail-screen" aria-hidden="true">
+        <div className="sc-detail-header">
+          <Skeleton variant="text" width="4rem" height="1.125rem" />
+          <Skeleton variant="block" width="8rem" height="1.5rem" />
+        </div>
+        <div className="sc-detail-meta">
+          <Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-sm)' }} />
+          <Skeleton variant="text" width="3rem" height="0.875rem" />
+          <Skeleton variant="text" width="6rem" height="0.875rem" />
+        </div>
+        <div className="sc-detail-actions" style={{ marginBottom: 'var(--space-4)' }}>
+          <Skeleton variant="block" width="10rem" height="2.25rem" />
+        </div>
+        {/* Lines table skeleton */}
+        <div className="sc-detail-lines">
+          <div className="sc-lines-header">
+            {['SKU', 'Product', 'Expected', 'Counted', 'Diff', ''].map((_, i) => (
+              <span key={i} className={i < 5 ? 'sc-lines-col-' + ['sku','name','expected','counted','diff'][i] : 'sc-lines-col-actions'}>
+                <Skeleton variant="text" width="3rem" height="0.75rem" />
+              </span>
+            ))}
+          </div>
+          {[0, 1, 2, 3].map((r) => (
+            <div key={r} className="sc-lines-row">
+              <span className="sc-lines-col-sku"><Skeleton variant="text" width="4rem" height="0.75rem" /></span>
+              <span className="sc-lines-col-name"><Skeleton variant="text" width="7rem" height="0.875rem" /></span>
+              <span className="sc-lines-col-expected"><Skeleton variant="text" width="2rem" height="0.875rem" /></span>
+              <span className="sc-lines-col-counted"><Skeleton variant="block" width="3rem" height="1.375rem" /></span>
+              <span className="sc-lines-col-diff"><Skeleton variant="text" width="2rem" height="0.875rem" /></span>
+              <span className="sc-lines-col-actions"><Skeleton variant="block" width="1.25rem" height="1.25rem" /></span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (!count) {

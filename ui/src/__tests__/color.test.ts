@@ -5,7 +5,9 @@ import {
   lighten,
   darken,
   rgba,
+  contrastFg,
   deriveAccentPalette,
+  applyAccentPalette,
 } from '@/utils/color';
 
 describe('hexToRgb', () => {
@@ -37,6 +39,18 @@ describe('hexToRgb', () => {
 
   it('handles uppercase hex', () => {
     expect(hexToRgb('#ABCDEF')).toEqual({ r: 0xab, g: 0xcd, b: 0xef });
+  });
+
+  it('returns black for empty string', () => {
+    expect(hexToRgb('')).toEqual({ r: 0, g: 0, b: 0 });
+  });
+
+  it('returns zero channels for invalid hex', () => {
+    // parseInt on 'GGG' returns NaN, but bitwise ops (>>, &) convert NaN to 0
+    const result = hexToRgb('#GGG');
+    expect(result.r).toBe(0);
+    expect(result.g).toBe(0);
+    expect(result.b).toBe(0);
   });
 });
 
@@ -178,5 +192,45 @@ describe('deriveAccentPalette', () => {
     expect(palette.active).toMatch(/^#[0-9a-f]{6}$/);
     expect(palette.subtle).toMatch(/^#[0-9a-f]{6}$/);
     expect(palette.secondary).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe('contrastFg', () => {
+  it('returns white text for dark colours', () => {
+    expect(contrastFg('#000000')).toBe('#ffffff');
+    expect(contrastFg('#333333')).toBe('#ffffff');
+  });
+
+  it('returns dark text for light colours', () => {
+    expect(contrastFg('#ffffff')).toBe('#0a0a0a');
+    expect(contrastFg('#cccccc')).toBe('#0a0a0a');
+  });
+
+  it('returns white text at the luminance boundary (160)', () => {
+    // luminance = 0.299*160 + 0.587*160 + 0.114*160 ≈ 160
+    // condition is luminance > 160, so exactly 160 → white text (dark bg)
+    expect(contrastFg('#a0a0a0')).toBe('#ffffff');
+  });
+
+  it('returns dark text just above the luminance boundary (161)', () => {
+    // #a1a1a1 → r=g=b=161, luminance ≈ 161 > 160 → dark text (light bg)
+    expect(contrastFg('#a1a1a1')).toBe('#0a0a0a');
+  });
+});
+
+describe('applyAccentPalette', () => {
+  it('sets CSS custom properties on the document element', () => {
+    const palette = deriveAccentPalette('#ff5500');
+    applyAccentPalette(palette);
+
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--color-accent')).toBe(palette.base);
+    expect(root.style.getPropertyValue('--color-accent-hover')).toBe(palette.hover);
+    expect(root.style.getPropertyValue('--color-accent-active')).toBe(palette.active);
+    expect(root.style.getPropertyValue('--color-accent-subtle')).toBe(palette.subtle);
+    expect(root.style.getPropertyValue('--color-accent-fg')).toBe(palette.fg);
+    expect(root.style.getPropertyValue('--color-accent-dim')).toBe(palette.dim);
+    expect(root.style.getPropertyValue('--color-accent-alpha')).toBe(palette.alpha);
+    expect(root.style.getPropertyValue('--color-accent-secondary')).toBe(palette.secondary);
   });
 });

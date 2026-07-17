@@ -4,7 +4,8 @@ import { type Product } from '@/types/domain';
 import { useLocalization } from '@fluent/react';
 import { useProducts } from '@/features/products/useProducts';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
-import { useAuth } from '@/contexts/AuthContext';import { useTheme } from '@/frontend/shell/ThemeProvider';
+import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/frontend/shell/ThemeProvider';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { getUserPreferences, setUserPreferences } from '@/api/settings';
 import './RestaurantMenu.css';
@@ -540,6 +541,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 type="button"
                 className="restaurant-hamburger-item"
                 role="menuitem"
+                aria-label={l10n.getString(theme === 'dark' ? 'restaurant-theme-light' : 'restaurant-theme-dark')}
                 onClick={() => { toggleTheme(); setMenuOpen(false); }}
               >
                 <Localized id={theme === 'dark' ? 'restaurant-theme-light' : 'restaurant-theme-dark'}>
@@ -550,6 +552,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 type="button"
                 className="restaurant-hamburger-item"
                 role="menuitem"
+                aria-label={l10n.getString('restaurant-lock-terminal')}
                 onClick={() => { logout(); setMenuOpen(false); }}
               >
                 <Localized id="restaurant-lock-terminal"><span>Lock Terminal</span></Localized>
@@ -558,6 +561,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 type="button"
                 className="restaurant-hamburger-item"
                 role="menuitem"
+                aria-label={l10n.getString('restaurant-toggle-fullscreen')}
                 onClick={() => { toggleFullscreen(); setMenuOpen(false); }}
               >
                 <Localized id="restaurant-toggle-fullscreen"><span>Toggle Fullscreen</span></Localized>
@@ -584,6 +588,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         <input
           type="text"
           className="restaurant-search-input"
+          id="restaurant-menu-search"
+          name="restaurant-menu-search"
           ref={searchInputRef}
           placeholder={l10n.getString('restaurant-menu-search-placeholder')}
           value={searchQuery}
@@ -679,6 +685,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <button
             type="button"
             className="restaurant-context-item"
+            aria-label={l10n.getString(contextMenu.isPinned ? 'restaurant-context-unpin' : 'restaurant-context-pin')}
             onClick={() => togglePin(contextMenu.sku)}
             role="menuitem"
           >
@@ -689,6 +696,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <button
             type="button"
             className="restaurant-context-item"
+            aria-label={l10n.getString(contextMenu.isUnavailable ? 'restaurant-context-available' : 'restaurant-context-unavailable')}
             onClick={() => toggleUnavailable(contextMenu.sku)}
             role="menuitem"
           >
@@ -755,13 +763,12 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
   if (added) cardClass += ' restaurant-card--added';
 
   return (
-    <div
+    <button
+      type="button"
       className={cardClass}
-      role="button"
-      tabIndex={product.inStock ? 0 : undefined}
+      tabIndex={product.inStock ? 0 : -1}
       onClick={handleClick}
       onContextMenu={handleContext}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
       style={{ '--btn-color': color ?? 'var(--color-accent)', animationDelay: `${(index ?? 0) * 35}ms` } as React.CSSProperties}
     >
       <div className="restaurant-card-body">
@@ -780,6 +787,6 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
           <span>Add</span>
         </Localized>
       </span>
-    </div>
+    </button>
   );
 }

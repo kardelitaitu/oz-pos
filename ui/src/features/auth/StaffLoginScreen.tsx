@@ -121,6 +121,7 @@ export default function StaffLoginScreen() {
 
     addToast({ type: 'error', message: error, duration: 5000 });
     setPin([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
   // ── Focus appropriate element when step changes ──────────────
@@ -211,20 +212,20 @@ export default function StaffLoginScreen() {
     try {
       const result = await checkUsername({ username: trimmed });
       if (!result.found) {
-        addToast({ type: 'error', message: 'User not found' });
+        addToast({ type: 'error', message: l10n.getString('staff-login-error-not-found') });
         return;
       }
       if (!result.is_active) {
-        addToast({ type: 'error', message: 'Account is deactivated' });
+        addToast({ type: 'error', message: l10n.getString('staff-login-error-deactivated') });
         return;
       }
       setStep('pin');
     } catch {
-      addToast({ type: 'error', message: 'Could not verify username. Check your connection.' });
+      addToast({ type: 'error', message: l10n.getString('staff-login-error-connection') });
     } finally {
       setUsernameChecking(false);
     }
-  }, [username, clearError]);
+  }, [username, clearError, addToast, l10n]);
 
   const handleUsernameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setUsername(e.target.value);
@@ -372,8 +373,10 @@ export default function StaffLoginScreen() {
 
   const storeName = brandSettings?.store_name || '';
 
+  // Focus management: clicking anywhere refocuses the active input
+  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
   return (
-    <div className="staff-login-screen" onClick={handleScreenClick} role="presentation">
+    <div className="staff-login-screen" onClick={handleScreenClick}>
       <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={cardRef}>
         {step === 'pin' && (
           <button
@@ -482,7 +485,7 @@ export default function StaffLoginScreen() {
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.8</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.9</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

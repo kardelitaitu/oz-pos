@@ -15,8 +15,10 @@ use rand::Rng;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
+use oz_core::settings::Settings;
 use oz_core::sync_client::SyncConfig;
 
+use crate::SyncError;
 use crate::queue::SyncQueue;
 use crate::transport::{PushOutcome, SyncTransport};
 
@@ -252,6 +254,19 @@ impl SyncDaemon {
                     }
                     Err(e) => {
                         pushed = 0;
+                        // ADR #11: If the server migrated, update the local
+                        // URL so the next cycle connects to the new server.
+                        if let SyncError::ServerMigrated { new_url } = &e {
+                            let db = db.clone();
+                            let url = new_url.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let conn = db.blocking_lock();
+                                let store = Store::new(&conn);
+                                let _ = Settings::set_sync_server_url(store.conn(), &url);
+                            })
+                            .await;
+                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                        }
                         sync_error = Some(e.to_string());
                     }
                 }
@@ -304,6 +319,18 @@ impl SyncDaemon {
                     }
                     Err(e) => {
                         pulled = 0;
+                        // ADR #11: Handle server migration redirect.
+                        if let SyncError::ServerMigrated { new_url } = &e {
+                            let db = db.clone();
+                            let url = new_url.clone();
+                            let _ = tokio::task::spawn_blocking(move || {
+                                let conn = db.blocking_lock();
+                                let store = Store::new(&conn);
+                                let _ = Settings::set_sync_server_url(store.conn(), &url);
+                            })
+                            .await;
+                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                        }
                         if sync_error.is_none() {
                             sync_error = Some(format!("pull phase: {e}"));
                         }
@@ -597,5 +624,91 @@ mod tests {
             "zero failures should cap at 2000ms, got {}ms",
             backoff.as_millis()
         );
+    }
+
+    // ── ADR #11: Server migration integration tests ──────────
+
+    use crate::test_helpers::spawn_redirect_server;
+
+    #[tokio::test]
+    async fn daemon_auto_updates_url_on_server_migration() {
+        let new_url = "https://new-server.example.com";
+        let old_url = spawn_redirect_server(new_url).await;
+        let db = setup_db();
+
+        // Configure sync to point at the redirect server.
+        let db_clone = db.clone();
+        let old = old_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &old).unwrap();
+            store.enqueue_offline("test", r#"{}"#).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let daemon = SyncDaemon::with_interval(Duration::from_millis(100));
+        daemon.start(db.clone()).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // The daemon should have detected the redirect and updated the URL.
+        let updated_url = tokio::task::spawn_blocking(move || {
+            let conn = db.blocking_lock();
+            Settings::get_sync_server_url(&conn).unwrap()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(
+            updated_url.as_deref(),
+            Some(new_url),
+            "daemon should auto-update sync_server_url after server_migrated redirect"
+        );
+
+        daemon.stop().await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    #[tokio::test]
+    async fn daemon_pull_phase_detects_server_migration() {
+        // No pending items — push is skipped, only pull runs.
+        // The pull hits the redirect server and should still auto-update
+        // the URL. This exercises the pull-phase ServerMigrated handler.
+        let new_url = "https://pull-migrated.example.com";
+        let old_url = spawn_redirect_server(new_url).await;
+        let db = setup_db();
+
+        let db_clone = db.clone();
+        let old = old_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &old).unwrap();
+            // No enqueue_offline — push phase is skipped.
+        })
+        .await
+        .unwrap();
+
+        let daemon = SyncDaemon::with_interval(Duration::from_millis(100));
+        daemon.start(db.clone()).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let updated_url = tokio::task::spawn_blocking(move || {
+            let conn = db.blocking_lock();
+            Settings::get_sync_server_url(&conn).unwrap()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(
+            updated_url.as_deref(),
+            Some(new_url),
+            "pull-phase only: daemon should still auto-update sync_server_url"
+        );
+
+        daemon.stop().await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }

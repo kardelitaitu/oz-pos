@@ -96,10 +96,11 @@ describe('TerminalManagementScreen', () => {
     });
   });
 
-  it('shows loading state', () => {
+  it('shows loading skeleton while fetching terminals', () => {
     mockListTerminals.mockReturnValue(new Promise(() => {}));
     renderScreen();
-    expect(screen.getByText('Loading terminals…')).toBeDefined();
+    expect(document.querySelector('.terminal-mgmt-loading-skeleton')).toBeDefined();
+    expect(screen.queryByText('Loading terminals…')).toBeNull();
   });
 
   it('shows empty state', async () => {

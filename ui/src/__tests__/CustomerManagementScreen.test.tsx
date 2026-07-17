@@ -48,10 +48,11 @@ describe('CustomerManagementScreen', () => {
     expect(screen.getByText('Add Customer')).toBeInTheDocument();
   });
 
-  it('shows loading state', async () => {
+  it('shows loading skeleton while fetching customers', async () => {
     mockListCustomers.mockReturnValue(new Promise(() => {}));
     renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
-    expect(screen.getByText('Loading customers…')).toBeInTheDocument();
+    expect(document.querySelector('.customer-mgmt-loading-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText('Loading customers…')).not.toBeInTheDocument();
   });
 
   it('shows empty state when no customers exist', async () => {

@@ -25,6 +25,11 @@ settings-category-management = Manajemen
 settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
+settings-sidebar-collapse-all-aria = Tutup semua kategori
+settings-sidebar-search-clear-aria =
+    .aria-label = Hapus pencarian
+settings-sidebar-no-results = Tidak ada bagian yang cocok
+settings-sidebar-clear-results = Hapus pencarian
 settings-theme-toggle-dark-aria = Alihkan ke mode gelap
 settings-theme-toggle-light-aria = Alihkan ke mode terang
 settings-store-name = Nama Toko
@@ -202,6 +207,7 @@ settings-load-failed = Gagal memuat pengaturan
 settings-load-partial = Sebagian pengaturan gagal dimuat. Coba lagi.
 settings-section-store = Toko
 settings-section-currency = Mata Uang
+settings-currency-loading = Memuat mata uang…
 settings-section-display = Tampilan
 settings-section-receipt = Nota
 settings-field-store-name = Nama toko
@@ -210,7 +216,6 @@ settings-field-tax-id = NPWP
 settings-field-default-currency = Mata uang default
 settings-field-decimal-separator = Pemisah desimal
 settings-field-paper-width = Lebar kertas
-settings-field-language = Bahasa
 settings-field-footer = Kaki nota
 
 # ── Tampilan ──
@@ -235,6 +240,11 @@ settings-toggle-show-table-number = Tampilkan nomor meja di keranjang dan nota
 settings-toggle-show-table-number-aria =
     .aria-label = Tampilkan nomor meja di keranjang dan nota
 settings-btn-save = Simpan
+settings-btn-revert = Kembalikan
+
+settings-btn-revert-aria =
+    .aria-label = Kembalikan pengaturan ke keadaan tersimpan terakhir
+
 settings-saved = Tersimpan!
 settings-section-sync = Sinkronisasi Cloud
 settings-sync-server-url = URL Server
@@ -243,8 +253,33 @@ settings-sync-enabled = Aktifkan Sinkronisasi Cloud
 settings-sync-enabled-aria = Alihkan sinkronisasi cloud
 settings-sync-sync-now = Sinkron Sekarang
 settings-sync-syncing = Menyinkronkan…
+settings-sync-test-connection = Tes Koneksi
+settings-sync-testing = Menguji…
+settings-sync-test-failed = Tes koneksi gagal
+settings-sync-token-request-failed = Permintaan token gagal — periksa URL server
+settings-sync-request-token = Minta Token
+settings-sync-requesting = Meminta…
 settings-sync-error = Sinkronisasi gagal
+
+# ── Token expiry badge ──────────────────────────────────
+settings-sync-expiry-expired = Kedaluwarsa
+settings-sync-expiry-in-days = { $count ->
+    [one] Kedaluwarsa dalam 1 hari
+   *[other] Kedaluwarsa dalam { $count } hari
+}
+settings-sync-expiry-in-hours = { $count ->
+    [one] Kedaluwarsa dalam 1 jam
+   *[other] Kedaluwarsa dalam { $count } jam
+}
+settings-sync-expiry-in-minutes = { $count ->
+    [one] Kedaluwarsa dalam 1 menit
+   *[other] Kedaluwarsa dalam { $count } menit
+}
+settings-sync-expiry-less-than-minute = Kedaluwarsa dalam kurang dari 1 menit
+settings-sync-expiry-fallback = Kedaluwarsa { $iso }
 settings-sync-result = Sinkronisasi terakhir: { $synced } tersinkron, { $failed } gagal
+settings-sync-success = Sinkronisasi selesai: { $synced } tersinkron, { $failed } gagal
+settings-sync-nothing = Tidak ada yang perlu disinkronkan
 settings-store-name-placeholder = Toko OZ-POS
 settings-address-placeholder = Jl. Contoh No. 123
 settings-tax-id-placeholder = 12-345-678-9-000
@@ -252,6 +287,8 @@ settings-footer-placeholder = Terima kasih telah berbelanja!
 settings-server-url-placeholder = https://api.example.com
 settings-api-key-placeholder = Masukkan kunci API
 settings-api-key-masked = ••••••••
+settings-api-key-show-aria = Tampilkan kunci API
+settings-api-key-hide-aria = Sembunyikan kunci API
 settings-btn-save-aria =
     .aria-label = { $state ->
         [saved] Tersimpan!
@@ -261,12 +298,23 @@ settings-save-error = Gagal menyimpan pengaturan. Silakan coba lagi.
 settings-save-partial = Sebagian pengaturan gagal disimpan. Coba lagi.
 settings-retry = Coba Lagi
 settings-sync-not-configured = Sinkronisasi belum dikonfigurasi. Masukkan URL server dan aktifkan sinkronisasi.
+settings-sync-status-idle = Siap
+settings-sync-status-ok = Terhubung
+settings-sync-status-error = Gagal terhubung
+settings-sync-pending-count = { $count } tertunda
+settings-sync-pull = Tarik dari Server
+settings-sync-pulling = Menarik…
+settings-sync-pull-empty = Server mengembalikan snapshot kosong
+settings-sync-pull-result = Tarik terakhir: { $products } produk, { $tax_rates } pajak, { $users } pengguna
 settings-appearance = Tampilan
 appearance-primary-colour = Warna Utama
 appearance-primary-colour-picker-aria =
     .aria-label = Pemilih warna utama
 appearance-colour-hex-aria =
     .aria-label = Nilai hex warna
+appearance-reset-colour-aria =
+    .aria-label = Atur ulang warna ke default
+appearance-reset-colour = Atur ulang ke default
 appearance-logo = Logo Toko
 appearance-logo-alt = Logo toko
 appearance-choose-logo = Pilih Logo
@@ -279,10 +327,27 @@ appearance-zoom-100 = 100% (Default)
 appearance-zoom-125 = 125%
 appearance-zoom-150 = 150%
 appearance-zoom-200 = 200%
+appearance-branding = Merek
+appearance-interface = Antarmuka
+appearance-preview-heading = Pratinjau
 appearance-store-name-fallback = OZ-POS
+appearance-hw-accel = Akselerasi Perangkat Keras
+appearance-hw-accel-aria =
+    .aria-label = Alihkan akselerasi perangkat keras
+appearance-hw-accel-on = Aktif
+appearance-hw-accel-off = Nonaktif
+appearance-hw-accel-hint = Nonaktifkan jika animasi UI terasa lambat di perangkat rendah. Mulai ulang aplikasi agar perubahan diterapkan sepenuhnya.
 appearance-preview = Pratinjau
+appearance-reset-all-aria =
+    .aria-label = Atur ulang semua ke default
+appearance-reset-all = Atur ulang semua ke default
+appearance-reset-all-confirm = Atur ulang semua pengaturan tampilan ke default? Tindakan ini tidak dapat dibatalkan.
+appearance-reset-all-success = Pengaturan tampilan diatur ulang ke default
+appearance-reset-all-failed = Gagal mengatur ulang pengaturan tampilan
 appearance-save-aria =
     .aria-label = Simpan tampilan
+appearance-save-success = Pengaturan tampilan berhasil disimpan
+appearance-save-failed = Gagal menyimpan pengaturan tampilan
 settings-decimal-separator-dot = 1,00 (titik)
 settings-decimal-separator-comma = 1,00 (koma)
 settings-decimal-separator-none = 1 (tanpa)
@@ -382,6 +447,7 @@ data-mgmt-toast-import-no-file = Tidak ada file dipilih
 data-mgmt-toast-import-success = Impor selesai
 data-mgmt-toast-import-fail = Impor gagal
 data-mgmt-toast-file-picker-fail = Gagal membuka pemilih file
+data-mgmt-toast-backup-status-fail = Gagal memuat status cadangan
 data-mgmt-dismiss-aria =
     .aria-label = Tutup notifikasi
 
@@ -422,6 +488,10 @@ feature-toggle-group-aria = Fitur { $group }
 feature-toggle-toggle-aria = Alihkan { $name }
 feature-toggle-dismiss-aria =
     .aria-label = Tutup notifikasi
+
+# ── Data Management ──
+data-mgmt-password-show-aria = Tampilkan kata sandi
+data-mgmt-password-hide-aria = Sembunyikan kata sandi
 
 # ── Sales History ──
 category-colour-picker-aria =
@@ -649,6 +719,18 @@ settings-license-ws-franchise = Waralaba
 settings-license-ws-warehouse = Gudang
 settings-license-server-status-retrieved = Status lisensi server berhasil diambil.
 settings-license-server-check-failed = Pemeriksaan server gagal
+settings-license-server-status = Status Server
+settings-license-live-online = Langsung
+settings-license-live-offline = Offline
+settings-license-live-inactive = Nonaktif
+settings-license-live-checking = Memeriksa…
+settings-license-last-checked = Terakhir diperiksa: { $when }
+settings-license-just-now = baru saja
+settings-license-seconds-ago = { $seconds }d yang lalu
+settings-license-minutes-ago = { $minutes }m yang lalu
+settings-license-refresh = Muat Ulang
+settings-license-refresh-aria = Muat ulang status lisensi
+settings-license-poll-offline = Server tidak dapat dijangkau
 settings-license-load-failed = Gagal memuat info lisensi
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 
@@ -660,6 +742,26 @@ settings-toast-failed-credit-settings = Gagal memuat pengaturan kredit
 settings-toast-failed-hardware-settings = Gagal memuat pengaturan perangkat keras
 settings-toast-failed-scanners = Gagal memuat pemindai
 settings-toast-failed-sync = Gagal memuat pengaturan sinkronisasi
+
+# ── Updates ──
+settings-updates-heading = Pembaruan
+settings-current-version = Versi Saat Ini
+settings-check-for-updates = Periksa Pembaruan
+settings-checking-for-updates = Memeriksa…
+settings-up-to-date = ✓ Anda telah menggunakan versi terbaru
+settings-update-available = { $version } tersedia
+settings-install-update = Pasang Sekarang
+settings-installing-update = Memasang…
+settings-update-status-label = Status
+settings-update-not-checked = Belum diperiksa
+settings-update-check-error = Pemeriksaan pembaruan gagal
+settings-update-retry = Coba Lagi
 settings-toast-failed-displays = Gagal memuat layar
+settings-field-language = Bahasa
+
+# ── Field validation ──
+settings-store-name-required = Nama toko wajib diisi
+settings-tax-id-pattern-error = Hanya huruf, angka, garis, titik, dan garis miring yang diizinkan
+settings-tax-id-pattern-hint = Hanya huruf, angka, garis, titik, dan garis miring, maks 20 karakter
 settings-toast-saved = Pengaturan tersimpan
 settings-toast-failed-save = Gagal menyimpan pengaturan

@@ -1,7 +1,7 @@
 /*
-last audited 12-07-26 by RSA-Agent
-crate: oz-pos-app | status: UNSAFE | lint: ISSUES
-findings: lines 316, 330 use unsafe env::set_var from async command (UB) | next: typed setter in AppState + tokio::sync::watch; callers migrate | perf: not in request hot path; concurrency is the concern
+last audited 12-07-27 by C-2 env-var fix
+crate: oz-pos-app | status: SAFE (C-2 resolved) | lint: CLEAN
+findings: unsafe env::set_var removed from async command path; terminal_id written via AppState field | next: typed setter in AppState + tokio::sync::watch; callers migrate | perf: not in request hot path; concurrency is the concern
 */
 
 //! Feature flag management Tauri commands.
@@ -275,6 +275,9 @@ pub async fn set_feature(
         drop(kernel);
     }
 
+    // Acquire terminal_id BEFORE the db lock so the db MutexGuard
+    // (which wraps a !Send Connection) never crosses an await point.
+    let mut tid = state.terminal_id.lock().await;
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -317,28 +320,19 @@ pub async fn set_feature(
             let name = format!("{} (auto)", &device_id);
             let terminal = Terminal::new(&name, &device_id);
             store.create_terminal(&terminal)?;
-            // SAFETY: set_var is called once during feature toggle, not from
-            // multiple threads simultaneously. The terminal ID value is stable.
-            unsafe {
-                std::env::set_var("OZ_TERMINAL_ID", &terminal.id);
-            }
+            *tid = Some(terminal.id.clone());
             tracing::info!(
                 id = %terminal.id,
                 name = %terminal.name,
                 "terminal auto-registered for multi-terminal"
             );
-        } else {
-            // Terminal already registered — ensure env var is set.
-            if std::env::var("OZ_TERMINAL_ID").is_err()
-                && let Some(existing) = store.get_terminal_by_device_id(&device_id)?
-            {
-                // SAFETY: single-threaded toggle, value is stable.
-                unsafe {
-                    std::env::set_var("OZ_TERMINAL_ID", existing.id);
-                }
-            }
+        } else if tid.is_none()
+            && let Some(existing) = store.get_terminal_by_device_id(&device_id)?
+        {
+            *tid = Some(existing.id);
         }
     }
+    drop(tid);
 
     let features = build_feature_list(&reg);
 

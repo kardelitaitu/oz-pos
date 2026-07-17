@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { listProducts, listCategories, type ProductDto, type CategoryDto } from '@/api/products';
 import { type Product, type Sku } from '@/types/domain';
@@ -89,6 +89,12 @@ export interface UseProductsResult {
  */
 export function useProducts(): UseProductsResult {
   const { l10n } = useLocalization();
+  // Capture l10n in a ref so the effect below only runs on mount.
+  // Using l10n directly as a dep would re-fetch all products on every
+  // locale change, which is wasteful since the IPC data hasn't changed.
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+
   const [products, setProducts] = useState<Product[] | null>(null);
   const [categoryMeta, setCategoryMeta] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +110,7 @@ export function useProducts(): UseProductsResult {
         if (cancelled) return;
         setCategoryMeta(cats);
         if (dtos.length > 0) {
-          const uncategorisedLabel = l10n.getString('product-lookup-uncategorised');
+          const uncategorisedLabel = l10nRef.current.getString('product-lookup-uncategorised');
           setProducts(dtos.map(dto => dtoToProduct(dto, uncategorisedLabel)));
           setUsingFallback(false);
         } else {
@@ -116,7 +122,7 @@ export function useProducts(): UseProductsResult {
       } catch (err) {
         // IPC unavailable — fall back to sample data
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : l10n.getString('product-lookup-error-load'));
+        setError(err instanceof Error ? err.message : l10nRef.current.getString('product-lookup-error-load'));
         setProducts(SAMPLE_PRODUCTS);
         setCategoryMeta(SAMPLE_CATEGORY_META);
         setUsingFallback(true);
@@ -130,7 +136,8 @@ export function useProducts(): UseProductsResult {
     return () => {
       cancelled = true;
     };
-  }, [l10n]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- l10n captured via ref
+  }, []);
 
   // Derive categories from products (memoized).
   const categories = useMemo(() => {

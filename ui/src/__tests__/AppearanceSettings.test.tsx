@@ -24,6 +24,13 @@ vi.mock('@/contexts/ZoomContext', () => ({
   useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
 }));
 
+const mockSetHwAccelEnabled = vi.fn();
+
+vi.mock('@/contexts/HardwareAccelContext', () => ({
+  useHardwareAccel: () => ({ enabled: true, setEnabled: (val: boolean) => mockSetHwAccelEnabled(val) }),
+  HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
@@ -50,10 +57,8 @@ vi.mock('@/utils/color', () => ({
   applyAccentPalette: (palette: unknown) => mockApplyAccentPalette(palette),
 }));
 
-vi.mock('@/components/Card', () => ({
-  Card: ({ children, shadow }: { children: React.ReactNode; shadow?: string }) => (
-    <div data-testid="card" data-shadow={shadow}>{children}</div>
-  ),
+vi.mock('@/frontend/shared/Toast', () => ({
+  useToast: () => ({ addToast: vi.fn() }),
 }));
 
 vi.mock('@/components/Button', () => ({
@@ -100,26 +105,51 @@ describe('AppearanceSettings', () => {
     mockPickLogoFile.mockResolvedValue(null);
     mockDeriveAccentPalette.mockReturnValue({});
     mockApplyAccentPalette.mockReturnValue(undefined);
+    mockSetHwAccelEnabled.mockClear();
   });
 
   // ── Rendering ──────────────────────────────────────────────────
 
-  it('renders inside a Card wrapper in non-embedded mode', async () => {
+  it('renders inside three CSS card containers in non-embedded mode', async () => {
     render(<AppearanceSettings />);
     await waitFor(() => {
-      expect(screen.getByTestId('card')).toBeInTheDocument();
+      const cards = document.querySelectorAll('.card');
+      expect(cards).toHaveLength(3);
     });
   });
 
-  it('renders without Card wrapper in embedded mode', () => {
-    render(<AppearanceSettings embedded colour="#ff0000" storeName="Test Store" />);
-    expect(screen.queryByTestId('card')).not.toBeInTheDocument();
-  });
-
-  it('shows "Appearance" section title in non-embedded mode', async () => {
+  it('toggles Hardware Acceleration when clicking toggle slider', async () => {
     render(<AppearanceSettings />);
     await waitFor(() => {
-      expect(screen.getByText('Appearance')).toBeInTheDocument();
+      expect(screen.getByLabelText('Hardware Acceleration')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getByLabelText('Hardware Acceleration') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    // Verify clicking the visual slider or label container properly delegates click to checkbox
+    const toggleContainer = document.querySelector('.settings-toggle') as HTMLElement;
+    expect(toggleContainer).not.toBeNull();
+    fireEvent.click(toggleContainer);
+
+    expect(mockSetHwAccelEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it('renders card containers in embedded mode without reset/save buttons', () => {
+    render(<AppearanceSettings embedded colour="#ff0000" storeName="Test Store" />);
+    // Embedded mode now also renders cards, just without reset/save.
+    const cards = document.querySelectorAll('.card');
+    expect(cards).toHaveLength(3);
+    expect(screen.queryByLabelText('Save appearance')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reset all appearance settings')).not.toBeInTheDocument();
+  });
+
+  it('shows "Branding" section title as first card heading in non-embedded mode', async () => {
+    render(<AppearanceSettings />);
+    await waitFor(() => {
+      expect(screen.getByText('Branding')).toBeInTheDocument();
+      expect(screen.getByText('Interface')).toBeInTheDocument();
+      expect(screen.getByText('Preview')).toBeInTheDocument();
     });
   });
 
@@ -146,15 +176,16 @@ describe('AppearanceSettings', () => {
   });
 
   it('updates colour picker value when user changes hex input', async () => {
-    const user = userEvent.setup();
     render(<AppearanceSettings />);
     await waitFor(() => {
       expect(screen.getByLabelText('Colour hex value')).toBeInTheDocument();
     });
 
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    await user.clear(hexInput);
-    await user.type(hexInput, '#ff5500');
+    // Use fireEvent.change (not user.type) so the full hex value is
+    // processed at once — user.type types character-by-character and
+    // normaliseHex rejects the leading '#' on its own.
+    fireEvent.change(hexInput, { target: { value: '#ff5500' } });
 
     expect(hexInput.value).toBe('#ff5500');
     // Colour picker should sync.
@@ -321,6 +352,21 @@ describe('AppearanceSettings', () => {
     expect(screen.getByLabelText('Save appearance')).toBeDisabled();
   });
 
+  it('re-enables save button when API call fails', async () => {
+    const user = userEvent.setup();
+    mockSetBrandPrimaryColour.mockRejectedValue(new Error('network error'));
+    render(<AppearanceSettings />);
+    await waitFor(() => {
+      expect(screen.getByLabelText('Save appearance')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Save appearance'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Save appearance')).not.toBeDisabled();
+    });
+  });
+
   it('calls setBrandPrimaryColour and setBrandStoreName with updated values on save', async () => {
     const user = userEvent.setup();
     render(<AppearanceSettings />);
@@ -328,10 +374,10 @@ describe('AppearanceSettings', () => {
       expect(screen.getByLabelText('Colour hex value')).toBeInTheDocument();
     });
 
-    // Change colour.
+    // Change colour via fireEvent.change (not user.type) so normaliseHex
+    // gets the complete hex value in one call.
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    await user.clear(hexInput);
-    await user.type(hexInput, '#aabbcc');
+    fireEvent.change(hexInput, { target: { value: '#aabbcc' } });
 
     // Save.
     await user.click(screen.getByLabelText('Save appearance'));
@@ -397,15 +443,13 @@ describe('AppearanceSettings', () => {
   // ── Accent palette ─────────────────────────────────────────────
 
   it('applies accent palette on colour change', async () => {
-    const user = userEvent.setup();
     render(<AppearanceSettings />);
     await waitFor(() => {
       expect(screen.getByLabelText('Colour hex value')).toBeInTheDocument();
     });
 
     const hexInput = screen.getByLabelText('Colour hex value') as HTMLInputElement;
-    await user.clear(hexInput);
-    await user.type(hexInput, '#334455');
+    fireEvent.change(hexInput, { target: { value: '#334455' } });
 
     expect(mockDeriveAccentPalette).toHaveBeenCalledWith('#334455');
     expect(mockApplyAccentPalette).toHaveBeenCalled();

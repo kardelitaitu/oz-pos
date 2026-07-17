@@ -77,9 +77,21 @@ export interface AccentPalette {
   dim: string;
   alpha: string;
   secondary: string;
+  subtleFg: string;
+  hoverFg: string;
+  activeFg: string;
 }
 
 const DEFAULT_ACCENT = '#10b981';
+
+/**
+ * Return black or white text that contrasts with the given hex colour.
+ */
+export function contrastFg(hex: string): string {
+  const { r, g, b } = hexToRgb(hex);
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 160 ? '#0a0a0a' : '#ffffff';
+}
 
 /**
  * Derive the full accent palette from a single base colour.
@@ -99,10 +111,13 @@ export function deriveAccentPalette(base: string = DEFAULT_ACCENT): AccentPalett
     hover: darken(base, 0.1),
     active: darken(base, 0.2),
     subtle: lighten(base, isLight ? 0.55 : 0.7),
-    fg: isLight ? '#0a0a0a' : '#ffffff',
+    fg: contrastFg(base),
     dim: rgba(base, 0.12),
     alpha: rgba(base, 0.2),
     secondary: lighten(base, 0.15),
+    subtleFg: contrastFg(lighten(base, isLight ? 0.55 : 0.7)),
+    hoverFg: contrastFg(darken(base, 0.1)),
+    activeFg: contrastFg(darken(base, 0.2)),
   };
 }
 
@@ -119,4 +134,45 @@ export function applyAccentPalette(palette: AccentPalette): void {
   root.style.setProperty('--color-accent-dim', palette.dim);
   root.style.setProperty('--color-accent-alpha', palette.alpha);
   root.style.setProperty('--color-accent-secondary', palette.secondary);
+  root.style.setProperty('--color-accent-subtle-fg', palette.subtleFg);
+  root.style.setProperty('--color-accent-hover-fg', palette.hoverFg);
+  root.style.setProperty('--color-accent-active-fg', palette.activeFg);
+}
+
+/**
+ * Read the computed value of a CSS custom property on `:root`.
+ */
+function readCSSVar(name: string): string | null {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || null;
+}
+
+/**
+ * Scan all semantic colour tokens on the document and set their
+ * companion `--*-fg` contrast variables. This keeps text readable
+ * regardless of the active theme or custom brand colour.
+ *
+ * Run once on boot and every time the theme (light/dark) changes.
+ */
+export function applyThemeContrasts(): void {
+  const pairs: [string, string][] = [
+    ['--color-accent', '--color-accent-fg'],
+    ['--color-accent-hover', '--color-accent-hover-fg'],
+    ['--color-accent-active', '--color-accent-active-fg'],
+    ['--color-accent-subtle', '--color-accent-subtle-fg'],
+    ['--color-danger', '--color-danger-fg'],
+    ['--color-success', '--color-success-fg'],
+    ['--color-warning', '--color-warning-fg'],
+    ['--color-info', '--color-info-fg'],
+    ['--color-bg-elevated', '--color-bg-elevated-fg'],
+    ['--color-bg-primary', '--color-bg-primary-fg'],
+  ];
+
+  const root = document.documentElement;
+  for (const [bgVar, fgVar] of pairs) {
+    const bg = readCSSVar(bgVar);
+    if (bg) {
+      root.style.setProperty(fgVar, contrastFg(bg));
+    }
+  }
 }

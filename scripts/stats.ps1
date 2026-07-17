@@ -55,8 +55,9 @@ function IsExcluded($path) {
     return $false
 }
 
-# Scan directory recursively
-Get-ChildItem -Path $projectRoot -File -Recurse | Get-Unique | ForEach-Object {
+# Scan directory recursively. No Get-Unique needed — Get-ChildItem -File
+# never returns duplicates for distinct file paths on disk.
+Get-ChildItem -Path $projectRoot -File -Recurse | ForEach-Object {
     $file = $_
     $ext = $file.Extension.ToLower()
     
@@ -102,7 +103,7 @@ $report = [ordered]@{
     }
 }
 
-$outputPath = Join-Path $projectRoot "stats.json"
+$outputPath = Join-Path $scriptDir "stats.json"
 $report | ConvertTo-Json -Depth 4 | Out-File -FilePath $outputPath -Encoding utf8
 
 Write-Host "Generated stats.json at $outputPath (Total lines: $totalLines, Files: $totalFiles)"

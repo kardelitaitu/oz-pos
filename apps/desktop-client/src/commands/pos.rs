@@ -454,7 +454,8 @@ fn run_override_line_price(
         .find(|l| l.id == *line_id)
         .ok_or_else(|| AppError::Invalid(format!("line not found: {}", line_id)))?;
 
-    line.set_overridden_price(new_price);
+    line.set_overridden_price(new_price)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     store.save_active_cart(&cart)?;
 

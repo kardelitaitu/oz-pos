@@ -324,10 +324,15 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
       } catch {
         /* IPC may fail in tests; non-secret still in localStorage */
       }
-      try {
-        await invoke('set_setting', { key: IPC_TOKEN_KEY, value: token, user_id: userId });
-      } catch {
-        /* settings DB unavailable */
+      // Only persist the token when the user actually typed one;
+      // an empty value would overwrite a token previously saved
+      // via the Settings page (which now also writes here).
+      if (token.trim()) {
+        try {
+          await invoke('set_setting', { key: IPC_TOKEN_KEY, value: token, user_id: userId });
+        } catch {
+          /* settings DB unavailable */
+        }
       }
     },
     [enabled, serverURL, autoMinutes, token],

@@ -13,11 +13,15 @@
   color: var(--color-fg);
 }
 
-.multi-store-dashboard-loading {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-base);
-  padding: var(--space-8);
-  text-align: center;
+/* ── Skeleton loading ───────────────────────────────────── */
+.multi-store-dashboard-loading-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.multi-store-dashboard-loading-skeleton .multi-store-stat-card {
+  border-color: var(--color-border);
 }
 
 .multi-store-dashboard-error {
@@ -48,17 +52,23 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
+  transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
+}
+
+.multi-store-stat-card:hover {
+  border-color: var(--color-accent-dim);
+  box-shadow: var(--shadow-md);
 }
 
 .multi-store-stat-value {
-  font-size: var(--text-3xl);
+  font-size: var(--text-4xl);
   font-weight: var(--font-weight-bold);
   color: var(--color-accent);
   line-height: 1;
 }
 
 .multi-store-stat-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-fg-tertiary);
   text-transform: uppercase;
@@ -78,7 +88,7 @@
 
 .multi-store-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-4);
   margin-bottom: var(--space-8);
 }
@@ -100,15 +110,15 @@
 }
 
 .multi-store-card-name {
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
 }
 
 .multi-store-card-badge {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-active);
+  color: var(--color-accent-subtle-fg, var(--color-accent-active));
   background: var(--color-accent-subtle);
   padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-full);
@@ -127,13 +137,13 @@
 }
 
 .multi-store-card-label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
   font-weight: var(--font-weight-medium);
 }
 
 .multi-store-card-value {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--color-fg);
   font-weight: var(--font-weight-medium);
   text-align: right;

@@ -1,8 +1,7 @@
 # ADR #9: License Server Architecture (PocketBase on Northflank)
 
-**Status:** Proposed
+**Status:** Implemented (2026-07-15)
 **Date:** 2026-07-10
-**Revised:** 2026-07-11
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** licensing, activation, subscription-signing, pocketbase, northflank
 
@@ -713,15 +712,15 @@ The `api_key` is stored once on activation and reused for all subsequent renew a
 - [x] **Step 2.V1 (Verification)**: `cargo test -p oz-core -- subscription license_verification` — **30 tests pass**.
 - [x] **Step 2.V2 (Verification)**: `cargo clippy -p oz-core -- -D warnings` — **PASS**.
 
-### Phase 3: Northflank Deployment
+### Phase 3: Northflank Deployment (Done 2026-07-15)
 
-- [ ] **Step 3.1**: Create Northflank service from PocketBase template.
-- [ ] **Step 3.2**: Attach persistent NVMe volume at `/pb/pb_data`.
+- [x] **Step 3.1**: Create Northflank service from PocketBase template.
+- [x] **Step 3.2**: Attach persistent NVMe volume at `/pb/pb_data`.
 - [x] **Step 3.3**: Generate RSA-2048 key pair — public key embedded in `crates/oz-core/oz-license.key.pub`; private key in `crates/oz-core/oz-license-private.pem` (gitignored, to be set as `OZ_LICENSE_PRIVATE_KEY` env var on Northflank). Key generation scripts: `scripts/generate-license-keys.ps1` (Windows) + `scripts/generate-license-keys.sh` (Linux/Mac).
 - [x] **Step 3.4**: Create production Dockerfile (`apps/license-server/Dockerfile`) — multi-stage build (golang:1.23-alpine → alpine:3.20), CGO_ENABLED=1, healthcheck using `/api/` (PocketBase always responds), volume mount. `.dockerignore` excludes test files and build artifacts. `apps/license-server/docker-compose.yml` for local testing. `apps/license-server/DEPLOY.md` is the comprehensive 12-step Northflank deployment guide.
-- [ ] **Step 3.5**: Import `pb_schema.json` collections via admin UI.
-- [ ] **Step 3.6**: Configure custom domain (e.g., `license.oz-pos.com`).
-- [ ] **Step 3.V1 (Verification)**: End-to-end test: generate key in admin UI → activate from POS → verify signature → check status.
+- [x] **Step 3.5**: Import `pb_schema.json` collections via admin UI.
+- [x] **Step 3.6**: Configure custom domain (e.g., `license.oz-pos.com`).
+- [x] **Step 3.V1 (Verification)**: End-to-end test: generate key in admin UI → activate from POS → verify signature → check status.
 
 ---
 

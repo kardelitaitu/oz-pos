@@ -14,8 +14,6 @@
   color: var(--color-fg);
   font-family: var(--font-sans);
   overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 .tables-title {
@@ -62,7 +60,7 @@
   background: var(--color-bg-hover);
   border-color: var(--color-border-hover);
   color: var(--color-fg);
-  transform: translateY(-1px);
+  transform: translateY(-0.0625rem);
 }
 
 .tables-section-btn.active {
@@ -82,13 +80,13 @@
   background-image: 
     radial-gradient(var(--color-border) 1px, transparent 1px),
     radial-gradient(var(--color-border) 1px, transparent 1px);
-  background-size: 20px 20px;
-  background-position: 0 0, 10px 10px;
+  background-size: 1.25rem 1.25rem;
+  background-position: 0 0, 0.625rem 0.625rem;
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border-strong);
   box-shadow: var(--shadow-inner);
   overflow: hidden;
-  min-height: 400px;
+  min-height: 25rem;
 }
 
 /* Base table style */
@@ -106,6 +104,7 @@
   padding: var(--space-1);
   overflow: hidden;
   line-height: var(--leading-tight);
+  user-select: none;
   transition:
     transform var(--duration-200) cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow var(--duration-200) var(--ease-out),
@@ -152,12 +151,16 @@
 }
 
 /* Occupied */
+@media (prefers-reduced-motion: no-preference) {
+  .tables-table--occupied {
+    animation: table-occupied-pulse var(--duration-2000) infinite var(--ease-in-out);
+  }
+}
 .tables-table--occupied {
   background: linear-gradient(135deg, var(--color-danger) 0%, color-mix(in srgb, var(--color-danger) 80%, black) 100%);
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  animation: table-occupied-pulse 2s infinite ease-in-out;
 }
 .tables-table--occupied:hover {
   box-shadow: 
@@ -191,21 +194,23 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
-@keyframes table-occupied-pulse {
-  0% {
-    box-shadow: 
-      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  }
-  50% {
-    box-shadow: 
-      0 4px 20px color-mix(in srgb, var(--color-danger) 45%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  }
-  100% {
-    box-shadow: 
-      0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes table-occupied-pulse {
+    0% {
+      box-shadow: 
+        0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    50% {
+      box-shadow: 
+        0 4px 20px color-mix(in srgb, var(--color-danger) 45%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    100% {
+      box-shadow: 
+        0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
   }
 }
 
@@ -222,7 +227,7 @@
   font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-top: 2px;
+  margin-top: 0.125rem;
 }
 
 /* ── Detail dialog ──────────────────────────────────── */
@@ -236,7 +241,12 @@
   padding: var(--space-6);
   box-shadow: var(--shadow-2xl);
   z-index: 100;
-  animation: slideUp var(--duration-200) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tables-detail {
+    animation: slideUp var(--duration-200) var(--ease-out);
+  }
 }
 
 .tables-detail h2 {
@@ -277,7 +287,7 @@
 
 .tables-detail-actions button:hover {
   background-color: var(--color-accent-hover);
-  transform: translateY(-1px);
+  transform: translateY(-0.0625rem);
 }
 
 .tables-detail-actions button:active {
@@ -295,13 +305,20 @@
   background: var(--color-bg-hover);
 }
 
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
 }
 
 /* ── Desktop responsive overlay modal ────────────────── */
-@media (min-width: 768px) {
+@media (min-width: 48rem) {
   .tables-detail {
     position: absolute;
     top: 50%;
@@ -309,15 +326,15 @@
     bottom: auto;
     right: auto;
     transform: translate(-50%, -50%);
-    width: 400px;
+    width: 25rem;
     border-radius: var(--radius-xl);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-2xl);
-    animation: fadeIn var(--duration-200) var(--ease-out);
   }
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  @media (prefers-reduced-motion: no-preference) {
+    .tables-detail {
+      animation: fadeIn var(--duration-200) var(--ease-out);
+    }
+  }
 }

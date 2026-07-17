@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { animDuration } from '@/utils/animation';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listStockTransfers,
@@ -16,8 +17,10 @@ import {
 import { listProducts, type ProductDto } from '@/api/products';
 import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import './StockTransfersScreen.css';
 
 const STATUS_FILTERS = ['all', 'draft', 'pending', 'in_transit', 'received', 'cancelled'] as const;
@@ -48,10 +51,29 @@ export default function StockTransfersScreen() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  // ── Exit animation state ───────────────────────────────────────
+  const ANIM_MS = animDuration(200);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [detailExiting, setDetailExiting] = useState(false);
+  const [createExiting, setCreateExiting] = useState(false);
+  const [receiveExiting, setReceiveExiting] = useState(false);
+
+  // Cleanup exit timers on unmount
+  useEffect(() => {
+    return () => {
+      if (exitTimerRef.current !== null) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Detail view
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ transfer: StockTransfer; lines: StockTransferLine[] } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -63,11 +85,13 @@ export default function StockTransfersScreen() {
   const [createLines, setCreateLines] = useState<LineFormEntry[]>([]);
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const createPanelRef = useRef<HTMLDivElement>(null);
 
   // Receive modal
   const [receiveTransferId, setReceiveTransferId] = useState<string | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<string, string>>({});
   const [receiveSaving, setReceiveSaving] = useState(false);
+  const receivePanelRef = useRef<HTMLDivElement>(null);
 
   // Cancel state
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -111,9 +135,15 @@ export default function StockTransfersScreen() {
   }, [l10n]);
 
   const closeDetail = useCallback(() => {
-    setDetailId(null);
-    setDetail(null);
-  }, []);
+    if (detailId === null) return;
+    setDetailExiting(true);
+    exitTimerRef.current = setTimeout(() => {
+      setDetailId(null);
+      setDetail(null);
+      setDetailExiting(false);
+      exitTimerRef.current = null;
+    }, ANIM_MS);
+  }, [detailId, ANIM_MS]);
 
   const openSend = useCallback(async () => {
     if (!detailId) return;
@@ -133,6 +163,16 @@ export default function StockTransfersScreen() {
     detail.lines.forEach((l) => { init[l.id] = String(l.qty); });
     setReceiveLines(init);
   }, [detailId, detail]);
+
+  const closeReceive = useCallback(() => {
+    if (receiveTransferId === null) return;
+    setReceiveExiting(true);
+    exitTimerRef.current = setTimeout(() => {
+      setReceiveTransferId(null);
+      setReceiveExiting(false);
+      exitTimerRef.current = null;
+    }, ANIM_MS);
+  }, [receiveTransferId, ANIM_MS]);
 
   const handleReceive = useCallback(async () => {
     if (!receiveTransferId || !session?.user_id) return;
@@ -242,9 +282,23 @@ export default function StockTransfersScreen() {
   }, [resetCreateForm]);
 
   const closeCreate = useCallback(() => {
-    setShowCreate(false);
-    resetCreateForm();
-  }, [resetCreateForm]);
+    if (!showCreate) return;
+    setCreateExiting(true);
+    exitTimerRef.current = setTimeout(() => {
+      setShowCreate(false);
+      resetCreateForm();
+      setCreateExiting(false);
+      exitTimerRef.current = null;
+    }, ANIM_MS);
+  }, [showCreate, resetCreateForm, ANIM_MS]);
+
+  // ── Focus traps for modals ─────────────────────────────────────
+  // Deactivate detail trap while receive modal is open so Escape only
+  // closes the top-most modal instead of all active modals.
+  const detailTrapActive = detailId !== null && !detailExiting && !detailLoading && receiveTransferId === null;
+  useFocusTrap(detailPanelRef, detailTrapActive, closeDetail);
+  useFocusTrap(createPanelRef, showCreate && !createExiting && !createSaving, closeCreate);
+  useFocusTrap(receivePanelRef, receiveTransferId !== null && !receiveExiting && !receiveSaving, closeReceive);
 
   const filtered = statusFilter === 'all'
     ? transfers
@@ -268,6 +322,7 @@ export default function StockTransfersScreen() {
             type="button"
             role="tab"
             aria-selected={statusFilter === s}
+            aria-label={l10n.getString(`stock-transfers-status-${s}`)}
             className={`stock-transfers-filter-btn${statusFilter === s ? ' active' : ''}`}
             onClick={() => setStatusFilter(s)}
           >
@@ -279,9 +334,43 @@ export default function StockTransfersScreen() {
       </div>
 
       {loading ? (
-        <Localized id="loading">
-          <p className="stock-transfers-loading">Loading…</p>
-        </Localized>
+        <div className="stock-transfers-loading-skeleton" aria-hidden="true">
+          <div className="stock-transfers-header">
+            <Skeleton variant="block" width="12rem" height="1.75rem" />
+            <Skeleton variant="block" width="8rem" height="2.25rem" />
+          </div>
+          <div className="stock-transfers-filters">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} variant="block" width="5rem" height="1.75rem" style={{ borderRadius: 'var(--radius-full)' }} />
+            ))}
+          </div>
+          <div className="stock-transfers-table-wrap">
+            <table className="stock-transfers-table" aria-hidden="true">
+              <thead>
+                <tr>
+                  {['Transfer #', 'Status', 'Source', 'Destination', 'Created', ''].map((_, i) => (
+                    <th key={i}><Skeleton variant="text" width={i < 5 ? '5rem' : '3rem'} height="0.75rem" /></th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[0, 1, 2, 3].map((r) => (
+                  <tr key={r}>
+                    <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="block" width="4.5rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
+                    <td><Skeleton variant="text" width="8rem" height="0.75rem" /></td>
+                    <td className="stock-transfers-cell-actions">
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                      <Skeleton variant="block" width="3.5rem" height="1.375rem" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : error ? (
         <Card shadow="sm">
           <div className="stock-transfers-empty">
@@ -349,6 +438,7 @@ export default function StockTransfersScreen() {
                         type="button"
                         className="stock-transfers-action-btn stock-transfers-action-btn--danger"
                         disabled={cancelling === t.id}
+                        aria-label={l10n.getString('stock-transfers-cancel')}
                         onClick={() => handleCancel(t.id)}
                       >
                         <Localized id="stock-transfers-cancel">
@@ -365,9 +455,9 @@ export default function StockTransfersScreen() {
       )}
 
       {/* ── Detail Modal ─────────────────────────────────────────── */}
-      {detailId && (
-        <div className="stock-transfers-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-detail-aria')}>
-          <div className="stock-transfers-modal stock-transfers-modal--wide">
+      {(detailId || detailExiting) && (
+        <div className={`stock-transfers-overlay${detailExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-detail-aria')}>
+          <div className={`stock-transfers-modal stock-transfers-modal--wide${detailExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={detailPanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-detail-title">
                 <h2>Transfer Details</h2>
@@ -375,7 +465,38 @@ export default function StockTransfersScreen() {
               <button type="button" className="stock-transfers-modal-close" onClick={closeDetail} aria-label={l10n.getString('close')}>&times;</button>
             </div>
             {detailLoading ? (
-              <Localized id="loading"><p className="stock-transfers-loading">Loading…</p></Localized>
+              <div className="stock-transfers-detail-skeleton" aria-hidden="true">
+                <div className="stock-transfers-detail-info">
+                  {Array.from({ length: 6 }, (_, i) => (
+                    <div key={i} className="stock-transfers-detail-field">
+                      <Skeleton width="3rem" height="0.75rem" />
+                      <Skeleton width="80%" height="0.875rem" />
+                    </div>
+                  ))}
+                </div>
+                <table className="stock-transfers-lines-table" aria-hidden="true">
+                  <thead>
+                    <tr>
+                      {['SKU', 'Product', 'Qty', 'Received'].map((_, i) => (
+                        <th key={i}><Skeleton width="3rem" height="0.75rem" /></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: 4 }, (_, r) => (
+                      <tr key={r}>
+                        <td><Skeleton width="4rem" height="0.875rem" /></td>
+                        <td><Skeleton width="6rem" height="0.875rem" /></td>
+                        <td><Skeleton width="2rem" height="0.875rem" /></td>
+                        <td><Skeleton width="2rem" height="0.875rem" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="stock-transfers-detail-actions">
+                  <Skeleton variant="block" width="7rem" height="2rem" style={{ borderRadius: 'var(--radius-lg)' }} />
+                </div>
+              </div>
             ) : detail ? (
               <div className="stock-transfers-detail">
                 <div className="stock-transfers-detail-info">
@@ -469,9 +590,9 @@ export default function StockTransfersScreen() {
       )}
 
       {/* ── Create Modal ─────────────────────────────────────────── */}
-      {showCreate && (
-        <div className="stock-transfers-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-create-aria')}>
-          <div className="stock-transfers-modal stock-transfers-modal--wide">
+      {(showCreate || createExiting) && (
+        <div className={`stock-transfers-overlay${createExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-create-aria')}>
+          <div className={`stock-transfers-modal stock-transfers-modal--wide${createExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={createPanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-create-title">
                 <h2>New Stock Transfer</h2>
@@ -550,6 +671,7 @@ export default function StockTransfersScreen() {
                   </div>
                 ))}
                 <datalist id="product-skus">
+                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- <option> inside <datalist>; false positive */}
                   {products.map((p) => <option key={p.sku} value={p.sku} />)}
                 </datalist>
               </div>
@@ -569,14 +691,14 @@ export default function StockTransfersScreen() {
       )}
 
       {/* ── Receive Modal ────────────────────────────────────────── */}
-      {receiveTransferId && detail && (
-        <div className="stock-transfers-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-receive-aria')}>
-          <div className="stock-transfers-modal">
+      {(receiveTransferId || receiveExiting) && detail && (
+        <div className={`stock-transfers-overlay${receiveExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-receive-aria')}>
+          <div className={`stock-transfers-modal${receiveExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={receivePanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-receive-title">
                 <h2>Receive Transfer</h2>
               </Localized>
-              <button type="button" className="stock-transfers-modal-close" onClick={() => setReceiveTransferId(null)} aria-label={l10n.getString('close')}>&times;</button>
+              <button type="button" className="stock-transfers-modal-close" onClick={closeReceive} aria-label={l10n.getString('close')}>&times;</button>
             </div>
             <div className="stock-transfers-modal-body">
               <Localized id="stock-transfers-receive-instruction">
@@ -599,7 +721,7 @@ export default function StockTransfersScreen() {
             </div>
             <div className="stock-transfers-modal-actions">
               <Localized id="cancel">
-                <Button variant="ghost" onClick={() => setReceiveTransferId(null)} disabled={receiveSaving}>Cancel</Button>
+                <Button variant="ghost" onClick={closeReceive} disabled={receiveSaving}>Cancel</Button>
               </Localized>
               <Button variant="primary" loading={receiveSaving} onClick={handleReceive}>
                 <Localized id="stock-transfers-receive-action"><span>Confirm Receipt</span></Localized>

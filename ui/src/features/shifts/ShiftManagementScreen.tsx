@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { Skeleton } from '@/components/Skeleton';
 import { formatMoney } from '@/types/domain';
 import {
   listShifts,
@@ -197,9 +198,63 @@ export default function ShiftManagementScreen() {
       </div>
 
       {loading && (
-        <Localized id="shift-loading">
-          <p className="shift-mgmt-loading">Loading shifts…</p>
-        </Localized>
+        <div className="shift-mgmt-loading-skeleton">
+          {/* Active shift card skeleton */}
+          <Card shadow="md" className="shift-mgmt-active-card">
+            <div className="shift-mgmt-active-header">
+              <Skeleton variant="block" width="7rem" height="1.25rem" />
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <Skeleton variant="block" width="7rem" height="2rem" />
+                <Skeleton variant="block" width="7rem" height="2rem" />
+              </div>
+            </div>
+            <div className="shift-mgmt-active-details">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="shift-mgmt-active-stat">
+                  <Skeleton variant="text" width="3rem" />
+                  <Skeleton variant="text" width="5rem" />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Table skeleton */}
+          <Card shadow="sm" className="shift-mgmt-table-card">
+            <Skeleton variant="block" width="8rem" height="1.25rem" style={{ marginBottom: 'var(--space-3)' }} />
+            <div className="shift-mgmt-table-wrap">
+              <table className="shift-mgmt-table" aria-hidden="true">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Opened</th>
+                    <th>Closed</th>
+                    <th>Opening</th>
+                    <th>Counted</th>
+                    <th>Expected</th>
+                    <th>Diff</th>
+                    <th>Sales</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={i}>
+                      <td><Skeleton variant="block" width="3.5rem" height="1.25rem" /></td>
+                      <td><Skeleton variant="text" width="7rem" /></td>
+                      <td><Skeleton variant="text" width="7rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="text" width="4rem" /></td>
+                      <td><Skeleton variant="block" width="2.5rem" height="1.25rem" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
 
       {!loading && (
@@ -367,6 +422,7 @@ export default function ShiftManagementScreen() {
                             : '';
                       return (
                         <tr key={s.id} className={s.status === 'open' ? 'shift-mgmt-row--open' : ''}>
+                          {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                           <td>
                             <span className={`shift-mgmt-status-badge shift-mgmt-status-badge--${s.status}`}>
                               <Localized id={s.status === 'open' ? 'shift-status-open' : 'shift-status-closed'}>
@@ -441,10 +497,13 @@ export default function ShiftManagementScreen() {
               {error && (
                 <div className="shift-mgmt-modal-error" role="alert">{error}</div>
               )}
-              <label className="shift-mgmt-field" htmlFor="open-balance">
-                <Localized id="shift-open-balance-label">
-                  <span className="shift-mgmt-label">Opening balance (minor units)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
+                <label htmlFor="open-balance" className="shift-mgmt-label">
+                  <Localized id="shift-open-balance-label">
+                    <span>Opening balance (minor units)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-open-balance-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="open-balance"
@@ -458,7 +517,7 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
             </div>
             <div className="shift-mgmt-modal-actions">
               <Localized id="shift-btn-cancel">
@@ -503,10 +562,13 @@ export default function ShiftManagementScreen() {
                   Record cash removed from the drawer (safe drop, manager pickup, etc.).
                 </p>
               </Localized>
-              <label className="shift-mgmt-field" htmlFor="payout-amount">
-                <Localized id="shift-payout-amount-label">
-                  <span className="shift-mgmt-label">Amount (minor units)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
+                <label htmlFor="payout-amount" className="shift-mgmt-label">
+                  <Localized id="shift-payout-amount-label">
+                    <span>Amount (minor units)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-payout-amount-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="payout-amount"
@@ -520,11 +582,14 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
-              <label className="shift-mgmt-field" htmlFor="payout-reason">
-                <Localized id="shift-payout-reason-label">
-                  <span className="shift-mgmt-label">Reason</span>
-                </Localized>
+              </div>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
+                <label htmlFor="payout-reason" className="shift-mgmt-label">
+                  <Localized id="shift-payout-reason-label">
+                    <span>Reason</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-payout-reason-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="payout-reason"
@@ -537,7 +602,7 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
             </div>
             <div className="shift-mgmt-modal-actions">
               <Localized id="shift-btn-cancel">
@@ -635,10 +700,13 @@ export default function ShiftManagementScreen() {
                 </div>
               </div>
 
-              <label className="shift-mgmt-field" htmlFor="close-balance">
-                <Localized id="shift-close-counted-label">
-                  <span className="shift-mgmt-label">Counted cash in drawer (minor units)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
+                <label htmlFor="close-balance" className="shift-mgmt-label">
+                  <Localized id="shift-close-counted-label">
+                    <span>Counted cash in drawer (minor units)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-close-counted-placeholder" attrs={{ placeholder: true }}>
                   <input
                     id="close-balance"
@@ -652,12 +720,15 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
 
-              <label className="shift-mgmt-field" htmlFor="close-notes">
-                <Localized id="shift-close-notes-label">
-                  <span className="shift-mgmt-label">Notes (optional)</span>
-                </Localized>
+              <div className="shift-mgmt-field shift-mgmt-field--horizontal">
+                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
+                <label htmlFor="close-notes" className="shift-mgmt-label">
+                  <Localized id="shift-close-notes-label">
+                    <span>Notes (optional)</span>
+                  </Localized>
+                </label>
                 <Localized id="shift-close-notes-placeholder" attrs={{ placeholder: true }}>
                   <textarea
                     id="close-notes"
@@ -670,7 +741,7 @@ export default function ShiftManagementScreen() {
                     disabled={saving}
                   />
                 </Localized>
-              </label>
+              </div>
             </div>
             <div className="shift-mgmt-modal-actions">
               <Localized id="shift-btn-cancel">
@@ -694,7 +765,7 @@ export default function ShiftManagementScreen() {
       )}
 
       {/* ── Closed Shift Summary ──────────────────────── */}
-      {mClosedSum && (
+      {mClosedSum && closedShiftSummary && (
         <div className={`shift-mgmt-overlay${eClosedSum ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-closed-label')}>
           <div className={`shift-mgmt-modal${eClosedSum ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
@@ -789,7 +860,7 @@ export default function ShiftManagementScreen() {
       )}
 
       {/* ── Shift Detail Modal ────────────────────────── */}
-      {mDetail && (() => {
+      {mDetail && showDetailModal && (() => {
         const s = showDetailModal!;
         return (
         <div className={`shift-mgmt-overlay${eDetail ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-detail-label')}>
@@ -914,9 +985,15 @@ export default function ShiftManagementScreen() {
 
               {/* ── Shift Report sections ──────────────── */}
               {reportLoading && (
-                <Localized id="shift-report-loading">
-                  <div className="shift-mgmt-report-loading">Loading report…</div>
-                </Localized>
+                <div className="shift-mgmt-report-skeleton" aria-hidden="true">
+                  <Skeleton variant="block" width="8rem" height="0.875rem" style={{ marginBottom: 'var(--space-2)' }} />
+                  {Array.from({ length: 4 }, (_, i) => (
+                    <div key={i} className="shift-mgmt-report-skeleton-row">
+                      <Skeleton width="40%" height="0.75rem" />
+                      <Skeleton width="30%" height="0.75rem" />
+                    </div>
+                  ))}
+                </div>
               )}
 
               {shiftReport && !reportLoading && (

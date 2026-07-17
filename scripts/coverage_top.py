@@ -1,15 +1,38 @@
 #!/usr/bin/env python3
-"""Per-file coverage for the 5 new feature modules from cargo-llvm-cov JSON."""
+"""Per-file coverage for feature modules from cargo-llvm-cov JSON.
+
+Usage:
+    python3 scripts/coverage_top.py [path/to/coverage.json]
+
+If no path is given, scans coverage/rust/ for .json files and uses
+whichever is newest (typically coverage.json from cargo-llvm-cov).
+"""
 import json
 import os
 import sys
+from pathlib import Path
 
 # cargo-llvm-cov --output-path produces a JSON whose top-level is
 # {"version": ..., "type": ..., "cargo_llvm_cov": ..., "data": [...]}.
 # The 'data' array typically contains one entry scoped to the run; its
 # 'files' array holds per-source-file coverage data.
 
-path = "coverage/rust/coverage-ozcore.json"
+DEFAULT_DIR = Path(__file__).resolve().parent.parent / "coverage" / "rust"
+
+if len(sys.argv) > 1:
+    path = sys.argv[1]
+else:
+    if DEFAULT_DIR.is_dir():
+        candidates = sorted(DEFAULT_DIR.glob("*.json"), key=os.path.getmtime)
+        if candidates:
+            path = str(candidates[-1])
+        else:
+            print(f"MISSING: no .json files in {DEFAULT_DIR}")
+            sys.exit(0)
+    else:
+        print(f"MISSING: directory not found: {DEFAULT_DIR}")
+        sys.exit(0)
+
 if not os.path.exists(path):
     print(f"MISSING: {path}")
     sys.exit(0)

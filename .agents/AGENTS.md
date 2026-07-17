@@ -34,11 +34,11 @@ starts fresh.
 Prepend `ui\node_modules\.bin` to `$env:PATH` **in the same command** as the tool:
 
 ```powershell
-# Type-check the whole project
-$env:PATH = "c:\My Script\oz-pos\ui\node_modules\.bin;" + $env:PATH; tsc --noEmit
+# Type-check the whole project (run from project root)
+$env:PATH = "$PWD\ui\node_modules\.bin;" + $env:PATH; tsc --noEmit
 
 # Lint a single file
-$env:PATH = "c:\My Script\oz-pos\ui\node_modules\.bin;" + $env:PATH; eslint src/frontend/shell/AppShell.tsx
+$env:PATH = "$PWD\ui\node_modules\.bin;" + $env:PATH; eslint ui/src/frontend/shell/AppShell.tsx
 ```
 
 ### Preferred alternative — use npm scripts
@@ -56,7 +56,7 @@ $env:PATH = "c:\My Script\oz-pos\ui\node_modules\.bin;" + $env:PATH; eslint src/
 
 ```powershell
 # Example — always run from the ui/ directory
-cd "c:\My Script\oz-pos\ui"
+cd ui
 npm run typecheck
 npm run lint
 ```
@@ -70,7 +70,7 @@ npm run lint
 Run `npm install` inside `ui/` before any of the above:
 
 ```powershell
-cd "c:\My Script\oz-pos\ui"
+cd ui
 npm install
 ```
 
@@ -80,7 +80,7 @@ npm install
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.7`.** Never change the version number
+- **Version is locked at `0.0.9`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
@@ -104,7 +104,7 @@ npm install
 - Front-end components must have a corresponding test in `ui/src/__tests__/`.
 
 ### Git & Branch Policy
-- Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`.
+- Branch naming: `feat/<name>`, `fix/<name>`, `docs/<name>`, `chore/<name>`, `test/<name>`, `refactor/<name>`.
 - **Always make a local commit after each major modification.** Whenever a logical task, feature step, or significant code change is completed and verified locally, commit it before moving on to the next task. The commit message must accurately and comprehensively explain what was changed across all committed files.
 
 - **Never run `git push` without an explicit, direct order from the user.** Even after committing code or completing verification, always wait for the user to explicitly instruct you to push before executing any `git push` command.

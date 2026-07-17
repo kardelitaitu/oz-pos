@@ -91,10 +91,13 @@ describe('BundleManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Add Bundle')).toBeDefined());
   });
 
-  it('shows loading state initially', () => {
+  it('shows loading skeleton initially', () => {
     mockListBundles.mockImplementation(() => pendingPromise());
-    renderScreen();
-    expect(screen.getByText('Loading bundles…')).toBeDefined();
+    const { container } = renderScreen();
+
+    const skeleton = container.querySelector('[aria-hidden="true"].bundle-mgmt-loading-skeleton');
+    expect(skeleton).toBeTruthy();
+    expect(screen.queryByText(/loading bundles/i)).toBeNull();
   });
 
   it('shows empty state when no bundles', async () => {
@@ -303,8 +306,13 @@ describe('BundleManagementScreen', () => {
     const nameInput = document.getElementById('bundle-field-name') as HTMLInputElement;
     await userEvent.type(nameInput, 'New Bundle');
 
-    const itemSkus = document.querySelectorAll('.bundle-mgmt-item-sku');
-    await userEvent.type(itemSkus[0] as HTMLInputElement, 'SKU-ONE');
+    // Find the item SKU input inside the first item row (via document.querySelectorAll)
+    await waitFor(() => {
+      const rows = document.querySelectorAll('.bundle-mgmt-item-sku');
+      expect(rows.length).toBe(1);
+    }, { timeout: 5000 });
+    const itemSkuInput = document.querySelector('.bundle-mgmt-item-sku') as HTMLInputElement;
+    await userEvent.type(itemSkuInput, 'SKU-ONE');
 
     const createBtn = screen.getByText('Create').closest('button')!;
     await userEvent.click(createBtn);

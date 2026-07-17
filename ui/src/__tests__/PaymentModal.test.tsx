@@ -55,7 +55,7 @@ beforeEach(() => {
   invokeMock.mockClear();
 });
 
-describe('PaymentModal', () => {
+describe('PaymentModal — rendering & fast interaction', () => {
   it('renders total due and payment method options when open', async () => {
     await renderWithFluent(
       <PaymentModal
@@ -168,95 +168,6 @@ describe('PaymentModal', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
     });
-  });
-
-  it('calls printSalesReceipt on complete', async () => {
-    await renderWithFluent(
-      <PaymentModal
-        open
-        lineItems={[lineItem()]}
-        total={usd(700)}
-        userId="test-user-id"
-        onComplete={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    );
-
-    const input = screen.getByLabelText(/amount tendered/i);
-    await userEvent.type(input, '10');
-    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
-
-    await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
-    });
-  });
-
-  it('calls onComplete after sale done', async () => {
-    const onComplete = vi.fn();
-    await renderWithFluent(
-      <PaymentModal
-        open
-        lineItems={[lineItem()]}
-        total={usd(700)}
-        userId="test-user-id"
-        onComplete={onComplete}
-        onClose={vi.fn()}
-      />,
-    );
-
-    const input = screen.getByLabelText(/amount tendered/i);
-    await userEvent.type(input, '10');
-    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
-
-    // Wait for the done state to render, then the auto-close timer fires.
-    await screen.findByText(/sale complete/i);
-    await screen.findByText(/change due/i);
-
-    await waitFor(() => {
-      expect(onComplete).toHaveBeenCalled();
-    }, { timeout: 5000 });
-  });
-
-  it('shows change due in done state for cash', async () => {
-    await renderWithFluent(
-      <PaymentModal
-        open
-        lineItems={[lineItem()]}
-        total={usd(700)}
-        userId="test-user-id"
-        onComplete={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    );
-
-    const input = screen.getByLabelText(/amount tendered/i);
-    await userEvent.type(input, '10');
-    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
-
-    expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
-    expect(await screen.findByText(/change due/i)).toBeInTheDocument();
-    expect(await screen.findByText('$ 3,00')).toBeInTheDocument();
-  });
-
-  it('shows sale complete state for card and prints receipt', async () => {
-    await renderWithFluent(
-      <PaymentModal
-        open
-        lineItems={[lineItem()]}
-        total={usd(700)}
-        userId="test-user-id"
-        onComplete={vi.fn()}
-        onClose={vi.fn()}
-      />,
-    );
-
-    await userEvent.click(screen.getByLabelText(/Card/));
-    expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
-
-    // The done state should appear after printSalesReceipt resolves.
-    expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
   });
 
   // ── Split payment mode ──
@@ -418,7 +329,6 @@ describe('PaymentModal', () => {
       />,
     );
 
-    // Select "other" radio — the text input is disabled until the radio is selected
     const otherRadio = document.querySelector<HTMLInputElement>('input[type="radio"][value="other"]')!;
     await userEvent.click(otherRadio);
 
@@ -522,7 +432,7 @@ describe('PaymentModal', () => {
 
     await userEvent.click(screen.getByLabelText(/QRIS/));
 
-    expect(screen.getByRole('button', { name: /generate qris/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pay with qr/i })).toBeInTheDocument();
   });
 
   // ── Close button ──
@@ -562,7 +472,6 @@ describe('PaymentModal', () => {
       />,
     );
 
-    // For 700 minor units (7.00), the 10000-preset rounds up to 10000.00
     const presetBtn = screen.getByText(/USD 10\.000/);
     await userEvent.click(presetBtn);
 

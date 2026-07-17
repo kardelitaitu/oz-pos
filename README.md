@@ -30,7 +30,7 @@ Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cl
 - **Modular by design** — Independent modules for inventory, CRM, reporting, etc.
 - **Secure by default** — Encrypted backups, PAN masking, platform keychains
 - **Hardware abstraction** — Vendor-independent drivers for printers, scanners, displays
-- **Enterprise-grade code quality** — 1900+ Rust tests, strict Clippy, typed Money, transactional DB
+- **Enterprise-grade code quality** — 1900+ Rust tests, 2533+ frontend tests (164 files), strict Clippy, typed Money, transactional DB
 
 ---
 
@@ -110,9 +110,9 @@ oz-pos/
 │   └── src/
 │       ├── api/            # Per-domain invoke() wrappers — no invoke() in components
 │       ├── frontend/       # Shared components, shell layout, design tokens
-│       ├── features/       # 21+ screen components by domain
+│       ├── features/       # 55+ audited screen components by domain
 │       ├── locales/        # Fluent (.ftl) files — 1900+ IDs across 25 files
-│       └── __tests__/      # Vitest + testing-library (33 files)
+│       └── __tests__/      # Vitest + testing-library (164 files, 2533+ tests)
 ├── docs/                   # ROADMAP.md, ADRs, specs, whitepaper
 ├── scripts/                # Example Lua business rule scripts, coverage scripts
 └── packaging/              # MSI, .deb, .AppImage build configs
@@ -160,7 +160,7 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
 | `npm run build` | Production build |
 | `npm run typecheck` | TypeScript validation |
 | `npm run lint` | ESLint + jsx-a11y |
-| `npm run test` | Vitest (33 files) |
+| `npm run test` | Vitest (164 files, 2533+ tests) |
 
 ### Backend (root)
 
@@ -187,7 +187,7 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 
 ## Status
 
-**Phase 3 (Transactions & Staff) complete.** 51 migrations, 200+ IPC commands, 21+ screen components, 33 front-end test files, 1900+ Rust tests.
+**Phase 4 (CRM, Restaurant, Accounting) in progress.** 51 migrations, 200+ IPC commands, 55 audited screen components, 164 front-end test files (2533+ tests), 1900+ Rust tests.
 
 | Phase | Status | Focus |
 |---|---|---|
@@ -196,6 +196,8 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 | 3 | Complete | Transactions & Staff |
 | 4 | In Progress | CRM, Restaurant, Accounting |
 | 5 | Planned | Multi-store, Cloud Sync, Plugin Marketplace |
+
+Latest release: **v0.0.9** (on branch `0.0.9`).
 
 See [ROADMAP.md](./docs/ROADMAP.md) for the full phased delivery plan, and [MODULAR_APP_PLAN.md](./docs/MODULAR_APP_PLAN.md) for detailed granular checklists covering feature presets, restaurant workflows, LAN KDS discovery, and Docker cloud server containerization (`apps/cloud-server`).
 
