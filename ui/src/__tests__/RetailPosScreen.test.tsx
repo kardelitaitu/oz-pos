@@ -351,6 +351,7 @@ describe('RetailPosScreen — rendering', () => {
   it('shows zero credit reminders when no outstanding credits', async () => {
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReturnValue({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       lines: [{ id: crypto.randomUUID(), sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1 }] as any,
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
@@ -362,6 +363,7 @@ describe('RetailPosScreen — rendering', () => {
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const creditBtn = await screen.findByText(/Credit Reminders/);

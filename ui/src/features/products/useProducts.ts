@@ -136,7 +136,8 @@ export function useProducts(): UseProductsResult {
     return () => {
       cancelled = true;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — l10n captured via ref
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- l10n captured via ref
+  }, []);
 
   // Derive categories from products (memoized).
   const categories = useMemo(() => {

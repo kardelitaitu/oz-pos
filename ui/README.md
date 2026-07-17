@@ -106,4 +106,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 2026-07-17 by docs-auditor
+> last audited 17-07-26 by docs-auditor

@@ -210,7 +210,6 @@ describe('ProductLookupScreen', () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
-    const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
     fillInput(/enter or scan a barcode/i, '4901234567904');
 
     clickButton(/submit the entered barcode/i);

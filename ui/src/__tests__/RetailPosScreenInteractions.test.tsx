@@ -252,6 +252,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
@@ -277,6 +278,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
@@ -301,6 +303,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
@@ -322,6 +325,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
@@ -371,6 +375,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount: vi.fn(), updateLinePrice: vi.fn(),
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled());
@@ -420,6 +425,7 @@ describe('RetailPosScreen — interactions', () => {
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const payBtns = await screen.findAllByRole('button', { name: /F1.*Pay/i });
@@ -446,6 +452,7 @@ describe('RetailPosScreen — interactions', () => {
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
@@ -467,6 +474,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount, resetCart: vi.fn(),
       updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
@@ -493,6 +501,7 @@ describe('RetailPosScreen — interactions', () => {
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const clearBtn = await screen.findByRole('button', { name: /^clear$/i });
@@ -514,6 +523,7 @@ describe('RetailPosScreen — interactions', () => {
       setDiscount: vi.fn(), resetCart,
       updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const clearBtn = await screen.findByRole('button', { name: /^clear$/i });

@@ -6,11 +6,10 @@
 //! `PATCH /api/v1/products/:sku/stock` — adjust stock quantity.
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Extension,
 };
 use serde::{Deserialize, Serialize};
 

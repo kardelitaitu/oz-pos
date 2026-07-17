@@ -643,9 +643,21 @@ mod tests {
         assert_eq!(resp_b.status(), StatusCode::OK);
         let body_b = resp_b.into_body().collect().await.unwrap().to_bytes();
         let json_b: serde_json::Value = serde_json::from_slice(&body_b).unwrap();
-        assert_eq!(json_b["products"].as_array().unwrap().len(), 0, "tenant-b should see no products");
-        assert_eq!(json_b["tax_rates"].as_array().unwrap().len(), 0, "tenant-b should see no tax rates");
-        assert_eq!(json_b["users"].as_array().unwrap().len(), 0, "tenant-b should see no users");
+        assert_eq!(
+            json_b["products"].as_array().unwrap().len(),
+            0,
+            "tenant-b should see no products"
+        );
+        assert_eq!(
+            json_b["tax_rates"].as_array().unwrap().len(),
+            0,
+            "tenant-b should see no tax rates"
+        );
+        assert_eq!(
+            json_b["users"].as_array().unwrap().len(),
+            0,
+            "tenant-b should see no users"
+        );
 
         // Tenant A's snapshot should contain the seeded data.
         let req_a = authed(
@@ -657,10 +669,22 @@ mod tests {
         assert_eq!(resp_a.status(), StatusCode::OK);
         let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
         let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
-        assert_eq!(json_a["products"].as_array().unwrap().len(), 1, "tenant-a should see 1 product");
+        assert_eq!(
+            json_a["products"].as_array().unwrap().len(),
+            1,
+            "tenant-a should see 1 product"
+        );
         assert_eq!(json_a["products"][0]["sku"], "SKU-A");
-        assert_eq!(json_a["tax_rates"].as_array().unwrap().len(), 1, "tenant-a should see 1 tax rate");
-        assert_eq!(json_a["users"].as_array().unwrap().len(), 1, "tenant-a should see 1 user");
+        assert_eq!(
+            json_a["tax_rates"].as_array().unwrap().len(),
+            1,
+            "tenant-a should see 1 tax rate"
+        );
+        assert_eq!(
+            json_a["users"].as_array().unwrap().len(),
+            1,
+            "tenant-a should see 1 user"
+        );
     }
 
     // ── Basic push/pull with auth ────────────────────────────────────

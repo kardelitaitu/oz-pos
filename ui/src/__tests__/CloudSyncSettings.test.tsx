@@ -224,7 +224,7 @@ describe('CloudSyncSettings', () => {
 
     const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
     expect(syncArgs).toBeDefined();
-    const args = syncArgs?.args as { serverUrl?: string | null; enabled?: boolean };
+    const args = syncArgs?.['args'] as { serverUrl?: string | null; enabled?: boolean };
     expect(args?.serverUrl).toBe('https://sync.example.com');
   });
 
@@ -301,7 +301,7 @@ describe('CloudSyncSettings', () => {
     });
 
     const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
-    const args = syncArgs?.args as { apiKey?: string };
+    const args = syncArgs?.['args'] as { apiKey?: string };
     expect(args?.apiKey).toBe('sk-abc-123');
   });
 
@@ -344,7 +344,7 @@ describe('CloudSyncSettings', () => {
     });
 
     const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
-    const args = syncArgs?.args as Record<string, unknown>;
+    const args = syncArgs?.['args'] as Record<string, unknown>;
     // apiKey must be absent (not included in the object)
     expect(args).not.toHaveProperty('apiKey');
   });
@@ -390,7 +390,7 @@ describe('CloudSyncSettings', () => {
     });
 
     const syncArgs = lastCallArgs.get('update_sync_settings') as Record<string, unknown> | undefined;
-    const args = syncArgs?.args as { enabled?: boolean };
+    const args = syncArgs?.['args'] as { enabled?: boolean };
     expect(args?.enabled).toBe(true);
   });
 

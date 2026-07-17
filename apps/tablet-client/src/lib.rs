@@ -122,12 +122,11 @@ pub fn run() {
                                 }
 
                                 // Phase 2: Async HTTP push (no DB lock).
-                                let outcomes =
-                                    oz_core::sync_client::send_items_to_server(
-                                        &config,
-                                        &pending_items,
-                                    )
-                                    .await;
+                                let outcomes = oz_core::sync_client::send_items_to_server(
+                                    &config,
+                                    &pending_items,
+                                )
+                                .await;
 
                                 // Phase 3: Apply outcomes (brief lock).
                                 {

@@ -30,7 +30,6 @@ import {
   type SyncAttemptResult,
   type PullResult,
   type PingResult,
-  type TokenResult,
 } from '@/api/offline';
 import { getVersion } from '@/api/system';
 import {
@@ -364,7 +363,7 @@ interface ExpiryInfo {
   /** Fluent key — one of the `settings-sync-expiry-*` keys. */
   fluentKey: string;
   /** Argument object passed to `l10n.getString()`. */
-  fluentArgs: Record<string, unknown>;
+  fluentArgs: Record<string, number | string>;
   /** Urgency level for the badge colour. */
   tone: 'good' | 'warn' | 'critical';
 }

@@ -176,6 +176,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **OfflineQueueScreen table polish**: Wrapped table in bordered/rounded container with thead styling (uppercase, bg-secondary), row hover states, last-row border cleanup.
 - **Responsive mobile layout**: Settings form fields now stack vertically at ≤768px (`.settings-field--horizontal` → `flex-direction: column`) to prevent label/input overflow on small screens.
 - **SettingsPage tests (3 failures)**: Added `Element.prototype.scrollIntoView = vi.fn()` mock for jsdom compatibility (used by `SettingsSelect`). Updated 3 tests (`renders Currency section`, `changes default currency`, `changes decimal separator`) to interact with the custom `SettingsSelect` component (click trigger button → click `role="option"` in portal) instead of native `<select>` API.
+- **Tenant-scoped cloud sync snapshot (migration 076)**: The `GET /api/sync/snapshot` endpoint on the cloud server now filters products, tax rates, and users by `tenant_id` from the JWT claims. Previously all tenants saw every tenant's reference data. Added `tenant_id` columns + indexes to `products`, `tax_rates`, and `users` tables via migration 076. `oz-api` `create_product` stamps `tenant_id` from JWT on newly created products. Includes `snapshot_tenant_isolation` test verifying tenant-A's data is invisible to tenant-B. End-to-end verified with rebuilt Docker container.
+
+### Fixed
+- **Token request toast message**: The Request Token catch block was incorrectly showing "Connection test failed" instead of the proper "Token request failed — check server URL" message. Added `settings-sync-token-request-failed` Fluent key (EN + ID).
+- **Lint errors (18 → 0)**: Removed 3 unused variables (`TokenResult` in SettingsPage, `rerender` in FastPINOverlayKeyboard test, `barcodeInput` in ProductLookupScreen test). Fixed 12 `@typescript-eslint/no-explicit-any` violations in RetailPos test files. Fixed invalid eslint-disable comment format in `useProducts.ts`.
+- **Doc audit dates**: Fixed `CONTRIBUTING.md` and `ui/README.md` audit footer dates from `YYYY-MM-DD` to `DD-MM-YY` convention per skill-drift-guard.
+- **TypeScript errors in changed files**: Fixed `Property 'args' comes from an index signature` (4 sites in CloudSyncSettings.test.tsx) and `FluentVariable` type mismatch in SettingsPage.tsx.
 
 
 ## [0.0.8] — 2026-07-15

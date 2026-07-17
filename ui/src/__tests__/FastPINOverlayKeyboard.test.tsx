@@ -205,7 +205,7 @@ describe('FastPINOverlay — keyboard accessibility', () => {
 
   it('removes dialog from DOM after close completes', () => {
     const onClose = vi.fn();
-    const { rerender } = render(<FastPINOverlay open={true} onClose={onClose} />);
+    render(<FastPINOverlay open={true} onClose={onClose} />);
 
     expect(screen.queryByRole('dialog')).toBeInTheDocument();
 

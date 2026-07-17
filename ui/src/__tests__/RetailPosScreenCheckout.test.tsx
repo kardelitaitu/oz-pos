@@ -226,6 +226,7 @@ describe('RetailPosScreen — checkout & navigation', () => {
       setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
       resetCart: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     const shiftsApi = await import('@/api/shifts');
     vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
@@ -259,6 +260,7 @@ describe('RetailPosScreen — checkout & navigation', () => {
       setDiscount: vi.fn(), resetCart,
       updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
       assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     const shiftsApi = await import('@/api/shifts');
     vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
