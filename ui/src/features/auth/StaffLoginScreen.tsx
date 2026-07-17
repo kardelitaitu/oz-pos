@@ -395,9 +395,24 @@ export default function StaffLoginScreen() {
   const storeName = brandSettings?.store_name || '';
 
   // Focus management: clicking anywhere refocuses the active input
-  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
+  const handleScreenKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleScreenClick();
+      }
+    },
+    [handleScreenClick],
+  );
+
   return (
-    <div className="staff-login-screen" onClick={handleScreenClick}>
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- focus convenience, keyboard covered below */
+    <div
+      className="staff-login-screen"
+      onClick={handleScreenClick}
+      onKeyDown={handleScreenKeyDown}
+      tabIndex={-1}
+    >
       <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={cardRef}>
         {step === 'pin' && (
           <button
