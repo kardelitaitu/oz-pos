@@ -299,6 +299,10 @@ pub const ALL: &[Migration] = &[
         id: "075_global_currency_settings.sql",
         sql: include_str!("../migrations/075_global_currency_settings.sql"),
     },
+    Migration {
+        id: "076_tenant_id_reference.sql",
+        sql: include_str!("../migrations/076_tenant_id_reference.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around

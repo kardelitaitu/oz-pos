@@ -257,9 +257,14 @@ async fn pull_handler(
 /// `GET /api/sync/snapshot` — return reference data baseline for a tenant (P-3).
 ///
 /// Called by clients whose sync anchor has expired. Returns all products,
-/// tax rates, and users. Responses are cached in-memory with a 5-min TTL.
-/// NOTE: reference tables (products, tax_rates, users) are not tenant-scoped;
-/// snapshot returns all rows regardless of the requesting tenant's JWT scope.
+/// tax rates, and users for the requesting tenant (scoped by `tenant_id`
+/// from JWT claims). Responses are cached in-memory per-tenant with a
+/// 5-min TTL.
+///
+/// TODO: When oz-api adds POST endpoints for tax_rates and users, those
+/// handlers must stamp `tenant_id` from JWT claims — same pattern as
+/// `create_product` in oz-api/src/routes/products.rs. Without it, new
+/// tax rates and users default to 'default' and leak across tenants.
 async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
@@ -289,16 +294,16 @@ async fn snapshot_handler(
         .with_label_values(&["snapshot"])
         .observe(db_start.elapsed().as_secs_f64());
 
-    // Query products.
+    // Query products — scoped to the requesting tenant.
     let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
                 "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
-                 FROM products"
+                 FROM products WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
         Ok(stmt
-            .query_map([], |row| {
+            .query_map(params![tenant_id], |row| {
                 Ok(serde_json::json!({
                     "id": row.get::<_, String>("id")?,
                     "sku": row.get::<_, String>("sku")?,
@@ -321,15 +326,15 @@ async fn snapshot_handler(
         Err(e) => return error_json(&e),
     };
 
-    // Query tax rates.
+    // Query tax rates — scoped to the requesting tenant.
     let tax_rates: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at FROM tax_rates"
+                "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at FROM tax_rates WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
         Ok(stmt
-            .query_map([], |row| {
+            .query_map(params![tenant_id], |row| {
                 Ok(serde_json::json!({
                     "id": row.get::<_, String>("id")?,
                     "name": row.get::<_, String>("name")?,
@@ -348,15 +353,15 @@ async fn snapshot_handler(
         Err(e) => return error_json(&e),
     };
 
-    // Query users.
+    // Query users — scoped to the requesting tenant.
     let users: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at FROM users"
+                "SELECT id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at FROM users WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
         Ok(stmt
-            .query_map([], |row| {
+            .query_map(params![tenant_id], |row| {
                 Ok(serde_json::json!({
                     "id": row.get::<_, String>("id")?,
                     "username": row.get::<_, String>("username")?,
@@ -589,6 +594,73 @@ mod tests {
         assert!(json["products"].is_array());
         assert!(json["tax_rates"].is_array());
         assert!(json["users"].is_array());
+    }
+
+    #[tokio::test]
+    async fn snapshot_tenant_isolation() {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+        };
+        let app = test_router_with_state(state.clone());
+
+        // Seed a product for tenant-a only.
+        {
+            let conn = state.db.lock().await;
+            // Seed a role so the FK on users is satisfied.
+            conn.execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ('r-owner', 'Owner', '[]')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ('prod-a', 'SKU-A', 'Product A', 100, 'USD', 'tenant-a')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO tax_rates (id, name, rate_bps, tenant_id)
+                 VALUES ('tax-a', 'Tax A', 800, 'tenant-a')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+                 VALUES ('user-a', 'alice', 'hash', 'Alice', 'r-owner', 'tenant-a')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Tenant B's snapshot should be empty (no data seeded for tenant-b).
+        let req_b = authed(
+            axum::http::Method::GET,
+            "/api/sync/snapshot",
+            Some("tenant-b"),
+        );
+        let resp_b = app.clone().oneshot(req_b).await.unwrap();
+        assert_eq!(resp_b.status(), StatusCode::OK);
+        let body_b = resp_b.into_body().collect().await.unwrap().to_bytes();
+        let json_b: serde_json::Value = serde_json::from_slice(&body_b).unwrap();
+        assert_eq!(json_b["products"].as_array().unwrap().len(), 0, "tenant-b should see no products");
+        assert_eq!(json_b["tax_rates"].as_array().unwrap().len(), 0, "tenant-b should see no tax rates");
+        assert_eq!(json_b["users"].as_array().unwrap().len(), 0, "tenant-b should see no users");
+
+        // Tenant A's snapshot should contain the seeded data.
+        let req_a = authed(
+            axum::http::Method::GET,
+            "/api/sync/snapshot",
+            Some("tenant-a"),
+        );
+        let resp_a = app.oneshot(req_a).await.unwrap();
+        assert_eq!(resp_a.status(), StatusCode::OK);
+        let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
+        let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
+        assert_eq!(json_a["products"].as_array().unwrap().len(), 1, "tenant-a should see 1 product");
+        assert_eq!(json_a["products"][0]["sku"], "SKU-A");
+        assert_eq!(json_a["tax_rates"].as_array().unwrap().len(), 1, "tenant-a should see 1 tax rate");
+        assert_eq!(json_a["users"].as_array().unwrap().len(), 1, "tenant-a should see 1 user");
     }
 
     // ── Basic push/pull with auth ────────────────────────────────────
