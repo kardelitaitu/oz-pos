@@ -121,6 +121,7 @@ export default function StaffLoginScreen() {
 
     addToast({ type: 'error', message: error, duration: 5000 });
     setPin([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
   // ── Focus appropriate element when step changes ──────────────

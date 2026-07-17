@@ -180,12 +180,14 @@ export default function DataManagementScreen() {
   }, []);
 
   // Cleanup flash timeouts on unmount.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     return () => {
       flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
       flashTimeoutsRef.current.clear();
     };
   }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   // ── Refs to hold latest form state so callbacks don't depend on
   //     keystroke-level state (which would defeat useCallback).

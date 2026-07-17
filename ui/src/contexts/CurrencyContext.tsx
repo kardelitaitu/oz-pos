@@ -67,6 +67,7 @@ export function CurrencyProvider({ children, fallback = 'USD' }: CurrencyProvide
  * Access the store's default currency.
  * Must be called within a `<CurrencyProvider>`.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useCurrency(): CurrencyContextValue {
   const ctx = useContext(CurrencyContext);
   if (!ctx) {

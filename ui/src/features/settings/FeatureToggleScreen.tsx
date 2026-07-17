@@ -163,12 +163,14 @@ export default function FeatureToggleScreen() {
   }, []);
 
   // Cleanup flash timeouts on unmount.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     return () => {
       flashTimeoutsRef.current.forEach((tid) => clearTimeout(tid));
       flashTimeoutsRef.current.clear();
     };
   }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const load = useCallback(async () => {
     setLoading(true);

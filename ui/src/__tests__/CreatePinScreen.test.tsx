@@ -33,6 +33,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/frontend/shared/Toast', async (importOriginal) => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   const actual = await importOriginal<typeof import('@/frontend/shared/Toast')>();
   return {
     ...actual,

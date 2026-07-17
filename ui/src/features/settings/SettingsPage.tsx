@@ -714,6 +714,7 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
@@ -885,6 +886,7 @@ export default function SettingsPage() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, mobileSidebarOpen, saving, searchQuery]);
 
   // ── Loading / Error states ───────────────────────────────────

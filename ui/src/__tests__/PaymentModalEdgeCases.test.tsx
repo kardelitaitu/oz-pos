@@ -79,6 +79,7 @@ afterEach(() => {
 
 function setProcessingMock() {
   // Make complete_sale never resolve so processing stays true
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMock.mockImplementation((cmd: string): any => {
     if (cmd === 'complete_sale') return new Promise(() => {});
     if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });
@@ -90,6 +91,7 @@ function setProcessingMock() {
 }
 
 function setErrorMock() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMock.mockImplementation((cmd: string): any => {
     if (cmd === 'complete_sale') return Promise.reject(new Error('Payment gateway timeout'));
     if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });

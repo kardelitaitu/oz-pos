@@ -91,8 +91,8 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 /** Access the zoom context. Must be used within a `<ZoomProvider>`. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAppZoom() {
   const context = useContext(ZoomContext);
   if (context === undefined) {

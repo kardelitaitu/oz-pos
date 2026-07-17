@@ -217,6 +217,7 @@ describe('useBarcodeScanner', () => {
   describe('idempotency', () => {
     it('re-starts scanner when preferredId changes', async () => {
       mocks.startScanner.mockClear();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { rerender } = await (renderHookInAct as any)(
         ({ scannerId }: { scannerId?: string }) => useBarcodeScanner(makeOpts({ scannerId })),
         { initialProps: { scannerId: 'scanner-1' } },

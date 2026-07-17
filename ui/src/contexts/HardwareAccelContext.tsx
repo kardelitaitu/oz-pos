@@ -43,8 +43,8 @@ export function HardwareAccelProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 /** Access the hardware acceleration context. Must be used within a `<HardwareAccelProvider>`. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useHardwareAccel() {
   const context = useContext(HardwareAccelContext);
   if (context === undefined) {

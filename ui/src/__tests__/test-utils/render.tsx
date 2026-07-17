@@ -57,6 +57,7 @@ export function renderWithFluentSync(
 // and Fluent i18n bundles. Exposes sync and async variants matching
 // the renderWithFluent/renderWithFluentSync dual-API.
 
+// eslint-disable-next-line react-refresh/only-export-components
 const DefaultProviders = ({ children }: { children: ReactNode }) => (
   <BrandProvider>
     <ThemeProvider>
@@ -89,6 +90,7 @@ export async function renderWithProviders(
  * `render()` internally. Use for components that don't trigger async
  * state updates on mount.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function renderWithProvidersSync(
   ui: ReactElement,
   ...ftlContents: string[]

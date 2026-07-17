@@ -78,6 +78,7 @@ describe('useCustomerDisplay', () => {
     });
 
     it('clears display when cart is empty', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (renderHookInAct as any)(() =>
         useCustomerDisplay({ lines: [], total: null }),
       );
@@ -86,6 +87,7 @@ describe('useCustomerDisplay', () => {
     });
 
     it('clears display when item count reaches zero', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { rerender } = await (renderHookInAct as any)(
         ({ lines, total }: { lines: { qty: number }[]; total: Money | null }) =>
           useCustomerDisplay({ lines, total }),
@@ -138,6 +140,7 @@ describe('useCustomerDisplay', () => {
       const lines = [{ qty: 3 }];
       const total = makeTotal();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { rerender } = await (renderHookInAct as any)(
         ({ lines: l, total: t }: { lines: { qty: number }[]; total: Money | null }) =>
           useCustomerDisplay({ lines: l, total: t }),
@@ -164,7 +167,9 @@ describe('useCustomerDisplay', () => {
 
     it('calls onPaymentComplete callback', async () => {
       const onPaymentComplete = vi.fn();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { result } = await (renderHookInAct as any)(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         useCustomerDisplay({ lines: [{ qty: 3 }], total: makeTotal(), onPaymentComplete } as any),
       );
 

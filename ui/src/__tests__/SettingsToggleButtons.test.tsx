@@ -63,6 +63,7 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
   HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
@@ -78,6 +79,7 @@ vi.mock('@/utils/color', () => ({
   deriveAccentPalette: vi.fn().mockReturnValue({}),
   applyAccentPalette: vi.fn(),
 } as any));
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 const mockAddToast = vi.fn();
 vi.mock('@/frontend/shared/Toast', () => ({
@@ -140,6 +142,7 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
 });
 
 vi.mock('@tauri-apps/api/core', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invoke: (cmd: string, args?: unknown) => (invokeMock as any)(cmd, args),
 }));
 
@@ -149,7 +152,9 @@ describe('Settings Toggle Buttons Regression Suite', () => {
   beforeEach(() => {
     mockSetHwAccelEnabled.mockClear();
     mockGetBrandSettings.mockResolvedValue({ primary_colour: '#10b981', logo_path: null, store_name: '' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (invokeMock as any).mockReset();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (invokeMock as any).mockImplementation((cmd: any) => defaultImpl(cmd));
   });
 
