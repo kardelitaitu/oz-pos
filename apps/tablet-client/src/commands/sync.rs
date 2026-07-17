@@ -114,8 +114,16 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
     let db = state.db.lock().await;
     let store = Store::new(&db);
     match outcomes {
-        Ok(outcomes) => Ok(sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?),
-        Err(e) => Ok(sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?),
+        Ok(outcomes) => Ok(sync_client::apply_sync_outcomes(
+            &store,
+            &pending_items,
+            &outcomes,
+        )?),
+        Err(e) => Ok(sync_client::mark_all_failed(
+            &store,
+            &pending_items,
+            &e.to_string(),
+        )?),
     }
 }
 
