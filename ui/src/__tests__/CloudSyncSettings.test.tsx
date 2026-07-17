@@ -80,6 +80,20 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (cmd === 'sync_run') {
       return Promise.resolve({ synced: 3, failed: 0, error: null });
     }
+    if (cmd === 'request_sync_token') {
+      return Promise.resolve({
+        ok: true,
+        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token',
+        status: 'Token obtained — expires in 2 hours',
+        expiresAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+      });
+    }
+    if (cmd === 'test_sync_connection') {
+      return Promise.resolve({ ok: true, status: 'Connected (12ms)', latencyMs: 12 });
+    }
+    if (cmd === 'pending_sync_count') {
+      return Promise.resolve(0);
+    }
     return Promise.resolve(undefined);
   };
   return { invokeMock: vi.fn(impl), defaultImpl: impl, failCommands, lastCallArgs };
@@ -561,5 +575,250 @@ describe('CloudSyncSettings', () => {
 
     // Placeholder should still show masked dots (not downgraded to "Enter API key")
     expect(getApiKeyInput().getAttribute('placeholder')).toBe('••••••••');
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Request Token button
+  // ═══════════════════════════════════════════════════════════════
+
+  it('renders Request Token button when server URL is set', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    expect(screen.getByRole('button', { name: /request token/i })).toBeInTheDocument();
+  });
+
+  it('calls request_sync_token with the in-progress URL on click', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    // Type a custom URL into the server URL field
+    fireEvent.change(getServerUrlInput(), { target: { value: 'http://localhost:3099' } });
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('request_sync_token', { url: 'http://localhost:3099' });
+    });
+  });
+
+  it('auto-fills API key field on successful token request', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    expect(getApiKeyInput()).toHaveValue('');
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      expect(getApiKeyInput()).toHaveValue('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token');
+    });
+  });
+
+  it('shows visibility toggle after auto-fill since there is text to reveal', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    // Before auto-fill: no toggle (field is empty)
+    expect(document.querySelector('.settings-input-toggle')).toBeNull();
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      expect(getApiKeyInput()).toHaveValue('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token');
+    });
+
+    // Eye toggle SHOULD be visible because there is text to reveal
+    expect(document.querySelector('.settings-input-toggle')).not.toBeNull();
+    // But the field type should be 'password' (hidden by default)
+    expect(getApiKeyInput().type).toBe('password');
+  });
+
+  it('shows expiry badge after successful token request', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      // Badge should render with the expiry text (the mock returns 2 hours from now)
+      const badge = document.querySelector('.settings-sync-expiry-badge');
+      expect(badge).not.toBeNull();
+      expect(badge?.textContent).toMatch(/expires in/i);
+    });
+  });
+
+  it('clears expiry badge on revert', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    // Request a token so the badge appears
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      expect(document.querySelector('.settings-sync-expiry-badge')).not.toBeNull();
+    });
+
+    // Click Revert
+    const revertBtn = screen.getByRole('button', { name: /revert settings/i });
+    fireEvent.click(revertBtn);
+
+    // Badge should be gone
+    await waitFor(() => {
+      expect(document.querySelector('.settings-sync-expiry-badge')).toBeNull();
+    });
+  });
+
+  it('clears expiry badge when server URL changes', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    // Request a token so the badge appears
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      expect(document.querySelector('.settings-sync-expiry-badge')).not.toBeNull();
+    });
+
+    // Change the server URL — badge should clear
+    fireEvent.change(getServerUrlInput(), { target: { value: 'https://new-server.com' } });
+
+    await waitFor(() => {
+      expect(document.querySelector('.settings-sync-expiry-badge')).toBeNull();
+    });
+  });
+
+  it('shows error toast when token request fails (ok: false)', async () => {
+    const user = userEvent.setup();
+
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'request_sync_token') {
+        return Promise.resolve({ ok: false, token: null, status: 'Server returned 500: Internal error', expiresAt: null });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    // Token field should NOT have been filled
+    await waitFor(() => {
+      expect(getApiKeyInput()).toHaveValue('');
+    });
+
+    // No badge should appear
+    expect(document.querySelector('.settings-sync-expiry-badge')).toBeNull();
+
+    // The error status string appears in the toast
+    await waitFor(() => {
+      expect(screen.getByText(/500.*internal error/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error toast when token request throws (network error)', async () => {
+    const user = userEvent.setup();
+
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'request_sync_token') {
+        return Promise.reject(new Error('Connection refused'));
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    // Token field should remain empty
+    await waitFor(() => {
+      expect(getApiKeyInput()).toHaveValue('');
+    });
+
+    // No badge should appear
+    expect(document.querySelector('.settings-sync-expiry-badge')).toBeNull();
+
+    // The catch block uses 'settings-sync-test-failed' which renders "Connection test failed"
+    await waitFor(() => {
+      expect(screen.getByText(/test failed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('marks settings as dirty after successful token auto-fill', async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings') {
+        return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    const requestBtn = screen.getByRole('button', { name: /request token/i });
+    await user.click(requestBtn);
+
+    await waitFor(() => {
+      expect(getApiKeyInput()).toHaveValue('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test-token');
+    });
+
+    // Save button should show unsaved changes (Revert button visible)
+    expect(screen.getByRole('button', { name: /revert settings/i })).toBeInTheDocument();
   });
 });
