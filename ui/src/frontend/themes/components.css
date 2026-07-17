@@ -236,6 +236,7 @@
 .shift-mgmt-modal::after,
 .payment-modal::after,
 .sales-history-modal::after,
+.price-override-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -277,6 +278,7 @@
   .shift-mgmt-modal::after,
   .payment-modal::after,
   .sales-history-modal::after,
+  .price-override-modal::after,
   .noise-dither::after { display: none; }
 }
 
