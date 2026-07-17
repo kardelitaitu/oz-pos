@@ -132,7 +132,15 @@ export function usePosState() {
     );
   }, []);
 
-  /** Computed subtotal (sum of all line qty × unit_price). */
+  /**
+   * Computed subtotal (sum of all line qty × unit_price).
+   *
+   * Currency is taken from the first line. The POS does not support
+   * mixed-currency carts — all lines in a single transaction must
+   * share the same currency. If a mixed-currency scenario occurs
+   * (e.g. bug or direct state mutation), the first line's currency
+   * is used and subsequent lines' amounts are summed regardless.
+   */
   const subtotal: Money | null = useMemo(() => {
     if (lines.length === 0) return null;
     const currency = lines[0]!.unit_price.currency;

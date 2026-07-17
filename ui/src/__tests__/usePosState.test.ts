@@ -134,6 +134,25 @@ describe('usePosState', () => {
       expect(result.current.subtotal).toBeNull();
     });
 
+    it('uses first line currency as the subtotal currency', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => { result.current.addProduct(makeProduct({ price: { minor_units: 1000, currency: 'IDR' } })); });
+      act(() => { result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel', price: { minor_units: 500, currency: 'IDR' } }), 2); });
+
+      expect(result.current.subtotal).toEqual({ minor_units: 2000, currency: 'IDR' });
+    });
+
+    it('uses first line currency even when subsequent lines differ', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => { result.current.addProduct(makeProduct({ price: { minor_units: 1000, currency: 'USD' } })); });
+      act(() => { result.current.addProduct(makeProduct({ sku: 'BAGEL' as Product['sku'], name: 'Bagel', price: { minor_units: 500, currency: 'EUR' } })); });
+
+      // First line's currency (USD) wins; amounts are summed without conversion
+      expect(result.current.subtotal).toEqual({ minor_units: 1500, currency: 'USD' });
+    });
+
     it('computes discount amount as percentage of subtotal', () => {
       const { result } = renderHook(() => usePosState());
 
