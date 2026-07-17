@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { bootstrapOwner } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
+import { Localized, useLocalization } from '@fluent/react';
 import './CreatePinScreen.css';
 
 /** Props for the CreatePinScreen component. */
@@ -12,6 +13,7 @@ export interface CreatePinScreenProps {
 
 /** Create owner PIN screen — bootstraps the first owner account on a fresh installation. */
 export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
+  const { l10n } = useLocalization();
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
@@ -26,15 +28,15 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
     setErrorMsg(null);
 
     if (!displayName.trim() || !username.trim() || !pin.trim()) {
-      setErrorMsg('All fields are required.');
+      setErrorMsg(l10n.getString('auth-create-pin-error-fields'));
       return;
     }
     if (pin.length < 4) {
-      setErrorMsg('PIN must be at least 4 characters.');
+      setErrorMsg(l10n.getString('auth-create-pin-error-pin-length'));
       return;
     }
     if (pin !== confirmPin) {
-      setErrorMsg('PINs do not match.');
+      setErrorMsg(l10n.getString('auth-create-pin-error-pin-mismatch'));
       return;
     }
 
@@ -46,10 +48,10 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
         display_name: displayName.trim(),
       });
       swapSession(result.session);
-      addToast({ type: 'success', message: 'Owner account created successfully!' });
+      addToast({ type: 'success', message: l10n.getString('auth-create-pin-success') });
       onCreated();
       } catch (err: unknown) {
-        let message = 'An error occurred while creating the owner account.';
+        let message = l10n.getString('auth-create-pin-error-generic');
         if (err instanceof Error) message = err.message;
         else if (typeof err === 'string') message = err;
         else if (err && typeof err === 'object' && 'message' in err) {
@@ -70,8 +72,12 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
     <div className="create-pin-container">
       <div className="create-pin-card">
         <div className="create-pin-header">
-          <h1>Create Owner PIN</h1>
-          <p>Set up the first owner account to manage your POS</p>
+          <Localized id="auth-create-pin-title">
+            <h1>Create Owner PIN</h1>
+          </Localized>
+          <Localized id="auth-create-pin-desc">
+            <p>Set up the first owner account to manage your POS</p>
+          </Localized>
         </div>
 
         {errorMsg && (
@@ -82,62 +88,90 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
 
         <form onSubmit={handleSubmit}>
           <div className="create-pin-form-group">
-            <label htmlFor="displayName">Display Name</label>
-            <input
-              id="displayName"
-              type="text"
-              className="create-pin-input"
-              placeholder="Store Owner"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              disabled={loading}
-            />
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text via Localized span */}
+            <label htmlFor="displayName">
+              <Localized id="auth-create-pin-display-name-label">
+                <span>Display Name</span>
+              </Localized>
+            </label>
+            <Localized id="auth-create-pin-display-name-placeholder" attrs={{ placeholder: true }}>
+              <input
+                id="displayName"
+                type="text"
+                className="create-pin-input"
+                placeholder="Store Owner"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={loading}
+              />
+            </Localized>
           </div>
 
           <div className="create-pin-form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              className="create-pin-input"
-              placeholder="owner"
-              value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase())}
-              disabled={loading}
-              autoComplete="username"
-            />
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text via Localized span */}
+            <label htmlFor="username">
+              <Localized id="auth-create-pin-username-label">
+                <span>Username</span>
+              </Localized>
+            </label>
+            <Localized id="auth-create-pin-username-placeholder" attrs={{ placeholder: true }}>
+              <input
+                id="username"
+                type="text"
+                className="create-pin-input"
+                placeholder="owner"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                disabled={loading}
+                autoComplete="username"
+              />
+            </Localized>
           </div>
 
           <div className="create-pin-form-group">
-            <label htmlFor="pin">PIN</label>
-            <input
-              id="pin"
-              type="password"
-              className="create-pin-input"
-              placeholder="At least 4 digits"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              disabled={loading}
-              autoComplete="new-password"
-              inputMode="numeric"
-              maxLength={8}
-            />
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text via Localized span */}
+            <label htmlFor="pin">
+              <Localized id="auth-create-pin-pin-label">
+                <span>PIN</span>
+              </Localized>
+            </label>
+            <Localized id="auth-create-pin-pin-placeholder" attrs={{ placeholder: true }}>
+              <input
+                id="pin"
+                type="password"
+                className="create-pin-input"
+                placeholder="At least 4 digits"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                disabled={loading}
+                autoComplete="new-password"
+                inputMode="numeric"
+                maxLength={8}
+              />
+            </Localized>
           </div>
 
           <div className="create-pin-form-group">
-            <label htmlFor="confirmPin">Confirm PIN</label>
-            <input
-              id="confirmPin"
-              type="password"
-              className="create-pin-input"
-              placeholder="Re-enter PIN"
-              value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value)}
-              disabled={loading}
-              autoComplete="new-password"
-              inputMode="numeric"
-              maxLength={8}
-            />
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text via Localized span */}
+            <label htmlFor="confirmPin">
+              <Localized id="auth-create-pin-confirm-label">
+                <span>Confirm PIN</span>
+              </Localized>
+            </label>
+            <Localized id="auth-create-pin-confirm-placeholder" attrs={{ placeholder: true }}>
+              <input
+                id="confirmPin"
+                type="password"
+                className="create-pin-input"
+                placeholder="Re-enter PIN"
+                value={confirmPin}
+                onChange={(e) => setConfirmPin(e.target.value)}
+                disabled={loading}
+                autoComplete="new-password"
+                inputMode="numeric"
+                maxLength={8}
+              />
+            </Localized>
           </div>
 
           <button
@@ -151,10 +185,10 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
                   <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
                   <path d="M12 2a10 10 0 0 1 10 10" />
                 </svg>
-                Creating...
+                {l10n.getString('auth-create-pin-creating')}
               </>
             ) : (
-              'Create Owner Account'
+              l10n.getString('auth-create-pin-create')
             )}
           </button>
         </form>

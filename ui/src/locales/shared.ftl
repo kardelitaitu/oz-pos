@@ -264,3 +264,22 @@ auth-ip-address = IP Address : { $ip }
 auth-copyright = OZ-POS © { $year } All rights reserved.
 auth-clipboard-error = Clipboard error: { $message }
 auth-error-title = Error
+
+## Create Owner PIN (first-run setup)
+auth-create-pin-title = Create Owner PIN
+auth-create-pin-desc = Set up the first owner account to manage your POS
+auth-create-pin-display-name-label = Display Name
+auth-create-pin-display-name-placeholder = Store Owner
+auth-create-pin-username-label = Username
+auth-create-pin-username-placeholder = owner
+auth-create-pin-pin-label = PIN
+auth-create-pin-pin-placeholder = At least 4 digits
+auth-create-pin-confirm-label = Confirm PIN
+auth-create-pin-confirm-placeholder = Re-enter PIN
+auth-create-pin-creating = Creating...
+auth-create-pin-create = Create Owner Account
+auth-create-pin-success = Owner account created successfully!
+auth-create-pin-error-fields = All fields are required.
+auth-create-pin-error-pin-length = PIN must be at least 4 characters.
+auth-create-pin-error-pin-mismatch = PINs do not match.
+auth-create-pin-error-generic = An error occurred while creating the owner account.
