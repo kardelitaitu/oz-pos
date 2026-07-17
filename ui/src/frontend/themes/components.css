@@ -221,6 +221,7 @@
 .retail-shift-modal::after,
 .retail-held-carts-modal::after,
 .retail-discount-modal::after,
+.retail-qty-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -247,6 +248,7 @@
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
   .retail-discount-modal::after,
+  .retail-qty-modal::after,
   .noise-dither::after { display: none; }
 }
 
