@@ -262,7 +262,11 @@ describe('CloudSyncSettings', () => {
     const keyInput = getApiKeyInput();
     expect(keyInput.type).toBe('password');
 
+    // The toggle only renders when text is typed (not for placeholder dots)
+    fireEvent.change(keyInput, { target: { value: 'sk-xyz' } });
+
     const toggleBtn = document.querySelector('.settings-input-toggle') as HTMLElement;
+    expect(toggleBtn).not.toBeNull();
     fireEvent.click(toggleBtn);
     expect(keyInput.type).toBe('text');
 

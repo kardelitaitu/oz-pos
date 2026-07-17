@@ -1316,6 +1316,11 @@ export default function SettingsPage() {
                         onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
                       />
                     </Localized>
+                    {/* Only show the eye toggle when there is text to reveal.
+                        When hasApiKey is true the placeholder shows dots, but the
+                        actual key value is never loaded from the backend — so
+                        toggling visibility on an empty field is misleading. */}
+                    {syncApiKey && (
                     <button
                       type="button"
                       className="settings-input-toggle"
@@ -1336,6 +1341,7 @@ export default function SettingsPage() {
                         </svg>
                       )}
                     </button>
+                    )}
                   </div>
                 </span>
               </div>

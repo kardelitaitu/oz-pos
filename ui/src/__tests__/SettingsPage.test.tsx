@@ -673,7 +673,11 @@ describe('SettingsPage', () => {
     const apiKeyInput = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
     expect(apiKeyInput.type).toBe('password');
 
+    // The toggle only renders when text is typed (not for placeholder dots)
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test' } });
+
     const toggleBtn = document.querySelector('.settings-input-toggle') as HTMLElement;
+    expect(toggleBtn).not.toBeNull();
     fireEvent.click(toggleBtn);
 
     expect(apiKeyInput.type).toBe('text');
