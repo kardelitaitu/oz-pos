@@ -79,25 +79,86 @@ pub fn run() {
                 app.manage(state);
 
                 // ── Background sync daemon ────────────────────────────────
+                // Uses the same 3-phase split as the Tauri commands:
+                // read DB → async HTTP → write DB, so the DB lock is never
+                // held during the network round-trip.
                 platform_startup::spawn_daemon("tablet sync daemon", async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
                         interval.tick().await;
                         match app_handle.try_state::<AppState>() {
                             Some(state) => {
-                                let db = state.db.lock().await;
-                                let store = Store::new(&db);
-                                match SyncConfig::from_settings(&store) {
-                                    Ok(Some(config)) => {
-                                        if let Err(e) =
-                                            oz_core::sync_client::sync_pending(&store, &config)
-                                        {
-                                            tracing::error!(error = %e, "sync cycle failed");
+                                // Phase 1: Read config + pending items (brief lock).
+                                let (config_opt, pending_items) = {
+                                    let db = state.db.lock().await;
+                                    let store = Store::new(&db);
+                                    let config = match SyncConfig::from_settings(&store) {
+                                        Ok(c) => c,
+                                        Err(e) => {
+                                            tracing::error!(
+                                                error = %e,
+                                                "tablet sync daemon: failed to load sync config"
+                                            );
+                                            None
                                         }
-                                    }
-                                    Ok(None) => {}
-                                    Err(e) => {
-                                        tracing::error!(error = %e, "failed to load sync config")
+                                    };
+                                    let pending =
+                                        store.list_pending_offline().unwrap_or_else(|e| {
+                                            tracing::error!(
+                                                error = %e,
+                                                "tablet sync daemon: failed to list pending offline"
+                                            );
+                                            vec![]
+                                        });
+                                    (config, pending)
+                                };
+
+                                let Some(config) = config_opt else {
+                                    continue;
+                                };
+
+                                if pending_items.is_empty() {
+                                    continue;
+                                }
+
+                                // Phase 2: Async HTTP push (no DB lock).
+                                let outcomes =
+                                    oz_core::sync_client::send_items_to_server(
+                                        &config,
+                                        &pending_items,
+                                    )
+                                    .await;
+
+                                // Phase 3: Apply outcomes (brief lock).
+                                {
+                                    let db = state.db.lock().await;
+                                    let store = Store::new(&db);
+                                    match outcomes {
+                                        Ok(outcomes) => {
+                                            if let Err(e) =
+                                                oz_core::sync_client::apply_sync_outcomes(
+                                                    &store,
+                                                    &pending_items,
+                                                    &outcomes,
+                                                )
+                                            {
+                                                tracing::error!(
+                                                    error = %e,
+                                                    "tablet sync daemon: failed to apply outcomes"
+                                                );
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let _ = oz_core::sync_client::mark_all_failed(
+                                                &store,
+                                                &pending_items,
+                                                &e.to_string(),
+                                            );
+                                            tracing::error!(
+                                                error = %e,
+                                                "tablet sync daemon: HTTP push failed"
+                                            );
+                                        }
                                     }
                                 }
                             }
