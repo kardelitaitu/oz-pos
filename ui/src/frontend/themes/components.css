@@ -223,6 +223,8 @@
 .retail-discount-modal::after,
 .retail-qty-modal::after,
 .retail-shortcuts-modal::after,
+.retail-preview-modal::after,
+.retail-customer-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -251,6 +253,8 @@
   .retail-discount-modal::after,
   .retail-qty-modal::after,
   .retail-shortcuts-modal::after,
+  .retail-preview-modal::after,
+  .retail-customer-modal::after,
   .noise-dither::after { display: none; }
 }
 
