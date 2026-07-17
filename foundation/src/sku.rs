@@ -7,9 +7,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A SKU string. Trimmed, must be non-empty.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Sku(String);
+
+impl<'de> Deserialize<'de> for Sku {
+    fn deserialize<D: serde::Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(de)?;
+        Sku::try_new(s)
+            .ok_or_else(|| serde::de::Error::custom("SKU must not be empty or whitespace-only"))
+    }
+}
 
 impl Sku {
     /// Construct a SKU from any string-like value, trimming and panicking
@@ -191,5 +199,25 @@ mod tests {
         let c = a.clone();
         assert_eq!(a, b);
         assert_eq!(a, c);
+    }
+
+    // ── Sku serde validation ──
+
+    #[test]
+    fn sku_serde_rejects_empty_string() {
+        let result: Result<Sku, _> = serde_json::from_str("\"\"");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sku_serde_rejects_whitespace_only() {
+        let result: Result<Sku, _> = serde_json::from_str("\"   \"");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sku_serde_trims_whitespace() {
+        let sku: Sku = serde_json::from_str("\"  COFFEE  \"").unwrap();
+        assert_eq!(sku.as_str(), "COFFEE");
     }
 }
