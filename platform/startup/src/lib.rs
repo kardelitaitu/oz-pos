@@ -146,6 +146,27 @@ pub fn init_module_system(
     Ok(())
 }
 
+/// Spawn a background daemon with a watchdog that logs on panic or
+/// unexpected exit.
+///
+/// Cancellation (normal app shutdown) is logged at `info!` level so
+/// it doesn't look like a crash.  Uses `tokio::spawn` directly so that
+/// `JoinError::is_panic()` is available to distinguish panics from
+/// cancellations.
+pub fn spawn_daemon(
+    name: &'static str,
+    fut: impl std::future::Future<Output = ()> + Send + 'static,
+) {
+    let handle = tokio::spawn(fut);
+    tokio::spawn(async move {
+        match handle.await {
+            Ok(()) => tracing::warn!("{name} exited unexpectedly"),
+            Err(e) if e.is_panic() => tracing::error!(error = %e, "{name} panicked"),
+            Err(_) => tracing::info!("{name} shut down"),
+        }
+    });
+}
+
 /// Initialise and start the exchange rate auto-sync daemon.
 ///
 /// Spawns a background task that periodically fetches exchange rates

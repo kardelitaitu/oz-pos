@@ -71,7 +71,7 @@ pub fn run() {
 
                 // ── Background sync daemon ────────────────────────────────
                 let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
+                platform_startup::spawn_daemon("tablet sync daemon", async move {
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
                     loop {
                         interval.tick().await;

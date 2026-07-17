@@ -78,21 +78,21 @@ pub fn run() {
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
+            platform_startup::spawn_daemon("sync daemon", async move {
                 let state = app_handle.state::<AppState>();
                 state.sync_daemon.start(db).await;
             });
 
             // ── Background prune daemon (ADR #6 Q4 / P-1 Ledger Retention) ─
             let prune_db = app.state::<AppState>().db.clone();
-            tauri::async_runtime::spawn(async move {
+            platform_startup::spawn_daemon("prune daemon", async move {
                 platform_sync::daemon::SyncDaemon::start_prune_task(prune_db);
             });
 
             // ── LAN event forwarder ────────────────────────────────────
             let forwarder = crate::lan_server::LanEventForwarder::new();
             let handle = forwarder.handle();
-            tauri::async_runtime::spawn(forwarder.run());
+            platform_startup::spawn_daemon("LAN event forwarder", forwarder.run());
 
             // Subscribe event bus handlers for LAN forwarding.
             // .setup() is synchronous, so we can't use .await.
