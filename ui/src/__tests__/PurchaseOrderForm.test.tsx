@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
-import userEvent from '@testing-library/user-event';
 
 // Mock the purchasing API — use vi.fn() inline to avoid hoisting issues.
 vi.mock('@/api/purchasing', () => ({
@@ -20,6 +19,22 @@ const sampleSuppliers = [
   { id: 'sup-1', code: 'SUP001', name: 'Acme Corp', status: 'active' },
   { id: 'sup-2', code: 'SUP002', name: 'Global Goods', status: 'active' },
 ];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fillField(placeholder: string | RegExp, value: string) {
+  fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value } });
+}
+
+function clickButton(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
+function selectOption(label: string | RegExp, value: string) {
+  fireEvent.change(screen.getByRole('combobox'), { target: { value } });
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('PurchaseOrderForm', () => {
   beforeEach(() => {
@@ -69,14 +84,14 @@ describe('PurchaseOrderForm', () => {
   it('calls onClose when cancel is clicked', async () => {
     const onClose = vi.fn();
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    clickButton(/cancel/i);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('calls onClose when X button is clicked', async () => {
     const onClose = vi.fn();
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: /close/i }));
+    clickButton(/close/i);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -89,9 +104,8 @@ describe('PurchaseOrderForm', () => {
   it('button enables when both PO number and supplier are filled', async () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
-    await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-001');
-    const select = screen.getByRole('combobox');
-    await userEvent.selectOptions(select, 'sup-1');
+    fillField('PO-001', 'PO-001');
+    selectOption(/supplier/i, 'sup-1');
     expect(screen.getByRole('button', { name: /create po/i })).toBeEnabled();
   });
 
@@ -99,12 +113,11 @@ describe('PurchaseOrderForm', () => {
     mockListSuppliers.mockResolvedValue(sampleSuppliers);
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
-    await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-001');
+    fillField('PO-001', 'PO-001');
     // Select first supplier.
-    const select = screen.getByRole('combobox');
-    await userEvent.selectOptions(select, 'sup-1');
+    selectOption(/supplier/i, 'sup-1');
     // Leave the default empty SKU line.
-    await userEvent.click(screen.getByRole('button', { name: /create po/i }));
+    clickButton(/create po/i);
 
     expect(screen.getByRole('alert')).toHaveTextContent('Each line must have a SKU');
   });
@@ -115,7 +128,7 @@ describe('PurchaseOrderForm', () => {
     const initialSkuInputs = screen.getAllByPlaceholderText('SKU');
     expect(initialSkuInputs).toHaveLength(1);
 
-    await userEvent.click(screen.getByRole('button', { name: '+ Add Line' }));
+    clickButton('+ Add Line');
 
     const afterSkuInputs = screen.getAllByPlaceholderText('SKU');
     expect(afterSkuInputs).toHaveLength(2);
@@ -123,11 +136,11 @@ describe('PurchaseOrderForm', () => {
 
   it('removes a line row when remove button is clicked', async () => {
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: '+ Add Line' }));
+    clickButton('+ Add Line');
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(2);
 
     const removeButtons = screen.getAllByRole('button', { name: /remove line/i });
-    await userEvent.click(removeButtons[0]!);
+    fireEvent.click(removeButtons[0]!);
 
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(1);
   });
@@ -145,13 +158,10 @@ describe('PurchaseOrderForm', () => {
     const qtyInput = screen.getByDisplayValue('1');
     const costInput = screen.getByPlaceholderText('in cents');
 
-    await userEvent.clear(skuInput);
-    await userEvent.type(skuInput, 'SKU-123');
-    await userEvent.type(nameInput, 'Widget');
-    await userEvent.clear(qtyInput);
-    await userEvent.type(qtyInput, '5');
-    await userEvent.clear(costInput);
-    await userEvent.type(costInput, '2000');
+    fillField('SKU', 'SKU-123');
+    fireEvent.change(nameInput, { target: { value: 'Widget' } });
+    fireEvent.change(qtyInput, { target: { value: '5' } });
+    fireEvent.change(costInput, { target: { value: '2000' } });
 
     expect(skuInput).toHaveValue('SKU-123');
     expect(nameInput).toHaveValue('Widget');
@@ -165,10 +175,8 @@ describe('PurchaseOrderForm', () => {
     const qtyInput = screen.getByDisplayValue('1');
     const costInput = screen.getByPlaceholderText('in cents');
 
-    await userEvent.clear(qtyInput);
-    await userEvent.type(qtyInput, '3');
-    await userEvent.clear(costInput);
-    await userEvent.type(costInput, '1500');
+    fireEvent.change(qtyInput, { target: { value: '3' } });
+    fireEvent.change(costInput, { target: { value: '1500' } });
 
     // Line total: 3 × 1500 = 4500 cents → $45.00
     // The line total cell + subtotal value should both show 45.00.
@@ -180,11 +188,11 @@ describe('PurchaseOrderForm', () => {
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const dateInput = screen.getByLabelText('Expected Date');
-    await userEvent.type(dateInput, '2026-08-01');
+    fireEvent.change(dateInput, { target: { value: '2026-08-01' } });
     expect(dateInput).toHaveValue('2026-08-01');
 
     const notesInput = screen.getByPlaceholderText('Optional notes');
-    await userEvent.type(notesInput, 'Rush order');
+    fireEvent.change(notesInput, { target: { value: 'Rush order' } });
     expect(notesInput).toHaveValue('Rush order');
   });
 
@@ -195,13 +203,12 @@ describe('PurchaseOrderForm', () => {
 
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
 
-    await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-001');
-    const select = screen.getByRole('combobox');
-    await userEvent.selectOptions(select, 'sup-1');
-    await userEvent.type(screen.getByPlaceholderText('SKU'), 'SKU-001');
-    await userEvent.type(screen.getByPlaceholderText('Product name'), 'Test Product');
+    fillField('PO-001', 'PO-001');
+    selectOption(/supplier/i, 'sup-1');
+    fillField('SKU', 'SKU-001');
+    fireEvent.change(screen.getByPlaceholderText('Product name'), { target: { value: 'Test Product' } });
 
-    await userEvent.click(screen.getByRole('button', { name: /create po/i }));
+    clickButton(/create po/i);
 
     expect(mockCreatePO).toHaveBeenCalledTimes(1);
     expect(mockCreatePO).toHaveBeenCalledWith(
@@ -225,17 +232,14 @@ describe('PurchaseOrderForm', () => {
 
     await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
-    await userEvent.type(screen.getByPlaceholderText('PO-001'), 'PO-FAIL');
-    const select = screen.getByRole('combobox');
-    await userEvent.selectOptions(select, 'sup-1');
-    await userEvent.type(screen.getByPlaceholderText('SKU'), 'SKU-X');
+    fillField('PO-001', 'PO-FAIL');
+    selectOption(/supplier/i, 'sup-1');
+    fillField('SKU', 'SKU-X');
 
-    await userEvent.click(screen.getByRole('button', { name: /create po/i }));
+    clickButton(/create po/i);
 
     await vi.waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Network failure');
     });
   });
-
-
 });
