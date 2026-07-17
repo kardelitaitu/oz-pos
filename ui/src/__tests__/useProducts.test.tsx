@@ -16,7 +16,7 @@ vi.mock('@/api/products', () => ({
 }));
 
 vi.mock('@fluent/react', () => ({
-  useLocalization: () => ({ l10n: { getString: mocks.getString } }),
+  useLocalization: vi.fn(() => ({ l10n: { getString: mocks.getString } })),
 }));
 
 function makeProductDto(overrides: Partial<ProductDto> = {}): ProductDto {
@@ -200,6 +200,22 @@ describe('useProducts', () => {
       act(() => { resolve([makeProductDto()]); });
 
       expect(result.current.loading).toBe(true);
+    });
+  });
+
+  describe('stability', () => {
+    it('does not refetch when l10n changes after initial load', async () => {
+      const { result, rerender } = renderHook(() => useProducts());
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(mocks.listProducts).toHaveBeenCalledTimes(1);
+
+      // Simulate locale change — getString returns different label
+      mocks.getString.mockReturnValue('Tanpa Kategori');
+      rerender();
+
+      // listProducts must NOT be called again — l10n is captured via ref
+      expect(mocks.listProducts).toHaveBeenCalledTimes(1);
     });
   });
 });
