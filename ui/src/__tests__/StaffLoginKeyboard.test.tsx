@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
 import { checkUsername } from '@/api/staff';
 
@@ -32,6 +33,7 @@ import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 
 vi.mock('@/contexts/BrandContext', () => ({
+  useBrand: () => ({ settings: null, loading: false, refreshBrandSettings: vi.fn() }),
   useOptionalBrand: () => null,
 }));
 
@@ -197,6 +199,27 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       await waitFor(() => {
         expect(checkUsername).toHaveBeenCalledWith({ username: 'alice' });
       });
+    });
+
+    it('submits on Enter key', async () => {
+      const user = userEvent.setup();
+      renderScreen();
+      const input = screen.getByPlaceholderText('Username');
+      await user.type(input, 'alice{Enter}');
+
+      await waitFor(() => {
+        expect(checkUsername).toHaveBeenCalledWith({ username: 'alice' });
+      });
+    });
+
+    it('clears the input on Escape key', async () => {
+      renderScreen();
+      const input = screen.getByPlaceholderText('Username') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: 'alice' } });
+      expect(input.value).toBe('alice');
+
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(input.value).toBe('');
     });
   });
 

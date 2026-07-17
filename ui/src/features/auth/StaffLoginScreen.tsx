@@ -243,6 +243,13 @@ export default function StaffLoginScreen() {
     setUsername(e.target.value);
   }, []);
 
+  const handleUsernameKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setUsername('');
+    }
+  }, []);
+
   // ── Auto-submit when PIN reaches max length ──────────────────
 
   useEffect(() => {
@@ -397,7 +404,7 @@ export default function StaffLoginScreen() {
   // Focus management: clicking anywhere refocuses the active input
   const handleScreenKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === ' ') {
         e.preventDefault();
         handleScreenClick();
       }
@@ -455,6 +462,7 @@ export default function StaffLoginScreen() {
                       placeholder="Username"
                       value={username}
                       onChange={handleUsernameChange}
+                      onKeyDown={handleUsernameKeyDown}
                       autoComplete="off"
                       autoCorrect="off"
                       spellCheck={false}
