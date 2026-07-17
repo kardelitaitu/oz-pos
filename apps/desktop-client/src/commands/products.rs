@@ -51,7 +51,7 @@ pub async fn adjust_stock(
     // the next .await point when we lock the kernel for event publishing.
     let new_qty = {
         let db = state.db.lock().await;
-        let store = oz_core::db::Store::new(&db);
+        let store = state.store(&db);
         store.adjust_stock(&args.sku, args.delta)?
     };
 
@@ -105,7 +105,7 @@ pub async fn adjust_stock_scoped(
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-        let store = oz_core::db::Store::new(&db);
+        let store = state.store(&db);
         store.adjust_stock_with_reason(
             &args.sku,
             args.delta,

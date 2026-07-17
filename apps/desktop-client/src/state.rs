@@ -260,12 +260,16 @@ fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 impl AppState {
-    /// Create a [`Store`] with the shared cache layer.
+    /// Create a [`Store`] with the shared cache layer and terminal
+    /// identity for pub/sub message tagging.
     ///
     /// Command handlers should use this instead of `Store::new(&conn)`
-    /// to benefit from Redis caching (when configured).
+    /// to benefit from Redis caching (when configured) and to ensure
+    /// inventory-change pub/sub messages are correctly tagged with the
+    /// terminal's identity.
     pub fn store<'a>(&self, conn: &'a Connection) -> oz_core::db::Store<'a> {
-        oz_core::db::Store::with_cache(conn, self.cache.clone())
+        let tid = self.terminal_id.lock().unwrap().clone();
+        oz_core::db::Store::with_cache(conn, self.cache.clone()).with_terminal_id(tid)
     }
 
     /// Resolve an opaque session token to its [`SessionContext`].
