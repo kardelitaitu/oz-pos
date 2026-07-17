@@ -477,8 +477,7 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /switch to light/i })).toBeInTheDocument();
-    const versionFooterEls = screen.getAllByText(/0\.0\.\d+/);
-    expect(versionFooterEls.length).toBeGreaterThanOrEqual(1);
+    expect(document.body.textContent).toContain('0.0.4');
   });
 
   // ── Keyboard shortcut ─────────────────────────────────────────
