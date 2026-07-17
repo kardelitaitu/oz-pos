@@ -24,9 +24,11 @@ import {
   syncRun,
   syncPull,
   pendingSyncCount,
+  testSyncConnection,
   type SyncSettingsDto,
   type SyncAttemptResult,
   type PullResult,
+  type PingResult,
 } from '@/api/offline';
 import { getVersion } from '@/api/system';
 import {
@@ -443,6 +445,8 @@ export default function SettingsPage() {
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
   const [pullResult, setPullResult] = useState<PullResult | null>(null);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [pingResult, setPingResult] = useState<PingResult | null>(null);
 
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
@@ -1318,7 +1322,7 @@ export default function SettingsPage() {
                       id="settings-field-server-url"
                       placeholder="https://api.example.com"
                       value={syncServerUrl}
-                      onChange={(e) => { setSyncServerUrl(e.target.value); markDirty(); }}
+                      onChange={(e) => { setSyncServerUrl(e.target.value); setPingResult(null); markDirty(); }}
                     />
                   </Localized>
                 </span>
@@ -1367,6 +1371,11 @@ export default function SettingsPage() {
                     </button>
                     )}
                   </div>
+                  <p className="settings-hint">
+                    <Localized id="settings-sync-token-hint">
+                      <span>Enter a JWT token from the cloud server. Generate one via POST /api/v1/tokens</span>
+                    </Localized>
+                  </p>
                 </span>
               </div>
 
@@ -1405,9 +1414,11 @@ export default function SettingsPage() {
                     />
                     <span className="settings-sync-status-text">
                       {syncResult === null
-                        ? l10n.getString('settings-sync-status-idle')
+                        ? (pingResult
+                          ? pingResult.status
+                          : l10n.getString('settings-sync-status-idle'))
                         : syncResult.error
-                          ? l10n.getString('settings-sync-status-error')
+                          ? syncResult.error
                           : l10n.getString('settings-sync-status-ok')}
                     </span>
                     {pendingCount !== null && pendingCount > 0 && (
@@ -1418,6 +1429,32 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="settings-actions">
+                    <Button
+                      variant="ghost"
+                      loading={testing}
+                      onClick={async () => {
+                        setTesting(true);
+                        setPingResult(null);
+                        try {
+                          const result = await testSyncConnection();
+                          setPingResult(result);
+                          if (result.ok) {
+                            addToast({ message: result.status, type: 'success' });
+                          } else {
+                            addToast({ message: result.status, type: 'error' });
+                          }
+                        } catch {
+                          setPingResult({ ok: false, status: l10n.getString('settings-sync-test-failed'), latencyMs: null });
+                          addToast({ message: l10n.getString('settings-sync-test-failed'), type: 'error' });
+                        } finally {
+                          setTesting(false);
+                        }
+                      }}
+                    >
+                      <Localized id={testing ? 'settings-sync-testing' : 'settings-sync-test-connection'}>
+                        <span>{testing ? 'Testing…' : 'Test Connection'}</span>
+                      </Localized>
+                    </Button>
                     <Button
                       variant="secondary"
                       loading={syncing}

@@ -101,3 +101,16 @@ export const pendingSyncCount = (): Promise<number> =>
 /** Pull data (products, tax rates, users) from the cloud server. */
 export const syncPull = (): Promise<PullResult> =>
   invoke<PullResult>('sync_pull');
+
+// ── Connection Test ──────────────────────────────────────────────
+
+/** Result of pinging the cloud server's health endpoint. */
+export interface PingResult {
+  ok: boolean;
+  status: string;
+  latencyMs: number | null;
+}
+
+/** Test connectivity to the configured cloud server. */
+export const testSyncConnection = (): Promise<PingResult> =>
+  invoke<PingResult>('test_sync_connection');

@@ -68,6 +68,63 @@ pub struct PullResult {
     pub error: Option<String>,
 }
 
+/// Result of a health-check ping to the cloud server.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PingResult {
+    /// Whether the server responded successfully.
+    pub ok: bool,
+    /// Status text (e.g. "Connected", "Connection refused", etc.).
+    pub status: String,
+    /// Round-trip latency in milliseconds, if the ping succeeded.
+    pub latency_ms: Option<u64>,
+}
+
+/// Ping the cloud server's `/health` endpoint to verify connectivity.
+///
+/// Returns a `PingResult` with ok=true and latency if the server
+/// responds with a 2xx status code. Network errors populate `ok=false`
+/// and `status` with the error message.
+#[cfg(feature = "sync-http")]
+pub fn ping_server(url: &str) -> PingResult {
+    let health_url = format!("{}/health", url.trim_end_matches('/'));
+    let start = std::time::Instant::now();
+    match reqwest::blocking::get(&health_url) {
+        Ok(resp) => {
+            let latency = start.elapsed().as_millis() as u64;
+            if resp.status().is_success() {
+                PingResult {
+                    ok: true,
+                    status: format!("Connected ({latency}ms)"),
+                    latency_ms: Some(latency),
+                }
+            } else {
+                let status = resp.status();
+                PingResult {
+                    ok: false,
+                    status: format!("Server returned {status}"),
+                    latency_ms: Some(latency),
+                }
+            }
+        }
+        Err(e) => PingResult {
+            ok: false,
+            status: format!("Connection failed: {e}"),
+            latency_ms: None,
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub fn ping_server(_url: &str) -> PingResult {
+    PingResult {
+        ok: false,
+        status: "sync-http feature is disabled".into(),
+        latency_ms: None,
+    }
+}
+
 /// Sync client configuration.
 #[derive(Debug, Clone)]
 pub struct SyncConfig {

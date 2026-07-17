@@ -253,6 +253,9 @@ settings-sync-enabled = Aktifkan Sinkronisasi Cloud
 settings-sync-enabled-aria = Alihkan sinkronisasi cloud
 settings-sync-sync-now = Sinkron Sekarang
 settings-sync-syncing = Menyinkronkan…
+settings-sync-test-connection = Tes Koneksi
+settings-sync-testing = Menguji…
+settings-sync-test-failed = Tes koneksi gagal
 settings-sync-error = Sinkronisasi gagal
 settings-sync-result = Sinkronisasi terakhir: { $synced } tersinkron, { $failed } gagal
 settings-sync-success = Sinkronisasi selesai: { $synced } tersinkron, { $failed } gagal
@@ -651,6 +654,7 @@ settings-sync-toast-fail = Sinkronisasi gagal — periksa URL server dan token
 settings-sync-toast-test-success = Uji koneksi berhasil
 settings-sync-toast-test-fail = Tidak dapat menjangkau server
 settings-sync-pull-toast-success = { $products } produk, { $tax_rates } tarif pajak, { $users } pengguna ditarik dari server
+settings-sync-token-hint = Masukkan token JWT dari server cloud. Buat token via POST /api/v1/tokens dengan body: {"label":"pos-terminal"}
 settings-sync-pull-toast-empty = Snapshot server kosong — tidak ada yang ditarik
 settings-sync-pull-toast-fail = Penarikan gagal — periksa URL server dan token
 
