@@ -10,6 +10,7 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # ── Verify (quality gates) ──────────────────────────────────────────
   verify:
     name: Verify
     runs-on: ubuntu-latest
@@ -45,6 +46,7 @@ jobs:
             exit 1
           fi
           echo "Binary size check passed"
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -52,30 +54,176 @@ jobs:
           cache-dependency-path: 'ui/package-lock.json'
 
       - name: UI lint & test
-
         run: |
           cd ui
           npm ci --no-audit --no-fund
           npm run lint
           npm run typecheck
-          # Tee the test output so the i18n quality gate below can
-          # grep for Fluent `Attempt to override an existing message`
-          # warnings and the [i18n] translation-completeness warnings
-          # on stderr. Fluent prints the former when two .ftl files
-          # in the same joined bundle define the same key; the
-          # latter are emitted by the translation gate in
-          # ui/src/__tests__/i18nBundle.test.tsx.
           npm run test -- --reporter=verbose 2>&1 | tee vitest-output.log
 
-
-      # ── i18n quality gate (mirrors `.github/workflows/ci.yml#ui`) ────
-      #
-      # Same single-block consolidation as PR CI: catches both
-      # `[i18n]` translation-completeness warnings and Fluent
-      # duplicate-key warnings in one decision. Output is
-      # categorized so contributors see exactly which class of
-      # issue needs fixing.
       - name: i18n quality gate
-        
         if: always()
         run: bash scripts/lint-i18n.sh
+
+  # ── Build (Windows desktop installers) ──────────────────────────────
+  build:
+    name: Build Windows Installers
+    runs-on: windows-latest
+    needs: [verify]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable, msvc)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+
+      - name: Restore Cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop-client/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+            ${{ runner.os }}-cargo-
+
+      - name: Install npm dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+
+      - name: Check for code-signing certificate
+        id: check_cert
+        run: |
+          if (Test-Path env:UPDATER_CERT) {
+            echo "has_cert=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "has_cert=false" >> $env:GITHUB_OUTPUT
+            Write-Host "No code-signing certificate — installer will be unsigned"
+          }
+        env:
+          UPDATER_CERT: ${{ secrets.UPDATER_CERT }}
+        shell: pwsh
+
+      - name: Import code-signing certificate
+        if: steps.check_cert.outputs.has_cert == 'true'
+        env:
+          UPDATER_CERT: ${{ secrets.UPDATER_CERT }}
+          UPDATER_CERT_PASSWORD: ${{ secrets.UPDATER_CERT_PASSWORD }}
+        run: |
+          $certBytes = [Convert]::FromBase64String($env:UPDATER_CERT)
+          $certPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+          $password = ConvertTo-SecureString -String $env:UPDATER_CERT_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $certPath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $password `
+            -Exportable
+          Write-Host "Code-signing certificate imported"
+        shell: pwsh
+
+      - name: Build frontend
+        run: cd ui && npm run build
+
+      - name: Build Tauri desktop app
+        run: cargo tauri build --bundles "nsis,msi" --ci
+        working-directory: apps/desktop-client
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: nsis-installer
+          path: apps/desktop-client/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-installer
+          path: apps/desktop-client/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+  # ── Release (create GitHub Release + updater manifest) ──────────────
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Download NSIS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: nsis-installer
+          path: ./bundles/nsis
+
+      - name: Download MSI installer
+        uses: actions/download-artifact@v4
+        with:
+          name: msi-installer
+          path: ./bundles/msi
+
+      - name: Identify installer files
+        id: files
+        run: |
+          NSIS_PATH=$(ls ./bundles/nsis/*.exe | head -1)
+          MSI_PATH=$(ls ./bundles/msi/*.msi | head -1)
+          echo "nsis=$(basename "$NSIS_PATH")" >> "$GITHUB_OUTPUT"
+          echo "msi=$(basename "$MSI_PATH")" >> "$GITHUB_OUTPUT"
+          echo "nsis_full=$NSIS_PATH" >> "$GITHUB_OUTPUT"
+          echo "msi_full=$MSI_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Generate latest.json manifest
+        id: manifest
+        env:
+          UPDATER_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+          REPO: ${{ github.repository }}
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          NOTES="Release v${VERSION}"
+
+          # Generate latest.json from the NSIS installer only.
+          # The MSI is for enterprise GPO/SCCM deployment, not the
+          # in-app updater (which only uses windows-x86_64).
+          node scripts/generate-latest-json.mjs \
+            "$VERSION" "$NOTES" "windows-x86_64" \
+            "${{ steps.files.outputs.nsis_full }}" > latest.json
+
+          echo "Generated latest.json:"
+          cat latest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ needs.build.outputs.version }}"
+          files: |
+            ${{ steps.files.outputs.nsis_full }}
+            ${{ steps.files.outputs.msi_full }}
+            latest.json
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') }}
+          generate_release_notes: true

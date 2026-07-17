@@ -59,7 +59,6 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
       "endpoints": [
         "https://github.com/kardelitaitu/oz-pos/releases/latest/download/latest.json"
       ],
