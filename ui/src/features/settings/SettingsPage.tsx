@@ -1442,7 +1442,7 @@ export default function SettingsPage() {
                             addToast({ message: result.status, type: 'error' });
                           }
                         } catch {
-                          addToast({ message: l10n.getString('settings-sync-test-failed'), type: 'error' });
+                          addToast({ message: l10n.getString('settings-sync-token-request-failed'), type: 'error' });
                         } finally {
                           setRequesting(false);
                         }

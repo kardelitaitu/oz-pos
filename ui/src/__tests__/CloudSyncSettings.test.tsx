@@ -794,9 +794,10 @@ describe('CloudSyncSettings', () => {
     // No badge should appear
     expect(document.querySelector('.settings-sync-expiry-badge')).toBeNull();
 
-    // The catch block uses 'settings-sync-test-failed' which renders "Connection test failed"
+    // The catch block uses 'settings-sync-token-request-failed' which renders
+    // "Token request failed — check server URL"
     await waitFor(() => {
-      expect(screen.getByText(/test failed/i)).toBeInTheDocument();
+      expect(screen.getByText(/request failed/i)).toBeInTheDocument();
     });
   });
 
