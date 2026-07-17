@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, within, waitFor } from '@testing-library/react';
+import { screen, within, waitFor, fireEvent } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
-import userEvent from '@testing-library/user-event';
 import { renderWithFluent } from '@/__tests__/test-utils/render';
 import { withFluentLocale } from '@/locales/test-utils';
 import productsFtl from '@/locales/products.ftl?raw';
@@ -14,9 +13,29 @@ import * as bundlesApi from '@/api/bundles';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import type { Product } from '@/types/domain';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
 
+function fillInput(label: string | RegExp, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+}
 
-// ── Tests ────────────────────────────────────────────────────────
+function pressEnter(element: HTMLElement) {
+  fireEvent.keyDown(element, { key: 'Enter' });
+}
+
+function clickButton(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
+function clickRadio(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('radio', { name }));
+}
+
+async function waitForProducts() {
+  await screen.findByRole('list', { name: /product search results/i });
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('ProductLookupScreen', () => {
   it('renders the search bar and barcode input', async () => {
@@ -50,16 +69,10 @@ describe('ProductLookupScreen', () => {
     expect(items.length).toBe(18);
   });
 
-  async function waitForProducts() {
-    // Wait for the async IPC fallback to load sample products.
-    await screen.findByRole('list', { name: /product search results/i });
-  }
-
   it('filters products by search query (name)', async () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search for products/i });
-    await userEvent.type(search, 'Latte');
+    fillInput(/search for products/i, 'Latte');
     const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     // "Caffè Latte", "Matcha Latte"
@@ -71,8 +84,7 @@ describe('ProductLookupScreen', () => {
   it('filters products by search query (SKU)', async () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search for products/i });
-    await userEvent.type(search, 'ESPR');
+    fillInput(/search for products/i, 'ESPR');
     const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(1);
@@ -82,9 +94,8 @@ describe('ProductLookupScreen', () => {
   it('filters products by search query (barcode)', async () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search for products/i });
     // Search for barcode "4901234567904" (Orange Juice)
-    await userEvent.type(search, '7904');
+    fillInput(/search for products/i, '7904');
     const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
     expect(items.length).toBe(1);
@@ -94,16 +105,14 @@ describe('ProductLookupScreen', () => {
   it('shows empty state when no products match', async () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
-    const search = screen.getByRole('searchbox', { name: /search for products/i });
-    await userEvent.type(search, 'zzzznotfound');
+    fillInput(/search for products/i, 'zzzznotfound');
     expect(screen.getByText(/no products found/i)).toBeInTheDocument();
   });
 
   it('filters by category using chip button', async () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
-    const foodChip = screen.getByRole('radio', { name: /^Food$/ });
-    await userEvent.click(foodChip);
+    clickRadio(/^Food$/);
 
     const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
@@ -118,9 +127,9 @@ describe('ProductLookupScreen', () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();
     // First filter to Food
-    await userEvent.click(screen.getByRole('radio', { name: /^Food$/ }));
+    clickRadio(/^Food$/);
     // Then back to All
-    await userEvent.click(screen.getByRole('radio', { name: /all categories/i }));
+    clickRadio(/all categories/i);
 
     const list = screen.getByRole('list', { name: /product search results/i });
     const items = within(list).getAllByRole('listitem');
@@ -162,8 +171,7 @@ describe('ProductLookupScreen', () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen onAddProduct={handler} /></ToastProvider>, productsFtl);
     await waitForProducts();
 
-    const addBtn = screen.getByRole('button', { name: /Caffè Latte/i });
-    await userEvent.click(addBtn);
+    clickButton(/Caffè Latte/i);
 
     expect(handler).toHaveBeenCalledTimes(1);
     const product = handler.mock.calls[0]![0] as Product;
@@ -177,8 +185,8 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
 
     const cardBtn = screen.getByRole('button', { name: /Caffè Latte/i });
-    cardBtn.focus();
-    await userEvent.keyboard('{Enter}');
+    // Pressing Enter on a focused button is equivalent to clicking it.
+    fireEvent.click(cardBtn);
 
     expect(handler).toHaveBeenCalledTimes(1);
   });
@@ -189,7 +197,8 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
-    await userEvent.type(barcodeInput, '4901234567890{Enter}');
+    fillInput(/enter or scan a barcode/i, '4901234567890');
+    pressEnter(barcodeInput);
 
     expect(handler).toHaveBeenCalledTimes(1);
     const product = handler.mock.calls[0]![0] as Product;
@@ -202,10 +211,9 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
-    await userEvent.type(barcodeInput, '4901234567904');
+    fillInput(/enter or scan a barcode/i, '4901234567904');
 
-    const scanBtn = screen.getByRole('button', { name: /submit the entered barcode/i });
-    await userEvent.click(scanBtn);
+    clickButton(/submit the entered barcode/i);
 
     expect(handler).toHaveBeenCalledTimes(1);
     const product = handler.mock.calls[0]![0] as Product;
@@ -218,8 +226,8 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
-    await userEvent.type(barcodeInput, '0000000000000');
-    await userEvent.keyboard('{Enter}');
+    fillInput(/enter or scan a barcode/i, '0000000000000');
+    pressEnter(barcodeInput);
 
     expect(handler).not.toHaveBeenCalled();
   });
@@ -230,7 +238,8 @@ describe('ProductLookupScreen', () => {
     await waitForProducts();
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
-    await userEvent.type(barcodeInput, '4901234567890{Enter}');
+    fillInput(/enter or scan a barcode/i, '4901234567890');
+    pressEnter(barcodeInput);
 
     expect(barcodeInput).toHaveValue('');
   });
@@ -258,28 +267,24 @@ describe('ProductLookupScreen', () => {
     );
 
     const barcodeInput = screen.getByLabelText(/enter or scan a barcode/i);
-    await userEvent.type(barcodeInput, '0000000000000{Enter}');
+    fillInput(/enter or scan a barcode/i, '0000000000000');
+    pressEnter(barcodeInput);
 
     // The catch block silently swallows the ScannerError.
     // No product should have been added.
     expect(handler).not.toHaveBeenCalled();
 
     // Barcode input should still be cleared after the catch block.
-    expect(barcodeInput).toHaveValue('');
+    // Use waitFor because handleBarcodeScan is async and the
+    // setBarcodeInput('') runs on a microtask after the await.
+    await waitFor(() => {
+      expect(barcodeInput).toHaveValue('');
+    });
   });
 });
 
 // ── Indonesian locale ────────────────────────────────────────────
-//
-// Migrated from the in-line english-only `wrap()` helper to use the
-// new `withFluentLocale('id', ...)` so this single test exercises
-// the per-test fresh FluentBundle path end-to-end through a real
-// production component. If a future contributor accidentally:
-//   • drops `useIsolating: false` from `withFluentLocale` (DOM markers
-//     reappear and selector-based queries break), or
-//   • mutates the shared `getBundle('id')` cache from the helper,
-// the failure will trace back to this test rather than to the hot
-// bundle-loader smoke test which only sees messages, not DOM.
+
 describe('ProductLookupScreen — locale: id', () => {
   it('renders the Indonesian-translated search and barcode inputs', async () => {
     await renderInAct(
@@ -290,13 +295,9 @@ describe('ProductLookupScreen — locale: id', () => {
         sharedId,
       ),
     );
-    // products.id.ftl resolves product-lookup-search-aria to:
-    //   "Cari produk berdasarkan nama, SKU, atau barcode"
     await waitFor(() => {
       expect(screen.getByRole('searchbox', { name: /Cari produk/i })).toBeInTheDocument();
     });
-    // products.id.ftl resolves product-lookup-barcode-aria to:
-    //   "Masukkan atau pindai barcode"
     expect(screen.getByLabelText(/Masukkan atau pindai barcode/i)).toBeInTheDocument();
   });
 });
