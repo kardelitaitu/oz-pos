@@ -397,7 +397,7 @@ export default function StaffLoginScreen() {
           {step === 'username' && renderLogo()}
           {step === 'pin' && (
             <div className="staff-login-pin-top">
-              {storeName && <p className="staff-login-store-name">{storeName}</p>}
+              {storeName && <p>{storeName}</p>}
               {renderPinDots()}
             </div>
           )}
@@ -485,7 +485,7 @@ export default function StaffLoginScreen() {
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.9</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.10</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

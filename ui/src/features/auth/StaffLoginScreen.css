@@ -187,6 +187,22 @@
   @keyframes login-spin {
     to { transform: rotate(360deg); }
   }
+
+  /* ── Step dot pulse + slow blink ───────────── */
+  .staff-login-step-dot--active {
+    animation: login-step-dot-pulse 3s var(--ease-out) infinite;
+  }
+
+  @keyframes login-step-dot-pulse {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 3px var(--color-accent-dim);
+    }
+    50% {
+      opacity: 0.35;
+      box-shadow: 0 0 0 6px var(--color-accent-subtle);
+    }
+  }
 }
 
 /* ── Logo area ───────────────────────────────────────────────────── */

@@ -69,12 +69,12 @@ Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cl
       ▼                                         ▼
  Foundation                              Domain Modules
  ┌──────────────┐                    ┌─────────────────┐
- │ Money  SKU   │                    │ Inventory        │
- │ Cart         │                    │ Reporting        │
- │ Contracts    │                    │ CRM              │
- └──────────────┘                    │ Tax / Discounts  │
-                                     │ Restaurant       │
-      │                              │ Loyalty          │
+ │ Money  SKU   │                    │ Inventory       │
+ │ Cart         │                    │ Reporting       │
+ │ Contracts    │                    │ CRM             │
+ └──────────────┘                    │ Tax / Discounts │
+                                     │ Restaurant      │
+      │                              │ Loyalty         │
       ▼                              └─────────────────┘
  Infrastructure
  ┌──────────────────────────────────────────────┐
