@@ -7,8 +7,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act } from 'react';
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import { ScannerError } from '@/api/hardware';
 import type * as HardwareModule from '@/api/hardware';
@@ -211,6 +210,9 @@ vi.mock('@/features/settings/DataManagementScreen', () => ({
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
+
 describe('PosScreen – bundle scanning toast', () => {
   beforeEach(() => {
     mockedBarcode.reset();
@@ -223,7 +225,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // load an active shift (the onProductFound callback checks for it).
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Simulate scanning a bundle SKU barcode.
@@ -241,7 +243,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Simulate scanning an unrecognised code.
@@ -258,7 +260,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Simulate scanning a bundle SKU.
@@ -281,7 +283,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Make lookupByBarcode throw on the next call.
@@ -296,7 +298,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for the error to propagate through the catch block.
     await waitFor(() => {
       expect(vi.mocked(productsApi.lookupByBarcode)).toHaveBeenCalledWith('ANY-CODE');
-    });
+    }, FAST_WAIT);
 
     // No success or warning toast should appear.
     expect(screen.queryByText(/Bundle.*added/)).not.toBeInTheDocument();
@@ -311,7 +313,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Make lookupByBarcode throw a ScannerError (scanner hardware failure).
@@ -329,7 +331,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for the error to propagate through the catch block.
     await waitFor(() => {
       expect(vi.mocked(productsApi.lookupByBarcode)).toHaveBeenCalledWith('ANY-CODE');
-    });
+    }, FAST_WAIT);
 
     // No success or warning toast should appear.
     expect(screen.queryByText(/Bundle.*added/)).not.toBeInTheDocument();
@@ -344,7 +346,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // lookupByBarcode returns null (as mocked by default), so the
@@ -361,7 +363,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // the barcode lookup and into the bundle path before the error).
     await waitFor(() => {
       expect(vi.mocked(bundlesApi.lookupBundleBySku)).toHaveBeenCalledWith('BUNDLE-SKU-001');
-    });
+    }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.
     expect(screen.queryByText(/Bundle.*added/)).not.toBeInTheDocument();
@@ -376,7 +378,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // lookupByBarcode returns null (default), so the callback falls
@@ -396,7 +398,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // the barcode lookup and into the bundle path before the error).
     await waitFor(() => {
       expect(vi.mocked(bundlesApi.lookupBundleBySku)).toHaveBeenCalledWith('BUNDLE-SKU-001');
-    });
+    }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.
     expect(screen.queryByText(/Bundle.*added/)).not.toBeInTheDocument();
@@ -411,7 +413,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // lookupByBarcode returns null (default), lookupBundleBySku succeeds.
@@ -429,7 +431,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for lookupProductBySku to be called (confirms expansion started).
     await waitFor(() => {
       expect(vi.mocked(productsApi.lookupProductBySku)).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.
     expect(screen.queryByText(/Bundle.*added/)).not.toBeInTheDocument();
@@ -444,7 +446,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // lookupByBarcode returns null (default), lookupBundleBySku succeeds.
@@ -465,7 +467,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for lookupProductBySku to be called (confirms expansion started).
     await waitFor(() => {
       expect(vi.mocked(productsApi.lookupProductBySku)).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
 
     // No toast should appear — the catch block swallowed the error.
     expect(screen.queryByText(/Bundle.*added/)).not.toBeInTheDocument();
@@ -480,7 +482,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Make lookupByBarcode return a product DTO for this scan.
@@ -504,7 +506,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for lookupByBarcode to be called with the scanned code.
     await waitFor(() => {
       expect(vi.mocked(productsApi.lookupByBarcode)).toHaveBeenCalledWith('4901234567890');
-    });
+    }, FAST_WAIT);
 
     // The product name appears in both the product grid and the cart.
     expect(screen.getAllByText('Caffè Latte').length).toBeGreaterThanOrEqual(1);
@@ -513,7 +515,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // from addProduct (setLines inside usePosState adds the item).
     await waitFor(() => {
       expect(screen.queryByText(/Cart is empty/)).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // The subtotal area should appear, confirming the product is in the cart.
     expect(screen.getByText(/Subtotal/)).toBeInTheDocument();
@@ -530,7 +532,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // lookupByBarcode returns a product DTO for the scanned code.
@@ -557,13 +559,13 @@ describe('PosScreen – bundle scanning toast', () => {
     // Wait for the product lookup to be called.
     await waitFor(() => {
       expect(vi.mocked(productsApi.lookupByBarcode)).toHaveBeenCalledWith('4900000000000');
-    });
+    }, FAST_WAIT);
 
     // The product should appear in the cart (product path won).
     expect(screen.getAllByText('Espresso Shot').length).toBeGreaterThanOrEqual(1);
     await waitFor(() => {
       expect(screen.queryByText(/Cart is empty/)).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // The bundle lookup should NOT have been called — the product path
     // returns early via `return` before falling through to the bundle path.
@@ -580,7 +582,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // active shift to be loaded.
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Scan an SKU the mock factory recognizes as an inactive bundle.
@@ -606,7 +608,7 @@ describe('PosScreen – bundle scanning toast', () => {
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
 
     // Simulate a scanner hardware error event (e.g. USB disconnect).
     await act(async () => { mockedBarcode.triggerError('Scanner disconnected — check USB connection'); });
@@ -632,7 +634,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // PosScreen should render without crashing — cart shows empty state.
     await waitFor(() => {
       expect(screen.getByText(/Cart is empty/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // The product lookup screen should be visible and functional.
     // (ProductLookupScreen renders search and barcode inputs.)
@@ -653,22 +655,21 @@ describe('PosScreen – bundle scanning toast', () => {
   // Settings surface as the desktop client.
 
   it('opens the Settings sub-screen and renders the Appearance tab by default', async () => {
-    const user = userEvent.setup();
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Open the Settings sub-screen via the gear button in the header.
-    await user.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByTitle('Settings'));
 
     // AppearanceSettings is the default tab — the Appearance sub-screen
     // stub should mount immediately.
     await waitFor(() => {
       expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
     // The 4 tab buttons are all present and addressable by role=tab.
     expect(screen.getByRole('tab', { name: 'Appearance' })).toBeInTheDocument();
@@ -678,65 +679,62 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('routes the Features tab to FeatureToggleScreen', async () => {
-    const user = userEvent.setup();
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
-    await user.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByTitle('Settings'));
     await waitFor(() => {
       expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('tab', { name: 'Features' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Features' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-features')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     // The Appearance sub-screen is unmounted when the Features tab is active.
     expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
   });
 
   it('routes the Data tab to DataManagementScreen', async () => {
-    const user = userEvent.setup();
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
-    await user.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByTitle('Settings'));
     await waitFor(() => {
       expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('tab', { name: 'Data' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Data' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-data')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
   });
 
   it('routes the Sync tab to the Cloud Sync placeholder', async () => {
-    const user = userEvent.setup();
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
-    await user.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByTitle('Settings'));
     await waitFor(() => {
       expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('tab', { name: 'Sync' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Sync' }));
 
     // The Sync tab renders the "Cloud Sync" heading and an info
     // paragraph. The settings FTL key is `settings-sync-heading` →
@@ -744,7 +742,7 @@ describe('PosScreen – bundle scanning toast', () => {
     // "sync cycle" sentence to verify the placeholder rendered.
     await waitFor(() => {
       expect(screen.getByText(/Cloud Sync/)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     // None of the other tab stubs should be mounted.
     expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
     expect(screen.queryByTestId('mock-features')).not.toBeInTheDocument();
@@ -752,26 +750,25 @@ describe('PosScreen – bundle scanning toast', () => {
   });
 
   it('returns to the main PosScreen when the Settings back button is clicked', async () => {
-    const user = userEvent.setup();
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
       expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    });
+    }, FAST_WAIT);
     await screen.findByText('Close');
 
     // Open Settings, then close it.
-    await user.click(screen.getByTitle('Settings'));
+    fireEvent.click(screen.getByTitle('Settings'));
     await waitFor(() => {
       expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
 
-    await user.click(screen.getByRole('button', { name: /Back/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
 
     // The Appearance sub-screen is gone and the main cart is back.
     await waitFor(() => {
       expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByText(/Cart is empty/)).toBeInTheDocument();
   });
 

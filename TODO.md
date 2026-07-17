@@ -76,7 +76,10 @@ suite and record the new wall-clock time at the bottom.
       top-up, cancel, issue), fireEvent.change for top-up amount input.
       Removed 14 userEvent.setup() calls + userEvent import. Added FAST_WAIT
       (5ms polling), expandCard() and waitAndClickButton() helpers.
-- [ ] **PosScreen.test.tsx** — 2,264ms / 19 tests
+- [x] **PosScreen.test.tsx** — 2,264ms / 19 tests → 1,571ms (-31%)
+      fireEvent.click for 5 Settings tab tests (gear, Features/Data/Sync tabs,
+      Back button). FAST_WAIT (5ms polling) for all waitFor calls. 14 barcode
+      scan tests already used act() — only got FAST_WAIT benefit.
 - [ ] **LicenseActivationScreen.test.tsx** — 2,236ms / 50 tests
 - [ ] **StaffManagementScreen.test.tsx** — 2,176ms / 12 tests
 
@@ -99,6 +102,7 @@ suite and record the new wall-clock time at the bottom.
 | 2026-07-17 | 16.55s | +2.56s | After WorkspaceContext optimization (164 files, 2533 tests). WorkspaceContext 2.1s→1.4s (-34%). Run-to-run variance; safety-preserving waitForLoaded. |
 | 2026-07-17 | 15.10s | +1.11s | After RefundModal optimization (164 files, 2533 tests). RefundModal 2.1s→1.18s (-44%). Tier 2 complete! |
 | 2026-07-17 | **13.47s** | **-0.52s** | After GiftCardsScreen optimization (164 files, 2533 tests). GiftCardsScreen 2.37s→1.03s (-57%). **New all-time best!** 🎉 |
+| 2026-07-17 | 15.50s | +1.51s | After PosScreen optimization (164 files, 2533 tests). PosScreen 2.26s→1.57s (-31%). Run-to-run variance. |
 
 ---
 
