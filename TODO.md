@@ -63,7 +63,11 @@ suite and record the new wall-clock time at the bottom.
       waitForLoaded(result) helper: waitFor(loading===false, FAST_WAIT) preserves
       safety assertion. flushAsync() kept for 2 null-session tests. FAST_WAIT
       (5ms polling) for multi-step async chains (sessionToken, screens).
-- [ ] **RefundModal.test.tsx** — 2,114ms / 15 tests (avg 140ms)
+- [x] **RefundModal.test.tsx** — 2,114ms / 15 tests → 1,180ms (-44%)
+      fireEvent.click for checkboxes/buttons, fireEvent.change for reason
+      input, waitFor for async processRefund resolution. Added clickCheckbox(),
+      fillReason(), clickSubmitRefund(), doRefund() helpers. Sync tests
+      (checkbox toggle, qty decrement) converted from async to sync.
 
 ### 📝 Benchmark Log
 
@@ -82,6 +86,7 @@ suite and record the new wall-clock time at the bottom.
 | 2026-07-17 | 15.28s | +1.29s | After SuppliersScreen optimization (164 files, 2533 tests). SuppliersScreen 2.35s→2.10s (-11%). All passing. |
 | 2026-07-17 | **13.45s** | **-0.54s** | After FastPINOverlay optimization (164 files, 2533 tests). FastPINOverlay 2.3s→1.1s (-52%). **Below baseline!** 🎉 |
 | 2026-07-17 | 16.55s | +2.56s | After WorkspaceContext optimization (164 files, 2533 tests). WorkspaceContext 2.1s→1.4s (-34%). Run-to-run variance; safety-preserving waitForLoaded. |
+| 2026-07-17 | 15.10s | +1.11s | After RefundModal optimization (164 files, 2533 tests). RefundModal 2.1s→1.18s (-44%). Tier 2 complete! |
 
 ---
 

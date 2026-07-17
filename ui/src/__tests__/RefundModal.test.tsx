@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import salesFtl from '@/locales/sales.ftl?raw';
 
@@ -78,6 +77,33 @@ const defaultProps = {
   onRefunded: vi.fn(),
 };
 
+// ── Helpers ────────────────────────────────────────────────────────────
+// fireEvent.click on a checkbox toggles it via the component's onChange
+// handler. fireEvent.change on a textbox sets the value in one step,
+// saving ~20ms/char compared to userEvent.type.
+
+function clickCheckbox(index = 0) {
+  const checkboxes = screen.getAllByRole('checkbox');
+  fireEvent.click(checkboxes[index]!);
+  return checkboxes[index]!;
+}
+
+function fillReason(text: string) {
+  const reasonInput = screen.getAllByRole('textbox')[0]!;
+  fireEvent.change(reasonInput, { target: { value: text } });
+}
+
+function clickSubmitRefund() {
+  const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
+  fireEvent.click(submitBtns[submitBtns.length - 1]!);
+}
+
+function doRefund(reason: string) {
+  clickCheckbox(0);
+  fillReason(reason);
+  clickSubmitRefund();
+}
+
 describe('RefundModal', () => {
   it('renders null when not open', () => {
     const { container } = renderWithFluentSync(<RefundModal {...defaultProps} open={false} />, salesFtl, refundFtl);
@@ -115,20 +141,20 @@ describe('RefundModal', () => {
     expect(btns[0]).toBeDisabled();
   });
 
-  it('selects a line item when its checkbox is clicked', async () => {
+  it('selects a line item when its checkbox is clicked', () => {
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes).toHaveLength(2);
 
-    await userEvent.click(checkboxes[0]!);
+    fireEvent.click(checkboxes[0]!);
     // Should be selected.
     expect(checkboxes[0]).toBeChecked();
   });
 
-  it('shows qty controls when a line is selected', async () => {
+  it('shows qty controls when a line is selected', () => {
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
     const checkbox = screen.getAllByRole('checkbox')[0]!;
-    await userEvent.click(checkbox);
+    fireEvent.click(checkbox);
 
     // Qty controls should appear: decrement, value, increment.
     expect(screen.getByText('2')).toBeInTheDocument(); // maxQty displayed
@@ -136,16 +162,16 @@ describe('RefundModal', () => {
     expect(screen.getByRole('button', { name: /increase refund quantity/i })).toBeInTheDocument();
   });
 
-  it('decrements selected qty when decrease button clicked', async () => {
+  it('decrements selected qty when decrease button clicked', () => {
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
     const checkbox = screen.getAllByRole('checkbox')[0]!;
-    await userEvent.click(checkbox);
+    fireEvent.click(checkbox);
 
     // Initial qty = maxQty = 2
     expect(screen.getByText('2')).toBeInTheDocument();
 
     const decBtn = screen.getByRole('button', { name: /decrease refund quantity/i });
-    await userEvent.click(decBtn);
+    fireEvent.click(decBtn);
     expect(screen.getByText('1')).toBeInTheDocument();
   });
 
@@ -153,8 +179,8 @@ describe('RefundModal', () => {
     const onClose = vi.fn();
     renderWithFluentSync(<RefundModal {...defaultProps} onClose={onClose} />, salesFtl, refundFtl);
     const closeBtns = screen.getAllByRole('button', { name: /cancel refund/i });
-    await userEvent.click(closeBtns[0]!);
-    await vi.waitFor(() => {
+    fireEvent.click(closeBtns[0]!);
+    await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
@@ -163,18 +189,14 @@ describe('RefundModal', () => {
     mockProcessRefund.mockResolvedValueOnce({ refundId: 'ref-1', totalMinor: 7000 });
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
 
-    // Select first line item.
-    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
+    // Select first line item + enter reason + submit.
+    clickCheckbox(0);
+    fillReason('Customer returned');
+    clickSubmitRefund();
 
-    // Enter reason into the reason input (first text input).
-    const reasonInput = screen.getAllByRole('textbox')[0]!;
-    await userEvent.type(reasonInput, 'Customer returned');
-
-    // Process.
-    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
-    await userEvent.click(submitBtns[submitBtns.length - 1]!);
-
-    expect(mockProcessRefund).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mockProcessRefund).toHaveBeenCalledTimes(1);
+    });
     expect(mockProcessRefund).toHaveBeenCalledWith(
       expect.objectContaining({
         saleId: 'sale-abc123456789',
@@ -191,12 +213,9 @@ describe('RefundModal', () => {
     mockProcessRefund.mockResolvedValueOnce({ refundId: 'ref-done', totalMinor: 12000 });
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
 
-    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
-    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'Defective');
-    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
-    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+    await doRefund('Defective');
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByText('Refund Processed')).toBeInTheDocument();
     });
   });
@@ -205,12 +224,9 @@ describe('RefundModal', () => {
     mockProcessRefund.mockRejectedValueOnce(new Error('Network down'));
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
 
-    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
-    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'Broken');
-    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
-    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+    await doRefund('Broken');
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByText('Network down')).toBeInTheDocument();
     });
   });
@@ -222,18 +238,17 @@ describe('RefundModal', () => {
 
     renderWithFluentSync(<RefundModal {...defaultProps} onRefunded={onRefunded} onClose={onClose} />, salesFtl, refundFtl);
 
-    await userEvent.click(screen.getAllByRole('checkbox')[0]!);
-    await userEvent.type(screen.getAllByRole('textbox')[0]!, 'Return');
-    const submitBtns = screen.getAllByRole('button', { name: /process refund/i });
-    await userEvent.click(submitBtns[submitBtns.length - 1]!);
+    clickCheckbox(0);
+    fillReason('Return');
+    clickSubmitRefund();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByText('Refund Processed')).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole('button', { name: /done/i }));
+    fireEvent.click(screen.getByRole('button', { name: /done/i }));
     expect(onRefunded).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
@@ -243,12 +258,12 @@ describe('RefundModal', () => {
     expect(screen.getByText('Refund Total')).toBeInTheDocument();
   });
 
-  it('deselects a line item when clicked again', async () => {
+  it('deselects a line item when clicked again', () => {
     renderWithFluentSync(<RefundModal {...defaultProps} />, salesFtl, refundFtl);
     const checkbox = screen.getAllByRole('checkbox')[0]!;
-    await userEvent.click(checkbox);
+    fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
-    await userEvent.click(checkbox);
+    fireEvent.click(checkbox);
     expect(checkbox).not.toBeChecked();
   });
 });
