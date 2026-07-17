@@ -233,6 +233,7 @@
 .product-mgmt-modal::after,
 .po-form-modal::after,
 .stock-transfers-modal::after,
+.shift-mgmt-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -271,6 +272,7 @@
   .product-mgmt-modal::after,
   .po-form-modal::after,
   .stock-transfers-modal::after,
+  .shift-mgmt-modal::after,
   .noise-dither::after { display: none; }
 }
 
