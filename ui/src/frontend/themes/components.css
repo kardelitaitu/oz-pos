@@ -219,6 +219,7 @@
 .modal-panel::after,
 .workspace-card::after,
 .retail-shift-modal::after,
+.retail-held-carts-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -243,6 +244,7 @@
   .modal-panel::after,
   .workspace-card::after,
   .retail-shift-modal::after,
+  .retail-held-carts-modal::after,
   .noise-dither::after { display: none; }
 }
 
