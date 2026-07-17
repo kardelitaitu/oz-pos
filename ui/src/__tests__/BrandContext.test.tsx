@@ -101,11 +101,14 @@ describe('BrandContext', () => {
   });
 
   it('throws when useBrand is used outside BrandProvider', () => {
-    // Suppress console.error from React for this expected error
+    // Suppress console.error from React and JSDOM for this expected error
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', preventJsdomError);
     expect(() => {
       render(<TestConsumer />);
     }).toThrow('useBrand must be used within a BrandProvider');
+    window.removeEventListener('error', preventJsdomError);
     spy.mockRestore();
   });
 });

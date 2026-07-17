@@ -23,9 +23,14 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('CurrencyContext', () => {
   describe('useCurrency', () => {
     it('throws when used outside CurrencyProvider', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+      window.addEventListener('error', preventJsdomError);
       expect(() => renderHook(() => useCurrency())).toThrow(
         'useCurrency must be used within a CurrencyProvider',
       );
+      window.removeEventListener('error', preventJsdomError);
+      spy.mockRestore();
     });
 
     it('starts with fallback currency and loading=true', () => {

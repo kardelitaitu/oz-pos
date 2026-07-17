@@ -147,9 +147,12 @@ describe('AuthContext', () => {
 
   it('throws when useAuth is used outside AuthProvider', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', preventJsdomError);
     expect(() => {
       render(<TestConsumer />);
     }).toThrow('useAuth must be used within an <AuthProvider>');
+    window.removeEventListener('error', preventJsdomError);
     spy.mockRestore();
   });
 });

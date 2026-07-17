@@ -20,9 +20,14 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('HardwareAccelContext', () => {
   describe('useHardwareAccel', () => {
     it('throws when used outside HardwareAccelProvider', () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+      window.addEventListener('error', preventJsdomError);
       expect(() => renderHook(() => useHardwareAccel())).toThrow(
         'useHardwareAccel must be used within a HardwareAccelProvider',
       );
+      window.removeEventListener('error', preventJsdomError);
+      spy.mockRestore();
     });
 
     it('starts enabled by default', () => {

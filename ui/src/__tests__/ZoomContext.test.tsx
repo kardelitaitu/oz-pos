@@ -160,6 +160,8 @@ describe('ZoomContext — element sizing', () => {
   it('throws error when useAppZoom is used outside ZoomProvider', () => {
     // Suppress expected console error
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', preventJsdomError);
 
     function BadComponent() {
       useAppZoom();
@@ -170,6 +172,7 @@ describe('ZoomContext — element sizing', () => {
       'useAppZoom must be used within a ZoomProvider',
     );
 
+    window.removeEventListener('error', preventJsdomError);
     consoleSpy.mockRestore();
   });
 

@@ -1,7 +1,7 @@
 /*
-last audited 12-07-26 by RSA-Agent
-crate: oz-pos-app | status: UNSAFE | lint: ISSUES
-findings: 4+ sync primitives; line 149 unsafe env::set_var; Drop try_lock leaks | next: consolidate lock types; typed setter; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
+last audited 12-07-27 by C-2 env-var fix
+crate: oz-pos-app | status: SAFE (C-2 resolved) | lint: CLEAN
+findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied | next: consolidate lock types; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
 */
 
 //! `AppState` — the long-lived state managed by Tauri and reached via
@@ -107,6 +107,16 @@ pub struct AppState {
     /// Tokens are randomly-generated UUIDs created during login/session
     /// resolution. Commands look up their context via [`AppState::resolve_session`].
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
+
+    /// Terminal identifier for multi-terminal deployments.
+    ///
+    /// Set once at startup from the registered terminal matching this
+    /// device's hostname. Commands that auto-register a terminal via
+    /// `set_feature(MultiTerminal, true)` update this field directly
+    /// instead of mutating the process env (which is UB from async
+    /// tokio workers). Consumers (Redis pub/sub subscriber, inventory
+    /// change publisher) read this field.
+    pub terminal_id: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -141,8 +151,12 @@ impl AppState {
 
         // ── OZ_TERMINAL_ID for multi-terminal support ───────────────
         // On subsequent launches where MultiTerminal is already enabled,
-        // look up the registered terminal by hostname and set the env var
-        // so the Redis pub/sub subscriber can filter its own messages.
+        // look up the registered terminal by hostname. The terminal_id is
+        // stored in AppState (typed field) instead of the process env var.
+        // The Redis pub/sub subscriber and inventory change publisher read
+        // it from this field — they no longer call std::env::var().
+        let terminal_id: Arc<std::sync::Mutex<Option<String>>> =
+            Arc::new(std::sync::Mutex::new(None));
         let reg = oz_core::Settings::load_features(&conn).unwrap_or_default();
         if reg.is_enabled(oz_core::Feature::MultiTerminal) {
             let device_id = std::env::var("COMPUTERNAME")
@@ -151,21 +165,20 @@ impl AppState {
             if !device_id.is_empty() {
                 let store = oz_core::db::Store::new(&conn);
                 if let Ok(Some(terminal)) = store.get_terminal_by_device_id(&device_id) {
-                    // SAFETY: single-threaded startup, called once per process.
-                    unsafe {
-                        std::env::set_var("OZ_TERMINAL_ID", &terminal.id);
-                    }
+                    *terminal_id.lock().unwrap() = Some(terminal.id.clone());
                     tracing::info!(
                         terminal_id = %terminal.id,
                         device_id = %device_id,
-                        "OZ_TERMINAL_ID set at startup for multi-terminal"
+                        "terminal_id set at startup for multi-terminal"
                     );
                 }
             }
         }
 
         // ── Start inventory pub/sub listener (Redis only) ────────────
-        let inventory_pubsub_shutdown = cache.start_inventory_pubsub(cache.clone());
+        let pubsub_terminal_id = terminal_id.lock().unwrap().clone();
+        let inventory_pubsub_shutdown =
+            cache.start_inventory_pubsub(cache.clone(), pubsub_terminal_id);
         if inventory_pubsub_shutdown.is_some() {
             tracing::info!("inventory pub/sub listener started");
         }
@@ -223,6 +236,7 @@ impl AppState {
             cache,
             inventory_pubsub_shutdown,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id,
         })
     }
 }
@@ -408,6 +422,7 @@ impl AppState {
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }

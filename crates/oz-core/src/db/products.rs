@@ -739,7 +739,7 @@ impl Store<'_> {
 
         if let Some(cache) = &self.cache {
             cache.invalidate_inventory(&product_id);
-            cache.publish_inventory_change(&product_id, sku, new_qty);
+            cache.publish_inventory_change(&product_id, sku, new_qty, self.terminal_id.as_deref());
         }
 
         Ok(new_qty)

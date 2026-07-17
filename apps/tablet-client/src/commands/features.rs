@@ -149,31 +149,23 @@ pub async fn set_feature(
     // cross-terminal inventory sync and Redis pub/sub filtering.
     if args.enabled && feature == Feature::MultiTerminal {
         let device_id = device_hostname();
+        let mut tid = state.terminal_id.lock().unwrap();
         if store.get_terminal_by_device_id(&device_id)?.is_none() {
             let name = format!("{} (auto)", &device_id);
             let terminal = Terminal::new(&name, &device_id);
             store.create_terminal(&terminal)?;
-            // SAFETY: set_var is called once during feature toggle, not from
-            // multiple threads simultaneously. The terminal ID value is stable.
-            unsafe {
-                std::env::set_var("OZ_TERMINAL_ID", &terminal.id);
-            }
+            *tid = Some(terminal.id.clone());
             tracing::info!(
                 id = %terminal.id,
                 name = %terminal.name,
                 "terminal auto-registered for multi-terminal"
             );
-        } else {
-            // Terminal already registered — ensure env var is set.
-            if std::env::var("OZ_TERMINAL_ID").is_err()
-                && let Some(existing) = store.get_terminal_by_device_id(&device_id)?
-            {
-                // SAFETY: single-threaded toggle, value is stable.
-                unsafe {
-                    std::env::set_var("OZ_TERMINAL_ID", existing.id);
-                }
+        } else if tid.is_none() {
+            if let Some(existing) = store.get_terminal_by_device_id(&device_id)? {
+                *tid = Some(existing.id);
             }
         }
+        drop(tid);
     }
 
     // Build the full feature list response.

@@ -63,6 +63,13 @@ pub struct AppState {
     /// In-memory session store mapping opaque session tokens to resolved
     /// [`SessionContext`] values. ADR #4 / ADR #7.
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
+
+    /// Terminal identifier for multi-terminal deployments.
+    ///
+    /// Set once at startup or via set_feature(MultiTerminal, true).
+    /// Consumers (Redis pub/sub subscriber, inventory change publisher)
+    /// read this field instead of calling std::env::var().
+    pub terminal_id: std::sync::Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -97,6 +104,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: std::sync::Mutex::new(None),
         })
     }
 
@@ -166,6 +174,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: std::sync::Mutex::new(None),
         }
     }
 
@@ -180,6 +189,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            terminal_id: std::sync::Mutex::new(None),
         }
     }
 }
