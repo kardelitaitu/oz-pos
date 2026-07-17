@@ -1,0 +1,189 @@
+import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { useTheme, type Theme } from '@/frontend/shell/ThemeProvider';
+import './DevToolbar.css';
+
+// ── SVG icons ──────────────────────────────────────────────────────
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
+function GlassIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="4" fill="currentColor" opacity="0.2" />
+      <path d="M12 2v0M22 12v0M12 22v0M2 12v0" opacity="0.5" />
+    </svg>
+  );
+}
+
+interface ThemeOption {
+  key: Theme;
+  label: string;
+  icon: ReactNode;
+  swatches: string[];
+}
+
+const THEMES: ThemeOption[] = [
+  { key: 'default', label: 'Glass', icon: <GlassIcon />, swatches: ['#132540', '#5a9fd4', '#f0f6ff'] },
+  { key: 'light', label: 'Light', icon: <SunIcon />, swatches: ['#f8fafc', '#1052bc', '#1e293b'] },
+  { key: 'dark', label: 'Dark', icon: <MoonIcon />, swatches: ['#080e16', '#5a9fd4', '#cddff0'] },
+];
+
+const STORAGE_POS = 'oz-pos-dev-toolbar-pos';
+
+// ── Draggable hook ─────────────────────────────────────────────────
+
+function useDragToolbar() {
+  const [pos, setPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_POS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (
+          typeof parsed.x === 'number' &&
+          typeof parsed.y === 'number' &&
+          // Validate position is within reasonable viewport bounds
+          parsed.x >= -400 && parsed.x <= 5000 &&
+          parsed.y >= -400 && parsed.y <= 5000
+        ) {
+          return parsed;
+        }
+        // Invalid/off-screen position — clear and reset
+        localStorage.removeItem(STORAGE_POS);
+      }
+    } catch { /* ignore */ }
+    return { x: -1, y: -1 }; // -1 means default (bottom-right)
+  });
+
+  const isDragging = useRef(false);
+  const startPos = useRef({ x: 0, y: 0 });
+  const offset = useRef({ x: -1, y: -1 });
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    startPos.current = { x: e.clientX, y: e.clientY };
+    offset.current = { x: pos.x, y: pos.y };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+  }, [pos]);
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const dx = e.clientX - startPos.current.x;
+      const dy = e.clientY - startPos.current.y;
+      setPos({
+        x: offset.current.x + dx,
+        y: offset.current.y + dy,
+      });
+    };
+
+    const handleUp = () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+    };
+  }, []);
+
+  // Persist position on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_POS, JSON.stringify(pos));
+    } catch { /* ignore */ }
+  }, [pos]);
+
+  return { pos, onMouseDown };
+}
+
+// ── Component ──────────────────────────────────────────────────────
+
+/**
+ * DevToolbar — a draggable developer overlay providing realtime
+ * theme switching. Always visible. Remove when no longer needed.
+ */
+export function DevToolbar() {
+  const { theme, setTheme } = useTheme();
+  const { pos, onMouseDown } = useDragToolbar();
+  const currentTheme = THEMES.find((t) => t.key === theme);
+
+  const style: React.CSSProperties | undefined =
+    pos.x !== -1 || pos.y !== -1
+      ? { left: pos.x, top: pos.y, bottom: undefined, right: undefined }
+      : undefined;
+
+  return (
+    <div
+      className="dev-toolbar"
+      style={style}
+      role="toolbar"
+      aria-label="Developer tools"
+    >
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+      <div className="dev-toolbar-header" onMouseDown={onMouseDown}>
+        <span>DevTools</span>
+      </div>
+
+      <div className="dev-toolbar-body">
+        <p className="dev-toolbar-label">Theme</p>
+        <div className="dev-toolbar-themes" role="radiogroup" aria-label="Theme selector">
+          {THEMES.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`dev-toolbar-theme-btn${theme === t.key ? ' dev-toolbar-theme-btn--active' : ''}`}
+              onClick={() => setTheme(t.key)}
+              role="radio"
+              aria-checked={theme === t.key}
+              aria-label={`${t.label} theme`}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="dev-toolbar-bottom">
+          <span className="dev-toolbar-badge">
+            {currentTheme?.label ?? theme}
+          </span>
+          <div className="dev-toolbar-swatches" aria-hidden="true">
+            {currentTheme?.swatches.map((c, i) => (
+              <span key={i} className="dev-toolbar-swatch" style={{ background: c }} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

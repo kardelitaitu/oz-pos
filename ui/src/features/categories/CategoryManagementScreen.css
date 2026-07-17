@@ -78,15 +78,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  /* Must be white for visibility on dynamic-colour badges (set via --cat-color) */
+  color: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 .cat-mgmt-icon-badge-empty {
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--color-border);
   display: block;
 }
 
@@ -296,7 +297,7 @@
 .cat-mgmt-icon-btn--selected {
   border-color: transparent;
   transform: scale(1.08);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-sm);
 }
 
 

@@ -319,19 +319,3 @@
   cursor: not-allowed;
 }
 
-@media (prefers-color-scheme: dark) {
-  .audit-log-badge--success {
-    background: rgba(22, 163, 74, 0.12);
-    color: #4ade80;
-  }
-
-  .audit-log-badge--failure {
-    background: rgba(220, 38, 38, 0.12);
-    color: #f87171;
-  }
-
-  .audit-log-badge--info {
-    background: rgba(2, 132, 199, 0.12);
-    color: #60a5fa;
-  }
-}

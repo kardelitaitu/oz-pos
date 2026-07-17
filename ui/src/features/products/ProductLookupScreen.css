@@ -185,10 +185,10 @@
 /* ── Product card (button inside listitem wrapper) ─ */
 .product-card-price-volatility {
   position: absolute;
-  top: 0.375rem;
-  left: 0.375rem;
-  width: 0.5rem;
-  height: 0.5rem;
+  top: var(--space-1_5);
+  left: var(--space-1_5);
+  width: var(--space-2);
+  height: var(--space-2);
   border-radius: 50%;
   background: var(--color-warning, #eab308);
   animation: product-card-price-pulse var(--duration-2000) var(--ease-in-out) infinite;
@@ -234,7 +234,7 @@
       transform: scale(1.02);
     }
     100% {
-      box-shadow: 0 0 0 0 transparent;
+      box-shadow: none;
       border-color: var(--color-border);
       transform: scale(1);
     }
@@ -395,6 +395,7 @@
 }
 
 .product-card--added .product-card-add-icon {
+  /* --color-accent-fg is dark in default/dark themes; must be white for visibility on success-green background */
   background-color: var(--color-success);
   color: #fff;
 }

@@ -1,0 +1,134 @@
+/* ═══════════════════════════════════════════════════════════════════
+ * DevToolbar — draggable developer overlay
+ *
+ * Provides realtime theme switching for the theme consistency audit.
+ * Remove this file when no longer needed.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+.dev-toolbar {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: var(--z-tooltip);
+  display: flex;
+  flex-direction: column;
+
+  width: 256px;
+  height: 256px;
+
+  background: var(--color-bg-elevated, rgba(16, 82, 188, 0.08));
+  border: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
+  border-radius: var(--radius-lg, 0.5rem);
+  box-shadow: var(--shadow-xl, 0 20px 40px -5px rgba(4, 10, 18, 0.65));
+
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ── Drag handle ─────────────────────────────────── */
+.dev-toolbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-2_5);
+  background: var(--color-accent-subtle, rgba(16, 82, 188, 0.18));
+  border-bottom: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
+  font-size: var(--text-2xs, 0.5625rem);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-accent-fg, #07111d);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide, 0.02em);
+  cursor: grab;
+}
+
+.dev-toolbar-header:active {
+  cursor: grabbing;
+}
+
+/* ── Body ─────────────────────────────────────────── */
+.dev-toolbar-body {
+  padding: var(--space-2) var(--space-2_5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── Theme buttons row ────────────────────────────── */
+.dev-toolbar-themes {
+  display: flex;
+  gap: var(--space-0_5);
+}
+
+.dev-toolbar-theme-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-0_5);
+  padding: var(--space-1) var(--space-0_5);
+  border: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
+  border-radius: var(--radius-sm, 0.125rem);
+  background: transparent;
+  color: var(--color-fg-secondary, #a8c4e0);
+  cursor: pointer;
+  font-size: var(--text-2xs, 0.5625rem);
+  white-space: nowrap;
+  transition:
+    background var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out);
+}
+
+.dev-toolbar-theme-btn:hover {
+  background: var(--color-bg-surface, rgba(16, 82, 188, 0.05));
+  border-color: var(--color-border-hover, rgba(90, 159, 212, 0.25));
+  color: var(--color-fg, #f0f6ff);
+}
+
+.dev-toolbar-theme-btn--active {
+  background: var(--color-accent-subtle, rgba(16, 82, 188, 0.18));
+  border-color: var(--color-accent, #5a9fd4);
+  color: var(--color-accent, #5a9fd4);
+}
+
+.dev-toolbar-theme-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Badge + swatches row (collapsed) ─────────────── */
+.dev-toolbar-bottom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.dev-toolbar-badge {
+  padding: var(--space-0_5) var(--space-1_5);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--color-accent-subtle, rgba(16, 82, 188, 0.18));
+  color: var(--color-accent, #5a9fd4);
+  font-size: var(--text-2xs, 0.5625rem);
+  font-weight: var(--font-weight-semibold, 600);
+  letter-spacing: var(--tracking-tight, -0.01em);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dev-toolbar-swatches {
+  display: flex;
+  gap: var(--space-0_5);
+}
+
+.dev-toolbar-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
+  flex-shrink: 0;
+}

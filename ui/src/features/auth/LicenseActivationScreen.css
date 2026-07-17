@@ -1,4 +1,3 @@
-
 .license-activation-container {
   display: flex;
   flex-direction: column;
@@ -8,7 +7,7 @@
   background: var(--color-bg);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  padding: 2rem;
+  padding: var(--space-8);
 }
 
 .license-activation-layout {
@@ -16,7 +15,7 @@
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6rem;
+  gap: var(--space-24);
   width: 100%;
   max-width: 64rem; /* 1024px */
 }
@@ -47,8 +46,8 @@
   background: var(--color-bg-elevated);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  border-radius: 1.5rem;
-  padding: 3rem;
+  border-radius: var(--radius-3xl);
+  padding: var(--space-12);
   width: 100%;
   max-width: 31.25rem;
   box-shadow: var(--shadow-glow, var(--shadow-2xl));
@@ -64,13 +63,13 @@
 
 .license-activation-header {
   text-align: center;
-  margin-bottom: 2.5rem;
+  margin-bottom: var(--space-10);
 }
 
 .license-activation-header h1 {
-  font-size: 2rem;
-  font-weight: 600;
-  margin: 0 0 0.5rem 0;
+  font-size: var(--text-4xl);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--space-2) 0;
   background: linear-gradient(90deg, var(--color-fg), var(--primary-500));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -78,21 +77,21 @@
 
 .license-activation-header p {
   color: var(--color-fg-secondary);
-  font-size: 1rem;
+  font-size: var(--text-md);
   margin: 0;
 }
 
 .license-form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .license-form-group label {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: var(--color-fg-secondary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .license-input {
@@ -100,10 +99,10 @@
   box-sizing: border-box;
   background: var(--color-bg-input);
   border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  padding: 1rem 3rem 1rem 1rem;
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-12) var(--space-4) var(--space-4);
   color: var(--color-fg);
-  font-size: 1rem;
+  font-size: var(--text-md);
   transition: all var(--duration-200) var(--ease-out);
   font-family: var(--font-mono);
   letter-spacing: 0.0625rem;
@@ -118,12 +117,12 @@
 
 .license-input-clear {
   position: absolute;
-  right: 0.75rem;
+  right: var(--space-3);
   background: none;
   border: none;
-  padding: 0.25rem;
-  min-width: 2rem;
-  min-height: 2rem;
+  padding: var(--space-1);
+  min-width: var(--space-8);
+  min-height: var(--space-8);
   cursor: pointer;
   color: var(--color-fg-disabled);
   display: flex;
@@ -134,8 +133,8 @@
 
 @media (pointer: coarse) {
   .license-input-clear {
-    min-width: 2.75rem;
-    min-height: 2.75rem;
+    min-width: var(--space-11);
+    min-height: var(--space-11);
   }
 }
 
@@ -168,26 +167,26 @@
 
 .license-submit-btn {
   width: 100%;
-  padding: 1rem;
-  background: var(--primary-500);
-  color: #ffffff;
+  padding: var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
   border: none;
-  border-radius: 0.75rem;
-  font-size: 1.125rem;
-  font-weight: 600;
+  border-radius: var(--radius-xl);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all var(--duration-200) var(--ease-out);
-  margin-top: 1rem;
+  margin-top: var(--space-4);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .license-submit-btn:hover:not(:disabled) {
-  background: var(--primary-600);
+  background: var(--color-accent-hover);
   transform: translateY(-0.125rem);
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
 }
 
 .license-submit-btn:active:not(:disabled) {
@@ -212,11 +211,11 @@
 
 .license-server-status-container {
   position: absolute;
-  bottom: 1.5rem;
-  right: 1.5rem;
+  bottom: var(--space-6);
+  right: var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .spinner {
@@ -239,13 +238,13 @@
 
 .activation-device-info {
   position: absolute;
-  bottom: 1.5rem;
-  left: 1.5rem;
+  bottom: var(--space-6);
+  left: var(--space-6);
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   color: var(--color-fg-tertiary);
-  font-size: 0.75rem;
+  font-size: var(--text-sm);
   font-family: var(--font-mono);
   pointer-events: none;
 }
@@ -256,15 +255,15 @@
   background: var(--color-bg-overlay);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
-  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  border-radius: 0.75rem;
-  padding: 0.5rem;
+  box-shadow: var(--shadow-glow);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   color: var(--color-fg);
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
   cursor: pointer;
   min-width: 8.75rem;
   transform-origin: top left;
@@ -301,9 +300,9 @@
 @media (max-width: 900px) {
   .license-activation-layout {
     flex-direction: column;
-    gap: 2rem;
+    gap: var(--space-8);
   }
   .license-activation-card {
-    padding: 2rem;
+    padding: var(--space-8);
   }
 }

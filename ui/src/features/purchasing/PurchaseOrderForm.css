@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-bg-overlay);
 }
 
 .po-form-modal {
@@ -39,7 +39,7 @@
 .po-form-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   cursor: pointer;
   color: var(--color-fg-tertiary);
   width: 2rem;
@@ -156,9 +156,9 @@
   background: none;
   border: none;
   color: var(--color-danger);
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   cursor: pointer;
-  padding: 0 0.25rem;
+  padding: 0 var(--space-1);
 }
 
 .po-form-total-label {
