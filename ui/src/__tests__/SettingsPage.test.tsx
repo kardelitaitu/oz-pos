@@ -488,10 +488,8 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
     });
 
-    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
     fillField('Store name', 'Ctrl+S Store');
-
-    const addressInput = screen.getByRole('textbox', { name: 'Address' });
+    fillField('Address', '456 Keyboard Blvd');
     fillField('Address', '456 Keyboard Blvd');
 
     fireEvent.keyDown(document, { key: 's', ctrlKey: true });
@@ -533,7 +531,6 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
     });
 
-    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
     fillField('Store name', '');
     blurField('Store name');
     await waitFor(() => {
@@ -581,7 +578,6 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
     });
 
-    const nameInput = screen.getByRole('textbox', { name: 'Store name' });
     fillField('Store name', '');
     blurField('Store name');
     await waitFor(() => {

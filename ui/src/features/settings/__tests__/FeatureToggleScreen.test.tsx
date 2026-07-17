@@ -56,7 +56,7 @@ const STABLE_L10N = {
 vi.mock('@fluent/react', () => ({
   Localized: ({ children, id, vars }: { children: React.ReactNode; id: string; vars?: Record<string, string> }) => {
     if (id === 'feature-toggle-subtitle') {
-      return <span>{vars?.enabled ?? '0'} / {vars?.total ?? '0'} enabled</span>;
+      return <span>{vars?.['enabled'] ?? '0'} / {vars?.['total'] ?? '0'} enabled</span>;
     }
     return <>{children}</>;
   },

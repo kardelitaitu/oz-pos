@@ -21,7 +21,7 @@ const FLASH_DURATION = 1_400;
 
 // ── Types ──────────────────────────────────────────────────────────
 
-interface FeatureInfo {
+export interface FeatureInfo {
   key: string;
   name: string;
   description: string;
