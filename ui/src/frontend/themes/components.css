@@ -220,6 +220,7 @@
 .workspace-card::after,
 .retail-shift-modal::after,
 .retail-held-carts-modal::after,
+.retail-discount-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -245,6 +246,7 @@
   .workspace-card::after,
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
+  .retail-discount-modal::after,
   .noise-dither::after { display: none; }
 }
 
