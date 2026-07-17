@@ -96,8 +96,9 @@ All screens must use **design tokens only** — never hardcoded colours, sizes, 
   - [x] PurchaseOrderForm.css (3 violations)
   - [x] PurchaseOrdersScreen.css (1 violation)
   - [x] SuppliersScreen.css (1 violation)
-  - [ ] RestaurantMenu.css, RetailPosScreen.css, etc. (528 remaining)
-  - [ ] sales/ CSS files (PaymentModal, RefundModal, etc.)
+  - [x] RestaurantMenu.css (~10 violations)
+  - [x] RetailPosScreen.css (~150 violations — largest single file)
+  - [ ] sales/ CSS files (PaymentModal, RefundModal, SalesHistoryScreen, WeightScaleWidget)
   - [ ] settings/ CSS files (SettingsPage, DataManagement, etc.)
   - [ ] frontend/ CSS files
   - [ ] components/ CSS files
