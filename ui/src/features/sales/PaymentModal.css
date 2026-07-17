@@ -36,11 +36,12 @@
 }
 
 .payment-modal {
+  position: relative;
   width: 26.25rem;
   max-width: 92vw;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl));
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
 }
 
@@ -769,7 +770,7 @@
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-lg));
+  box-shadow: var(--shadow-lg);
   animation: payment-modal-slide-up var(--duration-200, 200ms) var(--ease-out);
 }
 .payment-customer-search-heading {

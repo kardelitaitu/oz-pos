@@ -234,6 +234,7 @@
 .po-form-modal::after,
 .stock-transfers-modal::after,
 .shift-mgmt-modal::after,
+.payment-modal::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -273,6 +274,7 @@
   .po-form-modal::after,
   .stock-transfers-modal::after,
   .shift-mgmt-modal::after,
+  .payment-modal::after,
   .noise-dither::after { display: none; }
 }
 
