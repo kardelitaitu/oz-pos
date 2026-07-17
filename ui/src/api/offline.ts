@@ -116,3 +116,19 @@ export interface PingResult {
  *  test before saving. Falls back to saved settings if empty. */
 export const testSyncConnection = (url?: string): Promise<PingResult> =>
   invoke<PingResult>('test_sync_connection', { url: url || null });
+
+// ── Token Request ────────────────────────────────────────────────
+
+/** Result of requesting a new JWT API token from the cloud server. */
+export interface TokenResult {
+  ok: boolean;
+  token: string | null;
+  status: string;
+  expiresAt: string | null;
+}
+
+/** Request a new JWT token from the cloud server's
+ *  POST /api/v1/tokens endpoint. Pass the in-progress URL
+ *  so users can request a token before saving. */
+export const requestSyncToken = (url?: string): Promise<TokenResult> =>
+  invoke<TokenResult>('request_sync_token', { url: url || null });

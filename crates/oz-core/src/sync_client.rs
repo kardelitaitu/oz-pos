@@ -80,6 +80,111 @@ pub struct PingResult {
     pub latency_ms: Option<u64>,
 }
 
+/// Result of requesting a new API token from the cloud server.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenResult {
+    /// Whether the token was successfully obtained.
+    pub ok: bool,
+    /// The JWT token string (only present on success).
+    pub token: Option<String>,
+    /// Human-readable status or error message.
+    pub status: String,
+    /// Token expiry in ISO-8601 format, if the server returned one.
+    pub expires_at: Option<String>,
+}
+
+/// Request a new JWT API token from the cloud server's
+/// `POST /api/v1/tokens` endpoint.
+///
+/// The endpoint is unauthenticated — it accepts a JSON body with
+/// a `label` field and returns a signed JWT for use as a Bearer token
+/// in subsequent sync API calls.
+#[cfg(feature = "sync-http")]
+pub fn request_token(url: &str) -> TokenResult {
+    let token_url = format!("{}/api/v1/tokens", url.trim_end_matches('/'));
+    let body = serde_json::json!({"label": "pos-terminal"});
+
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return TokenResult {
+                ok: false,
+                token: None,
+                status: format!("Failed to build HTTP client: {e}"),
+                expires_at: None,
+            };
+        }
+    };
+
+    match client
+        .post(&token_url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                #[derive(Deserialize)]
+                struct TokenResponse {
+                    token: String,
+                    #[serde(default)]
+                    expires_at: Option<String>,
+                }
+                match resp.json::<TokenResponse>() {
+                    Ok(tr) => {
+                        let expires = tr.expires_at.clone();
+                        TokenResult {
+                            ok: true,
+                            status: expires
+                                .as_ref()
+                                .map(|e| format!("Token obtained — expires {e}"))
+                                .unwrap_or_else(|| "Token obtained".into()),
+                            token: Some(tr.token),
+                            expires_at: tr.expires_at,
+                        }
+                    }
+                    Err(e) => TokenResult {
+                        ok: false,
+                        token: None,
+                        status: format!("Failed to parse token response: {e}"),
+                        expires_at: None,
+                    },
+                }
+            } else {
+                let status = resp.status();
+                let body = resp.text().unwrap_or_default();
+                TokenResult {
+                    ok: false,
+                    token: None,
+                    status: format!("Server returned {status}: {body}"),
+                    expires_at: None,
+                }
+            }
+        }
+        Err(e) => TokenResult {
+            ok: false,
+            token: None,
+            status: format!("Request failed: {e}"),
+            expires_at: None,
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub fn request_token(_url: &str) -> TokenResult {
+    TokenResult {
+        ok: false,
+        token: None,
+        status: "sync-http feature is disabled".into(),
+        expires_at: None,
+    }
+}
+
 /// Ping the cloud server's `/health` endpoint to verify connectivity.
 ///
 /// Returns a `PingResult` with ok=true and latency if the server

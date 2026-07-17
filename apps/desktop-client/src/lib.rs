@@ -403,6 +403,7 @@ pub fn run() {
             commands::sync::sync_pull,
             commands::sync::pending_sync_count,
             commands::sync::test_sync_connection,
+            commands::sync::request_sync_token,
             commands::refunds::process_refund,
             commands::refunds::process_refund_scoped,
             commands::refunds::list_refunds,

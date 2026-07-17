@@ -190,7 +190,8 @@ pub use store_profile::StoreProfile;
 pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
 pub use supplier::Supplier;
 pub use sync_client::{
-    PingResult, PullResult, SyncAttemptResult, SyncConfig, ping_server, pull_snapshot, sync_pending,
+    PingResult, PullResult, SyncAttemptResult, SyncConfig, TokenResult, ping_server,
+    pull_snapshot, request_token, sync_pending,
 };
 pub use table::{Table, TableStatus};
 pub use terminal::Terminal;

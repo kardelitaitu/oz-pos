@@ -105,6 +105,36 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
     Ok(count)
 }
 
+/// Request a new JWT API token from the cloud server's
+/// `POST /api/v1/tokens` endpoint.
+///
+/// If `url` is provided (from the front-end text field), it is used
+/// directly so users can request a token before saving. Otherwise the
+/// saved value from settings is used.
+#[command]
+pub async fn request_sync_token(
+    url: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<sync_client::TokenResult, AppError> {
+    // Use the explicit URL if provided, otherwise read from saved settings.
+    let resolved = match url.filter(|u| !u.is_empty()) {
+        Some(u) => Some(u),
+        None => {
+            let db = state.db.lock().await;
+            Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty())
+        }
+    };
+    match resolved {
+        Some(u) => Ok(sync_client::request_token(&u)),
+        None => Ok(sync_client::TokenResult {
+            ok: false,
+            token: None,
+            status: "No server URL configured".into(),
+            expires_at: None,
+        }),
+    }
+}
+
 /// Test the cloud sync connection by pinging the configured server's
 /// `/health` endpoint.
 ///

@@ -25,10 +25,12 @@ import {
   syncPull,
   pendingSyncCount,
   testSyncConnection,
+  requestSyncToken,
   type SyncSettingsDto,
   type SyncAttemptResult,
   type PullResult,
   type PingResult,
+  type TokenResult,
 } from '@/api/offline';
 import { getVersion } from '@/api/system';
 import {
@@ -447,6 +449,7 @@ export default function SettingsPage() {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [testing, setTesting] = useState(false);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
+  const [requesting, setRequesting] = useState(false);
 
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
@@ -1376,6 +1379,34 @@ export default function SettingsPage() {
                       <span>Enter a JWT token from the cloud server. Generate one via POST /api/v1/tokens</span>
                     </Localized>
                   </p>
+                  <div className="settings-sync-token-actions">
+                    <Button
+                      variant="ghost"
+                      loading={requesting}
+                      onClick={async () => {
+                        setRequesting(true);
+                        try {
+                          const result = await requestSyncToken(syncServerUrl || undefined);
+                          if (result.ok && result.token) {
+                            setSyncApiKey(result.token);
+                            setSyncApiKeyVisible(false);
+                            markDirty();
+                            addToast({ message: result.status, type: 'success' });
+                          } else {
+                            addToast({ message: result.status, type: 'error' });
+                          }
+                        } catch {
+                          addToast({ message: l10n.getString('settings-sync-test-failed'), type: 'error' });
+                        } finally {
+                          setRequesting(false);
+                        }
+                      }}
+                    >
+                      <Localized id={requesting ? 'settings-sync-requesting' : 'settings-sync-request-token'}>
+                        <span>{requesting ? 'Requesting…' : 'Request Token'}</span>
+                      </Localized>
+                    </Button>
+                  </div>
                 </span>
               </div>
 
