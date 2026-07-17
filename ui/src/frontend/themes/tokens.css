@@ -88,8 +88,16 @@
   --info-500:    #3b82f6;
 
   /* ── Semantic colour tokens (Steel Blue Glassmorphism) ────────────── */
-  /* Stronger radial bloom — visible glow from top implies depth */
-  --color-bg:              radial-gradient(ellipse at 50% -10%, #132540 0%, #07111d 60%, #040a12 100%);
+  /* Radial bloom — extra colour stops for 8-bit GPU banding reduction */
+  --color-bg: radial-gradient(ellipse at 50% -10%,
+    #132540 0%,
+    #111f33 15%,
+    #0e1a2b 28%,
+    #0c1523 40%,
+    #09111d 52%,
+    #070e19 65%,
+    #060c16 78%,
+    #040a12 100%);
   /* Blue-tinted glass surfaces — hue resonance with the background */
   --color-bg-elevated:     rgba(16, 82, 188, 0.08);
   --color-bg-surface:      rgba(16, 82, 188, 0.05);
@@ -184,14 +192,15 @@
   --radius-3xl:  1.5rem;
   --radius-full: 9999px;
 
-  /* ── Shadows (Steel Blue Glassmorphic) — blue-tinted for depth ──── */
-  --shadow-xs:   0 1px 2px rgba(4, 10, 18, 0.5);
-  --shadow-sm:   0 1px 3px rgba(4, 10, 18, 0.5), 0 1px 2px rgba(4, 10, 18, 0.4);
-  --shadow-md:   0 4px 12px -1px rgba(4, 10, 18, 0.55), 0 2px 4px -2px rgba(16, 82, 188, 0.15);
-  --shadow-lg:   0 10px 24px -3px rgba(4, 10, 18, 0.6), 0 4px 8px -4px rgba(16, 82, 188, 0.2);
-  --shadow-xl:   0 20px 40px -5px rgba(4, 10, 18, 0.65), 0 8px 16px -6px rgba(16, 82, 188, 0.25);
-  --shadow-2xl:  0 25px 60px -12px rgba(4, 10, 18, 0.7), 0 0 0 1px rgba(90, 159, 212, 0.08);
-  --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.5);
+  /* ── Single shadow size (8px) across all levels ─ */
+  /* Normal elevation curve: smallest elements get lightest shadow */
+  --shadow-xs:   0 0 12px rgba(4,10,18,0.00);
+  --shadow-sm:   0 0 12px rgba(4,10,18,0.08);
+  --shadow-md:   0 0 12px rgba(4,10,18,0.16);
+  --shadow-lg:   0 0 12px rgba(4,10,18,0.24);
+  --shadow-xl:   0 0 12px rgba(4,10,18,0.32);
+  --shadow-2xl:  0 0 12px rgba(4,10,18,0.40);
+  --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.20);
 
   /* ── Timing / transitions ──────────────────────── */
   --duration-75:   75ms;
@@ -323,13 +332,13 @@
   --color-accent-alpha:    rgba(16, 82, 188, 0.18);
   --color-accent-secondary: var(--primary-400);
 
-  /* Shadows — blue-tinted for cohesion with steel blue palette */
-  --shadow-xs:   0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-sm:   0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(16, 82, 188, 0.05);
-  --shadow-md:   0 4px 12px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(16, 82, 188, 0.08);
-  --shadow-lg:   0 10px 24px -3px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(16, 82, 188, 0.1);
-  --shadow-xl:   0 20px 40px -5px rgba(15, 23, 42, 0.14), 0 8px 16px -6px rgba(16, 82, 188, 0.12);
-  --shadow-2xl:  0 25px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(16, 82, 188, 0.06);
+  /* Shadows — single size (8px), normal elevation curve */
+  --shadow-xs:   0 0 12px rgba(15,23,42,0.00);
+  --shadow-sm:   0 0 12px rgba(15,23,42,0.08);
+  --shadow-md:   0 0 12px rgba(15,23,42,0.16);
+  --shadow-lg:   0 0 12px rgba(15,23,42,0.24);
+  --shadow-xl:   0 0 12px rgba(15,23,42,0.32);
+  --shadow-2xl:  0 0 12px rgba(15,23,42,0.40);
   --shadow-inner: inset 0 2px 4px rgba(15, 23, 42, 0.06);
 }
 
@@ -417,14 +426,14 @@
   --color-accent-alpha:    rgba(90, 159, 212, 0.2);
   --color-accent-secondary: #5a9fd4;
 
-  /* Shadows — blue-tinted for steel blue dark surfaces */
-  --shadow-xs:   0 1px 2px rgba(8, 14, 22, 0.5);
-  --shadow-sm:   0 1px 3px rgba(8, 14, 22, 0.55), 0 1px 2px rgba(8, 14, 22, 0.4);
-  --shadow-md:   0 4px 12px -1px rgba(8, 14, 22, 0.6), 0 2px 4px -2px rgba(16, 82, 188, 0.15);
-  --shadow-lg:   0 10px 24px -3px rgba(8, 14, 22, 0.65), 0 4px 8px -4px rgba(16, 82, 188, 0.2);
-  --shadow-xl:   0 20px 40px -5px rgba(8, 14, 22, 0.7), 0 8px 16px -6px rgba(16, 82, 188, 0.25);
-  --shadow-2xl:  0 25px 60px -12px rgba(8, 14, 22, 0.75), 0 0 0 1px rgba(90, 159, 212, 0.06);
-  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.5);
+  /* Shadows — single size (8px), normal elevation curve */
+  --shadow-xs:   0 0 12px rgba(8,14,22,0.00);
+  --shadow-sm:   0 0 12px rgba(8,14,22,0.08);
+  --shadow-md:   0 0 12px rgba(8,14,22,0.16);
+  --shadow-lg:   0 0 12px rgba(8,14,22,0.24);
+  --shadow-xl:   0 0 12px rgba(8,14,22,0.32);
+  --shadow-2xl:  0 0 12px rgba(8,14,22,0.40);
+  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.25);
 }
 
 /* ── Smooth theme transitions ──────────────────── */
