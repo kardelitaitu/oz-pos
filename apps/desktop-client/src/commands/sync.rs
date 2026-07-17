@@ -18,6 +18,7 @@ use crate::state::AppState;
 
 /// Get the current sync configuration settings.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncSettingsDto {
     /// Server Url.
     pub server_url: Option<String>,
@@ -44,6 +45,7 @@ pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSetting
 
 /// Update sync settings.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateSyncSettingsArgs {
     /// Server Url.
     pub server_url: Option<String>,
@@ -136,8 +138,8 @@ mod tests {
             enabled: true,
         };
         let json = serde_json::to_value(&s).unwrap();
-        assert_eq!(json["server_url"], "https://sync.example.com");
-        assert_eq!(json["has_api_key"], true);
+        assert_eq!(json["serverUrl"], "https://sync.example.com");
+        assert_eq!(json["hasApiKey"], true);
         assert_eq!(json["enabled"], true);
     }
 
@@ -149,15 +151,15 @@ mod tests {
             enabled: false,
         };
         let json = serde_json::to_value(&s).unwrap();
-        assert!(json["server_url"].is_null());
-        assert_eq!(json["has_api_key"], false);
+        assert!(json["serverUrl"].is_null());
+        assert_eq!(json["hasApiKey"], false);
         assert_eq!(json["enabled"], false);
     }
 
     #[test]
     fn update_sync_settings_deserialize() {
         let json =
-            r#"{"server_url":"https://sync.example.com","api_key":"sk-abc123","enabled":true}"#;
+            r#"{"serverUrl":"https://sync.example.com","apiKey":"sk-abc123","enabled":true}"#;
         let args: UpdateSyncSettingsArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.server_url.unwrap(), "https://sync.example.com");
         assert_eq!(args.api_key.unwrap(), "sk-abc123");
@@ -166,7 +168,7 @@ mod tests {
 
     #[test]
     fn update_sync_settings_deserialize_no_key() {
-        let json = r#"{"server_url":null,"api_key":null,"enabled":false}"#;
+        let json = r#"{"serverUrl":null,"apiKey":null,"enabled":false}"#;
         let args: UpdateSyncSettingsArgs = serde_json::from_str(json).unwrap();
         assert!(args.server_url.is_none());
         assert!(args.api_key.is_none());
