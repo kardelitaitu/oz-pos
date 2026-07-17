@@ -207,6 +207,7 @@
 }
 
 .promo-mgmt-modal {
+  position: relative;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
