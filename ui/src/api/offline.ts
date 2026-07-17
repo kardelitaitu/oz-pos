@@ -111,6 +111,8 @@ export interface PingResult {
   latencyMs: number | null;
 }
 
-/** Test connectivity to the configured cloud server. */
-export const testSyncConnection = (): Promise<PingResult> =>
-  invoke<PingResult>('test_sync_connection');
+/** Test connectivity to the configured cloud server.
+ *  Pass the in-progress URL from the text field so users can
+ *  test before saving. Falls back to saved settings if empty. */
+export const testSyncConnection = (url?: string): Promise<PingResult> =>
+  invoke<PingResult>('test_sync_connection', { url: url || null });

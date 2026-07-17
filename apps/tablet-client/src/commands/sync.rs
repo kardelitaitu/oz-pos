@@ -102,15 +102,21 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
 }
 
 /// Test the cloud sync connection by pinging the configured server.
+/// If `url` is provided from the front-end, it is used directly.
 #[command]
 pub async fn test_sync_connection(
+    url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<sync_client::PingResult, AppError> {
-    let db = state.db.lock().await;
-    let server_url = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
-    drop(db);
-    match server_url {
-        Some(url) => Ok(sync_client::ping_server(&url)),
+    let resolved = match url.filter(|u| !u.is_empty()) {
+        Some(u) => Some(u),
+        None => {
+            let db = state.db.lock().await;
+            Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty())
+        }
+    };
+    match resolved {
+        Some(u) => Ok(sync_client::ping_server(&u)),
         None => Ok(sync_client::PingResult {
             ok: false,
             status: "No server URL configured".into(),

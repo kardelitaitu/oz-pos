@@ -1436,7 +1436,7 @@ export default function SettingsPage() {
                         setTesting(true);
                         setPingResult(null);
                         try {
-                          const result = await testSyncConnection();
+                          const result = await testSyncConnection(syncServerUrl || undefined);
                           setPingResult(result);
                           if (result.ok) {
                             addToast({ message: result.status, type: 'success' });
