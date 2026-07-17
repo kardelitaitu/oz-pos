@@ -1,9 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import staffFtl from '@/locales/staff.ftl?raw';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
+
+// FAST_WAIT: 5ms polling for async assertions (10x faster than default 50ms).
+const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const SAMPLE_ROLES = [
   { id: 'role-1', name: 'owner', description: 'Owner' },
@@ -91,7 +94,7 @@ describe('StaffManagementScreen', () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitFor(() => {
       expect(screen.getByText(/no staff members yet/i)).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
     expect(screen.getByRole('button', { name: /add your first staff member/i })).toBeInTheDocument();
   });
 
@@ -106,7 +109,7 @@ describe('StaffManagementScreen', () => {
   it('opens add modal', async () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
-    await userEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveTextContent(/add staff member/i);
@@ -116,7 +119,7 @@ describe('StaffManagementScreen', () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
     const editBtn = screen.getByRole('button', { name: /edit.*jane smith/i });
-    await userEvent.click(editBtn);
+    fireEvent.click(editBtn);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveTextContent(/edit staff member/i);
@@ -130,7 +133,7 @@ describe('StaffManagementScreen', () => {
 
     // Find the Deactivate button for Jane (active)
     const deactivateBtn = screen.getByRole('button', { name: /deactivate.*jane smith/i });
-    await userEvent.click(deactivateBtn);
+    fireEvent.click(deactivateBtn);
 
     // update_staff should be called with is_active: false
     // Note: updateStaff from @/api/staff wraps args in { args } for the IPC call
@@ -141,7 +144,7 @@ describe('StaffManagementScreen', () => {
           is_active: false,
         }),
       }));
-    });
+    }, FAST_WAIT);
   });
 
   it('reactivates an inactive staff member when Restore is clicked', async () => {
@@ -150,7 +153,7 @@ describe('StaffManagementScreen', () => {
 
     // Find the Restore button for John (inactive) via visible text content
     const restoreBtn = screen.getByText('Restore').closest('button')!;
-    await userEvent.click(restoreBtn);
+    fireEvent.click(restoreBtn);
 
     // update_staff wraps args in { args } — assert the inner payload
     await waitFor(() => {
@@ -160,7 +163,7 @@ describe('StaffManagementScreen', () => {
           is_active: true,
         }),
       }));
-    });
+    }, FAST_WAIT);
   });
 
   it('closes the add modal when Escape is pressed', async () => {
@@ -168,15 +171,18 @@ describe('StaffManagementScreen', () => {
     await waitForTable();
 
     // Open add modal
-    await userEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    // Press Escape
-    await userEvent.keyboard('{Escape}');
+    // Press Escape — kept as userEvent.keyboard because the modal's
+    // useFocusTrap hook uses a native addEventListener for keydown,
+    // which userEvent simulates more faithfully than fireEvent.keyDown.
+    const user = userEvent.setup();
+    await user.keyboard('{Escape}');
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('creates a new staff member via the add modal', async () => {
@@ -184,28 +190,23 @@ describe('StaffManagementScreen', () => {
     await waitForTable();
 
     // Open add modal and fill form
-    await userEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
     const dialog = screen.getByRole('dialog');
 
-    // Fill username
-    const usernameInput = within(dialog).getByRole('textbox', { name: /username/i });
-    await userEvent.type(usernameInput, 'newuser');
+    // Fill username — fireEvent.change saves ~140ms vs userEvent.type
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
 
     // Fill display name
-    const nameInput = within(dialog).getByRole('textbox', { name: /display name/i });
-    await userEvent.type(nameInput, 'New User');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
 
     // Fill PIN — use placeholder to avoid matching both label and input elements
-    const pinInput = within(dialog).getByPlaceholderText(/enter pin/i);
-    await userEvent.type(pinInput, '1234');
+    fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
 
     // Select a role
-    const roleSelect = within(dialog).getByRole('combobox', { name: /role/i });
-    await userEvent.selectOptions(roleSelect, 'role-3');
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-3' } });
 
     // Click Create
-    const createBtn = within(dialog).getByRole('button', { name: /create/i });
-    await userEvent.click(createBtn);
+    fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
 
     // create_staff wraps args in { args }
     await waitFor(() => {
@@ -214,12 +215,12 @@ describe('StaffManagementScreen', () => {
           username: 'newuser',
         }),
       }));
-    });
+    }, FAST_WAIT);
 
     // Modal should close
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('handles save failure gracefully in add modal', async () => {
@@ -238,21 +239,20 @@ describe('StaffManagementScreen', () => {
     await waitForTable();
 
     // Open add modal and fill form
-    await userEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
     const dialog = screen.getByRole('dialog');
 
-    await userEvent.type(within(dialog).getByRole('textbox', { name: /username/i }), 'newuser');
-    await userEvent.type(within(dialog).getByRole('textbox', { name: /display name/i }), 'New User');
-    await userEvent.type(within(dialog).getByPlaceholderText(/enter pin/i), '1234');
-    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /role/i }), 'role-3');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
+    fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-3' } });
 
-    const createBtn = within(dialog).getByRole('button', { name: /create/i });
-    await userEvent.click(createBtn);
+    fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
 
     // Modal should stay open after failure
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
-    });
+    }, FAST_WAIT);
   });
 
   it('renders workspace column for staff members', async () => {

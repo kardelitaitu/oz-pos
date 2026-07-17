@@ -81,7 +81,11 @@ suite and record the new wall-clock time at the bottom.
       Back button). FAST_WAIT (5ms polling) for all waitFor calls. 14 barcode
       scan tests already used act() — only got FAST_WAIT benefit.
 - [ ] **LicenseActivationScreen.test.tsx** — 2,236ms / 50 tests
-- [ ] **StaffManagementScreen.test.tsx** — 2,176ms / 12 tests
+- [x] **StaffManagementScreen.test.tsx** — 2,176ms / 12 tests → 1,348ms (-38%)
+      fireEvent.change for form fields (username, display name, PIN),
+      fireEvent.click for buttons (Add/Edit/Deactivate/Restore/Create),
+      fireEvent.change for role dropdown. Kept userEvent.keyboard for Escape
+      (native addEventListener in useFocusTrap). FAST_WAIT (5ms polling).
 
 ### 📝 Benchmark Log
 
@@ -103,6 +107,7 @@ suite and record the new wall-clock time at the bottom.
 | 2026-07-17 | 15.10s | +1.11s | After RefundModal optimization (164 files, 2533 tests). RefundModal 2.1s→1.18s (-44%). Tier 2 complete! |
 | 2026-07-17 | **13.47s** | **-0.52s** | After GiftCardsScreen optimization (164 files, 2533 tests). GiftCardsScreen 2.37s→1.03s (-57%). **New all-time best!** 🎉 |
 | 2026-07-17 | 15.50s | +1.51s | After PosScreen optimization (164 files, 2533 tests). PosScreen 2.26s→1.57s (-31%). Run-to-run variance. |
+| 2026-07-17 | 16.81s | +2.82s | After StaffManagementScreen optimization (164 files, 2533 tests). StaffMgmt 2.18s→1.35s (-38%). Run-to-run variance. |
 
 ---
 
