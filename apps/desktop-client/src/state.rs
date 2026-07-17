@@ -116,7 +116,7 @@ pub struct AppState {
     /// instead of mutating the process env (which is UB from async
     /// tokio workers). Consumers (Redis pub/sub subscriber, inventory
     /// change publisher) read this field.
-    pub terminal_id: Arc<std::sync::Mutex<Option<String>>>,
+    pub terminal_id: Arc<Mutex<Option<String>>>,
 }
 
 impl AppState {
@@ -155,8 +155,7 @@ impl AppState {
         // stored in AppState (typed field) instead of the process env var.
         // The Redis pub/sub subscriber and inventory change publisher read
         // it from this field — they no longer call std::env::var().
-        let terminal_id: Arc<std::sync::Mutex<Option<String>>> =
-            Arc::new(std::sync::Mutex::new(None));
+        let terminal_id: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let reg = oz_core::Settings::load_features(&conn).unwrap_or_default();
         if reg.is_enabled(oz_core::Feature::MultiTerminal) {
             let device_id = std::env::var("COMPUTERNAME")
@@ -165,7 +164,7 @@ impl AppState {
             if !device_id.is_empty() {
                 let store = oz_core::db::Store::new(&conn);
                 if let Ok(Some(terminal)) = store.get_terminal_by_device_id(&device_id) {
-                    *terminal_id.lock().unwrap() = Some(terminal.id.clone());
+                    *terminal_id.blocking_lock() = Some(terminal.id.clone());
                     tracing::info!(
                         terminal_id = %terminal.id,
                         device_id = %device_id,
@@ -176,7 +175,7 @@ impl AppState {
         }
 
         // ── Start inventory pub/sub listener (Redis only) ────────────
-        let pubsub_terminal_id = terminal_id.lock().unwrap().clone();
+        let pubsub_terminal_id = terminal_id.blocking_lock().clone();
         let inventory_pubsub_shutdown =
             cache.start_inventory_pubsub(cache.clone(), pubsub_terminal_id);
         if inventory_pubsub_shutdown.is_some() {
@@ -267,8 +266,22 @@ impl AppState {
     /// to benefit from Redis caching (when configured) and to ensure
     /// inventory-change pub/sub messages are correctly tagged with the
     /// terminal's identity.
-    pub fn store<'a>(&self, conn: &'a Connection) -> oz_core::db::Store<'a> {
-        let tid = self.terminal_id.lock().unwrap().clone();
+    /// Create a [`Store`] with the shared cache layer and a pre-acquired
+    /// terminal identity for pub/sub message tagging.
+    ///
+    /// Callers should acquire the terminal_id via
+    /// `state.terminal_id.lock().await.clone()` BEFORE locking the
+    /// database, so the db guard never crosses an await point.
+    ///
+    /// Command handlers should use this instead of `Store::new(&conn)`
+    /// to benefit from Redis caching (when configured) and to ensure
+    /// inventory-change pub/sub messages are correctly tagged with the
+    /// terminal's identity.
+    pub fn store_with_tid<'a>(
+        &self,
+        conn: &'a Connection,
+        tid: Option<String>,
+    ) -> oz_core::db::Store<'a> {
         oz_core::db::Store::with_cache(conn, self.cache.clone()).with_terminal_id(tid)
     }
 
@@ -426,7 +439,7 @@ impl AppState {
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
-            terminal_id: Arc::new(std::sync::Mutex::new(None)),
+            terminal_id: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -523,10 +536,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn store_method_creates_store_with_cache() {
+    async fn store_with_tid_creates_store_with_cache() {
         let state = AppState::for_test();
+        let tid = state.terminal_id.lock().await.clone();
         let conn = state.db.lock().await;
-        let store = state.store(&conn);
+        let store = state.store_with_tid(&conn, tid);
         let _ = store;
     }
 
