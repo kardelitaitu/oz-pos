@@ -696,8 +696,23 @@ export default function SettingsPage() {
       setIsDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-      // Only clear the API key if the sync settings save succeeded.
-      if (syncApiKey && results[4]?.status === 'fulfilled') setSyncApiKey('');
+      // Persist the sync DTO in React state so the UI immediately
+      // reflects the just-saved values (server URL, API key presence,
+      // enabled flag). Without this the loaded snapshot stays stale
+      // until the next page reload, causing placeholder regressions
+      // like "Enter API key" after saving a new key or a blank server
+      // URL field after saving a URL.
+      if (results[4]?.status === 'fulfilled') {
+        if (syncApiKey) {
+          setSyncApiKey('');
+        }
+        setSync((prev) => ({
+          ...prev,
+          serverUrl: syncServerUrl || null,
+          hasApiKey: syncApiKey ? true : prev.hasApiKey,
+          enabled: sync.enabled,
+        }));
+      }
       refreshBrandSettings();
 
       // Update the snapshot so Revert goes to the *saved* state.
