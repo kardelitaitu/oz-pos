@@ -61,7 +61,8 @@ impl SyncConfig {
             Some(u) if !u.is_empty() => u,
             _ => return Ok(None),
         };
-        let api_key = crate::settings::Settings::get_sync_api_key(store.conn())?;
+        let api_key =
+            crate::settings::Settings::get_sync_api_key(store.conn())?.filter(|k| !k.is_empty());
         Ok(Some(Self {
             server_url,
             api_key,

@@ -31,8 +31,8 @@ pub struct SyncSettingsDto {
 #[command]
 pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSettingsDto, AppError> {
     let db = state.db.lock().await;
-    let server_url = Settings::get_sync_server_url(&db)?;
-    let api_key = Settings::get_sync_api_key(&db)?;
+    let server_url = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
+    let api_key = Settings::get_sync_api_key(&db)?.filter(|k| !k.is_empty());
     let enabled = Settings::is_sync_enabled(&db)?;
     drop(db);
     Ok(SyncSettingsDto {
@@ -60,13 +60,15 @@ pub async fn update_sync_settings(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    // Always write — passing `null` from the front-end is the UI's
-    // signal to clear the field. `SyncConfig::from_settings` treats
-    // an empty string as "not configured", so the round-trip is safe.
+    // Always update server URL (passing `null` or empty string clears it).
     let url = args.server_url.as_deref().unwrap_or("");
-    let key = args.api_key.as_deref().unwrap_or("");
     Settings::set_sync_server_url(&db, url)?;
-    Settings::set_sync_api_key(&db, key)?;
+    // Only update API key if `Some(key)` was passed from the UI.
+    // When `args.api_key` is `None` (the masked API field on the front-end was not modified),
+    // preserve the existing key stored in the database.
+    if let Some(ref key) = args.api_key {
+        Settings::set_sync_api_key(&db, key)?;
+    }
     Settings::set_sync_enabled(&db, args.enabled)?;
     drop(db);
     Ok(())
