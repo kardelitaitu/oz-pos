@@ -56,6 +56,56 @@ vi.mock('@/api/hardware', () => ({
   displayClear: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(() => Promise.resolve('')),
+}));
+
+vi.mock('@/hooks/useCloudSync', () => ({
+  useCloudSync: () => ({
+    enabled: false, setEnabled: vi.fn(),
+    serverURL: '', setServerURL: vi.fn(),
+    token: '', setToken: vi.fn(),
+    autoMinutes: 0, setAutoMinutes: vi.fn(),
+    status: 'offline', lastAt: null, pending: 0,
+    syncing: false, pulling: false, tokenLoaded: true,
+    persist: vi.fn(),
+    syncNow: vi.fn(), testConnection: vi.fn(), pullFromServer: vi.fn(),
+  }),
+}));
+
+vi.mock('@/i18n/LanguageSelector', () => ({
+  LanguageSelector: () => <select aria-label="Language selector"><option>English</option></select>,
+}));
+
+vi.mock('@/features/settings/DataManagementScreen', () => ({
+  __esModule: true,
+  default: () => <div data-testid="data-management-screen">Data Management</div>,
+}));
+
+vi.mock('@/features/settings/AppearanceSettings', () => ({
+  AppearanceSettings: () => <div data-testid="appearance-settings">Appearance</div>,
+}));
+
+vi.mock('@/features/settings/FeatureToggleScreen', () => ({
+  __esModule: true,
+  default: () => <div data-testid="feature-toggle-screen">Feature Toggles</div>,
+}));
+
+vi.mock('@/contexts/ZoomContext', () => ({
+  useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
+}));
+
+vi.mock('@/contexts/HardwareAccelContext', () => ({
+  useHardwareAccel: () => ({ enabled: true, setEnabled: vi.fn() }),
+}));
+
+vi.mock('@/contexts/BrandContext', () => ({
+  useBrand: () => ({
+    settings: { primary_colour: '#10b981', logo_path: null, store_name: '' },
+    refreshBrandSettings: vi.fn(),
+  }),
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: { user_id: 'user-1', username: 'testuser', role_name: 'manager', token: 'mock-token', role_id: 'role-1', display_name: 'Budi Manager' },
@@ -339,6 +389,228 @@ describe('RetailOptionsScreen', () => {
   });
 
   // ── Credit toggle ──────────────────────────────────────────────
+
+  // ── API error handling ─────────────────────────────────────────
+
+  it('shows error toast when store settings fail to load', async () => {
+    const { getStoreSettings } = await import('@/api/settings');
+    vi.mocked(getStoreSettings).mockRejectedValueOnce(new Error('Network error'));
+
+    render(wrap());
+
+    await waitFor(() => {
+      const toasts = screen.getAllByRole('alert');
+      const errorToast = toasts.find((t) => t.textContent?.includes('Failed to load'));
+      expect(errorToast).toBeTruthy();
+    });
+  });
+
+  it('shows error toast when receipt settings fail to load', async () => {
+    const { getReceiptSettings } = await import('@/api/settings');
+    vi.mocked(getReceiptSettings).mockRejectedValueOnce(new Error('Network error'));
+
+    render(wrap());
+
+    await waitFor(() => {
+      const toasts = screen.getAllByRole('alert');
+      const errorToast = toasts.find((t) => t.textContent?.includes('Failed to load'));
+      expect(errorToast).toBeTruthy();
+    });
+  });
+
+  // ── Payments tab ──────────────────────────────────────────────
+
+  it('switches to Payments tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Payments')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Payments'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Payment Gateways/)).toBeInTheDocument();
+    });
+  });
+
+  it('renders tender presets add/remove in Payments tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Payments')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Payments'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Add preset/)).toBeInTheDocument();
+    });
+  });
+
+  it('adds a tender preset when add button is clicked', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Payments')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Payments'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Add preset/)).toBeInTheDocument();
+    });
+
+    const addBtn = screen.getByText(/Add preset/);
+    await userEvent.click(addBtn);
+
+    // Should now have 6 presets (5 default + 1 new)
+    const removeBtns = screen.getAllByRole('button', { name: /remove preset/i });
+    expect(removeBtns).toHaveLength(6);
+  });
+
+  it('removes a tender preset when remove button is clicked', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Payments')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Payments'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Add preset/)).toBeInTheDocument();
+    });
+
+    const removeBtns = screen.getAllByRole('button', { name: /remove preset/i });
+    await userEvent.click(removeBtns[0]!);
+
+    const remaining = screen.getAllByRole('button', { name: /remove preset/i });
+    expect(remaining).toHaveLength(4);
+  });
+
+  // ── Sync tab ──────────────────────────────────────────────────
+
+  it('switches to Sync tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Sync'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Cloud Sync/)).toBeInTheDocument();
+    });
+  });
+
+  it('renders sync toggle and server URL field in Sync tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Sync'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Server URL/)).toBeInTheDocument();
+      expect(screen.getByText(/Enable cloud sync/)).toBeInTheDocument();
+      expect(screen.getByText(/Authentication Token/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows sync status box in Sync tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Sync'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Offline/)).toBeInTheDocument();
+      expect(screen.getByText(/Never synced/)).toBeInTheDocument();
+    });
+  });
+
+  // ── Appearance / Features / Data tabs ─────────────────────────
+
+  it('switches to Appearance tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Appearance')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Appearance'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('appearance-settings')).toBeInTheDocument();
+    });
+  });
+
+  it('switches to Features tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Features')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Features'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('feature-toggle-screen')).toBeInTheDocument();
+    });
+  });
+
+  it('switches to Data tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('Data')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('Data'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('data-management-screen')).toBeInTheDocument();
+    });
+  });
+
+  // ── System tab additional options ─────────────────────────────
+
+  it('renders theme selector in System tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('System')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('System'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Theme/)).toBeInTheDocument();
+      expect(screen.getByText(/Light/)).toBeInTheDocument();
+      expect(screen.getByText(/Dark/)).toBeInTheDocument();
+    });
+  });
+
+  it('renders language selector in System tab', async () => {
+    render(wrap());
+
+    await waitFor(() => {
+      expect(screen.getByText('System')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText('System'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Language selector')).toBeInTheDocument();
+    });
+  });
 
   it('shows credit limit info when credit is enabled', async () => {
     render(wrap());

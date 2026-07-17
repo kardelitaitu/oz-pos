@@ -246,6 +246,40 @@ describe('SettingsPopup', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
+  it('shows Save button with aria-busy when saving is true', () => {
+    render(
+      <SettingsPopup open={true} onClose={onClose} title="Test" saving={true}>
+        <p>Content</p>
+      </SettingsPopup>,
+    );
+    const saveBtn = screen.getByRole('button', { name: 'Save' });
+    expect(saveBtn).toHaveAttribute('aria-busy', 'true');
+    expect(saveBtn).toBeDisabled();
+  });
+
+  it('does not have aria-busy on Save when saving is false', () => {
+    render(
+      <SettingsPopup open={true} onClose={onClose} title="Test">
+        <p>Content</p>
+      </SettingsPopup>,
+    );
+    const saveBtn = screen.getByRole('button', { name: 'Save' });
+    expect(saveBtn).not.toHaveAttribute('aria-busy');
+    expect(saveBtn).not.toBeDisabled();
+  });
+
+  it('renders spinner element when saving is true', () => {
+    render(
+      <SettingsPopup open={true} onClose={onClose} title="Test" saving={true}>
+        <p>Content</p>
+      </SettingsPopup>,
+    );
+    const saveBtn = screen.getByRole('button', { name: 'Save' });
+    const spinner = saveBtn.querySelector('.btn__spinner');
+    expect(spinner).toBeInTheDocument();
+    expect(spinner).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('disables Cancel button when saving is true', () => {
     render(
       <SettingsPopup open={true} onClose={onClose} title="Test" saving={true}>

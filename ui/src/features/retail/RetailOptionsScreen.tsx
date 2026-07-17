@@ -1215,7 +1215,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
         >
           <div className="retail-preview-modal" role="dialog" aria-modal="true" aria-label={l10n.getString('settings-receipt-heading')}>
             <button type="button" className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
-            <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={[]} scale={SCALE} />
+            <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={taxRates} scale={SCALE} />
           </div>
         </div>
       )}
