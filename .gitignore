@@ -45,6 +45,8 @@ Thumbs.db
 # CI gate teed output from the act() / flushSync warning check
 # in .github/workflows/ci.yml. Regenerated on every CI run.
 ui/vitest-output.log
+# Vitest profiling output (vitest --reporter=json)
+vitest-profile.json
 
 # Tauri — generated platform code (Android/iOS)
 # Tauri requires real PNG/ICO icons; the scaffold ships without them.
@@ -62,3 +64,7 @@ nul
 ui/vite.config.js
 ui/tsconfig.tsbuildinfo
 ui/tsconfig.node.tsbuildinfo
+
+# Root-level node deps & Vite cache (some tooling installs at root)
+/node_modules/
+/.vite/
