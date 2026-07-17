@@ -226,6 +226,7 @@
 .retail-preview-modal::after,
 .retail-customer-modal::after,
 .tables-detail::after,
+.settings-popup::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -257,6 +258,7 @@
   .retail-preview-modal::after,
   .retail-customer-modal::after,
   .tables-detail::after,
+  .settings-popup::after,
   .noise-dither::after { display: none; }
 }
 
