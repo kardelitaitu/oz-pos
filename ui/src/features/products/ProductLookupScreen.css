@@ -136,7 +136,8 @@
 }
 
 .product-category-chip {
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-1_5) var(--space-3);
+  min-height: var(--touch-target-min);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-fg-secondary);
@@ -376,13 +377,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   flex-shrink: 0;
   border-radius: var(--radius-md);
   color: var(--color-accent-fg);
   background: var(--color-accent);
   transition: background-color var(--duration-200) var(--ease-out), color var(--duration-200) var(--ease-out);
+}
+
+/* WCAG 2.5.5: bump to 44px on touch devices */
+@media (pointer: coarse) {
+  .product-card-add-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
 }
 
 .product-card--added .product-card-add-icon {
