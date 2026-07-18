@@ -318,6 +318,8 @@ pub fn run() {
             commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
             commands::products::list_products_scoped,
+            commands::products::list_warehouse_products,
+            commands::products::list_warehouse_products_scoped,
             commands::products::create_product,
             commands::products::create_product_scoped,
             commands::products::update_product,

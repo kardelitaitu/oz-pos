@@ -24,12 +24,16 @@ pub async fn list_kds_orders(
     Ok(orders)
 }
 
-/// Get the kitchen queue (pending + preparing, ordered oldest first).
+/// Get the kitchen queue (pending + preparing + ready, ordered oldest first).
+/// Optionally filtered by kitchen zone.
 #[command]
-pub async fn get_kds_queue(state: State<'_, AppState>) -> Result<Vec<KdsOrder>, AppError> {
+pub async fn get_kds_queue(
+    kds_zone: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let orders = store.get_kds_queue()?;
+    let orders = store.get_kds_queue(kds_zone.as_deref())?;
     drop(db);
     Ok(orders)
 }
@@ -48,17 +52,17 @@ pub async fn update_kds_status(
     Ok(order)
 }
 
-/// Create a KDS order from a completed sale.
+/// Create KDS orders from a completed sale. Returns one order per kitchen zone.
 #[command]
 pub async fn create_kds_order_from_sale(
     sale_id: String,
     state: State<'_, AppState>,
-) -> Result<Option<KdsOrder>, AppError> {
+) -> Result<Vec<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let order = store.complete_sale_to_kds(&sale_id, None)?;
+    let orders = store.complete_sale_to_kds(&sale_id, None)?;
     drop(db);
-    Ok(order)
+    Ok(orders)
 }
 
 /// Get a KDS order by id.

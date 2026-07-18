@@ -529,7 +529,8 @@ impl Store<'_> {
 // ── Void Sale ───────────────────────────────────────────────────────
 
 impl Store<'_> {
-    /// Void a sale and restore stock for all line items.
+    /// Void a sale — sets status to Voided and logs an audit entry.
+    /// Does NOT adjust inventory; stock is managed independently.
     pub fn void_sale(&self, sale_id: &str, user_id: &str, reason: &str) -> Result<Sale, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
@@ -561,27 +562,7 @@ impl Store<'_> {
             });
         }
 
-        // 2. Restore stock for each line item.
-        for line in &sale.lines {
-            if let Some(product_id) = self.product_id_by_sku(&line.sku)? {
-                let current_qty = self.get_stock(&product_id)?;
-                let new_qty =
-                    current_qty
-                        .checked_add(line.qty)
-                        .ok_or_else(|| CoreError::Validation {
-                            field: "qty",
-                            message: "stock overflow during void".into(),
-                        })?;
-                tx.execute(
-                    "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
-                     ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
-                                                            updated_at = excluded.updated_at",
-                    rusqlite::params![product_id, new_qty, now],
-                )?;
-            }
-        }
-
-        // 3. Audit log entry.
+        // 2. Audit log entry.
         let details = serde_json::json!({
             "reason": reason,
             "total_minor": sale.total.minor_units,
@@ -1212,77 +1193,24 @@ mod tests {
     // ── Void Sale ────────────────────────────────────────────────
 
     #[test]
-    fn void_sale_changes_status_and_restores_stock() {
+    fn void_sale_changes_status_and_logs_audit() {
         let conn = fresh();
         let s = store(&conn);
 
-        // Create a product with stock.
-        let currency: crate::money::Currency = "USD".parse().unwrap();
-        let money = crate::Money {
-            minor_units: 500,
-            currency,
-        };
-        s.create_product("VOID-SKU", "Voidable", money, None, None, 10, None)
-            .unwrap();
-
-        // Create an active sale with the product.
-        let cart = make_cart(); // COFFEE x 2 (350) + BAGEL x 1 (450)
+        let cart = make_cart();
         let sale = Sale::from_cart(&cart).unwrap();
-        // We need to set the SKU to match our seeded product for stock tracking
-        let sale_with_stock = Sale {
-            id: sale.id.clone(),
-            total: sale.total,
-            currency: sale.currency,
-            line_count: 1,
-            status: SaleStatus::Pending,
-            payment_method: None,
-            tendered_minor: None,
-            discount_percent: 0,
-            discount_label: None,
-            user_id: Some("user-1".into()),
-            created_at: sale.created_at.clone(),
-            updated_at: sale.updated_at.clone(),
-            subtotal: sale.total,
-            tax_total: price(0),
-            customer_id: None,
-            version: 1,
-            lines: vec![SaleLine {
-                id: uuid::Uuid::now_v7().to_string(),
-                sale_id: sale.id.clone(),
-                sku: "VOID-SKU".into(),
-                qty: 2,
-                unit_price: price(500),
-                line_total: price(1000),
-                line_position: 1,
-                tax_amount: price(0),
-                tax_rate_id: None,
-                serial_number: None,
-            }],
-        };
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
 
-        s.create_sale(&sale_with_stock).unwrap();
-        // Move to Active so it can be voided.
-        s.update_sale_status(&sale_with_stock.id, SaleStatus::Active)
-            .unwrap();
+        s.void_sale(&sale.id, "user-2", "customer request").unwrap();
 
-        // Void the sale.
-        s.void_sale(&sale_with_stock.id, "user-2", "customer request")
-            .unwrap();
-
-        // Verify status is voided.
-        let loaded = s.get_sale(&sale_with_stock.id).unwrap().unwrap();
+        let loaded = s.get_sale(&sale.id).unwrap().unwrap();
         assert_eq!(loaded.status, SaleStatus::Voided);
 
-        // Verify stock was restored (10 + 2 = 12).
-        let product_id = s.product_id_by_sku("VOID-SKU").unwrap().unwrap();
-        let stock = s.get_stock(&product_id).unwrap();
-        assert_eq!(stock, 12, "stock should be restored after void");
-
-        // Verify audit log entry was created.
         let audit_count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM audit_log WHERE action = 'sale.void' AND target_id = ?1",
-                rusqlite::params![sale_with_stock.id],
+                rusqlite::params![sale.id],
                 |r| r.get(0),
             )
             .unwrap();
@@ -1688,66 +1616,19 @@ mod tests {
     }
 
     #[test]
-    fn void_sale_stock_overflow() {
+    fn void_sale_succeeds_regardless_of_stock() {
         let conn = fresh();
         let s = store(&conn);
-        let currency: crate::money::Currency = "USD".parse().unwrap();
-        let money = crate::Money {
-            minor_units: 500,
-            currency,
-        };
-        // Create a product with near-max stock.
-        s.create_product(
-            "OVERFLOW-SKU",
-            "Near Overflow",
-            money,
-            None,
-            None,
-            i64::MAX - 1,
-            None,
-        )
-        .unwrap();
 
-        let sale_id = uuid::Uuid::now_v7().to_string();
-        let line_id = uuid::Uuid::now_v7().to_string();
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let sale = Sale {
-            id: sale_id.clone(),
-            total: price(5000),
-            currency: usd(),
-            line_count: 1,
-            status: SaleStatus::Pending,
-            payment_method: None,
-            tendered_minor: None,
-            discount_percent: 0,
-            discount_label: None,
-            user_id: Some("user-1".into()),
-            created_at: now.clone(),
-            updated_at: now.clone(),
-            subtotal: price(5000),
-            tax_total: price(0),
-            customer_id: None,
-            version: 1,
-            lines: vec![SaleLine {
-                id: line_id,
-                sale_id: sale_id.clone(),
-                sku: "OVERFLOW-SKU".into(),
-                qty: 10,
-                unit_price: price(500),
-                line_total: price(5000),
-                line_position: 1,
-                tax_amount: price(0),
-                tax_rate_id: None,
-                serial_number: None,
-            }],
-        };
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
-        s.update_sale_status(&sale_id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
 
-        // Stock restore would overflow i64::MAX - 1 + 10.
-        let err = s
-            .void_sale(&sale_id, "user-1", "trigger overflow")
-            .unwrap_err();
-        assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
+        // Void succeeds without touching stock at all.
+        s.void_sale(&sale.id, "user-1", "no stock impact").unwrap();
+
+        let loaded = s.get_sale(&sale.id).unwrap().unwrap();
+        assert_eq!(loaded.status, SaleStatus::Voided);
     }
 }

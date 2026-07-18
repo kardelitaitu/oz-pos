@@ -22,6 +22,7 @@ impl Store<'_> {
             ready_at: row.get("ready_at")?,
             served_at: row.get("served_at")?,
             prep_time_seconds: row.get("prep_time_seconds")?,
+            kitchen_zone: row.get("kitchen_zone")?,
             notes: row.get("notes")?,
         })
     }
@@ -53,8 +54,8 @@ impl Store<'_> {
 
         tx.execute(
             "INSERT INTO kds_orders (id, sale_id, store_id, status, items_summary, item_count,
-                                     display_number, received_at, notes)
-             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8)",
+                                     display_number, received_at, kitchen_zone, notes)
+             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 id,
                 input.sale_id,
@@ -63,6 +64,7 @@ impl Store<'_> {
                 input.item_count,
                 display_number,
                 now,
+                input.kitchen_zone,
                 input.notes,
             ],
         )?;
@@ -79,7 +81,7 @@ impl Store<'_> {
         let mut sql = String::from(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, notes
+                    prep_time_seconds, kitchen_zone, notes
              FROM kds_orders",
         );
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let Some(s) = status_filter {
@@ -102,7 +104,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, notes
+                    prep_time_seconds, kitchen_zone, notes
              FROM kds_orders WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], Self::row_to_kds_order);
@@ -118,7 +120,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, notes
+                    prep_time_seconds, kitchen_zone, notes
              FROM kds_orders WHERE sale_id = ?1",
         )?;
         let result = stmt.query_row(params![sale_id], Self::row_to_kds_order);
@@ -168,40 +170,62 @@ impl Store<'_> {
         })
     }
 
-    /// Get the kitchen queue: orders with status 'pending' or 'preparing',
-    /// ordered by received_at ASC (oldest first).
-    pub fn get_kds_queue(&self) -> Result<Vec<KdsOrder>, CoreError> {
-        let mut stmt = self.conn.prepare(
+    /// Get the kitchen queue: orders with status 'pending', 'preparing', or 'ready',
+    /// ordered by status priority then received_at ASC (oldest first).
+    ///
+    /// When `zone_filter` is `Some(zone)`, only orders with that `kitchen_zone`
+    /// value are returned. Pass `Some("")` to match orders with no zone assigned.
+    /// When `None`, all orders are returned (no zone filtering).
+    pub fn get_kds_queue(&self, zone_filter: Option<&str>) -> Result<Vec<KdsOrder>, CoreError> {
+        let mut sql = String::from(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, notes
+                    prep_time_seconds, kitchen_zone, notes
              FROM kds_orders
-             WHERE status IN ('pending', 'preparing', 'ready')
-             ORDER BY
+             WHERE status IN ('pending', 'preparing', 'ready')",
+        );
+
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let Some(zone) = zone_filter {
+            if zone.is_empty() {
+                sql.push_str(" AND (kitchen_zone IS NULL OR kitchen_zone = '')");
+            } else {
+                sql.push_str(" AND kitchen_zone = ?1");
+            }
+            vec![Box::new(zone.to_owned())]
+        } else {
+            vec![]
+        };
+
+        sql.push_str(
+            " ORDER BY
                 CASE status
                     WHEN 'pending' THEN 1
                     WHEN 'preparing' THEN 2
                     WHEN 'ready' THEN 3
                 END,
                 received_at ASC",
-        )?;
-        let rows = stmt.query_map([], Self::row_to_kds_order)?;
+        );
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(param_refs.as_slice(), Self::row_to_kds_order)?;
         rows.map(|r| Ok(r?)).collect()
     }
 
-    /// Complete a sale to a KDS order: creates a KDS ticket from a completed sale
-    /// for items whose product type is `restaurant` or `both`.
+    /// Complete a sale to KDS orders: creates one KDS ticket per kitchen zone
+    /// from a completed sale for items whose product type is `restaurant` or `both`.
     ///
     /// When `store_id` is provided (from the caller's `SessionContext`), the
-    /// resulting KDS order is tagged with that store for defense-in-depth
+    /// resulting KDS orders are tagged with that store for defense-in-depth
     /// filtering on KDS tablets (ADR #8).
     ///
-    /// Returns `Ok(None)` when the sale has no restaurant-eligible items.
+    /// Returns an empty `Vec` when the sale has no restaurant-eligible items.
     pub fn complete_sale_to_kds(
         &self,
         sale_id: &str,
         store_id: Option<&str>,
-    ) -> Result<Option<KdsOrder>, CoreError> {
+    ) -> Result<Vec<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
             id: sale_id.to_owned(),
@@ -220,38 +244,53 @@ impl Store<'_> {
             .collect();
 
         if kds_lines.is_empty() {
-            return Ok(None);
+            return Ok(vec![]);
         }
 
-        let items_summary = kds_lines
-            .iter()
-            .map(|l| {
-                let name = self
-                    .product_name_by_sku(&l.sku)
-                    .ok()
-                    .flatten()
-                    .unwrap_or_else(|| l.sku.clone());
-                if l.qty > 1 {
-                    format!("{name} x{}", l.qty)
-                } else {
-                    name
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+        // Group eligible lines by kitchen zone.
+        let mut by_zone: std::collections::BTreeMap<Option<String>, Vec<&crate::SaleLine>> =
+            std::collections::BTreeMap::new();
+        for line in &kds_lines {
+            let zone = self
+                .product_kitchen_zone_by_sku(&line.sku)
+                .ok()
+                .flatten()
+                .filter(|z| !z.is_empty());
+            by_zone.entry(zone).or_default().push(line);
+        }
 
-        let item_count: i64 = kds_lines.iter().map(|l| l.qty).sum();
+        let mut orders = Vec::with_capacity(by_zone.len());
+        for (zone, lines) in by_zone {
+            let items_summary = lines
+                .iter()
+                .map(|l| {
+                    let name = self
+                        .product_name_by_sku(&l.sku)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| l.sku.clone());
+                    if l.qty > 1 {
+                        format!("{name} x{}", l.qty)
+                    } else {
+                        name
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
 
-        let notes = String::new();
+            let item_count: i64 = lines.iter().map(|l| l.qty).sum();
 
-        self.create_kds_order(CreateKdsOrderInput {
-            sale_id: sale_id.to_owned(),
-            store_id: store_id.map(|s| s.to_owned()),
-            items_summary,
-            item_count,
-            notes,
-        })
-        .map(Some)
+            orders.push(self.create_kds_order(CreateKdsOrderInput {
+                sale_id: sale_id.to_owned(),
+                store_id: store_id.map(|s| s.to_owned()),
+                items_summary,
+                item_count,
+                kitchen_zone: zone,
+                notes: String::new(),
+            })?);
+        }
+
+        Ok(orders)
     }
 
     fn product_type_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
@@ -273,6 +312,18 @@ impl Store<'_> {
         let result = stmt.query_row(params![sku], |row| row.get::<_, String>(0));
         match result {
             Ok(name) => Ok(Some(name)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    fn product_kitchen_zone_by_sku(&self, sku: &str) -> Result<Option<String>, CoreError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT kitchen_zone FROM products WHERE sku = ?1")?;
+        let result = stmt.query_row(params![sku], |row| row.get::<_, Option<String>>(0));
+        match result {
+            Ok(zone) => Ok(zone),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
@@ -347,6 +398,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Coffee x2, Bagel".into(),
                 item_count: 3,
+                kitchen_zone: None,
                 notes: "No onions".into(),
             })
             .unwrap();
@@ -406,6 +458,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Tea".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -448,6 +501,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Test".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -502,6 +556,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Test".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -555,6 +610,7 @@ mod tests {
             store_id: None,
             items_summary: "Order 1".into(),
             item_count: 1,
+            kitchen_zone: None,
             notes: String::new(),
         })
         .unwrap();
@@ -564,6 +620,7 @@ mod tests {
             store_id: None,
             items_summary: "Order 2".into(),
             item_count: 2,
+            kitchen_zone: None,
             notes: String::new(),
         })
         .unwrap();
@@ -617,6 +674,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Pending".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -627,6 +685,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Preparing".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -637,6 +696,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Served".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -644,7 +704,7 @@ mod tests {
         s.update_kds_status(&o2.id, "preparing").unwrap();
         s.update_kds_status(&o3.id, "served").unwrap();
 
-        let queue = s.get_kds_queue().unwrap();
+        let queue = s.get_kds_queue(None).unwrap();
         // Queue should include pending + preparing + ready (but not served/cancelled).
         assert_eq!(queue.len(), 2);
         assert!(
@@ -671,7 +731,9 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        let order = s.complete_sale_to_kds(&sale.id, None).unwrap().unwrap();
+        let orders = s.complete_sale_to_kds(&sale.id, None).unwrap();
+        assert_eq!(orders.len(), 1);
+        let order = &orders[0];
         assert_eq!(order.sale_id, sale.id);
         assert_eq!(order.status, "pending");
         assert!(order.items_summary.contains("Coffee"));
@@ -717,6 +779,7 @@ mod tests {
                 store_id: None,
                 items_summary: "First".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();
@@ -727,6 +790,7 @@ mod tests {
                 store_id: None,
                 items_summary: "Second".into(),
                 item_count: 1,
+                kitchen_zone: None,
                 notes: String::new(),
             })
             .unwrap();

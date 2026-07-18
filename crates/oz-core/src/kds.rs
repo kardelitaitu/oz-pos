@@ -76,6 +76,11 @@ pub struct KdsOrder {
     pub served_at: Option<String>,
     /// Estimated preparation time in seconds.
     pub prep_time_seconds: i64,
+    /// Kitchen zone this order belongs to (e.g., "front", "back").
+    ///
+    /// Populated from the product's `kitchen_zone` at sale completion time.
+    /// Used by KDS devices to filter their queue to only their assigned zone.
+    pub kitchen_zone: Option<String>,
     /// Special notes from the POS (e.g., "no onions").
     pub notes: String,
 }
@@ -91,6 +96,8 @@ pub struct CreateKdsOrderInput {
     pub items_summary: String,
     /// Total item count.
     pub item_count: i64,
+    /// Kitchen zone to assign (e.g., "front", "back").
+    pub kitchen_zone: Option<String>,
     /// Special notes.
     pub notes: String,
 }
@@ -166,6 +173,7 @@ mod tests {
             ready_at: None,
             served_at: None,
             prep_time_seconds: 300,
+            kitchen_zone: Some("front".into()),
             notes: "No onions".into(),
         };
         let json = serde_json::to_string(&order).unwrap();
@@ -176,6 +184,7 @@ mod tests {
         assert_eq!(back.items_summary, order.items_summary);
         assert_eq!(back.item_count, order.item_count);
         assert_eq!(back.prep_time_seconds, order.prep_time_seconds);
+        assert_eq!(back.kitchen_zone, Some("front".into()));
         assert_eq!(back.notes, order.notes);
     }
 
@@ -186,6 +195,7 @@ mod tests {
             store_id: None,
             items_summary: "Tea".into(),
             item_count: 1,
+            kitchen_zone: None,
             notes: String::new(),
         };
         let json = serde_json::to_string(&input).unwrap();
@@ -211,6 +221,7 @@ mod tests {
             ready_at: Some("2025-01-01T12:10:00.000Z".into()),
             served_at: Some("2025-01-01T12:12:00.000Z".into()),
             prep_time_seconds: 720,
+            kitchen_zone: None,
             notes: String::new(),
         };
         assert_eq!(

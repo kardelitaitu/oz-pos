@@ -23,6 +23,7 @@ use crate::state::AppState;
 // ── Discount ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Setcartdiscountargs.
 pub struct SetCartDiscountArgs {
     /// ID of the associated cart.
@@ -70,6 +71,7 @@ pub async fn set_cart_discount(
 
 /// Args for `set_cart_discount_scoped` — without `user_id`.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetCartDiscountScopedArgs {
     /// ID of the associated cart.
     pub cart_id: CartId,
@@ -127,6 +129,7 @@ pub async fn set_cart_discount_scoped(
 // ── Start Sale ───────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Startsaleargs.
 pub struct StartSaleArgs {
     /// ISO-4217 currency code for the new cart.
@@ -265,6 +268,7 @@ pub async fn get_active_cart_scoped(
 // ── Add Line ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Addlineargs.
 pub struct AddLineArgs {
     /// ID of the associated cart.
@@ -358,6 +362,7 @@ pub async fn add_line_scoped(
 // ── Override Line Price ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Overridelinepriceargs.
 pub struct OverrideLinePriceArgs {
     /// ID of the associated cart.
@@ -390,6 +395,7 @@ pub async fn override_line_price(
 
 /// Args for `override_line_price_scoped` — without `user_id`.
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OverrideLinePriceScopedArgs {
     /// ID of the associated cart.
     pub cart_id: CartId,
@@ -466,6 +472,7 @@ fn run_override_line_price(
 // ── Complete Sale ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Serialnumberarg.
 pub struct SerialNumberArg {
     /// Stock-keeping unit identifier.
@@ -475,6 +482,7 @@ pub struct SerialNumberArg {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Completesaleargs.
 pub struct CompleteSaleArgs {
     /// ID of the associated cart.
@@ -499,6 +507,7 @@ pub struct CompleteSaleArgs {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Completesalescopedargs.
 pub struct CompleteSaleScopedArgs {
     /// ID of the associated cart.
@@ -700,6 +709,9 @@ pub async fn complete_sale(
             store.create_payments(&sale_id, &single_split, &sale.currency, &sale.created_at)?;
         }
 
+        // Transition through Active before Completed — the state machine
+        // does not allow Pending → Completed directly.
+        store.update_sale_status(&sale_id, SaleStatus::Active)?;
         store.update_sale_status(&sale_id, SaleStatus::Completed)?
     };
 
@@ -1011,6 +1023,7 @@ pub async fn compute_cart_tax_scoped(
 // ── Hold Orders ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Holdcartargs.
 pub struct HoldCartArgs {
     /// Label.
@@ -1317,7 +1330,8 @@ mod tests {
 
     #[test]
     fn hold_cart_args_default_bill_type() {
-        let json = r#"{"label":"Test","cart_data":"{}","item_count":1,"total_minor":100,"currency":"USD"}"#;
+        let json =
+            r#"{"label":"Test","cartData":"{}","itemCount":1,"totalMinor":100,"currency":"USD"}"#;
         let args: HoldCartArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.bill_type, "hold");
     }
@@ -1332,6 +1346,46 @@ mod tests {
         let debug = format!("{result:?}");
         assert!(debug.contains("sale-1"));
         assert!(debug.contains("1000"));
+    }
+
+    // ── Serde regression: all DTOs accept camelCase from JS ────────
+
+    #[test]
+    fn add_line_args_from_camel_case_json() {
+        let json = r#"{"cartId":"11111111-1111-1111-1111-111111111111","sku":"BAGEL","qty":2,"unitPriceMinor":500}"#;
+        let args: AddLineArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            args.cart_id.to_string(),
+            "11111111-1111-1111-1111-111111111111"
+        );
+        assert_eq!(args.sku.as_str(), "BAGEL");
+        assert_eq!(args.qty, 2);
+        assert_eq!(args.unit_price_minor, 500);
+    }
+
+    #[test]
+    fn complete_sale_args_from_camel_case_json() {
+        let json = r#"{"cartId":"22222222-2222-2222-2222-222222222222","paymentMethod":"cash","tenderedMinor":50000,"userId":"user-1"}"#;
+        let args: CompleteSaleArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            args.cart_id.to_string(),
+            "22222222-2222-2222-2222-222222222222"
+        );
+        assert_eq!(args.payment_method, "cash");
+        assert_eq!(args.tendered_minor, Some(50000));
+        assert_eq!(args.user_id, "user-1");
+    }
+
+    #[test]
+    fn hold_cart_args_from_camel_case_json() {
+        let json = r#"{"label":"Table 5","cartData":"{}","itemCount":3,"totalMinor":15000,"currency":"IDR","customerName":"Budi"}"#;
+        let args: HoldCartArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.label, "Table 5");
+        assert_eq!(args.item_count, 3);
+        assert_eq!(args.total_minor, 15000);
+        assert_eq!(args.currency, "IDR");
+        assert_eq!(args.customer_name.as_deref(), Some("Budi"));
+        assert_eq!(args.bill_type, "hold");
     }
 
     // ── Scoped command token rejection tests ───────────────────────

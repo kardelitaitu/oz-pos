@@ -79,6 +79,26 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List inventory-tracked products only, ordered by name, with category
+    /// and stock. Excludes service-type products (e.g. "car wash") that have
+    /// no physical stock. Used by the warehouse/inventory workspace.
+    pub fn list_warehouse_products(&self) -> Result<Vec<ProductWithDetails>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type, p.version,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN inventory i ON p.id = i.product_id
+             WHERE p.product_type != 'service'
+             ORDER BY p.name",
+        )?;
+        let rows = stmt.query_map([], row_to_product_with_details)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
     /// Look up a single product by SKU, including category and stock.
     ///
     /// Checks the cache first; on cache miss, queries the database and
@@ -221,7 +241,8 @@ impl Store<'_> {
             Ok(_) => {}
         }
 
-        if initial_stock > 0 {
+        // Service products never get inventory rows — they have unlimited stock.
+        if initial_stock > 0 && product_type != "service" {
             tx.execute(
                 "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
                 params![id, initial_stock, now],
@@ -610,6 +631,20 @@ impl Store<'_> {
         );
         match result {
             Ok(sku) => Ok(Some(sku)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Look up a product's `product_type` by product ID.
+    pub fn product_type_by_id(&self, product_id: &str) -> Result<Option<String>, CoreError> {
+        let result = self.conn.query_row(
+            "SELECT product_type FROM products WHERE id = ?1",
+            params![product_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(pt) => Ok(Some(pt)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
@@ -1285,6 +1320,33 @@ mod tests {
             .create_product("SKU", "X", price(1), None, None, -5, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "initial_stock"));
+    }
+
+    #[test]
+    fn create_service_product_never_gets_inventory_row() {
+        let conn = fresh();
+        // Even with initial_stock > 0, service products skip inventory.
+        let p = store(&conn)
+            .create_product(
+                "CARWASH",
+                "Car Wash",
+                price(5000),
+                None,
+                None,
+                10,
+                Some("service"),
+            )
+            .unwrap();
+        assert_eq!(p.product_type, crate::ProductType::Service);
+        // get_stock returns 0 when no inventory row exists.
+        let qty = store(&conn).get_stock(&p.id).unwrap();
+        assert_eq!(qty, 0);
+        // list_products returns stock_qty = None via LEFT JOIN.
+        let pwd = store(&conn).get_product("CARWASH").unwrap().unwrap();
+        assert_eq!(
+            pwd.stock_qty, None,
+            "service product should have null stock_qty"
+        );
     }
 
     // ── Product update / delete ─────────────────────────────────

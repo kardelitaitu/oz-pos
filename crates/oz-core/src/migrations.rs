@@ -303,6 +303,151 @@ pub const ALL: &[Migration] = &[
         id: "076_tenant_id_reference.sql",
         sql: include_str!("../migrations/076_tenant_id_reference.sql"),
     },
+    Migration {
+        id: "077_kitchen_zone.sql",
+        sql: include_str!("../migrations/077_kitchen_zone.sql"),
+    },
+    // ── ADR #18 Phase 0A: Multi-Location Inventory Foundation ─────
+    // These three migrations introduce location-aware stock tracking
+    // without touching the Rust API or the workspace-rename cascade.
+    // They are added in lexicographic order so the runner picks them up
+    // after 077_kitchen_zone.sql. Phase 1 follow-ups will land the
+    // composite-PK rebuild of inventory.stock_summary, the stock_transfers
+    // CHECK extension (ADR §13 finding 34), and the sale-deduction flow
+    // changes (gated on ADR-19 per §13 finding 31).
+    Migration {
+        id: "078_inventory_locations.sql",
+        sql: include_str!("../migrations/078_inventory_locations.sql"),
+    },
+    Migration {
+        id: "079_inventory_location_id.sql",
+        sql: include_str!("../migrations/079_inventory_location_id.sql"),
+    },
+    Migration {
+        id: "080_stock_movements_location_id.sql",
+        sql: include_str!("../migrations/080_stock_movements_location_id.sql"),
+    },
+    // ── ADR #18 Phase 1: stock_transfers rebuild (§13 finding 34) ──
+    // Extends the CHECK constraint to include 'received_partial' so
+    // the §7 step-6 partial-receipt flow doesn't crash on insert. Adds
+    // source_location_id / destination_location_id FK columns to
+    // inventory_locations; renames the legacy free-text columns to
+    // `_old` for backward-compatibility audit (§2d). No Rust API
+    // change required — the existing stock_transfer module still
+    // accepts and emits the same Rust domain types.
+    Migration {
+        id: "081_stock_transfers_received_partial.sql",
+        sql: include_str!("../migrations/081_stock_transfers_received_partial.sql"),
+    },
+    // ── ADR #18 Phase 1: workspace-instance-to-location binding (§5) ─
+    // Adds a nullable bound_location_id FK on workspace_instances.
+    // Nullable (not NOT NULL) per §5 to preserve the "unbound admin
+    // console" fallback for legacy single-location deployments. The
+    // companion workspace_inventory_locations table (§4) is a separate
+    // multi-binding migration in a later phase — together they form
+    // §5's split-brain-prevention framework enforced at the
+    // application layer (SQLite cannot enforce the XOR constraint
+    // without triggers).
+    Migration {
+        id: "082_workspace_instances_bound_location.sql",
+        sql: include_str!("../migrations/082_workspace_instances_bound_location.sql"),
+    },
+    // ── ADR #18 Phase 1: workspace multi-binding (§4) ─────────────
+    // Companion table to migration 082's single-binding
+    // `bound_location_id` FK. Allows a single workspace instance
+    // to bind to multiple inventory locations (the multi-binding case).
+    // §5 split-brain prevention: a workspace MUST NOT have both
+    // bound_location_id set AND rows here — enforced at the
+    // application layer (SQLite cannot enforce the XOR constraint
+    // without triggers).
+    Migration {
+        id: "083_workspace_inventory_locations.sql",
+        sql: include_str!("../migrations/083_workspace_inventory_locations.sql"),
+    },
+    // ── ADR #18 Phase 2: staff audit trail (§9a + §9b) ───────────
+    // inventory_transactions is a session grouping for inventory
+    // operations; inventory_transaction_lines is the per-SKU detail.
+    // Followup migrations (§9c, §9d) will link stock_movements rows
+    // back to the session and add the shift accountability window.
+    Migration {
+        id: "084_inventory_transaction_audit.sql",
+        sql: include_str!("../migrations/084_inventory_transaction_audit.sql"),
+    },
+    // ── ADR #18 Phase 2: ledger → session linkage (§9c) ─────────
+    // ALTER stock_movements + stock_movements_archive add a nullable
+    // `inventory_transaction_id` FK pointing at migration 084's audit
+    // session table. Nullable because legacy stock_movements rows
+    // predate this audit framework. The transactional chain
+    // (users ← inventory_transactions.staff_id ← stock_movements.inventory_transaction_id)
+    // makes users.id hard-deletable-only-if-no-audit-history —
+    // see §9c "on-delete chain note" inline.
+    Migration {
+        id: "085_stock_movements_inventory_transaction_fk.sql",
+        sql: include_str!("../migrations/085_stock_movements_inventory_transaction_fk.sql"),
+    },
+    // ── ADR #18 Phase 2: staff shift accountability (§9d) ──────────
+    // Bundles the inventory_shifts table and the FK column that links
+    // inventory_transactions to a shift session. Per §9d, an inventory
+    // shift is bound to one location; cross-location active shifts are
+    // allowed via the (user_id, location_id) partial unique index —
+    // this is the §13 finding 32 v2 amend that fixed the v1 (user_id)-only
+    // contradiction with §9d's "one shift = one location" invariant.
+    // The inventory_shift_id FK is NULLABLE so legacy transactions
+    // (before §3 Rust API) and pre-shift sessions remain valid.
+    Migration {
+        id: "086_inventory_shifts.sql",
+        sql: include_str!("../migrations/086_inventory_shifts.sql"),
+    },
+    // ── ADR #18 Phase 2: configurable threshold alerts (§9e) ────
+    // Bundles §9e-i (stock_thresholds config table) + §9e-ii
+    // (stock_alert_events lifecycle table) per the migration 084/086
+    // sibling-table pattern. After 087 lands, the alert system has
+    // a config baseline AND the lifecycle table; in-memory trigger
+    // logic in Rust (Phase 2's runtime work) reads/writes these.
+    // §9e-iii low_stock_alerts_at_location is a Rust function, no
+    // migration needed.
+    Migration {
+        id: "087_stock_thresholds_alerts.sql",
+        sql: include_str!("../migrations/087_stock_thresholds_alerts.sql"),
+    },
+    // ── ADR #18 Phase 1: stock_summary composite-PK (§2c) ────────
+    // Rebuilds stock_summary with PRIMARY KEY (item_id, location_id).
+    // Pairs with §2a's deferred inventory full-rebuild (still in
+    // ADD COLUMN form from migration 079 because that one needed to
+    // keep migration_069 tests green). This §2c rebuild is independent
+    // — the materialised ledger aggregate and the §2a live stock
+    // table can be sequenced independently. Without this rebuild,
+    // §9e-iii low_stock_alerts_at_location returns aggregated
+    // cross-location totals instead of per-location vectors.
+    // NOTE: bundles with a Rust-side refactor of
+    // crates/oz-core/src/db/stock_summary.rs::rebuild_stock_summary()
+    // to `GROUP BY item_id, location_id` — required for correctness
+    // since the old `GROUP BY item_id` will fail on the composite PK.
+    Migration {
+        id: "089_stock_summary_composite_pk.sql",
+        sql: include_str!("../migrations/089_stock_summary_composite_pk.sql"),
+    },
+    // ── ADR #18 Phase 1: purchase order receiving flow (§8) ─────
+    // ALTER purchase_orders ADD COLUMN location_id FK to
+    // inventory_locations. Nullable per §8 — PO drafts may not yet
+    // have a receiving location. The `adjust_stock_at_location_with_reason
+    // (sku, +qty, location_id, 'purchase-order', ...)` receive flow
+    // requires a non-null location_id at receive time (Rust-layer
+    // constraint).
+    Migration {
+        id: "090_purchase_orders_location_id.sql",
+        sql: include_str!("../migrations/090_purchase_orders_location_id.sql"),
+    },
+    // ── ADR #18 §3 + §13 finding 37: workspace rename cascade ─
+    // Renames `inventory` → `warehouse` across all FK-referencing
+    // tables atomically. The 8-site cascade per §13-37 also requires
+    // file-level renames (ui directory, fluent bundles, manifest,
+    // platform/startup, Rust crate) — those accompany this PR outside
+    // the SQL migration and are documented inline.
+    Migration {
+        id: "091_workspace_types_rename.sql",
+        sql: include_str!("../migrations/091_workspace_types_rename.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -518,6 +663,14 @@ mod tests {
             "role_workspace_types",
             "login_attempts",
             "user_store_access",
+            // ── ADR #18 Phase 1+2 (migrations 078-090) ──
+            "inventory_locations",
+            "workspace_inventory_locations",
+            "inventory_transactions",
+            "inventory_transaction_lines",
+            "inventory_shifts",
+            "stock_thresholds",
+            "stock_alert_events",
         ];
 
         for table in &expected_tables {
@@ -634,6 +787,142 @@ mod tests {
             )
             .unwrap();
         assert!(sale_store_id.is_none(), "store_id should default to NULL");
+    }
+
+    // ── ADR #18 Phase 0A: Inventory Locations canonical seeds ──
+
+    #[test]
+    fn migration_078_seeds_canonical_default_and_transit_locations() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // ADR-18 §13 finding 36: the canonical UUIDs are FROZEN and
+        // propagate uniformly through §2a/§2b/§2d/§5 migrations. A
+        // regression that drops one of these seeds breaks every
+        // downstream migration that defaults `location_id` to the
+        // canonical value (migrations 079, 080, 082, 085, 089).
+        let default_uuid = "01926b3a-0000-7000-8000-000000000001";
+        let transit_uuid = "01926b3a-0000-7000-8000-000000000002";
+
+        let default_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM inventory_locations WHERE id = ?1",
+                rusqlite::params![default_uuid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            default_count, 1,
+            "missing canonical default-location UUID seed (01926b3a-...-001)"
+        );
+
+        let transit_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM inventory_locations WHERE id = ?1",
+                rusqlite::params![transit_uuid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            transit_count, 1,
+            "missing canonical transit-location UUID seed (01926b3a-...-002)"
+        );
+
+        // Also verify the human-readable names match ADR §1 expectations
+        // — app lookup-by-name relies on this.
+        let default_name: String = conn
+            .query_row(
+                "SELECT name FROM inventory_locations WHERE id = ?1",
+                rusqlite::params![default_uuid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(default_name, "Default Inventory");
+
+        let transit_name: String = conn
+            .query_row(
+                "SELECT name FROM inventory_locations WHERE id = ?1",
+                rusqlite::params![transit_uuid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(transit_name, "In Transit");
+    }
+
+    #[test]
+    fn migration_078_inventory_locations_enforces_active_name_uniqueness() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // The partial UNIQUE INDEX idx_inventory_locations_name_unique
+        // enforces name uniqueness ONLY for active rows (is_active = 1).
+        // Soft-deactivated rows can reuse names. Verify both halves:
+        //
+        //   * Inserting a second active location with the same name as
+        //     a seeded one must fail at the index level.
+        //   * Soft-deactivating the seeded row (is_active = 0) lets a
+        //     new active row reuse the name.
+        let result = conn.execute(
+            "INSERT INTO inventory_locations (id, name, type) VALUES ('other-uuid', 'Default Inventory', 'store')",
+            [],
+        );
+        assert!(
+            result.is_err(),
+            "expected UNIQUE index to reject duplicate active 'Default Inventory' name"
+        );
+
+        // Soft-deactivate the canonical default and allow a re-use.
+        conn.execute(
+            "UPDATE inventory_locations SET is_active = 0 WHERE name = 'Default Inventory'",
+            [],
+        )
+        .unwrap();
+        let reuse = conn.execute(
+            "INSERT INTO inventory_locations (id, name, type) VALUES ('other-uuid-2', 'Default Inventory', 'store')",
+            [],
+        );
+        assert!(
+            reuse.is_ok(),
+            "soft-deactivated name should be reusable: {:?}",
+            reuse
+        );
+    }
+
+    #[test]
+    fn migration_086_creates_partial_unique_index_for_active_shifts() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // ADR §13 finding 32 v2 amend: the partial UNIQUE index
+        // idx_inv_shifts_active_per_user_location must exist with
+        // leading-column pair (user_id, location_id) and predicate
+        // `WHERE status = 'active'`. Schema-level check (rather than
+        // a data-level enforcement test) because seeding users + roles
+        // is out of scope for this migration test. The index is the
+        // database-layer enforcement of §9d's "at most one active shift
+        // per (user_id, location_id) pair" invariant.
+        //
+        // We verify BOTH the index's presence AND its predicate +
+        // leading-columns. A copy-paste regression that drops the
+        // WHERE clause would silently pass a presence-only check;
+        // assert substring on the index's stored SQL catches that.
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master
+                  WHERE type='index' AND name='idx_inv_shifts_active_per_user_location'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("missing §13-32 v2-amend partial UNIQUE index for active inventory shifts");
+
+        assert!(
+            index_sql.contains("user_id") && index_sql.contains("location_id"),
+            "partial UNIQUE index must index both user_id and location_id, got: {index_sql}"
+        );
+        assert!(
+            index_sql.contains("WHERE") && index_sql.contains("active"),
+            "partial UNIQUE index must predicate on active status (v2 amend), got: {index_sql}"
+        );
     }
 
     #[test]

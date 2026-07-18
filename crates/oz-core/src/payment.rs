@@ -47,6 +47,7 @@ pub struct Payment {
 ///
 /// This is the serialisation boundary type used in IPC commands.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PaymentSplitArg {
     /// Payment method ("cash", "card", "other", etc.).
     pub method: String,
@@ -370,14 +371,22 @@ mod tests {
         let split = PaymentSplitArg {
             method: "card".into(),
             amount_minor: 50000,
-            gateway_reference: None,
-            gateway_status: None,
+            gateway_reference: Some("txn_abc".into()),
+            gateway_status: Some("approved".into()),
             gateway_response: None,
         };
         let json = serde_json::to_value(&split).unwrap();
         assert_eq!(json["method"], "card");
-        assert_eq!(json["amount_minor"], 50000);
-        assert!(json.get("gateway_reference").unwrap().is_null());
+        assert_eq!(json["amountMinor"], 50000);
+        assert_eq!(json["gatewayReference"], "txn_abc");
+    }
+
+    #[test]
+    fn payment_split_arg_from_camel_case_json() {
+        let json = r#"{"method":"cash","amountMinor":25000}"#;
+        let split: PaymentSplitArg = serde_json::from_str(json).unwrap();
+        assert_eq!(split.method, "cash");
+        assert_eq!(split.amount_minor, 25000);
     }
 
     #[test]

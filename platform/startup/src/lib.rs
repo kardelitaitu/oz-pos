@@ -82,12 +82,6 @@ pub fn init_module_system(
         let k = kernel.blocking_lock();
         let bus = k.event_bus();
 
-        bus.subscribe(
-            "sale.completed",
-            Box::new(modules_inventory::handlers::InventoryStockHandler::new(
-                handler_conn.clone(),
-            )),
-        );
         bus.subscribe::<oz_core::events::SaleCompleted>(
             "sale.completed",
             Box::new(crate::event_handlers::SaleSyncEnqueuer::new(

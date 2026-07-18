@@ -23,6 +23,7 @@ use crate::state::AppState;
 // ── Discount ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Setcartdiscountargs.
 pub struct SetCartDiscountArgs {
     /// ID of the associated cart.
@@ -72,6 +73,7 @@ pub async fn set_cart_discount(
 // ── Start Sale ───────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Startsaleargs.
 pub struct StartSaleArgs {
     /// ISO-4217 currency code for the new cart.
@@ -143,6 +145,7 @@ pub async fn get_active_cart(
 // ── Add Line ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Addlineargs.
 pub struct AddLineArgs {
     /// ID of the associated cart.
@@ -199,6 +202,7 @@ pub async fn add_line(
 // ── Override Line Price ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Overridelinepriceargs.
 pub struct OverrideLinePriceArgs {
     /// ID of the associated cart.
@@ -256,6 +260,7 @@ pub async fn override_line_price(
 // ── Complete Sale ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Serialnumberarg.
 pub struct SerialNumberArg {
     /// Stock-keeping unit identifier.
@@ -265,6 +270,7 @@ pub struct SerialNumberArg {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Completesaleargs.
 pub struct CompleteSaleArgs {
     /// ID of the associated cart.
@@ -342,6 +348,9 @@ pub async fn complete_sale(
         }
 
         store.create_sale(&sale)?;
+        // Transition through Active before Completed — the state machine
+        // does not allow Pending → Completed directly.
+        store.update_sale_status(&sale_id, SaleStatus::Active)?;
         store.update_sale_status(&sale_id, SaleStatus::Completed)?
     };
 
@@ -410,6 +419,7 @@ pub async fn compute_cart_tax(
 // ── Hold Orders ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Holdcartargs.
 pub struct HoldCartArgs {
     /// Label.
