@@ -20,6 +20,13 @@
 -- UUID pair in memory for the lifetime of the process.
 -- DO NOT substitute different UUIDs here — §13 finding 36 requires the same
 -- value propagate through §2a, §2b, §2d, §5, and §13 acceptance criterion 36.
+--
+-- Rust cross-reference (ADR-19 code-review): the canonical default UUID
+-- also lives at `crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID` in
+-- `crates/oz-core/src/inventory.rs`. Every Rust code path that needs
+-- the canonical default MUST import that const — never copy-paste the
+-- UUID literal here. Drift between the const and this migration breaks
+-- the FK chain (migrations 079/080/089 all reference this UUID too).
 
 CREATE TABLE IF NOT EXISTS inventory_locations (
     id          TEXT PRIMARY KEY,                            -- UUID v7

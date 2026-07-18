@@ -289,7 +289,7 @@ impl Store<'_> {
             upsert_stock_summary_in_tx(
                 &tx,
                 &id,
-                "01926b3a-0000-7000-8000-000000000001",
+                crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
                 initial_stock,
                 &now,
             )?;
@@ -803,7 +803,7 @@ impl Store<'_> {
         upsert_stock_summary_in_tx(
             &tx,
             &product_id,
-            "01926b3a-0000-7000-8000-000000000001",
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
             new_qty,
             &now,
         )?;
@@ -865,12 +865,13 @@ impl Store<'_> {
     /// higher for products stored across multiple locations.
     pub fn rebuild_stock_summary(&self) -> Result<usize, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        // ADR-18 §13-36 frozen canonical default-location UUID. This is also
+        // ADR-18 §13-36 frozen canonical default-location UUID (see
+        // `crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID`). This is also
         // the column DEFAULT on `stock_movements.location_id` (migration 080)
         // and `inventory.location_id` (migration 079), so legacy pre-790
         // stock_movements rows uniformly land at this location_id and the
         // rebuild stays backward-compatible.
-        let canonical_default_loc = "01926b3a-0000-7000-8000-000000000001";
+        let canonical_default_loc = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -2167,7 +2168,7 @@ mod tests {
     fn rebuild_stock_summary_aggregates_per_location() {
         let conn = fresh();
         seed_everything(&conn);
-        let canonical = "01926b3a-0000-7000-8000-000000000001";
+        let canonical = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
         let transit = "01926b3a-0000-7000-8000-000000000002";
         let s = store(&conn);
 

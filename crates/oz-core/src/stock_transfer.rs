@@ -16,9 +16,14 @@ pub struct StockTransfer {
     pub transfer_number: String,
     /// Status: draft, pending, in_transit, received, cancelled.
     pub status: String,
-    /// Source store/location name.
+    /// FK to `inventory_locations.id` (source location). Carries a UUID
+    /// string, NOT a free-text name — post-migration 081 the underlying
+    /// column is `source_location_id` with the canonical default UUID
+    /// (`crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID`) supplied by
+    /// `Store::create_transfer` when the caller passes `None`.
     pub source_location: Option<String>,
-    /// Destination store/location name.
+    /// FK to `inventory_locations.id` (destination location). Carries a
+    /// UUID string — see [`Self::source_location`] for the contract.
     pub destination_location: Option<String>,
     /// FK to terminals.id — source terminal device.
     pub source_terminal_id: Option<String>,

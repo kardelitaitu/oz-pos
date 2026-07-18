@@ -6,6 +6,34 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Canonical default inventory location UUID.
+///
+/// **Frozen invariant** (ADR-18 §13-36): this exact UUID is seeded by
+/// `crates/oz-core/migrations/078_inventory_locations.sql` and is the
+/// column DEFAULT on `inventory.location_id` (migration 079),
+/// `stock_movements.location_id` (migration 080), and
+/// `stock_summary.location_id` (composite-PK rebuild in migration 089).
+///
+/// Use this constant in all Rust code that needs to reference the
+/// canonical default location — never copy-paste the UUID literal.
+/// Future SQL migrations that touch routing/backfill must continue
+/// to use the same UUID and may comment-reference this constant
+/// location for discoverability.
+///
+/// The companion canonical transit UUID (`01926b3a-0000-7000-8000-000000000002`)
+/// intentionally has no Rust const — transit routing is invariant-free
+/// and should remain a SQL-only concern under migration 078.
+///
+/// **Test assertion exception**: the LITERAL `01926b3a-0000-7000-8000-000000000001`
+/// may remain hardcoded inside
+/// `crates/oz-core/src/migrations.rs::migration_078_seeds_canonical_default_and_transit_locations`
+/// — that test asserts the SQL seed value matches the canonical UUID on disk, so
+/// substituting this const there would make the assertion circular / self-referential
+/// (`const == seeded-const`). Future automated cleanup passes must NOT
+/// "fix" that test by importing this constant. An inline sibling comment at the
+/// test site provides the layered defence.
+pub const CANONICAL_DEFAULT_LOCATION_UUID: &str = "01926b3a-0000-7000-8000-000000000001";
+
 /// Stock level for a single product.
 ///
 /// # Schema mapping

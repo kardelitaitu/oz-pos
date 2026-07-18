@@ -801,8 +801,26 @@ mod tests {
         // regression that drops one of these seeds breaks every
         // downstream migration that defaults `location_id` to the
         // canonical value (migrations 079, 080, 082, 085, 089).
+        // DO NOT replace the literals below with
+        // `crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID` (or the
+        // transit counterpart) — this test asserts the schema seed value,
+        // so substituting the const would make the assertion circular /
+        // self-referential (`const == seeded-const`). The const's own
+        // docstring in `inventory.rs` documents this exception.
         let default_uuid = "01926b3a-0000-7000-8000-000000000001";
         let transit_uuid = "01926b3a-0000-7000-8000-000000000002";
+
+        // Runtime drift guard — fires only in debug builds. Catches drift
+        // between this test-assertion literal and the Rust const even if
+        // both prose comments above get deleted by a future automated
+        // cleanup pass. The transit counterpart intentionally has no
+        // CANONICAL_TRANSIT_LOCATION_UUID const (SQL-only concern per the
+        // inventory.rs const docstring), so no equivalent guard needed.
+        debug_assert_eq!(
+            default_uuid,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            "test-assertion literal drifted from CANONICAL_DEFAULT_LOCATION_UUID const"
+        );
 
         let default_count: i64 = conn
             .query_row(
