@@ -4,13 +4,9 @@
 //!
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
-//!
-//! Tests use the deprecated `adjust_stock` (ADR-19 §3.4 deferred to
-//! v0.1.0). Each callsite will be migrated to
-//! `adjust_stock_at_location_with_reason` as part of the §3.4 follow-up.
-#![allow(deprecated)]
 
 use foundation::Barcode;
+use oz_core::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
 use oz_core::{Currency, Money, ProductVariant, Store, migrations};
 use rusqlite::Connection;
 
@@ -42,6 +38,23 @@ fn seed_product(conn: &Connection, _id: &str, sku: &str, name: &str, initial_sto
         .unwrap();
 }
 
+/// Helper: canonical wrapper around `adjust_stock_at_location_with_reason`
+/// that creates a transaction and uses the canonical default location.
+/// Returns the post-update qty, matching the old `adjust_stock` contract.
+fn adjust_stock(
+    s: &Store<'_>,
+    conn: &Connection,
+    sku: &str,
+    delta: i64,
+) -> Result<i64, oz_core::CoreError> {
+    let tx = conn.unchecked_transaction()?;
+    let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
+    let result =
+        s.adjust_stock_at_location_with_reason(&tx, sku, delta, &loc, None, None, None, None)?;
+    tx.commit()?;
+    Ok(result)
+}
+
 // ── Stock: Multi-step adjustments ────────────────────────────────────
 
 #[test]
@@ -51,13 +64,13 @@ fn stock_multi_step_adjustments() {
     let s = store(&conn);
 
     // Sell 10 → 90.
-    assert_eq!(s.adjust_stock("MULTI", -10).unwrap(), 90);
+    assert_eq!(adjust_stock(&s, &conn, "MULTI", -10).unwrap(), 90);
     // Sell 30 → 60.
-    assert_eq!(s.adjust_stock("MULTI", -30).unwrap(), 60);
+    assert_eq!(adjust_stock(&s, &conn, "MULTI", -30).unwrap(), 60);
     // Restock 50 → 110.
-    assert_eq!(s.adjust_stock("MULTI", 50).unwrap(), 110);
+    assert_eq!(adjust_stock(&s, &conn, "MULTI", 50).unwrap(), 110);
     // Sell 110 → 0.
-    assert_eq!(s.adjust_stock("MULTI", -110).unwrap(), 0);
+    assert_eq!(adjust_stock(&s, &conn, "MULTI", -110).unwrap(), 0);
 }
 
 #[test]
@@ -67,14 +80,14 @@ fn stock_sell_to_zero_then_restock() {
     let s = store(&conn);
 
     // Sell all 25.
-    assert_eq!(s.adjust_stock("ZERO-RESTOCK", -25).unwrap(), 0);
+    assert_eq!(adjust_stock(&s, &conn, "ZERO-RESTOCK", -25).unwrap(), 0);
 
     // Verify get_stock returns 0.
     let id = s.product_id_by_sku("ZERO-RESTOCK").unwrap().unwrap();
     assert_eq!(s.get_stock(&id).unwrap(), 0);
 
     // Restock 15.
-    assert_eq!(s.adjust_stock("ZERO-RESTOCK", 15).unwrap(), 15);
+    assert_eq!(adjust_stock(&s, &conn, "ZERO-RESTOCK", 15).unwrap(), 15);
 }
 
 #[test]
@@ -98,7 +111,7 @@ fn stock_first_adjustment_creates_inventory_row() {
     assert_eq!(s.get_stock(&p.id).unwrap(), 0);
 
     // First adjustment creates the inventory row.
-    assert_eq!(s.adjust_stock("FIRST-ADJ", 25).unwrap(), 25);
+    assert_eq!(adjust_stock(&s, &conn, "FIRST-ADJ", 25).unwrap(), 25);
     assert_eq!(s.get_stock(&p.id).unwrap(), 25);
 }
 
@@ -110,7 +123,7 @@ fn stock_adjust_after_product_delete_returns_not_found() {
 
     s.delete_product("DEL-ADJ").unwrap();
 
-    let err = s.adjust_stock("DEL-ADJ", 5).unwrap_err();
+    let err = adjust_stock(&s, &conn, "DEL-ADJ", 5).unwrap_err();
     assert!(matches!(err, oz_core::CoreError::NotFound { .. }));
 }
 
@@ -120,8 +133,11 @@ fn stock_adjust_oversell_rejected() {
     seed_product(&conn, "p4", "OVERSELL", "Oversell Test", 5);
     let s = store(&conn);
 
-    let err = s.adjust_stock("OVERSELL", -10).unwrap_err();
-    assert!(matches!(err, oz_core::CoreError::Validation { field, .. } if field == "delta"));
+    let err = adjust_stock(&s, &conn, "OVERSELL", -10).unwrap_err();
+    assert!(matches!(
+        err,
+        oz_core::CoreError::InsufficientStockAtLocation { .. }
+    ));
 }
 
 // ── Stock: Multiple products ─────────────────────────────────────────
@@ -134,9 +150,9 @@ fn stock_multiple_products_tracked_independently() {
     seed_product(&conn, "mp3", "PROD-C", "Product C", 300);
     let s = store(&conn);
 
-    assert_eq!(s.adjust_stock("PROD-A", -10).unwrap(), 90);
-    assert_eq!(s.adjust_stock("PROD-B", 25).unwrap(), 225);
-    assert_eq!(s.adjust_stock("PROD-C", -50).unwrap(), 250);
+    assert_eq!(adjust_stock(&s, &conn, "PROD-A", -10).unwrap(), 90);
+    assert_eq!(adjust_stock(&s, &conn, "PROD-B", 25).unwrap(), 225);
+    assert_eq!(adjust_stock(&s, &conn, "PROD-C", -50).unwrap(), 250);
 
     // Verify each independently.
     let id_a = s.product_id_by_sku("PROD-A").unwrap().unwrap();
@@ -165,8 +181,11 @@ fn stock_adjust_overflow_rejected() {
         )
         .unwrap();
 
-    let err = s.adjust_stock("OVERFLOW", 1).unwrap_err();
-    assert!(matches!(err, oz_core::CoreError::Validation { field, .. } if field == "delta"));
+    let err = adjust_stock(&s, &conn, "OVERFLOW", 1).unwrap_err();
+    assert!(matches!(
+        err,
+        oz_core::CoreError::InsufficientStockAtLocation { .. }
+    ));
 }
 
 // ── Product delete cascades to inventory ─────────────────────────────
@@ -200,8 +219,8 @@ fn list_products_reflects_stock_adjustments() {
     seed_product(&conn, "pb", "LIST-ADJ-B", "Adjust B", 40);
     let s = store(&conn);
 
-    s.adjust_stock("LIST-ADJ-A", -10).unwrap();
-    s.adjust_stock("LIST-ADJ-B", 5).unwrap();
+    adjust_stock(&s, &conn, "LIST-ADJ-A", -10).unwrap();
+    adjust_stock(&s, &conn, "LIST-ADJ-B", 5).unwrap();
 
     let products = s.list_products().unwrap();
     let a = products
@@ -539,7 +558,7 @@ fn inventory_updated_at_changes_on_adjustment() {
 
     std::thread::sleep(std::time::Duration::from_millis(2));
 
-    s.adjust_stock("INV-TIMESTAMP", 5).unwrap();
+    adjust_stock(&s, &conn, "INV-TIMESTAMP", 5).unwrap();
 
     let after: String = conn
         .query_row(

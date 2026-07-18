@@ -63,7 +63,6 @@ vi.mock('@/contexts/HardwareAccelContext', () => ({
   HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock('@/contexts/BrandContext', () => ({
   useBrand: () => ({
     settings: {
@@ -73,11 +72,13 @@ vi.mock('@/contexts/BrandContext', () => ({
     },
     refreshBrandSettings: vi.fn(),
   }),
-} as any));
+  BrandProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 vi.mock('@/utils/color', () => ({
   deriveAccentPalette: vi.fn().mockReturnValue({}),
   applyAccentPalette: vi.fn(),
+  applyThemeContrasts: vi.fn(),
 } as any));
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -132,6 +133,8 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
         return { name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' };
       case 'get_license_status':
         return { is_valid: true, license_type: 'Pro', expires_at: null };
+      case 'pending_sync_count':
+        return 0;
       default:
         console.warn('UNHANDLED INVOKE COMMAND:', cmd);
         return null;

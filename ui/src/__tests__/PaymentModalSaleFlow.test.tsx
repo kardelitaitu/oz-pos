@@ -55,6 +55,17 @@ const { invokeMock } = vi.hoisted(() => ({
   }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: null,
+    sessionToken: 'mock-token',
+    swapSessionToken: vi.fn(),
+    workspaces: [],
+    loading: false,
+  }),
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
@@ -149,5 +160,85 @@ describe('PaymentModal — sale flow', () => {
 
     expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
+  });
+});
+
+// ── Shortfall resolution integration ────────────────────────────────
+
+const defaultInvokeImpl = (cmd: string) => {
+  switch (cmd) {
+    case 'start_sale':
+      return Promise.resolve({ cartId: 'test-cart' });
+    case 'add_line':
+      return Promise.resolve({ lineId: 'test-line', lineTotal: null });
+    case 'complete_sale':
+      return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
+    case 'get_sale':
+      return Promise.resolve(null);
+    case 'print_sales_receipt':
+      return Promise.resolve({ printed: true });
+    case 'hold_cart':
+      return Promise.resolve();
+    case 'get_enabled_features':
+      return Promise.resolve({ features: [] });
+    default:
+      return Promise.resolve({});
+  }
+};
+
+describe('PaymentModal — shortfall resolution', () => {
+  afterEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(defaultInvokeImpl as (cmd: string) => Promise<unknown>);
+  });
+
+  it('shows StockShortfallDialog when completeSale fails with PartialStockResult', async () => {
+    const shortfallPayload = {
+      requiresResolution: true,
+      shortfalls: [
+        {
+          sku: 'COFFEE',
+          productName: 'Coffee',
+          requestedQty: 5,
+          primaryQtyAvailable: 2,
+          deficit: 3,
+          primaryLocationId: 'main',
+          alternatives: [
+            { locationId: 'alt-1', locationName: 'Warehouse', qtyAvailable: 10 },
+          ],
+        },
+      ],
+    };
+
+    invokeMock.mockImplementation((cmd: string): Promise<unknown> => {
+      if (cmd === 'complete_sale') {
+        return Promise.reject(
+          new Error(JSON.stringify(shortfallPayload)),
+        );
+      }
+      return defaultInvokeImpl(cmd) as Promise<unknown>;
+    });
+
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText(/Card/));
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Insufficient Stock')).toBeInTheDocument();
+    });
+    expect(screen.getByText('#COFFEE')).toBeInTheDocument();
+    expect(screen.getByText('Coffee')).toBeInTheDocument();
+    expect(screen.getByText('Confirm & Continue')).toBeInTheDocument();
+    expect(screen.getByText('Cancel Sale')).toBeInTheDocument();
   });
 });

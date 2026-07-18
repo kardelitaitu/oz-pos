@@ -1516,10 +1516,9 @@ impl Store<'_> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(deprecated)] // §3.4 deferred to v0.1.0 — `adjust_stock` will be migrated then.
-
     use super::*;
     use crate::Money;
+    use crate::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
     use crate::migrations;
     use rusqlite::Connection;
 
@@ -1577,6 +1576,22 @@ mod tests {
 
     fn store(conn: &Connection) -> Store<'_> {
         Store::new(conn)
+    }
+
+    /// Helper: canonical wrapper around `adjust_stock_at_location_with_reason`
+    /// that creates a transaction and uses the canonical default location.
+    fn adjust_stock(
+        s: &Store<'_>,
+        conn: &Connection,
+        sku: &str,
+        delta: i64,
+    ) -> Result<i64, CoreError> {
+        let tx = conn.unchecked_transaction()?;
+        let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
+        let result =
+            s.adjust_stock_at_location_with_reason(&tx, sku, delta, &loc, None, None, None, None)?;
+        tx.commit()?;
+        Ok(result)
     }
 
     fn usd() -> Currency {
@@ -1918,7 +1933,7 @@ mod tests {
     fn adjust_stock_add() {
         let conn = fresh();
         seed_everything(&conn);
-        let new_qty = store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+        let new_qty = adjust_stock(&store(&conn), &conn, "DRINK-001", 5).unwrap();
         assert_eq!(new_qty, 55);
     }
 
@@ -1926,7 +1941,7 @@ mod tests {
     fn adjust_stock_remove() {
         let conn = fresh();
         seed_everything(&conn);
-        let new_qty = store(&conn).adjust_stock("DRINK-001", -10).unwrap();
+        let new_qty = adjust_stock(&store(&conn), &conn, "DRINK-001", -10).unwrap();
         assert_eq!(new_qty, 40);
     }
 
@@ -1934,14 +1949,14 @@ mod tests {
     fn adjust_stock_negative_error() {
         let conn = fresh();
         seed_everything(&conn);
-        let err = store(&conn).adjust_stock("DRINK-001", -100).unwrap_err();
-        assert!(matches!(err, CoreError::Validation { field, .. } if field == "delta"));
+        let err = adjust_stock(&store(&conn), &conn, "DRINK-001", -100).unwrap_err();
+        assert!(matches!(err, CoreError::InsufficientStockAtLocation { .. }));
     }
 
     #[test]
     fn adjust_stock_unknown_sku() {
         let conn = fresh();
-        let err = store(&conn).adjust_stock("NO-SKU", 5).unwrap_err();
+        let err = adjust_stock(&store(&conn), &conn, "NO-SKU", 5).unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
@@ -2344,7 +2359,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 5).unwrap();
 
         let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
         assert_eq!(movements.len(), 1);
@@ -2364,13 +2379,13 @@ mod tests {
         assert_eq!(initial, 50, "fallback to inventory returns 50");
 
         // Adjustment writes a delta row. SUM(delta) = 10 (just the adjustment).
-        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 10).unwrap();
         let after = store(&conn).get_stock_from_ledger("prod-1").unwrap();
         assert_eq!(after, 10, "SUM(delta) should be 10 (only adjustment row)");
 
         // Multiple adjustments accumulate.
-        store(&conn).adjust_stock("DRINK-001", -5).unwrap();
-        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", -5).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 20).unwrap();
         let after2 = store(&conn).get_stock_from_ledger("prod-1").unwrap();
         assert_eq!(after2, 25, "SUM of deltas: 10 + (-5) + 20 = 25");
     }
@@ -2457,8 +2472,8 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        // adjust_stock (the backward-compat wrapper) passes None for audit fields.
-        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+        // adjust_stock_at_location_with_reason passes None for audit fields.
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 10).unwrap();
 
         let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
         assert_eq!(movements.len(), 1);
@@ -2645,7 +2660,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         // Write a recent movement.
-        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 5).unwrap();
 
         // All rows are recent — nothing to archive.
         let count = store(&conn).archive_stock_movements(90, 50).unwrap();
@@ -2714,7 +2729,7 @@ mod tests {
         )
         .unwrap();
         // New row via normal API (gets current timestamp).
-        s.adjust_stock("DRINK-001", 5).unwrap();
+        adjust_stock(&s, &conn, "DRINK-001", 5).unwrap();
 
         let count = s.archive_stock_movements(30, 50).unwrap();
         assert_eq!(count, 1, "one item group archived");
@@ -2860,7 +2875,7 @@ mod tests {
 
         // Migration backfill ran against empty inventory, so stock_summary starts empty.
         // After the first adjust_stock call, the summary row is created.
-        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 20).unwrap();
         let qty: i64 = conn
             .query_row(
                 "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
@@ -2875,7 +2890,7 @@ mod tests {
         );
 
         // Second adjustment updates the summary.
-        store(&conn).adjust_stock("DRINK-001", -10).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", -10).unwrap();
         let qty2: i64 = conn
             .query_row(
                 "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
