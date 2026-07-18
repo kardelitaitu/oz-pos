@@ -59,6 +59,37 @@ pub struct StockMovement {
     pub created_at: String,
 }
 
+/// Upsert a single `(item_id, location_id, qty)` row into `stock_summary`.
+///
+/// **ADR-19 §3**: post-migration-089's composite PRIMARY KEY
+/// `(item_id, location_id)` requires every insert to specify BOTH columns
+/// AND target BOTH columns in the conflict clause. Older single-column
+/// callsites (`ON CONFLICT(item_id)`) now fail with SQLite error
+/// `"ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"`
+/// — the cascade broke 46 cargo tests across KDS, products, purchase_orders,
+/// reports, sales, stock_transfers, workspaces modules. This helper is the
+/// canonical replacement and is used by `create_product`,
+/// `adjust_stock_with_reason`, and any future single-row ops.
+///
+/// Accepts `&rusqlite::Connection` (NOT `&mut self`) so it works transparently
+/// inside `unchecked_transaction()` blocks via `Transaction`'s `Deref<Target = Connection>`
+/// behaviour — callers pass `&tx`.
+fn upsert_stock_summary_in_tx(
+    conn: &rusqlite::Connection,
+    item_id: &str,
+    location_id: &str,
+    qty: i64,
+    updated_at: &str,
+) -> Result<(), CoreError> {
+    conn.execute(
+        "INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(item_id, location_id) DO UPDATE SET qty = excluded.qty,
+                                                      updated_at = excluded.updated_at",
+        rusqlite::params![item_id, location_id, qty, updated_at],
+    )?;
+    Ok(())
+}
+
 // ── Product CRUD ─────────────────────────────────────────────────────
 
 impl Store<'_> {
@@ -255,11 +286,12 @@ impl Store<'_> {
                  VALUES (?1, ?2, ?3, 'initial-stock', NULL, NULL, ?4)",
                 params![movement_id, id, initial_stock, now],
             )?;
-            tx.execute(
-                "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
-                 ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
-                                                     updated_at = excluded.updated_at",
-                params![id, initial_stock, now],
+            upsert_stock_summary_in_tx(
+                &tx,
+                &id,
+                "01926b3a-0000-7000-8000-000000000001",
+                initial_stock,
+                &now,
             )?;
         }
 
@@ -762,12 +794,18 @@ impl Store<'_> {
             params![product_id, new_qty, now],
         )?;
 
-        // 3. Update the stock_summary materialised view (perf — ADR #6).
-        tx.execute(
-            "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
-             ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
-                                                 updated_at = excluded.updated_at",
-            params![product_id, new_qty, now],
+        // 3. Update the stock_summary materialised view (perf — ADR #6 + ADR-19 §3).
+        // Uses the canonical default location UUID per ADR-18 §13-36 frozen seed.
+        // The helper targets the composite PRIMARY KEY (item_id, location_id)
+        // introduced by migration 089 — pre-refactor single-column
+        // ON CONFLICT(item_id) raise "ON CONFLICT clause does not match any
+        // PRIMARY KEY or UNIQUE constraint" and cascade-fail 46+ tests.
+        upsert_stock_summary_in_tx(
+            &tx,
+            &product_id,
+            "01926b3a-0000-7000-8000-000000000001",
+            new_qty,
+            &now,
         )?;
 
         tx.commit()?;
@@ -803,41 +841,72 @@ impl Store<'_> {
     }
 
     /// Rebuild the materialised `stock_summary` and `inventory` tables from the
-    /// delta ledger (ADR #6).
+    /// delta ledger (ADR #6 + ADR-18 §2c + ADR-19 §1).
+    ///
+    /// After ADR-18 migration 089, `stock_summary` has a composite PRIMARY
+    /// KEY (item_id, location_id). The rebuild MUST aggregate the delta ledger
+    /// by BOTH columns — not by `item_id` alone — otherwise per-location stock
+    /// is silently funneled into the canonical default UUID and the §9 alert
+    /// system queries return aggregated cross-location totals instead of
+    /// per-location vectors. This is ADR-19 §15 criterion 19-1.
+    ///
+    /// `inventory` still has a single-PK on `product_id` (ADR-18 §2a's
+    /// composite-PK rebuild is deferred), so it aggregates per product across
+    /// all locations. Per-location authoritative stock now lives in
+    /// `stock_summary`. Legacy `inventory` is preserved here as a sum-of-all
+    /// locations approximation for backward-compat callers.
     ///
     /// This is called after a sync cycle receives new deltas from other
     /// registers or the cloud, ensuring the materialised cache is consistent
     /// with the authoritative ledger. Runs in a single transaction for atomicity.
     ///
-    /// Returns the number of products whose stock was rebuilt.
+    /// **Returns** the number of `(item_id, location_id)` tuples rebuilt —
+    /// NOT the number of distinct products. Post-refactor the count is
+    /// higher for products stored across multiple locations.
     pub fn rebuild_stock_summary(&self) -> Result<usize, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        // ADR-18 §13-36 frozen canonical default-location UUID. This is also
+        // the column DEFAULT on `stock_movements.location_id` (migration 080)
+        // and `inventory.location_id` (migration 079), so legacy pre-790
+        // stock_movements rows uniformly land at this location_id and the
+        // rebuild stays backward-compatible.
+        let canonical_default_loc = "01926b3a-0000-7000-8000-000000000001";
 
         let tx = self.conn.unchecked_transaction()?;
 
         // Clear the materialised caches.
         tx.execute("DELETE FROM stock_summary", [])?;
 
-        // Rebuild stock_summary from the delta ledger.
+        // Rebuild stock_summary from the delta ledger. MUST group by both
+        // (item_id, location_id) per ADR-18 migration 089's composite PK.
+        // Without this, multi-location data silently collapses to one row
+        // per item_id at the canonical default UUID — the dormant bug
+        // originally flagged in the ADR-18 final-review.
         let rebuilt = tx.execute(
-            "INSERT INTO stock_summary (item_id, qty, updated_at)
-             SELECT item_id, SUM(delta), ?1
+            "INSERT INTO stock_summary (item_id, location_id, qty, updated_at)
+             SELECT item_id, location_id, SUM(delta), ?1
              FROM stock_movements
-             GROUP BY item_id",
+             GROUP BY item_id, location_id",
             params![now],
         )?;
 
-        // Rebuild the inventory table (backward compat) to match.
-        // Upsert: set qty for products with deltas, leave others untouched.
+        // Rebuild the inventory table (backward compat, single-PK preserved).
+        // Aggregates per product (sums ALL location deltas into one row),
+        // and pins the row's location_id to the canonical default UUID to
+        // match how `adjust_stock_with_reason` writes (it doesn't specify
+        // location_id, relying on the column DEFAULT). This keeps `inventory`
+        // a representative aggregate for pre-refactor callers while
+        // `stock_summary` becomes the per-location authoritative surface.
         tx.execute(
-            "INSERT INTO inventory (product_id, qty, updated_at)
-             SELECT item_id, SUM(delta), ?1
+            "INSERT INTO inventory (product_id, location_id, qty, updated_at)
+             SELECT item_id, ?2 AS location_id, SUM(delta), ?1
              FROM stock_movements
              GROUP BY item_id
              ON CONFLICT(product_id) DO UPDATE SET
                 qty = excluded.qty,
+                location_id = excluded.location_id,
                 updated_at = excluded.updated_at",
-            params![now],
+            params![now, canonical_default_loc],
         )?;
 
         // Zero out inventory for products whose ledger SUM is 0 or negative
@@ -2086,6 +2155,95 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM stock_summary", [], |r| r.get(0))
             .unwrap();
         assert_eq!(rows, 0);
+    }
+
+    /// ADR-19 §15 criterion 19-1: rebuild_stock_summary() aggregates per
+    /// (item_id, location_id), not per item_id alone. This test seeds stock
+    /// movements in TWO different locations for the same SKU and asserts the
+    /// rebuild produces TWO stock_summary rows (one per location) instead of
+    /// single aggregated row at the canonical default UUID (the dormant
+    /// bug pre-refactor).
+    #[test]
+    fn rebuild_stock_summary_aggregates_per_location() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let canonical = "01926b3a-0000-7000-8000-000000000001";
+        let transit = "01926b3a-0000-7000-8000-000000000002";
+        let s = store(&conn);
+
+        // Seed stock_movements in two locations for the same SKU (prod-1).
+        // Pre-refactor these would collapse into ONE stock_summary row at
+        // canonical with qty=80; post-refactor they must produce TWO rows.
+        conn.execute_batch(&format!(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,\n                                          source_terminal_id, source_user_id,\n                                          store_id, created_at, location_id)\n             VALUES ('mv-loc-c', 'prod-1',  30, 'restock', NULL, NULL, '', '2025-01-01T00:00:00.000Z', '{canonical}'),\n                    ('mv-loc-t', 'prod-1',  50, 'restock', NULL, NULL, '', '2025-01-01T00:00:00.000Z', '{transit}'),\n                    ('mv-loc-c2','prod-2',  12, 'restock', NULL, NULL, '', '2025-01-01T00:00:00.000Z', '{canonical}')"
+        ))
+        .unwrap();
+
+        let count = s.rebuild_stock_summary().unwrap();
+        assert_eq!(
+            count, 3,
+            "three (item_id, location_id) tuples should be rebuilt, got {count}"
+        );
+
+        // Verify TWO rows for prod-1: per-location qty breakdown.
+        let canonical_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1' AND location_id = ?1",
+                params![canonical],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            canonical_qty, 30,
+            "canonical default location must hold 30, got {canonical_qty}"
+        );
+
+        let transit_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1' AND location_id = ?1",
+                params![transit],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            transit_qty, 50,
+            "transit location must hold 50 (NOT aggregated to 80), got {transit_qty}"
+        );
+
+        // Single canonical-only row for prod-2.
+        let prod2_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-2' AND location_id = ?1",
+                params![canonical],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(prod2_qty, 12, "prod-2 canonical row must hold 12");
+
+        // Verify NO aggregated single row at wrong total of 80 somewhere.
+        let total: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(qty), 0) FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            total, 80,
+            "sum across locations must equal 80, but row count must be 2 not 1"
+        );
+
+        let prod1_row_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            prod1_row_count, 2,
+            "prod-1 must have exactly 2 stock_summary rows (one per location), got {prod1_row_count}"
+        );
     }
 
     // ── Archive Stock Movements (ADR #6 Q4) ─────────────────────
