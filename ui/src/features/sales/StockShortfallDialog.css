@@ -1,0 +1,292 @@
+/* ── Stock Shortfall Dialog — multi-location split fulfillment ───── */
+
+.shortfall-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.shortfall-modal {
+  width: clamp(20rem, 40vw, 38rem);
+  max-width: 94vw;
+  max-height: 90vh;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shortfall-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--color-danger-subtle);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.shortfall-header-icon {
+  font-size: var(--text-3xl);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.shortfall-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-danger);
+}
+
+.shortfall-description {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  line-height: 1.4;
+}
+
+/* ── Shortfall cards ─────────────────────────────────────────────── */
+
+.shortfall-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.shortfall-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.shortfall-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.shortfall-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+}
+
+.shortfall-card-sku {
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+}
+
+.shortfall-card-name {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
+.shortfall-card-quantities {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+}
+
+.shortfall-qty-label {
+  color: var(--color-fg-tertiary);
+}
+
+.shortfall-qty-available strong {
+  color: var(--color-fg);
+}
+
+.shortfall-deficit {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+}
+
+/* ── Alternative locations ───────────────────────────────────────── */
+
+.shortfall-alternatives {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.shortfall-alternatives-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.shortfall-alt-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+}
+
+.shortfall-alt-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-100) var(--ease-out);
+}
+
+.shortfall-alt-option:hover {
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+}
+
+.shortfall-alt-option input[type="radio"] {
+  accent-color: var(--color-accent);
+}
+
+.shortfall-alt-name {
+  flex: 1;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+}
+
+.shortfall-alt-qty {
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+}
+
+/* ── Split mode ──────────────────────────────────────────────────── */
+
+.shortfall-split-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.shortfall-split-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-3);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+}
+
+.shortfall-split-input {
+  width: 5rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-base);
+  font-family: var(--font-mono);
+  text-align: right;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-fg);
+}
+
+.shortfall-split-input:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+  outline: none;
+}
+
+.shortfall-split-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.shortfall-split-toggle:hover {
+  color: var(--color-accent-hover);
+}
+
+/* ── No alternatives ─────────────────────────────────────────────── */
+
+.shortfall-no-alts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+}
+
+.shortfall-negative-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+  cursor: pointer;
+}
+
+.shortfall-negative-option input[type="checkbox"] {
+  accent-color: var(--color-warning);
+}
+
+.shortfall-negative-margin {
+  margin-top: var(--space-1);
+}
+
+/* ── Error banner ────────────────────────────────────────────────── */
+
+.shortfall-error {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-danger-subtle);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.shortfall-error p {
+  margin: 0;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+
+.shortfall-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.shortfall-warning {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-warning);
+}
+
+.shortfall-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}

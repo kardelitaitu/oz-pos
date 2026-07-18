@@ -1,0 +1,441 @@
+import { useState, useCallback } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { completeSaleWithResolvedShortfalls, type CompleteSaleWithResolvedShortfallsArgs, type ResolvedShortfall, type LocationAllocation, type PartialStockResult, type CartLineData, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
+import { Button } from '@/components/Button';
+import './StockShortfallDialog.css';
+
+export interface StockShortfallDialogProps {
+  /** The PartialStockResult received from the back-end. */
+  shortfallResult: PartialStockResult;
+  /** Cart line data needed to reconstruct the sale on retry. */
+  cartLines: CartLineData[];
+  /** Total sale amount in minor units. */
+  totalMinor: number;
+  /** ISO-4217 currency code. */
+  currency: string;
+  /** Payment method label. */
+  paymentMethod: string;
+  /** Tendered amount (if cash). */
+  tenderedMinor: number | null;
+  /** Payment splits (if split tender). */
+  paymentSplits?: PaymentSplitArg[] | null;
+  /** Customer ID (if selected). */
+  customerId?: string | null;
+  /** Customer name (for credit). */
+  customerName?: string | null;
+  /** Serial numbers (if track_serial products). */
+  serialNumbers?: SerialNumberArg[] | null;
+  /** Discount percentage. */
+  discountPercent: number;
+  /** Discount label. */
+  discountLabel?: string | null;
+  /** Called when the sale completes successfully after resolution. */
+  onComplete: () => void;
+  /** Called when the cashier cancels the sale. */
+  onCancel: () => void;
+}
+
+interface ShortfallResolutionState {
+  sku: string;
+  /** For simple mode: which alternative location to draw from entirely. */
+  selectedLocationId: string | null;
+  /** For split mode: per-location quantities. */
+  allocations: Record<string, number>;
+  /** Whether to allow negative stock (manager override). */
+  allowNegative: boolean;
+}
+
+/**
+ * Stock Shortfall Dialog — shown when a sale cannot be completed due to
+ * insufficient stock at the primary inventory location. The cashier can:
+ * - Pick an alternative location for each item
+ * - Split an item across multiple locations
+ * - Manager-override to allow negative stock
+ */
+export default function StockShortfallDialog({
+  shortfallResult,
+  cartLines,
+  totalMinor,
+  currency,
+  paymentMethod,
+  tenderedMinor,
+  paymentSplits = null,
+  customerId = null,
+  customerName,
+  serialNumbers,
+  discountPercent,
+  discountLabel,
+  onComplete,
+  onCancel,
+}: StockShortfallDialogProps) {
+  const { sessionToken } = useWorkspace();
+  const { l10n } = useLocalization();
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initialize resolution state for each shortfall
+  const [resolutions, setResolutions] = useState<ShortfallResolutionState[]>(
+    () => shortfallResult.shortfalls.map((s) => {
+      const defaultAlt = s.alternatives.length > 0 ? s.alternatives[0]!.locationId : null;
+      const alloc: Record<string, number> = {};
+      // Pre-fill split: if there's an alternative, default the whole deficit there
+      if (defaultAlt) {
+        alloc[defaultAlt] = s.deficit;
+      }
+      return {
+        sku: s.sku,
+        selectedLocationId: defaultAlt,
+        allocations: alloc,
+        allowNegative: false,
+      };
+    })
+  );
+
+  // Track which shortfall is in "split" mode
+  const [splitMode, setSplitMode] = useState<Record<string, boolean>>({});
+
+  const updateResolution = useCallback(
+    (sku: string, patch: Partial<ShortfallResolutionState>) => {
+      setResolutions((prev) =>
+        prev.map((r) => (r.sku === sku ? { ...r, ...patch } : r))
+      );
+    },
+    []
+  );
+
+  const toggleSplitMode = useCallback(
+    (sku: string) => {
+      setSplitMode((prev) => {
+        const next = { ...prev, [sku]: !prev[sku] };
+        return next;
+      });
+      // Reset allocations when toggling
+      updateResolution(sku, {
+        selectedLocationId: null,
+        allocations: {},
+      });
+    },
+    [updateResolution]
+  );
+
+  const handleLocationSelect = useCallback(
+    (sku: string, locationId: string, deficit: number) => {
+      updateResolution(sku, {
+        selectedLocationId: locationId,
+        allocations: { [locationId]: deficit },
+      });
+    },
+    [updateResolution]
+  );
+
+  const handleSplitQtyChange = useCallback(
+    (sku: string, locationId: string, qty: number, maxQty: number) => {
+      const clamped = Math.max(0, Math.min(qty, maxQty));
+      updateResolution(sku, {
+        allocations: {
+          ...(resolutions.find((r) => r.sku === sku)?.allocations ?? {}),
+          [locationId]: clamped,
+        },
+      });
+    },
+    [resolutions, updateResolution]
+  );
+
+  const handleAllowNegative = useCallback(
+    (sku: string, allowed: boolean) => {
+      updateResolution(sku, { allowNegative: allowed });
+    },
+    [updateResolution]
+  );
+
+  const handleConfirm = useCallback(async () => {
+    if (!sessionToken) {
+      console.warn('[ShortfallDialog] No session token — cannot complete sale');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Build resolved shortfalls
+      const resolvedShortfalls: ResolvedShortfall[] = resolutions.map((r) => {
+        // Find the original shortfall to get deficit
+        const orig = shortfallResult.shortfalls.find((s) => s.sku === r.sku);
+        const deficit = orig?.deficit ?? 0;
+
+        // If in simple mode (single location), create single allocation
+        const primaryLocId = orig?.primaryLocationId ?? '';
+
+        if (!splitMode[r.sku]) {
+          const locId = r.selectedLocationId ?? primaryLocId;
+          return {
+            sku: r.sku,
+            allocations: [{ locationId: locId, qty: deficit }],
+          };
+        }
+
+        // In split mode: build allocations from the state
+        const allocs: LocationAllocation[] = [];
+        let allocTotal = 0;
+
+        // Add resolved alternative allocations
+        if (r.allocations) {
+          for (const [locId, qty] of Object.entries(r.allocations)) {
+            if (qty > 0) {
+              allocs.push({ locationId: locId, qty });
+              allocTotal += qty;
+            }
+          }
+        }
+
+        // Auto-fill remaining deficit from primary if allocations don't sum up
+        const remaining = deficit - allocTotal;
+        if (remaining > 0) {
+          allocs.push({ locationId: primaryLocId, qty: remaining });
+        }
+
+        return { sku: r.sku, allocations: allocs };
+      });
+
+      const args: CompleteSaleWithResolvedShortfallsArgs = {
+        cartId: `resolved-${Date.now()}`,
+        paymentMethod,
+        tenderedMinor,
+        ...(customerId != null ? { customerId } : {}),
+        ...(customerName ? { customerName } : {}),
+        ...(paymentSplits ? { paymentSplits } : {}),
+        ...(serialNumbers ? { serialNumbers } : {}),
+        lines: cartLines,
+        totalMinor,
+        currency,
+        discountPercent,
+        ...(discountLabel ? { discountLabel } : {}),
+        resolutions: resolvedShortfalls,
+      };
+
+      await completeSaleWithResolvedShortfalls(sessionToken, args);
+      onComplete();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      console.error('[ShortfallDialog] Resolution failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    sessionToken,
+    resolutions,
+    shortfallResult,
+    splitMode,
+    paymentMethod,
+    tenderedMinor,
+    customerId,
+    customerName,
+    paymentSplits,
+    serialNumbers,
+    cartLines,
+    totalMinor,
+    currency,
+    discountPercent,
+    discountLabel,
+    onComplete,
+  ]);
+
+  if (shortfallResult.shortfalls.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="shortfall-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shortfall-dialog-aria')}>
+      <div className="shortfall-modal">
+        <div className="shortfall-header">
+          <div className="shortfall-header-icon">⚠</div>
+          <div>
+            <Localized id="shortfall-title">
+              <h2 className="shortfall-title">Insufficient Stock</h2>
+            </Localized>
+            <Localized id="shortfall-description">
+              <p className="shortfall-description">
+                Some items don&apos;t have enough stock at the primary location. Choose alternative sources below.
+              </p>
+            </Localized>
+          </div>
+        </div>
+
+        <div className="shortfall-list">
+          {shortfallResult.shortfalls.map((shortfall) => {
+            const resolution = resolutions.find((r) => r.sku === shortfall.sku);
+            const isSplit = splitMode[shortfall.sku] ?? false;
+
+            return (
+              <div key={shortfall.sku} className="shortfall-card">
+                <div className="shortfall-card-header">
+                  <div className="shortfall-card-info">
+                    <span className="shortfall-card-sku">#{shortfall.sku}</span>
+                    <span className="shortfall-card-name">{shortfall.productName}</span>
+                  </div>
+                  <div className="shortfall-card-quantities">
+                    <span className="shortfall-qty-label">
+                      <Localized id="shortfall-wanted">
+                        <span>Wanted</span>
+                      </Localized>
+                      : {shortfall.requestedQty}
+                    </span>
+                    <span className="shortfall-qty-label shortfall-qty-available">
+                      <Localized id="shortfall-available">
+                        <span>Available</span>
+                      </Localized>
+                      : <strong>{shortfall.primaryQtyAvailable}</strong>
+                    </span>
+                    <span className="shortfall-deficit">-{shortfall.deficit}</span>
+                  </div>
+                </div>
+
+                {/* Alternative locations */}
+                {shortfall.alternatives.length > 0 ? (
+                  <div className="shortfall-alternatives">
+                    <Localized id="shortfall-alternatives-label">
+                      <span className="shortfall-alternatives-label">Alternative locations:</span>
+                    </Localized>
+
+                    {!isSplit ? (
+                      // Simple mode: radio buttons
+                      <div className="shortfall-alt-list">
+                        {shortfall.alternatives.map((alt) => (
+                          // eslint-disable-next-line jsx-a11y/label-has-associated-control
+                          <label key={alt.locationId} className="shortfall-alt-option">
+                            <input
+                              type="radio"
+                              name={`alt-${shortfall.sku}`}
+                              checked={resolution?.selectedLocationId === alt.locationId}
+                              onChange={() =>
+                                handleLocationSelect(shortfall.sku, alt.locationId, shortfall.deficit)
+                              }
+                            />
+                            <span className="shortfall-alt-name">{alt.locationName}</span>
+                            <span className="shortfall-alt-qty">
+                              <Localized id="shortfall-alt-available">
+                                <span>available</span>
+                              </Localized>
+                              : {alt.qtyAvailable}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      // Split mode: quantity inputs per location
+                      <div className="shortfall-split-list">
+                        {shortfall.alternatives.map((alt) => {
+                          const currentQty = resolution?.allocations?.[alt.locationId] ?? 0;
+                          return (
+                            <div key={alt.locationId} className="shortfall-split-row">
+                              <span className="shortfall-alt-name">{alt.locationName}</span>
+                              <span className="shortfall-alt-qty">
+                                (<Localized id="shortfall-alt-available"><span>available</span></Localized>: {alt.qtyAvailable})
+                              </span>
+                              <Localized id="shortfall-split-qty-aria" attrs={{ 'aria-label': true }}>
+                                <input
+                                  type="number"
+                                  className="shortfall-split-input"
+                                  value={currentQty}
+                                  onChange={(e) =>
+                                    handleSplitQtyChange(
+                                      shortfall.sku,
+                                      alt.locationId,
+                                      parseInt(e.target.value, 10) || 0,
+                                      Math.min(alt.qtyAvailable, shortfall.deficit)
+                                    )
+                                  }
+                                  min={0}
+                                  max={Math.min(alt.qtyAvailable, shortfall.deficit)}
+                                  aria-label={`${alt.locationName} qty`}
+                                />
+                              </Localized>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Split toggle */}
+                    <button
+                      type="button"
+                      className="shortfall-split-toggle"
+                      onClick={() => toggleSplitMode(shortfall.sku)}
+                    >
+                      {isSplit ? (
+                        <Localized id="shortfall-simple-mode"><span>Use single location</span></Localized>
+                      ) : (
+                        <Localized id="shortfall-split-mode"><span>Split across locations</span></Localized>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="shortfall-no-alts">
+                    <Localized id="shortfall-no-alternatives">
+                      <span>No alternative locations with stock available.</span>
+                    </Localized>
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="shortfall-negative-option">
+                      <input
+                        type="checkbox"
+                        checked={resolution?.allowNegative ?? false}
+                        onChange={(e) => handleAllowNegative(shortfall.sku, e.target.checked)}
+                      />
+                      <Localized id="shortfall-negative-override">
+                        <span>Allow negative stock (Manager PIN override)</span>
+                      </Localized>
+                    </label>
+                  </div>
+                )}
+
+                {/* Manager override for allowed_negative_stock */}
+                {shortfall.alternatives.length > 0 && (
+                  // eslint-disable-next-line jsx-a11y/label-has-associated-control
+                  <label className="shortfall-negative-option shortfall-negative-margin">
+                    <input
+                      type="checkbox"
+                      checked={resolution?.allowNegative ?? false}
+                      onChange={(e) => handleAllowNegative(shortfall.sku, e.target.checked)}
+                    />
+                    <Localized id="shortfall-negative-override">
+                      <span>Allow negative stock (Manager PIN override)</span>
+                    </Localized>
+                  </label>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {error && (
+          <div className="shortfall-error">
+            <p>{error}</p>
+          </div>
+        )}
+
+        <div className="shortfall-footer">
+          <Localized id="shortfall-warehouse-warning">
+            <p className="shortfall-warning">
+              ⚠ Warehouse fulfillment may incur delivery charges.
+            </p>
+          </Localized>
+          <div className="shortfall-actions">
+            <Localized id="shortfall-cancel-btn">
+              <Button variant="ghost" onClick={onCancel} disabled={loading}>
+                Cancel Sale
+              </Button>
+            </Localized>
+            <Localized id="shortfall-confirm-btn">
+              <Button variant="primary" onClick={handleConfirm} loading={loading}>
+                Confirm & Continue
+              </Button>
+            </Localized>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

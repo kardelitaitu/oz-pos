@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
+import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
@@ -19,6 +19,7 @@ import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAcc
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { animDuration } from '@/utils/animation';
+import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
 import './PaymentModal.css';
 
 type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
@@ -112,6 +113,7 @@ export default function PaymentModal({
 
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
+  const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
 
   const [splitMode, setSplitMode] = useState(false);
   const [splits, setSplits] = useState<SplitRow[]>([
@@ -175,6 +177,7 @@ export default function PaymentModal({
       setSplitMode(false);
       setShowQr(false);
       setQrReference('');
+      setShortfallResult(null);
       setSelectedCurrency(total.currency);
       notifyCustomerChange(null);
       setCustomerSearchQuery('');
@@ -670,6 +673,14 @@ export default function PaymentModal({
       setDone(true);
     } catch (err) {
       console.error('[Sale] FAILED:', err);
+      // Try to detect PartialStockResult from the backend error
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const parsed = tryParsePartialStockResult(errMsg);
+      if (parsed) {
+        setShortfallResult(parsed);
+        return; // Don't show generic error — let the ShortfallDialog handle it
+      }
+      addToast({ message: 'Failed to complete sale. Please try again.', type: 'error' });
     } finally {
       setProcessing(false);
     }
@@ -695,14 +706,55 @@ export default function PaymentModal({
     if (!showCustomerSearch && !showQr) animateLeave(onClose);
   });
 
+  // Parse PartialStockResult from Tauri error messages
+  const tryParsePartialStockResult = (msg: string): PartialStockResult | null => {
+    try {
+      // Tauri wraps AppError with prefix; try to find JSON in the message
+      const jsonStart = msg.indexOf('{');
+      if (jsonStart < 0) return null;
+      const jsonStr = msg.substring(jsonStart);
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && parsed.requiresResolution && Array.isArray(parsed.shortfalls)) {
+        return parsed as PartialStockResult;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Reconstruct payment splits from the current split state (for shortfall retry)
+  const paymentSplitsFromState = useCallback((): PaymentSplitArg[] | undefined => {
+    if (!splitMode) return undefined;
+    const known: Record<string, number> = {
+      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
+      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
+    };
+    const exp = known[total.currency] ?? 2;
+    return splits.map((s) => ({
+      method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
+      amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
+    }));
+  }, [splitMode, splits, total.currency]);
+
+  // Reconstruct serial number args from the current serialNumbers prop
+  const serialNumberArgsFromState = useCallback((): SerialNumberArg[] | undefined => {
+    if (!serialNumbers) return undefined;
+    return Object.entries(serialNumbers)
+      .filter(([_, s]) => s.trim().length > 0)
+      .map(([lineId, serial]) => {
+        const line = lineItems.find((l) => String(l.id) === lineId);
+        return { sku: String(line?.sku ?? lineId), serial };
+      });
+  }, [serialNumbers, lineItems]);
+
   if (!open && !leaving) return null;
 
   const stateClass = leaving ? 'payment-overlay--exit' : 'payment-overlay--enter';
   const modalStateClass = leaving ? 'payment-modal--exit' : 'payment-modal--enter';
 
   return (
-    <Localized id="payment-dialog-aria" attrs={{ 'aria-label': true }}>
-    <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria')}>
+    <Localized id="payment-dialog-aria" attrs={{ 'aria-label': true }}>      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria')}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -712,6 +764,38 @@ export default function PaymentModal({
         onPaymentConfirmed={handleQrConfirmed}
       />
 
+      {shortfallResult && (
+        <StockShortfallDialog
+          shortfallResult={shortfallResult}
+          cartLines={lineItems.map((l) => ({
+            sku: l.sku,
+            qty: l.qty,
+            unitPriceMinor: l.unit_price.minor_units,
+          }))}
+          totalMinor={total.minor_units}
+          currency={total.currency}
+          paymentMethod={splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase()}
+          tenderedMinor={method === 'cash' && !splitMode ? Number(tenderedMinor) : null}
+          paymentSplits={paymentSplitsFromState() ?? null}
+          customerId={selectedCustomer?.id ?? null}
+          customerName={customerName.trim() || null}
+          serialNumbers={serialNumberArgsFromState() ?? null}
+          discountPercent={discountPercent}
+          discountLabel={discountLabel ?? null}
+          onComplete={() => {
+            setShortfallResult(null);
+            console.log('[Sale] Completed via shortfall resolution');
+            setDone(true);
+          }}
+          onCancel={() => {
+            setShortfallResult(null);
+            addToast({ message: 'Sale cancelled due to insufficient stock.', type: 'info' });
+            animateLeave(onClose);
+          }}
+        />
+      )}
+
+      {!shortfallResult && (
       <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
         {done ? (
           <div className="payment-done">
@@ -753,6 +837,14 @@ export default function PaymentModal({
               </button>
               </Localized>
             </div>
+
+            {tableNumber && (
+              <div className="payment-table-badge">
+                <Localized id="payment-table-number" vars={{ number: tableNumber }}>
+                  <span>Table {tableNumber}</span>
+                </Localized>
+              </div>
+            )}
 
             <div className="payment-total-row">
               <Localized id="payment-total-due">
@@ -1370,6 +1462,7 @@ export default function PaymentModal({
           </>
         )}
       </div>
+      )}
     </div>
     </Localized>
   );
