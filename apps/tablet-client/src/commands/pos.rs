@@ -64,7 +64,7 @@ pub async fn set_cart_discount(
         .load_active_cart(&args.cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
     cart.set_discount(percent, args.label);
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
     tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set");
     Ok(())
@@ -107,7 +107,7 @@ pub async fn start_sale(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
 
     Ok(StartSaleResult { cart_id: id })
@@ -190,7 +190,7 @@ pub async fn add_line(
     let line_total = line.total();
     cart.add_line(line)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
 
     Ok(AddLineResult {
@@ -250,7 +250,7 @@ pub async fn override_line_price(
     line.set_overridden_price(new_price)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
 
     tracing::info!(cart_id = %args.cart_id, line_id = %args.line_id, new_price_minor = args.new_price_minor, "line price overridden");

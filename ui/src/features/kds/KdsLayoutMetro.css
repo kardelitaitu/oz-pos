@@ -1,0 +1,22 @@
+/* ── Metro layout: responsive tile grid ────────────────────────────── */
+
+.kds-metro {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow-y: auto;
+  align-content: start;
+}
+
+.kds-metro .kds-ticket {
+  min-height: 160px;
+  justify-content: space-between;
+}
+
+@media (max-width: 800px) {
+  .kds-metro {
+    grid-template-columns: 1fr;
+  }
+}

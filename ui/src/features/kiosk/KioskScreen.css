@@ -20,8 +20,7 @@
 }
 
 .kiosk-attract-title {
-  /* No --text-* token exists at 4rem; kept as kiosk-specific hero size */
-  font-size: 4rem;
+  font-size: var(--text-hero);
   font-weight: var(--font-weight-bold);
   text-align: center;
 }

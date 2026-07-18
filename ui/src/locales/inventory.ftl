@@ -60,3 +60,53 @@ inv-report-no-results = No results found
 inv-search-results-aria = Search results
 inv-qty-field-aria = Quantity
 inv-reason-custom-field-aria = Describe the reason
+
+# Inventory Shifts
+inv-shift-start-title = Start Inventory Shift
+inv-shift-select-location = Select Location
+inv-shift-notes-label = Shift Notes
+inv-shift-notes-placeholder = e.g., Night shift count...
+inv-shift-start-btn = Start Shift
+inv-shift-active-info = { $user } — { $location } — Started { $time }
+inv-shift-end-btn = End Shift
+inv-shift-summary-title = Shift Summary
+inv-shift-summary-performed = Transactions performed during this shift:
+inv-shift-no-transactions = No transactions recorded.
+
+# Transit Audit
+inv-transit-title = Transit Stock Audit
+inv-transit-col-sku = SKU
+inv-transit-col-product = Product
+inv-transit-col-qty = Qty
+inv-transit-col-source = Source
+inv-transit-col-dest = Destination
+inv-transit-col-sent = Sent At
+inv-transit-col-overdue = Overdue
+inv-transit-reverse-btn = Reverse Transfer
+inv-transit-no-overdue = No overdue transit items.
+
+# Transaction Log
+inv-log-title = Inventory Transaction Log
+inv-log-filter-location = Location
+inv-log-filter-staff = Staff
+inv-log-filter-type = Type
+inv-log-filter-all = All
+inv-log-expand-btn = Details
+inv-log-col-barcode = Barcode Scanned
+
+# Threshold Config
+inv-threshold-title = Stock Threshold Configuration
+inv-threshold-col-sku = SKU
+inv-threshold-col-product = Product Name
+inv-threshold-col-location = Location
+inv-threshold-col-threshold = Threshold
+inv-threshold-add-btn = + Add Threshold
+inv-threshold-dialog-title = Configure Threshold
+inv-threshold-global-opt = Global (All Locations)
+
+# Stock Alert Panel
+inv-alert-title = Stock Alert Panel
+inv-alert-badge-count = { $count } Stock Alerts
+inv-alert-col-triggered = Triggered
+inv-alert-acknowledge-btn = Acknowledge
+

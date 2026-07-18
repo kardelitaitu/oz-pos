@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
+use oz_core::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
+use oz_core::inventory_transaction::InventoryTransactionId;
 use oz_core::{Money, Store};
 
 use oz_core::events::{ProductCreated, StockAdjusted};
@@ -108,13 +110,25 @@ pub async fn adjust_stock_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = state.store_with_tid(&db, tid);
-        store.adjust_stock_with_reason(
+        let tx = db
+            .unchecked_transaction()
+            .map_err(|e| AppError::Internal(format!("starting tx: {e}")))?;
+        let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
+        let new_qty = store.adjust_stock_at_location_with_reason(
+            &tx,
             &args.sku,
             args.delta,
+            &loc,
             Some(&args.reason),
-            Some(&session.terminal_id),
-            Some(&session.user_id),
-        )?
+            Some(&InventoryTransactionId::new()),
+            Some(&oz_core::terminal::TerminalId::from(
+                session.terminal_id.as_str(),
+            )),
+            Some(&oz_core::user::UserId::from(session.user_id.clone())),
+        )?;
+        tx.commit()
+            .map_err(|e| AppError::Internal(format!("commit tx: {e}")))?;
+        new_qty
     };
 
     // Publish the StockAdjusted domain event.

@@ -167,7 +167,7 @@
 
 .sales-report-heatmap-col-header {
   width: 1.75rem;
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   text-align: center;
   font-family: var(--font-mono);
@@ -182,7 +182,7 @@
 }
 
 .sales-report-heatmap-row-label {
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   font-family: var(--font-mono);
   text-align: right;

@@ -187,7 +187,7 @@
 .tablet-shell .product-grid [role="button"] {
   min-height: 64px;
   min-width: 64px;
-  padding: 12px;
+  padding: var(--space-3);
   font-size: var(--tablet-font-base);
   border-radius: var(--tablet-radius);
 }
@@ -212,7 +212,7 @@
 
 .tablet-shell ::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
-  border-radius: 3px; /* scrollbar thumb, sub-token design exception */
+  border-radius: var(--radius-sm);
 }
 
 .tablet-shell ::-webkit-scrollbar-thumb:hover {

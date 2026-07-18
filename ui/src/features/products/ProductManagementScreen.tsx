@@ -456,6 +456,7 @@ export default function ProductManagementScreen() {
                   <option value="retail">Retail</option>
                   <option value="restaurant">Restaurant</option>
                   <option value="both">Both</option>
+                  <option value="service">Service</option>
                 </select>
               </label>
 

@@ -16,28 +16,50 @@
 --      point at `inventory_locations` with `ON DELETE RESTRICT` so a
 --      location with in-flight transfers cannot be hard-deleted.
 --
+-- REBUILD PATTERN — POST v0.0.10 fix (criterion 19-1 batch):
+--
+-- The pre-v0.0.10 version of this migration used the classic SQLite
+-- pattern `ALTER TABLE stock_transfers RENAME TO stock_transfers_old` →
+-- `CREATE TABLE stock_transfers (...)` → `INSERT ... FROM stock_transfers_old`
+-- → `DROP TABLE stock_transfers_old`. That pattern triggers SQLite's
+-- implicit FK-reference renaming for the duration of the rename — every
+-- `REFERENCES stock_transfers(id)` text in `sqlite_master` is silently
+-- rewritten to `REFERENCES stock_transfers_old(id)`. After the DROP
+-- `stock_transfer_lines.transfer_id` was left pointing at a non-existent
+-- table name; subsequent `INSERT INTO stock_transfer_lines` panicked
+-- at runtime with "no such table: main.stock_transfers_old".
+--
+-- The safe pattern: `CREATE TABLE stock_transfers_new (...)` →
+-- `INSERT…SELECT FROM stock_transfers` → `DROP TABLE stock_transfers`
+-- → `ALTER TABLE stock_transfers_new RENAME TO stock_transfers`. The
+-- `RENAME INTO stock_transfers` step is on a NEW table that has never
+-- had a different name, so SQLite has no FK-rewriting work to do, and
+-- the `stock_transfer_lines.REFERENCES stock_transfers(id)` text is
+-- untouched. See https://sqlite.org/lang_altertable.html#otheralter
+-- for the documented limitation.
+--
 -- On the FK-chain concern:
 --   * `stock_transfer_lines.transfer_id REFERENCES stock_transfers(id) ON DELETE CASCADE`
 --     survives the rebuild because the new `stock_transfers.id` keeps the
---     same type (TEXT) and the same PRIMARY KEY constraint.
+--     same type (TEXT) and the same PRIMARY KEY constraint, and the FK
+--     reference text in `sqlite_master` is never rewritten.
 --   * `PRAGMA foreign_keys = OFF` is set around the rebuild so the
---     DROP TABLE of `stock_transfers_old` does not trigger cascades
---     from `stock_transfer_lines` (which FK-references the original table).
+--     DROP TABLE of `stock_transfers` does not trigger cascades from
+--     `stock_transfer_lines` (which FK-references the original table).
 --   * `PRAGMA foreign_keys = ON` is restored at the end so subsequent
 --     migration runs (and the production database) are back to FK-enforcing.
 --
 -- Insertion backfill: the ADR §7 form uses
 --   `COALESCE(source_location_id, '01926b3a-…-001')` for the FK columns,
--- but `stock_transfers_old` has NO `source_location_id` column — that
--- column is being created in this migration. The correct backfill is
--- to project the literal canonical default UUID into every copied row.
--- (See ADR §13 acceptance criterion 36 for the UUID-propagation rationale.)
+-- but the original `stock_transfers` table has NO `source_location_id`
+-- column — that column is being created in this migration. The correct
+-- backfill is to project the literal canonical default UUID into every
+-- copied row. (See ADR §13 acceptance criterion 36 for the UUID-propagation
+-- rationale.)
 
 PRAGMA foreign_keys = OFF;
 
-ALTER TABLE stock_transfers RENAME TO stock_transfers_old;
-
-CREATE TABLE stock_transfers (
+CREATE TABLE stock_transfers_new (
     id                     TEXT PRIMARY KEY,
     transfer_number        TEXT NOT NULL UNIQUE,
     status                 TEXT NOT NULL DEFAULT 'draft'
@@ -66,7 +88,7 @@ CREATE TABLE stock_transfers (
     updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
-INSERT INTO stock_transfers (
+INSERT INTO stock_transfers_new (
     id, transfer_number, status,
     source_location_old, destination_location_old,
     source_location_id, destination_location_id,
@@ -82,9 +104,11 @@ SELECT
     source_terminal_id, destination_terminal_id,
     notes, created_by, received_by,
     created_at, sent_at, received_at, updated_at
-FROM stock_transfers_old;
+FROM stock_transfers;
 
-DROP TABLE stock_transfers_old;
+DROP TABLE stock_transfers;
+
+ALTER TABLE stock_transfers_new RENAME TO stock_transfers;
 
 -- Recreate migration 047's indexes that were lost in DROP TABLE.
 -- (Pushing these into the CREATE TABLE body would also work; we keep them

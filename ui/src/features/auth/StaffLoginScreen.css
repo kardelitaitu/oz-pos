@@ -235,7 +235,6 @@
   object-fit: contain;
 }
 
-/* Small logo + store name for the PIN step */
 .staff-login-logo--small .staff-login-logo-img {
   width: clamp(48px, 10vw, 72px);
   height: clamp(48px, 10vw, 72px);
@@ -245,15 +244,6 @@
 .staff-login-logo--small svg {
   width: clamp(40px, 8vw, 56px);
   height: clamp(40px, 8vw, 56px);
-}
-
-.staff-login-store-name {
-  margin: 0;
-  font-size: clamp(var(--text-base), 3vw, var(--text-lg));
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-fg);
-  text-align: center;
-  letter-spacing: var(--tracking-tight);
 }
 
 /* ── Username form ───────────────────────────────────────────────── */

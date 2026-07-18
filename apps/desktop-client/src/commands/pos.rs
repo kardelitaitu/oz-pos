@@ -63,7 +63,7 @@ pub async fn set_cart_discount(
         .load_active_cart(&args.cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
     cart.set_discount(percent, args.label);
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
     tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set");
     Ok(())
@@ -120,7 +120,7 @@ pub async fn set_cart_discount_scoped(
         .load_active_cart(&args.cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
     cart.set_discount(percent, args.label);
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
     tracing::info!(cart_id = %args.cart_id, percent = %args.percent, "cart discount set (scoped)");
     Ok(())
@@ -166,13 +166,16 @@ pub async fn start_sale(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
 
     Ok(StartSaleResult { cart_id: id })
 }
 
 /// Start a new sale in the store resolved from a session token. ADR #7.
+///
+/// ADR-19 §5.1: resolves the primary deduction location from the workspace
+/// instance and locks it on the `active_carts` row at cart-start time.
 #[command]
 pub async fn start_sale_scoped(
     session_token: String,
@@ -190,13 +193,25 @@ pub async fn start_sale_scoped(
     let cart = Cart::new(currency);
     let id = cart.id();
 
-    let conn = state.resolve_store(&session_token)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    store.save_active_cart(&cart)?;
+
+    // Resolve the primary deduction location for this workspace instance.
+    let deduction_location_id =
+        oz_core::location_resolver::resolve_primary_location(&db, &session.instance_id, None)
+            .unwrap_or_else(|_| oz_core::location_resolver::get_default_location_id());
+
+    store.save_active_cart(&cart, Some(deduction_location_id.as_str()))?;
     drop(db);
+
+    tracing::info!(
+        cart_id = %id,
+        deduction_location_id = %deduction_location_id,
+        "cart created with deduction location lock",
+    );
 
     Ok(StartSaleResult { cart_id: id })
 }
@@ -315,7 +330,7 @@ pub async fn add_line(
     let line_total = line.total();
     cart.add_line(line)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
 
     Ok(AddLineResult {
@@ -325,6 +340,10 @@ pub async fn add_line(
 }
 
 /// Add a line to an active cart in the store resolved from a session token. ADR #7.
+///
+/// ADR-19 §5.1: rejects the command when the cart has no `deduction_location_id`
+/// lock (carts must be created via `start_sale_scoped` which resolves and locks
+/// the deduction location at cart-start time).
 #[command]
 pub async fn add_line_scoped(
     session_token: String,
@@ -336,6 +355,17 @@ pub async fn add_line_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    // ADR-19 §5.1: reject add_line when the cart has no deduction location lock.
+    store
+        .ensure_cart_deduction_location_lock(&args.cart_id)
+        .map_err(|_| {
+            AppError::Invalid(format!(
+                "cart {} has no deduction location lock — create via start_sale_scoped first",
+                args.cart_id
+            ))
+        })?;
+
     let mut cart = store
         .load_active_cart(&args.cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", args.cart_id)))?;
@@ -350,7 +380,7 @@ pub async fn add_line_scoped(
     let line_total = line.total();
     cart.add_line(line)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
     drop(db);
 
     Ok(AddLineResult {
@@ -463,7 +493,7 @@ fn run_override_line_price(
     line.set_overridden_price(new_price)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
-    store.save_active_cart(&cart)?;
+    store.save_active_cart(&cart, None)?;
 
     tracing::info!(%cart_id, %line_id, new_price_minor, "line price overridden");
     Ok(())
@@ -843,10 +873,10 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     }
 
     // Apply discount if configured
-    if args.discount_percent > 0 {
-        if let Ok(pct) = foundation::Percentage::new(args.discount_percent as u8) {
-            cart.set_discount(pct, args.discount_label.clone());
-        }
+    if args.discount_percent > 0
+        && let Some(pct) = foundation::Percentage::new(args.discount_percent as u8)
+    {
+        cart.set_discount(pct, args.discount_label.clone());
     }
 
     let line_count = cart.line_count();
@@ -861,7 +891,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     let sale_id = sale.id.clone();
 
     // ── Lock: Compute tax + execute the resolved deduction ────────
-    let result = {
+    let _result = {
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -943,10 +973,6 @@ pub async fn complete_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)

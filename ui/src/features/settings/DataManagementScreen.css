@@ -48,7 +48,7 @@
   width: 0;
   height: 2px;
   background: var(--color-accent);
-  border-radius: 1px;
+  border-radius: var(--radius-sm);
   transition: width var(--duration-200) var(--ease-out),
               left var(--duration-200) var(--ease-out);
 }

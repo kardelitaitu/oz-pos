@@ -1027,10 +1027,6 @@ impl Store<'_> {
     /// (not `inventory`) will pass the §3.1 path but fail this wrapper with
     /// phantom zero stock — a §3.4 migration foot-gun. The §3.4 follow-up
     /// should explicitly migrate Layer-1 reads to `stock_summary`.
-    #[deprecated(
-        note = "Use adjust_stock_at_location_with_reason (§3.1). §3.4 demotion \
-                deferred to v0.1.0 — see inline docstring for migration notes."
-    )]
     pub fn adjust_stock_with_reason(
         &self,
         sku: &str,
@@ -2313,15 +2309,22 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        store(&conn)
-            .adjust_stock_with_reason(
-                "DRINK-001",
-                -3,
-                Some("sale"),
-                Some("term-1"),
-                Some("user-1"),
-            )
-            .unwrap();
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "DRINK-001",
+            -3,
+            &loc,
+            Some("sale"),
+            None,
+            Some(&crate::terminal::TerminalId::from("term-1")),
+            Some(&crate::user::UserId::from("user-1")),
+        )
+        .unwrap();
+        tx.commit().unwrap();
 
         // Verify ledger row was written.
         let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
@@ -2383,15 +2386,23 @@ mod tests {
         // Write 5 movements (migration backfill ran against empty inventory,
         // so only these 5 adjust_stock calls create rows).
         for _i in 0..5 {
-            store(&conn)
-                .adjust_stock_with_reason(
-                    "DRINK-001",
-                    1,
-                    Some("restock"),
-                    Some("term-1"),
-                    Some("user-1"),
-                )
-                .unwrap();
+            let s = store(&conn);
+            let tx = conn.unchecked_transaction().unwrap();
+            let loc = crate::inventory::LocationId::from(
+                crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            );
+            s.adjust_stock_at_location_with_reason(
+                &tx,
+                "DRINK-001",
+                1,
+                &loc,
+                Some("restock"),
+                None,
+                Some(&crate::terminal::TerminalId::from("term-1")),
+                Some(&crate::user::UserId::from("user-1")),
+            )
+            .unwrap();
+            tx.commit().unwrap();
         }
 
         // With limit 3, should return 3 most recent.
@@ -2408,15 +2419,22 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        store(&conn)
-            .adjust_stock_with_reason(
-                "DRINK-001",
-                -5,
-                Some("sale"),
-                Some("term-kitchen"),
-                Some("user-alice"),
-            )
-            .unwrap();
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "DRINK-001",
+            -5,
+            &loc,
+            Some("sale"),
+            None,
+            Some(&crate::terminal::TerminalId::from("term-kitchen")),
+            Some(&crate::user::UserId::from("user-alice")),
+        )
+        .unwrap();
+        tx.commit().unwrap();
 
         let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
         assert_eq!(movements.len(), 1);
@@ -2951,9 +2969,9 @@ mod tests {
         }
     }
 
-    /// `adjust_stock_at_location_with_reason` with positive delta credits the
-    /// location from zero — covers the restock path used by purchase-order
-    /// receive + manual restock flows (ADR-19 §3.2 + §6 sale-void inverse).
+    // `adjust_stock_at_location_with_reason` with positive delta credits the
+    // location from zero — covers the restock path used by purchase-order
+    // receive + manual restock flows (ADR-19 §3.2 + §6 sale-void inverse).
     // ── adjust_stock_batch tests (ADR-19 §3) ──────────────────
 
     /// ADR-19 §16.2: empty batch is a no-op.

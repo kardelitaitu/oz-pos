@@ -1,4 +1,4 @@
-/* ── Kitchen Display System: full-screen order queue ──────────────── */
+/* ── Kitchen Display System: shell ─────────────────────────────────── */
 
 .kds {
   --kds-bg: #1a1a2e;
@@ -35,26 +35,33 @@
   overflow: hidden;
 }
 
-/* Selective user-select: chrome only — ticket content remains selectable */
-.kds-header,
-.kds-column-title,
-.kds-order-count,
-.kds-column-count {
-  user-select: none;
-}
+/* ── Header ────────────────────────────────────────────────────────── */
 
 .kds-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-4) var(--space-8);
+  padding: var(--space-3) var(--space-6);
   background: var(--kds-header-bg);
   border-bottom: 2px solid var(--kds-header-border);
+  user-select: none;
+}
+
+.kds-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.kds-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .kds-title {
   margin: 0;
-  font-size: var(--text-3xl);
+  font-size: var(--text-2xl);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -63,7 +70,10 @@
   font-size: var(--text-lg);
   font-weight: 600;
   color: var(--kds-muted);
+  user-select: none;
 }
+
+/* ── Error banner ──────────────────────────────────────────────────── */
 
 .kds-error {
   margin: var(--space-2) var(--space-4);
@@ -75,94 +85,7 @@
   font-size: var(--text-base);
 }
 
-/* ── Three-column layout ──────────────────────────────────────────── */
-
-.kds-columns {
-  display: flex;
-  flex: 1;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  overflow: hidden;
-}
-
-.kds-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--kds-column-bg);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-}
-
-.kds-column--pending {
-  border-top: 4px solid var(--kds-pending);
-}
-
-.kds-column--preparing {
-  border-top: 4px solid var(--kds-preparing);
-}
-
-.kds-column--ready {
-  border-top: 4px solid var(--kds-ready);
-}
-
-.kds-column-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  padding: var(--space-4) var(--space-5);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  color: var(--kds-text);
-}
-
-.kds-column-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.75rem;
-  height: 1.75rem;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-2xl);
-  font-size: var(--text-base);
-  font-weight: 700;
-}
-
-.kds-column--pending .kds-column-count {
-  background: var(--kds-pending);
-  color: var(--kds-bg);
-}
-
-.kds-column--preparing .kds-column-count {
-  background: var(--kds-preparing);
-  color: var(--kds-badge-text);
-}
-
-.kds-column--ready .kds-column-count {
-  background: var(--kds-ready);
-  color: var(--kds-badge-text);
-}
-
-/* ── Ticket list ──────────────────────────────────────────────────── */
-
-.kds-tickets {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2_5);
-}
-
-.kds-empty {
-  text-align: center;
-  color: var(--kds-dim);
-  font-size: var(--text-md);
-  margin-top: var(--space-10);
-}
-
-/* ── Ticket card ──────────────────────────────────────────────────── */
+/* ── Shared ticket card styles (used by all layouts) ───────────────── */
 
 .kds-ticket {
   display: flex;
@@ -197,20 +120,6 @@
   box-shadow: 0 2px 8px var(--kds-shadow);
 }
 
-.kds-column--pending .kds-ticket {
-  border-left: 4px solid var(--kds-pending);
-}
-
-.kds-column--preparing .kds-ticket {
-  border-left: 4px solid var(--kds-preparing);
-}
-
-.kds-column--ready .kds-ticket {
-  border-left: 4px solid var(--kds-ready);
-}
-
-/* ── SLA level color modifiers ─────────────────────────────────── */
-
 .kds-ticket--green {
   --sla-glow: rgba(16, 185, 129, 0.25);
   box-shadow: inset 0 0 0 1px transparent;
@@ -243,18 +152,31 @@
   }
 }
 
-/* ── Ticket header ──────────────────────────────────────────────── */
-
 .kds-ticket-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
+.kds-ticket-id-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .kds-ticket-number {
   font-size: var(--text-2xl);
   font-weight: 800;
   color: var(--kds-ticket-number);
+}
+
+.kds-ticket-table {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--kds-subtle);
+  background: var(--kds-column-bg);
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-md);
 }
 
 .kds-ticket-time {
@@ -264,6 +186,7 @@
   background: var(--kds-column-bg);
   padding: var(--space-0_5) var(--space-2_5);
   border-radius: var(--radius-3xl);
+  flex-shrink: 0;
 }
 
 .kds-ticket-time--green {
@@ -305,7 +228,14 @@
   color: var(--kds-subtle);
 }
 
-/* ── Workspace wrapper (used by AppShell when KDS is a standalone workspace) ── */
+.kds-empty {
+  text-align: center;
+  color: var(--kds-dim);
+  font-size: var(--text-md);
+  margin-top: var(--space-10);
+}
+
+/* ── Workspace wrapper (used by AppShell when KDS is standalone) ──── */
 
 .kds-workspace {
   display: flex;
@@ -347,17 +277,4 @@
 
 .kds-workspace .kds {
   flex: 1;
-}
-
-/* ── Responsive: stack columns on small screens ───────────────────── */
-
-@media (max-width: 800px) {
-  .kds-columns {
-    flex-direction: column;
-    overflow-y: auto;
-  }
-
-  .kds-column {
-    min-height: 12.5rem;
-  }
 }

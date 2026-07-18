@@ -104,6 +104,11 @@
   background: var(--color-success-bg);
   color: var(--color-success);
 }
+/* Service badge uses muted indigo/violet to distinguish non-inventory items */
+.product-mgmt-type--service {
+  background: #ede9fe;
+  color: #5b21b6;
+}
 
 .product-mgmt-stock-ok {
   color: var(--color-success);

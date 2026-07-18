@@ -387,7 +387,7 @@
   justify-content: center;
   min-width: 1.125rem;
   height: 1.125rem;
-  padding: 0 0.3125rem; /* design exception: 5px, no exact space token */
+  padding: 0 var(--space-1_5);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   color: var(--color-accent-fg);

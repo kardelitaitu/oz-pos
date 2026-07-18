@@ -295,7 +295,7 @@
   background: var(--color-bg-surface);
   color: var(--color-primary-pos);
   border-bottom: 2px solid var(--color-primary-pos);
-  margin-bottom: -2px;
+  margin-bottom: calc(-1 * var(--space-0_5));
   font-weight: var(--font-weight-bold);
 }
 

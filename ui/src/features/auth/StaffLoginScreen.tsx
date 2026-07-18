@@ -399,8 +399,6 @@ export default function StaffLoginScreen() {
 
   // ── Render ───────────────────────────────────────────────────
 
-  const storeName = brandSettings?.store_name || '';
-
   // Focus management: clicking anywhere refocuses the active input
   const handleScreenKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -440,7 +438,6 @@ export default function StaffLoginScreen() {
           {step === 'username' && renderLogo()}
           {step === 'pin' && (
             <div className="staff-login-pin-top">
-              {storeName && <p className="staff-login-store-name">{storeName}</p>}
               {renderPinDots()}
             </div>
           )}

@@ -108,6 +108,17 @@
   color: var(--color-fg);
 }
 
+.payment-table-badge {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-accent-active);
+  background: var(--color-accent-subtle);
+  border-top: 1px solid var(--color-border);
+}
+
 .payment-total-row {
   display: flex;
   justify-content: space-between;

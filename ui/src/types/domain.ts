@@ -78,8 +78,8 @@ export interface Product {
   readonly createdAt?: string;
   /** ISO-8601 timestamp of the last price change. */
   readonly priceUpdatedAt?: string;
-  /** Product type: "retail" | "restaurant" | "both". */
-  readonly productType: 'retail' | 'restaurant' | 'both';
+  /** Product type: "retail" | "restaurant" | "both" | "service". */
+  readonly productType: 'retail' | 'restaurant' | 'both' | 'service';
 }
 
 /** Mirrors `AppError` in `apps/desktop-client/src/error.rs`. */
