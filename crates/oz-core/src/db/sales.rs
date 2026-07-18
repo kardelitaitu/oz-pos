@@ -297,7 +297,7 @@ impl Store<'_> {
             // cleaner, but for now we use the standard result type pattern.
             // The caller (Tauri command) matches on the return variant.
             return Err(CoreError::Validation {
-                field: "stock".into(),
+                field: "stock",
                 message: serde_json::to_string(&crate::sale_deduction::PartialStockResult {
                     requires_resolution: true,
                     shortfalls,
@@ -778,14 +778,14 @@ impl Store<'_> {
 
         let v: serde_json::Value =
             serde_json::from_str(&deduction_locations_json).map_err(|e| CoreError::Validation {
-                field: "deduction_locations".into(),
+                field: "deduction_locations",
                 message: e.to_string(),
             })?;
 
         if let Some(lines) = v["lines"].as_array() {
             for line in lines {
                 let sku = line["sku"].as_str().ok_or_else(|| CoreError::Validation {
-                    field: "sku".into(),
+                    field: "sku",
                     message: "missing sku in deduction_locations".into(),
                 })?;
                 if let Some(deductions) = line["deductions"].as_array() {
@@ -794,11 +794,11 @@ impl Store<'_> {
                             d["location_id"]
                                 .as_str()
                                 .ok_or_else(|| CoreError::Validation {
-                                    field: "location_id".into(),
+                                    field: "location_id",
                                     message: "missing location_id in deductions".into(),
                                 })?;
                         let qty = d["qty"].as_i64().ok_or_else(|| CoreError::Validation {
-                            field: "qty".into(),
+                            field: "qty",
                             message: "missing qty in deductions".into(),
                         })?;
 

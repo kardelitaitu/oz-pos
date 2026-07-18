@@ -812,28 +812,27 @@ impl Store<'_> {
             .unwrap_or(0);
 
         let mut allow_negative = false;
-        if let Some(t_id) = terminal_id {
-            if let Ok(ws_id) = tx.query_row(
+        if let Some(t_id) = terminal_id
+            && let Ok(ws_id) = tx.query_row(
                 "SELECT workspace_instance_id FROM terminals WHERE id = ?1",
                 rusqlite::params![t_id.as_str()],
                 |row| row.get::<_, String>(0),
-            ) {
-                if let Ok(allowed) = tx.query_row(
-                    "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
+            )
+            && let Ok(allowed) = tx.query_row(
+                "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
                      WHERE instance_id = ?1 AND location_id = ?2",
-                    rusqlite::params![ws_id, location_id.as_str()],
-                    |row| row.get::<_, i64>(0),
-                ) {
-                    allow_negative = allowed == 1;
-                }
-            }
+                rusqlite::params![ws_id, location_id.as_str()],
+                |row| row.get::<_, i64>(0),
+            )
+        {
+            allow_negative = allowed == 1;
         }
 
         let new_qty = if allow_negative {
             current_qty
                 .checked_add(delta)
                 .ok_or_else(|| CoreError::Validation {
-                    field: "qty".into(),
+                    field: "qty",
                     message: "overflow".into(),
                 })?
         } else {
@@ -958,21 +957,20 @@ impl Store<'_> {
                 .unwrap_or(0);
 
             let mut allow_negative = false;
-            if let Some(t_id) = terminal_id {
-                if let Ok(ws_id) = tx.query_row(
+            if let Some(t_id) = terminal_id
+                && let Ok(ws_id) = tx.query_row(
                     "SELECT workspace_instance_id FROM terminals WHERE id = ?1",
                     rusqlite::params![t_id.as_str()],
                     |row| row.get::<_, String>(0),
-                ) {
-                    if let Ok(allowed) = tx.query_row(
-                        "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
+                )
+                && let Ok(allowed) = tx.query_row(
+                    "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
                          WHERE instance_id = ?1 AND location_id = ?2",
-                        rusqlite::params![ws_id, d.location_id.as_str()],
-                        |row| row.get::<_, i64>(0),
-                    ) {
-                        allow_negative = allowed == 1;
-                    }
-                }
+                    rusqlite::params![ws_id, d.location_id.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )
+            {
+                allow_negative = allowed == 1;
             }
 
             if !allow_negative {

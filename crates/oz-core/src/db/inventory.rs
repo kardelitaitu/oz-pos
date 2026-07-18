@@ -40,7 +40,7 @@ impl Store<'_> {
             "store" | "warehouse" | "transit" | "damaged" | "virtual" => {}
             other => {
                 return Err(CoreError::Validation {
-                    field: "type".into(),
+                    field: "type",
                     message: format!("invalid location type: {}", other),
                 });
             }
@@ -96,7 +96,7 @@ impl Store<'_> {
             "store" | "warehouse" | "transit" | "damaged" | "virtual" => {}
             other => {
                 return Err(CoreError::Validation {
-                    field: "type".into(),
+                    field: "type",
                     message: format!("invalid location type: {}", other),
                 });
             }
@@ -135,7 +135,7 @@ impl Store<'_> {
 
         if stock_count > 0 {
             return Err(CoreError::Validation {
-                field: "location".into(),
+                field: "location",
                 message: "cannot deactivate location with active stock".into(),
             });
         }
@@ -153,7 +153,7 @@ impl Store<'_> {
 
         if transfer_count > 0 {
             return Err(CoreError::Validation {
-                field: "location".into(),
+                field: "location",
                 message: "cannot deactivate location with pending stock transfers".into(),
             });
         }
@@ -261,7 +261,7 @@ impl Store<'_> {
 
         if active_count > 0 {
             return Err(CoreError::Validation {
-                field: "shift".into(),
+                field: "shift",
                 message: "user already has an active inventory shift open".into(),
             });
         }

@@ -57,16 +57,15 @@ impl InventoryStockHandler {
         };
 
         // Non-inventory product types (service, etc.) have no stock — skip.
-        if let Ok(Some(ref pt)) = store.product_type_by_id(&product_id) {
-            if let Some(product_type) = oz_core::ProductType::parse_str(pt) {
-                if !product_type.tracks_inventory() {
-                    info!(
-                        sku,
-                        "inventory handler: skipping non-inventory product — no stock to deduct"
-                    );
-                    return;
-                }
-            }
+        if let Ok(Some(ref pt)) = store.product_type_by_id(&product_id)
+            && let Some(product_type) = oz_core::ProductType::parse_str(pt)
+            && !product_type.tracks_inventory()
+        {
+            info!(
+                sku,
+                "inventory handler: skipping non-inventory product — no stock to deduct"
+            );
+            return;
         }
 
         // Check if this product has a recipe (BOM ingredients).
