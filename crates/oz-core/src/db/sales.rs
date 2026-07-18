@@ -827,6 +827,7 @@ impl Store<'_> {
             ],
         )?;
 
+        tx.commit()?;
         Ok(())
     }
 }
@@ -2878,5 +2879,241 @@ mod tests {
             )
             .unwrap();
         assert_eq!(stock_wh, 20, "loc-wh untouched");
+    }
+
+    // ── ADR-19 §16.2 acceptance tests ──────────────────────────────
+
+    /// Multi-binding sale with insufficient primary stock → shortfall
+    /// returned AND no sale row persists (full rollback).
+    #[test]
+    fn complete_sale_partial_shortfall_rolls_back_sale_row() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // ── set up a multi-binding workspace ────────────────────────
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES
+                ('loc-pri', 'Primary', 'store'),
+                ('loc-sec', 'Secondary', 'warehouse');
+             INSERT OR IGNORE INTO store_profiles (id, name, is_primary) VALUES ('store-1', 'Test Store', 1);
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name)
+                VALUES ('ws-multi-test',
+                    (SELECT key FROM workspace_types LIMIT 1),
+                    'store-1', 'Multi-Test');
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order)
+                VALUES ('wsl-pri', 'ws-multi-test', 'loc-pri', 1, 0),
+                       ('wsl-sec', 'ws-multi-test', 'loc-sec', 0, 1);",
+        )
+        .unwrap();
+        let product_id = seed_product_with_stock(&conn, "COFFEE", 0);
+        // Stock only at the secondary location (primary has 0).
+        conn.execute(
+            "INSERT OR REPLACE INTO stock_summary (item_id, location_id, qty) VALUES (?1, 'loc-sec', 5)",
+            rusqlite::params![product_id],
+        )
+        .unwrap();
+
+        let sale = make_single_line_sale("COFFEE", 2, 350);
+        let err = s
+            .complete_sale_deduction(&sale, Some("ws-multi-test"), &[], "cashier-1", None)
+            .unwrap_err();
+
+        match &err {
+            CoreError::Validation { field, message } if *field == "stock" => {
+                let psr: crate::sale_deduction::PartialStockResult =
+                    serde_json::from_str(message).unwrap();
+                assert!(psr.requires_resolution);
+                assert_eq!(psr.shortfalls.len(), 1);
+                assert_eq!(psr.shortfalls[0].sku, "COFFEE");
+                assert_eq!(
+                    psr.shortfalls[0].primary_location_id,
+                    crate::inventory::LocationId::from("loc-pri")
+                );
+                assert_eq!(psr.shortfalls[0].primary_qty_available, 0);
+                assert_eq!(psr.shortfalls[0].deficit, 2);
+                // Should have loc-sec as an alternative
+                assert!(
+                    psr.shortfalls[0]
+                        .alternatives
+                        .iter()
+                        .any(|a| a.location_id == crate::inventory::LocationId::from("loc-sec")),
+                    "expected loc-sec as alternative"
+                );
+            }
+            other => panic!("expected Validation error with field=stock, got {other:?}"),
+        }
+
+        // Verify NO sale row was created (full rollback).
+        let sale_exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM sales WHERE id = ?1",
+                rusqlite::params![sale.id],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        assert!(
+            !sale_exists,
+            "sale row must not exist after shortfall rollback"
+        );
+    }
+
+    /// Void of a multi-location pending sale credits stock back to
+    /// each original deduction source (ADR-19 §5.3 / §16.2).
+    #[test]
+    fn void_sale_credits_back_to_original_deduction_source() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_a = "loc-v-a";
+        let loc_b = "loc-v-b";
+
+        // ── create a sale with split-location deduction_locations ───
+        setup_locations_with_stock(&conn, "TEA", loc_a, 10, loc_b, 5);
+        let sale = make_single_line_sale("TEA", 8, 200);
+        let resolution = crate::sale_deduction::ResolvedShortfall {
+            sku: "TEA".into(),
+            allocations: vec![
+                crate::sale_deduction::LocationAllocation {
+                    location_id: crate::inventory::LocationId::from(loc_a),
+                    qty: 5,
+                },
+                crate::sale_deduction::LocationAllocation {
+                    location_id: crate::inventory::LocationId::from(loc_b),
+                    qty: 3,
+                },
+            ],
+        };
+        s.complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &[],
+            "cashier-1",
+            None,
+            &[resolution],
+        )
+        .unwrap();
+
+        // Confirm stock was deducted.
+        let stock_a_before: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
+                 (SELECT id FROM products WHERE sku = 'TEA') AND location_id = ?1",
+                rusqlite::params![loc_a],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock_a_before, 5, "loc-a had 10, deducted 5 → 5");
+
+        let stock_b_before: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
+                 (SELECT id FROM products WHERE sku = 'TEA') AND location_id = ?1",
+                rusqlite::params![loc_b],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock_b_before, 2, "loc-b had 5, deducted 3 → 2");
+
+        // ── void the pending sale ───────────────────────────────────
+        s.void_pending_sale(&sale.id).unwrap();
+
+        // Verify stock was credited BACK to each location.
+        let stock_a_after: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
+                 (SELECT id FROM products WHERE sku = 'TEA') AND location_id = ?1",
+                rusqlite::params![loc_a],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock_a_after, 10, "loc-a credited back to original 10");
+
+        let stock_b_after: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
+                 (SELECT id FROM products WHERE sku = 'TEA') AND location_id = ?1",
+                rusqlite::params![loc_b],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock_b_after, 5, "loc-b credited back to original 5");
+
+        // Verify sale status is voided.
+        let loaded = s.get_sale(&sale.id).unwrap().unwrap();
+        assert_eq!(loaded.status, SaleStatus::Voided);
+    }
+
+    /// Two threads attempting complete_sale_deduction on the same SKU:
+    /// one succeeds, the other fails with a constraint/serialization error
+    /// thanks to BEGIN IMMEDIATE (ADR-19 §5.2).
+    #[test]
+    fn concurrent_complete_sale_serialized_by_begin_immediate() {
+        // Use a file-based DB so two connections can access it concurrently.
+        let dir = std::env::temp_dir().join(format!("oz_concurrent_{}", uuid::Uuid::now_v7()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("test.db");
+
+        // Clone the schema from a fresh_db() snapshot into the file DB.
+        {
+            let mut file_conn = rusqlite::Connection::open(&db_path).unwrap();
+            {
+                let template = crate::migrations::fresh_db();
+                let backup = rusqlite::backup::Backup::new(&template, &mut file_conn).unwrap();
+                backup
+                    .run_to_completion(10, std::time::Duration::from_millis(0), None)
+                    .unwrap();
+            }
+            let pid = uuid::Uuid::now_v7().to_string();
+            file_conn
+                .execute(
+                    "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+                     VALUES (?1, 'COFFEE', 'Coffee', 1000, 'USD', 'retail')",
+                    rusqlite::params![pid],
+                )
+                .unwrap();
+            file_conn
+                .execute(
+                    "INSERT INTO stock_summary (item_id, location_id, qty) VALUES (?1, ?2, 2)",
+                    rusqlite::params![pid, crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+                )
+                .unwrap();
+        }
+
+        let sale = std::sync::Arc::new(make_single_line_sale("COFFEE", 2, 350));
+
+        let mut handles = Vec::new();
+        for i in 0..2 {
+            let p = db_path.clone();
+            let sl = sale.clone();
+            handles.push(std::thread::spawn(move || {
+                let conn = rusqlite::Connection::open(&p).unwrap();
+                let store = Store::new(&conn);
+                let result = store.complete_sale_deduction(&sl, None, &[], "cashier-1", None);
+                (i, result)
+            }));
+        }
+
+        let mut success_count = 0;
+        let mut failure_count = 0;
+        for h in handles {
+            match h.join().unwrap() {
+                (_, Ok(_)) => success_count += 1,
+                (i, Err(e)) => {
+                    failure_count += 1;
+                    tracing::info!(thread = i, error = %e, "concurrent sale failed as expected");
+                }
+            }
+        }
+
+        assert_eq!(
+            success_count, 1,
+            "exactly one thread should succeed with BEGIN IMMEDIATE"
+        );
+        assert!(
+            failure_count >= 1,
+            "second thread should fail with serialization error"
+        );
+
+        // Clean up.
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
