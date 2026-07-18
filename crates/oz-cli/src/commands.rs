@@ -327,6 +327,7 @@ pub(crate) fn run_inventory_get(store: &Store<'_>, sku: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(deprecated)]
 pub(crate) fn run_inventory_adjust(store: &Store<'_>, sku: &str, delta: i64) -> Result<()> {
     let new_qty = store.adjust_stock(sku, delta).map_err(|e| match &e {
         CoreError::NotFound { .. } => anyhow::anyhow!("Product not found: {sku}"),

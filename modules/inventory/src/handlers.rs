@@ -42,6 +42,7 @@ impl InventoryStockHandler {
     /// If the product has a recipe, deduct each ingredient by
     /// `qty_sold × quantity_required`. Otherwise, deduct the
     /// product itself.
+    #[allow(deprecated)]
     fn handle_line(&self, store: &Store<'_>, sku: &str, qty: i64) {
         // Look up the product ID by SKU.
         let product_id = match store.product_id_by_sku(sku) {

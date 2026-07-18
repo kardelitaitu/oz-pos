@@ -726,6 +726,8 @@ impl Store<'_> {
     /// Writes a delta row to the `stock_movements` ledger (ADR #6)
     /// and updates the materialised `inventory` and `stock_summary` tables.
     /// The `reason` parameter is recorded in the ledger for audit purposes.
+    #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
+    #[allow(deprecated)]
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {
         self.adjust_stock_with_reason(sku, delta, None, None, None)
     }
@@ -1027,6 +1029,7 @@ impl Store<'_> {
     /// (not `inventory`) will pass the §3.1 path but fail this wrapper with
     /// phantom zero stock — a §3.4 migration foot-gun. The §3.4 follow-up
     /// should explicitly migrate Layer-1 reads to `stock_summary`.
+    #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
     pub fn adjust_stock_with_reason(
         &self,
         sku: &str,

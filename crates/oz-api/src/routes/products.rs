@@ -180,6 +180,7 @@ pub async fn create_product(
 /// - 200 — stock adjusted successfully
 /// - 404 — product not found
 /// - 422 — adjustment would cause negative stock
+#[allow(deprecated)]
 pub async fn patch_stock(
     State(state): State<AppState>,
     Path(sku): Path<String>,

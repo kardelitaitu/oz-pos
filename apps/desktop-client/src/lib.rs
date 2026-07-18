@@ -54,6 +54,7 @@ use tauri::Manager;
 /// registers all Tauri commands, and starts the event loop. Mobile
 /// builds use the same code via `#[cfg_attr(mobile, tauri::mobile_entry_point)]`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(deprecated)]
 pub fn run() {
     // Initialise tokio-console before any other tracing setup.
     platform_startup::console::init_console_subscriber();

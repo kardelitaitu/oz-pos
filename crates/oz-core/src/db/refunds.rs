@@ -258,7 +258,9 @@ impl Store<'_> {
             )?;
         }
 
-        // Emit a warning audit entry for the legacy fallback.
+        // Emit a warning audit entry for the legacy fallback. This targets
+        // the refund (not the sale) so it does not shadow the primary
+        // `sale.refund` audit entry written by `create_refund`.
         tx.execute(
             "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -266,8 +268,8 @@ impl Store<'_> {
                 uuid::Uuid::now_v7().to_string(),
                 refund.processed_by,
                 "sale.refund.legacy",
-                "sale",
-                refund.sale_id,
+                "refund",
+                &refund.id,
                 serde_json::json!({
                     "refund_id": refund.id,
                     "note": "deduction_locations was NULL; credited to default location",

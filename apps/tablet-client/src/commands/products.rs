@@ -36,6 +36,8 @@ pub struct AdjustStockArgs {
 ///
 /// Positive `delta` restocks, negative `delta` removes stock.
 /// Returns the new quantity on success.
+#[deprecated(note = "use adjust_stock_scoped instead")]
+#[allow(deprecated)]
 #[command]
 pub async fn adjust_stock(
     args: AdjustStockArgs,
