@@ -779,14 +779,7 @@ impl Store<'_> {
     /// - **Layer 1 (Rust)**: pre-check `current_qty + delta >= 0` before any
     ///   write, returning [`CoreError::InsufficientStockAtLocation`] with the
     ///   exact available qty if the deduction would underflow. This keeps
-    ///   `PartialStockResult` aggregation O(1) without a SELECT-after-failure.
-    /// - **Layer 2 (SQLite)**: `SqliteFailure(extended_code=787)` on the
-    ///   `stock_summary` upsert is translated to the same variant (defence
-    ///   in depth against any Rust-side race in Layer 1).
-    ///
-    /// Returns the **post-update qty at the location** so the caller can
-    /// detect post-commit state without a separate SELECT.
-    #[allow(clippy::too_many_arguments)]
+    ///   `PartialStockResu    #[allow(clippy::too_many_arguments)]
     pub fn adjust_stock_at_location_with_reason(
         &self,
         tx: &rusqlite::Transaction<'_>,
@@ -818,15 +811,42 @@ impl Store<'_> {
             )
             .unwrap_or(0);
 
-        let new_qty = current_qty
-            .checked_add(delta)
-            .filter(|&v| v >= 0)
-            .ok_or_else(|| CoreError::InsufficientStockAtLocation {
-                sku: sku.to_owned(),
-                location_id: location_id.clone(),
-                requested_delta: delta,
-                available_qty: current_qty,
-            })?;
+        let mut allow_negative = false;
+        if let Some(t_id) = terminal_id {
+            if let Ok(ws_id) = tx.query_row(
+                "SELECT workspace_instance_id FROM terminals WHERE id = ?1",
+                rusqlite::params![t_id.as_str()],
+                |row| row.get::<_, String>(0),
+            ) {
+                if let Ok(allowed) = tx.query_row(
+                    "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
+                     WHERE instance_id = ?1 AND location_id = ?2",
+                    rusqlite::params![ws_id, location_id.as_str()],
+                    |row| row.get::<_, i64>(0),
+                ) {
+                    allow_negative = allowed == 1;
+                }
+            }
+        }
+
+        let new_qty = if allow_negative {
+            current_qty
+                .checked_add(delta)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "qty".into(),
+                    message: "overflow".into(),
+                })?
+        } else {
+            current_qty
+                .checked_add(delta)
+                .filter(|&v| v >= 0)
+                .ok_or_else(|| CoreError::InsufficientStockAtLocation {
+                    sku: sku.to_owned(),
+                    location_id: location_id.clone(),
+                    requested_delta: delta,
+                    available_qty: current_qty,
+                })?
+        };
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let movement_id = uuid::Uuid::now_v7().to_string();
@@ -897,7 +917,6 @@ impl Store<'_> {
     /// no internal BEGIN/COMMIT. Used by the split-fulfillment flow (§6b)
     /// where one line item is deducted from 2+ locations simultaneously.
     ///
-    /// **Two-phase execution:**
     /// 1. Pre-check every deduction against current stock at its location.
     ///    If ANY deduction would cause negative stock at its location, the
     ///    function returns [`CoreError::InsufficientStockAtLocation`] for
@@ -912,6 +931,9 @@ impl Store<'_> {
         tx: &rusqlite::Transaction<'_>,
         deductions: &[crate::sale_deduction::StockDeduction],
         reason: Option<&str>,
+        inventory_transaction_id: Option<&crate::inventory_transaction::InventoryTransactionId>,
+        terminal_id: Option<&crate::terminal::TerminalId>,
+        source_user_id: Option<&crate::user::UserId>,
     ) -> Result<(), CoreError> {
         if deductions.is_empty() {
             return Ok(());
@@ -935,15 +957,35 @@ impl Store<'_> {
                 )
                 .unwrap_or(0);
 
-            let _new_qty = current_qty
-                .checked_add(d.delta)
-                .filter(|&v| v >= 0)
-                .ok_or_else(|| CoreError::InsufficientStockAtLocation {
-                    sku: d.sku.clone(),
-                    location_id: d.location_id.clone(),
-                    requested_delta: d.delta,
-                    available_qty: current_qty,
-                })?;
+            let mut allow_negative = false;
+            if let Some(t_id) = terminal_id {
+                if let Ok(ws_id) = tx.query_row(
+                    "SELECT workspace_instance_id FROM terminals WHERE id = ?1",
+                    rusqlite::params![t_id.as_str()],
+                    |row| row.get::<_, String>(0),
+                ) {
+                    if let Ok(allowed) = tx.query_row(
+                        "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
+                         WHERE instance_id = ?1 AND location_id = ?2",
+                        rusqlite::params![ws_id, d.location_id.as_str()],
+                        |row| row.get::<_, i64>(0),
+                    ) {
+                        allow_negative = allowed == 1;
+                    }
+                }
+            }
+
+            if !allow_negative {
+                let _new_qty = current_qty
+                    .checked_add(d.delta)
+                    .filter(|&v| v >= 0)
+                    .ok_or_else(|| CoreError::InsufficientStockAtLocation {
+                        sku: d.sku.clone(),
+                        location_id: d.location_id.clone(),
+                        requested_delta: d.delta,
+                        available_qty: current_qty,
+                    })?;
+            }
         }
 
         // Phase 2: execute all deductions (all pre-checks passed).
@@ -954,9 +996,9 @@ impl Store<'_> {
                 d.delta,
                 &d.location_id,
                 reason,
-                None,
-                None,
-                None,
+                inventory_transaction_id,
+                terminal_id,
+                source_user_id,
             )?;
         }
 
@@ -2924,7 +2966,8 @@ mod tests {
         seed_for_canonical_test(&conn);
         let s = store(&conn);
         let tx = conn.unchecked_transaction().unwrap();
-        s.adjust_stock_batch(&tx, &[], Some("sale")).unwrap();
+        s.adjust_stock_batch(&tx, &[], Some("sale"), None, None, None)
+            .unwrap();
         tx.commit().unwrap();
     }
 
@@ -2946,6 +2989,9 @@ mod tests {
                 delta: -5,
             }],
             Some("sale"),
+            None,
+            None,
+            None,
         )
         .unwrap();
         tx.commit().unwrap();
@@ -2984,6 +3030,9 @@ mod tests {
                 },
             ],
             Some("sale"),
+            None,
+            None,
+            None,
         )
         .unwrap();
         tx.commit().unwrap();
@@ -3026,6 +3075,9 @@ mod tests {
                     delta: -999,
                 }],
                 Some("sale"),
+                None,
+                None,
+                None,
             )
             .unwrap_err();
         assert!(matches!(err, CoreError::InsufficientStockAtLocation { .. }));

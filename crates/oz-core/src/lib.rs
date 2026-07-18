@@ -171,7 +171,10 @@ pub use gift_card::{
     GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
     RedeemGiftCardResult,
 };
-pub use inventory::{CANONICAL_DEFAULT_LOCATION_UUID, Inventory, LocationId};
+pub use inventory::{
+    CANONICAL_DEFAULT_LOCATION_UUID, Inventory, InventoryLocation, InventoryShift, LocationId,
+    StockThreshold, WorkspaceInventoryLocation,
+};
 pub use inventory_transaction::{
     InventoryTransaction, InventoryTransactionId, InventoryTransactionLine,
     InventoryTransactionType,

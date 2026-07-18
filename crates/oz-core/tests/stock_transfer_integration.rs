@@ -16,6 +16,13 @@ fn setup() -> Connection {
     let mut conn = Connection::open_in_memory().unwrap();
     conn.pragma_update(None, "foreign_keys", "ON").unwrap();
     migrations::run(&mut conn).unwrap();
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO inventory_locations (id, name, type) \
+         VALUES ('Warehouse A', 'Warehouse A', 'warehouse'); \
+         INSERT OR IGNORE INTO inventory_locations (id, name, type) \
+         VALUES ('Store B', 'Store B', 'store');",
+    )
+    .unwrap();
     conn
 }
 

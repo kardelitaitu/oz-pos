@@ -1,0 +1,210 @@
+//! Sale-deduction result types (ADR-19 §2).
+//!
+//! When [`Store::complete_sale`](crate::db::Store) runs with multi-location
+//! inventory, it returns either a [`CompleteSaleResult`] (all stock sufficed)
+//! or a [`PartialStockResult`] (one or more lines had insufficient stock at
+//! the resolved primary location). The cashier UI uses these discriminators
+//! to render either a success toast or the Stock Shortfall panel.
+//!
+//! These types belong in `oz-core` because both the desktop-client and
+//! tablet-client Tauri command layers deserialize and forward them to the
+//! front-end without further transformation.
+
+use serde::{Deserialize, Serialize};
+
+use crate::inventory::LocationId;
+use crate::inventory_transaction::InventoryTransactionId;
+use foundation::SaleStatus;
+
+/// Stock availability at a specific inventory location.
+///
+/// Returned inside [`Shortfall::alternatives`] so the cashier UI can render
+/// a per-location choice (e.g. "Warehouse A — 250 available").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationStock {
+    /// FK to `inventory_locations.id`.
+    pub location_id: LocationId,
+    /// Human-readable location name for the cashier UI dropdown.
+    pub location_name: String,
+    /// Live stock on hand at this location for the relevant SKU.
+    pub qty_available: i64,
+}
+
+/// A single SKU that could not be fulfilled from the resolved primary location.
+///
+/// Aggregated into [`PartialStockResult::shortfalls`] so the cashier sees
+/// every affected line item in a single dialog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Shortfall {
+    /// Product SKU that is short.
+    pub sku: String,
+    /// Product display name (denormalised from the cart line).
+    pub product_name: String,
+    /// Quantity the customer requested.
+    pub requested_qty: i64,
+    /// Quantity currently available at the primary location.
+    pub primary_qty_available: i64,
+    /// Shortfall = requested_qty - primary_qty_available (≥ 1).
+    pub deficit: i64,
+    /// The primary location where stock was checked.
+    pub primary_location_id: LocationId,
+    /// Alternative locations where this SKU has available stock.
+    /// Suggested fallback sources for the cashier to choose from.
+    /// Empty if no alternative location has stock.
+    pub alternatives: Vec<LocationStock>,
+}
+
+/// Returned when every line item had sufficient stock at its resolved
+/// deduction location. The sale row is committed; the cart is cleared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteSaleResult {
+    /// The newly-created sale's primary key.
+    pub sale_id: String,
+    /// Always `completed` — stock was sufficient across all lines.
+    pub status: SaleStatus,
+    /// Human-readable receipt number for the cashier UI.
+    pub receipt_number: String,
+    /// FK to `inventory_transactions.id` — the audit session that groups
+    /// all `stock_movements` rows produced by this deduction.
+    pub deduct_tx_id: InventoryTransactionId,
+}
+
+/// Returned when at least one line item exceeded available stock at the
+/// resolved primary location. The sale row is **rolled back** — no DB row
+/// exists for this attempt. The cashier must resolve each shortfall via
+/// the Stock Shortfall dialog and retry with
+/// `complete_sale_with_resolved_shortfalls`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialStockResult {
+    /// Always `true` — sentinel for the front-end to render the shortfall
+    /// panel instead of the receipt screen.
+    pub requires_resolution: bool,
+    /// Every line item that had insufficient stock at the primary location.
+    /// May be a subset of the cart's lines (some lines may have sufficed,
+    /// but since the transaction is rolled back atomically, ALL lines must
+    /// be re-deducted on the retry — lines that sufficed on the first pass
+    /// are NOT listed here because they don't need cashier resolution).
+    pub shortfalls: Vec<Shortfall>,
+}
+
+/// A single deduction to execute atomically inside a batch operation.
+///
+/// Used by [`Store::adjust_stock_batch`](crate::db::Store) for split-fulfillment
+/// where one line item is deducted from 2+ locations simultaneously (ADR-19 §3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StockDeduction {
+    /// Product SKU to deduct from.
+    pub sku: String,
+    /// FK to `inventory_locations.id` — where the stock is deducted.
+    pub location_id: LocationId,
+    /// Signed quantity: negative for deduction, positive for credit.
+    pub delta: i64,
+}
+
+impl PartialStockResult {
+    /// Convenience constructor for a single-shortfall response.
+    #[must_use]
+    pub fn single(shortfall: Shortfall) -> Self {
+        Self {
+            requires_resolution: true,
+            shortfalls: vec![shortfall],
+        }
+    }
+
+    /// Convenience constructor for a multi-shortfall response.
+    #[must_use]
+    pub fn multiple(shortfalls: Vec<Shortfall>) -> Self {
+        Self {
+            requires_resolution: true,
+            shortfalls,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn complete_sale_result_serde_roundtrip() {
+        let result = CompleteSaleResult {
+            sale_id: "sale-1".into(),
+            status: SaleStatus::Completed,
+            receipt_number: "REC-001".into(),
+            deduct_tx_id: InventoryTransactionId::from("tx-1"),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let back: CompleteSaleResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sale_id, "sale-1");
+        assert_eq!(back.status, SaleStatus::Completed);
+        assert_eq!(back.receipt_number, "REC-001");
+        assert_eq!(back.deduct_tx_id.as_str(), "tx-1");
+    }
+
+    #[test]
+    fn partial_stock_result_serde_roundtrip() {
+        let shortfall = Shortfall {
+            sku: "CHO-001".into(),
+            product_name: "Choco Bar".into(),
+            requested_qty: 20,
+            primary_qty_available: 5,
+            deficit: 15,
+            primary_location_id: LocationId::from("loc-store"),
+            alternatives: vec![LocationStock {
+                location_id: LocationId::from("loc-wh-a"),
+                location_name: "Warehouse A".into(),
+                qty_available: 500,
+            }],
+        };
+        let result = PartialStockResult::single(shortfall);
+        let json = serde_json::to_string(&result).unwrap();
+        let back: PartialStockResult = serde_json::from_str(&json).unwrap();
+        assert!(back.requires_resolution);
+        assert_eq!(back.shortfalls.len(), 1);
+        assert_eq!(back.shortfalls[0].sku, "CHO-001");
+        assert_eq!(back.shortfalls[0].deficit, 15);
+        assert_eq!(back.shortfalls[0].alternatives.len(), 1);
+    }
+
+    #[test]
+    fn partial_stock_result_multiple_constructor() {
+        let a = Shortfall {
+            sku: "A".into(),
+            product_name: "Item A".into(),
+            requested_qty: 10,
+            primary_qty_available: 0,
+            deficit: 10,
+            primary_location_id: LocationId::from("loc-1"),
+            alternatives: vec![],
+        };
+        let b = Shortfall {
+            sku: "B".into(),
+            product_name: "Item B".into(),
+            requested_qty: 5,
+            primary_qty_available: 2,
+            deficit: 3,
+            primary_location_id: LocationId::from("loc-1"),
+            alternatives: vec![],
+        };
+        let result = PartialStockResult::multiple(vec![a, b]);
+        assert_eq!(result.shortfalls.len(), 2);
+    }
+
+    #[test]
+    fn location_stock_serde_camel_case() {
+        let ls = LocationStock {
+            location_id: LocationId::from("loc-wh-a"),
+            location_name: "Warehouse A".into(),
+            qty_available: 250,
+        };
+        let json = serde_json::to_string(&ls).unwrap();
+        assert!(json.contains("locationId"));
+        assert!(json.contains("locationName"));
+        assert!(json.contains("qtyAvailable"));
+    }
+}

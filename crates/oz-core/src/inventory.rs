@@ -234,3 +234,80 @@ mod tests {
         assert!(debug.contains("25"));
     }
 }
+
+/// An inventory location where physical/logical stock is stored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InventoryLocation {
+    /// Location ID (UUID v7).
+    pub id: String,
+    /// Human-readable location name.
+    pub name: String,
+    /// Location type.
+    #[serde(rename = "type")]
+    pub location_type: String,
+    /// Optional description.
+    pub description: String,
+    /// Whether the location is active.
+    pub is_active: bool,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+    /// ISO-8601 update timestamp.
+    pub updated_at: String,
+}
+
+/// A binding between a workspace instance and an inventory location.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInventoryLocation {
+    /// Unique binding ID (UUID v7).
+    pub id: String,
+    /// Workspace instance ID.
+    pub instance_id: String,
+    /// Location ID.
+    pub location_id: String,
+    /// Whether this location is the primary location for stock deductions.
+    pub is_primary: bool,
+    /// Whether this location is allowed to go below zero stock.
+    pub allow_negative_stock: bool,
+    /// Sorting order priority.
+    pub sort_order: i64,
+}
+
+/// An inventory shift representing a window of time a staff member is working at a location.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InventoryShift {
+    /// Shift ID (UUID v7).
+    pub id: String,
+    /// Staff user ID.
+    pub user_id: String,
+    /// Location ID.
+    pub location_id: String,
+    /// Optional terminal ID where the shift was opened.
+    pub terminal_id: Option<String>,
+    /// ISO-8601 opened timestamp.
+    pub started_at: String,
+    /// ISO-8601 closed timestamp.
+    pub ended_at: Option<String>,
+    /// Shift status ('active', 'ended').
+    pub status: String,
+    /// Optional shift notes.
+    pub notes: String,
+}
+
+/// A stock threshold config for a product at a location.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StockThreshold {
+    /// Threshold ID (UUID v7).
+    pub id: String,
+    /// Product ID.
+    pub product_id: String,
+    /// Location ID (nullable for global thresholds).
+    pub location_id: Option<String>,
+    /// Threshold quantity.
+    pub threshold: i64,
+    /// Whether the threshold is enabled.
+    pub enabled: bool,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+    /// ISO-8601 update timestamp.
+    pub updated_at: String,
+}

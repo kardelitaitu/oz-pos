@@ -35,6 +35,8 @@ pub mod hardware;
 pub mod health;
 /// Sales-history commands.
 pub mod history;
+/// Multi-location inventory, shifts, transactions, and thresholds commands.
+pub mod inventory;
 /// Inventory-count commands.
 pub mod inventory_counts;
 /// Kitchen Display System commands.

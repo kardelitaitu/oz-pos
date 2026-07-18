@@ -903,7 +903,7 @@ pub async fn complete_sale_scoped(
     let sale_id = sale.id.clone();
 
     // ── Lock 2: Compute tax and create sale ───────────────────────
-    let updated = {
+    let _res = {
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -918,24 +918,25 @@ pub async fn complete_sale_scoped(
             }
         }
 
-        store.create_sale(&sale)?;
-
-        if let Some(ref splits) = args.payment_splits {
-            if !splits.is_empty() {
-                store.create_payments(&sale_id, splits, &sale.currency, &sale.created_at)?;
-            }
+        let splits = if let Some(ref splits) = args.payment_splits {
+            splits.clone()
         } else {
-            let single_split = vec![PaymentSplitArg {
+            vec![PaymentSplitArg {
                 method: args.payment_method.clone(),
                 amount_minor: sale.total.minor_units,
                 gateway_reference: args.customer_name.clone(),
                 gateway_status: None,
                 gateway_response: None,
-            }];
-            store.create_payments(&sale_id, &single_split, &sale.currency, &sale.created_at)?;
-        }
+            }]
+        };
 
-        store.update_sale_status(&sale_id, SaleStatus::Completed)?
+        store.complete_sale_deduction(
+            &sale,
+            Some(&session.instance_id),
+            &splits,
+            &session.user_id,
+            Some(&session.terminal_id),
+        )?
     };
 
     let total = cart.total();
@@ -972,7 +973,7 @@ pub async fn complete_sale_scoped(
     }
 
     Ok(CompleteSaleResult {
-        sale_id: updated.id,
+        sale_id,
         total,
         line_count,
     })
