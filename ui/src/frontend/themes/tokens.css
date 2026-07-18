@@ -201,6 +201,10 @@
   --shadow-xl:   0 0 12px rgba(4,10,18,0.32);
   --shadow-2xl:  0 0 12px rgba(4,10,18,0.40);
   --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.20);
+  /* Status-glow shadows — used by ConnectionStatus and status indicators */
+  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
+  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
+  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
 
   /* ── Timing / transitions ──────────────────────── */
   --duration-75:   75ms;
@@ -340,6 +344,10 @@
   --shadow-xl:   0 0 12px rgba(15,23,42,0.32);
   --shadow-2xl:  0 0 12px rgba(15,23,42,0.40);
   --shadow-inner: inset 0 2px 4px rgba(15, 23, 42, 0.06);
+  /* Status-glow shadows */
+  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
+  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
+  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -434,6 +442,10 @@
   --shadow-xl:   0 0 12px rgba(8,14,22,0.32);
   --shadow-2xl:  0 0 12px rgba(8,14,22,0.40);
   --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.25);
+  /* Status-glow shadows */
+  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
+  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
+  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 /* ── Smooth theme transitions ──────────────────── */

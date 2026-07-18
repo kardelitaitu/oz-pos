@@ -38,17 +38,17 @@
 
 .status-indicator.online {
   background-color: var(--color-success);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); /* design exception: status glow, no token for green glow opacity */
+  box-shadow: var(--shadow-glow-success);
 }
 
 .status-indicator.warning {
   background-color: var(--color-warning);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); /* design exception: status glow */
+  box-shadow: var(--shadow-glow-warning);
 }
 
 .status-indicator.offline {
   background-color: var(--color-danger);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4); /* design exception: status glow */
+  box-shadow: var(--shadow-glow-danger);
 }
 
 .connection-label {
