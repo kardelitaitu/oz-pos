@@ -1516,6 +1516,8 @@ impl Store<'_> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(deprecated)] // §3.4 deferred to v0.1.0 — `adjust_stock` will be migrated then.
+
     use super::*;
     use crate::Money;
     use crate::migrations;

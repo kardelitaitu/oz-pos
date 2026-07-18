@@ -142,6 +142,8 @@ pub struct StartSaleArgs {
 pub struct StartSaleResult {
     /// ID of the associated cart.
     pub cart_id: CartId,
+    /// ADR-19 §5.1: the deduction location locked at cart-start time.
+    pub deduction_location_id: Option<String>,
 }
 
 /// Start a new sale cart using the global database.
@@ -169,7 +171,10 @@ pub async fn start_sale(
     store.save_active_cart(&cart, None)?;
     drop(db);
 
-    Ok(StartSaleResult { cart_id: id })
+    Ok(StartSaleResult {
+        cart_id: id,
+        deduction_location_id: None,
+    })
 }
 
 /// Start a new sale in the store resolved from a session token. ADR #7.
@@ -213,7 +218,10 @@ pub async fn start_sale_scoped(
         "cart created with deduction location lock",
     );
 
-    Ok(StartSaleResult { cart_id: id })
+    Ok(StartSaleResult {
+        cart_id: id,
+        deduction_location_id: Some(deduction_location_id.to_string()),
+    })
 }
 
 // ── List Active Carts ────────────────────────────────────────────────
@@ -496,6 +504,87 @@ fn run_override_line_price(
     store.save_active_cart(&cart, None)?;
 
     tracing::info!(%cart_id, %line_id, new_price_minor, "line price overridden");
+    Ok(())
+}
+
+// ── Get Cart Deduction Location ───────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// Info about the deduction location locked on an active cart. ADR-19 §17.
+pub struct DeductionLocationInfo {
+    /// The location UUID.
+    pub location_id: String,
+    /// Human-readable location name.
+    pub location_name: String,
+    /// ISO-8601 timestamp of the last manager override, or `None`.
+    pub overridden_at: Option<String>,
+}
+
+/// Return the deduction location info for an active cart.
+///
+/// Returns `null` when the cart has no deduction location lock
+/// (unbound workspace) or the cart does not exist.
+#[command]
+pub async fn get_cart_deduction_location(
+    cart_id: CartId,
+    state: State<'_, AppState>,
+) -> Result<Option<DeductionLocationInfo>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.get_active_cart_deduction_location_info(&cart_id)?;
+    drop(db);
+    Ok(
+        result.map(|(loc_id, loc_name, overridden_at)| DeductionLocationInfo {
+            location_id: loc_id,
+            location_name: loc_name,
+            overridden_at,
+        }),
+    )
+}
+
+// ── Override Deduction Location ───────────────────────────────────────
+
+/// Override the deduction location lock on an active cart.
+///
+/// Records the manager override timestamp (`location_override_at`) on the
+/// cart.  The `deduction_location_id` itself is not changed — this is an
+/// audit record that a manager authorised the current location.
+///
+/// ADR-19 §17: called after FastPINOverlay PIN verification.
+#[command]
+pub async fn override_cart_deduction_location_scoped(
+    session_token: String,
+    cart_id: CartId,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    // Permission check: require sales override permission.
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_OVERRIDE_PRICE,
+    )?;
+
+    store
+        .override_active_cart_deduction_location(&cart_id)
+        .map_err(|e| AppError::Internal(format!("failed to override deduction location: {e}")))?;
+
+    tracing::info!(
+        cart_id = %cart_id,
+        user_id = %session.user_id,
+        "deduction location override recorded",
+    );
     Ok(())
 }
 
@@ -1502,7 +1591,10 @@ mod tests {
     #[test]
     fn start_sale_result_debug() {
         let cart_id = CartId::new();
-        let result = StartSaleResult { cart_id };
+        let result = StartSaleResult {
+            cart_id,
+            deduction_location_id: None,
+        };
         let debug = format!("{result:?}");
         assert!(debug.contains("StartSaleResult"));
     }

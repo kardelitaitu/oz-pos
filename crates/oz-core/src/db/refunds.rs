@@ -722,11 +722,12 @@ mod tests {
             "legacy refund credits to default location"
         );
 
-        // Audit log should have the legacy warning entry.
+        // Audit log should have the legacy warning entry (targets the refund,
+        // not the sale, to avoid shadowing the primary `sale.refund` entry).
         let warn_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM audit_log WHERE action = 'sale.refund.legacy' AND target_id = 'legacy-sale-1'",
-                [],
+                "SELECT COUNT(*) FROM audit_log WHERE action = 'sale.refund.legacy' AND target_id = ?1",
+                params![refund.id],
                 |r| r.get(0),
             )
             .unwrap();

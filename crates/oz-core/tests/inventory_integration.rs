@@ -4,6 +4,11 @@
 //!
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API against an in-memory SQLite database.
+//!
+//! Tests use the deprecated `adjust_stock` (ADR-19 §3.4 deferred to
+//! v0.1.0). Each callsite will be migrated to
+//! `adjust_stock_at_location_with_reason` as part of the §3.4 follow-up.
+#![allow(deprecated)]
 
 use foundation::Barcode;
 use oz_core::{Currency, Money, ProductVariant, Store, migrations};

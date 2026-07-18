@@ -237,6 +237,8 @@ pub fn run() {
                 commands::pos::complete_sale,
                 commands::pos::set_cart_discount,
                 commands::pos::override_line_price,
+                commands::pos::override_cart_deduction_location,
+                commands::pos::get_cart_deduction_location,
                 commands::pos::list_active_carts,
                 commands::pos::get_active_cart,
                 commands::pos::hold_cart,

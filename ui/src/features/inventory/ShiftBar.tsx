@@ -45,7 +45,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         const activeLocs = locs.filter(l => l.is_active);
         setLocations(activeLocs);
         if (activeLocs.length > 0) {
-          setSelectedLocationId(activeLocs[0].id);
+          setSelectedLocationId(activeLocs[0]!.id);
         }
       })
       .catch(console.error);
@@ -107,12 +107,17 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       const allTxs = await listInventoryTransactions(sessionToken);
       const startTime = new Date(activeShift.started_at).getTime();
       
-      const filtered = allTxs.filter(tx => {
+      const shiftLocId = activeShift.location_id;
+      const filtered: InventoryTransaction[] = [];
+      for (const tx of allTxs) {
         const txTime = new Date(tx.created_at).getTime();
-        return tx.staff_id === session?.user_id &&
-               tx.location_id === activeShift.location_id &&
-               txTime >= startTime;
-      });
+        const uid = session?.user_id;
+        if (uid != null && tx.staff_id === uid &&
+            tx.location_id === shiftLocId &&
+            txTime >= startTime) {
+          filtered.push(tx);
+        }
+      }
 
       await endInventoryShift(sessionToken, activeShift.id);
       setShiftSummaryTxs(filtered);
@@ -124,7 +129,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     }
   };
 
-  const activeLocationName = locations.find(l => l.id === activeShift?.location_id)?.name || activeShift?.location_id;
+  const activeLocationName = locations.find(l => l.id === activeShift?.location_id)?.name ?? activeShift?.location_id ?? '';
 
   return (
     <>
@@ -136,8 +141,8 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               <Localized
                 id="inv-shift-active-info"
                 vars={{
-                  user: session?.display_name || '',
-                  location: activeLocationName || '',
+                  user: session?.display_name ?? '',
+                  location: activeLocationName ?? '',
                   time: elapsedText,
                 }}
               >

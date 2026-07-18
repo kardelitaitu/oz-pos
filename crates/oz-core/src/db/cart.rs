@@ -24,6 +24,32 @@ pub struct NoDeductionLocationLock {
 }
 
 impl Store<'_> {
+    /// Record a manager override of the deduction location lock on an active cart.
+    ///
+    /// Sets `location_override_at` to the current UTC timestamp (ISO-8601).
+    /// This is an audit record — the `deduction_location_id` itself is not
+    /// changed by this call.
+    ///
+    /// ADR-19 §5.1: manager override via FastPINOverlay (ADR-6 pattern).
+    /// Call this after the manager PIN is verified.
+    pub fn override_active_cart_deduction_location(&self, id: &CartId) -> Result<(), CoreError> {
+        let id_str = id.to_string();
+        let updated = self.conn.execute(
+            "UPDATE active_carts
+             SET location_override_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            rusqlite::params![id_str],
+        )?;
+        if updated == 0 {
+            return Err(CoreError::NotFound {
+                entity: "active_cart",
+                id: id_str.clone(),
+            });
+        }
+        Ok(())
+    }
+
     /// Persist (insert or update) an active cart in SQLite.
     ///
     /// The cart is serialised to JSON via `serde_json`.  If a cart with
@@ -53,6 +79,36 @@ impl Store<'_> {
             rusqlite::params![id, cart_data, deduction_location_id],
         )?;
         Ok(())
+    }
+
+    /// Return the deduction location info (id, name, override timestamp) for
+    /// an active cart by JOINing with `inventory_locations`.  Returns `None`
+    /// when the cart row does not exist or `deduction_location_id` is NULL.
+    ///
+    /// ADR-19 §17: consumed by `get_cart_deduction_location` Tauri command.
+    pub fn get_active_cart_deduction_location_info(
+        &self,
+        id: &CartId,
+    ) -> Result<Option<(String, String, Option<String>)>, CoreError> {
+        let id_str = id.to_string();
+        let result = self.conn.query_row(
+            "SELECT l.name, ac.deduction_location_id, ac.location_override_at
+             FROM active_carts ac
+             LEFT JOIN inventory_locations l ON l.id = ac.deduction_location_id
+             WHERE ac.id = ?1 AND ac.deduction_location_id IS NOT NULL",
+            rusqlite::params![id_str],
+            |row| {
+                let loc_name: String = row.get::<_, String>(0).unwrap_or_default();
+                let loc_id: String = row.get(1)?;
+                let override_at: Option<String> = row.get(2)?;
+                Ok((loc_id, loc_name, override_at))
+            },
+        );
+        match result {
+            Ok(val) => Ok(Some(val)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 
     /// Return the `deduction_location_id` for an active cart, or `None`

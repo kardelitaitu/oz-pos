@@ -58,7 +58,7 @@ export default function ThresholdConfigScreen() {
     setEditingId(null);
     if (products.length > 0) {
       // Find the first product that has SKU or is tracking stock
-      setSelectedProductId(products[0].sku); // Product DTO uses SKU as id or we map by SKU
+      setSelectedProductId(products[0]!.sku); // Product DTO uses SKU as id or we map by SKU
     }
     setSelectedLocationId(''); // Global
     setThresholdVal('5');
