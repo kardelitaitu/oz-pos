@@ -198,6 +198,64 @@ pub mod seed_users {
     pub const ADMIN: &str = "user-admin";
 }
 
+/// Strongly-typed identifier for a [`User`] row (FK to `users.id`).
+///
+/// **ADR-19 §3.1**: the canonical core function
+/// [`Store::adjust_stock_at_location_with_reason`](crate::db::Store::adjust_stock_at_location_with_reason)
+/// takes `Option<&UserId>` to attribute the `stock_movements.source_user_id`
+/// column for §9 audit linkage.
+///
+/// Newtype pattern matches `LocationId` + `InventoryTransactionId` +
+/// `TerminalId`: `String` inner field, `Deref<Target=str>`, `Display`,
+/// `From<&str>` / `From<String>` for ergonomic conversion.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct UserId(String);
+
+impl UserId {
+    /// Generate a new UUID v7 identifier.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(crate::new_id())
+    }
+
+    /// Borrow the underlying UUID string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for UserId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::ops::Deref for UserId {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for UserId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for UserId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for UserId {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

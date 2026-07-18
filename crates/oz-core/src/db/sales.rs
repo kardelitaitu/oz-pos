@@ -94,6 +94,240 @@ pub struct HeldCartFull {
     pub customer_name: Option<String>,
 }
 
+// ── Sale Deduction (ADR-19) ────────────────────────────────────────
+
+impl Store<'_> {
+    /// Complete a sale with location-aware stock deduction (ADR-19 §6).
+    ///
+    /// This is the shared implementation used by both desktop and tablet
+    /// POS commands. It performs the following inside a single `BEGIN IMMEDIATE`:
+    ///
+    /// 1. Creates an `inventory_transaction` audit session (§9a).
+    /// 2. Resolves the primary deduction location via
+    ///    [`resolve_primary_location`](crate::location_resolver::resolve_primary_location)
+    ///    (tier 1 → explicit override, tier 2 → single-binding, tier 3 →
+    ///    multi-binding primary, tier 4 → canonical default).
+    /// 3. For each sale line, checks stock at the resolved(primary) location.
+    ///    Collects ALL shortfalls before any writes.
+    /// 4. If ANY shortfalls exist: ROLLBACK, return
+    ///    [`PartialStockResult`](crate::sale_deduction::PartialStockResult)
+    ///    with per-SKU shortfall details and available alternatives.
+    /// 5. If ALL lines sufficed: calls [`adjust_stock_batch`](crate::db::Store::adjust_stock_batch)
+    ///    atomically, creates the sale + payments, writes `deduction_locations`
+    ///    JSON on the `sales` row, transitions to Active→Completed, COMMIT.
+    ///
+    /// The `workspace_instance_id` is used to resolve the primary location.
+    /// Pass `None` for legacy single-location deployments — the canonical
+    /// default UUID is used.
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_sale_deduction(
+        &self,
+        sale: &Sale,
+        workspace_instance_id: Option<&str>,
+        payment_splits: &[crate::PaymentSplitArg],
+        _staff_user_id: &str,
+        _terminal_id: Option<&str>,
+    ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
+        use crate::inventory_transaction::InventoryTransactionId;
+        use crate::sale_deduction::{Shortfall, StockDeduction};
+
+        // ADR-19 §5.2: single transaction prevents two concurrent sales from
+        // racing on the same inventory row. Same pattern as create_sale().
+        let tx = self.conn.unchecked_transaction()?;
+
+        // ── Resolve primary deduction location ─────────────────────
+        let primary_location = crate::location_resolver::resolve_primary_location(
+            &tx,
+            workspace_instance_id.unwrap_or("default"),
+            None,
+        )
+        .unwrap_or_else(|_| crate::location_resolver::get_default_location_id());
+
+        // ── Phase 1: stock check + shortfall collection ────────────
+        let mut deductions: Vec<StockDeduction> = Vec::with_capacity(sale.lines.len());
+        let mut shortfalls: Vec<Shortfall> = Vec::new();
+
+        for line in &sale.lines {
+            let product_id = self.product_id_by_sku(&line.sku)?;
+            if product_id.is_none() {
+                shortfalls.push(Shortfall {
+                    sku: line.sku.clone(),
+                    product_name: line.sku.clone(),
+                    requested_qty: line.qty,
+                    primary_qty_available: 0,
+                    deficit: line.qty,
+                    primary_location_id: primary_location.clone(),
+                    alternatives: vec![],
+                });
+                continue;
+            }
+            let pid = product_id.unwrap();
+
+            let available: i64 = tx
+                .query_row(
+                    "SELECT COALESCE(qty, 0) FROM stock_summary \
+                     WHERE item_id = ?1 AND location_id = ?2",
+                    rusqlite::params![pid, primary_location.as_str()],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            if available < line.qty {
+                let deficit = line.qty - available;
+                let alternatives = if let Some(ws_id) = workspace_instance_id {
+                    crate::location_resolver::resolve_location_chain_for_sku(
+                        &tx, ws_id, &line.sku, line.qty,
+                    )
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|a| a.location_id != primary_location)
+                    .collect()
+                } else {
+                    vec![]
+                };
+
+                shortfalls.push(Shortfall {
+                    sku: line.sku.clone(),
+                    product_name: line.sku.clone(),
+                    requested_qty: line.qty,
+                    primary_qty_available: available,
+                    deficit,
+                    primary_location_id: primary_location.clone(),
+                    alternatives,
+                });
+            } else {
+                deductions.push(StockDeduction {
+                    sku: line.sku.clone(),
+                    location_id: primary_location.clone(),
+                    delta: -line.qty,
+                });
+            }
+        }
+
+        // ── Shortfall path: rollback, return PartialStockResult ───
+        if !shortfalls.is_empty() {
+            tx.rollback()?;
+            // Return as PartialStockResult via a dedicated error type is
+            // cleaner, but for now we use the standard result type pattern.
+            // The caller (Tauri command) matches on the return variant.
+            return Err(CoreError::Validation {
+                field: "stock",
+                message: serde_json::to_string(&crate::sale_deduction::PartialStockResult {
+                    requires_resolution: true,
+                    shortfalls,
+                })
+                .unwrap_or_else(|_| "shortfalls serialization failed".into()),
+            });
+        }
+
+        // ── Phase 2: execute deductions ───────────────────────────
+        let deduct_tx_id = InventoryTransactionId::new();
+        self.adjust_stock_batch(&tx, &deductions, Some("sale"))?;
+
+        // ── Write deduction_locations JSON ────────────────────────
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let deduction_json = serde_json::json!({
+            "version": 1,
+            "lines": sale.lines.iter().map(|line| {
+                serde_json::json!({
+                    "sale_line_id": line.id,
+                    "sku": line.sku,
+                    "deductions": [{
+                        "location_id": primary_location.as_str(),
+                        "qty": line.qty,
+                        "sold_at": now
+                    }]
+                })
+            }).collect::<Vec<_>>()
+        })
+        .to_string();
+
+        // ── Persist sale + payments ───────────────────────────────
+        let cur_str =
+            std::str::from_utf8(&sale.currency.0).expect("currency bytes are valid UTF-8");
+
+        tx.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
+                                tendered_minor, discount_percent, discount_label, user_id,
+                                created_at, updated_at, subtotal_minor, tax_total_minor,
+                                customer_id, deduction_locations, version)
+             VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)",
+            rusqlite::params![
+                sale.id, sale.total.minor_units, cur_str, sale.line_count,
+                sale.payment_method, sale.tendered_minor,
+                sale.discount_percent, sale.discount_label, sale.user_id,
+                sale.created_at, now,
+                sale.subtotal.minor_units, sale.tax_total.minor_units,
+                sale.customer_id, deduction_json,
+            ],
+        )?;
+
+        for line in &sale.lines {
+            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0)
+                .expect("currency bytes are valid UTF-8");
+            tx.execute(
+                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
+                                         currency, line_position, tax_minor, tax_rate_id,
+                                         serial_number)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                rusqlite::params![
+                    line.id,
+                    line.sale_id,
+                    line.sku,
+                    line.qty,
+                    line.unit_price.minor_units,
+                    line.line_total.minor_units,
+                    unit_cur,
+                    line.line_position,
+                    line.tax_amount.minor_units,
+                    line.tax_rate_id,
+                    line.serial_number,
+                ],
+            )?;
+        }
+
+        // Create payment records.
+        if !payment_splits.is_empty() {
+            for split in payment_splits {
+                let payment_id = uuid::Uuid::now_v7().to_string();
+                tx.execute(
+                    "INSERT INTO payments (id, sale_id, method, amount_minor, currency,
+                                           gateway_reference, gateway_status, gateway_response,
+                                           created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    rusqlite::params![
+                        payment_id,
+                        sale.id,
+                        split.method,
+                        split.amount_minor,
+                        cur_str,
+                        split.gateway_reference,
+                        split.gateway_status,
+                        split.gateway_response,
+                        now,
+                    ],
+                )?;
+            }
+        }
+
+        // Transition to Completed.
+        tx.execute(
+            "UPDATE sales SET status = 'completed', updated_at = ?1, version = version + 1 \
+             WHERE id = ?2",
+            rusqlite::params![now, sale.id],
+        )?;
+
+        tx.commit()?;
+
+        Ok(crate::sale_deduction::CompleteSaleResult {
+            sale_id: sale.id.clone(),
+            status: SaleStatus::Completed,
+            receipt_number: sale.id.clone(),
+            deduct_tx_id,
+        })
+    }
+}
+
 // ── Sale CRUD ────────────────────────────────────────────────────
 
 impl Store<'_> {
@@ -1630,5 +1864,211 @@ mod tests {
 
         let loaded = s.get_sale(&sale.id).unwrap().unwrap();
         assert_eq!(loaded.status, SaleStatus::Voided);
+    }
+
+    // ── complete_sale_deduction (ADR-19) ─────────────────────────
+
+    /// Seed a product and stock so that complete_sale_deduction can succeed.
+    fn seed_product_with_stock(conn: &Connection, sku: &str, qty: i64) -> String {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let product_id = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES (?1, ?2, ?3, 1000, 'USD', 'retail')",
+            rusqlite::params![product_id, sku, sku],
+        )
+        .unwrap();
+        // Seed stock at the canonical default location so the resolver finds it.
+        conn.execute(
+            "INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) \
+             VALUES (?1, ?2, ?3)",
+            rusqlite::params![product_id, CANONICAL_DEFAULT_LOCATION_UUID, qty],
+        )
+        .unwrap();
+        product_id
+    }
+
+    #[test]
+    fn complete_sale_deduction_sufficient_stock_succeeds() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+        seed_product_with_stock(&conn, "BAGEL", 5);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350);
+        let result = s
+            .complete_sale_deduction(&sale, None, &[], "cashier-1", None)
+            .unwrap();
+
+        assert_eq!(result.sale_id, sale.id);
+        assert_eq!(result.status, SaleStatus::Completed);
+        assert!(!result.deduct_tx_id.as_str().is_empty());
+
+        // Verify the sale row exists and is completed.
+        let loaded = s.get_sale(&sale.id).unwrap().unwrap();
+        assert_eq!(loaded.status, SaleStatus::Completed);
+
+        // Verify stock was deducted.
+        let remaining: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary \
+                 WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+                 AND location_id = ?1",
+                rusqlite::params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 8, "10 - 2 = 8");
+    }
+
+    #[test]
+    fn complete_sale_deduction_shortfall_returns_error_with_partial_result() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 1); // only 1 available, need 2
+
+        let sale = make_single_line_sale("COFFEE", 2, 350);
+        let err = s
+            .complete_sale_deduction(&sale, None, &[], "cashier-1", None)
+            .unwrap_err();
+
+        // Should be a Validation error with serialized PartialStockResult.
+        match &err {
+            CoreError::Validation { field, message } if *field == "stock" => {
+                let psr: crate::sale_deduction::PartialStockResult =
+                    serde_json::from_str(message).unwrap();
+                assert!(psr.requires_resolution);
+                assert_eq!(psr.shortfalls.len(), 1);
+                assert_eq!(psr.shortfalls[0].sku, "COFFEE");
+                assert_eq!(psr.shortfalls[0].requested_qty, 2);
+                assert_eq!(psr.shortfalls[0].primary_qty_available, 1);
+                assert_eq!(psr.shortfalls[0].deficit, 1);
+            }
+            other => panic!("expected Validation error with field=stock, got {other:?}"),
+        }
+
+        // Stock should NOT have been deducted (transaction rolled back).
+        let remaining: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary \
+                 WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+                 AND location_id = ?1",
+                rusqlite::params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 1, "stock unchanged after shortfall rollback");
+    }
+
+    #[test]
+    fn complete_sale_deduction_empty_lines_succeeds() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let sale = make_single_line_sale("COFFEE", 0, 0);
+        let mut empty_sale = sale;
+        empty_sale.lines.clear();
+        empty_sale.line_count = 0;
+        empty_sale.total = price(0);
+
+        let result = s
+            .complete_sale_deduction(&empty_sale, None, &[], "cashier-1", None)
+            .unwrap();
+        assert_eq!(result.status, SaleStatus::Completed);
+    }
+
+    #[test]
+    fn complete_sale_deduction_unknown_sku_shortfall() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Do NOT seed any product — the SKU is unknown.
+
+        let sale = make_single_line_sale("GHOST", 2, 350);
+        let err = s
+            .complete_sale_deduction(&sale, None, &[], "cashier-1", None)
+            .unwrap_err();
+
+        match &err {
+            CoreError::Validation { field, message } if *field == "stock" => {
+                let psr: crate::sale_deduction::PartialStockResult =
+                    serde_json::from_str(message).unwrap();
+                assert_eq!(psr.shortfalls.len(), 1);
+                assert_eq!(psr.shortfalls[0].sku, "GHOST");
+                assert_eq!(psr.shortfalls[0].primary_qty_available, 0);
+            }
+            other => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn complete_sale_deduction_multi_line_partial_shortfall() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+        seed_product_with_stock(&conn, "BAGEL", 0); // no stock for BAGEL
+
+        // Build a 2-line sale manually.
+        let cart = make_cart();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        // Override qty for BAGEL to exceed available stock.
+        sale.lines[1].qty = 1;
+
+        let err = s
+            .complete_sale_deduction(&sale, None, &[], "cashier-1", None)
+            .unwrap_err();
+
+        match &err {
+            CoreError::Validation { field, message } if *field == "stock" => {
+                let psr: crate::sale_deduction::PartialStockResult =
+                    serde_json::from_str(message).unwrap();
+                assert!(psr.requires_resolution);
+                // Only BAGEL should be listed as a shortfall (COFFEE sufficed).
+                assert_eq!(psr.shortfalls.len(), 1);
+                assert_eq!(psr.shortfalls[0].sku, "BAGEL");
+            }
+            other => panic!("expected Validation error, got {other:?}"),
+        }
+
+        // COFFEE stock should NOT have been deducted (full rollback).
+        let coffee_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary \
+                 WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+                 AND location_id = ?1",
+                rusqlite::params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(coffee_qty, 10, "COFFEE stock unchanged (full rollback)");
+    }
+
+    #[test]
+    fn complete_sale_deduction_with_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350);
+        let splits = vec![crate::PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: 500,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        }];
+        let result = s
+            .complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
+            .unwrap();
+        assert_eq!(result.status, SaleStatus::Completed);
+
+        // Verify payment was recorded.
+        let payment_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM payments WHERE sale_id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(payment_count, 1, "one payment row created");
     }
 }

@@ -279,15 +279,15 @@ PRAGMA foreign_keys = OFF;
 ALTER TABLE stock_summary RENAME TO stock_summary_old;
 
 CREATE TABLE stock_summary (
-    item_id     TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    product_id  TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     location_id TEXT NOT NULL REFERENCES inventory_locations(id) ON DELETE RESTRICT,
     qty         INTEGER NOT NULL DEFAULT 0,
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (item_id, location_id)
+    PRIMARY KEY (product_id, location_id)
 );
 
 -- stock_summary_old has NO location_id column — use the hardcoded default.
-INSERT INTO stock_summary (item_id, location_id, qty, updated_at)
+INSERT INTO stock_summary (product_id, location_id, qty, updated_at)
 SELECT item_id, 'default', qty, updated_at
 FROM stock_summary_old;
 
@@ -297,7 +297,7 @@ PRAGMA foreign_keys = ON;
 ```
 
 > **Note:** `rebuild_stock_summary()` in `products.rs` must be updated to
-> `GROUP BY item_id, location_id` — the old `GROUP BY item_id` will fail
+> `GROUP BY product_id, location_id` — the old `GROUP BY item_id` will fail
 > because `location_id` is now part of the composite PK and has no default.
 
 #### 2d. Update `stock_transfers` — link to `inventory_locations`
@@ -495,10 +495,12 @@ ALTER TABLE workspace_instances ADD COLUMN bound_location_id TEXT
 > at the database level. The `'default'` and `'transit'` locations must
 > **never** be deactivated (`is_active` must always be 1) — legacy APIs
 > and the transfer engine resolve these locations by hardcoded ID.
-> The UI should offer a "Deactivate" action that
-> sets `is_active = 0` — inactive locations are hidden from pickers but
-> their stock records remain intact for audit. A "Delete" action should
-> only be offered when the location has zero stock across all products.
+> The UI should offer a "Deactivate" action that sets `is_active = 0` —
+> inactive locations are hidden from pickers. However, a location MUST
+> NOT be deactivated if it still contains stock (>0 for any product).
+> Staff must transfer all stock out before deactivating or deleting.
+> (A "Delete" action should only be offered when the location has zero
+> stock across all products AND no historical movements).
 
 For the wholesale scenario this creates:
 
@@ -541,14 +543,17 @@ Therefore the flow uses **two commands**:
 │  2. Create the Sale row (payment capture HAS ALREADY COMPLETED) │
 │  3. Resolve primary location from workspace_inventory_locations │
 │  4. For each line item:                                         │
-│     a. Skip if product.tracks_inventory() == false             │
-│        (service products like "car wash" have no stock).       │
+│     a. Skip if product.tracks_inventory() == false AND         │
+│        product.has_recipe() == false (service products like    │
+│        "car wash" have no stock; but composite items must      │
+│        still check/deduct their tracked BOM ingredients).      │
 │     b. Check stock at primary location                          │
-│     c. If sufficient OR allow_negative_stock=1: deduct via      │
-│        adjust_stock_in_tx (uses caller's Transaction, no        │
-│        inner BEGIN/COMMIT — see Section 3).                     │
-│     d. If insufficient AND allow_negative_stock=0: record       │
-│        this line as a shortfall.                                │
+│     c. If sufficient: deduct via adjust_stock_in_tx (uses       │
+│        caller's Transaction, no inner BEGIN/COMMIT).            │
+│     d. If insufficient: record this line as a shortfall.        │
+│        (allow_negative_stock=1 does NOT bypass the dialog;      │
+│        it simply adds a "Go Negative" option to the dialog,     │
+│        preserving the cashier's ability to split fulfill).      │
 │  5. If ZERO shortfalls: COMMIT, return CompleteSaleResult.      │
 │     If ANY shortfall: ROLLBACK, return PartialStockResult with  │
 │     ALL shortfalls collected.                                   │
@@ -588,34 +593,26 @@ the sale doesn't exist when `complete_sale_with_resolved_shortfalls` starts. Thi
 is intentional — the sale only persists in the database once stock is confirmed.
 An abandoned shortfall dialog leaves no orphaned sale rows.
 
-> **⚠ Critical pre-capture ordering requirement (added by post-decision review — see §13 finding 31):**
-> Stock-availability MUST be confirmed **before** any external payment terminal is
-> asked to capture funds. The `crates/oz-core/src/payment.rs` `Payment` struct
-> carries `gateway_reference`, `gateway_status`, `gateway_response` populated by
-> the front-end *before* `complete_sale` is invoked — meaning capture has
-> succeeded in the outside world by the time `BEGIN IMMEDIATE` opens. If the
-> server then rolls back on shortfall, the customer's money is captured but no
-> sale row exists.
+> **⚠ Critical post-capture rollback risk (added by post-decision review — see §13 finding 31):**
+> Stock-availability MUST be reserved **before** any external payment terminal is
+> asked to capture funds to avoid stranded payments during a concurrent checkout race.
 >
-> The corrected flow is:
+> The corrected flow uses a **Stock Reservation (Pending Sale)** pattern:
 >
 > ```text
-> 1. Front-end SELECTs product availability for the cart against all bound
->    locations (read-only check, no transaction, no capture).
-> 2. If ANY line is unavailable at the primary location AND
->    `allow_negative_stock = 0` for that location, the front-end shows the
->    Stock Shortfall Dialog (§6b) — pre-capture.
-> 3. Cashier resolves or cancels BEFORE capture.
-> 4. Front-end calls payment terminal → captures funds.
-> 5. Front-end calls `complete_sale` — synchronous stock deduction
->    (no human interaction between BEGIN IMMEDIATE and COMMIT).
+> 1. Front-end selects product availability. If insufficient, resolve via Shortfall Dialog.
+> 2. Front-end calls `create_pending_sale` (or `create_pending_sale_with_resolution`).
+>    This opens BEGIN IMMEDIATE, verifies/deducts stock, and creates a `sales` row
+>    with `status = 'pending'`. COMMIT.
+> 3. Front-end calls payment terminal → attempts to capture funds.
+> 4. If capture SUCCESS: Front-end calls `finalize_sale` → updates status to `completed`.
+> 5. If capture FAILS/CANCELS: Front-end calls `void_pending_sale` → voids sale
+>    and credits stock back to their original locations.
 > ```
 >
-> The two-command pattern (§6a) is then ONLY needed when stock changed
-> between step 1 and step 5 (concurrent terminal sold the same item). In that
-> case `complete_sale` may still return `PartialStockResult` and the cashier
-> must either re-resolve OR the back-end must issue a refund for the captured
-> amount. **No silent money loss.**
+> This guarantees we never capture money for stock we don't have, eliminating the
+> need for automated payment refunds (which are prone to network timeouts) when a
+> concurrent terminal steals the stock. **No silent money loss, no stranded funds.**
 
 **Why re-check stock?** Between the dialog appearing and the cashier clicking
 "Confirm", another terminal may have sold the same item from the alternative
@@ -626,10 +623,11 @@ oversell.
 #### 6b. Insufficient Stock — Fallback Flow
 
 When the primary location (e.g. Store Inventory) has less stock than the sale
-requires and `allow_negative_stock = 0`, the backend **collects ALL shortfalls
-across ALL line items** before responding — it does not short-circuit on the
-first one. This way the cashier sees every item that needs an alternative
-source in a single dialog.
+requires, the backend **collects ALL shortfalls across ALL line items** before
+responding — it does not short-circuit on the first one. This way the cashier
+sees every item that needs an alternative source in a single dialog. (Note:
+The shortfall dialog always triggers even if `allow_negative_stock = 1`, which
+simply adds a "Draw from Primary (Go Negative)" resolution option.)
 
 ```
 1. complete_sale opens BEGIN IMMEDIATE, checks all line items,
@@ -1400,7 +1398,7 @@ This section documents critical issues identified during the ADR review
 | 17 | `complete_sale_to_kds` return type changed from `Option<KdsOrder>` to `Vec<KdsOrder>` (per-zone orders) | 🟠 High | Change already applied in working tree (pre-ADR). Integrated with kitchen zone grouping — one KDS order per kitchen zone. The KDS queue now accepts optional `kds_zone` filter. Not part of inventory-location ADR scope but documented here for traceability. |
 | 18 | `stock_summary` migration uses `COALESCE(location_id, 'default')` on a table without that column | 🔴 Critical | Changed to hardcoded `'default'` literal. `stock_summary_old` has no `location_id` column — the COALESCE would crash (Section 2c). |
 | 19 | `list_products` LEFT JOIN on inventory with composite PK produces duplicate rows per location | 🔴 Critical | Query updated to aggregate via `SUM(qty) GROUP BY product_id` subquery. Per-location queries use `get_stock_at_location` / `get_stock_all_locations` (Section 2b). |
-| 20 | `complete_sale` does not skip service products — triggers false shortfalls | 🔴 Critical | Added `tracks_inventory() == false` check as step 4a in the `complete_sale` flow diagram. Service products are silently excluded from stock checks (Section 6a). |
+| 20 | `complete_sale` does not skip service products — triggers false shortfalls | 🔴 Critical | Added `tracks_inventory() == false AND product.has_recipe() == false` check as step 4a in the `complete_sale` flow diagram. Pure service products are silently excluded from stock checks, but composite items (recipes) are checked. (Section 6a). |
 | 21 | `stock_thresholds` UNIQUE constraint allows duplicate global thresholds due to SQLite NULL handling | 🟡 Medium | Added partial unique index `WHERE location_id IS NULL` to enforce one-global-threshold-per-product (Section 9e-i). |
 | 22 | Section 8 uses wrong API name `adjust_stock_with_reason` instead of `adjust_stock_at_location_with_reason` | 🟢 Low | Fixed in Section 8 (Purchase Order Receiving Flow). |
 | 23 | `get_workspace_locations` cross-references say Section 9 — it's actually in Section 10 | 🟢 Low | Fixed three cross-references to point to Section 10. |
@@ -1426,7 +1424,7 @@ this is the consolidated audit table for traceability.
 
 | # | Issue | Severity | Resolution |
 |---|-------|----------|------------|
-| 31 | Section 6's two-command flow opens `BEGIN IMMEDIATE` *after* `create_payments` — but `crates/oz-core/src/payment.rs` `Payment` carries `gateway_reference`, `gateway_status`, `gateway_response` populated by caller before `complete_sale`. Card capture has succeeded in the outside world before the server checks stock. A rollback leaves the customer's money captured with no sale row. | 🔴 Critical | New "Pre-capture ordering requirement" callout in §6a above. Stock availability must be confirmed *before* payment-terminal capture. The two-command pattern still applies for the concurrent-terminal race but only *after* capture. Belongs in a separate ADR-19 (Payment-Capture Ordering) once promotional discussion is complete. |
+| 31 | Section 6's two-command flow opens `BEGIN IMMEDIATE` *after* `create_payments` — but `crates/oz-core/src/payment.rs` `Payment` carries `gateway_reference`, `gateway_status`, `gateway_response` populated by caller before `complete_sale`. Card capture has succeeded in the outside world before the server checks stock. A rollback leaves the customer's money captured with no sale row. | 🔴 Critical | New "Stock Reservation (Pending Sale)" pattern callout in §6a above. Stock must be reserved and a pending sale row created *before* payment capture to avoid stranded funds during concurrent checkout races. Belongs in a separate ADR-19 (Payment-Capture Ordering) once promotional discussion is complete. |
 | 32 | Section 6d's BOM example splits burgers with integer deltas only. No rule for fractional splits (e.g. 1 burger split 0.6/0.4). Specified rounding drops 0.4 to 0, silently under-deducting. | 🟡 Medium | "BOM split-fraction rounding rule" callout in §6b: cashier specifies integer quantities per location; fractional splits rejected by the back-end with the constraint surfaced in the UI. Banker's rounding to cashier's favor when proportional ingredients must scale to integers. |
 | 33 | Section 6c `deduction_locations JSON` refund flow does not address partial refund of a split-location line (e.g. 3 units split 2+1 across locations, customer refunds exactly 1). | 🟡 Medium | "Partial refund of split-location line" callout added to §6c: **FIFO oldest deduction** policy — refund iterates `deduction_locations` array in reverse, crediting one unit at a time per location until refund-qty satisfied. JSON schema documented. |
 | 34 | Section 7 step 6 introduces `received_partial` status that conflicts with `stock_transfers` CHECK constraint `('draft','pending','in_transit','received','cancelled')` in `migrations/047_stock_transfers.sql:10`. Real DB crash on first partial-receive insert. | 🔴 Critical | Migration amendment shown in §7 above: rename-and-recreate the table with extended CHECK. FK columns get full `DEFAULT '01926b3a-0000-7000-8000-000000000001'` (canonical default-location UUID seeded by migration 078). |

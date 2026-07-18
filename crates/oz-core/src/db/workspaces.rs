@@ -912,7 +912,12 @@ mod tests {
         assert!(ws.iter().any(|w| w.key == "restaurant-pos"));
         assert!(ws.iter().any(|w| w.key == "kds"));
         assert!(ws.iter().any(|w| w.key == "store-pos"));
-        assert!(ws.iter().any(|w| w.key == "inventory"));
+        // ADR-18 §3 + §13 finding 37 (migration 091): workspace_types.key
+        // rename cascade renames 'inventory' -> 'warehouse' across all FK
+        // references including the legacy `workspaces` table. This fixture
+        // asserts the post-rename state — the user-facing workspace type
+        // for stock-keeping is 'warehouse', not 'inventory'.
+        assert!(ws.iter().any(|w| w.key == "warehouse"));
         assert!(ws.iter().any(|w| w.key == "admin"));
         let kds = ws.iter().find(|w| w.key == "kds").unwrap();
         assert_eq!(kds.name, "Kitchen Display");
@@ -929,12 +934,16 @@ mod tests {
     #[test]
     fn set_user_workspaces_legacy_replaces_previous() {
         let (store, user_id) = fresh();
+        // Post ADR-18 §13 finding 37 (migration 091): workspace_types.key is
+        // 'warehouse', not 'inventory' — the user_workspaces.ws_key FK
+        // column references `workspaces.key` and the literal 'inventory'
+        // would FK-violate against the post-rename workspaces row.
         store
-            .set_user_workspaces_legacy(&user_id, ["restaurant-pos", "inventory"])
+            .set_user_workspaces_legacy(&user_id, ["restaurant-pos", "warehouse"])
             .unwrap();
         let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
         assert_eq!(keys.len(), 2);
-        assert!(keys.contains(&"inventory".into()));
+        assert!(keys.contains(&"warehouse".into()));
 
         store
             .set_user_workspaces_legacy(&user_id, ["admin"])
@@ -1145,13 +1154,17 @@ mod tests {
     #[test]
     fn list_workspaces_with_entitlement_premium_sees_kds() {
         let (store, _) = fresh();
-        // Premium tier includes KDS
+        // Premium tier includes KDS. Post ADR-18 §13-37 migration 091
+        // renamed `workspace_types.key = 'inventory'` -> `'warehouse'`,
+        // so the entitlement query checks 'warehouse' as the user-facing
+        // stock-keeping workspace type (internal crate is still
+        // `modules/inventory/` per §3 multi-crate carve-out rationale).
         let premium = SubscriptionTier::Premium;
         let dto = store
             .list_workspaces_with_entitlement("role-owner", None, "default", &premium)
             .unwrap();
         assert!(dto.iter().any(|w| w.type_key == "kds"));
-        assert!(dto.iter().any(|w| w.type_key == "inventory"));
+        assert!(dto.iter().any(|w| w.type_key == "warehouse"));
         // All 5 types should be present
         assert_eq!(dto.len(), 5);
     }
@@ -1223,9 +1236,13 @@ mod tests {
     #[test]
     fn auto_recover_restores_suspended_to_limit() {
         let (store, _) = fresh();
-        // Suspend two instances manually.
+        // Suspend two instances manually. Post ADR-18 §13-37 migration 091
+        // renamed workspace_instances.id 'default-inventory' -> 'default-warehouse'
+        // (the matched-pair workaround for the workspace_types.key -> id rename
+        // cascade — see the migration_060 seed-row derivation cited inline in
+        // migration 091).
         store.conn.execute(
-            "UPDATE workspace_instances SET status = 'quota_suspended' WHERE id IN ('default-kds', 'default-inventory')",
+            "UPDATE workspace_instances SET status = 'quota_suspended' WHERE id IN ('default-kds', 'default-warehouse')",
             [],
         ).unwrap();
         // Now: 3 active, 2 suspended.

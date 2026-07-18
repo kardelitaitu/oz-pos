@@ -56,6 +56,64 @@ impl Terminal {
     }
 }
 
+/// Strongly-typed identifier for a [`Terminal`] row (FK to `terminals.id`).
+///
+/// **ADR-19 §3.1**: the canonical core function
+/// [`Store::adjust_stock_at_location_with_reason`](crate::db::Store::adjust_stock_at_location_with_reason)
+/// takes `Option<&TerminalId>` to attribute the `stock_movements.source_terminal_id`
+/// column for audit.
+//
+// Newtype pattern matches `LocationId` + `InventoryTransactionId`:
+// `String` inner field, `Deref<Target=str>`, `Display`, `From<&str>` /
+// `From<String>` for ergonomic conversion at the IPC + test boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct TerminalId(String);
+
+impl TerminalId {
+    /// Generate a new UUID v7 identifier.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(crate::new_id())
+    }
+
+    /// Borrow the underlying UUID string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for TerminalId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::ops::Deref for TerminalId {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for TerminalId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for TerminalId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for TerminalId {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

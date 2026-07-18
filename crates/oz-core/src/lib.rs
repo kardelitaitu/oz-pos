@@ -46,10 +46,14 @@ pub mod features;
 pub mod gift_card;
 /// Stock-on-hand queries and reservation.
 pub mod inventory;
+/// Inventory audit transactions (ADR-18 §9a + §9b; ADR-19 §3.2).
+pub mod inventory_transaction;
 /// Kitchen Display System order pipeline.
 pub mod kds;
 /// License server client — verify, activate, renew subscriptions (ADR #9).
 pub mod license_verification;
+/// Workspace-to-location resolution — which inventory location should a POS deduct from? (ADR-19 §4).
+pub mod location_resolver;
 /// Loyalty program — points, tiers, and redemption.
 pub mod loyalty;
 /// SQL migration definitions embedded at compile time.
@@ -80,6 +84,8 @@ pub mod recipe;
 pub mod refund;
 /// Completed sale records and sale-line items.
 pub mod sale;
+/// Sale-deduction result types — CompleteSaleResult vs PartialStockResult (ADR-19 §2).
+pub mod sale_deduction;
 /// Active user session state.
 pub mod session;
 /// Persistent key-value settings store.
@@ -165,8 +171,16 @@ pub use gift_card::{
     GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
     RedeemGiftCardResult,
 };
-pub use inventory::Inventory;
+pub use inventory::{CANONICAL_DEFAULT_LOCATION_UUID, Inventory, LocationId};
+pub use inventory_transaction::{
+    InventoryTransaction, InventoryTransactionId, InventoryTransactionLine,
+    InventoryTransactionType,
+};
 pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+pub use location_resolver::{
+    get_default_location_id, resolve_all_locations, resolve_location_chain_for_sku,
+    resolve_primary_location,
+};
 pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
 pub use money::{Currency, Money};
 pub use offline::{OfflineQueueItem, OfflineQueueStatus};
@@ -181,6 +195,9 @@ pub use rate_limiter::LoginRateLimiter;
 pub use recipe::RecipeItem;
 pub use refund::{Refund, RefundLine};
 pub use sale::{Sale, SaleLine};
+pub use sale_deduction::{
+    CompleteSaleResult, LocationStock, PartialStockResult, Shortfall, StockDeduction,
+};
 pub use settings::Settings;
 pub use shift::Shift;
 pub use sku::{LineId, Sku};

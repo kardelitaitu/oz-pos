@@ -126,13 +126,18 @@ impl SubscriptionTier {
     pub fn allows_workspace_type(&self, type_key: &str) -> bool {
         match self {
             Self::Free => matches!(type_key, "store-pos" | "restaurant-pos" | "admin"),
+            // ADR-18 §13 finding 37 (migration 091): the user-facing
+            // stock-keeping workspace type was renamed from 'inventory'
+            // → 'warehouse' across all FK references. The Pro + Premium
+            // tier match arms must track the rename or cashier POS would
+            // silently lose its 'warehouse' workspace entitlement.
             Self::Pro => matches!(
                 type_key,
-                "restaurant-pos" | "store-pos" | "inventory" | "admin"
+                "restaurant-pos" | "store-pos" | "warehouse" | "admin"
             ),
             Self::Premium => matches!(
                 type_key,
-                "restaurant-pos" | "store-pos" | "inventory" | "admin" | "kds" | "analytics-pro"
+                "restaurant-pos" | "store-pos" | "warehouse" | "admin" | "kds" | "analytics-pro"
             ),
             Self::Enterprise => true, // All types + custom plugins
         }
@@ -492,15 +497,18 @@ mod tests {
         assert!(SubscriptionTier::Free.allows_workspace_type("store-pos"));
         assert!(SubscriptionTier::Free.allows_workspace_type("admin"));
         assert!(!SubscriptionTier::Free.allows_workspace_type("kds"));
-        assert!(!SubscriptionTier::Free.allows_workspace_type("inventory"));
+        // ADR-18 §13 finding 37 (migration 091): post-rename, Free tier
+        // excludes 'warehouse' the same way it excluded 'inventory' pre-§.
+        assert!(!SubscriptionTier::Free.allows_workspace_type("warehouse"));
 
         // Pro tier
-        assert!(SubscriptionTier::Pro.allows_workspace_type("inventory"));
+        assert!(SubscriptionTier::Pro.allows_workspace_type("warehouse"));
         assert!(!SubscriptionTier::Pro.allows_workspace_type("kds"));
 
         // Premium tier
         assert!(SubscriptionTier::Premium.allows_workspace_type("kds"));
         assert!(SubscriptionTier::Premium.allows_workspace_type("analytics-pro"));
+        assert!(SubscriptionTier::Premium.allows_workspace_type("warehouse"));
 
         // Enterprise
         assert!(SubscriptionTier::Enterprise.allows_workspace_type("anything"));

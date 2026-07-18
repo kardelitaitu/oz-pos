@@ -448,6 +448,30 @@ pub const ALL: &[Migration] = &[
         id: "091_workspace_types_rename.sql",
         sql: include_str!("../migrations/091_workspace_types_rename.sql"),
     },
+    // ── ADR #19 Phase 3: sale-deduction runtime foundation ──
+    // 092: rebuild_stock_summary GROUP BY (item_id, location_id) at SQL
+    // layer (ADR-19 §15 criterion 19-1 — Rust function already aggregates;
+    // this lands the equivalent SQL invariant so a fresh install passes
+    // §9e-iii low_stock_alerts_at_location per-location vector query
+    // even before any Rust code runs).
+    Migration {
+        id: "092_rebuild_stock_summary_group_by_location.sql",
+        sql: include_str!("../migrations/092_rebuild_stock_summary_group_by_location.sql"),
+    },
+    // 093: adds `deduction_locations` JSON column to `sales` so the
+    // `complete_sale_with_resolved_shortfalls` command can record per-line
+    // per-location breakdown for void/refund inverse-flow fidelity (§2.4).
+    // 094: locks the deduction location on `active_carts` at cart-start
+    // time so the payment gateway capture always has a known stock source
+    // BEFORE funds are captured (§5.1 pre-capture ordering).
+    Migration {
+        id: "093_sales_deduction_locations.sql",
+        sql: include_str!("../migrations/093_sales_deduction_locations.sql"),
+    },
+    Migration {
+        id: "094_active_carts_location_lock.sql",
+        sql: include_str!("../migrations/094_active_carts_location_lock.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around
@@ -671,6 +695,9 @@ mod tests {
             "inventory_shifts",
             "stock_thresholds",
             "stock_alert_events",
+            // ── ADR #19 Phase 3 (migrations 093-094) ──
+            // 093 adds deduction_locations column to sales (no new table).
+            // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
         ];
 
         for table in &expected_tables {

@@ -34,6 +34,66 @@ use serde::{Deserialize, Serialize};
 /// test site provides the layered defence.
 pub const CANONICAL_DEFAULT_LOCATION_UUID: &str = "01926b3a-0000-7000-8000-000000000001";
 
+/// Strongly-typed identifier for an inventory location (FK to `inventory_locations.id`).
+///
+/// **ADR-19 §3.1**: the canonical core function
+/// [`Store::adjust_stock_at_location_with_reason`](../struct.Store.html) takes
+/// `&LocationId` for type-safety over the bare UUID string. The companion
+/// `inventory_locations` table is seeded in migration 078 with two canonical
+/// UUIDs (`-001` default, `-002` in-transit per §13-36); all other locations
+/// are workspace-admin-installed and surface via the resolver layer (criterion 19-4).
+///
+/// Newtype pattern: `String` inner field, `Deref<Target=str>`, `Display`,
+/// `From<&str>` / `From<String>` for ergonomic construction from migration
+/// code + seed data + resolver return values.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct LocationId(String);
+
+impl LocationId {
+    /// Generate a new UUID v7 identifier for a freshly-created location.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(crate::new_id())
+    }
+
+    /// Borrow the underlying UUID string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for LocationId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::ops::Deref for LocationId {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for LocationId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for LocationId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for LocationId {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
 /// Stock level for a single product.
 ///
 /// # Schema mapping
