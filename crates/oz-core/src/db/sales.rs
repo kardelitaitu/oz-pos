@@ -2826,7 +2826,7 @@ mod tests {
             .unwrap();
         assert_eq!(coffee_wh, 47, "loc-wh had 50, deducted 3 → 47");
 
-        // BAGEL deductible from canonical default (100 seeded, 2 deducted → 98)
+        // BAGEL deductible from canonical default (10 seeded, 2 deducted → 8)
         let bagel_def: i64 = conn
             .query_row(
                 "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = \
@@ -2835,7 +2835,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(bagel_def, 98, "canonical default had 100, deducted 2 → 98");
+        assert_eq!(bagel_def, 8, "canonical default had 10, deducted 2 → 8");
     }
 
     /// Empty resolutions (no shortfalls) still deducts all stock from primary.

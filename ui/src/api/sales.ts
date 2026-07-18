@@ -109,6 +109,79 @@ export interface CompleteSaleScopedArgs {
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
 
+// ── Shortfall Resolution — complete_sale_with_resolved_shortfalls ──
+
+export interface LocationAllocation {
+  locationId: string;
+  qty: number;
+}
+
+export interface ResolvedShortfall {
+  sku: string;
+  allocations: LocationAllocation[];
+}
+
+export interface CartLineData {
+  sku: string;
+  qty: number;
+  unitPriceMinor: number;
+}
+
+export interface CompleteSaleWithResolvedShortfallsArgs {
+  cartId: string;
+  paymentMethod: string;
+  tenderedMinor: number | null;
+  customerId?: string;
+  paymentSplits?: PaymentSplitArg[];
+  customerName?: string;
+  serialNumbers?: SerialNumberArg[];
+  /** Cart line data reconstructed from the in-memory cart (original was deleted). */
+  lines: CartLineData[];
+  /** Total sale amount in minor units. */
+  totalMinor: number;
+  /** ISO-4217 currency code. */
+  currency: string;
+  /** Discount percentage (0-100). */
+  discountPercent: number;
+  /** Optional discount label. */
+  discountLabel?: string;
+  /** Cashier-resolved shortfalls: per-SKU allocation to specific locations. */
+  resolutions: ResolvedShortfall[];
+}
+
+/** Complete a sale with cashier-resolved shortfalls (split fulfillment).
+ *  This is the second command after a PartialStockResult is returned. */
+export const completeSaleWithResolvedShortfalls = (
+  sessionToken: string,
+  args: CompleteSaleWithResolvedShortfallsArgs
+): Promise<CompleteSaleResult> =>
+  invoke<CompleteSaleResult>('complete_sale_with_resolved_shortfalls_scoped', { sessionToken, args });
+
+// Export front-end types for the StockShortfallDialog
+// PartialStockResult, Shortfall, LocationStock are returned by the backend
+// and consumed by the front-end dialog; they are defined in the Rust side
+// and serialized via JSON. The front-end types mirror the Rust definitions:
+export interface LocationStock {
+  locationId: string;
+  locationName: string;
+  qtyAvailable: number;
+}
+
+export interface Shortfall {
+  sku: string;
+  productName: string;
+  requestedQty: number;
+  primaryQtyAvailable: number;
+  deficit: number;
+  primaryLocationId: string;
+  alternatives: LocationStock[];
+}
+
+export interface PartialStockResult {
+  requiresResolution: boolean;
+  shortfalls: Shortfall[];
+}
+
 /** Check whether a product is configured for serial number tracking. */
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>
   invoke<boolean>('get_product_track_serial', { sku });
