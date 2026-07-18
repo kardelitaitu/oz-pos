@@ -199,7 +199,8 @@ pub use recipe::RecipeItem;
 pub use refund::{Refund, RefundLine};
 pub use sale::{Sale, SaleLine};
 pub use sale_deduction::{
-    CompleteSaleResult, LocationStock, PartialStockResult, Shortfall, StockDeduction,
+    CompleteSaleResult, LocationAllocation, LocationStock, PartialStockResult, ResolvedShortfall,
+    Shortfall, StockDeduction,
 };
 pub use settings::Settings;
 pub use shift::Shift;

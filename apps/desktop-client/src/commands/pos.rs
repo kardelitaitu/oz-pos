@@ -758,6 +758,177 @@ pub async fn complete_sale(
     })
 }
 
+/// A single cart line reconstructed by the frontend for the second command.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CartLineData {
+    /// SKU identifier.
+    pub sku: String,
+    /// Quantity.
+    pub qty: i64,
+    /// Unit price in minor units.
+    pub unit_price_minor: i64,
+}
+
+/// Arguments for completing a sale with resolved shortfalls (split fulfillment).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteSaleWithResolvedShortfallsArgs {
+    /// ID of the original cart (informational).
+    pub cart_id: CartId,
+    /// Payment method label.
+    pub payment_method: String,
+    /// Tendered amount in minor units.
+    pub tendered_minor: Option<i64>,
+    /// Optional customer id.
+    pub customer_id: Option<String>,
+    /// Optional payment splits.
+    pub payment_splits: Option<Vec<PaymentSplitArg>>,
+    /// Customer name (for credit sales).
+    pub customer_name: Option<String>,
+    /// Optional serial numbers.
+    pub serial_numbers: Option<Vec<SerialNumberArg>>,
+    /// Cart line data reconstructed by the frontend (needed because the
+    /// original cart was deleted in the first `complete_sale_scoped` call).
+    pub lines: Vec<CartLineData>,
+    /// Total sale amount in minor units.
+    pub total_minor: i64,
+    /// ISO-4217 currency code.
+    pub currency: String,
+    /// Discount percentage (0-100).
+    pub discount_percent: i64,
+    /// Optional discount label.
+    pub discount_label: Option<String>,
+    /// Cashier-resolved shortfalls: per-SKU allocation to specific locations.
+    pub resolutions: Vec<oz_core::sale_deduction::ResolvedShortfall>,
+}
+
+/// Complete a sale with cashier-resolved shortfalls (split fulfillment).
+///
+/// This is the second command in the two-command flow (ADR-19 §6b).
+/// After `complete_sale_scoped` returns a [`PartialStockResult`] error,
+/// the cashier resolves shortfalls via the Stock Shortfall dialog.
+/// This command re-checks stock at the resolved locations and deducts
+/// accordingly — using [`Store::complete_sale_with_resolved_shortfalls`].
+/// The front-end passes cart line data since the original cart was deleted
+/// in the first `complete_sale_scoped` call.
+#[command]
+pub async fn complete_sale_with_resolved_shortfalls_scoped(
+    session_token: String,
+    args: CompleteSaleWithResolvedShortfallsArgs,
+    state: State<'_, AppState>,
+) -> Result<CompleteSaleResult, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+
+    // ── Reconstruct the Cart from front-end line data ─────────────
+    let currency: oz_core::Currency = args
+        .currency
+        .parse()
+        .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.currency)))?;
+
+    let mut cart = oz_core::Cart::new(currency);
+    for line_data in &args.lines {
+        let unit_price = oz_core::Money {
+            minor_units: line_data.unit_price_minor,
+            currency: cart.currency(),
+        };
+        let line =
+            oz_core::CartLine::new(oz_core::Sku::new(&line_data.sku), line_data.qty, unit_price);
+        cart.add_line(line)
+            .map_err(|e| AppError::Invalid(e.to_string()))?;
+    }
+
+    // Apply discount if configured
+    if args.discount_percent > 0 {
+        if let Ok(pct) = foundation::Percentage::new(args.discount_percent as u8) {
+            cart.set_discount(pct, args.discount_label.clone());
+        }
+    }
+
+    let line_count = cart.line_count();
+    let total = cart.total();
+
+    let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
+        .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
+    sale.payment_method = Some(args.payment_method.clone());
+    sale.tendered_minor = args.tendered_minor;
+    sale.customer_id = args.customer_id.clone();
+
+    let sale_id = sale.id.clone();
+
+    // ── Lock: Compute tax + execute the resolved deduction ────────
+    let result = {
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+
+        // Compute tax (same as first command)
+        store.compute_sale_tax(&mut sale, &[])?;
+
+        let splits = if let Some(ref splits) = args.payment_splits {
+            splits.clone()
+        } else {
+            vec![PaymentSplitArg {
+                method: args.payment_method.clone(),
+                amount_minor: sale.total.minor_units,
+                gateway_reference: args.customer_name.clone(),
+                gateway_status: None,
+                gateway_response: None,
+            }]
+        };
+
+        store.complete_sale_with_resolved_shortfalls(
+            &sale,
+            Some(&session.instance_id),
+            &splits,
+            &session.user_id,
+            Some(&session.terminal_id),
+            &args.resolutions,
+        )?
+    };
+
+    tracing::info!(%sale_id, store_id = %session.store_id, "sale completed with resolved shortfalls");
+
+    // ── Event publishing (no DB lock held) ────────────────────────
+    {
+        let kernel = state.kernel.lock().await;
+        let bus = kernel.event_bus();
+        let line_items: Vec<oz_core::events::SaleCompletedLine> = sale
+            .lines
+            .iter()
+            .map(|l| oz_core::events::SaleCompletedLine {
+                sku: l.sku.clone(),
+                qty: l.qty,
+                unit_price_minor: l.unit_price.minor_units,
+                tax_minor: l.tax_amount.minor_units,
+                tax_rate_id: l.tax_rate_id.clone(),
+            })
+            .collect();
+
+        if let Err(e) = bus.publish(&oz_core::events::SaleCompleted {
+            sale_id: sale_id.clone(),
+            store_id: Some(session.store_id.clone()),
+            line_items,
+            total_minor: sale.total.minor_units,
+            currency: String::from_utf8_lossy(&sale.currency.0).into_owned(),
+            customer_id: args.customer_id.clone(),
+        }) {
+            tracing::warn!(%sale_id, error = %e, "event bus publish failed");
+        }
+    }
+
+    Ok(CompleteSaleResult {
+        sale_id,
+        total,
+        line_count,
+    })
+}
+
 /// Complete a sale within the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `complete_sale`. The `user_id` for
@@ -772,6 +943,10 @@ pub async fn complete_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)

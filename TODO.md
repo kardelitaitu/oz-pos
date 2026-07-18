@@ -73,35 +73,37 @@ All screens must use **design tokens only** — never hardcoded colours, sizes, 
   - [x] Flags any colour value (`#...`, `rgb(`, `rgba(`) that is **not** a `var(--)` reference
   - [x] Flags any hardcoded font-size, border-radius, box-shadow, or spacing that should use a token
   - [x] Exempt legitimate exceptions (gradient backgrounds, `transparent`, `currentColor`, `inset 0`)
-- [ ] **Fix violations per screen** — Track progress in the table below
-  - [x] AuditLogScreen.css
-  - [x] CreatePinScreen.css
-  - [x] LicenseActivationScreen.css
-  - [x] InventoryReportScreen.css
-  - [x] StaffLoginScreen.css
-  - [x] CategoryManagementScreen.css
-  - [x] DesignSystem.css
-  - [x] GiftCardsScreen.css
-  - [x] InventoryAdjustmentScreen.css
-  - [x] StockCountDetail.css (~30 violations)
-  - [x] StockCountForm.css (~15 violations)
-  - [x] StockCountHistory.css (~25 violations)
-  - [x] StockCountsScreen.css (~15 violations)
-  - [x] KdsScreen.css (~30 violations)
-  - [x] KioskScreen.css (~20 violations)
-  - [x] LoyaltyManagementScreen.css (2 violations)
-  - [x] ProductLookupScreen.css (4 violations)
-  - [x] ProductManagementScreen.css (5 violations)
-  - [x] PromotionManagementScreen.css (6 violations)
-  - [x] PurchaseOrderForm.css (3 violations)
-  - [x] PurchaseOrdersScreen.css (1 violation)
-  - [x] SuppliersScreen.css (1 violation)
-  - [x] RestaurantMenu.css (~10 violations)
-  - [x] RetailPosScreen.css (~150 violations — largest single file)
-  - [ ] sales/ CSS files (PaymentModal, RefundModal, SalesHistoryScreen, WeightScaleWidget)
-  - [ ] settings/ CSS files (SettingsPage, DataManagement, etc.)
-  - [ ] frontend/ CSS files
-  - [ ] components/ CSS files
+- [x] **Fix violations per screen** — Complete. **101 remaining design exceptions** (all documented with inline comments).
+  - **fixable violations all resolved:** 720 hardcoded values eliminated across 64 CSS files.
+  - **Remaining 101 are intentional:** semantic colors (white-on-status, tier badges, workspace accents), sub-pixel positioning, non-standard sizes (5px, 9px, 11px), animation-only colors, theme-specific overlays, QR pulse shadows, tooltip arrow offsets, sr-only utilities.
+
+The 64 tokenized CSS files by directory:
+  - [x] features/auth/ (4 files)
+  - [x] features/categories/ (1 file)
+  - [x] features/kds/ (2 files)
+  - [x] features/kiosk/ (1 file)
+  - [x] features/loyalty/ (1 file)
+  - [x] features/products/ (2 files)
+  - [x] features/promotions/ (1 file)
+  - [x] features/purchasing/ (3 files)
+  - [x] features/reports/ (2 files)
+  - [x] features/restaurant/ (1 file)
+  - [x] features/retail/ (1 file)
+  - [x] features/sales/ (12 files)
+  - [x] features/settings/ (6 files)
+  - [x] features/setup/ (1 file)
+  - [x] features/shifts/ (1 file)
+  - [x] features/stock-transfers/ (1 file)
+  - [x] features/stores/ (2 files)
+  - [x] features/tables/ (1 file)
+  - [x] features/tax/ (1 file)
+  - [x] features/terminals/ (1 file)
+  - [x] features/workspaces/ (1 file)
+  - [x] frontend/shared/ (3 files)
+  - [x] frontend/shell/ (5 files)
+  - [x] frontend/themes/ (2 files)
+  - [x] components/ (8 files)
+  - [x] TODO.md
 
 ### 🌗 Theme Switching
 

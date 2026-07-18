@@ -242,6 +242,7 @@ pub fn run() {
             commands::pos::add_line_scoped,
             commands::pos::complete_sale,
             commands::pos::complete_sale_scoped,
+            commands::pos::complete_sale_with_resolved_shortfalls_scoped,
             commands::pos::set_cart_discount,
             commands::pos::set_cart_discount_scoped,
             commands::pos::override_line_price,

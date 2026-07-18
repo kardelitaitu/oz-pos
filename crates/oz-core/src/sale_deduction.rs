@@ -16,6 +16,31 @@ use crate::inventory::LocationId;
 use crate::inventory_transaction::InventoryTransactionId;
 use foundation::SaleStatus;
 
+/// A cashier's resolution for a single shortfall — which location(s) to
+/// draw from to fulfill the deficit.
+///
+/// Sent by the front-end Stock Shortfall dialog after the cashier picks
+/// alternative locations or enters split-fulfillment quantities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedShortfall {
+    /// SKU that was short (must match a Shortfall from PartialStockResult).
+    pub sku: String,
+    /// Per-location allocation of the quantity to deduct from each location.
+    /// Sum of `qty` across all entries MUST equal the original `requested_qty`.
+    pub allocations: Vec<LocationAllocation>,
+}
+
+/// A per-location quantity allocation chosen by the cashier for split fulfillment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationAllocation {
+    /// Which inventory location to deduct from.
+    pub location_id: LocationId,
+    /// How many units to deduct from this location (must be ≥ 0).
+    pub qty: i64,
+}
+
 /// Stock availability at a specific inventory location.
 ///
 /// Returned inside [`Shortfall::alternatives`] so the cashier UI can render
