@@ -396,4 +396,163 @@ mod tests {
         // Deleting a nonexistent bundle should not error.
         store.delete_bundle("no-such-bundle").unwrap();
     }
+
+    // ── Additional edge-case tests ─────────────────────────────────
+    //
+    // NOTE: bundle_sku has FK REFERENCES products(sku), so bundle names
+    // must match seeded product SKUs (B-Gift Box, B-Hamper, B-Sampler,
+    // B-Edit Me, B-Delete Me, BUNDLE1).
+
+    #[test]
+    fn create_bundle_with_many_items() {
+        let store = fresh_store();
+        let bundle = make_bundle("Gift Box");
+        let items = vec![
+            make_item(&bundle.id, "ITEM-A", 1),
+            make_item(&bundle.id, "ITEM-B", 1),
+            make_item(&bundle.id, "ITEM-C", 1),
+            make_item(&bundle.id, "ITEM-A", 2),
+            make_item(&bundle.id, "ITEM-B", 3),
+        ];
+        store.create_bundle(&bundle, &items).unwrap();
+
+        let found = store.get_bundle(&bundle.id).unwrap().unwrap();
+        assert_eq!(found.items.len(), 5);
+    }
+
+    #[test]
+    fn create_bundle_with_zero_qty_item() {
+        let store = fresh_store();
+        let bundle = make_bundle("Hamper");
+        let items = vec![make_item(&bundle.id, "ITEM-A", 0)];
+        store.create_bundle(&bundle, &items).unwrap();
+
+        let found = store.get_bundle(&bundle.id).unwrap().unwrap();
+        assert_eq!(found.items.len(), 1);
+        assert_eq!(found.items[0].qty, 0);
+    }
+
+    #[test]
+    fn create_bundle_with_no_items() {
+        let store = fresh_store();
+        let bundle = make_bundle("Sampler");
+        store.create_bundle(&bundle, &[]).unwrap();
+
+        let found = store.get_bundle(&bundle.id).unwrap().unwrap();
+        assert!(found.items.is_empty());
+    }
+
+    #[test]
+    fn update_bundle_sku() {
+        let store = fresh_store();
+        let mut bundle = make_bundle("Edit Me");
+        let items = vec![make_item(&bundle.id, "ITEM-A", 1)];
+        store.create_bundle(&bundle, &items).unwrap();
+
+        // bundle_sku FK must reference an existing product SKU; BUNDLE1 exists
+        bundle.bundle_sku = "BUNDLE1".into();
+        store.update_bundle(&bundle, &items).unwrap();
+
+        // Look up by new SKU
+        let found = store.get_bundle_by_sku("BUNDLE1").unwrap().unwrap();
+        assert_eq!(found.bundle.name, "Edit Me");
+
+        // Old SKU should not find it
+        assert!(store.get_bundle_by_sku("B-Edit Me").unwrap().is_none());
+    }
+
+    #[test]
+    fn update_bundle_mark_inactive() {
+        let store = fresh_store();
+        let mut bundle = make_bundle("Delete Me");
+        let items = vec![make_item(&bundle.id, "ITEM-A", 1)];
+        store.create_bundle(&bundle, &items).unwrap();
+
+        bundle.active = false;
+        store.update_bundle(&bundle, &items).unwrap();
+
+        let found = store.get_bundle(&bundle.id).unwrap().unwrap();
+        assert!(!found.bundle.active);
+    }
+
+    #[test]
+    fn update_bundle_clear_items_to_empty() {
+        let store = fresh_store();
+        let bundle = make_bundle("Gift Box");
+        let items = vec![make_item(&bundle.id, "ITEM-A", 1)];
+        store.create_bundle(&bundle, &items).unwrap();
+
+        // Update with empty items
+        store.update_bundle(&bundle, &[]).unwrap();
+
+        let found = store.get_bundle(&bundle.id).unwrap().unwrap();
+        assert!(found.items.is_empty());
+    }
+
+    #[test]
+    fn list_bundles_multiple_ordered_by_name() {
+        let store = fresh_store();
+
+        // Create bundles using seeded skus: B-Gift Box, B-Hamper, B-Sampler
+        // Names sort as: Gift Box < Hamper < Sampler -> already in order
+        // Insert out-of-order to verify ORDER BY name works
+        let b = make_bundle("Sampler");
+        store.create_bundle(&b, &[]).unwrap();
+        let a = make_bundle("Gift Box");
+        store.create_bundle(&a, &[]).unwrap();
+        let c = make_bundle("Hamper");
+        store.create_bundle(&c, &[]).unwrap();
+
+        let all = store.list_bundles().unwrap();
+        assert_eq!(all.len(), 3);
+        // ORDER BY name ASC
+        assert_eq!(all[0].bundle.name, "Gift Box");
+        assert_eq!(all[1].bundle.name, "Hamper");
+        assert_eq!(all[2].bundle.name, "Sampler");
+    }
+
+    #[test]
+    fn get_bundle_by_sku_empty_string() {
+        let store = fresh_store();
+        assert!(store.get_bundle_by_sku("").unwrap().is_none());
+    }
+
+    #[test]
+    fn create_bundle_duplicate_id() {
+        let store = fresh_store();
+        let bundle = make_bundle("Gift Box");
+        let items = vec![make_item(&bundle.id, "ITEM-A", 1)];
+        store.create_bundle(&bundle, &items).unwrap();
+
+        // Creating with same ID should fail (PK constraint)
+        // Use a different seeded SKU for the duplicate to avoid bundle_sku UNIQUE
+        let dup = ProductBundle {
+            id: bundle.id.clone(),
+            bundle_sku: "B-Hamper".into(),
+            name: "Duplicate".into(),
+            ..make_bundle("Gift Box")
+        };
+        let result = store.create_bundle(&dup, &items);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_bundle_by_nonexistent_id_returns_none() {
+        let store = fresh_store();
+        assert!(store.get_bundle("no-such-id").unwrap().is_none());
+    }
+
+    #[test]
+    fn get_bundle_by_nonexistent_sku_returns_none() {
+        let store = fresh_store();
+        assert!(store.get_bundle_by_sku("NO-SUCH-SKU").unwrap().is_none());
+    }
+
+    #[test]
+    fn update_nonexistent_bundle_is_noop() {
+        let store = fresh_store();
+        let bundle = make_bundle("Gift Box");
+        // Updating a bundle that doesn't exist is a no-op (0 rows affected, no error)
+        store.update_bundle(&bundle, &[]).unwrap();
+    }
 }
