@@ -541,4 +541,140 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
     }
+
+    #[test]
+    fn po_full_lifecycle() {
+        let conn = fresh();
+        seed_supplier(&conn);
+        seed_product(&conn);
+
+        // Step 1: Create as draft
+        let lines = vec![CreatePoLineInput {
+            sku: "SKU-001".into(),
+            product_name: "Widget".into(),
+            qty: 5,
+            unit_cost_minor: 1000,
+        }];
+        let po = store(&conn)
+            .create_purchase_order(
+                "PO-LIFECYCLE",
+                "sup-po",
+                "2025-03-01",
+                "full cycle",
+                None,
+                &lines,
+            )
+            .unwrap();
+        assert_eq!(po.order.status, "draft");
+        assert_eq!(po.order.subtotal_minor, 5000);
+        assert_eq!(po.lines.len(), 1);
+
+        // Step 2: Approve
+        let approved = store(&conn)
+            .update_po_status(&po.order.id, "approved")
+            .unwrap();
+        assert_eq!(approved.order.status, "approved");
+
+        // Step 3: Receive
+        let received = store(&conn).receive_purchase_order(&po.order.id).unwrap();
+        assert_eq!(received.order.status, "received");
+        assert!(received.order.received_date.is_some());
+
+        // Step 4: Verify inventory incremented (seed = 10, +5 = 15)
+        let stock: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id='prod-po'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock, 15);
+    }
+
+    #[test]
+    fn po_draft_to_pending_to_approved() {
+        let conn = fresh();
+        let sid = seed_supplier(&conn);
+        let po = store(&conn)
+            .create_purchase_order("PO-TRANSITIONS", &sid, "", "", None, &[])
+            .unwrap();
+        assert_eq!(po.order.status, "draft");
+
+        let pending = store(&conn)
+            .update_po_status(&po.order.id, "pending")
+            .unwrap();
+        assert_eq!(pending.order.status, "pending");
+
+        let approved = store(&conn)
+            .update_po_status(&po.order.id, "approved")
+            .unwrap();
+        assert_eq!(approved.order.status, "approved");
+    }
+
+    #[test]
+    fn po_cancel_then_reopen_then_receive() {
+        let conn = fresh();
+        seed_supplier(&conn);
+        seed_product(&conn);
+
+        let lines = vec![CreatePoLineInput {
+            sku: "SKU-001".into(),
+            product_name: "Widget".into(),
+            qty: 3,
+            unit_cost_minor: 500,
+        }];
+        let po = store(&conn)
+            .create_purchase_order("PO-REOPEN", "sup-po", "", "", None, &lines)
+            .unwrap();
+
+        // Cancel first
+        let cancelled = store(&conn)
+            .update_po_status(&po.order.id, "cancelled")
+            .unwrap();
+        assert_eq!(cancelled.order.status, "cancelled");
+
+        // Now try to receive while cancelled — should fail
+        let err = store(&conn)
+            .receive_purchase_order(&po.order.id)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+
+        // Reopen: set back to approved
+        let reopened = store(&conn)
+            .update_po_status(&po.order.id, "approved")
+            .unwrap();
+        assert_eq!(reopened.order.status, "approved");
+
+        // Now receive should work
+        let received = store(&conn).receive_purchase_order(&po.order.id).unwrap();
+        assert_eq!(received.order.status, "received");
+
+        // Verify inventory (seed = 10, +3 = 13)
+        let stock: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id='prod-po'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock, 13);
+    }
+
+    #[test]
+    fn po_update_status_nonexistent_id() {
+        let conn = fresh();
+        let err = store(&conn)
+            .update_po_status("i-do-not-exist", "approved")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "purchase_order"));
+    }
+
+    #[test]
+    fn po_receive_nonexistent_id() {
+        let conn = fresh();
+        let err = store(&conn)
+            .receive_purchase_order("i-do-not-exist")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "purchase_order"));
+    }
 }
