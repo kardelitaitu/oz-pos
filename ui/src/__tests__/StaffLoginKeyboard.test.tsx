@@ -6,7 +6,7 @@ import { checkUsername } from '@/api/staff';
 
 // ── Hoisted mock helpers ───────────────────────────────────────────
 
-const mockAuthError = vi.hoisted(() => vi.fn(() => null));
+const mockAuthError = vi.hoisted(() => vi.fn<() => string | null>(() => null));
 
 // ── Mocks ────────────────────────────────────────────────────────────
 

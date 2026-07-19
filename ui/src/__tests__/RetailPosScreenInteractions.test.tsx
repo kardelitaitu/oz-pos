@@ -565,7 +565,7 @@ describe('RetailPosScreen — interactions', () => {
     });
     const removeBtns = document.querySelectorAll('.retail-cart-remove-btn');
     expect(removeBtns.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(removeBtns[0]);
+    await userEvent.click(removeBtns[0]!);
     expect(removeLine).toHaveBeenCalledTimes(1);
     expect(removeLine).toHaveBeenCalledWith('line-1');
   });

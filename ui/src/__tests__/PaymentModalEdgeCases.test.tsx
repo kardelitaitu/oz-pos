@@ -234,7 +234,8 @@ describe('PaymentModal — edge cases', () => {
 
   it('retry button re-attempts the sale', async () => {
     let callCount = 0;
-    invokeMock.mockImplementation((cmd: string): Promise<unknown> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    invokeMock.mockImplementation((cmd: string): any => {
       if (cmd === 'complete_sale') {
         callCount++;
         if (callCount === 1) return Promise.reject(new Error('Payment gateway timeout'));
