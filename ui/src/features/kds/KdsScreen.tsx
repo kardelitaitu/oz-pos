@@ -58,11 +58,64 @@ export default function KdsScreen() {
       .catch((e) => setError(e.message ?? String(e)));
   }, [userId, workspaceScope?.storeId, prefs.kdsZone]);
 
+  // P2-3: Adaptive polling with dynamic interval based on idle time.
+  // Uses recursive setTimeout so the duration recalculates after every
+  // fetch. Polls 2s when active, backs off to 10s after 30s idle, 30s
+  // after 2min idle. Pauses when the tab is hidden. Idle resets when
+  // orders.length changes (via effect dependency re-run).
   useEffect(() => {
+    let idleMs = 0;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let isPaused = document.hidden;
+
+    const getInterval = (idle: number): number => {
+      if (idle < 30_000) return 2_000;   // active: 2s
+      if (idle < 120_000) return 10_000;  // idle 30s+: 10s
+      return 30_000;                        // idle 2min+: 30s
+    };
+
+    const clearTimer = () => {
+      if (timerId !== null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+    };
+
+    // Recursive tick — recalculates interval after every fetch
+    const tick = () => {
+      if (!isPaused) {
+        fetchOrders();
+      }
+
+      // Advance idle time by the current interval, then schedule next tick
+      idleMs += getInterval(idleMs);
+      timerId = setTimeout(tick, getInterval(idleMs));
+    };
+
+    // Visibility change handler — pause polling when tab hidden
+    const onVisibilityChange = () => {
+      isPaused = document.hidden;
+      if (!isPaused) {
+        // Immediately fetch when tab becomes visible, then restart with fresh idle
+        clearTimer();
+        fetchOrders();
+        idleMs = 0;
+        timerId = setTimeout(tick, getInterval(0));
+      }
+    };
+
+    // Initial fetch and start polling
     fetchOrders();
-    const interval = setInterval(fetchOrders, 15000);
-    return () => clearInterval(interval);
-  }, [fetchOrders]);
+    timerId = setTimeout(tick, getInterval(0));
+
+    // Wire up visibility change listener
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearTimer();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [fetchOrders, orders.length]);
 
   const advanceStatus = async (order: KdsOrder) => {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
