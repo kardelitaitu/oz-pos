@@ -109,8 +109,8 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 - [ ] Wire reconciler into the POS `complete` flow
 
 **6.2 Cache strategy for `resolve_primary_location`**
-- [ ] Add in-memory cache in `location_resolver.rs` with 30s TTL
-- [ ] Invalidate on workspace change
+- [x] Add in-memory cache in `location_resolver.rs` with 30s TTL (CachedLocation + LOCATION_CACHE static + cache_get/cache_set/pub invalidate_location_cache)
+- [ ] Invalidate on workspace change (wire `invalidate_location_cache()` into workspace switch commands in `apps/desktop-client/src/commands/workspaces.rs`)
 
 **6.3 Held carts `deduction_location_id` lock**
 - [ ] Migrate `active_carts.deduction_location_id` to the `held_carts` table

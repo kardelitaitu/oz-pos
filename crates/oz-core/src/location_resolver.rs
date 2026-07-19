@@ -11,16 +11,70 @@
 //! | 3 | Multi-binding primary | `workspace_inventory_locations.is_primary = 1` |
 //! | 4 | Canonical default | `CANONICAL_DEFAULT_LOCATION_UUID` |
 //!
-//! The resolver is read-heavy (called once per cart-open + possibly per
-//! `add_line`), so all functions accept a `&rusqlite::Connection` and
-//! perform direct SELECTs — no caching at this layer (ADR-19 §4.2 defers
-//! caching to a future ADR).
+//! Performance optimisation: `resolve_primary_location` is read-heavy (called
+//! once per cart-open + possibly per `add_line`), so we cache the result per
+//! `workspace_instance_id` with a 30-second TTL. The cache is invalidated on
+//! workspace switch to force a fresh SELECT from the database.
 
 use rusqlite::params;
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use crate::error::CoreError;
 use crate::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
 use crate::sale_deduction::LocationStock;
+
+// ── In-memory cache with 30s TTL ────────────────────────────────────
+
+#[derive(Clone)]
+struct CachedLocation {
+    location_id: LocationId,
+    cached_at: Instant,
+}
+
+/// Global cache for resolved primary locations, keyed by `workspace_instance_id`.
+/// Entries expire after 30 seconds. Call [`invalidate_location_cache`] to clear
+/// the entire cache (e.g. on workspace switch).
+static LOCATION_CACHE: LazyLock<Mutex<HashMap<String, CachedLocation>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// TTL for cached location resolutions, in seconds.
+const CACHE_TTL_SECS: u64 = 30;
+
+/// Check the in-memory cache for a previously-resolved primary location.
+/// Returns `None` on cache miss or if the entry has expired (30s TTL).
+fn cache_get(workspace_instance_id: &str) -> Option<LocationId> {
+    let cache = LOCATION_CACHE.lock().ok()?;
+    if let Some(entry) = cache.get(workspace_instance_id) {
+        if entry.cached_at.elapsed().as_secs() < CACHE_TTL_SECS {
+            return Some(entry.location_id.clone());
+        }
+    }
+    None
+}
+
+/// Store a resolved primary location in the in-memory cache.
+fn cache_set(workspace_instance_id: &str, location_id: &LocationId) {
+    if let Ok(mut cache) = LOCATION_CACHE.lock() {
+        cache.insert(
+            workspace_instance_id.to_owned(),
+            CachedLocation {
+                location_id: location_id.clone(),
+                cached_at: Instant::now(),
+            },
+        );
+    }
+}
+
+/// Clear the entire location cache. Called on workspace switch so the next
+/// `resolve_primary_location` call performs a fresh database SELECT.
+pub fn invalidate_location_cache() {
+    if let Ok(mut cache) = LOCATION_CACHE.lock() {
+        cache.clear();
+    }
+}
 
 /// Return the frozen canonical default location UUID as a [`LocationId`].
 ///
@@ -56,6 +110,12 @@ pub fn resolve_primary_location(
         return Ok(loc.clone());
     }
 
+    // Check the in-memory cache (30s TTL). Only applies to non-override paths
+    // because overrides are ephemeral and should not pollute the cache.
+    if let Some(cached) = cache_get(workspace_instance_id) {
+        return Ok(cached);
+    }
+
     // Verify the workspace instance exists.
     let (bound_location_id,): (Option<String>,) = conn
         .query_row(
@@ -73,7 +133,9 @@ pub fn resolve_primary_location(
 
     // Tier 2: single-binding.
     if let Some(bound) = bound_location_id.filter(|b| !b.is_empty()) {
-        return Ok(LocationId::from(bound));
+        let loc = LocationId::from(bound);
+        cache_set(workspace_instance_id, &loc);
+        return Ok(loc);
     }
 
     // Check for multi-binding rows.
@@ -98,7 +160,9 @@ pub fn resolve_primary_location(
             .ok();
 
         if let Some(pid) = primary {
-            return Ok(LocationId::from(pid));
+            let loc = LocationId::from(pid);
+            cache_set(workspace_instance_id, &loc);
+            return Ok(loc);
         }
 
         // Multi-binding with no explicit primary — fall through to canonical
@@ -106,7 +170,9 @@ pub fn resolve_primary_location(
     }
 
     // Tier 4: canonical default.
-    Ok(get_default_location_id())
+    let loc = get_default_location_id();
+    cache_set(workspace_instance_id, &loc);
+    Ok(loc)
 }
 
 /// Resolve ALL inventory location bindings for a workspace instance.
@@ -480,6 +546,131 @@ mod tests {
         let loc = resolve_primary_location(&conn, "ws-no-primary", None).unwrap();
         // Falls through to canonical default — no is_primary=1 row exists.
         assert_eq!(loc.as_str(), CANONICAL_DEFAULT_LOCATION_UUID);
+    }
+
+    // ── Cache tests ────────────────────────────────────────────────
+
+    #[test]
+    fn location_cache_returns_cached_value_invalidation_forces_db_read() {
+        // Uses entirely unique IDs to avoid any possible collision with seed data
+        // or parallel test interference. The location name must be globally unique
+        // due to the UNIQUE index on inventory_locations(name).
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-cache-zzz', 'Cache Test Loc Z99', 'store')",
+            [],
+        )
+        .expect("insert inventory_locations");
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name, bound_location_id) \
+             VALUES ('ws-cache-zz99', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'CacheTestZZ99', 'loc-cache-zzz')",
+            [],
+        )
+        .expect("insert workspace_instances");
+
+        invalidate_location_cache();
+
+        // First call — should hit DB, cache result.
+        let loc = resolve_primary_location(&conn, "ws-cache-zz99", None).unwrap();
+        assert_eq!(loc.as_str(), "loc-cache-zzz");
+
+        // Modify DB behind the cache.
+        // Must insert the target location first — FK bound_location_id REFERENCES inventory_locations(id).
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-fake-zz99', 'Cache Fake Loc Z99', 'warehouse')",
+            [],
+        )
+        .expect("insert fake location for FK");
+        let rows = conn
+            .execute(
+                "UPDATE workspace_instances SET bound_location_id = 'loc-fake-zz99' WHERE id = 'ws-cache-zz99'",
+                [],
+            )
+            .expect("update bound_location_id");
+        assert_eq!(rows, 1, "UPDATE must affect exactly 1 row");
+
+        // Second call — should return CACHED value, not DB value.
+        let loc2 = resolve_primary_location(&conn, "ws-cache-zz99", None).unwrap();
+        assert_eq!(
+            loc2.as_str(),
+            "loc-cache-zzz",
+            "cache should return stale value within TTL"
+        );
+
+        // Invalidate cache.
+        invalidate_location_cache();
+
+        // Third call — should hit DB, return updated value.
+        let loc3 = resolve_primary_location(&conn, "ws-cache-zz99", None).unwrap();
+        assert_eq!(
+            loc3.as_str(),
+            "loc-fake-zz99",
+            "after invalidation, should read fresh DB value"
+        );
+    }
+
+    #[test]
+    fn location_cache_notfound_cleared_by_invalidation() {
+        let conn = migrated();
+        seed_fks(&conn);
+        invalidate_location_cache();
+
+        // Resolving a nonexistent workspace returns NotFound.
+        let err = resolve_primary_location(&conn, "ws-noexist-cache", None).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CoreError::NotFound {
+                    entity: "workspace_instance",
+                    ..
+                }
+            ),
+            "expected NotFound error"
+        );
+
+        // Create a workspace and resolve again.
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-b', 'B', 'store');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name, bound_location_id) \
+               VALUES ('ws-noexist-cache', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'NowExists', 'loc-b');",
+        )
+        .unwrap();
+
+        invalidate_location_cache();
+        let ok_loc = resolve_primary_location(&conn, "ws-noexist-cache", None).unwrap();
+        assert_eq!(
+            ok_loc.as_str(),
+            "loc-b",
+            "must resolve after NotFound + invalidation"
+        );
+    }
+
+    #[test]
+    fn location_cache_explicit_override_never_cached() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-z', 'Z', 'store');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name, bound_location_id) \
+               VALUES ('ws-override-cache', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'OCache', 'loc-z');",
+        )
+        .unwrap();
+
+        invalidate_location_cache();
+
+        // Call with explicit override — should return override, NOT bound.
+        let ovr = LocationId::from("loc-override");
+        let loc = resolve_primary_location(&conn, "ws-override-cache", Some(&ovr)).unwrap();
+        assert_eq!(loc.as_str(), "loc-override");
+
+        // After override, subsequent non-override call should hit DB.
+        let loc2 = resolve_primary_location(&conn, "ws-override-cache", None).unwrap();
+        assert_eq!(
+            loc2.as_str(),
+            "loc-z",
+            "non-override call after override should hit DB"
+        );
     }
 
     #[test]
