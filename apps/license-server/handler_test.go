@@ -113,6 +113,8 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenants.Id, MaxSelect: 1},
 		&core.DateField{Name: "first_seen_at"},
 		&core.DateField{Name: "last_seen_at"},
+		&core.TextField{Name: "machine_id"},
+		&core.DateField{Name: "revoked_at"},
 	)
 	tenantMachines.CreateRule = types.Pointer("")
 	tenantMachines.ListRule = types.Pointer("")
@@ -267,6 +269,8 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 			&core.RelationField{Name: "tenant_id", Required: true, CollectionId: tenantsID, MaxSelect: 1},
 			&core.DateField{Name: "first_seen_at"},
 			&core.DateField{Name: "last_seen_at"},
+			&core.TextField{Name: "machine_id"},
+			&core.DateField{Name: "revoked_at"},
 		)
 		tenantMachines.CreateRule = types.Pointer("")
 		tenantMachines.ListRule = types.Pointer("")
@@ -3378,5 +3382,244 @@ func seedSubscriptionStatus(t *testing.T, app *tests.TestApp, tenantID, tierKey,
 	rec.Set("signature", "dummy-sig")
 	if err := app.Save(rec); err != nil {
 		t.Fatalf("failed to seed subscription for %q: %v", tenantID, err)
+	}
+}
+
+// seedMachine inserts a tenant_machines record directly via app.Save.
+
+
+// ── Tests: Machine Revocation via /status (P8-2) ──────────────────
+//
+// Machine-level revocation is performed via the /api/v1/license/status
+// endpoint by including revoke:true and machine_id in the request body.
+// This avoids needing a separate route (PocketBase chi router routing
+
+// ── Tests: Machine Revocation via /status (P8-2) ──────────────────
+
+func TestStatusHandler_MachineNotFound(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "devmachnotfnd01", "devmachnotfndkey", "active")
+
+	body := strings.NewReader(`{"machine_id":"abababababababa"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer devmachnotfndkey")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["device_revoked"] != false {
+		t.Errorf("expected device_revoked=false for unknown machine, got %v", resp["device_revoked"])
+	}
+}
+
+func TestStatusHandler_RevokeMachine(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "revstat00000001", "revstatkey000001", "active")
+	seedMachine(t, app, "deadbeef0000001", "revstat00000001")
+
+	body := strings.NewReader(`{"machine_id":"deadbeef0000001","revoke":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer revstatkey000001")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["device_revoked"] != true {
+		t.Errorf("expected device_revoked=true after revoke, got %v", resp["device_revoked"])
+	}
+	if resp["revoke_performed"] != true {
+		t.Errorf("expected revoke_performed=true, got %v", resp["revoke_performed"])
+	}
+
+	machines, err := app.FindRecordsByFilter(
+		"tenant_machines",
+		"machine_id = {:machine_id} && tenant_id = {:tenant_id}",
+		"", 1, 0,
+		map[string]any{
+			"machine_id": "deadbeef0000001",
+			"tenant_id":  "revstat00000001",
+		},
+	)
+	if err != nil || len(machines) == 0 {
+		t.Fatal("machine should exist")
+	}
+	if machines[0].GetDateTime("revoked_at").Time().IsZero() {
+		t.Error("revoked_at should be set after revoke")
+	}
+}
+
+func TestStatusHandler_RevokeAlreadyRevoked(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "revdupstenant01", "revdupstatekey001", "active")
+	seedMachine(t, app, "cafebabe0000001", "revdupstenant01")
+
+	body := strings.NewReader(`{"machine_id":"cafebabe0000001","revoke":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer revdupstatekey001")
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+
+	rec1 := httptest.NewRecorder()
+	mux.ServeHTTP(rec1, req)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("first revoke expected 200, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+	var resp1 map[string]any
+	json.Unmarshal(rec1.Body.Bytes(), &resp1)
+	if resp1["revoke_performed"] != true {
+		t.Errorf("expected revoke_performed=true on first revoke, got %v", resp1["revoke_performed"])
+	}
+
+	rec2 := httptest.NewRecorder()
+	// Create a fresh request with a new body reader (the original body was consumed on first ServeHTTP).
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", strings.NewReader(`{"machine_id":"cafebabe0000001","revoke":true}`))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Authorization", "Bearer revdupstatekey001")
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("second revoke expected 200, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	var resp2 map[string]any
+	json.Unmarshal(rec2.Body.Bytes(), &resp2)
+	if resp2["device_revoked"] != true {
+		t.Errorf("expected device_revoked=true on second revoke, got %v", resp2["device_revoked"])
+	}
+	if resp2["revoke_performed"] == true {
+		t.Errorf("expected revoke_performed=false (already revoked), got true")
+	}
+}
+
+func TestStatusHandler_RevokeWithoutMachineID(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "devnomachreq001", "devnomachreqkey0", "active")
+
+	body := strings.NewReader(`{"revoke":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer devnomachreqkey0")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["device_revoked"] != false {
+		t.Errorf("expected device_revoked=false (no machine_id), got %v", resp["device_revoked"])
+	}
+	if resp["revoke_performed"] == true {
+		t.Errorf("expected revoke_performed=false (no machine_id), got true")
+	}
+}
+
+func TestStatusHandler_RevokeDifferentTenantMachine(t *testing.T) {
+	resetRateLimiters()
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	seedTenant(t, app, "tenanta00000001", "tenanta-key000001", "active")
+	seedTenant(t, app, "tenantb00000001", "tenantb-key000001", "active")
+	seedMachine(t, app, "beefcafe0000001", "tenanta00000001")
+
+	body := strings.NewReader(`{"machine_id":"beefcafe0000001","revoke":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/license/status", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer tenantb-key000001")
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp["device_revoked"] != false {
+		t.Errorf("expected device_revoked=false (machine belongs to different tenant), got %v", resp["device_revoked"])
+	}
+
+	machines, err := app.FindRecordsByFilter(
+		"tenant_machines",
+		"machine_id = {:machine_id} && tenant_id = {:tenant_id}",
+		"", 1, 0,
+		map[string]any{
+			"machine_id": "beefcafe0000001",
+			"tenant_id":  "tenanta00000001",
+		},
+	)
+	if err == nil && len(machines) > 0 {
+		if !machines[0].GetDateTime("revoked_at").Time().IsZero() {
+			t.Error("Tenant A's machine should NOT be revoked after Tenant B's request")
+		}
+	}
+}
+
+// seedMachine inserts a tenant_machines record directly via app.Save.
+// The machine_id must be exactly 15 hex characters (matching the
+// ^[a-f0-9]{15}$ pattern defined in pb_schema.json). The record id
+// is auto-generated by PocketBase (do NOT set it explicitly).
+func seedMachine(t *testing.T, app *tests.TestApp, machineIDHex, tenantID string) {
+	t.Helper()
+	col, err := app.FindCollectionByNameOrId("tenant_machines")
+	if err != nil {
+		t.Fatalf("tenant_machines collection not found: %v", err)
+	}
+	rec := core.NewRecord(col)
+	// Do NOT set id — PocketBase auto-generates it.
+	rec.Set("tenant_id", []string{tenantID})
+	rec.Set("machine_id", machineIDHex)
+	rec.Set("first_seen_at", time.Now().UTC().Format(time.RFC3339))
+	rec.Set("last_seen_at", time.Now().UTC().Format(time.RFC3339))
+	if err := app.Save(rec); err != nil {
+		t.Fatalf("failed to seed machine %q for tenant %q: %v", machineIDHex, tenantID, err)
 	}
 }

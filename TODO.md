@@ -18,14 +18,14 @@
 | 🟤 P5 — Payment Gateway Hardening | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | ⚪ P6 — Hardware Integration | 4 | **4** | **██████████████████ 100% 🎉** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🔘 P8 — Cloud Server & License | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
+| 🔘 P8 — Cloud Server & License | 4 | **2** | **█████▱▱▱▱▱ 50%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P11 — Shadow Banding Audit | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **50** | **██████████████████████████████████████▱ 70%** |
+| **Total** | **71** | **51** | **████████████████████████████████████████▱ 72%** |
 
 ---
 
@@ -210,7 +210,7 @@ The cloud server (`oz-cloud-server`) handles sync API, authentication, and metri
 ### Checklist
 
 - [x] **P8-1: Per-tenant rate limiting** ✅ — Token-bucket rate limiter with per-tenant per-endpoint buckets. Private `RateLimiterState` injected via `Extension` layer. Middleware reads `ApiTokenClaims` after auth middleware, applies config (push: 100/min, pull: 300/min, status: 300/min, snapshot: 50/min), returns `429 Too Many Requests` with `Retry-After`. Background cleanup task (60s interval) removes stale buckets. 11 dedicated rate-limit tests + all 82 cloud-server tests pass.
-- [ ] **P8-2: Machine-level revocation** — Add `POST /api/license/revoke-device` endpoint to license server. Accept `machine_id` + `license_key`. Mark device as revoked in PocketBase. `GET /api/license/status` returns `device_revoked` for revoked machines. Frontend shows "This device has been deactivated" with contact-support message.
+- [x] **P8-2: Machine-level revocation** — Add `POST /api/license/revoke-device` endpoint to license server. Accept `machine_id` + `license_key`. Mark device as revoked in PocketBase. `GET /api/license/status` returns `device_revoked` for revoked machines. Frontend shows "This device has been deactivated" with contact-support message.
 - [ ] **P8-3: Cloud server health endpoint** — Add comprehensive `/api/health` to cloud server: DB connectivity (ping), sync queue depth, last sync timestamp, uptime. Consumed by Tauri app's ConnectionStatus component. Add prometheus metrics export.
 - [ ] **P8-4: License server Docker healthcheck** — Replace curl-based Docker healthcheck with proper Go HTTP client in `apps/license-server/Dockerfile`. Healthcheck pings `/api/health` with 5s interval, 3 retries, 10s timeout. Document in DEPLOY.md.
 
