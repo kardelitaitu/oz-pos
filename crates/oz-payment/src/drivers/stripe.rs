@@ -234,14 +234,44 @@ impl StripePaymentProcessor {
         Ok((status, body))
     }
 
+    /// Classify a Stripe error type into a specific PaymentError variant.
+    fn classify_stripe_error(
+        error_type: &str,
+        message: Option<&str>,
+        code: Option<&str>,
+    ) -> PaymentError {
+        let msg = message.unwrap_or(error_type).to_string();
+        match error_type {
+            "card_error" | "invalid_request_error"
+                if code == Some("card_declined")
+                    || code == Some("processing_error")
+                    || code == Some("incorrect_number")
+                    || code == Some("expired_card")
+                    || code == Some("incorrect_cvc")
+                    || code == Some("incorrect_zip")
+                    || message.map_or(false, |m| m.contains("card")) =>
+            {
+                PaymentError::InvalidCard(msg)
+            }
+            "card_error" => PaymentError::Declined(msg),
+            "idempotency_error" => PaymentError::Duplicate(msg),
+            "invalid_request_error"
+            | "api_error"
+            | "api_connection_error"
+            | "authentication_error"
+            | "rate_limit_error" => PaymentError::Network(msg),
+            _ => PaymentError::Network(format!("stripe_error: {}", msg)),
+        }
+    }
+
     /// Parse a Stripe API error response body into a [`PaymentError`].
     fn parse_error(status: u16, body: &str) -> PaymentError {
         if let Ok(err) = serde_json::from_str::<StripeErrorBody>(body) {
-            let msg = err
-                .error
-                .message
-                .unwrap_or_else(|| format!("stripe_error: {}", err.error.error_type));
-            PaymentError::Network(msg)
+            Self::classify_stripe_error(
+                &err.error.error_type,
+                err.error.message.as_deref(),
+                err.error.code.as_deref(),
+            )
         } else {
             PaymentError::Network(format!("HTTP {}: {}", status, body))
         }

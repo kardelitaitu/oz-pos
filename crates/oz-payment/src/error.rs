@@ -21,6 +21,14 @@ pub enum PaymentError {
     /// The processor's API returned an unexpected response shape.
     #[error("invalid response: {0}")]
     InvalidResponse(String),
+
+    /// The card was invalid (e.g. expired, incorrect CVC, unsupported card type).
+    #[error("invalid card: {0}")]
+    InvalidCard(String),
+
+    /// The transaction is a duplicate of a previously processed transaction.
+    #[error("duplicate transaction: {0}")]
+    Duplicate(String),
 }
 
 #[cfg(test)]
@@ -58,6 +66,21 @@ mod tests {
     }
 
     #[test]
+    fn invalid_card_display() {
+        let err = PaymentError::InvalidCard("card expired".into());
+        assert_eq!(err.to_string(), "invalid card: card expired");
+    }
+
+    #[test]
+    fn duplicate_display() {
+        let err = PaymentError::Duplicate("idempotency key already used".into());
+        assert_eq!(
+            err.to_string(),
+            "duplicate transaction: idempotency key already used"
+        );
+    }
+
+    #[test]
     fn debug_output() {
         let err = PaymentError::Declined("test".into());
         let debug = format!("{err:?}");
@@ -82,11 +105,22 @@ mod tests {
         let b = format!("{:?}", PaymentError::Timeout(1));
         let c = format!("{:?}", PaymentError::Network("x".into()));
         let d = format!("{:?}", PaymentError::InvalidResponse("x".into()));
+        let e = format!("{:?}", PaymentError::InvalidCard("x".into()));
+        let f = format!("{:?}", PaymentError::Duplicate("x".into()));
         assert_ne!(a, b);
         assert_ne!(a, c);
         assert_ne!(a, d);
+        assert_ne!(a, e);
+        assert_ne!(a, f);
         assert_ne!(b, c);
         assert_ne!(b, d);
+        assert_ne!(b, e);
+        assert_ne!(b, f);
         assert_ne!(c, d);
+        assert_ne!(c, e);
+        assert_ne!(c, f);
+        assert_ne!(d, e);
+        assert_ne!(d, f);
+        assert_ne!(e, f);
     }
 }

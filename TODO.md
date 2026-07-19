@@ -15,7 +15,7 @@
 | 🟡 P2 — UI Performance | 6 | **6** | **███████████████████████████████ 100% 🎉** |
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
-| 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟤 P5 — Payment Gateway Hardening | 4 | **1** | **███▱▱▱▱▱▱▱ 25%** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **29** | **████████████████████▱ 41%** |
+| **Total** | **71** | **30** | **█████████████████████▱ 42%** |
 
 ---
 
@@ -145,7 +145,7 @@ Payment gateway drivers live in `crates/oz-payment/src/drivers/` (qris.rs, squar
 
 ### Checklist
 
-- [ ] **P5-1: Gateway error classification** — Standardise error types across all 3 drivers: `PaymentError::Declined(reason)`, `PaymentError::Timeout`, `PaymentError::NetworkError`, `PaymentError::InvalidCard`, `PaymentError::Duplicate`. Map each driver's native errors to these types. Update `PaymentModal.tsx` error display to show human-readable messages per type.
+- [x] **P5-1: Gateway error classification** ✅ — Added `InvalidCard(String)` and `Duplicate(String)` variants to `PaymentError`. Added per-driver classification functions: `classify_midtrans_status()` (QRIS: 402→InvalidCard, 406→Duplicate, deny/cancel→Declined), `classify_stripe_error()` (Stripe: card_error→InvalidCard/Declined, idempotency_error→Duplicate), `classify_square_error()` (Square: CARD_DECLINED→Declined, UNSUPPORTED_CARD_BRAND→InvalidCard, DUPLICATE_CARD→Duplicate, TIMEOUT→Timeout). Updated all `parse_error()` methods to use classification. 12 unit tests + 5 doctests pass.
 - [ ] **P5-2: Idempotency keys** — Add idempotency key generation (UUIDv7) to every payment intent/create request. Store key with payment record. Retry same idempotency key instead of creating duplicate charges. Add `idempotency_key` column to payments table (migration 097).
 - [ ] **P5-3: Webhook receiver** — Add a lightweight webhook endpoint in `oz-api` for Stripe/Square payment events. Verify webhook signatures using gateway secrets. Update payment status from `'pending'` → `'completed'` on `payment_intent.succeeded` / `charge.captured`. Re-queue `finalize_sale` on successful capture.
 - [ ] **P5-4: Sandbox test recording** — Implement a `TestFixture` recorder for payment tests: run against sandbox once, capture request/response pairs, replay in CI. Add 3 integration tests per driver (success, decline, timeout) using recorded fixtures.

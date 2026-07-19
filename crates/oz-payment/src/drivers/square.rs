@@ -221,14 +221,50 @@ impl SquarePaymentProcessor {
         Ok((status, body_text))
     }
 
+    /// Classify a Square error code into a specific PaymentError variant.
+    fn classify_square_error(code: Option<&str>, detail: Option<&str>) -> PaymentError {
+        let msg = detail.unwrap_or(code.unwrap_or("unknown")).to_string();
+        match code {
+            Some(c)
+                if c == "CARD_DECLINED"
+                    || c == "VERIFY_CVV_FAILURE"
+                    || c == "VERIFY_AVS_FAILURE"
+                    || c == "INVALID_EXPIRATION"
+                    || c == "INVALID_CARD"
+                    || c == "CARD_EXPIRED"
+                    || c == "INVALID_PIN"
+                    || c == "INVALID_ACCOUNT"
+                    || c == "CARDHOLDER_VERIFICATION_REQUIRED" =>
+            {
+                PaymentError::Declined(msg)
+            }
+            Some(c)
+                if c == "INVALID_LOCATION"
+                    || c == "MISSING_REQUIRED_PARAMETER"
+                    || c == "UNSUPPORTED_CARD_BRAND"
+                    || c == "CARD_NOT_SUPPORTED"
+                    || c == "UNSUPPORTED_ENTRY_METHOD" =>
+            {
+                PaymentError::InvalidCard(msg)
+            }
+            Some(c) if c == "DUPLICATE_CARD" || c == "IDEMPOTENCY_KEY_REUSED" => {
+                PaymentError::Duplicate(msg)
+            }
+            Some(c) if c == "TIMEOUT" || c == "GATEWAY_TIMEOUT" => PaymentError::Timeout(30000),
+            _ => PaymentError::Network(msg),
+        }
+    }
+
     /// Parse a Square API error response body into a [`PaymentError`].
     fn parse_error(status: u16, body: &str) -> PaymentError {
         if let Ok(err) = serde_json::from_str::<SquareErrorBody>(body) {
-            let msgs: Vec<String> = err.errors.iter().filter_map(|e| e.detail.clone()).collect();
-            if msgs.is_empty() {
+            let mut errors = err.errors;
+            if errors.is_empty() {
                 PaymentError::Network(format!("square_error: HTTP {}", status))
             } else {
-                PaymentError::Network(msgs.join("; "))
+                // Classify the most specific error from Square's error list
+                let first = errors.remove(0);
+                Self::classify_square_error(first.code.as_deref(), first.detail.as_deref())
             }
         } else {
             PaymentError::Network(format!("HTTP {}: {}", status, body))
