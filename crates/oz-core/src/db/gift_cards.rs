@@ -939,4 +939,146 @@ mod tests {
             }
         ));
     }
+
+    // ── Additional edge cases ─────────────────────────────────────
+
+    #[test]
+    fn issue_gift_card_with_empty_card_number_fails() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        let err = store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "  ".into(),
+                pin: None,
+                initial_amount_minor: 10000,
+                currency: "IDR".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "card_number",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn redeem_gift_card_zero_amount_fails() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "GC-9001".into(),
+                pin: None,
+                initial_amount_minor: 50000,
+                currency: "IDR".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-9', 0, 'IDR', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 0, 0)",
+            [],
+        ).unwrap();
+
+        let err = store(&conn)
+            .redeem_gift_card("GC-9001", 0, "sale-9")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "amount_minor",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn top_up_nonexistent_card_fails() {
+        let conn = fresh();
+        let err = store(&conn)
+            .top_up_gift_card("NONEXISTENT", 10000)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "gift_card",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn freeze_nonexistent_card_fails() {
+        let conn = fresh();
+        let err = store(&conn).freeze_gift_card("NO-SUCH-CARD").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "gift_card",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn unfreeze_card_not_frozen_fails() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "GC-10001".into(),
+                pin: None,
+                initial_amount_minor: 10000,
+                currency: "IDR".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap();
+        let err = store(&conn).unfreeze_gift_card("GC-10001").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "status",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn redeem_exhausts_balance_auto_redeemed() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "GC-11001".into(),
+                pin: None,
+                initial_amount_minor: 5000,
+                currency: "IDR".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-11', 5000, 'IDR', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 5000, 0)",
+            [],
+        ).unwrap();
+
+        let result = store(&conn)
+            .redeem_gift_card("GC-11001", 5000, "sale-11")
+            .unwrap();
+        assert_eq!(result.card.current_balance_minor, 0);
+        assert_eq!(result.card.status, "redeemed");
+    }
 }
