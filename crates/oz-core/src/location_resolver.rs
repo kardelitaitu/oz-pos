@@ -461,4 +461,72 @@ mod tests {
         let chain = resolve_location_chain_for_sku(&conn, "ws-1", "EMPTY", 10).unwrap();
         assert!(chain.is_empty());
     }
+
+    #[test]
+    fn resolve_primary_location_multi_binding_no_primary_returns_canonical() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-a', 'A', 'store');\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-b', 'B', 'warehouse');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('ws-no-primary', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'NoPrimary');\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-a', 'ws-no-primary', 'loc-a', 0, 0);\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-b', 'ws-no-primary', 'loc-b', 0, 1);",
+        )
+        .unwrap();
+        let loc = resolve_primary_location(&conn, "ws-no-primary", None).unwrap();
+        // Falls through to canonical default — no is_primary=1 row exists.
+        assert_eq!(loc.as_str(), CANONICAL_DEFAULT_LOCATION_UUID);
+    }
+
+    #[test]
+    fn resolve_primary_location_nonexistent_workspace_errors() {
+        let conn = migrated();
+        seed_fks(&conn);
+        let err = resolve_primary_location(&conn, "ws-nonexistent", None).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "workspace_instance",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn resolve_all_locations_nonexistent_workspace_errors() {
+        let conn = migrated();
+        seed_fks(&conn);
+        let err = resolve_all_locations(&conn, "ws-nonexistent").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "workspace_instance",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn resolve_location_chain_for_sku_nonexistent_product_errors() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+             VALUES ('ws-1', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'WS1')",
+            [],
+        )
+        .unwrap();
+        let err = resolve_location_chain_for_sku(&conn, "ws-1", "NONEXISTENT-SKU", 10).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "product",
+                ..
+            }
+        ));
+    }
 }

@@ -58,8 +58,7 @@ const QRIS_EXPIRY_SECS: u64 = 300; // 5 minutes
 /// A [`PaymentProcessor`] implementation backed by the Midtrans QRIS API.
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```no_run
 /// use oz_payment::drivers::qris::QrisPaymentProcessor;
 /// use oz_payment::PaymentProcessor;
 ///

@@ -12,8 +12,7 @@
 //! the client-specific `AppState` type.
 //!
 //! # Usage
-//!
-//! ```ignore
+//!//! ```no_run
 //! use platform_startup::init_module_system;
 //!
 //! // In your Tauri setup closure:

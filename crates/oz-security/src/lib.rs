@@ -44,8 +44,7 @@ pub use error::SecurityError;
 /// Windows Credential Manager, Linux Secret Service, or macOS Keychain.
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```no_run
 /// use oz_security::Keyring;
 ///
 /// let keyring = oz_security::default_keyring()?;

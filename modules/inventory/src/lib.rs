@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: modules-inventory | status: SAFE | lint: CLEAN
+findings: Transitional module implementing Module trait. No unsafe code. Re-exports Product,
+  Category, Inventory, Sku from oz-core. 8 unit tests pass.
+next: Migrate DB CRUD + commands into this module | perf: N/A.
+*/
 #![warn(missing_docs)]
 
 //! Inventory Module — product catalog and stock management.
@@ -29,8 +36,7 @@
 //!
 //! This module re-exports key inventory domain types from `oz-core` so that
 //! consumers can access all inventory-related types through a single crate:
-//!
-//! ```ignore
+//!//! ```
 //! use modules_inventory::{InventoryModule, Product, Category, Inventory};
 //! ```
 

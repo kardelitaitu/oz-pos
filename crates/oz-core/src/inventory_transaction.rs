@@ -68,7 +68,7 @@ impl From<&str> for InventoryTransactionId {
 
 /// Lifecycle / purpose of an [`InventoryTransaction`] audit session.
 ///
-/// Stored as a kebab-case string in the `inventory_transactions.row_type` column.
+/// Stored as a kebab-case string in the `inventory_transactions.type` column.
 /// Unknown values round-trip as `None` from [`Self::from_stored_str`] so a
 /// future migration adding a new type fails LOUDLY rather than silently
 /// truncating audit history.

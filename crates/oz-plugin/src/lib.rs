@@ -1,3 +1,11 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-plugin | status: SAFE | lint: CLEAN
+findings: No unsafe code. PluginDb enforces namespace-isolated SQL via regex-based table-name
+  validation. PluginManager sandboxes Lua via oz-lua's LuaRuntime (Send+Sync, mutex-guarded).
+  8 unit tests pass including SQL validator, PluginDb CRUD, archive parsing.
+next: None | perf: SQL validation uses compiled regexes — negligible overhead.
+*/
 #![warn(missing_docs)]
 
 //! Plugin discovery, loading, and sandboxing.

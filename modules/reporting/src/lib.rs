@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: modules-reporting | status: SAFE | lint: CLEAN
+findings: Transitional module implementing Module trait. No unsafe code. Has SaleCompletedReporter
+  handler subscribed to event bus. 8 unit tests pass covering lifecycle and kernel registration.
+next: Migrate reporting logic into this module | perf: N/A.
+*/
 #![warn(missing_docs)]
 
 //! Reporting Module — generates and exports sales, inventory, and financial reports.

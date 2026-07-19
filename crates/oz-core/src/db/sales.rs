@@ -3116,4 +3116,90 @@ mod tests {
         // Clean up.
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn void_pending_sale_nonexistent_sale_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.void_pending_sale("nonexistent").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "pending sale",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn void_pending_sale_malformed_deduction_locations_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let cart = make_cart();
+        let sale = Sale::from_cart(&cart).unwrap();
+
+        // Insert a sale with malformed JSON in deduction_locations
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
+                                tendered_minor, discount_percent, discount_label, user_id,
+                                created_at, updated_at, subtotal_minor, tax_total_minor,
+                                deduction_locations, version)
+             VALUES (?1, 1000, 'USD', 1, 'pending', 'CASH', 1000, 0, NULL, 'user-1',
+                     '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 1000, 0, 'not-valid-json', 1)",
+            rusqlite::params![sale.id],
+        )
+        .unwrap();
+
+        let err = s.void_pending_sale(&sale.id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "deduction_locations",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn void_pending_sale_twice_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed a product and stock
+        conn.execute(
+            "INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-test', 'TEST-1', 'Test', 5000, 'IDR', 'retail')",
+            [],
+        )
+        .unwrap();
+        let default_loc = crate::location_resolver::get_default_location_id();
+        conn.execute(
+            "INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) \
+             VALUES ('prod-test', ?1, 10)",
+            rusqlite::params![default_loc.as_str()],
+        )
+        .unwrap();
+
+        // Use Sale::from_cart to create a sale — the only public constructor.
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("TEST-1"), 3, price(5000)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+
+        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+            .unwrap();
+
+        // First void succeeds
+        s.void_pending_sale(&sale.id).unwrap();
+
+        // Second void fails — sale is now 'voided', not 'pending'
+        let err = s.void_pending_sale(&sale.id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "pending sale",
+                ..
+            }
+        ));
+    }
 }

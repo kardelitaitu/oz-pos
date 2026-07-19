@@ -384,7 +384,7 @@ impl Store<'_> {
 
         // Insert transaction header
         tx.execute(
-            "INSERT INTO inventory_transactions (id, row_type, location_id, staff_id, notes, created_at) \
+            "INSERT INTO inventory_transactions (id, type, location_id, staff_id, notes, created_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![id, transaction_type.as_stored_str(), location_id, staff_id, notes, now],
         )?;
@@ -422,7 +422,7 @@ impl Store<'_> {
     /// List all inventory transaction headers, sorted by created_at descending.
     pub fn list_inventory_transactions(&self) -> Result<Vec<InventoryTransaction>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, row_type, location_id, staff_id, transfer_id, purchase_order_id, notes, created_at \
+            "SELECT id, type, location_id, staff_id, transfer_id, purchase_order_id, notes, created_at \
              FROM inventory_transactions ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -459,7 +459,7 @@ impl Store<'_> {
         id: &str,
     ) -> Result<Option<(InventoryTransaction, Vec<InventoryTransactionLine>)>, CoreError> {
         let header_res = self.conn.query_row(
-            "SELECT id, row_type, location_id, staff_id, transfer_id, purchase_order_id, notes, created_at \
+            "SELECT id, type, location_id, staff_id, transfer_id, purchase_order_id, notes, created_at \
              FROM inventory_transactions WHERE id = ?1",
             params![id],
             |row| {
@@ -755,5 +755,390 @@ mod tests {
         s.delete_stock_threshold(&list[0].id).unwrap();
         let list = s.get_stock_thresholds(Some(&loc_id)).unwrap();
         assert_eq!(list.len(), 0);
+    }
+
+    // ── Validation & Error Paths ──────────────────────────────────────
+
+    #[test]
+    fn create_inventory_location_invalid_type_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_inventory_location("Bad", "invalid_type", "")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "type", .. }));
+    }
+
+    #[test]
+    fn update_inventory_location_nonexistent_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .update_inventory_location("nonexistent-id", "New", "store", "")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "inventory_location",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn deactivate_inventory_location_with_stock_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let loc_id = s
+            .create_inventory_location("Test Loc", "store", "")
+            .unwrap();
+        // Seed a product with stock at this location
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-1', 'SKU-1', 'Prod', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-1', ?1, 5)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let err = s.deactivate_inventory_location(&loc_id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "location",
+                ..
+            }
+        ));
+        assert!(
+            err.to_string().contains("active stock"),
+            "expected active stock message, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn deactivate_inventory_location_nonexistent_succeeds() {
+        let conn = fresh();
+        let s = store(&conn);
+        // deactivate on a non-existent location currently succeeds (no row matched)
+        assert!(s.deactivate_inventory_location("nonexistent").is_ok());
+    }
+
+    #[test]
+    fn get_workspace_locations_empty_for_unbound_workspace() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_types (key, name) VALUES ('retail', 'Retail POS')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_instances (id, type_key, store_id, name) \
+             VALUES ('ws-empty', 'retail', 'default', 'Empty')",
+            [],
+        )
+        .unwrap();
+
+        let locs = s.get_workspace_inventory_locations("ws-empty").unwrap();
+        assert!(locs.is_empty());
+    }
+
+    #[test]
+    fn end_inventory_shift_nonexistent_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.end_inventory_shift("nonexistent-shift").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "active_inventory_shift",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn list_inventory_shifts_empty_returns_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let shifts = s.list_inventory_shifts().unwrap();
+        assert!(shifts.is_empty());
+    }
+    #[test]
+    fn test_inventory_transaction_lifecycle() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed FK rows: role + user for staff_id constraint
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-inv', 'InvRole', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-1', 'staff1', 'hash', 'Staff 1', 'r-inv')",
+            [],
+        )
+        .unwrap();
+
+        // Seed a location and product with stock
+        let loc_id = s.create_inventory_location("Store", "store", "").unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-stock', 'STOCK-SKU', 'Stocked', 1000, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-stock', ?1, 100)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        // Create a stock-count transaction with one line (no delta change, just audit)
+        let lines = vec![InventoryTransactionLineInput {
+            sku: "STOCK-SKU".into(),
+            product_name: "Stocked Product".into(),
+            qty: 50,
+            delta: 0,
+            barcode_scanned: None,
+        }];
+        let tx_id = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_id,
+                "staff-1",
+                "audit notes",
+                &lines,
+            )
+            .unwrap();
+        assert!(!tx_id.is_empty());
+
+        // Verify it appears in list
+        let txns = s.list_inventory_transactions().unwrap();
+        assert_eq!(txns.len(), 1);
+        assert_eq!(txns[0].id.as_str(), tx_id);
+        assert_eq!(txns[0].notes, "audit notes");
+
+        // Verify we can get the full transaction with lines
+        let (header, detail_lines) = s.get_inventory_transaction(&tx_id).unwrap().unwrap();
+        assert_eq!(header.id.as_str(), tx_id);
+        assert_eq!(detail_lines.len(), 1);
+        assert_eq!(detail_lines[0].sku, "STOCK-SKU");
+        assert_eq!(detail_lines[0].qty, 50);
+    }
+
+    #[test]
+    fn get_inventory_transaction_not_found_returns_none() {
+        let conn = fresh();
+        let s = store(&conn);
+        let result = s.get_inventory_transaction("nonexistent-tx").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn list_inventory_transactions_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let txns = s.list_inventory_transactions().unwrap();
+        assert!(txns.is_empty());
+    }
+
+    #[test]
+    fn test_stock_threshold_upsert_updates_existing() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency) VALUES ('p-upsert', 'SKU-U', 'Upsert', 100, 'USD')",
+            [],
+        )
+        .unwrap();
+
+        // Create initial threshold
+        s.set_stock_threshold("p-upsert", None, 10, true).unwrap();
+        let list = s.get_stock_thresholds(None).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].threshold, 10);
+        assert!(list[0].enabled);
+
+        // Upsert: update threshold value and disable
+        s.set_stock_threshold("p-upsert", None, 25, false).unwrap();
+        let list = s.get_stock_thresholds(None).unwrap();
+        assert_eq!(list.len(), 1, "upsert should not create duplicate");
+        assert_eq!(list[0].threshold, 25);
+        assert!(!list[0].enabled);
+    }
+
+    #[test]
+    fn test_stock_threshold_global_vs_per_location() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency) VALUES ('p-glob', 'SKU-G', 'Global', 100, 'USD')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s
+            .create_inventory_location("Test Loc", "store", "")
+            .unwrap();
+
+        // Set a global threshold (null location_id)
+        s.set_stock_threshold("p-glob", None, 5, true).unwrap();
+        // Set a per-location threshold
+        s.set_stock_threshold("p-glob", Some(&loc_id), 15, true)
+            .unwrap();
+
+        let global_list = s.get_stock_thresholds(None).unwrap();
+        assert_eq!(global_list.len(), 1);
+        assert_eq!(global_list[0].threshold, 5);
+
+        let loc_list = s.get_stock_thresholds(Some(&loc_id)).unwrap();
+        assert_eq!(loc_list.len(), 1);
+        assert_eq!(loc_list[0].threshold, 15);
+    }
+
+    #[test]
+    fn set_workspace_locations_replaces_existing_bindings() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_types (key, name) VALUES ('retail', 'Retail POS')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO workspace_instances (id, type_key, store_id, name) \
+             VALUES ('ws-replace', 'retail', 'default', 'Replace')",
+            [],
+        )
+        .unwrap();
+
+        let loc_a = s.create_inventory_location("Loc A", "store", "").unwrap();
+        let loc_b = s
+            .create_inventory_location("Loc B", "warehouse", "")
+            .unwrap();
+
+        // Set initial binding
+        let initial = vec![WorkspaceInventoryLocation {
+            id: String::new(),
+            instance_id: "ws-replace".into(),
+            location_id: loc_a.clone(),
+            is_primary: true,
+            allow_negative_stock: false,
+            sort_order: 0,
+        }];
+        s.set_workspace_inventory_locations("ws-replace", &initial)
+            .unwrap();
+
+        // Replace with two bindings (different locations, different settings)
+        let replacement = vec![
+            WorkspaceInventoryLocation {
+                id: String::new(),
+                instance_id: "ws-replace".into(),
+                location_id: loc_b.clone(),
+                is_primary: true,
+                allow_negative_stock: true,
+                sort_order: 0,
+            },
+            WorkspaceInventoryLocation {
+                id: String::new(),
+                instance_id: "ws-replace".into(),
+                location_id: loc_a.clone(),
+                is_primary: false,
+                allow_negative_stock: false,
+                sort_order: 1,
+            },
+        ];
+        s.set_workspace_inventory_locations("ws-replace", &replacement)
+            .unwrap();
+
+        let retrieved = s.get_workspace_inventory_locations("ws-replace").unwrap();
+        assert_eq!(retrieved.len(), 2);
+        // First should be primary (loc_b)
+        assert_eq!(retrieved[0].location_id, loc_b);
+        assert!(retrieved[0].is_primary);
+        assert!(retrieved[0].allow_negative_stock);
+        // Second should be secondary (loc_a)
+        assert_eq!(retrieved[1].location_id, loc_a);
+        assert!(!retrieved[1].is_primary);
+        assert!(!retrieved[1].allow_negative_stock);
+    }
+
+    #[test]
+    fn update_inventory_location_invalid_type_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = s.create_inventory_location("Valid", "store", "").unwrap();
+        let err = s
+            .update_inventory_location(&loc_id, "Bad", "invalid_type", "")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "type", .. }));
+    }
+
+    #[test]
+    fn create_inventory_transaction_adjusts_stock() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed FK rows: role + user for staff_id constraint
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-inv2', 'InvRole2', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-2', 'staff2', 'hash', 'Staff 2', 'r-inv2')",
+            [],
+        )
+        .unwrap();
+
+        let loc_id = s
+            .create_inventory_location("Warehouse", "warehouse", "")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-delta', 'DELTA', 'Delta Item', 500, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-delta', ?1, 50)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        // Create a manual adjustment: add 10 units
+        let lines = vec![InventoryTransactionLineInput {
+            sku: "DELTA".into(),
+            product_name: "Delta Item".into(),
+            qty: 10,
+            delta: 10, // positive = credit
+            barcode_scanned: None,
+        }];
+        s.create_inventory_transaction(
+            crate::inventory_transaction::InventoryTransactionType::ManualAdjustment,
+            &loc_id,
+            "staff-2",
+            "added 10 units",
+            &lines,
+        )
+        .unwrap();
+
+        // Verify stock increased
+        let stock: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = 'prod-delta' AND location_id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock, 60, "stock should have increased by 10");
     }
 }

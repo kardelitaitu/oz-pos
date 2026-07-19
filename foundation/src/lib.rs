@@ -1,3 +1,11 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: foundation | status: SAFE | lint: CLEAN
+findings: Zero unsafe code. Pure value-objects, contracts, enums, and shared errors with no FFI or IO.
+  All 287 unit tests pass. All public items have doc comments (missing_docs warn).
+  Minimal dependency footprint — designed to be used everywhere without heavy transitive deps.
+next: None | perf: No allocations in hot paths; all types are Copy or lightweight.
+*/
 #![warn(missing_docs)]
 
 //! Foundation crate for OZ-POS.

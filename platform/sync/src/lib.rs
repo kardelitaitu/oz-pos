@@ -10,8 +10,7 @@
 //! - **Conflict** — last-write-wins (LWW) conflict resolution
 //!
 //! # Usage
-//!
-//! ```ignore
+//!//! ```no_run
 //! use platform_sync::{SyncEngine, SyncConfig};
 //!
 //! let engine = SyncEngine::new(config);

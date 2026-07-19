@@ -29,8 +29,7 @@ const SQUARE_API_BASE: &str = "https://connect.squareup.com/v2";
 /// Supports card-not-present payments via the Square Payments API.
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```no_run
 /// use oz_payment::drivers::square::SquarePaymentProcessor;
 /// use oz_payment::PaymentProcessor;
 ///

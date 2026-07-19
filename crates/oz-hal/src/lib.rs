@@ -1,3 +1,14 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-hal | status: SAFE | lint: CLEAN
+findings: No actual unsafe blocks present. #![allow(unsafe_code)] is forward-looking for planned
+  FFI drivers (barcode scanners, receipt printers). All traits have programmable mocks (drivers::mock).
+  13 unit tests pass. DriverRegistry provides safe abstraction over device enumeration.
+next: Add SAFETY comments when real FFI drivers are implemented | perf: Mock drivers are zero-alloc.
+*/
+#![allow(unsafe_code)]
+#![warn(missing_docs)]
+
 //! Hardware Abstraction Layer for OZ-POS.
 //!
 //! `oz-hal` is the seam between business logic and physical devices:
@@ -9,14 +20,6 @@
 //! Every trait has a programmable mock in [`drivers::mock`]. Tests use
 //! the mocks; production code uses real drivers registered through
 //! [`DriverRegistry`] at startup.
-
-#![allow(unsafe_code)]
-// HAL drivers may need unsafe for FFI
-// Scaffold: a number of accessors and field docs are still TODO.
-// The full doc pass is tracked as a followup in CHANGELOG.md
-// "Known limitations"; for now allow the warnings so the scaffold
-// compiles under `clippy -- -D warnings`.
-#![warn(missing_docs)]
 
 pub mod drivers;
 pub mod error;

@@ -40,8 +40,7 @@ pub enum ModuleStatus {
 /// traits — it has no knowledge of specific module types.
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```no_run
 /// let mut kernel = Kernel::new();
 /// kernel.register(Box::new(MyModule))?;
 /// kernel.register(Box::new(MyOtherModule))?;

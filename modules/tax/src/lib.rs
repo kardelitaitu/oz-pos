@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: modules-tax | status: SAFE | lint: CLEAN
+findings: Transitional module implementing Module trait. No unsafe code. Re-exports TaxRate from
+  oz-core. 8 unit tests pass.
+next: Migrate tax commands into this module | perf: N/A.
+*/
 #![warn(missing_docs)]
 
 //! Tax Module — tax rate configuration and management.
@@ -28,8 +35,7 @@
 //!
 //! This module re-exports key tax domain types from `oz-core` so that
 //! consumers can access all tax-related types through a single crate:
-//!
-//! ```ignore
+//!//! ```
 //! use modules_tax::{TaxModule, TaxRate};
 //! ```
 

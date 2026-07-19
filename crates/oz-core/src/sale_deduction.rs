@@ -232,4 +232,73 @@ mod tests {
         assert!(json.contains("locationName"));
         assert!(json.contains("qtyAvailable"));
     }
+
+    #[test]
+    fn resolved_shortfall_serde_roundtrip() {
+        let rs = ResolvedShortfall {
+            sku: "CHO-001".into(),
+            allocations: vec![
+                LocationAllocation {
+                    location_id: LocationId::from("loc-store"),
+                    qty: 2,
+                },
+                LocationAllocation {
+                    location_id: LocationId::from("loc-wh-a"),
+                    qty: 3,
+                },
+            ],
+        };
+        let json = serde_json::to_string(&rs).unwrap();
+        let back: ResolvedShortfall = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sku, "CHO-001");
+        assert_eq!(back.allocations.len(), 2);
+        assert_eq!(back.allocations[0].location_id.as_str(), "loc-store");
+        assert_eq!(back.allocations[0].qty, 2);
+        assert_eq!(back.allocations[1].location_id.as_str(), "loc-wh-a");
+        assert_eq!(back.allocations[1].qty, 3);
+        // Verify camelCase naming in JSON
+        assert!(json.contains("locationId"));
+        assert!(json.contains("\"qty\":"));
+    }
+
+    #[test]
+    fn location_allocation_serde_roundtrip() {
+        let la = LocationAllocation {
+            location_id: LocationId::from("loc-wh-b"),
+            qty: 10,
+        };
+        let json = serde_json::to_string(&la).unwrap();
+        let back: LocationAllocation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.location_id.as_str(), "loc-wh-b");
+        assert_eq!(back.qty, 10);
+        assert!(json.contains("locationId"));
+    }
+
+    #[test]
+    fn stock_deduction_serde_roundtrip() {
+        let sd = StockDeduction {
+            sku: "CHO-001".into(),
+            location_id: LocationId::from("loc-store"),
+            delta: -5,
+        };
+        let json = serde_json::to_string(&sd).unwrap();
+        let back: StockDeduction = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sku, "CHO-001");
+        assert_eq!(back.location_id.as_str(), "loc-store");
+        assert_eq!(back.delta, -5);
+        assert!(json.contains("locationId"));
+        assert!(json.contains("\"delta\":-5"));
+    }
+
+    #[test]
+    fn resolved_shortfall_empty_allocations() {
+        let rs = ResolvedShortfall {
+            sku: "EMPTY-SKU".into(),
+            allocations: vec![],
+        };
+        let json = serde_json::to_string(&rs).unwrap();
+        let back: ResolvedShortfall = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sku, "EMPTY-SKU");
+        assert!(back.allocations.is_empty());
+    }
 }

@@ -21,8 +21,7 @@ use crate::error::AppError;
 /// errors.
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```no_run
 /// use crate::commands::authz::require_permission;
 /// use oz_core::permissions;
 ///
