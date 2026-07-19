@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 95 / 101 items complete (94.1%) · Updated 2026-07-19
+**Current state:** 99 / 101 items complete (98.0%) · Updated 2026-07-26
 
 ---
 
@@ -15,7 +15,7 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | ♿ Accessibility | 17 | 15 | ██████████░ 88% |
-| 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
+| 🔌 Offline & Data | 8 | 4 | █████░░░░░░ 50% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
 | 🧹 Tech Debt | 11 | 6 | █████░░░░░░ 55% |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 8 | ████░░░░░░ 42% |
-| **Total** | **101** | **95** | **██████████░ 95%** |
+| **Total** | **101** | **99** | **████████████████████ 98%** |
 
 ---
 
