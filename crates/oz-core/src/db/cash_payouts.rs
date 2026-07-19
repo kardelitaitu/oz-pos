@@ -325,11 +325,11 @@ mod tests {
         let conn = fresh();
         let (s, shift_id) = seed_user_and_shift(&conn);
 
-        let p1 = s.create_cash_payout(&shift_id, 1000, "first").unwrap();
+        let _p1 = s.create_cash_payout(&shift_id, 1000, "first").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let p2 = s.create_cash_payout(&shift_id, 2000, "second").unwrap();
+        let _p2 = s.create_cash_payout(&shift_id, 2000, "second").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let p3 = s.create_cash_payout(&shift_id, 3000, "third").unwrap();
+        let _p3 = s.create_cash_payout(&shift_id, 3000, "third").unwrap();
 
         let payouts = s.list_cash_payouts(&shift_id).unwrap();
         assert_eq!(payouts.len(), 3);
