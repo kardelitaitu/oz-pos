@@ -340,4 +340,99 @@ mod tests {
         // Deleting a non-existent item should succeed (no error).
         s.delete_offline_item("nonexistent").unwrap();
     }
+
+    // ── Additional edge cases ─────────────────────────────────────
+
+    #[test]
+    fn enqueue_offline_with_tenant_sets_tenant_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        let item = s
+            .enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+        assert_eq!(item.tenant_id, "tenant-a");
+        assert_eq!(item.action, "sale.create");
+    }
+
+    #[test]
+    fn enqueue_offline_priority_roundtrip() {
+        let conn = fresh();
+        let s = store(&conn);
+        let item = s
+            .enqueue_offline_priority("payment.sync", "{}", SyncPriority::Critical)
+            .unwrap();
+        assert_eq!(item.priority, SyncPriority::Critical);
+        let item = s
+            .enqueue_offline_priority("audit.log", "{}", SyncPriority::Low)
+            .unwrap();
+        assert_eq!(item.priority, SyncPriority::Low);
+        // Default is Normal.
+        let item = s
+            .enqueue_offline_priority("default", "{}", SyncPriority::Normal)
+            .unwrap();
+        assert_eq!(item.priority, SyncPriority::Normal);
+    }
+
+    #[test]
+    fn list_pending_offline_for_tenant_filters() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Enqueue items for different tenants.
+        s.enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+        s.enqueue_offline_with_tenant("product.update", "{}", "tenant-b")
+            .unwrap();
+        s.enqueue_offline_with_tenant("sale.void", "{}", "tenant-a")
+            .unwrap();
+
+        let a_items = s.list_pending_offline_for_tenant("tenant-a").unwrap();
+        assert_eq!(a_items.len(), 2);
+        assert!(a_items.iter().all(|i| i.tenant_id == "tenant-a"));
+
+        let b_items = s.list_pending_offline_for_tenant("tenant-b").unwrap();
+        assert_eq!(b_items.len(), 1);
+    }
+
+    #[test]
+    fn list_pending_offline_for_tenant_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let items = s.list_pending_offline_for_tenant("no-such-tenant").unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn mark_offline_failed_nonexistent_noop() {
+        let conn = fresh();
+        let s = store(&conn);
+        // mark_offline_failed doesn't check affected rows, so this should be a no-op.
+        s.mark_offline_failed("nonexistent", "test error").unwrap();
+        // Verify state unchanged.
+        let count = s.pending_offline_count().unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn list_all_offline_empty_db() {
+        let conn = fresh();
+        let items = store(&conn).list_all_offline().unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn delete_offline_item_only_removes_target() {
+        let conn = fresh();
+        seed_pending_and_synced(&conn);
+        let s = store(&conn);
+
+        s.delete_offline_item("oq-1").unwrap();
+        let remaining = s.list_all_offline().unwrap();
+        assert_eq!(remaining.len(), 3);
+        assert!(remaining.iter().all(|i| i.id != "oq-1"));
+        // oq-2, oq-3, oq-4 should still be present.
+        assert!(remaining.iter().any(|i| i.id == "oq-2"));
+        assert!(remaining.iter().any(|i| i.id == "oq-3"));
+        assert!(remaining.iter().any(|i| i.id == "oq-4"));
+    }
 }
