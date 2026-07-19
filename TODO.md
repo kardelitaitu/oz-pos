@@ -113,8 +113,11 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 - [x] Invalidate on workspace change (wired `invalidate_location_cache()` into `create_session` in both `apps/desktop-client/src/commands/auth.rs` and `apps/tablet-client/src/commands/auth.rs` — called on any new session = workspace switch)
 
 **6.3 Held carts `deduction_location_id` lock**
-- [ ] Migrate `active_carts.deduction_location_id` to the `held_carts` table
-- [ ] Restore deduction location when cart is un-held
+- [x] Migration 095 adds `deduction_location_id` FK column to `held_carts` (REFERENCES inventory_locations(id) ON DELETE RESTRICT)
+- [x] `hold_cart()` now accepts and stores `deduction_location_id` parameter
+- [x] `HeldCartFull` returns `deduction_location_id` field (used by frontend when restoring a held cart via `start_sale_scoped`)
+- [x] Frontend API (`HoldCartArgs`, `HeldCartFull`) updated with the field
+- [x] Test: `hold_cart_roundtrips_deduction_location_id` — verifies roundtrip persistence
 
 ### 🧪 7. Rust Test Coverage — Gap Modules
 
