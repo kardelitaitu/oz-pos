@@ -22,6 +22,7 @@
 mod db;
 mod metrics;
 mod prune;
+mod rate_limit;
 mod redirect;
 mod sync_api;
 mod webhooks;
@@ -38,6 +39,7 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
+use crate::rate_limit::{RateLimiterState, start_rate_limit_cleanup};
 use crate::sync_api::{SyncState, sync_router};
 
 /// Shared application state for the cloud server.
@@ -103,7 +105,12 @@ async fn main() {
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
-            let app = build_router(state);
+
+            // P8-1: Per-tenant rate limiter state + background cleanup.
+            let rate_limiter = RateLimiterState::new();
+            start_rate_limit_cleanup(rate_limiter.clone());
+
+            let app = build_router(state, rate_limiter);
             serve(app).await;
         }
         db::DbPool::Postgres(_pg_pool) => {
@@ -121,7 +128,12 @@ async fn main() {
                 square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
                 square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
             };
-            let app = build_router(state);
+
+            // P8-1: Per-tenant rate limiter state + background cleanup.
+            let rate_limiter = RateLimiterState::new();
+            start_rate_limit_cleanup(rate_limiter.clone());
+
+            let app = build_router(state, rate_limiter);
             serve(app).await;
         }
     }
@@ -172,8 +184,8 @@ async fn health_handler(
     })
 }
 
-/// Build the combined router: REST API + sync endpoints.
-pub fn build_router(state: CloudServerState) -> Router {
+/// Build the combined router: REST API + sync endpoints + rate limiting.
+pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
@@ -189,7 +201,9 @@ pub fn build_router(state: CloudServerState) -> Router {
     let health_state = state.clone();
 
     // Build the sync router (push/pull endpoints) from sync_api module.
-    let sync_router = sync_router(SyncState::from(state.clone()));
+    // P8-1: Share the same RateLimiterState with the cleanup task.
+    let sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
+    let sync_router = sync_router(sync_state);
 
     // Build the webhook router (unauthenticated — HMAC signature verification).
     let webhook_router = webhooks::webhooks_router(state.clone());
@@ -238,7 +252,7 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        build_router(state)
+        build_router(state, crate::rate_limit::RateLimiterState::new())
     }
 
     /// Create a test JWT token.
@@ -312,7 +326,8 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Seed an item directly with tenant_id
         {
@@ -383,7 +398,8 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Tenant A pushes two items
         let push_body = r#"[
@@ -425,7 +441,8 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Tenant A pushes one item
         let push_a = authed_post(
@@ -473,7 +490,8 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Tenant A pushes 3 items
         let push_a = authed_post(
@@ -521,7 +539,8 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Push items as default tenant
         let push_d = authed_post(

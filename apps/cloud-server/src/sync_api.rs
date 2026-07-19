@@ -21,6 +21,7 @@ use oz_api::auth::{ApiTokenClaims, auth_middleware};
 use platform_sync::transport::{PullRequest, PullResponse, PushOutcome, PushResponse};
 
 use crate::metrics;
+use crate::rate_limit::{RateLimiterState, rate_limit_middleware};
 
 /// Snapshot cache entry: (generation timestamp, serialised JSON bytes).
 type CacheEntry = (std::time::Instant, Vec<u8>);
@@ -34,26 +35,54 @@ pub struct SyncState {
     /// Snapshot cache: keyed by tenant_id, stores (generated_at, JSON bytes).
     /// P-3 Step 4: in-memory cache with 5-minute TTL.
     pub snapshot_cache: SnapshotCache,
+    /// P8-1: Per-tenant rate limiter for sync endpoints.
+    pub rate_limiter: RateLimiterState,
 }
 
-impl From<super::CloudServerState> for SyncState {
-    fn from(state: super::CloudServerState) -> Self {
+impl SyncState {
+    /// Create a new SyncState from a CloudServerState and an existing RateLimiterState.
+    /// This ensures the rate limiter instance is shared with the cleanup task.
+    pub fn from_with_rate_limiter(
+        state: super::CloudServerState,
+        rate_limiter: RateLimiterState,
+    ) -> Self {
         Self {
             db: state.db,
             snapshot_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            rate_limiter,
         }
     }
 }
 
-/// Build the sync router with all four endpoints, protected by JWT auth.
+impl From<super::CloudServerState> for SyncState {
+    fn from(state: super::CloudServerState) -> Self {
+        Self::from_with_rate_limiter(state, RateLimiterState::new())
+    }
+}
+
+/// Build the sync router with all four endpoints, protected by JWT auth
+/// and per-tenant rate limiting (P8-1).
+///
+/// Middleware order (axum: first `.layer()` = outermost, runs FIRST):
+///
+///   `.layer(axum::Extension(rate_limiter.clone()))` — makes RateLimiterState available
+///   `.layer(middleware::from_fn(auth_middleware))`        ← outermost (injects ApiTokenClaims)
+///   `.layer(middleware::from_fn(rate_limit_middleware))`  ← innermost (reads claims)
+///
+/// Execution order: auth_middleware → rate_limit_middleware → handler
+/// Axum layers are applied from outside to inside, so the LAST .layer() is the
+/// innermost (closest to the handler).
 pub fn sync_router(state: SyncState) -> Router {
+    let rate_limiter = state.rate_limiter.clone();
     Router::new()
         .route("/api/sync/push", post(push_handler))
         .route("/api/sync/pull", post(pull_handler))
         .route("/api/sync/status", get(status_handler))
         .route("/api/sync/snapshot", get(snapshot_handler))
         .with_state(state)
+        .layer(middleware::from_fn(rate_limit_middleware))
         .layer(middleware::from_fn(auth_middleware))
+        .layer(axum::Extension(rate_limiter))
 }
 
 /// `POST /api/sync/push` — receive and persist offline queue items.
@@ -525,6 +554,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         sync_router(state)
     }
@@ -601,6 +631,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -702,6 +733,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -736,6 +768,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -772,6 +805,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -804,6 +838,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -840,6 +875,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -898,6 +934,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -940,6 +977,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -1010,6 +1048,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -1046,6 +1085,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state.clone());
 
@@ -1080,6 +1120,7 @@ mod tests {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
         };
         let app = test_router_with_state(state);
 
