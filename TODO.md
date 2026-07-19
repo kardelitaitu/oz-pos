@@ -15,7 +15,17 @@
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P3 — KDS Enhancements | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P4 — Docs & Compliance | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **25** | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🔵 P10 — i18n & Accessibility | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟢 P11 — Shadow Banding Audit | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| **Total** | **70** | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 
 ---
 
@@ -119,6 +129,202 @@ Several ADRs lack final "Implemented" status updates. The skill-drift-guard foun
 
 ---
 
+---
+
+## 🟤 P5 — Payment Gateway Hardening
+
+**Goal:** Improve reliability and test coverage for payment gateway integrations (QRIS, Square, Stripe). Add webhook handling, idempotency keys, and proper error classification.
+
+### Background
+
+Payment gateway drivers live in `crates/oz-payment/src/drivers/` (qris.rs, square.rs, stripe.rs). Current gaps:
+- No webhook signature verification for Stripe/Square
+- No idempotency key support for payment retries
+- QRIS driver lacks proper error classification (timeout vs declined vs network)
+- Integration tests use sandbox credentials configured via env vars — no recording/replay for deterministic CI
+
+### Checklist
+
+- [ ] **P5-1: Gateway error classification** — Standardise error types across all 3 drivers: `PaymentError::Declined(reason)`, `PaymentError::Timeout`, `PaymentError::NetworkError`, `PaymentError::InvalidCard`, `PaymentError::Duplicate`. Map each driver's native errors to these types. Update `PaymentModal.tsx` error display to show human-readable messages per type.
+- [ ] **P5-2: Idempotency keys** — Add idempotency key generation (UUIDv7) to every payment intent/create request. Store key with payment record. Retry same idempotency key instead of creating duplicate charges. Add `idempotency_key` column to payments table (migration 097).
+- [ ] **P5-3: Webhook receiver** — Add a lightweight webhook endpoint in `oz-api` for Stripe/Square payment events. Verify webhook signatures using gateway secrets. Update payment status from `'pending'` → `'completed'` on `payment_intent.succeeded` / `charge.captured`. Re-queue `finalize_sale` on successful capture.
+- [ ] **P5-4: Sandbox test recording** — Implement a `TestFixture` recorder for payment tests: run against sandbox once, capture request/response pairs, replay in CI. Add 3 integration tests per driver (success, decline, timeout) using recorded fixtures.
+
+---
+
+## ⚪ P6 — Hardware Integration
+
+**Goal:** Improve reliability, auto-detection, and test coverage for physical hardware: receipt printers, barcode scanners, cash drawers, customer displays, and scales.
+
+### Background
+
+The HAL (`crates/oz-hal/`) supports USB, Bluetooth, serial, and TCP/IP devices. Current gaps:
+- No automatic device discovery — users must configure port/address manually
+- Printer driver (ESC/POS) lacks common commands: barcode printing, QR code, cash drawer kick
+- No printer status polling (paper jam, out of paper, cover open)
+- Mock drivers exist but are not used in UI integration tests
+
+### Checklist
+
+- [ ] **P6-1: Auto-discovery** — Add USB device enumeration (using `rusb` or platform-specific APIs) to detect connected printers, scanners, and scales by vendor/product ID. Show discovered devices in TerminalManagementScreen as selectable options. Fall back to manual config when auto-detect fails.
+- [ ] **P6-2: ESC/POS barcode & QR printing** — Add `print_barcode()` and `print_qr()` commands to `escpos.rs` printer driver. Wire into receipt printing flow: print QR code (payment link) and barcode (receipt number) on each receipt. Add test with mock transport.
+- [ ] **P6-3: Printer status polling** — Add `get_status()` to the printer trait returning: `PaperStatus(ok/low/empty)`, `CoverOpen(bool)`, `DrawerOpen(bool)`. Poll before every print job; warn user if paper is low or cover is open. Add mock status simulation.
+- [ ] **P6-4: Receipt preview in UI** — Add a "Print Preview" modal in PaymentModal that shows a styled receipt rendering before printing. Include: store name/logo, line items, totals, payment method, QR code, barcode. Use CSS for layout, then send to printer. Add test.
+
+---
+
+## 🟠 P7 — Tablet/Mobile Experience
+
+**Goal:** Polish the tablet client for Android/iOS deployment. Fix touch targets, add swipe gestures, optimize for small screens, and ensure offline resilience.
+
+### Background
+
+The tablet client (`apps/tablet-client/`) targets Android and iOS via Tauri mobile. Commands mirror the desktop client. Current gaps:
+- No swipe-to-complete gesture on POS screen (users expect swipe to pay on tablets)
+- Touch targets need 44px minimum — some buttons are still 32px
+- No pull-to-refresh on order lists
+- Keyboard avoidance (input fields hidden behind keyboard on mobile)
+- Tablet home screen lacks KDS order count widget
+
+### Checklist
+
+- [ ] **P7-1: Swipe gestures** — Add `useSwipe` hook support to tablet POS flow: swipe left on cart → open payment modal, swipe right on payment modal → go back to cart. Use `touchstart`/`touchend` with distance + velocity threshold (min 50px, max 300ms).
+- [ ] **P7-2: Touch target audit** — Scan all tablet-rendered screens for sub-44px interactive elements using `touchTargetSizing.test.tsx`. Fix violations in: product cards (add-to-cart button 32px → 44px), filter chips (28px → 44px), tab buttons (36px → 44px), settings switches (32px → 44px).
+- [ ] **P7-3: Pull-to-refresh** — Add pull-to-refresh to SalesHistoryScreen, OfflineQueueScreen, and KDS ticket board using `@react-spring/web` gesture or native `touch` events. Show spinner + "Pull to refresh" / "Release to refresh" states.
+- [ ] **P7-4: Keyboard avoidance** — Add `useKeyboardAvoidance` hook that detects keyboard open/close on mobile (via `visualViewport` API or focus change) and scrolls active input into view with `scrollMargin`. Apply to: PaymentModal (customer search), SettingsPage text inputs, StaffLoginScreen PIN pad.
+
+---
+
+## 🔘 P8 — Cloud Server & License
+
+**Goal:** Harden the cloud server (`apps/cloud-server/`) and license server (`apps/license-server/`) for production. Add rate limiting, audit logging, and deployment docs.
+
+### Background
+
+The cloud server (`oz-cloud-server`) handles sync API, authentication, and metrics. The license server (Go) handles activation, renewal, and status. Current gaps:
+- Cloud server has no per-tenant rate limiting (any tenant can DoS the sync endpoint)
+- License server lacks machine-level revocation (can't deactivate a stolen device)
+- No health check endpoint on license server (Docker healthcheck uses curl)
+- Deployment docs for cloud server are incomplete
+
+### Checklist
+
+- [ ] **P8-1: Per-tenant rate limiting** — Add token-bucket rate limiter to `oz-cloud-server` sync endpoints: 100 requests/min per tenant for push, 300/min for pull. Return `429 Too Many Requests` with `Retry-After` header. Use in-memory `HashMap` with periodic cleanup.
+- [ ] **P8-2: Machine-level revocation** — Add `POST /api/license/revoke-device` endpoint to license server. Accept `machine_id` + `license_key`. Mark device as revoked in PocketBase. `GET /api/license/status` returns `device_revoked` for revoked machines. Frontend shows "This device has been deactivated" with contact-support message.
+- [ ] **P8-3: Cloud server health endpoint** — Add comprehensive `/api/health` to cloud server: DB connectivity (ping), sync queue depth, last sync timestamp, uptime. Consumed by Tauri app's ConnectionStatus component. Add prometheus metrics export.
+- [ ] **P8-4: License server Docker healthcheck** — Replace curl-based Docker healthcheck with proper Go HTTP client in `apps/license-server/Dockerfile`. Healthcheck pings `/api/health` with 5s interval, 3 retries, 10s timeout. Document in DEPLOY.md.
+
+---
+
+## 🟠 P9 — Reporting & Analytics
+
+**Goal:** Expand reporting capabilities with visual charts, export to CSV/Excel, and more granular date-range filters.
+
+### Background
+
+`crates/oz-reporting/` provides menu engineering and metrics modules. `crates/oz-core/src/db/reports.rs` has daily/weekly/monthly revenue, heatmap, top products, and category breakdown. Current gaps:
+- Reports return raw data only — no chart rendering on frontend
+- No CSV/Excel export for any report
+- Date range picker is basic (start/end string inputs)
+- No comparison period (e.g., this week vs last week)
+
+### Checklist
+
+- [ ] **P9-1: Chart visualizations** — Add lightweight chart rendering (via Canvas 2D API — no heavy chart library) for: daily revenue line chart, category breakdown pie chart, hourly heatmap. Use `color-mix()` for theme-aware colors. Add to ReportingDashboardScreen.
+- [ ] **P9-2: CSV export** — Add "Export CSV" button to every report view. Generate CSV from report data on the frontend (no server round-trip). Use `Blob` + `URL.createObjectURL` + `<a download>`. Include BOM for Excel compatibility with UTF-8. Add test verifying CSV content matches report data.
+- [ ] **P9-3: Period comparison** — Add "Compare to previous period" toggle to revenue reports. Show current period vs previous period side-by-side with delta percentage and up/down arrow indicator. Calculate on frontend from existing data.
+
+---
+
+---
+
+## 🔵 P10 — i18n & Accessibility
+
+**Goal:** Complete Indonesian translation coverage, pass Lighthouse a11y audit, and harden Fluent bundle verification.
+
+### Background
+
+From `docs/i18n-todo.md`: 4 Indonesian bundles are byte-identical to English (gift-cards, purchasing, stock-counting, stock-transfers). The ROADMAP has 2 unchecked items: Lighthouse a11y score ≥ 90 and full i18n coverage. The theme token compliance scanner needs expansion to catch a11y violations.
+
+### Checklist
+
+- [ ] **P10-1: Translate 4 Indonesian bundles** — Translate `gift-cards.id.ftl`, `purchasing.id.ftl`, `stock-counting.id.ftl`, `stock-transfers.id.ftl`. Use `scripts/translate-stub.py --write` to scaffold, then replace `[TODO]` sentinels. Verify with `verify-bundle-parity.py` and `lint-i18n.sh`. Est: 2 hrs.
+- [ ] **P10-2: Lighthouse a11y gate** — Add `lighthouse-ci` to CI pipeline. Set threshold: a11y ≥ 90, best-practices ≥ 80, SEO ≥ 80. Run on 5 key routes: POS checkout, Settings, Product Management, Sales History, KDS. Fix any violations before merging.
+- [ ] **P10-3: Color contrast audit** — Audit all CSS files against WCAG AA contrast ratios (4.5:1 for normal text, 3:1 for large text). Fix violations in: StatusBar (muted text on dark bg), CartPanel (line-item prices), Badge variants, KDS timer text. Add CI check via `contrast-colors` npm package or `axe-core`.
+- [ ] **P10-4: Focus indicator audit** — Verify every interactive element has a visible focus ring (`box-shadow: inset 0 0 0 2px var(--color-accent)`). Audit all 30+ screen files using automated selector scan. Fix: dropdown options, settings toggles, tab panels, date picker fields.
+- [ ] **P10-5: Screen reader UX** — Add `aria-live` announcements for: cart total changes, payment success/failure, shift open/close, sync status changes. Verify with `jest-axe` in existing test files. Add missing `aria-label` on icon-only buttons across all screens.
+
+---
+
+## 🟢 P11 — Shadow Banding Audit
+
+**Goal:** Eliminate visible colour banding on all elevated surfaces by applying SVG feTurbulence noise overlay.
+
+### Background
+
+From `docs/TODO-shadow-audit.md`: 30 CSS surfaces use shadows (`--shadow-xl` through `--shadow-xs`) but lack the SVG noise overlay `dither::after` that prevents gradient banding. Currently only `.card`, `.staff-login-card`, `.modal-panel`, and `.noise-dither` are covered.
+
+### Checklist
+
+- [ ] **P11-1: Phase 1 — High-risk surfaces (15 items)** — Apply `.noise-dither` class or add CSS selector to noise overlay list for: WorkspaceHome (ws-grid-item), RetailPosScreen (6 modal classes), TableManagementScreen, SettingsPopup, LicenseActivationScreen, GiftCardsScreen, PromotionManagementScreen, ProductManagementScreen, PurchaseOrderForm, SalesHistoryScreen, ShiftManagementScreen, StockTransfersScreen, PaymentModal, PriceOverrideModal, DevToolbar. All use `--shadow-2xl` or `--shadow-xl`.
+- [ ] **P11-2: Phase 2 — Medium-risk surfaces (6 items)** — Apply noise overlay to: PosScreen (3× `--shadow-lg`), RestaurantMenu, SettingsPage, ContextMenu, Tooltip, SettingsSelect. All use `--shadow-lg`.
+- [ ] **P11-3: Phase 3 — Low-risk surfaces (9 items)** — Apply noise overlay to: MultiStoreDashboardScreen, MenuEngineeringScreen, ProductLookupScreen, KioskScreen, RetailPosScreen (sm variants), SetupWizard (×2), CartPanelFooterTotals, CartPanelLineItem, PermissionDenied.
+- [ ] **P11-4: Noise overlay CSS refactor** — Extract the noise overlay into a reusable CSS class `.noise-dither` in `components.css`. Replace inline `::after` in individual files with the shared class. Add `@media (prefers-reduced-motion: reduce)` to remove overlay for accessibility.
+- [ ] **P11-5: Visual regression test** — Add a visual regression test (`playwright` or `puppeteer`) that captures screenshots of each elevated surface and compares against baseline. Run in CI on PRs. Fail if banding is detected via pixel-diff threshold > 1%.
+
+---
+
+## 🔴 P12 — PCI-DSS Gap Closure
+
+**Goal:** Close the 6 remaining PCI-DSS compliance gaps identified in the checklist (`docs/security/PCI-DSS_CHECKLIST.md`).
+
+### Background
+
+The PCI-DSS v4.0 checklist has several items marked "Planned" or needing implementation. Critical gaps: no key rotation policy, no incident response plan, no MFA, no daily audit log review notification, no security incident reporting.
+
+### Checklist
+
+- [ ] **P12-1: Key rotation policy** — Document and implement key rotation for `oz-security` Keyring. Add `rotate_key()` method that generates new key, re-encrypts existing KEK-wrapped data, and updates storage. Add 90-day rotation reminder via toast notification. Est: 2–3 hrs.
+- [ ] **P12-2: Incident response plan** — Write `docs/security/INCIDENT_RESPONSE.md` with: incident classification (P1-P4), containment steps, evidence preservation, notification contacts, post-mortem template. Integrate with audit log by adding `incident` action type. Est: 2 hrs.
+- [ ] **P12-3: Daily audit log review** — Add `unreviewed_audit_events` count to dashboard screen. Highlight events marked `critical` or `security` in red. Show last-reviewed timestamp. Add "Mark reviewed" button for managers. Est: 2–3 hrs.
+- [ ] **P12-4: Session timeout & lockout** — Implement automatic screen lock after configurable idle timeout (5/15/30/60 min). Require PIN re-entry to unlock. Store timeout preference in user preferences or settings. Lock screen shows blurred last screen + time. Est: 3–4 hrs.
+
+---
+
+## 🟡 P13 — DevOps & Infrastructure
+
+**Goal:** Improve CI/CD pipeline speed, Docker deployment, and developer onboarding experience.
+
+### Background
+
+Current CI pipeline takes ~10 minutes. Docker compose exists but cloud-server deployment docs are incomplete. Developer onboarding requires manual dependency installation. No automated end-to-end tests against the full stack.
+
+### Checklist
+
+- [ ] **P13-1: CI pipeline optimization** — Profile CI build times. Implement: shared sccache between jobs, incremental cargo check (only changed crates), parallel vitest + eslint runs, dependency caching between workflow runs. Target: < 5 min for lint + typecheck + unit tests. Est: 2–3 hrs.
+- [ ] **P13-2: Docker Compose for full stack** — Update `docker-compose.yml` to include: `oz-cloud-server` (Rust API), `oz-pos` (desktop client in X11/VNC for CI), `license-server` (Go), PostgreSQL (sync target), Redis (cache). Add healthcheck dependencies. Document in `docs/operations/docker-deployment.md`. Est: 3–4 hrs.
+- [ ] **P13-3: E2E test suite** — Add Playwright-based e2e tests for the 5 most critical flows: complete sale (scan → add → pay → receipt), staff login with PIN, create product, open/close shift, settings change. Use Docker Compose for backend + test against real SQLite. Est: 4–6 hrs.
+- [ ] **P13-4: Developer setup script** — Create `scripts/setup-dev.sh` / `setup-dev.ps1` that automates: install Rust toolchain, install Node.js deps, run `cargo check`, run `npm install`, run initial migration, seed demo data. Replace manual setup steps in `QUICKSTART.md` with single-command setup. Est: 2 hrs.
+
+---
+
+## 🟣 P14 — Mobile Build & Deploy
+
+**Goal:** Successfully build and deploy the tablet client on Android and iOS, enabling real-world mobile POS deployment.
+
+### Background
+
+The ROADMAP lists both Android and iPad builds as unchecked. The tablet client (`apps/tablet-client/`) and touch-optimized UI are ready, but the actual APK/IPA builds haven't been completed. Requires Android SDK / Xcode setup.
+
+### Checklist
+
+- [ ] **P14-1: Android build pipeline** — Add GitHub Actions workflow for Android APK build: install Android SDK (via `android-actions/setup-android`), set up keystore signing (secrets), run `cargo tauri build --target aarch64-linux-android`. Output signed APK + AAB as release artifacts. Est: 3–4 hrs (requires runner with Android SDK).
+- [ ] **P14-2: iOS build pipeline** — Add GitHub Actions workflow for iOS IPA build: install Xcode (macOS runner), configure provisioning profile + certificate (secrets), run `cargo tauri build --target aarch64-apple-ios`. Output IPA as release artifact. Est: 3–4 hrs (requires Apple Developer account + macOS runner).
+- [ ] **P14-3: Tablet gesture & orientation** — Add `orientation` lock to POS screen (landscape recommended), handle `orientationchange` event to reflow layout. Test swipe-to-complete gesture on physical Android/iPad. Fix any touch-event issues (passive listeners, scroll interference). Est: 2–3 hrs.
+- [ ] **P14-4: Mobile deployment docs** — Update `packaging/mobile/README.md` with: step-by-step Android APK build guide (with/without Android Studio), iOS TestFlight distribution guide, hardware requirements (minimum Android 10 / iOS 16, 4GB RAM), supported payment terminals, printer compatibility list. Est: 2 hrs.
+
+---
+
 ## 🧭 Dependency Graph
 
 ```
@@ -142,6 +348,26 @@ Several ADRs lack final "Implemented" status updates. The skill-drift-guard foun
 🔵 P3 KDS Enhancements ─ all independent
 
 🟣 P4 Docs & Compliance ─ all independent
+
+🟤 P5 Payment Gateway ─ P5-1 → P5-2/3/4
+
+⚪ P6 Hardware ─ all independent
+
+🟠 P7 Tablet/Mobile ─ P7-2 needs P7-1
+
+🔘 P8 Cloud Server ─ all independent
+
+🟠 P9 Reporting ─ all independent
+
+🔵 P10 i18n & A11y ─ P10-2 (Lighthouse) depends on P10-3, P10-4
+
+🟢 P11 Shadow Banding ─ P11-1 → P11-2 → P11-3 (ordered by risk)
+
+🔴 P12 PCI-DSS ─ all independent
+
+🟡 P13 DevOps ─ P13-3 (E2E) depends on P13-2 (Docker Compose)
+
+🟣 P14 Mobile Build ─ P14-3 (gestures) independent of P14-1/2 (build pipelines)
 ```
 
 ---
@@ -175,16 +401,63 @@ Several ADRs lack final "Implemented" status updates. The skill-drift-guard foun
 | 🟣 | P4-2: Missing docs | 1 hr | None |
 | 🟣 | P4-3: Skill-drift guard | 30 min | None |
 | 🟣 | P4-4: CHANGELOG final pass | 30 min | None |
+| 🟤 | P5-1: Gateway error classification | 2–3 hrs | None |
+| 🟤 | P5-2: Idempotency keys | 2–3 hrs | None (migration 097) |
+| 🟤 | P5-3: Webhook receiver | 3–4 hrs | None |
+| 🟤 | P5-4: Sandbox test recording | 2–3 hrs | None |
+| ⚪ | P6-1: Auto-discovery | 3–4 hrs | None |
+| ⚪ | P6-2: ESC/POS barcode & QR | 2–3 hrs | None |
+| ⚪ | P6-3: Printer status polling | 1–2 hrs | None |
+| ⚪ | P6-4: Receipt preview | 2–3 hrs | None |
+| 🟠 | P7-1: Swipe gestures | 2–3 hrs | None |
+| 🟠 | P7-2: Touch target audit | 1–2 hrs | None |
+| 🟠 | P7-3: Pull-to-refresh | 1–2 hrs | None |
+| 🟠 | P7-4: Keyboard avoidance | 1–2 hrs | None |
+| 🔘 | P8-1: Per-tenant rate limiting | 2–3 hrs | None |
+| 🔘 | P8-2: Machine-level revocation | 2–3 hrs | None |
+| 🔘 | P8-3: Cloud server health | 1–2 hrs | None |
+| 🔘 | P8-4: License server healthcheck | 1 hr | None |
+| 🟠 | P9-1: Chart visualizations | 3–4 hrs | None |
+| 🟠 | P9-2: CSV export | 1–2 hrs | None |
+| 🟠 | P9-3: Period comparison | 1–2 hrs | None |
+| 🔵 | P10-1: Translate 4 ID bundles | 2 hrs | None |
+| 🔵 | P10-2: Lighthouse a11y gate | 2–3 hrs | P10-3, P10-4 |
+| 🔵 | P10-3: Color contrast audit | 2–3 hrs | None |
+| 🔵 | P10-4: Focus indicator audit | 1–2 hrs | None |
+| 🔵 | P10-5: Screen reader UX | 2–3 hrs | None |
+| 🟢 | P11-1: Phase 1 — High-risk shadows | 2 hrs | None |
+| 🟢 | P11-2: Phase 2 — Medium-risk shadows | 1 hr | P11-1 |
+| 🟢 | P11-3: Phase 3 — Low-risk shadows | 1 hr | P11-2 |
+| 🟢 | P11-4: Noise overlay CSS refactor | 1–2 hrs | P11-3 |
+| 🟢 | P11-5: Visual regression test | 3–4 hrs | P11-4 |
+| 🔴 | P12-1: Key rotation policy | 2–3 hrs | None |
+| 🔴 | P12-2: Incident response plan | 2 hrs | None |
+| 🔴 | P12-3: Daily audit log review | 2–3 hrs | None |
+| 🔴 | P12-4: Session timeout & lockout | 3–4 hrs | None |
+| 🟡 | P13-1: CI pipeline optimization | 2–3 hrs | None |
+| 🟡 | P13-2: Docker Compose for full stack | 3–4 hrs | None |
+| 🟡 | P13-3: E2E test suite | 4–6 hrs | P13-2 |
+| 🟡 | P13-4: Developer setup script | 2 hrs | None |
+| 🟣 | P14-1: Android build pipeline | 3–4 hrs | None (SDK) |
+| 🟣 | P14-2: iOS build pipeline | 3–4 hrs | None (Xcode) |
+| 🟣 | P14-3: Tablet gesture & orientation | 2–3 hrs | None |
+| 🟣 | P14-4: Mobile deployment docs | 2 hrs | None |
 
-**Total estimated effort:** ~35–45 hours
+**Total estimated effort:** ~112–155 hours
 
 ### Suggested sprint plan
 
 | Sprint | Items | Est. hours |
 |--------|-------|------------|
-| **Day 1** | P0-1, P0-2, P0-3 (sandbox audit + manifests + limits) | 5–7h |
-| **Day 2** | P0-4, P0-5 (safe env + regressions), P4-1, P4-2, P4-3, P4-4 (docs) | 6–9h |
-| **Day 3** | P1-1, P2-1 (conflict strategy + profile baseline) | 4–5h |
-| **Day 4** | P1-2, P1-3 (sync tests + conflict UI), P2-2 (grid virtualize) | 8–10h |
-| **Day 5** | P1-4, P1-5, P1-6 (sync remaining), P2-3, P2-4, P2-5 (perf remaining) | 6–8h |
-| **Day 6** | P3-1 through P3-5 (KDS full pass) | 6–9h |
+| **Week 1** | P0-1 through P0-5 (plugin security) + P4-1 through P4-4 (docs) | 11–16h |
+| **Week 2** | P1-1 through P1-3 (conflict strategy, sync tests, conflict UI) | 8–11h |
+| **Week 3** | P1-4 through P1-6 (sync remaining) + P2-1, P2-2 (perf baseline + virtualize) | 7–11h |
+| **Week 4** | P2-3 through P2-5 (perf remaining) + P5-1, P5-2 (gateway hardening) | 6–10h |
+| **Week 5** | P5-3, P5-4 (webhooks + fixtures) + P6-1, P6-2 (hardware auto-detect + barcode) | 10–13h |
+| **Week 6** | P6-3, P6-4 (printer status + receipt preview) + P7-1, P7-2 (swipe + touch audit) | 6–10h |
+| **Week 7** | P7-3, P7-4 (pull-to-refresh + keyboard) + P8-1, P8-2 (rate limit + revocation) | 6–10h |
+| **Week 8** | P8-3, P8-4 (health + deploy) + P9-1, P9-2, P9-3 (charts, CSV, comparison) | 6–9h |
+| **Week 9** | P10-1 through P10-5 (i18n & a11y) + P11-1, P11-2 (shadow banding) | 9–13h |
+| **Week 10** | P11-3 through P11-5 (shadow remaining) + P12-1, P12-2 (PCI-DSS) | 8–11h |
+| **Week 11** | P12-3, P12-4 (PCI-DSS remaining) + P13-1, P13-2 (DevOps) | 8–11h |
+| **Week 12** | P13-3, P13-4 (E2E + setup script) + P14-1 through P14-4 (mobile build) | 12–15h |
