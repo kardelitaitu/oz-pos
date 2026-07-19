@@ -18,7 +18,7 @@ use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::{CustomerDisplay, DisplayContent};
-use crate::traits::printer::ReceiptPrinter;
+use crate::traits::printer::{PaperStatus, PrinterStatus, ReceiptPrinter};
 use crate::types::{Barcode, DeviceInfo};
 
 // --- Barcode scanner mock -----------------------------------------------
@@ -125,6 +125,9 @@ pub struct MockReceiptPrinter {
     pub info: DeviceInfo,
     /// If set, every `print_receipt` returns this error instead of Ok.
     pub fail_with: Arc<Mutex<Option<HalError>>>,
+    /// Programmable printer status returned by `get_status()`.
+    /// Defaults to `PrinterStatus { paper: Ok, cover_open: false, drawer_open: false }`.
+    pub status: Arc<Mutex<PrinterStatus>>,
 }
 
 impl MockReceiptPrinter {
@@ -143,6 +146,11 @@ impl MockReceiptPrinter {
             cut_calls: Arc::new(AtomicUsize::new(0)),
             info,
             fail_with: Arc::new(Mutex::new(None)),
+            status: Arc::new(Mutex::new(PrinterStatus {
+                paper: PaperStatus::Ok,
+                cover_open: false,
+                drawer_open: false,
+            })),
         }
     }
 
@@ -150,6 +158,11 @@ impl MockReceiptPrinter {
     /// subsequent calls until cleared).
     pub fn set_next_error(&self, err: HalError) {
         *self.fail_with.lock().expect("poisoned") = Some(err);
+    }
+
+    /// Set the printer status returned by `get_status()`.
+    pub fn set_status(&self, status: PrinterStatus) {
+        *self.status.lock().expect("poisoned") = status;
     }
 }
 
@@ -183,6 +196,10 @@ impl ReceiptPrinter for MockReceiptPrinter {
     async fn cut(&self) -> Result<(), HalError> {
         self.cut_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    async fn get_status(&self) -> Result<PrinterStatus, HalError> {
+        Ok(self.status.lock().expect("poisoned").clone())
     }
 
     fn device_info(&self) -> DeviceInfo {
@@ -476,6 +493,57 @@ mod tests {
         let d = MockCashDrawer::new();
         let result = d.is_open().await;
         assert!(matches!(result, Err(HalError::Disconnected)));
+    }
+
+    #[tokio::test]
+    async fn mock_get_status_returns_default_ok() {
+        let p = MockReceiptPrinter::new();
+        let status = p.get_status().await.unwrap();
+        assert_eq!(status.paper, PaperStatus::Ok);
+        assert!(!status.cover_open);
+        assert!(!status.drawer_open);
+        assert!(status.is_ready());
+        assert!(!status.has_fault());
+    }
+
+    #[tokio::test]
+    async fn mock_get_status_programmable() {
+        let p = MockReceiptPrinter::new();
+        p.set_status(PrinterStatus {
+            paper: PaperStatus::Low,
+            cover_open: false,
+            drawer_open: true,
+        });
+        let status = p.get_status().await.unwrap();
+        assert_eq!(status.paper, PaperStatus::Low);
+        assert!(!status.cover_open);
+        assert!(status.drawer_open);
+    }
+
+    #[tokio::test]
+    async fn mock_status_fault_detection() {
+        let p = MockReceiptPrinter::new();
+        // Empty paper + cover open = fault
+        p.set_status(PrinterStatus {
+            paper: PaperStatus::Empty,
+            cover_open: true,
+            drawer_open: false,
+        });
+        let status = p.get_status().await.unwrap();
+        assert!(status.has_fault());
+        assert!(!status.is_ready());
+    }
+
+    #[tokio::test]
+    async fn mock_status_is_ready_requires_ok_paper_and_closed_cover() {
+        let p = MockReceiptPrinter::new();
+        // Low paper + closed cover = should still be NOT ready
+        p.set_status(PrinterStatus {
+            paper: PaperStatus::Low,
+            cover_open: false,
+            drawer_open: false,
+        });
+        assert!(!p.get_status().await.unwrap().is_ready());
     }
 
     #[tokio::test]

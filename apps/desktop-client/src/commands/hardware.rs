@@ -79,6 +79,22 @@ pub async fn print_receipt(
         .printer("default")
         .await
         .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
+
+    // Check printer status before printing
+    let status = printer.get_status().await?;
+    if status.has_fault() {
+        return Err(AppError::Invalid(
+            "Printer is not ready: check paper supply and cover".into(),
+        ));
+    }
+    if status.paper != oz_hal::PaperStatus::Ok {
+        // Low paper — warn but continue
+        tracing::warn!(
+            paper = ?status.paper,
+            "printer paper is low, continuing"
+        );
+    }
+
     let lines: Vec<&str> = args.body.lines().collect();
     let n = lines.len();
     printer.print_receipt(&args.body).await?;
@@ -181,6 +197,20 @@ pub async fn print_sales_receipt(
         .printer("default")
         .await
         .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
+
+    // Check printer status before printing
+    let status = printer.get_status().await?;
+    if status.has_fault() {
+        return Err(AppError::Invalid(
+            "Printer is not ready: check paper supply and cover".into(),
+        ));
+    }
+    if status.paper != oz_hal::PaperStatus::Ok {
+        tracing::warn!(
+            paper = ?status.paper,
+            "printer paper is low, continuing"
+        );
+    }
 
     // Load store info + display settings from the DB.
     let conn = state.db.lock().await;
