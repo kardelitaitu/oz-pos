@@ -24,6 +24,7 @@ mod metrics;
 mod prune;
 mod redirect;
 mod sync_api;
+mod webhooks;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -48,6 +49,12 @@ pub struct CloudServerState {
     pub db: Arc<Mutex<Connection>>,
     /// Instant captured at startup for uptime calculation.
     pub started_at: Instant,
+    /// P5-3: Stripe webhook signing secret (loaded from `STRIPE_WEBHOOK_SECRET` env var).
+    pub stripe_webhook_secret: Option<String>,
+    /// P5-3: Square webhook signature key (loaded from `SQUARE_WEBHOOK_SIGNATURE_KEY` env var).
+    pub square_webhook_signature_key: Option<String>,
+    /// P5-3: Public Square webhook URL (loaded from `SQUARE_WEBHOOK_URL` env var).
+    pub square_webhook_url: Option<String>,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -90,6 +97,9 @@ async fn main() {
             let state = CloudServerState {
                 db: conn.clone(),
                 started_at: Instant::now(),
+                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
+                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
+                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
@@ -107,6 +117,9 @@ async fn main() {
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
                 started_at: Instant::now(),
+                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
+                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
+                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
             };
             let app = build_router(state);
             serve(app).await;
@@ -176,7 +189,10 @@ pub fn build_router(state: CloudServerState) -> Router {
     let health_state = state.clone();
 
     // Build the sync router (push/pull endpoints) from sync_api module.
-    let sync_router = sync_router(SyncState::from(state));
+    let sync_router = sync_router(SyncState::from(state.clone()));
+
+    // Build the webhook router (unauthenticated — HMAC signature verification).
+    let webhook_router = webhooks::webhooks_router(state.clone());
 
     // P-2: Per-route-group concurrency limits prevent sync bursts
     // from starving the product/sales/health API routes.
@@ -190,6 +206,7 @@ pub fn build_router(state: CloudServerState) -> Router {
         .with_state(health_state)
         .merge(api_router)
         .merge(sync_router)
+        .merge(webhook_router)
         .layer(axum::middleware::from_fn(redirect::redirect_middleware))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
@@ -217,6 +234,9 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
         build_router(state)
     }
@@ -288,6 +308,9 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
         let app = build_router(state.clone());
 
@@ -356,6 +379,9 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
         let app = build_router(state.clone());
 
@@ -395,6 +421,9 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
         let app = build_router(state.clone());
 
@@ -440,6 +469,9 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
         let app = build_router(state.clone());
 
@@ -485,6 +517,9 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
         let app = build_router(state.clone());
 

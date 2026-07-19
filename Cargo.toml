@@ -102,6 +102,8 @@ aead = "0.5"
 rand = "0.8"
 tracing-appender = "0.2"
 reqwest = { version = "0.12", features = ["json", "blocking", "gzip"] }
+hmac = "0.12"
+sha2 = "0.10"
 rlua = "0.20"
 notify = { version = "7", features = [] }
 
