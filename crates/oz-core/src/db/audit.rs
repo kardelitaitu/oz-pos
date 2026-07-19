@@ -202,4 +202,99 @@ mod tests {
         assert_eq!(login_entry.outcome, "failure");
         assert_eq!(login_entry.details, "{}");
     }
+
+    #[test]
+    fn audit_log_with_large_details() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let large_details = format!(
+            "{{\"payload\":\"{}\",\"metadata\":{{\"count\":{}}}}}",
+            "x".repeat(2000),
+            42
+        );
+        assert!(large_details.len() > 2000);
+
+        let entry = AuditEntry::new(
+            "user-1",
+            "bulk.import",
+            Some("product".to_string()),
+            Some("batch-99".to_string()),
+            Some(large_details.clone()),
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].details, large_details);
+    }
+
+    #[test]
+    fn audit_log_multiple_same_action() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        for i in 0..3 {
+            let entry = AuditEntry::new(
+                "user-1",
+                "inventory.sync",
+                Some("inventory".to_string()),
+                Some(format!("item-{i}")),
+                Some(format!("{{\"qty\":{i}}}")),
+                "ok",
+            );
+            s.log_audit(&entry).unwrap();
+        }
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 3);
+        // All should have the same action.
+        assert!(entries.iter().all(|e| e.action == "inventory.sync"));
+        // Should be in reverse chronological order (most recent first).
+        assert_eq!(entries[0].target_id.as_deref(), Some("item-2"));
+        assert_eq!(entries[1].target_id.as_deref(), Some("item-1"));
+        assert_eq!(entries[2].target_id.as_deref(), Some("item-0"));
+    }
+
+    #[test]
+    fn audit_log_limit_zero_returns_empty() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let entries = store(&conn).list_audit_entries(0, 0).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn audit_log_exact_limit_matches_total() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let entries = store(&conn).list_audit_entries(4, 0).unwrap();
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries[0].id, "aud-4");
+    }
+
+    #[test]
+    fn audit_log_very_long_action_name() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let long_action = "custom.event.".to_owned() + &"x".repeat(180);
+        // "custom.event." = 13 chars, + 180 = 193
+        assert_eq!(long_action.len(), 193);
+
+        let entry = AuditEntry::new(
+            "admin",
+            &long_action,
+            Some("test".to_string()),
+            None::<String>,
+            None::<String>,
+            "info",
+        );
+        s.log_audit(&entry).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].action.len(), 193);
+    }
 }
