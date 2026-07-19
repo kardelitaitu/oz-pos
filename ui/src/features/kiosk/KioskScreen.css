@@ -66,6 +66,11 @@
   min-height: var(--space-12);
 }
 
+.kiosk-cat-chip:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .kiosk-cat-chip.active {
   background: var(--color-accent);
   color: var(--color-accent-fg);
@@ -95,6 +100,11 @@
   cursor: pointer;
   min-height: 7.5rem;
   transition: transform var(--duration-100), box-shadow var(--duration-100);
+}
+
+.kiosk-product-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 .kiosk-product-card:active {
@@ -208,6 +218,11 @@
   min-height: var(--space-14);
 }
 
+.kiosk-checkout-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 /* Checkout screen */
 .kiosk-checkout {
   display: flex;
@@ -252,6 +267,11 @@
   margin-bottom: var(--space-2);
 }
 
+.kiosk-checkout-pay:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .kiosk-checkout-back {
   padding: var(--space-4);
   background: var(--color-bg-secondary);
@@ -261,6 +281,11 @@
   font-size: var(--text-xl);
   cursor: pointer;
   min-height: var(--space-14);
+}
+
+.kiosk-checkout-back:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 .kiosk-stock-badge {

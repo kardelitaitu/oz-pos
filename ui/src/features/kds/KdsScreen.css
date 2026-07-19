@@ -115,6 +115,11 @@
   border-color: var(--kds-ticket-hover-border);
 }
 
+.kds-ticket:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .kds-ticket:active {
   transform: translateY(0);
   box-shadow: 0 2px 8px var(--kds-shadow);
@@ -348,6 +353,11 @@
 
 .kds-workspace-back:hover {
   background: color-mix(in srgb, var(--color-fg-primary) 15%, transparent);
+}
+
+.kds-workspace-back:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 .kds-workspace-back:active {

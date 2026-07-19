@@ -20,12 +20,12 @@
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🔵 P10 — i18n & Accessibility | 5 | **1** | **██▱▱▱▱▱▱▱▱ 20%** |
+| 🔵 P10 — i18n & Accessibility | 5 | **3** | **██████▱▱▱▱ 60%** |
 | 🟢 P11 — Shadow Banding Audit | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **20** | **████████████████▱ 29%** |
+| **Total** | **70** | **22** | **████████████████▱ 31%** |
 
 ---
 
@@ -251,7 +251,7 @@ From `docs/i18n-todo.md`: 4 Indonesian bundles are byte-identical to English (gi
 - [x] **P10-1: Translate 4 Indonesian bundles** ✅ — 2 bundles already translated (gift-cards, purchasing). Translated 2 remaining bundles: stock-counting.id.ftl (29 keys — stok opname) and stock-transfers.id.ftl (38 keys — transfer stok). All Indonesian translations use proper retail/POS terminology. Verified with `lint-i18n.sh` (clean) and `verify-bundle-parity.py` (0 missing keys).
 - [ ] **P10-2: Lighthouse a11y gate** — Add `lighthouse-ci` to CI pipeline. Set threshold: a11y ≥ 90, best-practices ≥ 80, SEO ≥ 80. Run on 5 key routes: POS checkout, Settings, Product Management, Sales History, KDS. Fix any violations before merging.
 - [ ] **P10-3: Color contrast audit** — Audit all CSS files against WCAG AA contrast ratios (4.5:1 for normal text, 3:1 for large text). Fix violations in: StatusBar (muted text on dark bg), CartPanel (line-item prices), Badge variants, KDS timer text. Add CI check via `contrast-colors` npm package or `axe-core`.
-- [ ] **P10-4: Focus indicator audit** — Verify every interactive element has a visible focus ring (`box-shadow: inset 0 0 0 2px var(--color-accent)`). Audit all 30+ screen files using automated selector scan. Fix: dropdown options, settings toggles, tab panels, date picker fields.
+- [x] **P10-4: Focus indicator audit** ✅ — Added `:focus-visible` styles to 12 CSS files covering 24 interactive elements: dropdown options (KDS layout, density), settings toggles (KDS layout/settings), buttons (permission denied, reverse transit, ghost license, dev toolbar), cards (KDS ticket, kiosk product), filter chips (stock counts, kiosk categories), inputs (threshold select/input), action buttons (offline queue, stock count actions), checkout actions (kiosk). Consistent pattern: `outline: none; box-shadow: inset 0 0 0 2px var(--color-accent)` (buttons) or `box-shadow: 0 0 0 2px` (checkbox toggles, cards). TypeScript: 0 errors.
 - [x] **P10-5: Screen reader UX** ✅ — Added `aria-live="polite"` to cart grand total (RetailPosScreen), `aria-live="assertive"` to payment done state (PaymentModal), `aria-live="polite"` to shift status (ShiftBar), `aria-live="polite"` to pending count badge (OfflineQueueScreen). Added missing `aria-label` on 2 icon-only × buttons (PaymentModal customer remove, RetailOptionsScreen preview close). TypeScript: 0 errors.
 
 ---

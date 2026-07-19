@@ -116,6 +116,11 @@
   box-shadow: var(--shadow-xl);
 }
 
+.reverse-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .transit-empty {
   text-align: center;
   padding: var(--space-12);

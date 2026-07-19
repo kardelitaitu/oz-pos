@@ -224,6 +224,11 @@
   background: var(--color-bg-surface);
 }
 
+.offline-queue-action-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .offline-queue-action-btn--danger {
   color: var(--color-danger);
   border-color: var(--color-danger-dim);
