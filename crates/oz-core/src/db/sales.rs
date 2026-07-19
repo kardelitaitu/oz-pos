@@ -2118,9 +2118,12 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        // Manually corrupt the status in the DB.
+        // Set a status that is valid at the SQL CHECK level ('refunded' is
+        // in the CHECK constraint from migration 096) but NOT recognized
+        // by SaleStatus::from_stored_str — this tests the Rust-layer
+        // defensive guard against unknown stored values.
         conn.execute(
-            "UPDATE sales SET status = 'bogus_status' WHERE id = ?1",
+            "UPDATE sales SET status = 'refunded' WHERE id = ?1",
             rusqlite::params![sale.id],
         )
         .unwrap();
