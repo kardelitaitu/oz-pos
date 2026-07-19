@@ -60,6 +60,24 @@ pub trait Cache: Send + Sync {
         _terminal_id: Option<&str>,
     ) {
     }
+
+    /// Publish a `stock.negative` warning event (ADR-18 §4).
+    ///
+    /// Called when `allow_negative_stock` is enabled on a location and
+    /// a stock adjustment results in negative quantity. The payload
+    /// includes `{ product_id, sku, location_id, delta, current_qty, terminal_id, timestamp }`.
+    /// Default impl is a no-op; `RedisCache` overrides this to publish
+    /// to `stock:negative`.
+    fn publish_negative_stock_event(
+        &self,
+        _product_id: &str,
+        _sku: &str,
+        _location_id: &str,
+        _delta: i64,
+        _current_qty: i64,
+        _terminal_id: Option<&str>,
+    ) {
+    }
 }
 
 /// No-op cache that always misses.
@@ -89,6 +107,17 @@ impl Cache for NoopCache {
     ) -> Option<std::sync::mpsc::Sender<()>> {
         let _ = (_cache, _terminal_id);
         None
+    }
+
+    fn publish_negative_stock_event(
+        &self,
+        _product_id: &str,
+        _sku: &str,
+        _location_id: &str,
+        _delta: i64,
+        _current_qty: i64,
+        _terminal_id: Option<&str>,
+    ) {
     }
 }
 
@@ -319,6 +348,36 @@ pub mod redis_cache {
                 "product_id": product_id,
                 "sku": sku,
                 "new_qty": new_qty,
+                "terminal_id": terminal_id.unwrap_or(""),
+                "timestamp": chrono::Utc::now().to_rfc3339_opts(
+                    chrono::SecondsFormat::Millis, true,
+                ),
+            });
+            let Ok(msg) = serde_json::to_string(&payload) else {
+                return;
+            };
+            let Ok(mut conn) = self.conn.lock() else {
+                return;
+            };
+            let _: Result<(), _> = redis::cmd("PUBLISH").arg(key).arg(&msg).query(&mut *conn);
+        }
+
+        fn publish_negative_stock_event(
+            &self,
+            product_id: &str,
+            sku: &str,
+            location_id: &str,
+            delta: i64,
+            current_qty: i64,
+            terminal_id: Option<&str>,
+        ) {
+            let key = "stock:negative";
+            let payload = serde_json::json!({
+                "product_id": product_id,
+                "sku": sku,
+                "location_id": location_id,
+                "delta": delta,
+                "current_qty": current_qty,
                 "terminal_id": terminal_id.unwrap_or(""),
                 "timestamp": chrono::Utc::now().to_rfc3339_opts(
                     chrono::SecondsFormat::Millis, true,

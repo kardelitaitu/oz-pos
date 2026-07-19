@@ -919,6 +919,22 @@ impl Store<'_> {
             cache.publish_inventory_change(&product_id, sku, new_qty, self.terminal_id.as_deref());
         }
 
+        // 5. stock.negative warning event (ADR-18 §4).
+        // Emitted when allow_negative_stock is enabled and the resulting qty
+        // is negative — the deduction went below zero.
+        if allow_negative && new_qty < 0 {
+            if let Some(cache) = &self.cache {
+                cache.publish_negative_stock_event(
+                    &product_id,
+                    sku,
+                    location_id.as_str(),
+                    delta,
+                    new_qty,
+                    self.terminal_id.as_deref(),
+                );
+            }
+        }
+
         Ok(new_qty)
     }
 
