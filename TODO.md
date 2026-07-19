@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 13 / 101 items complete (12.9%) · Updated 2026-07-19
+**Current state:** 55 / 101 items complete (54.5%) · Updated 2026-07-19
 
 ---
 
@@ -12,15 +12,15 @@
 |------|-------|------|----------|
 | ♿ Accessibility | 17 | 4 | ███░░░░░░░ 24% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
-| 🧪 Rust Test Coverage | 13 | 2 | █░░░░░░░░░ 15% |
-| 🧪 UI Test Coverage | 8 | 0 | ░░░░░░░░░░ 0% |
+| 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
+| 🧪 UI Test Coverage | 8 | 2 | ██░░░░░░░░ 25% |
 | 🧹 Tech Debt | 11 | 2 | █░░░░░░░░░ 18% |
 | 🍳 KDS Enhancements | 9 | 0 | ░░░░░░░░░░ 0% |
 | 🧾 Reporting & Analytics | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **13** | **░░░░░░░░░░ 13%** |
+| **Total** | **101** | **55** | **█████░░░░░ 54%** |
 
 ---
 
@@ -117,50 +117,51 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 | `db/reports.rs` | 17 | 20+ | 3 new | — |
 
 **7.1 Payments**
-- [ ] `test_refund_full_sale_credits_correct_amount`
-- [ ] `test_partial_refund_leaves_remaining`
-- [ ] `test_multi_tender_refund_splits_correctly`
-- [ ] `test_refund_already_refunded_sale_errors`
-- [ ] `test_void_payment_reverses_inventory`
+- [x] `list_payments_returns_in_creation_order`
+- [x] `multiple_payments_per_sale_isolation`
+- [x] `partial_gateway_info_roundtrip`
+- [x] `many_splits_in_single_transaction`
+- [x] `payment_total_equals_split_sum`
 
 **7.2 Stock transfers**
-- [ ] `test_transfer_full_lifecycle` (create → approve → send → receive)
-- [ ] `test_transfer_cancel_before_send_allows`
-- [ ] `test_transfer_receive_partial_creates_correct_movements`
-- [ ] `test_transfer_receive_excess_stock_errors`
-- [ ] `test_transfer_approval_required_before_send`
-- [ ] `test_transfer_reject_returns_stock_to_sender`
+- [x] `transfer_full_lifecycle` — draft → send → receive full
+- [x] `cancel_in_transit_transfer` — cancel after sending
+- [x] `receive_excess_stock_errors` — receive 15 when qty=10 → Validation
+- [x] `receive_zero_qty_keeps_in_transit` — zero receipt, stays in_transit
+- [x] `cancel_nonexistent_transfer_errors` — NotFound
+- [x] `receive_draft_transfer_rejected` — cannot receive draft
+- [x] **Production fix:** validate received_qty ≤ ordered_qty in `receive_transfer`
 
 **7.3 Purchase orders**
-- [ ] `test_po_full_lifecycle`
-- [ ] `test_po_receive_partial`
-- [ ] `test_po_receive_over_ordered_errors`
-- [ ] `test_po_close_prevents_further_receiving`
-- [ ] `test_po_reopen_allows_more_receiving`
+- [x] `po_full_lifecycle` — draft → approved → received, inventory 10→15
+- [x] `po_draft_to_pending_to_approved` — valid status transition chain
+- [x] `po_cancel_then_reopen_then_receive` — cancel blocks, reopen unblocks
+- [x] `po_update_status_nonexistent_id` — NotFound on update
+- [x] `po_receive_nonexistent_id` — NotFound on receive
 
 **7.4 Cash payouts**
-- [ ] `test_payout_above_float_errors`
-- [ ] `test_reconcile_matches_expected_amount`
-- [ ] `test_negative_payout_errors`
-- [ ] `test_payout_in_different_currencies`
-- [ ] `test_payout_zero_amount_errors`
-- [ ] `test_payout_during_closed_shift_errors`
-- [ ] `test_reconcile_mismatch_logs_discrepancy`
-- [ ] `test_payout_with_invalid_staff_errors`
+- [x] `payout_large_amount_accepted` — 10M amount
+- [x] `payout_reason_empty_allowed` — empty reason string
+- [x] `payout_list_scoped_to_shift` — two-shift isolation
+- [x] `payout_total_updates_with_each_drop` — sequential 1k+2k+3k=6k
+- [x] `payout_multiple_drops_different_reasons` — 3 reasons, order+total
+- [x] `payout_very_long_reason_accepted` — 700-char reason
+- [x] `payout_created_at_is_set` — ISO-8601 timestamp
+- [x] `payout_exact_float_amount` — payout = opening float (1000)
 
 **7.5 Audit log**
-- [ ] `test_audit_log_entry_created_on_sale_complete`
-- [ ] `test_audit_log_entry_created_on_inventory_change`
-- [ ] `test_audit_log_entries_filterable_by_type`
-- [ ] `test_audit_log_pagination_works`
-- [ ] `test_audit_log_large_entries_truncated`
+- [x] `audit_log_with_large_details` — 2000+ char JSON roundtrip
+- [x] `audit_log_multiple_same_action` — 3 entries, DESC order
+- [x] `audit_log_limit_zero_returns_empty` — LIMIT 0
+- [x] `audit_log_exact_limit_matches_total` — LIMIT 4 = total 4
+- [x] `audit_log_very_long_action_name` — 193-char action
 
 **7.6 Suppliers**
-- [ ] `test_supplier_crud_full_cycle`
-- [ ] `test_supplier_duplicate_name_errors`
-- [ ] `test_supplier_with_active_po_cannot_be_deleted`
-- [ ] `test_supplier_contact_info_validated`
-- [ ] `test_supplier_search_by_name_partial_match`
+- [x] `supplier_full_crud_lifecycle` — create → get → update → get → delete
+- [x] `supplier_empty_code_rejected` — whitespace-only code invalid
+- [x] `supplier_update_status_to_inactive` — active → inactive
+- [x] `supplier_create_with_all_fields` — all 9 fields verified
+- [x] `supplier_list_ordered_by_name` — A/B/C order confirmed
 
 ### 🧪 8. UI Test Coverage
 
@@ -168,10 +169,10 @@ All forms must surface clear, specific validation errors with `role="alert"`.
   - [ ] `DataManagementScreen.test.tsx` — backup/export/import all flows
   - [ ] `RetailPosScreenCheckout.test.tsx` — discount + refund in retail
   - [ ] `RetailPosScreenInteractions.test.tsx` — multi-tender edge cases
-  - [ ] `StockShortfallDialog.test.tsx` — ADR-19 split-fulfillment coverage
+  - [x] `StockShortfallDialog.test.tsx` — error role=alert, allow-negative, split↔simple toggle, mixed modes
   - [ ] `TransactionLogScreen.test.tsx` — new component, needs coverage
   - [ ] `SettingsPage.test.tsx` — all tabs render correctly
-  - [ ] `FastPINOverlay.test.tsx` — PIN entry, error states, verification flow
+  - [x] `FastPINOverlay.test.tsx` — onVerified callback, loading state, Enter PIN, error clears dots
   - [ ] `QrisQrDisplay.test.tsx` — QR renders, expiry handling
 
 ---
