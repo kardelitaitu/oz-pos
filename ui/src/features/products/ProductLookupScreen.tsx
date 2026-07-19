@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect, Profiler } from 'react';
+import { Grid, type CellComponentProps } from 'react-window';
 import { useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/components/Localized';
@@ -89,6 +90,23 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [addedSku, setAddedSku] = useState<string | null>(null);
   const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gridContainerRef = useRef<HTMLDivElement | null>(null);
+  const [gridWidth, setGridWidth] = useState(0);
+
+  // Measure the grid container width for responsive column count
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) setGridWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Calculate column count and cell width from measured container width
+  const gridColCount = Math.max(1, Math.floor((gridWidth + CARD_GAP) / (CARD_WIDTH + CARD_GAP)));
+  const gridCellWidth = gridWidth > 0 ? Math.floor((gridWidth - (gridColCount - 1) * CARD_GAP) / gridColCount) : CARD_WIDTH;
 
   // Clean up add-to-cart animation timer on unmount
   useEffect(() => {
@@ -312,16 +330,27 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           </span>
         </div>
       ) : (
-        <div className="product-grid" role="list" aria-label={l10n.getString('product-lookup-grid-aria')}>
-            {filtered.map((product) => (
-              <ProductCard
-                key={product.sku}
-                product={product}
-                onAdd={handleAddProduct}
-                added={product.sku === addedSku}
-              />
-            ))}
-          </div>
+        <div ref={gridContainerRef} className="product-grid" role="list"
+             aria-label={l10n.getString('product-lookup-grid-aria')}
+             style={{ display: 'block', overflow: 'hidden', flex: 1, minHeight: 0 }}>
+          {gridWidth > 0 && (
+            <Grid
+              cellComponent={ProductGridCell}
+              cellProps={{
+                products: filtered,
+                onAdd: handleAddProduct,
+                addedSku,
+                columnCount: gridColCount,
+              }}
+              columnCount={gridColCount}
+              columnWidth={gridCellWidth}
+              rowCount={Math.ceil(filtered.length / gridColCount)}
+              rowHeight={CARD_HEIGHT + CARD_GAP}
+              overscanCount={4}
+              style={{ height: '100%', width: '100%' }}
+            />
+          )}
+        </div>
       )
       }
 
@@ -360,6 +389,47 @@ interface ProductCardProps {
   onAdd?: (product: Product) => void;
   added?: boolean;
 }
+
+/* ── Virtualized grid sizing ──────────────────────────────────── */
+
+const CARD_WIDTH = 220; // 13.75rem
+const CARD_HEIGHT = 180; // estimated card height, px
+const CARD_GAP = 16;     // var(--space-4), px
+
+/** react-window grid cell for the product grid. Must be defined outside the main component. */
+interface ProductGridCellExtraProps {
+  products: readonly Product[];
+  onAdd: (product: Product) => void;
+  addedSku: string | null;
+  columnCount: number;
+}
+
+/* Inline cell component for the virtualized grid. Not wrapped in React.memo
+   because react-window v2 already avoids re-rendering cells whose cellProps
+   haven't changed, and memo's return type (ReactNode) conflicts with
+   Grid's expected (ReactElement | null). */
+const ProductGridCell = function ProductGridCell({
+  columnIndex,
+  rowIndex,
+  style,
+  products,
+  onAdd,
+  addedSku,
+  columnCount,
+}: CellComponentProps<ProductGridCellExtraProps>) {
+  const idx = rowIndex * columnCount + columnIndex;
+  if (idx >= products.length) return null;
+  const product = products[idx]!;
+  return (
+    <div style={{ ...style, padding: CARD_GAP / 2, display: 'flex' }}>
+      <ProductCard
+        product={product}
+        onAdd={onAdd}
+        added={product.sku === addedSku}
+      />
+    </div>
+  );
+};
 
 function ProductCard({ product, onAdd, added }: ProductCardProps) {
   const { l10n } = useLocalization();

@@ -12,7 +12,7 @@
 |------|-------|------|----------|
 | 🔴 P0 — Plugin Security | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P1 — Sync Reliability | 6 | **5** | **████████▱▱▱▱ 83%** |
-| 🟡 P2 — UI Performance | 5 | **5** | **███████████████████████████████ 100% 🎉** |
+| 🟡 P2 — UI Performance | 6 | **6** | **███████████████████████████████ 100% 🎉** |
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **27** | **███████████████████▱ 39%** |
+| **Total** | **71** | **28** | **███████████████████▱ 39%** |
 
 ---
 
@@ -87,7 +87,7 @@ Current UI test suite runs in ~19s. The product grid (ProductLookupScreen/Retail
 ### Checklist
 
 - [x] **P2-1: Profile baseline** ✅ — Added `React.Profiler` wrappers to KdsScreen, SalesHistoryScreen, and ProductLookupScreen. Each logs mount/update renders with `console.debug` when actualDuration > 1ms. TypeScript: 0 errors.
-- [ ] **P2-2: Product grid virtualization** — Replace flat product list with `react-window` virtualized grid (FixedSizeGrid for desktop, FixedSizeList for tablet). Render only visible products + 2 rows overscan. Expected: 40%+ reduction in initial render time.
+- [x] **P2-2: Product grid virtualization** ✅ — Replaced flat product grid in ProductLookupScreen with react-window v2 `<Grid>` component. Uses ResizeObserver for responsive column count (based on 220px min card width), `cellComponent` + `cellProps` pattern for data passing, `overscanCount={4}` for smooth scrolling, and `style={{ height: '100%', width: '100%' }}` for container fill. Only renders visible rows + overscan. TypeScript: 0 errors.
 - [x] **P2-3: KDS adaptive polling** ✅ — Replaced fixed 15s interval with recursive setTimeout adaptive polling: 2s when active (<30s idle), 10s when idle (30s–2min), 30s when idle (>2min). Pauses when tab hidden (visibilityState), resumes with immediate fetch on tab show. Idle timer resets on every order count change via effect dependency. TypeScript: 0 errors.
 - [x] **P2-4: Sale detail caching** ✅ — Added `useRef<Map<string, SaleDetail>>` cache in SalesHistoryScreen. Cache checked before fetch on `openDetail`; hit returns instantly (only refunds re-fetched). `invalidateCache(id)` called on void (`handleConfirmVoid`) and refund (`handleRefunded`) to ensure stale entries are cleared. TypeScript: 0 errors.
 - [x] **P2-5: Memo audit** ✅ — Added `React.memo` to KdsTicketCard, StockAlertPanel, and LocationPicker — the 3 highest-value memo targets (rendered in loops or receiving stable prop sets). Wrapped `advanceStatus` in `useCallback` in KdsScreen.tsx so the `onAdvance` prop stays referentially stable, making the KdsTicketCard memo effective. TypeScript: 0 errors.
