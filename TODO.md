@@ -41,8 +41,8 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 
 **1.2 CreatePinScreen** — min length, mismatch, complexity requirements
 - [x] 17 hardcoded strings already fixed
-- [ ] Audit remaining error messages for specificity
-- [ ] Add `role="alert"` to all error surfaces
+- [x] Error messages already specific via Fluent: "All fields are required.", "PIN must be at least 4 characters.", "PINs do not match."
+- [x] `role="alert"` already present on error banner — confirmed via existing `getByRole('alert')` tests
 
 **1.3 PaymentModal** — insufficient stock, payment declined, connection lost
 - [ ] Surface backend error messages with `role="alert"`
