@@ -244,6 +244,15 @@
 .settings-sidebar::after,
 .tooltip-content::after,
 .ssel-dropdown::after,
+/* ── P11-3: Low-risk surfaces ──────────────────────────── */
+.multi-store-stat-card::after,
+.product-card::after,
+.kiosk-product-card::after,
+.setup-preset-card::after,
+.setup-step-panel::after,
+.pos-cart-line::after,
+.pos-cart-tip-segment::after,
+.permission-denied-card::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -292,6 +301,14 @@
   .settings-sidebar::after,
   .tooltip-content::after,
   .ssel-dropdown::after,
+  .multi-store-stat-card::after,
+  .product-card::after,
+  .kiosk-product-card::after,
+  .setup-preset-card::after,
+  .setup-step-panel::after,
+  .pos-cart-line::after,
+  .pos-cart-tip-segment::after,
+  .permission-denied-card::after,
   .noise-dither::after { display: none; }
 }
 
