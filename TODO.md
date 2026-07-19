@@ -52,7 +52,7 @@
 | `settings.rs` | 17 → **27** | 25+ | ✅ |
 | `terminals.rs` | 17 → **25** | 25+ | ✅ |
 | `stock_transfers.rs` | 18 → **25** | 25+ | ✅ |
-| `inventory.rs` | 19 | 30+ | 11 |
+| `inventory.rs` | 19 → **30** | 30+ | ✅ |
 | `tax.rs` | 19 | 25+ | 6 |
 
 **Total new Rust tests needed:** ~160+

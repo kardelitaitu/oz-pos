@@ -476,4 +476,111 @@ mod tests {
         let ids = s.get_category_tax_rates("no-cat").unwrap();
         assert!(ids.is_empty());
     }
+
+    // ── Extended edge cases (coverage 19→25) ──────────────────────────
+
+    #[test]
+    fn create_tax_rate_trims_whitespace_name_then_rejects_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Name with only whitespace should be rejected after trim
+        let result = s.create_tax_rate("   ", 100, false, false);
+        assert!(matches!(
+            result,
+            Err(CoreError::Validation { field: "name", .. })
+        ));
+    }
+
+    #[test]
+    fn list_tax_rates_ordered_by_name() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_tax_rate("Zebra Tax", 300, false, false).unwrap();
+        s.create_tax_rate("Alpha Tax", 100, false, false).unwrap();
+        s.create_tax_rate("Mike Tax", 200, false, false).unwrap();
+
+        let rates = s.list_tax_rates().unwrap();
+        assert_eq!(rates.len(), 3);
+        assert_eq!(rates[0].name, "Alpha Tax");
+        assert_eq!(rates[1].name, "Mike Tax");
+        assert_eq!(rates[2].name, "Zebra Tax");
+    }
+
+    #[test]
+    fn update_default_flag_clears_previous_default() {
+        let conn = fresh();
+        let s = store(&conn);
+        let first = s.create_tax_rate("First", 500, true, false).unwrap();
+        let second = s.create_tax_rate("Second", 1000, false, false).unwrap();
+
+        // Update second to become default; first should be cleared
+        s.update_tax_rate(&second.id, "Second", 1000, true, false)
+            .unwrap();
+
+        let r1 = s.get_tax_rate(&first.id).unwrap().unwrap();
+        let r2 = s.get_tax_rate(&second.id).unwrap().unwrap();
+        assert!(!r1.is_default, "first default should be cleared");
+        assert!(r2.is_default);
+    }
+
+    #[test]
+    fn product_tax_rates_with_multiple_rates() {
+        let conn = fresh();
+        let s = store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        s.create_product("SKU-MULTI", "Multi-Tax", money, None, None, 0, None)
+            .unwrap();
+
+        let r1 = s.create_tax_rate("VAT", 1000, false, false).unwrap();
+        let r2 = s.create_tax_rate("SVC", 500, false, false).unwrap();
+
+        s.set_product_tax_rates("SKU-MULTI", &[r1.id.clone(), r2.id.clone()])
+            .unwrap();
+
+        let ids = s.get_product_tax_rates("SKU-MULTI").unwrap();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&r1.id));
+        assert!(ids.contains(&r2.id));
+    }
+
+    #[test]
+    fn category_tax_rates_with_multiple_rates() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_category("cat-multi", "Multi Tax Cat", "#fff", "")
+            .unwrap();
+
+        let r1 = s.create_tax_rate("CT-A", 700, false, false).unwrap();
+        let r2 = s.create_tax_rate("CT-B", 300, false, false).unwrap();
+
+        s.set_category_tax_rates("cat-multi", &[r1.id.clone(), r2.id.clone()])
+            .unwrap();
+
+        let ids = s.get_category_tax_rates("cat-multi").unwrap();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&r1.id));
+        assert!(ids.contains(&r2.id));
+    }
+
+    #[test]
+    fn category_tax_rates_overwrites() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_category("cat-ow", "OW", "#000", "").unwrap();
+
+        let r1 = s.create_tax_rate("Old", 100, false, false).unwrap();
+        let r2 = s.create_tax_rate("New", 200, false, false).unwrap();
+
+        s.set_category_tax_rates("cat-ow", &[r1.id.clone()])
+            .unwrap();
+        s.set_category_tax_rates("cat-ow", &[r2.id.clone()])
+            .unwrap();
+
+        let ids = s.get_category_tax_rates("cat-ow").unwrap();
+        assert_eq!(ids, vec![r2.id]);
+    }
 }
