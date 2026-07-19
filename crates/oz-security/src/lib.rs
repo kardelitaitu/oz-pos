@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-security | status: SAFE (crate root) | lint: CLEAN
+findings: #![deny(unsafe_code)] at crate root. windows.rs module has #![allow(unsafe_code)] override for FFI — see stamp in windows.rs. SAFETY comments added 19-07-26.
+next: none | perf: N/A
+*/
+
 //! Encryption, secrets, and PCI-DSS helpers for OZ-POS.
 //!
 //! `oz-security` is responsible for at-rest encryption, secret

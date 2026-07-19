@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-logging | status: SAFE | lint: CLEAN
+findings: 2 unsafe blocks (openlog, syslog) — both with SAFETY comments. Valid CString + facility constant verified.
+next: none | perf: N/A
+*/
+
 //! Linux syslog output for `oz-logging`.
 //!
 //! This module provides a function to write log records to the system

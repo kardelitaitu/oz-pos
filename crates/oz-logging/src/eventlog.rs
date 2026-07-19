@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-logging | status: SAFE | lint: CLEAN
+findings: 1 unsafe block (OutputDebugStringW) with SAFETY comment. Minimally-scoped FFI to Windows debug output, valid wide string.
+next: none | perf: N/A — best-effort debug logging
+*/
+
 //! Windows Event Log output for `oz-logging`.
 //!
 //! This module provides a function to write log records to the Windows

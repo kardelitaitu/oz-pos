@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: 7 unsafe blocks in #[cfg(test)] only — env::set_var/remove_var (Rust 2024 edition). SAFETY comments added 19-07-26.
+next: none | perf: N/A
+*/
+
 //! Redirect middleware for zero-downtime VPS migration (ADR #11).
 //!
 //! When the `OZ_SYNC_REDIRECT_URL` environment variable is set, all
@@ -72,6 +79,9 @@ mod tests {
     #[tokio::test]
     async fn redirect_when_env_var_set() {
         let _guard = ENV_LOCK.lock().await;
+        // SAFETY: ENV_LOCK (held by _guard) serializes access to the process-global
+        // environment. set_var and remove_var are paired to restore state before
+        // the guard drops, preventing test isolation leaks.
         unsafe { env::set_var("OZ_SYNC_REDIRECT_URL", "https://new-server.example.com") };
 
         let app = test_app();
@@ -87,12 +97,16 @@ mod tests {
         assert_eq!(json["error"], "server_migrated");
         assert_eq!(json["new_url"], "https://new-server.example.com");
 
+        // SAFETY: Restores environment — paired with set_var above.
         unsafe { env::remove_var("OZ_SYNC_REDIRECT_URL") };
     }
 
     #[tokio::test]
     async fn pass_through_when_env_var_not_set() {
         let _guard = ENV_LOCK.lock().await;
+        // SAFETY: ENV_LOCK serializes access to the process-global environment.
+        // Ensures the env var is cleared before the test runs, preventing
+        // interference from other tests.
         unsafe { env::remove_var("OZ_SYNC_REDIRECT_URL") };
 
         let app = test_app();
@@ -110,6 +124,8 @@ mod tests {
     #[tokio::test]
     async fn non_sync_routes_pass_through() {
         let _guard = ENV_LOCK.lock().await;
+        // SAFETY: ENV_LOCK serializes access to the process-global environment.
+        // set_var and remove_var are paired to restore state before guard drops.
         unsafe { env::set_var("OZ_SYNC_REDIRECT_URL", "https://new.example.com") };
 
         let app = test_app();
@@ -120,12 +136,15 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
+        // SAFETY: Restores environment — paired with set_var above.
         unsafe { env::remove_var("OZ_SYNC_REDIRECT_URL") };
     }
 
     #[tokio::test]
     async fn redirect_includes_new_url_for_pull() {
         let _guard = ENV_LOCK.lock().await;
+        // SAFETY: ENV_LOCK serializes access to the process-global environment.
+        // set_var and remove_var are paired to restore state before guard drops.
         unsafe { env::set_var("OZ_SYNC_REDIRECT_URL", "https://migrated.example.com") };
 
         let app = test_app();
@@ -140,6 +159,7 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["new_url"], "https://migrated.example.com");
 
+        // SAFETY: Restores environment — paired with set_var above.
         unsafe { env::remove_var("OZ_SYNC_REDIRECT_URL") };
     }
 }

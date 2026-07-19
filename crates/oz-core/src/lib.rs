@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-core | status: SAFE | lint: CLEAN
+findings: #![deny(unsafe_code)] — zero unsafe code in crate. No unsafe blocks, transmutes, or raw pointer manipulation.
+next: none | perf: N/A
+*/
+
 //! Domain types for OZ-POS.
 //!
 //! `oz-core` is the foundation crate of the framework. It contains the

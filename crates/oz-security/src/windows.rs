@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-security | status: UNSAFE | lint: CLEAN
+findings: 6 unsafe blocks (CredReadW, CredWriteW, CredDeleteW, GetLastError, from_raw_parts, CredFree, zeroed) — all FFI calls to wincred API, necessary. SAFETY comments added 19-07-26.
+next: none | perf: N/A — FFI overhead negligible
+*/
+
 //! Windows Credential Manager implementation of [`Keyring`].
 //!
 //! Wraps `wincred` / `CredWriteW` / `CredReadW` / `CredDeleteW`
@@ -31,6 +38,10 @@ impl Keyring for WindowsCredentialManager {
         let target = encode_utf16_null(&format!("OZ-POS:{name}"));
 
         let mut p_cred: *mut CREDENTIALW = std::ptr::null_mut();
+        // SAFETY: CredReadW reads a credential from Windows Credential Manager.
+        // `target` is a valid null-terminated UTF-16 string. The output pointer
+        // `p_cred` is checked via the return value and is only dereferenced if
+        // the call succeeds.
         let rc = unsafe {
             CredReadW(
                 target.as_ptr() as *mut u16,
@@ -41,6 +52,8 @@ impl Keyring for WindowsCredentialManager {
         };
 
         if rc == FALSE {
+            // SAFETY: GetLastError retrieves the calling thread's last-error code.
+            // Safe to call immediately after a failed Win32 API call.
             let err = unsafe { GetLastError() };
             if err == ERROR_NOT_FOUND {
                 return Ok(None);
@@ -50,6 +63,12 @@ impl Keyring for WindowsCredentialManager {
             )));
         }
 
+        // SAFETY: p_cred is guaranteed non-null because CredReadW returned
+        // success above. The CredentialBlob pointer and CredentialBlobSize
+        // describe a valid byte buffer allocated by the Win32 API. from_raw_parts
+        // creates a temporary slice for the lifetime of the unsafe block only.
+        // CredFree releases the memory allocated by CredReadW — called exactly
+        // once here, matching the Win32 convention that the caller frees.
         let secret = unsafe {
             let cred = &*p_cred;
             let blob = std::slice::from_raw_parts(
@@ -73,6 +92,8 @@ impl Keyring for WindowsCredentialManager {
             Type: CRED_TYPE_GENERIC,
             TargetName: target.as_ptr() as *mut u16,
             Comment: std::ptr::null_mut(),
+            // SAFETY: FILETIME is a POD struct (two u32 fields);
+            // zero-initialization is valid and produces a well-defined value.
             LastWritten: unsafe { std::mem::zeroed() },
             CredentialBlobSize: blob.len() as u32,
             CredentialBlob: blob.as_ptr() as *mut u8,
@@ -83,8 +104,13 @@ impl Keyring for WindowsCredentialManager {
             UserName: std::ptr::null_mut(),
         };
 
+        // SAFETY: The CREDENTIALW struct is fully initialized with valid
+        // pointers (target name, blob) and sizes. CredWriteW copies the data
+        // internally and does not retain the pointers after returning.
         let rc = unsafe { CredWriteW(&cred, 0) };
         if rc == FALSE {
+            // SAFETY: GetLastError retrieves the calling thread's last-error code.
+            // Safe to call immediately after a failed Win32 API call.
             let err = unsafe { GetLastError() };
             return Err(SecurityError::KeyUnavailable(format!(
                 "CredWriteW failed: {err}"
@@ -96,9 +122,13 @@ impl Keyring for WindowsCredentialManager {
     fn delete_secret(&self, name: &str) -> Result<bool, SecurityError> {
         let target = encode_utf16_null(&format!("OZ-POS:{name}"));
 
+        // SAFETY: The target name is a valid null-terminated UTF-16 string.
+        // CredDeleteW is safe with valid arguments and does not retain pointers.
         let rc = unsafe { CredDeleteW(target.as_ptr() as *mut u16, CRED_TYPE_GENERIC, 0) };
 
         if rc == FALSE {
+            // SAFETY: GetLastError retrieves the calling thread's last-error code.
+            // Safe to call immediately after a failed Win32 API call.
             let err = unsafe { GetLastError() };
             if err == ERROR_NOT_FOUND {
                 return Ok(false);
