@@ -893,7 +893,11 @@ impl Store<'_> {
         summary_res?;
 
         // 3. Legacy inventory table — ADR-18 §2a composite-PK rebuild deferred.
-        tx.execute(
+        // When `allow_negative` is true, the CHECK (qty >= 0) constraint on the
+        // `inventory` table would reject a negative qty. We catch that error and
+        // log a warning instead of propagating it, because the stock_summary table
+        // (step 2) is the canonical source of truth for per-location stock.
+        let inventory_res = tx.execute(
             "INSERT INTO inventory (product_id, location_id, qty, updated_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(product_id) DO UPDATE SET
@@ -901,7 +905,20 @@ impl Store<'_> {
                 location_id = excluded.location_id,
                 updated_at = excluded.updated_at",
             rusqlite::params![product_id, location_id.as_str(), new_qty, now],
-        )?;
+        );
+        if let Err(rusqlite::Error::SqliteFailure(ref e, _)) = inventory_res
+            && e.code == rusqlite::ErrorCode::ConstraintViolation
+            && allow_negative
+        {
+            // Expected when qty < 0 and allow_negative_stock is enabled.
+            // The `stock_summary` table already has the accurate count.
+            tracing::warn!(
+                "negative stock (qty={}) not written to legacy inventory table; stock_summary is canonical",
+                new_qty
+            );
+        } else {
+            inventory_res?;
+        }
 
         // 4. Synchronous threshold check (ADR-18 §9e-ii).
         // Errors are silent — threshold alerts are advisory and should not
@@ -3645,5 +3662,185 @@ mod tests {
             0,
             "location-specific threshold should take precedence over global"
         );
+    }
+
+    // ── stock.negative event emission (ADR-18 §4) ────────────────────
+
+    /// A test-only Cache implementation that records calls to
+    /// `publish_negative_stock_event` in an `Arc<Mutex<Vec>>` so tests
+    /// can verify the event was emitted.
+    struct TestNegativeEventCache {
+        events: std::sync::Arc<std::sync::Mutex<Vec<(String, String, String, i64, i64)>>>,
+    }
+
+    impl TestNegativeEventCache {
+        fn new() -> (
+            Self,
+            std::sync::Arc<std::sync::Mutex<Vec<(String, String, String, i64, i64)>>>,
+        ) {
+            let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Self {
+                    events: events.clone(),
+                },
+                events,
+            )
+        }
+    }
+
+    impl crate::cache::Cache for TestNegativeEventCache {
+        fn get_product(&self, _sku: &str) -> Option<crate::db::ProductWithDetails> {
+            None
+        }
+        fn set_product(&self, _sku: &str, _product: &crate::db::ProductWithDetails) {}
+        fn invalidate_product(&self, _sku: &str) {}
+        fn get_inventory(&self, _product_id: &str) -> Option<i64> {
+            None
+        }
+        fn set_inventory(&self, _product_id: &str, _qty: i64) {}
+        fn invalidate_inventory(&self, _product_id: &str) {}
+        fn is_healthy(&self) -> bool {
+            true
+        }
+
+        fn publish_negative_stock_event(
+            &self,
+            product_id: &str,
+            sku: &str,
+            location_id: &str,
+            delta: i64,
+            current_qty: i64,
+            _terminal_id: Option<&str>,
+        ) {
+            if let Ok(mut events) = self.events.lock() {
+                events.push((
+                    product_id.to_owned(),
+                    sku.to_owned(),
+                    location_id.to_owned(),
+                    delta,
+                    current_qty,
+                ));
+            }
+        }
+    }
+
+    /// Helper: create a terminal bound to a workspace instance that allows
+    /// negative stock for the canonical default location.
+    ///
+    /// The `terminals` schema in migration 016 does not include
+    /// `workspace_instance_id`; this helper uses ALTER TABLE to add it
+    /// (idempotent via IF NOT EXISTS check). A future migration should
+    /// ship the column in the base schema.
+    fn seed_allow_negative_terminal(conn: &rusqlite::Connection) -> String {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let ws_inst_id = uuid::Uuid::now_v7().to_string();
+        let term_id = uuid::Uuid::now_v7().to_string();
+        let loc = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+
+        // Add workspace_instance_id column if it doesn't exist yet.
+        let col_exists: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('terminals') WHERE name = 'workspace_instance_id'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)).map(|c| c > 0))
+            .unwrap_or(false);
+        if !col_exists {
+            conn.execute_batch(
+                "ALTER TABLE terminals ADD COLUMN workspace_instance_id TEXT REFERENCES workspace_instances(id);"
+            ).unwrap();
+        }
+
+        conn.execute_batch(&format!(
+            "INSERT OR IGNORE INTO store_profiles (id, name) VALUES ('store-neg', 'Neg Store');
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('{ws}', (SELECT key FROM workspace_types LIMIT 1), 'store-neg', 'NegTest');
+             INSERT OR IGNORE INTO workspace_inventory_locations \
+               (id, instance_id, location_id, is_primary, allow_negative_stock, sort_order) \
+               VALUES ('wsl-{ws}', '{ws}', '{loc}', 1, 1, 0);
+             INSERT OR IGNORE INTO terminals (id, name, device_id, workspace_instance_id, created_at, updated_at) \
+               VALUES ('{term}', 'NegTerm', '{term}-dev', '{ws}', '{now}', '{now}');",
+            ws = ws_inst_id,
+            term = term_id,
+            loc = loc
+        ))
+        .unwrap();
+        term_id
+    }
+
+    #[test]
+    fn negative_stock_event_fires_when_allow_negative_enabled() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        // Create a terminal that allows negative stock for the default location.
+        let term_id = seed_allow_negative_terminal(&conn);
+
+        // Create cache and store with it.
+        let (test_cache, recorded_events) = TestNegativeEventCache::new();
+        let cache_arc: std::sync::Arc<dyn crate::cache::Cache> = std::sync::Arc::new(test_cache);
+        let s = crate::db::Store::with_cache(&conn, cache_arc);
+
+        // FOOD-001 is seeded at qty=12. Deduct 15 → new_qty=-3 (negative!).
+        let tx = conn.unchecked_transaction().unwrap();
+        let result = s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -15,
+            &loc,
+            Some("sale"),
+            None,
+            Some(&crate::terminal::TerminalId::from(term_id)),
+            None,
+        );
+        // The deduction should succeed (allow_negative_stock = true).
+        assert!(
+            result.is_ok(),
+            "deduction should succeed with allow_negative_stock=true: {:?}",
+            result
+        );
+        assert_eq!(result.unwrap(), -3, "stock should go to -3");
+        tx.commit().unwrap();
+
+        // Verify the negative stock event was published.
+        let events = recorded_events.lock().unwrap();
+        assert_eq!(
+            events.len(),
+            1,
+            "exactly one negative event should be emitted"
+        );
+        assert_eq!(events[0].1, "FOOD-001", "sku should match");
+        assert_eq!(events[0].3, -15, "delta should be -15");
+        assert_eq!(events[0].4, -3, "current_qty should be -3");
+    }
+
+    #[test]
+    fn negative_stock_event_not_fired_for_normal_deduction() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let (test_cache, recorded_events) = TestNegativeEventCache::new();
+        let cache_arc: std::sync::Arc<dyn crate::cache::Cache> = std::sync::Arc::new(test_cache);
+        let s = crate::db::Store::with_cache(&conn, cache_arc);
+
+        // FOOD-001 has qty=12. Deduct 5 → new_qty=7 (still positive).
+        let tx = conn.unchecked_transaction().unwrap();
+        let result = s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -5,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_ok());
+        tx.commit().unwrap();
+
+        // No negative event should be emitted.
+        let events = recorded_events.lock().unwrap();
+        assert_eq!(events.len(), 0, "no negative event for positive qty");
     }
 }

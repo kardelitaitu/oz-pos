@@ -112,7 +112,7 @@
 - [x] Returns ALL active inventory_locations when `bound_location_id IS NULL` on `warehouse` type
 - [x] `WorkspaceLocationBinding` struct with `location_id`, `location_name`, `is_primary`, `allow_negative_stock`
 - [x] 8 unit tests covering all acceptance criteria
-- [ ] Integration with existing callers (Tauri commands) — deferred
+- [x] Integration with existing callers (Tauri commands) — `get_workspace_locations_scoped` + `invalidate_location_cache_scoped` commands added to `apps/desktop-client/src/commands/inventory.rs`
 
 ### 2. Synchronous Alert Engine
 
@@ -141,8 +141,8 @@ The existing `get_low_stock_alerts` Tauri command takes only a global `threshold
 - [x] Add `pub fn low_stock_alerts_at_location(&self, location_id: &str, default_threshold: i64) -> Result<Vec<LowStockAlert>, CoreError>` — uses `stock_summary` per-location + COALESCE of custom/product-global/default threshold
 - [x] Add `pub fn active_stock_alerts(&self, location_id: &str) -> Result<Vec<StockAlertEvent>, CoreError>` — queries `stock_alert_events` LEFT JOINed with `products` for SKU/name enrichment
 - [x] `StockAlertEvent` struct with 13 fields (incl. product_sku, product_name)
-- [ ] Scoped Tauri command: `get_low_stock_alerts_at_location_scoped` — deferred
-- [ ] Frontend API wrapper: `getLowStockAlertsAtLocation` — deferred
+- [x] Scoped Tauri command: `get_low_stock_alerts_at_location_scoped` — added to `apps/desktop-client/src/commands/inventory.rs`
+- [x] Frontend API wrapper: `getLowStockAlertsAtLocation` + `WorkspaceLocationBinding` interface + `getWorkspaceLocations` + `invalidateLocationCache` — added to `ui/src/api/inventory.ts`
 - [x] 6 unit tests: per-location alerts, location with no alerts, custom threshold, active-only, excludes resolved
 - [x] Deprecated old `low_stock_alerts` with `#[deprecated]` note
 
@@ -157,7 +157,7 @@ When `allow_negative_stock` is enabled and a deduction goes below zero, the ADR 
 - [x] After `adjust_stock_at_location_with_reason` with resulting qty < 0 AND `allow_negative_stock == true`: emit `stock.negative` event via `cache.publish_negative_stock_event()`
 - [x] Event payload: `{ product_id, sku, location_id, delta, current_qty, terminal_id, timestamp }`
 - [x] Cache trait + NoopCache (no-op default) + RedisCache (publishes to `stock:negative` channel)
-- [ ] Unit test: negative stock event fires correctly — **deferred**: requires terminal + workspace_inventory_locations setup (FK constraint on `terminals.workspace_instance_id` which doesn't exist in migration schema). Needs ALTER TABLE or test helper migration.
+- [x] Unit test: negative stock event fires correctly — **implemented** via `seed_allow_negative_terminal` helper with ALTER TABLE to add `workspace_instance_id` column. Two tests: negative event fires (qty=-3) and normal deduction does not fire event. Also fixed production code bug where `inventory` table CHECK (qty >= 0) blocked negative writes even when `allow_negative_stock=true` — step 3 now catches and handles the constraint violation gracefully.
 
 ---
 

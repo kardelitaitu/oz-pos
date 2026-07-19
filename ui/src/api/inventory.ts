@@ -166,6 +166,44 @@ export const getStockThresholds = (sessionToken: string, locationId: string | nu
 export const deleteStockThreshold = (sessionToken: string, id: string): Promise<void> =>
   invoke<void>('delete_stock_threshold', { sessionToken, id });
 
+// ── Workspace Location Bindings (Unified Resolver) ──
+
+export interface WorkspaceLocationBinding {
+  location_id: string;
+  location_name: string;
+  is_primary: boolean;
+  allow_negative_stock: boolean;
+}
+
+/** ADR-19 §10: Resolve locations bound to a workspace instance. */
+export const getWorkspaceLocations = (
+  sessionToken: string,
+  instanceId: string,
+  typeKey: string
+): Promise<WorkspaceLocationBinding[]> =>
+  invoke<WorkspaceLocationBinding[]>('get_workspace_locations_scoped', { sessionToken, instanceId, typeKey });
+
+/** ADR-19 §4: Invalidate the location resolver cache. */
+export const invalidateLocationCache = (sessionToken: string): Promise<void> =>
+  invoke<void>('invalidate_location_cache_scoped', { sessionToken });
+
+// ── Per-Location Low Stock Alerts ──
+
+export const getLowStockAlertsAtLocation = (
+  sessionToken: string,
+  locationId: string,
+  defaultThreshold: number
+): Promise<LowStockAlert[]> =>
+  invoke<LowStockAlert[]>('get_low_stock_alerts_at_location_scoped', { sessionToken, locationId, defaultThreshold });
+
+export interface LowStockAlert {
+  product_id: string;
+  sku: string;
+  name: string;
+  current_qty: number;
+  threshold: number;
+}
+
 // ── Stock Alert Events ──
 
 export interface StockAlertEvent {
