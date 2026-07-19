@@ -970,7 +970,7 @@ impl SyncEngine {
                             queue.mark_synced(store, &item.id)?;
                         }
                         transport::PushOutcome::Conflict(server_item) => {
-                            let resolved = conflict::resolve_lww(item, server_item);
+                            let resolved = conflict::resolve_conflict(item, server_item);
                             queue.apply_resolution(store, &resolved)?;
                         }
                         transport::PushOutcome::Rejected { reason } => {
