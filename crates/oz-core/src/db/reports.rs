@@ -456,6 +456,22 @@ mod tests {
         }
     }
 
+    fn insert_user(conn: &Connection, id: &str) {
+        // Ensure a role exists for the FK reference.
+        conn.execute(
+            "INSERT OR IGNORE INTO roles (id, name, description, permissions, created_at, updated_at)
+             VALUES ('role-cashier', 'cashier', '', '[]', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES (?1, ?1, 'x', ?1, 'role-cashier', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+            rusqlite::params![id],
+        )
+        .unwrap();
+    }
+
     fn seed_completed_sale(conn: &Connection, sku: &str, qty: i64, unit_minor: i64) -> String {
         let s = store(conn);
         let money = Money {
@@ -891,5 +907,284 @@ mod tests {
 
         let rows = s.active_stock_alerts(loc_id).unwrap();
         assert!(rows.is_empty(), "resolved alerts should be excluded");
+    }
+
+    #[test]
+    fn active_stock_alerts_includes_acknowledged() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        let prod = s
+            .create_product("ACK", "Acknowledged Product", money, None, None, 2, None)
+            .unwrap();
+        let loc_id = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Create a user for the acknowledged_by FK reference.
+        insert_user(&conn, "user-1");
+
+        let tid = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT INTO stock_thresholds (id, product_id, location_id, threshold, enabled, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 5, 1, ?4, ?4)",
+            rusqlite::params![tid, prod.id, loc_id, now],
+        )
+        .unwrap();
+
+        // Create an acknowledged alert.
+        conn.execute(
+            "INSERT INTO stock_alert_events (id, threshold_id, product_id, location_id, current_qty, threshold, status, triggered_at, acknowledged_at, acknowledged_by)
+             VALUES (?1, ?2, ?3, ?4, 2, 5, 'acknowledged', ?5, ?5, 'user-1')",
+            rusqlite::params![uuid::Uuid::now_v7().to_string(), tid, prod.id, loc_id, now],
+        )
+        .unwrap();
+
+        let rows = s.active_stock_alerts(loc_id).unwrap();
+        assert_eq!(rows.len(), 1, "acknowledged alerts should be included");
+        assert_eq!(rows[0].status, "acknowledged");
+        assert_eq!(
+            rows[0].acknowledged_by.as_deref(),
+            Some("user-1"),
+            "acknowledged_by should be populated"
+        );
+    }
+
+    // ── Extended edge cases ───────────────────────────────────────
+
+    #[test]
+    fn daily_revenue_ignores_sales_outside_range() {
+        let conn = fresh();
+        // Create a sale with the seeded timestamp (today).
+        seed_completed_sale(&conn, "TODAY", 1, 500);
+        // Query a date range that doesn't include today.
+        let rows = store(&conn)
+            .daily_revenue("2000-01-01", "2000-01-31")
+            .unwrap();
+        assert!(
+            rows.is_empty(),
+            "sales outside the date range should be excluded"
+        );
+    }
+
+    #[test]
+    fn weekly_revenue_multiple_weeks() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("W1", "Week 1", money, None, None, 100, None)
+            .unwrap();
+        s.create_product("W2", "Week 2", money, None, None, 100, None)
+            .unwrap();
+
+        // Create a sale with an old date (simulate week 1).
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("W1"), 1, price(100)))
+            .unwrap();
+        let mut sale1 = Sale::from_cart(&cart).unwrap();
+        sale1.created_at = "2026-01-05T12:00:00.000Z".to_string();
+        sale1.updated_at = "2026-01-05T12:00:00.000Z".to_string();
+        s.create_sale(&sale1).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Completed)
+            .unwrap();
+
+        // Create a sale with a later date (simulate week 2).
+        let mut cart2 = Cart::new(usd());
+        cart2
+            .add_line(CartLine::new(Sku::new("W2"), 1, price(100)))
+            .unwrap();
+        let mut sale2 = Sale::from_cart(&cart2).unwrap();
+        sale2.created_at = "2026-01-12T12:00:00.000Z".to_string();
+        sale2.updated_at = "2026-01-12T12:00:00.000Z".to_string();
+        s.create_sale(&sale2).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Completed)
+            .unwrap();
+
+        let rows = s.weekly_revenue("2026-01-01", "2026-01-31").unwrap();
+        assert_eq!(rows.len(), 2, "should have two weekly rows");
+        // Both rows should have 100 each.
+        assert_eq!(rows[0].total_minor, 100);
+        assert_eq!(rows[1].total_minor, 100);
+    }
+
+    #[test]
+    fn monthly_revenue_multiple_months() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("M1", "Month 1", money, None, None, 100, None)
+            .unwrap();
+        s.create_product("M2", "Month 2", money, None, None, 100, None)
+            .unwrap();
+
+        // January sale.
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("M1"), 1, price(100)))
+            .unwrap();
+        let mut sale1 = Sale::from_cart(&cart).unwrap();
+        sale1.created_at = "2026-01-15T12:00:00.000Z".to_string();
+        sale1.updated_at = "2026-01-15T12:00:00.000Z".to_string();
+        s.create_sale(&sale1).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Completed)
+            .unwrap();
+
+        // February sale.
+        let mut cart2 = Cart::new(usd());
+        cart2
+            .add_line(CartLine::new(Sku::new("M2"), 1, price(100)))
+            .unwrap();
+        let mut sale2 = Sale::from_cart(&cart2).unwrap();
+        sale2.created_at = "2026-02-10T12:00:00.000Z".to_string();
+        sale2.updated_at = "2026-02-10T12:00:00.000Z".to_string();
+        s.create_sale(&sale2).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Completed)
+            .unwrap();
+
+        let rows = s.monthly_revenue("2026-01-01", "2026-02-28").unwrap();
+        assert_eq!(rows.len(), 2, "should have two monthly rows");
+        assert_eq!(rows[0].month, "2026-01");
+        assert_eq!(rows[0].total_minor, 100);
+        assert_eq!(rows[1].month, "2026-02");
+        assert_eq!(rows[1].total_minor, 100);
+    }
+
+    #[test]
+    fn top_products_product_deleted_after_sale() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_completed_sale(&conn, "DELETED", 2, 500);
+
+        // Delete the product (simulate what happens when a product is removed).
+        conn.execute("DELETE FROM products WHERE sku = 'DELETED'", [])
+            .unwrap();
+
+        // top_products JOINs with products, so the deleted product won't appear.
+        let rows = s.top_products("2000-01-01", "2099-12-31", 10).unwrap();
+        assert!(
+            rows.is_empty(),
+            "deleted products should not appear in top products"
+        );
+    }
+
+    #[test]
+    fn hourly_heatmap_multiple_hours() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("H1", "Hour 1", money, None, None, 100, None)
+            .unwrap();
+        s.create_product("H2", "Hour 2", money, None, None, 100, None)
+            .unwrap();
+
+        // Morning sale.
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("H1"), 1, price(100)))
+            .unwrap();
+        let mut sale1 = Sale::from_cart(&cart).unwrap();
+        sale1.created_at = "2026-06-01T08:30:00.000Z".to_string();
+        sale1.updated_at = "2026-06-01T08:30:00.000Z".to_string();
+        s.create_sale(&sale1).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Completed)
+            .unwrap();
+
+        // Afternoon sale.
+        let mut cart2 = Cart::new(usd());
+        cart2
+            .add_line(CartLine::new(Sku::new("H2"), 1, price(100)))
+            .unwrap();
+        let mut sale2 = Sale::from_cart(&cart2).unwrap();
+        sale2.created_at = "2026-06-01T14:00:00.000Z".to_string();
+        sale2.updated_at = "2026-06-01T14:00:00.000Z".to_string();
+        s.create_sale(&sale2).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Completed)
+            .unwrap();
+
+        let rows = s.hourly_heatmap("2026-06-01", "2026-06-01").unwrap();
+        assert_eq!(rows.len(), 2, "should have two hourly entries");
+        // Use hour comparison instead of position-dependent assert
+        let hours: Vec<i64> = rows.iter().map(|r| r.hour).collect();
+        assert!(hours.contains(&8), "should include hour 8");
+        assert!(hours.contains(&14), "should include hour 14");
+    }
+
+    #[test]
+    fn category_breakdown_percentage_multiple_categories() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.create_category("cat-drinks", "Drinks", "#00f", "")
+            .unwrap();
+        s.create_category("cat-food", "Food", "#f00", "").unwrap();
+
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("COLA", "Cola", money, Some("cat-drinks"), None, 100, None)
+            .unwrap();
+        s.create_product("BURGER", "Burger", money, Some("cat-food"), None, 100, None)
+            .unwrap();
+
+        // Drinks: 2 colas × 100 = 200
+        let mut cart1 = Cart::new(usd());
+        cart1
+            .add_line(CartLine::new(Sku::new("COLA"), 2, price(100)))
+            .unwrap();
+        let mut sale1 = Sale::from_cart(&cart1).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sale1.created_at = now.clone();
+        sale1.updated_at = now.clone();
+        s.create_sale(&sale1).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale1.id, SaleStatus::Completed)
+            .unwrap();
+
+        // Food: 1 burger × 100 = 100; grand_total = 300
+        let mut cart2 = Cart::new(usd());
+        cart2
+            .add_line(CartLine::new(Sku::new("BURGER"), 1, price(100)))
+            .unwrap();
+        let mut sale2 = Sale::from_cart(&cart2).unwrap();
+        sale2.created_at = now.clone();
+        sale2.updated_at = now.clone();
+        s.create_sale(&sale2).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale2.id, SaleStatus::Completed)
+            .unwrap();
+
+        let rows = s.category_breakdown("2000-01-01", "2099-12-31").unwrap();
+        assert_eq!(rows.len(), 2);
+        // Drinks should be first (higher total_minor = 200), Food second (100).
+        assert_eq!(rows[0].category_name, "Drinks");
+        assert_eq!(rows[0].total_minor, 200);
+        // Drinks: 200/300 = 66.666...%
+        assert!((rows[0].percentage - 200.0 / 3.0).abs() < 0.01);
+        assert_eq!(rows[1].category_name, "Food");
+        assert_eq!(rows[1].total_minor, 100);
+        // Food: 100/300 = 33.333...%
+        assert!((rows[1].percentage - 100.0 / 3.0).abs() < 0.01);
+        // Percentages should sum to ~100.
+        let total_pct: f64 = rows.iter().map(|r| r.percentage).sum();
+        assert!(
+            (total_pct - 100.0).abs() < 0.01,
+            "percentages should sum to 100"
+        );
     }
 }
