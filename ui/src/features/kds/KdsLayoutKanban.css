@@ -53,6 +53,52 @@
   font-weight: 700;
 }
 
+/* P3-4: count-change animations (applied/removed via JS) */
+.kds-column-count--up {
+  animation: kds-count-up var(--duration-300) var(--ease-out);
+}
+
+.kds-column-count--down {
+  animation: kds-count-down var(--duration-300) var(--ease-out);
+}
+
+@keyframes kds-count-up {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes kds-count-down {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.75);
+  }
+  70% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kds-column-count--up,
+  .kds-column-count--down {
+    animation: none;
+  }
+}
+
 .kds-column--pending .kds-column-count {
   background: var(--kds-pending);
   color: var(--kds-bg);
