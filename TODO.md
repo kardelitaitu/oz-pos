@@ -80,11 +80,11 @@
 - **ADR-20 spec:** `docs/decisions/2026-07-19-payment-capture-ordering.md`
 - **6 acceptance criteria (20-1 through 20-6):** Dedup, serialization, finalize, void, stale-reap, concurrent finalize/void
 
-### P1-1: Migration 095 — Add `pending` to sales.status CHECK
+### P1-1: Migration 096 — Add `pending` to sales.status CHECK
 
-- [ ] Create `migrations/095_pending_sale_status.sql`
-- [ ] Register migration in `crates/oz-core/src/migrations.rs`
-- [ ] Verify migration applies cleanly
+- [x] Create `migrations/096_pending_sale_status.sql` — table rebuild with status CHECK including 'pending', +3 columns (pending_expires_at, payment_reference, captured_at), partial index for stale-reaper
+- [x] Register migration in `crates/oz-core/src/migrations.rs`
+- [x] Verify: 14/14 migration tests pass (incl. idempotency, indexes, FK integrity) ✅
 
 ### P1-2: `create_pending_sale` backend
 
