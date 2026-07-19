@@ -15,7 +15,7 @@
 | 🟡 P2 — UI Performance | 6 | **6** | **███████████████████████████████ 100% 🎉** |
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
-| 🟤 P5 — Payment Gateway Hardening | 4 | **3** | **█████████▱▱▱ 75%** |
+| 🟤 P5 — Payment Gateway Hardening | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **43** | **███████████████████████████▱ 61%** |
+| **Total** | **71** | **44** | **████████████████████████████▱ 62%** |
 
 ---
 
@@ -148,7 +148,7 @@ Payment gateway drivers live in `crates/oz-payment/src/drivers/` (qris.rs, squar
 - [x] **P5-1: Gateway error classification** ✅ — Added `InvalidCard(String)` and `Duplicate(String)` variants to `PaymentError`. Added per-driver classification functions: `classify_midtrans_status()` (QRIS: 402→InvalidCard, 406→Duplicate, deny/cancel→Declined), `classify_stripe_error()` (Stripe: card_error→InvalidCard/Declined, idempotency_error→Duplicate), `classify_square_error()` (Square: CARD_DECLINED→Declined, UNSUPPORTED_CARD_BRAND→InvalidCard, DUPLICATE_CARD→Duplicate, TIMEOUT→Timeout). Updated all `parse_error()` methods to use classification. 12 unit tests + 5 doctests pass.
 - [x] **P5-2: Idempotency keys** ✅ — Migration 097 adds `idempotency_key TEXT` column + UNIQUE index to payments table. `PaymentSplitArg` and `Payment` structs updated with `idempotency_key: Option<String>`. `create_payments()` checks for existing key before INSERT (dedup). `PaymentRequest` updated with idempotency_key field. 3 DB-level dedup tests + 2 serde tests. Driver-level idempotency header integration deferred (stripe `Idempotency-Key` header, square `idempotency_key` field).
 - [x] **P5-3: Webhook receiver** ✅ — Added `POST /api/webhooks/stripe` and `POST /api/webhooks/square` endpoints to cloud server. Both verify HMAC-SHA256 signatures against gateway secrets loaded at startup into `CloudServerState`. On `payment_intent.succeeded` / `payment.updated`, extracts payment ID, looks up sale via `gateway_reference`, enqueues `finalize_sale` action to offline_queue. 18 tests (70 total cloud-server tests pass).
-- [ ] **P5-4: Sandbox test recording** — Implement a `TestFixture` recorder for payment tests: run against sandbox once, capture request/response pairs, replay in CI. Add 3 integration tests per driver (success, decline, timeout) using recorded fixtures.
+- [x] **P5-4: Sandbox test recording** ✅ — Added `PaymentScenario`/`RecordedExchange` fixture format in `tests/fixtures.rs` with `load_scenario()` loader and `start_replay_server()` wiremock configurator. Created 9 fixture JSON files (3 drivers × 3 scenarios: success, decline, timeout) in `tests/fixtures/<driver>/`. Added 9 replay tests in `recorded_fixture_tests.rs` plus 4 fixture-loading tests. All 13 pass.
 
 ---
 

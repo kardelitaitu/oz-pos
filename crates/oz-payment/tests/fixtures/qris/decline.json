@@ -1,0 +1,17 @@
+{
+  "name": "decline",
+  "driver": "qris",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/charge",
+      "status": 402,
+      "response_body": {
+        "status_code": "402",
+        "status_message": "Transaction amount exceeds limit",
+        "transaction_id": "",
+        "order_id": ""
+      }
+    }
+  ]
+}

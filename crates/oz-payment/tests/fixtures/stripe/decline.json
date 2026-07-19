@@ -1,0 +1,18 @@
+{
+  "name": "decline",
+  "driver": "stripe",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/payment_intents",
+      "status": 402,
+      "response_body": {
+        "error": {
+          "type": "card_error",
+          "message": "Your card was declined.",
+          "code": "card_declined"
+        }
+      }
+    }
+  ]
+}

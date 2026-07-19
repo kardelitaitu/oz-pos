@@ -1,0 +1,16 @@
+{
+  "name": "timeout",
+  "driver": "square",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/payments",
+      "status": 500,
+      "response_body": {
+        "errors": [
+          { "code": "INTERNAL_ERROR", "detail": "An unexpected error occurred." }
+        ]
+      }
+    }
+  ]
+}

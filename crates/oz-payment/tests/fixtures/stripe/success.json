@@ -1,0 +1,18 @@
+{
+  "name": "success",
+  "driver": "stripe",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/payment_intents",
+      "status": 200,
+      "response_body": {
+        "id": "pi_fixture_success_001",
+        "amount": 1500,
+        "amount_received": 1500,
+        "currency": "usd",
+        "status": "requires_capture"
+      }
+    }
+  ]
+}

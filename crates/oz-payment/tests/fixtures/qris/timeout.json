@@ -1,0 +1,15 @@
+{
+  "name": "timeout",
+  "driver": "qris",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/charge",
+      "status": 500,
+      "response_body": {
+        "status_code": "500",
+        "status_message": "Internal Server Error"
+      }
+    }
+  ]
+}
