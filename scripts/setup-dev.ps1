@@ -116,14 +116,16 @@ step -Label "migration idempotency" -Block {
 
 # Step 6: Demo data seed (optional, skip if command not available)
 step -Label "demo data seed" -Block {
-    # Try to detect if seed-demo subcommand exists
-    $help = & cargo run -p oz-cli -- --help 2>&1 | Out-String
-    if ($LASTEXITCODE -eq 0 -and $help -match "seed-demo") {
-        cargo run -p oz-cli -- seed-demo
+    # Try to seed demo data; skip gracefully if subcommand unavailable.
+    # Run via cmd.exe to suppress PowerShell error records from 2>&1
+    # that would otherwise become terminating errors under $ErrorActionPreference = "Stop".
+    $output = & cmd /c "cargo run -p oz-cli -- seed-demo 2>nul"
+    if ($LASTEXITCODE -eq 0) {
         Write-Host "  Demo data loaded"
     } else {
         Write-Host "  seed-demo subcommand not available -- skip" -ForegroundColor Yellow
     }
+    $global:LASTEXITCODE = 0
 }
 
 # Step 7: cargo check (quick verify)

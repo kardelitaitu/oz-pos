@@ -23,7 +23,25 @@ This guide gets OZ-POS building and running on your machine in under 15 minutes.
 
 ---
 
-## Clone and build
+## Quick setup (Windows)
+
+Run the automated setup script from the workspace root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-dev.ps1
+```
+
+This single command does everything below automatically:
+1. Checks prerequisites (Rust, Node.js, Git)
+2. Enables Git hooks (auto-format + lint on commit)
+3. Installs front-end npm dependencies
+4. Runs database migration
+5. Seeds demo data (if the CLI subcommand is available)
+6. Runs `cargo check` to verify the workspace compiles
+
+> **Note:** The setup script is Windows-only. Linux/macOS users follow the manual steps below.
+
+## Clone and build (manual)
 
 ```bash
 # 1. Clone the repository

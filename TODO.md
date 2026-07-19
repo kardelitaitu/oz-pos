@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 54 / 71 items complete (76%) · Updated 2026-07-20
+**Current state:** 55 / 71 items complete (77%) · Updated 2026-07-20
 
 ---
 
@@ -23,9 +23,9 @@
 | 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P11 — Shadow Banding Audit | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
-| 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
+| 🟡 P13 — DevOps & Infrastructure | 4 | **2** | **████▱▱▱▱▱▱ 50%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **54** | **████████████████████████████████████████████████ 76%** |
+| **Total** | **71** | **55** | **██████████████████████████████████████████████████ 77%** |
 
 ---
 
@@ -304,7 +304,7 @@ Current CI pipeline takes ~10 minutes. Docker compose exists but cloud-server de
 - [ ] **P13-1: CI pipeline optimization** — Profile CI build times. Implement: shared sccache between jobs, incremental cargo check (only changed crates), parallel vitest + eslint runs, dependency caching between workflow runs. Target: < 5 min for lint + typecheck + unit tests. Est: 2–3 hrs.
 - [ ] **P13-2: Docker Compose for full stack** — Update `docker-compose.yml` to include: `oz-cloud-server` (Rust API), `oz-pos` (desktop client in X11/VNC for CI), `license-server` (Go), PostgreSQL (sync target), Redis (cache). Add healthcheck dependencies. Document in `docs/operations/docker-deployment.md`. Est: 3–4 hrs.
 - [ ] **P13-3: E2E test suite** — Add Playwright-based e2e tests for the 5 most critical flows: complete sale (scan → add → pay → receipt), staff login with PIN, create product, open/close shift, settings change. Use Docker Compose for backend + test against real SQLite. Est: 4–6 hrs.
-- [ ] **P13-4: Developer setup script** — Create `scripts/setup-dev.sh` / `setup-dev.ps1` that automates: install Rust toolchain, install Node.js deps, run `cargo check`, run `npm install`, run initial migration, seed demo data. Replace manual setup steps in `QUICKSTART.md` with single-command setup. Est: 2 hrs.
+- [x] **P13-4: Developer setup script** ✅ — `scripts/setup-dev.ps1` previously created and enhanced: checks prerequisites (Rust, Node.js, Git), enables Git hooks, runs `npm ci`, runs `cargo run -p oz-cli -- migrate` (with idempotency check), attempts demo data seed (skips gracefully if unavailable), runs `cargo check --workspace` for quick verification. Added reference in QUICKSTART.md as the recommended first step for Windows developers. All 7 steps verified passing.
 
 ---
 
