@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
+import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
@@ -19,6 +19,7 @@ import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAcc
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { animDuration } from '@/utils/animation';
+import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
 import './PaymentModal.css';
 
 type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
@@ -37,6 +38,8 @@ export interface PaymentModalProps {
   discountPercent?: number;
   discountLabel?: string;
   userId: string;
+  /** ADR #7 session token for scoped commands (deduction-aware cart lifecycle). */
+  sessionToken?: string;
   tableNumber?: string;
   selectedCustomer?: CustomerDto | null;
   onCustomerChange?: (customer: CustomerDto | null) => void;
@@ -56,6 +59,7 @@ export default function PaymentModal({
   discountPercent = 0,
   discountLabel,
   userId,
+  sessionToken,
   tableNumber,
   selectedCustomer: selectedCustomerProp,
   onCustomerChange,
@@ -112,6 +116,7 @@ export default function PaymentModal({
 
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
+  const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
 
   const [splitMode, setSplitMode] = useState(false);
   const [splits, setSplits] = useState<SplitRow[]>([
@@ -175,6 +180,7 @@ export default function PaymentModal({
       setSplitMode(false);
       setShowQr(false);
       setQrReference('');
+      setShortfallResult(null);
       setSelectedCurrency(total.currency);
       notifyCustomerChange(null);
       setCustomerSearchQuery('');
@@ -296,21 +302,34 @@ export default function PaymentModal({
     setProcessing(true);
 
     try {
-      const { cartId } = await startSale({ currency: total.currency });
+      const { cartId } = sessionToken
+        ? await startSaleScoped(sessionToken, { currency: total.currency })
+        : await startSale({ currency: total.currency });
 
       if (discountPercent > 0) {
-        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-        if (discountLabel) discountArgs.label = discountLabel;
-        await setCartDiscount(discountArgs);
+        if (sessionToken) {
+          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+          if (discountLabel) scopedArgs.label = discountLabel;
+          await setCartDiscountScoped(sessionToken, scopedArgs);
+        } else {
+          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
+          if (discountLabel) discountArgs.label = discountLabel;
+          await setCartDiscount(discountArgs);
+        }
       }
 
       for (const line of lineItems) {
-        await addLine({
+        const lineArgs = {
           cartId,
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
-        });
+        };
+        if (sessionToken) {
+          await addLineScoped(sessionToken, lineArgs);
+        } else {
+          await addLine(lineArgs);
+        }
       }
 
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
@@ -321,23 +340,40 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
-      const saleResult = await completeSale({
-        cartId,
-        paymentMethod: 'QRIS',
-        tenderedMinor: null,
-        userId,
-        ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-        ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-        paymentSplits: [
-          {
-            method: 'QRIS',
-            amountMinor: Number(effectiveTotal),
-            gatewayReference: qrReference,
-            gatewayStatus: 'completed',
-            gatewayResponse: 'QRIS payment confirmed',
-          },
-        ],
-      });
+      const saleResult = sessionToken
+        ? await completeSaleScoped(sessionToken, {
+            cartId,
+            paymentMethod: 'QRIS',
+            tenderedMinor: null,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            paymentSplits: [
+              {
+                method: 'QRIS',
+                amountMinor: Number(effectiveTotal),
+                gatewayReference: qrReference,
+                gatewayStatus: 'completed',
+                gatewayResponse: 'QRIS payment confirmed',
+              },
+            ],
+          } as CompleteSaleScopedArgs)
+        : await completeSale({
+            cartId,
+            paymentMethod: 'QRIS',
+            tenderedMinor: null,
+            userId,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            paymentSplits: [
+              {
+                method: 'QRIS',
+                amountMinor: Number(effectiveTotal),
+                gatewayReference: qrReference,
+                gatewayStatus: 'completed',
+                gatewayResponse: 'QRIS payment confirmed',
+              },
+            ],
+          });
 
       try {
         const completedSale = await getSale(saleResult.saleId);
@@ -407,7 +443,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -531,24 +567,37 @@ export default function PaymentModal({
       }
 
       console.log('[Sale] Creating cart...');
-      const { cartId } = await startSale({ currency: total.currency });
+      const { cartId } = sessionToken
+        ? await startSaleScoped(sessionToken, { currency: total.currency })
+        : await startSale({ currency: total.currency });
       console.log('[Sale] Cart created:', cartId);
 
       if (discountPercent > 0) {
         console.log('[Sale] Setting discount:', discountPercent);
-        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-        if (discountLabel) discountArgs.label = discountLabel;
-        await setCartDiscount(discountArgs);
+        if (sessionToken) {
+          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+          if (discountLabel) scopedArgs.label = discountLabel;
+          await setCartDiscountScoped(sessionToken, scopedArgs);
+        } else {
+          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
+          if (discountLabel) discountArgs.label = discountLabel;
+          await setCartDiscount(discountArgs);
+        }
       }
 
       for (const line of lineItems) {
         console.log('[Sale] Adding line:', line.sku, 'qty:', line.qty);
-        await addLine({
+        const lineArgs = {
           cartId,
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
-        });
+        };
+        if (sessionToken) {
+          await addLineScoped(sessionToken, lineArgs);
+        } else {
+          await addLine(lineArgs);
+        }
       }
 
       let paymentSplits: PaymentSplitArg[] | undefined;
@@ -580,16 +629,26 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
-      const saleResult = await completeSale({
-        cartId,
-        paymentMethod: methodLabel,
-        tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
-        userId,
-        ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-        ...(paymentSplits ? { paymentSplits } : {}),
-        ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
-        ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-      });
+      const saleResult = sessionToken
+        ? await completeSaleScoped(sessionToken, {
+            cartId,
+            paymentMethod: methodLabel,
+            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(paymentSplits ? { paymentSplits } : {}),
+            ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+          } as CompleteSaleScopedArgs)
+        : await completeSale({
+            cartId,
+            paymentMethod: methodLabel,
+            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            userId,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(paymentSplits ? { paymentSplits } : {}),
+            ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+          });
       console.log('[Sale] Sale completed:', saleResult.saleId);
 
       try {
@@ -670,10 +729,18 @@ export default function PaymentModal({
       setDone(true);
     } catch (err) {
       console.error('[Sale] FAILED:', err);
+      // Try to detect PartialStockResult from the backend error
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const parsed = tryParsePartialStockResult(errMsg);
+      if (parsed) {
+        setShortfallResult(parsed);
+        return; // Don't show generic error — let the ShortfallDialog handle it
+      }
+      addToast({ message: 'Failed to complete sale. Please try again.', type: 'error' });
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
+  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast]);
 
   useEffect(() => {
     if (!done) return;
@@ -695,14 +762,55 @@ export default function PaymentModal({
     if (!showCustomerSearch && !showQr) animateLeave(onClose);
   });
 
+  // Parse PartialStockResult from Tauri error messages
+  const tryParsePartialStockResult = (msg: string): PartialStockResult | null => {
+    try {
+      // Tauri wraps AppError with prefix; try to find JSON in the message
+      const jsonStart = msg.indexOf('{');
+      if (jsonStart < 0) return null;
+      const jsonStr = msg.substring(jsonStart);
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && parsed.requiresResolution && Array.isArray(parsed.shortfalls)) {
+        return parsed as PartialStockResult;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Reconstruct payment splits from the current split state (for shortfall retry)
+  const paymentSplitsFromState = useCallback((): PaymentSplitArg[] | undefined => {
+    if (!splitMode) return undefined;
+    const known: Record<string, number> = {
+      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
+      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
+    };
+    const exp = known[total.currency] ?? 2;
+    return splits.map((s) => ({
+      method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
+      amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
+    }));
+  }, [splitMode, splits, total.currency]);
+
+  // Reconstruct serial number args from the current serialNumbers prop
+  const serialNumberArgsFromState = useCallback((): SerialNumberArg[] | undefined => {
+    if (!serialNumbers) return undefined;
+    return Object.entries(serialNumbers)
+      .filter(([_, s]) => s.trim().length > 0)
+      .map(([lineId, serial]) => {
+        const line = lineItems.find((l) => String(l.id) === lineId);
+        return { sku: String(line?.sku ?? lineId), serial };
+      });
+  }, [serialNumbers, lineItems]);
+
   if (!open && !leaving) return null;
 
   const stateClass = leaving ? 'payment-overlay--exit' : 'payment-overlay--enter';
   const modalStateClass = leaving ? 'payment-modal--exit' : 'payment-modal--enter';
 
   return (
-    <Localized id="payment-dialog-aria" attrs={{ 'aria-label': true }}>
-    <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria')}>
+      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria', null, 'Payment')}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -712,6 +820,38 @@ export default function PaymentModal({
         onPaymentConfirmed={handleQrConfirmed}
       />
 
+      {shortfallResult && (
+        <StockShortfallDialog
+          shortfallResult={shortfallResult}
+          cartLines={lineItems.map((l) => ({
+            sku: l.sku,
+            qty: l.qty,
+            unitPriceMinor: l.unit_price.minor_units,
+          }))}
+          totalMinor={total.minor_units}
+          currency={total.currency}
+          paymentMethod={splitMode ? 'split' : method === 'other' ? otherLabel.trim() || 'OTHER' : method.toUpperCase()}
+          tenderedMinor={method === 'cash' && !splitMode ? Number(tenderedMinor) : null}
+          paymentSplits={paymentSplitsFromState() ?? null}
+          customerId={selectedCustomer?.id ?? null}
+          customerName={customerName.trim() || null}
+          serialNumbers={serialNumberArgsFromState() ?? null}
+          discountPercent={discountPercent}
+          discountLabel={discountLabel ?? null}
+          onComplete={() => {
+            setShortfallResult(null);
+            console.log('[Sale] Completed via shortfall resolution');
+            setDone(true);
+          }}
+          onCancel={() => {
+            setShortfallResult(null);
+            addToast({ message: 'Sale cancelled due to insufficient stock.', type: 'info' });
+            animateLeave(onClose);
+          }}
+        />
+      )}
+
+      {!shortfallResult && (
       <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
         {done ? (
           <div className="payment-done">
@@ -742,17 +882,23 @@ export default function PaymentModal({
               <Localized id="payment-title">
                 <h2 className="payment-title">Complete Sale</h2>
               </Localized>
-              <Localized id="payment-close-aria" attrs={{ 'aria-label': true }}>
               <button
                 type="button"
                 className="payment-close"
                 onClick={() => animateLeave(onClose)}
-                aria-label={l10n.getString('payment-close-aria')}
+                aria-label={l10n.getString('payment-close-aria', null, 'Cancel payment')}
               >
                 &times;
               </button>
-              </Localized>
             </div>
+
+            {tableNumber && (
+              <div className="payment-table-badge">
+                <Localized id="payment-table-number" vars={{ number: tableNumber }}>
+                  <span>Table {tableNumber}</span>
+                </Localized>
+              </div>
+            )}
 
             <div className="payment-total-row">
               <Localized id="payment-total-due">
@@ -765,18 +911,16 @@ export default function PaymentModal({
 
             {multiCurrency && (
               <div className="payment-currency-selector">
-                <Localized id="payment-currency-aria" attrs={{ 'aria-label': true }}>
-                  <label htmlFor="payment-currency-select" aria-label={l10n.getString('payment-currency-aria')}>
+                  <label htmlFor="payment-currency-select" aria-label={l10n.getString('payment-currency-aria', null, 'Charge currency')}>
                     <Localized id="payment-currency-label">
                       <span className="payment-currency-label">Charge Currency</span>
                     </Localized>
-                    <Localized id="payment-currency-select-aria" attrs={{ 'aria-label': true }}>
                       <select
                         id="payment-currency-select"
                         className="payment-currency-select"
                         value={selectedCurrency}
                         onChange={(e) => setSelectedCurrency(e.target.value)}
-                        aria-label={l10n.getString('payment-currency-select-aria')}
+                        aria-label={l10n.getString('payment-currency-select-aria', null, 'Select charge currency')}
                       >
                         {currencies.length === 0 && (
                           <option value={total.currency}>{total.currency}</option>
@@ -787,15 +931,12 @@ export default function PaymentModal({
                           </option>
                         ))}
                       </select>
-                    </Localized>
                   </label>
-                </Localized>
               </div>
             )}
 
             {selectedCurrency !== total.currency && exchangeRateInfo && (
-              <Localized id="payment-exchange-aria" attrs={{ 'aria-label': true }}>
-              <div className="payment-exchange-notice" aria-label={l10n.getString('payment-exchange-aria')}>
+              <div className="payment-exchange-notice" aria-label={l10n.getString('payment-exchange-aria', null, 'Exchange rate information')}>
                 <div className="payment-exchange-row">
                   <Localized id="payment-exchange-rate">
                     <span>Exchange rate</span>
@@ -817,12 +958,10 @@ export default function PaymentModal({
                   <span>{exchangeRateInfo.effective_date}</span>
                 </div>
               </div>
-              </Localized>
             )}
 
             {selectedCurrency !== total.currency && (
-              <Localized id="payment-receipt-currency-aria" attrs={{ 'aria-label': true }}>
-              <div className="payment-receipt-currency" aria-label={l10n.getString('payment-receipt-currency-aria')}>
+              <div className="payment-receipt-currency" aria-label={l10n.getString('payment-receipt-currency-aria', null, 'Receipt currency information')}>
                 <div className="payment-receipt-currency-row">
                   <Localized id="payment-charged-in">
                     <span>Charged in</span>
@@ -853,7 +992,6 @@ export default function PaymentModal({
                   </span>
                 </div>
               </div>
-              </Localized>
             )}
 
             {!splitMode && (
@@ -885,12 +1023,11 @@ export default function PaymentModal({
                         checked={method === 'other'}
                         onChange={() => setMethod('other')}
                       />
-                      <Localized id="payment-other-aria" attrs={{ 'aria-label': true }}>
-                      <Localized id="payment-other-placeholder" attrs={{ placeholder: true }}>
                         <input
                           type="text"
                           className="payment-other-input"
-                          placeholder="Other..."
+                          aria-label={l10n.getString('payment-other-aria', null, 'Other payment method name')}
+                          placeholder={l10n.getString('payment-other-placeholder', null, 'Other...')}
                           value={otherLabel}
                           onChange={(e) => {
                             setMethod('other');
@@ -898,8 +1035,6 @@ export default function PaymentModal({
                           }}
                           disabled={method !== 'other'}
                         />
-                      </Localized>
-                      </Localized>
                     </div>
                     <>
                       {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
@@ -928,16 +1063,15 @@ export default function PaymentModal({
                         <Localized id="payment-customer-name">
                           <span>Customer Name</span>
                         </Localized>
-                        <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
                           <input
                             id="payment-customer-input"
                             type="text"
                             className="payment-customer-input"
+                            aria-label={l10n.getString('payment-customer-name-aria', null, 'Customer name for open bill')}
                             placeholder="e.g. John Doe"
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                           />
-                        </Localized>
                       </label>
                     </>
                   </div>
@@ -949,16 +1083,15 @@ export default function PaymentModal({
                       <Localized id="payment-amount-tendered">
                         <span>Amount Tendered</span>
                       </Localized>
-                      <Localized id="payment-tendered-input" attrs={{ placeholder: true, 'aria-label': true }}>
                         <input
                           type="text"
                           className="payment-tendered-input"
                           inputMode="decimal"
-                          placeholder="0.00"
+                          aria-label={l10n.getString('payment-tendered-input', null, 'Amount tendered')}
+                          placeholder={l10n.getString('payment-tendered-input', null, '0.00')}
                           value={tendered}
                           onChange={(e) => setTendered(e.target.value)}
                         />
-                      </Localized>
                     </div>
 
                     <div className="payment-quick-cash">
@@ -966,29 +1099,27 @@ export default function PaymentModal({
                         const totalNum = Number(total.minor_units) / 100;
                         const quickVal = Math.ceil(totalNum / amount) * amount;
                         return (
-                          <Localized key={amount} id="payment-quick-tender-aria" attrs={{ 'aria-label': true }} vars={{ amount: quickVal.toFixed(2) }}>
                           <button
+                            key={amount}
                             type="button"
                             className="payment-quick-btn"
+                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(2) }, 'Tender')}
                             onClick={() => setTendered(quickVal.toFixed(2))}
                           >
                             {total.currency} {quickVal.toLocaleString('id-ID')}
                           </button>
-                          </Localized>
                         );
                       })}
-                      <Localized id="payment-tender-exact-aria" attrs={{ 'aria-label': true }}>
                       <button
                         type="button"
                         className="payment-quick-btn"
-                        aria-label={l10n.getString('payment-tender-exact')}
+                        aria-label={l10n.getString('payment-tender-exact-aria', null, 'Tend exact amount')}
                         onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
                       >
                         <Localized id="payment-tender-exact">
                           <span>Exact</span>
                         </Localized>
                       </button>
-                      </Localized>
                     </div>
 
                     {tendered.length > 0 && (
@@ -1085,35 +1216,28 @@ export default function PaymentModal({
                             checked={s.method === 'other'}
                             onChange={() => updateSplit(s.id, { method: 'other' })}
                           />
-                          <Localized id="payment-split-other-aria" attrs={{ 'aria-label': true }}>
-                          <Localized id="payment-split-other-placeholder" attrs={{ placeholder: true }}>
                             <input
                               type="text"
                               className="payment-split-other-input"
-                              aria-label="Payment method name"
-                              placeholder="Other"
+                              aria-label={l10n.getString('payment-split-other-aria', null, 'Other payment method name')}
+                              placeholder={l10n.getString('payment-split-other-placeholder', null, 'Other')}
                               value={s.otherLabel}
                               onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
                               disabled={s.method !== 'other'}
                             />
-                          </Localized>
-                          </Localized>
                         </div>
                       </div>
                       <div className="payment-split-amount-group">
                         <span className="payment-split-currency">{total.currency}</span>
-                        <Localized id="payment-split-amount-aria" attrs={{ 'aria-label': true }}>
-                        <Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true }}>
                           <input
                             type="text"
                             className="payment-split-amount-input"
                             inputMode="decimal"
-                            placeholder="0.00"
+                            aria-label={l10n.getString('payment-split-amount-aria', null, 'Split amount')}
+                            placeholder={l10n.getString('payment-split-amount-placeholder', null, '0.00')}
                             value={s.amountMinor}
                             onChange={(e) => updateSplit(s.id, { amountMinor: e.target.value })}
                           />
-                        </Localized>
-                        </Localized>
                       </div>
                       <button
                         type="button"
@@ -1370,7 +1494,7 @@ export default function PaymentModal({
           </>
         )}
       </div>
+      )}
     </div>
-    </Localized>
   );
 }

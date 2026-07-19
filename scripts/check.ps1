@@ -139,3 +139,28 @@ Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.p
 $totalElapsed = (Get-Date) - $totalStart
 $label = if ($Fast) { "fast" } else { "all" }
 Write-Host ("$label checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
+
+# --- Commit suggestion ----------------------------------------------------
+Write-Host ""
+Write-Host "Now make a local commit:"
+Write-Host ""
+Write-Host "  1. git add <files>     # stage only intended files"
+Write-Host "  2. git commit          # write a message following the guidelines below"
+Write-Host ""
+Write-Host "Commit message guidelines:"
+Write-Host "  - Keep the summary line under 50 characters, imperative mood, no period"
+Write-Host "  - Leave a blank line after the summary"
+Write-Host "  - Use bullet points (- or *) for the body - focus on WHAT and WHY, not how"
+Write-Host "  - Reference related docs/decisions or issue numbers where relevant"
+Write-Host "  - Keep each bullet under 72 characters"
+Write-Host ""
+Write-Host "Example:"
+Write-Host ""
+Write-Host "    feat(sales): add deduction location override via PIN"
+Write-Host ""
+Write-Host "    - Clicking the badge opens FastPINOverlay for PIN verification"
+Write-Host "    - Store method overrides deduction location with IMMEDIATE transaction"
+Write-Host "    - Badge shows '(Override)' indicator after successful override"
+Write-Host ""
+Write-Host "    References ADR-19"
+Write-Host ""

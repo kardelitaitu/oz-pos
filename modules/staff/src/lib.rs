@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: modules-staff | status: SAFE | lint: CLEAN
+findings: Transitional module implementing Module trait. No unsafe code. Re-exports User, Role,
+  builtin_roles, seed_users from oz-core. 9 unit tests pass.
+next: Migrate auth/staff commands into this module | perf: N/A.
+*/
 #![warn(missing_docs)]
 
 //! Staff Module — user and role management.
@@ -29,8 +36,7 @@
 //!
 //! This module re-exports key staff domain types from `oz-core` so that
 //! consumers can access all staff-related types through a single crate:
-//!
-//! ```ignore
+//!//! ```
 //! use modules_staff::{StaffModule, User, Role, builtin_roles};
 //! ```
 

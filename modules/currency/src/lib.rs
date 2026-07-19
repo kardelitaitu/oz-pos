@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: modules-currency | status: SAFE | lint: CLEAN
+findings: Transitional module implementing Module trait. No unsafe code. Re-exports Currency
+  from foundation and ExchangeRateRow from oz-core. 0 tests yet.
+next: Add unit tests; migrate commands into this module | perf: N/A.
+*/
 #![warn(missing_docs)]
 
 //! Currency/Exchange Module — ISO-4217 currencies and exchange rates.

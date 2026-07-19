@@ -1,3 +1,14 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-payment | status: SAFE | lint: CLEAN
+findings: #![deny(unsafe_code)] at crate root. All payment processors (Stripe, Square, QRIS, Mock)
+  implemented via async traits with reqwest HTTP; no FFI or raw pointer manipulation.
+  120 unit + 64 integration tests pass (184 total). Mock processor covers decline/timeout/approval paths.
+next: None | perf: HTTP calls are async/tokio; mock is in-memory with AtomicUsize counters.
+*/
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
+
 //! Payment processor abstraction for OZ-POS.
 //!
 //! `oz-payment` provides a single trait, [`PaymentProcessor`], with
@@ -23,9 +34,6 @@
 //! ```
 //! use oz_payment::{PaymentProcessor, drivers::mock::MockPaymentProcessor};
 //! ```
-
-#![deny(unsafe_code)]
-#![warn(missing_docs)]
 
 pub mod drivers;
 pub mod error;

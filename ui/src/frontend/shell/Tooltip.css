@@ -106,32 +106,32 @@
   pointer-events: none;
 }
 
-/* Right-positioned arrow points left into the trigger */
 .tooltip-content--right::before {
+  /* -9px: functional arrow offset — no --space-* token at this value */
   left: -9px;
   top: 50%;
   transform: translateY(-50%);
   border-right-color: var(--tooltip-bg, var(--neutral-800));
 }
 
-/* Left-positioned arrow points right */
 .tooltip-content--left::before {
+  /* -9px: functional arrow offset */
   right: -9px;
   top: 50%;
   transform: translateY(-50%);
   border-left-color: var(--tooltip-bg, var(--neutral-800));
 }
 
-/* Top-positioned arrow points up */
 .tooltip-content--top::before {
+  /* -9px: functional arrow offset */
   bottom: -9px;
   left: 50%;
   transform: translateX(-50%);
   border-top-color: var(--tooltip-bg, var(--neutral-800));
 }
 
-/* Bottom-positioned arrow points down */
 .tooltip-content--bottom::before {
+  /* -9px: functional arrow offset */
   top: -9px;
   left: 50%;
   transform: translateX(-50%);

@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--color-bg-overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   will-change: backdrop-filter;
@@ -26,6 +26,7 @@
 
 /* ── Panel ──────────────────────────────────────────────── */
 .settings-popup {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 90%;
@@ -125,6 +126,7 @@
 
 .settings-popup-error svg {
   flex-shrink: 0;
+  /* 1px = 0.0625rem — sub-token value for SVG icon alignment */
   margin-top: 1px;
 }
 

@@ -1,12 +1,12 @@
 .connection-status {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  font-size: 0.75rem;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
   color: var(--color-fg);
   opacity: 1;
   appearance: none;
@@ -27,7 +27,7 @@
 }
 
 .status-indicator.checking {
-  background-color: #f59e0b; /* Amber */
+  background-color: var(--color-warning);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -37,18 +37,18 @@
 }
 
 .status-indicator.online {
-  background-color: #10b981; /* Emerald green */
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  background-color: var(--color-success);
+  box-shadow: var(--shadow-glow-success);
 }
 
 .status-indicator.warning {
-  background-color: #f59e0b; /* Amber (high latency) */
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  background-color: var(--color-warning);
+  box-shadow: var(--shadow-glow-warning);
 }
 
 .status-indicator.offline {
-  background-color: #ef4444; /* Red */
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  background-color: var(--color-danger);
+  box-shadow: var(--shadow-glow-danger);
 }
 
 .connection-label {
@@ -60,7 +60,7 @@
 .connection-latency {
   font-family: var(--font-mono);
   color: var(--color-fg-secondary);
-  margin-left: 0.25rem;
+  margin-left: var(--space-1);
 }
 
 @keyframes pulse {

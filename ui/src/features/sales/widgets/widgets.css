@@ -36,7 +36,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-fg-tertiary);
-  margin-bottom: 2px;
+  margin-bottom: var(--space-0_5);
 }
 
 .reporting-widget-kpi-value {
@@ -56,7 +56,7 @@
 .reporting-widget-hourly-chart {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0_5);
   max-height: 300px;
   overflow-y: auto;
   padding-right: var(--space-1);

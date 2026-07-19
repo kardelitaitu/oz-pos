@@ -60,12 +60,13 @@ pub async fn list_kds_orders_scoped(
 #[command]
 pub async fn get_kds_queue(
     user_id: String,
+    kds_zone: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, permissions::KDS_VIEW)?;
-    let orders = store.get_kds_queue()?;
+    let orders = store.get_kds_queue(kds_zone.as_deref())?;
     drop(db);
     Ok(orders)
 }
@@ -74,6 +75,7 @@ pub async fn get_kds_queue(
 #[command]
 pub async fn get_kds_queue_scoped(
     session_token: String,
+    kds_zone: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
@@ -86,7 +88,7 @@ pub async fn get_kds_queue_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
-    let orders = store.get_kds_queue()?;
+    let orders = store.get_kds_queue(kds_zone.as_deref())?;
     drop(db);
     Ok(orders)
 }
@@ -132,7 +134,7 @@ pub async fn update_kds_status_scoped(
     Ok(order)
 }
 
-/// Create a KDS order from a completed sale in the global database.
+/// Create KDS orders from a completed sale. Returns one order per kitchen zone.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `create_kds_order_from_sale_scoped`.
 #[command]
@@ -140,25 +142,26 @@ pub async fn create_kds_order_from_sale(
     user_id: String,
     sale_id: String,
     state: State<'_, AppState>,
-) -> Result<Option<KdsOrder>, AppError> {
+) -> Result<Vec<KdsOrder>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
-    let order = store.complete_sale_to_kds(&sale_id, None)?;
+    let orders = store.complete_sale_to_kds(&sale_id, None)?;
     drop(db);
-    Ok(order)
+    Ok(orders)
 }
 
-/// Create a KDS order in the store resolved from a session token. ADR #7.
+/// Create KDS orders in the store resolved from a session token. ADR #7.
 ///
 /// Passes the session's `store_id` so the KDS order carries store identity
-/// for defense-in-depth filtering on KDS tablets (ADR #8).
+/// for defense-in-depth filtering on KDS tablets (ADR #8). Returns one
+/// KDS order per kitchen zone; an empty vec when no restaurant items exist.
 #[command]
 pub async fn create_kds_order_from_sale_scoped(
     session_token: String,
     sale_id: String,
     state: State<'_, AppState>,
-) -> Result<Option<KdsOrder>, AppError> {
+) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
     let conn = state
         .db_manager
@@ -169,9 +172,9 @@ pub async fn create_kds_order_from_sale_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
-    let order = store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?;
+    let orders = store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?;
     drop(db);
-    Ok(order)
+    Ok(orders)
 }
 
 /// Get a KDS order by id from the global database.

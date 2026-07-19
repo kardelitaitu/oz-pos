@@ -83,4 +83,54 @@ inv-search-results-aria = Hasil pencarian
 inv-qty-field-aria = Jumlah
 inv-reason-custom-field-aria = Jelaskan alasannya
 
+# Inventory Shifts
+inv-shift-start-title = Mulai Shift Stok
+inv-shift-select-location = Pilih Lokasi
+inv-shift-notes-label = Catatan Shift
+inv-shift-notes-placeholder = mis., Perhitungan shift malam...
+inv-shift-start-btn = Mulai Shift
+inv-shift-active-info = { $user } — { $location } — Dimulai { $time }
+inv-shift-end-btn = Akhiri Shift
+inv-shift-summary-title = Ringkasan Shift
+inv-shift-summary-performed = Transaksi yang dilakukan selama shift ini:
+inv-shift-no-transactions = Tidak ada transaksi yang tercatat.
+
+# Transit Audit
+inv-transit-title = Audit Stok Transit
+inv-transit-col-sku = SKU
+inv-transit-col-product = Produk
+inv-transit-col-qty = Jml
+inv-transit-col-source = Asal
+inv-transit-col-dest = Tujuan
+inv-transit-col-sent = Dikirim Pada
+inv-transit-col-overdue = Terlambat
+inv-transit-reverse-btn = Batalkan Transfer
+inv-transit-no-overdue = Tidak ada item transit yang terlambat.
+
+# Transaction Log
+inv-log-title = Log Transaksi Stok
+inv-log-filter-location = Lokasi
+inv-log-filter-staff = Staf
+inv-log-filter-type = Tipe
+inv-log-filter-all = Semua
+inv-log-expand-btn = Detail
+inv-log-col-barcode = Barcode Dipindai
+
+# Threshold Config
+inv-threshold-title = Konfigurasi Batas Stok
+inv-threshold-col-sku = SKU
+inv-threshold-col-product = Nama Produk
+inv-threshold-col-location = Lokasi
+inv-threshold-col-threshold = Batas
+inv-threshold-add-btn = + Tambah Batas
+inv-threshold-dialog-title = Atur Batas
+inv-threshold-global-opt = Global (Semua Lokasi)
+
+# Stock Alert Panel
+inv-alert-title = Panel Peringatan Stok
+inv-alert-badge-count = { $count } Peringatan Stok
+inv-alert-col-triggered = Memicu
+inv-alert-acknowledge-btn = Tanggapi
+
 # ── Table Management ──
+

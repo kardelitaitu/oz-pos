@@ -97,9 +97,9 @@
 }
 .ds-type-styles code {
   background: var(--color-bg-surface);
-  padding: 0.125em 0.375em;
+  padding: var(--space-0_5) var(--space-1_5);
   border-radius: var(--radius-sm);
-  font-size: 0.9em;
+  font-size: var(--text-sm);
 }
 
 /* ── Spacing bars ──────────────────────────────── */

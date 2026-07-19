@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeAll } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import type { ReactElement, ReactNode } from 'react';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
+import { BrandProvider } from '@/contexts/BrandContext';
 import { checkUsername } from '@/api/staff';
 
 const mockLogin = vi.fn();
@@ -29,7 +32,15 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
-function withFluent(children: ReactNode): ReactElement {
+vi.mock('@/api/branding', () => ({
+  getBrandSettings: () => Promise.resolve({
+    primary_colour: '#10b981',
+    logo_path: null,
+    store_name: 'OZ-POS',
+  }),
+}));
+
+function withProviders(children: ReactNode): ReactElement {
   const bundle = new FluentBundle('en-US');
   bundle.addResource(new FluentResource(`
 staff-login-title = OZ-POS
@@ -63,11 +74,20 @@ staff-login-error-not-found = User not found
 staff-login-error-connection = Could not verify username. Check your connection.
 `));
   const l10n = new ReactLocalization([bundle]);
-  return <LocalizationProvider l10n={l10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
+
+  return (
+    <BrandProvider>
+      <LocalizationProvider l10n={l10n}>
+        <ToastProvider>
+          {children}
+        </ToastProvider>
+      </LocalizationProvider>
+    </BrandProvider>
+  );
 }
 
 function renderScreen() {
-  return render(withFluent(<StaffLoginScreen />));
+  return render(withProviders(<StaffLoginScreen />));
 }
 
 describe('StaffLoginScreen', () => {
@@ -126,5 +146,64 @@ describe('StaffLoginScreen', () => {
 
     // should NOT advance to PIN step
     expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+  });
+});
+
+// ── CSS integrity: guard against regression of empty or missing :focus-visible rules ──
+// Uses readFileSync to inspect the CSS source directly; JSDOM with css:false
+// cannot reliably reflect CSS rules via getComputedStyle.
+
+describe('StaffLoginScreen CSS integrity', () => {
+  const UI_SRC = resolve(__dirname, '..');
+  const CSS_PATH = resolve(UI_SRC, 'features', 'auth', 'StaffLoginScreen.css');
+
+  let css: string;
+
+  beforeAll(() => {
+    css = readFileSync(CSS_PATH, 'utf-8');
+  });
+
+  it('has a non-empty .staff-login-pin-wrap:focus-visible rule in the CSS', () => {
+    // Find the rule block for .staff-login-pin-wrap:focus-visible
+    const ruleMatch = css.match(/\.staff-login-pin-wrap:focus-visible\s*\{([^}]*)\}/);
+    expect(ruleMatch,
+      '.staff-login-pin-wrap:focus-visible rule must exist in StaffLoginScreen.css',
+    ).not.toBeNull();
+
+    const ruleBody = ruleMatch![1]!.trim();
+    expect(ruleBody,
+      '.staff-login-pin-wrap:focus-visible rule body must not be empty — ' +
+      'an empty :focus-visible block causes the browser default blue ' +
+      'outline to appear on the PIN keyboard wrapper',
+    ).not.toHaveLength(0);
+  });
+
+  it('has outline: none on .staff-login-pin-wrap:focus-visible', () => {
+    const ruleMatch = css.match(/\.staff-login-pin-wrap:focus-visible\s*\{([^}]*)\}/);
+    expect(ruleMatch,
+      '.staff-login-pin-wrap:focus-visible rule must exist in StaffLoginScreen.css',
+    ).not.toBeNull();
+
+    const ruleBody = ruleMatch![1]!.trim();
+
+    // The rule should suppress the visible outline since visual feedback
+    // is provided by PIN dots and keypad interactions.
+    expect(ruleBody).toContain('outline: none');
+  });
+
+  it('has no empty :focus-visible rules in the CSS file', () => {
+    // Find ALL :focus-visible rules
+    const focusRules = css.match(/[^,{}]*:focus-visible[^{]*\{[^}]*\}/g) || [];
+
+    const emptyRules = focusRules.filter((rule) => {
+      const body = rule.slice(rule.indexOf('{') + 1, -1).trim();
+      return body.length === 0;
+    });
+
+    expect(emptyRules,
+      'No :focus-visible rules should have an empty body. ' +
+      'Empty :focus-visible blocks let the browser default blue outline show through. ' +
+      `Found ${emptyRules.length} empty rule(s): ${emptyRules.join('; ')}`,
+    ).toHaveLength(0);
   });
 });

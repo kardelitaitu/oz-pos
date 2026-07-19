@@ -34,6 +34,7 @@
   --text-2xl:  1.5rem;    /* 24px */
   --text-3xl:  1.875rem;  /* 30px */
   --text-4xl:  2.25rem;   /* 36px */
+  --text-hero: 4rem;      /* 64px — kiosk hero title */
 
   --font-weight-normal:   400;
   --font-weight-medium:   500;
@@ -88,8 +89,16 @@
   --info-500:    #3b82f6;
 
   /* ── Semantic colour tokens (Steel Blue Glassmorphism) ────────────── */
-  /* Stronger radial bloom — visible glow from top implies depth */
-  --color-bg:              radial-gradient(ellipse at 50% -10%, #132540 0%, #07111d 60%, #040a12 100%);
+  /* Radial bloom — extra colour stops for 8-bit GPU banding reduction */
+  --color-bg: radial-gradient(ellipse at 50% -10%,
+    #132540 0%,
+    #111f33 15%,
+    #0e1a2b 28%,
+    #0c1523 40%,
+    #09111d 52%,
+    #070e19 65%,
+    #060c16 78%,
+    #040a12 100%);
   /* Blue-tinted glass surfaces — hue resonance with the background */
   --color-bg-elevated:     rgba(16, 82, 188, 0.08);
   --color-bg-surface:      rgba(16, 82, 188, 0.05);
@@ -173,6 +182,7 @@
   --space-16:  4rem;
   --space-20:  5rem;
   --space-24:  6rem;
+  --space-minus-1: calc(-1 * var(--space-1));  /* -0.25rem — negative spacing utility */
 
   /* ── Border radius ─────────────────────────────── */
   --radius-none: 0;
@@ -183,17 +193,26 @@
   --radius-2xl:  1rem;
   --radius-3xl:  1.5rem;
   --radius-full: 9999px;
+  --radius-xl-2:  0.625rem;  /* 10px — between radius-lg (8px) and radius-xl (12px) */
 
-  /* ── Shadows (Steel Blue Glassmorphic) — blue-tinted for depth ──── */
-  --shadow-xs:   0 1px 2px rgba(4, 10, 18, 0.5);
-  --shadow-sm:   0 1px 3px rgba(4, 10, 18, 0.5), 0 1px 2px rgba(4, 10, 18, 0.4);
-  --shadow-md:   0 4px 12px -1px rgba(4, 10, 18, 0.55), 0 2px 4px -2px rgba(16, 82, 188, 0.15);
-  --shadow-lg:   0 10px 24px -3px rgba(4, 10, 18, 0.6), 0 4px 8px -4px rgba(16, 82, 188, 0.2);
-  --shadow-xl:   0 20px 40px -5px rgba(4, 10, 18, 0.65), 0 8px 16px -6px rgba(16, 82, 188, 0.25);
-  --shadow-2xl:  0 25px 60px -12px rgba(4, 10, 18, 0.7), 0 0 0 1px rgba(90, 159, 212, 0.08);
-  --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.5);
+  /* ── Single shadow size (8px) across all levels ─ */
+  /* Normal elevation curve: smallest elements get lightest shadow */
+  --shadow-xs:   0 0 12px rgba(4,10,18,0.00);
+  --shadow-sm:   0 0 12px rgba(4,10,18,0.08);
+  --shadow-md:   0 0 12px rgba(4,10,18,0.16);
+  --shadow-lg:   0 0 12px rgba(4,10,18,0.24);
+  --shadow-xl:   0 0 12px rgba(4,10,18,0.32);
+  --shadow-2xl:  0 0 12px rgba(4,10,18,0.40);
+  --shadow-inner: inset 0 2px 4px rgba(4, 10, 18, 0.20);
+  /* Status-glow shadows — used by ConnectionStatus and status indicators */
+  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
+  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
+  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
+  /* QR scan expanding-ring start state (green glow at 30%) */
+  --shadow-pulse: 0 0 0 0 color-mix(in srgb, var(--color-success) 30%, transparent);
 
   /* ── Timing / transitions ──────────────────────── */
+  --duration-0:    0ms;
   --duration-75:   75ms;
   --duration-100:  100ms;
   --duration-150:  150ms;
@@ -273,7 +292,7 @@
   --color-bg-elevated:     #ffffff;
   --color-bg-surface:      rgba(255, 255, 255, 0.7);
   --color-bg-overlay:      rgba(0, 0, 0, 0.45);
-  --color-bg-input:        #ffffff;
+  --color-bg-input:        var(--neutral-50);
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
@@ -323,14 +342,18 @@
   --color-accent-alpha:    rgba(16, 82, 188, 0.18);
   --color-accent-secondary: var(--primary-400);
 
-  /* Shadows — blue-tinted for cohesion with steel blue palette */
-  --shadow-xs:   0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-sm:   0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(16, 82, 188, 0.05);
-  --shadow-md:   0 4px 12px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(16, 82, 188, 0.08);
-  --shadow-lg:   0 10px 24px -3px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(16, 82, 188, 0.1);
-  --shadow-xl:   0 20px 40px -5px rgba(15, 23, 42, 0.14), 0 8px 16px -6px rgba(16, 82, 188, 0.12);
-  --shadow-2xl:  0 25px 60px -12px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(16, 82, 188, 0.06);
+  /* Shadows — single size (8px), normal elevation curve */
+  --shadow-xs:   0 0 12px rgba(15,23,42,0.00);
+  --shadow-sm:   0 0 12px rgba(15,23,42,0.08);
+  --shadow-md:   0 0 12px rgba(15,23,42,0.16);
+  --shadow-lg:   0 0 12px rgba(15,23,42,0.24);
+  --shadow-xl:   0 0 12px rgba(15,23,42,0.32);
+  --shadow-2xl:  0 0 12px rgba(15,23,42,0.40);
   --shadow-inner: inset 0 2px 4px rgba(15, 23, 42, 0.06);
+  /* Status-glow shadows */
+  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
+  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
+  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -369,7 +392,7 @@
   --color-bg-elevated:     var(--neutral-100);
   --color-bg-surface:      var(--neutral-200);
   --color-bg-overlay:      rgba(0, 0, 0, 0.55);
-  --color-bg-input:        var(--neutral-100);
+  --color-bg-input:        var(--neutral-200);
 
   --color-fg:              var(--neutral-800);
   --color-fg-primary:      var(--neutral-900);
@@ -417,14 +440,18 @@
   --color-accent-alpha:    rgba(90, 159, 212, 0.2);
   --color-accent-secondary: #5a9fd4;
 
-  /* Shadows — blue-tinted for steel blue dark surfaces */
-  --shadow-xs:   0 1px 2px rgba(8, 14, 22, 0.5);
-  --shadow-sm:   0 1px 3px rgba(8, 14, 22, 0.55), 0 1px 2px rgba(8, 14, 22, 0.4);
-  --shadow-md:   0 4px 12px -1px rgba(8, 14, 22, 0.6), 0 2px 4px -2px rgba(16, 82, 188, 0.15);
-  --shadow-lg:   0 10px 24px -3px rgba(8, 14, 22, 0.65), 0 4px 8px -4px rgba(16, 82, 188, 0.2);
-  --shadow-xl:   0 20px 40px -5px rgba(8, 14, 22, 0.7), 0 8px 16px -6px rgba(16, 82, 188, 0.25);
-  --shadow-2xl:  0 25px 60px -12px rgba(8, 14, 22, 0.75), 0 0 0 1px rgba(90, 159, 212, 0.06);
-  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.5);
+  /* Shadows — single size (8px), normal elevation curve */
+  --shadow-xs:   0 0 12px rgba(8,14,22,0.00);
+  --shadow-sm:   0 0 12px rgba(8,14,22,0.08);
+  --shadow-md:   0 0 12px rgba(8,14,22,0.16);
+  --shadow-lg:   0 0 12px rgba(8,14,22,0.24);
+  --shadow-xl:   0 0 12px rgba(8,14,22,0.32);
+  --shadow-2xl:  0 0 12px rgba(8,14,22,0.40);
+  --shadow-inner: inset 0 2px 4px rgba(8, 14, 22, 0.25);
+  /* Status-glow shadows */
+  --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
+  --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
+  --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
 }
 
 /* ── Smooth theme transitions ──────────────────── */
@@ -441,7 +468,7 @@ html.is-theme-transitioning *::after {
   *,
   *::before,
   *::after {
-    transition-duration: 0s !important;
-    animation-duration: 0s !important;
+    transition-duration: var(--duration-0) !important;
+    animation-duration: var(--duration-0) !important;
   }
 }

@@ -1,7 +1,7 @@
-//! Stripe sandbox end-to-end integration tests.
+//! Wiremock-based Stripe payment lifecycle tests.
 //!
-//! These tests simulate the **full payment lifecycle** against a wiremock
-//! server acting as the Stripe sandbox API. They validate:
+//! These tests simulate the **full payment lifecycle** against a [`wiremock`]
+//! HTTP mock server that mimics the Stripe REST API. They validate:
 //!
 //! 1. The request/response format matches what Stripe expects
 //! 2. The full authorize → capture → refund lifecycle
@@ -9,19 +9,14 @@
 //! 4. Error responses (declined, server error) are handled properly
 //! 5. Card-present vs card-not-present payment method types
 //!
-//! # Running against the real Stripe sandbox
-//!
-//! To run against the real Stripe sandbox instead of wiremock:
-//!
-//! ```bash
-//! export STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxx
-//! # Then temporarily change the test to use StripePaymentProcessor::from_env()
-//! ```
+//! All tests run against a local wiremock server — no real Stripe credentials
+//! or network access are required. See [`stripe_integration`]
+//! for the base set of wiremock tests; this file adds the full lifecycle coverage.
 //!
 //! # Running
 //!
 //! ```bash
-//! cargo test --package oz-payment --test stripe_sandbox_e2e
+//! cargo test --package oz-payment --test stripe_lifecycle
 //! ```
 
 use foundation::{Currency, Money};
@@ -51,7 +46,7 @@ fn request(major_amount: i64, description: Option<&str>) -> PaymentRequest {
 /// Default test Stripe secret key.
 const TEST_SECRET_KEY: &str = "sk_test_e2e_mock_key";
 
-/// Spawn a wiremock server with Stripe-sandbox-like behaviour.
+/// Spawn a wiremock server that mimics the Stripe REST API.
 ///
 /// Returns `(mock_server, processor)` ready for testing.
 async fn stripe_fixture(card_present: bool) -> (MockServer, StripePaymentProcessor) {

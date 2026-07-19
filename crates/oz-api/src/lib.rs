@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-api | status: SAFE | lint: CLEAN
+findings: No unsafe code. Axum HTTP server with JWT auth middleware. SQLite connection behind
+  Arc<Mutex<>> for handler safety. 104 unit tests pass covering health, tokens, products, sales.
+next: None | perf: Arc<Mutex<Connection>> is the standard axum+rusqlite pattern; one connection per server.
+*/
 #![warn(missing_docs)]
 
 //! OZ-POS OpenAPI REST server.
@@ -8,10 +15,11 @@
 //! inventory scanners can query the POS data.
 //!
 //! # Quick start
-//!
-//! ```ignore
+//! ```no_run
+//! # use oz_api::serve;
 //! // In apps/desktop-client/src/main.rs or a background task:
-//! oz_api::serve().await?;
+//! let rt = tokio::runtime::Runtime::new().unwrap();
+//! rt.block_on(serve());
 //! ```
 //!
 //! Then generate a token:

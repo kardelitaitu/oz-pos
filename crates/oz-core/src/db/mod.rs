@@ -27,6 +27,8 @@ pub mod cash_payouts;
 pub mod customers;
 /// Gift cards — issue, redeem, top-up, freeze, balance checks.
 pub mod gift_cards;
+/// Inventory management CRUD (locations, shifts, thresholds, transaction logs).
+pub mod inventory;
 /// Kitchen Display System order CRUD.
 pub mod kds;
 /// Loyalty points / rewards CRUD.

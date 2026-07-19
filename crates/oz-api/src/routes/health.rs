@@ -52,7 +52,7 @@ mod tests {
     fn health_response_is_serializable() {
         let resp = HealthResponse {
             status: "ok",
-            version: "0.0.9",
+            version: env!("CARGO_PKG_VERSION"),
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"status\":\"ok\""));

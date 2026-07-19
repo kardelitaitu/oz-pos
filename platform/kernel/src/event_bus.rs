@@ -59,10 +59,10 @@ struct SubscriberEntry {
 ///
 /// # Example
 ///
-/// ```ignore
-/// use platform_kernel::EventBus;
-/// use foundation::contracts::{DomainEvent, EventHandler};
-///
+/// ```no_run
+/// # use platform_kernel::EventBus;
+/// # use foundation::contracts::{DomainEvent, EventHandler, ModuleResult};
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Define an event
 /// #[derive(Clone, Debug)]
 /// struct SaleCompleted { sale_id: String }
@@ -83,7 +83,8 @@ struct SubscriberEntry {
 /// let bus = EventBus::new();
 /// bus.subscribe("sale.completed", Box::new(InventoryHandler));
 /// bus.publish(&SaleCompleted { sale_id: "sale-1".into() })?;
-/// ```
+/// # Ok(())
+/// # }
 pub struct EventBus {
     /// Map of topic name → subscriber entries (handler + ownership).
     subscribers: RwLock<HashMap<&'static str, Vec<SubscriberEntry>>>,
@@ -128,8 +129,18 @@ impl EventBus {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// bus.subscribe_for_module("inventory", "sale.completed", Box::new(handler));
+    /// ```no_run
+    /// # use platform_kernel::EventBus;
+    /// # use foundation::contracts::{DomainEvent, EventHandler, ModuleResult};
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #[derive(Clone, Debug)] struct MyEvent;
+    /// # impl DomainEvent for MyEvent { fn event_name(&self) -> &'static str { "my.event" } }
+    /// struct MyHandler;
+    /// # impl EventHandler<MyEvent> for MyHandler { fn handle(&self, _: &MyEvent) -> ModuleResult { Ok(()) } }
+    /// let bus = EventBus::new();
+    /// bus.subscribe_for_module("inventory", "sale.completed", Box::new(MyHandler));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn subscribe_for_module<E>(
         &self,

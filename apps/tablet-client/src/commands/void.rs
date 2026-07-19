@@ -46,6 +46,39 @@ pub async fn void_sale(
     Ok(sale)
 }
 
+/// Args for `void_sale_scoped` — without `user_id`.
+#[derive(Debug, Deserialize)]
+pub struct VoidSaleScopedArgs {
+    /// ID of the associated sale.
+    pub sale_id: String,
+    /// Reason.
+    pub reason: String,
+}
+
+/// Void a completed sale within the session scope. ADR #7.
+///
+/// The `user_id` for permission checks and audit logging is read from
+/// the resolved session context.
+#[command]
+pub async fn void_sale_scoped(
+    session_token: String,
+    args: VoidSaleScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<oz_core::Sale, AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    let db = state.db.lock().await;
+    let store = oz_core::db::Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::SALES_VOID)?;
+
+    let sale = store.void_sale(&args.sale_id, &session.user_id, &args.reason)?;
+    drop(db);
+
+    tracing::info!(sale_id = %args.sale_id, reason = %args.reason, "sale voided (scoped)");
+    Ok(sale)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

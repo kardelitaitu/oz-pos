@@ -273,3 +273,22 @@ auth-ip-address = Alamat IP : { $ip }
 auth-copyright = OZ-POS © { $year } Hak Cipta Dilindungi.
 auth-clipboard-error = Kesalahan papan klip: { $message }
 auth-error-title = Kesalahan
+
+## Create Owner PIN (first-run setup)
+auth-create-pin-title = Buat PIN Pemilik
+auth-create-pin-desc = Siapkan akun pemilik pertama untuk mengelola POS Anda
+auth-create-pin-display-name-label = Nama Tampilan
+auth-create-pin-display-name-placeholder = Pemilik Toko
+auth-create-pin-username-label = Nama Pengguna
+auth-create-pin-username-placeholder = pemilik
+auth-create-pin-pin-label = PIN
+auth-create-pin-pin-placeholder = Minimal 4 digit
+auth-create-pin-confirm-label = Konfirmasi PIN
+auth-create-pin-confirm-placeholder = Masukkan ulang PIN
+auth-create-pin-creating = Membuat...
+auth-create-pin-create = Buat Akun Pemilik
+auth-create-pin-success = Akun pemilik berhasil dibuat!
+auth-create-pin-error-fields = Semua bidang wajib diisi.
+auth-create-pin-error-pin-length = PIN minimal harus 4 karakter.
+auth-create-pin-error-pin-mismatch = PIN tidak cocok.
+auth-create-pin-error-generic = Terjadi kesalahan saat membuat akun pemilik.

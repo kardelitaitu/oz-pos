@@ -36,6 +36,8 @@ pub struct AdjustStockArgs {
 ///
 /// Positive `delta` restocks, negative `delta` removes stock.
 /// Returns the new quantity on success.
+#[deprecated(note = "use adjust_stock_scoped instead")]
+#[allow(deprecated)]
 #[command]
 pub async fn adjust_stock(
     args: AdjustStockArgs,
@@ -125,11 +127,34 @@ pub async fn list_products(state: State<'_, AppState>) -> Result<Vec<ProductDto>
     run_list_products(&db)
 }
 
+/// Fetch warehouse-tracked products only (excludes services).
+#[command]
+pub async fn list_warehouse_products(
+    state: State<'_, AppState>,
+) -> Result<Vec<ProductDto>, AppError> {
+    let db = state.db.lock().await;
+    run_list_warehouse_products(&db)
+}
+
 /// Business logic for listing products (extracted for testing).
 fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, AppError> {
     let store = Store::new(conn);
     let products = store.list_products()?;
+    map_products_to_dtos(&store, products)
+}
 
+/// Business logic for listing warehouse-tracked products only.
+fn run_list_warehouse_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, AppError> {
+    let store = Store::new(conn);
+    let products = store.list_warehouse_products()?;
+    map_products_to_dtos(&store, products)
+}
+
+/// Shared mapping from a vec of ProductWithDetails to ProductDto vec.
+fn map_products_to_dtos(
+    store: &Store<'_>,
+    products: Vec<oz_core::db::ProductWithDetails>,
+) -> Result<Vec<ProductDto>, AppError> {
     let dtos: Vec<ProductDto> = products
         .into_iter()
         .map(|pwd| {
@@ -156,7 +181,6 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
             }
         })
         .collect();
-
     Ok(dtos)
 }
 

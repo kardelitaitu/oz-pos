@@ -145,6 +145,7 @@ impl SyncQueue {
     ///
     /// Parses the `action` field and dispatches to the appropriate local
     /// mutation (stock deduction for sales, stock adjustment, etc.).
+    #[allow(deprecated)]
     pub fn apply_remote(
         &self,
         store: &Store<'_>,

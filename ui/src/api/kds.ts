@@ -18,6 +18,8 @@ export interface KdsOrder {
   ready_at: string | null;
   served_at: string | null;
   prep_time_seconds: number;
+  /** Kitchen zone this order is assigned to (e.g., "front", "back"). */
+  kitchen_zone: string | null;
   notes: string;
 }
 
@@ -29,13 +31,13 @@ export const listKdsOrders = (userId: string, status?: KdsStatus): Promise<KdsOr
 export const listKdsOrdersScoped = (sessionToken: string, status?: KdsStatus): Promise<KdsOrder[]> =>
   invoke<KdsOrder[]>('list_kds_orders_scoped', { sessionToken, status: status ?? null });
 
-/** Get the KDS queue for the current user. */
-export const getKdsQueue = (userId: string): Promise<KdsOrder[]> =>
-  invoke<KdsOrder[]>('get_kds_queue', { userId });
+/** Get the KDS queue for the current user, optionally filtered by kitchen zone. */
+export const getKdsQueue = (userId: string, kdsZone?: string): Promise<KdsOrder[]> =>
+  invoke<KdsOrder[]>('get_kds_queue', { userId, kdsZone: kdsZone ?? null });
 
-/** Get the KDS queue (scoped — ADR #7). */
-export const getKdsQueueScoped = (sessionToken: string): Promise<KdsOrder[]> =>
-  invoke<KdsOrder[]>('get_kds_queue_scoped', { sessionToken });
+/** Get the KDS queue (scoped — ADR #7), optionally filtered by kitchen zone. */
+export const getKdsQueueScoped = (sessionToken: string, kdsZone?: string): Promise<KdsOrder[]> =>
+  invoke<KdsOrder[]>('get_kds_queue_scoped', { sessionToken, kdsZone: kdsZone ?? null });
 
 /** Update a KDS order's status (e.g. preparing, ready, served). */
 export const updateKdsStatus = (userId: string, id: string, status: KdsStatus): Promise<KdsOrder> =>
@@ -45,13 +47,13 @@ export const updateKdsStatus = (userId: string, id: string, status: KdsStatus): 
 export const updateKdsStatusScoped = (sessionToken: string, id: string, status: KdsStatus): Promise<KdsOrder> =>
   invoke<KdsOrder>('update_kds_status_scoped', { sessionToken, id, status });
 
-/** Create a KDS order from a completed sale. */
-export const createKdsOrderFromSale = (userId: string, saleId: string): Promise<KdsOrder> =>
-  invoke<KdsOrder>('create_kds_order_from_sale', { userId, saleId });
+/** Create KDS orders from a completed sale. Returns one order per kitchen zone. */
+export const createKdsOrderFromSale = (userId: string, saleId: string): Promise<KdsOrder[]> =>
+  invoke<KdsOrder[]>('create_kds_order_from_sale', { userId, saleId });
 
-/** Create a KDS order from a sale (scoped — ADR #7). */
-export const createKdsOrderFromSaleScoped = (sessionToken: string, saleId: string): Promise<KdsOrder> =>
-  invoke<KdsOrder>('create_kds_order_from_sale_scoped', { sessionToken, saleId });
+/** Create KDS orders from a sale (scoped — ADR #7). */
+export const createKdsOrderFromSaleScoped = (sessionToken: string, saleId: string): Promise<KdsOrder[]> =>
+  invoke<KdsOrder[]>('create_kds_order_from_sale_scoped', { sessionToken, saleId });
 
 /** Get a single KDS order by its identifier. */
 export const getKdsOrder = (userId: string, id: string): Promise<KdsOrder | null> =>

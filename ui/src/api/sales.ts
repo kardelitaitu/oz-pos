@@ -14,6 +14,8 @@ export interface StartSaleArgs {
 /** Result of starting a new sale, containing the new cart identifier. */
 export interface StartSaleResult {
   cartId: CartId;
+  /** ADR-19 §5.1: the deduction location locked at cart-start time. */
+  deductionLocationId?: string;
 }
 
 /** Arguments for adding a line item to a cart. */
@@ -83,6 +85,18 @@ export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
 export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
   invoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
 
+/** ADR-19: Info about the deduction location locked on a cart. */
+export interface DeductionLocationInfo {
+  locationId: string;
+  locationName: string;
+  /** ISO-8601 timestamp of the last manager override, or null. */
+  overriddenAt?: string;
+}
+
+/** ADR-19 §5.1: Get the deduction location info for an active cart. */
+export const getCartDeductionLocation = (cartId: string): Promise<DeductionLocationInfo | null> =>
+  invoke<DeductionLocationInfo | null>('get_cart_deduction_location', { cartId });
+
 /** Add a line item to a cart. */
 export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
   invoke<AddLineResult>('add_line', { args });
@@ -108,6 +122,83 @@ export interface CompleteSaleScopedArgs {
 
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
   invoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
+
+// ── Shortfall Resolution — complete_sale_with_resolved_shortfalls ──
+
+export interface LocationAllocation {
+  locationId: string;
+  qty: number;
+}
+
+export interface ResolvedShortfall {
+  sku: string;
+  allocations: LocationAllocation[];
+}
+
+export interface CartLineData {
+  sku: string;
+  qty: number;
+  unitPriceMinor: number;
+}
+
+export interface CompleteSaleWithResolvedShortfallsArgs {
+  cartId: string;
+  paymentMethod: string;
+  tenderedMinor: number | null;
+  customerId?: string;
+  paymentSplits?: PaymentSplitArg[];
+  customerName?: string;
+  serialNumbers?: SerialNumberArg[];
+  /** Cart line data reconstructed from the in-memory cart (original was deleted). */
+  lines: CartLineData[];
+  /** Total sale amount in minor units. */
+  totalMinor: number;
+  /** ISO-4217 currency code. */
+  currency: string;
+  /** Discount percentage (0-100). */
+  discountPercent: number;
+  /** Optional discount label. */
+  discountLabel?: string;
+  /** Cashier-resolved shortfalls: per-SKU allocation to specific locations. */
+  resolutions: ResolvedShortfall[];
+}
+
+/** Complete a sale with cashier-resolved shortfalls (split fulfillment).
+ *  This is the second command after a PartialStockResult is returned. */
+export const completeSaleWithResolvedShortfalls = (
+  sessionToken: string,
+  args: CompleteSaleWithResolvedShortfallsArgs
+): Promise<CompleteSaleResult> =>
+  invoke<CompleteSaleResult>('complete_sale_with_resolved_shortfalls_scoped', { sessionToken, args });
+
+// Export front-end types for the StockShortfallDialog
+// PartialStockResult, Shortfall, LocationStock are returned by the backend
+// and consumed by the front-end dialog; they are defined in the Rust side
+// and serialized via JSON. The front-end types mirror the Rust definitions:
+export interface LocationStock {
+  locationId: string;
+  locationName: string;
+  qtyAvailable: number;
+}
+
+export interface Shortfall {
+  sku: string;
+  productName: string;
+  requestedQty: number;
+  primaryQtyAvailable: number;
+  deficit: number;
+  primaryLocationId: string;
+  alternatives: LocationStock[];
+}
+
+export interface PartialStockResult {
+  requiresResolution: boolean;
+  shortfalls: Shortfall[];
+}
+
+/** ADR-19 §17: Record a manager override of the deduction location on an active cart. */
+export const overrideCartDeductionLocation = (sessionToken: string, cartId: string): Promise<void> =>
+  invoke<void>('override_cart_deduction_location_scoped', { sessionToken, cartId });
 
 /** Check whether a product is configured for serial number tracking. */
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>

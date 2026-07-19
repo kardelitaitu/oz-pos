@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use axum::{Json, Router, extract::State, routing::post};
 use oz_core::{
-    Store, migrations,
+    Store,
+    inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId},
+    migrations,
     offline::{OfflineQueueItem, OfflineQueueStatus},
     sync_client::SyncConfig,
 };
@@ -669,8 +671,21 @@ async fn stock_adjustment_on_terminal_a_reflected_on_terminal_b() {
         .enqueue_offline("product.created", &product_payload)
         .unwrap();
 
-    // Adjust stock on Terminal A (sell 5 units)
-    store_a.adjust_stock("STK-TEA", -5).unwrap();
+    // Adjust stock on Terminal A (sell 5 units) at the canonical default location.
+    let tx = conn_a.unchecked_transaction().unwrap();
+    store_a
+        .adjust_stock_at_location_with_reason(
+            &tx,
+            "STK-TEA",
+            -5,
+            &LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID),
+            None,
+            None::<&oz_core::inventory_transaction::InventoryTransactionId>,
+            None::<&oz_core::terminal::TerminalId>,
+            None::<&oz_core::user::UserId>,
+        )
+        .unwrap();
+    tx.commit().unwrap();
 
     // Enqueue the stock adjustment for sync
     let stock_payload = serde_json::json!({

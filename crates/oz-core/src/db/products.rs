@@ -59,6 +59,37 @@ pub struct StockMovement {
     pub created_at: String,
 }
 
+/// Upsert a single `(item_id, location_id, qty)` row into `stock_summary`.
+///
+/// **ADR-19 §3**: post-migration-089's composite PRIMARY KEY
+/// `(item_id, location_id)` requires every insert to specify BOTH columns
+/// AND target BOTH columns in the conflict clause. Older single-column
+/// callsites (`ON CONFLICT(item_id)`) now fail with SQLite error
+/// `"ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"`
+/// — the cascade broke 46 cargo tests across KDS, products, purchase_orders,
+/// reports, sales, stock_transfers, workspaces modules. This helper is the
+/// canonical replacement and is used by `create_product`,
+/// `adjust_stock_with_reason`, and any future single-row ops.
+///
+/// Accepts `&rusqlite::Connection` (NOT `&mut self`) so it works transparently
+/// inside `unchecked_transaction()` blocks via `Transaction`'s `Deref<Target = Connection>`
+/// behaviour — callers pass `&tx`.
+fn upsert_stock_summary_in_tx(
+    conn: &rusqlite::Connection,
+    item_id: &str,
+    location_id: &str,
+    qty: i64,
+    updated_at: &str,
+) -> Result<(), CoreError> {
+    conn.execute(
+        "INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(item_id, location_id) DO UPDATE SET qty = excluded.qty,
+                                                      updated_at = excluded.updated_at",
+        rusqlite::params![item_id, location_id, qty, updated_at],
+    )?;
+    Ok(())
+}
+
 // ── Product CRUD ─────────────────────────────────────────────────────
 
 impl Store<'_> {
@@ -73,6 +104,26 @@ impl Store<'_> {
              FROM products p
              LEFT JOIN categories c ON p.category_id = c.id
              LEFT JOIN inventory i ON p.id = i.product_id
+             ORDER BY p.name",
+        )?;
+        let rows = stmt.query_map([], row_to_product_with_details)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List inventory-tracked products only, ordered by name, with category
+    /// and stock. Excludes service-type products (e.g. "car wash") that have
+    /// no physical stock. Used by the warehouse/inventory workspace.
+    pub fn list_warehouse_products(&self) -> Result<Vec<ProductWithDetails>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type, p.version,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN inventory i ON p.id = i.product_id
+             WHERE p.product_type != 'service'
              ORDER BY p.name",
         )?;
         let rows = stmt.query_map([], row_to_product_with_details)?;
@@ -221,7 +272,8 @@ impl Store<'_> {
             Ok(_) => {}
         }
 
-        if initial_stock > 0 {
+        // Service products never get inventory rows — they have unlimited stock.
+        if initial_stock > 0 && product_type != "service" {
             tx.execute(
                 "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
                 params![id, initial_stock, now],
@@ -234,11 +286,12 @@ impl Store<'_> {
                  VALUES (?1, ?2, ?3, 'initial-stock', NULL, NULL, ?4)",
                 params![movement_id, id, initial_stock, now],
             )?;
-            tx.execute(
-                "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
-                 ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
-                                                     updated_at = excluded.updated_at",
-                params![id, initial_stock, now],
+            upsert_stock_summary_in_tx(
+                &tx,
+                &id,
+                crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+                initial_stock,
+                &now,
             )?;
         }
 
@@ -615,6 +668,20 @@ impl Store<'_> {
         }
     }
 
+    /// Look up a product's `product_type` by product ID.
+    pub fn product_type_by_id(&self, product_id: &str) -> Result<Option<String>, CoreError> {
+        let result = self.conn.query_row(
+            "SELECT product_type FROM products WHERE id = ?1",
+            params![product_id],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(pt) => Ok(Some(pt)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Insert a stock movement delta row directly into the ledger.
     ///
     /// This is the low-level insert used by the sync layer to apply
@@ -659,18 +726,310 @@ impl Store<'_> {
     /// Writes a delta row to the `stock_movements` ledger (ADR #6)
     /// and updates the materialised `inventory` and `stock_summary` tables.
     /// The `reason` parameter is recorded in the ledger for audit purposes.
+    #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
+    #[allow(deprecated)]
     pub fn adjust_stock(&self, sku: &str, delta: i64) -> Result<i64, CoreError> {
         self.adjust_stock_with_reason(sku, delta, None, None, None)
+    }
+    /// Adjust stock with an explicit reason at a specific location (ADR-19 §3.1 canonical API).
+    ///
+    /// This is the **canonical core function** that all sale deduction / void /
+    /// refund / transfer / purchase-order flows route through. It performs the
+    /// following writes inside the caller-provided `&Transaction` (no internal BEGIN —
+    /// the caller is responsible for `BEGIN IMMEDIATE` atomicity per ADR-19 §5.2):
+    ///
+    /// 1. One **immutable delta row** in `stock_movements` (CRDT ledger — ADR #6 +
+    ///    ADR-19 §3.2 audit trail: item_id, location_id, delta, reason,
+    ///    inventory_transaction_id?, source_terminal_id?, source_user_id?, created_at).
+    /// 2. **Upsert** `stock_summary` at the composite PRIMARY KEY
+    ///    `(item_id, location_id)` introduced by migration 089. The
+    ///    schema's `CHECK (qty >= 0)` constraint is Layer 2 negative-stock guard.
+    /// 3. **Upsert** the legacy `inventory` table at the single-PK
+    ///    `(product_id)` for backward-compat callers (ADR-18 §2a's full
+    ///    composite-PK inventory rebuild is deferred).
+    ///
+    /// **Two-layer negative-stock protection** (ADR-19 §3.3):
+    /// - **Layer 1 (Rust)**: pre-check `current_qty + delta >= 0` before any
+    ///   write, returning [`CoreError::InsufficientStockAtLocation`] with the
+    ///   exact available qty if the deduction would underflow. This keeps
+    ///   `PartialStockResult` aggregation O(1) without a SELECT-after-failure.
+    /// - **Layer 2 (SQLite)**: `SqliteFailure(extended_code=787)` on the
+    ///   `stock_summary` upsert is translated to the same variant (defence
+    ///   in depth against any Rust-side race in Layer 1).
+    ///
+    /// Returns the **post-update qty at the location** so the caller can
+    /// detect post-commit state without a separate SELECT.
+    #[allow(clippy::too_many_arguments)]
+    /// Adjust stock with an explicit reason at a specific location (ADR-19 §3.1 canonical API).
+    ///
+    /// This is the **canonical core function** that all sale deduction / void /
+    /// refund / transfer / purchase-order flows route through. It performs the
+    /// following writes inside the caller-provided `&Transaction` (no internal BEGIN —
+    /// the caller is responsible for `BEGIN IMMEDIATE` atomicity per ADR-19 §5.2):
+    ///
+    /// 1. One **immutable delta row** in `stock_movements` (CRDT ledger — ADR #6 +
+    ///    ADR-19 §3.2 audit trail: item_id, location_id, delta, reason,
+    ///    inventory_transaction_id?, source_terminal_id?, source_user_id?, created_at).
+    /// 2. **Upsert** `stock_summary` at the composite PRIMARY KEY
+    ///    `(item_id, location_id)` introduced by migration 089. The
+    ///    schema's `CHECK (qty >= 0)` constraint is Layer 2 negative-stock guard.
+    /// 3. **Upsert** the legacy `inventory` table at the single-PK
+    ///    `(product_id)` for backward-compat callers (ADR-18 §2a's full
+    ///    composite-PK inventory rebuild is deferred).
+    ///
+    /// **Two-layer negative-stock protection** (ADR-19 §3.3):
+    /// - **Layer 1 (Rust)**: pre-check `current_qty + delta >= 0` before any
+    ///   write, returning [`CoreError::InsufficientStockAtLocation`] with the
+    ///   exact available qty if the deduction would underflow. This keeps
+    ///   `PartialStockResu    #[allow(clippy::too_many_arguments)]
+    pub fn adjust_stock_at_location_with_reason(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sku: &str,
+        delta: i64,
+        location_id: &crate::inventory::LocationId,
+        reason: Option<&str>,
+        inventory_transaction_id: Option<&crate::inventory_transaction::InventoryTransactionId>,
+        terminal_id: Option<&crate::terminal::TerminalId>,
+        source_user_id: Option<&crate::user::UserId>,
+    ) -> Result<i64, CoreError> {
+        let product_id = self
+            .product_id_by_sku(sku)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "product",
+                id: sku.to_owned(),
+            })?;
+
+        // Layer 1: read current qty at THIS (item_id, location_id) — uses
+        // stock_summary.composite-PK via the per-location index from
+        // migration 089. Falls back to 0 when no prior movements exist
+        // (forward-compatible with pre-079 seed data).
+        let current_qty: i64 = tx
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![product_id, location_id.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let mut allow_negative = false;
+        if let Some(t_id) = terminal_id
+            && let Ok(ws_id) = tx.query_row(
+                "SELECT workspace_instance_id FROM terminals WHERE id = ?1",
+                rusqlite::params![t_id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            && let Ok(allowed) = tx.query_row(
+                "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
+                     WHERE instance_id = ?1 AND location_id = ?2",
+                rusqlite::params![ws_id, location_id.as_str()],
+                |row| row.get::<_, i64>(0),
+            )
+        {
+            allow_negative = allowed == 1;
+        }
+
+        let new_qty = if allow_negative {
+            current_qty
+                .checked_add(delta)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "qty",
+                    message: "overflow".into(),
+                })?
+        } else {
+            current_qty
+                .checked_add(delta)
+                .filter(|&v| v >= 0)
+                .ok_or_else(|| CoreError::InsufficientStockAtLocation {
+                    sku: sku.to_owned(),
+                    location_id: location_id.clone(),
+                    requested_delta: delta,
+                    available_qty: current_qty,
+                })?
+        };
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let movement_id = uuid::Uuid::now_v7().to_string();
+
+        // 1. Audit-trail delta row (ADR #6 + ADR-19 §3.2).
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, location_id, delta, reason,
+                                          inventory_transaction_id,
+                                          source_terminal_id, source_user_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                movement_id,
+                product_id,
+                location_id.as_str(),
+                delta,
+                reason,
+                inventory_transaction_id.map(|id| id.as_str()),
+                terminal_id.map(|id| id.as_str()),
+                source_user_id.map(|id| id.as_str()),
+                now,
+            ],
+        )?;
+
+        // 2. Per-location stock_summary upsert (Layer-2 negative-stock guard).
+        let summary_res = tx.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(item_id, location_id) DO UPDATE SET
+                qty = excluded.qty,
+                updated_at = excluded.updated_at",
+            rusqlite::params![product_id, location_id.as_str(), new_qty, now],
+        );
+        if let Err(rusqlite::Error::SqliteFailure(ref e, _)) = summary_res
+            && e.code == rusqlite::ErrorCode::ConstraintViolation
+        {
+            return Err(CoreError::InsufficientStockAtLocation {
+                sku: sku.to_owned(),
+                location_id: location_id.clone(),
+                requested_delta: delta,
+                available_qty: current_qty,
+            });
+        }
+        summary_res?;
+
+        // 3. Legacy inventory table — ADR-18 §2a composite-PK rebuild deferred.
+        tx.execute(
+            "INSERT INTO inventory (product_id, location_id, qty, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(product_id) DO UPDATE SET
+                qty = excluded.qty,
+                location_id = excluded.location_id,
+                updated_at = excluded.updated_at",
+            rusqlite::params![product_id, location_id.as_str(), new_qty, now],
+        )?;
+
+        if let Some(cache) = &self.cache {
+            cache.invalidate_inventory(&product_id);
+            cache.publish_inventory_change(&product_id, sku, new_qty, self.terminal_id.as_deref());
+        }
+
+        Ok(new_qty)
+    }
+
+    /// Atomically deduct from multiple locations for one or more SKUs
+    /// inside the caller's transaction (ADR-19 §3).
+    ///
+    /// All deductions happen inside the caller-provided `&Transaction` —
+    /// no internal BEGIN/COMMIT. Used by the split-fulfillment flow (§6b)
+    /// where one line item is deducted from 2+ locations simultaneously.
+    ///
+    /// 1. Pre-check every deduction against current stock at its location.
+    ///    If ANY deduction would cause negative stock at its location, the
+    ///    function returns [`CoreError::InsufficientStockAtLocation`] for
+    ///    the **first** shortfall encountered (the caller should have
+    ///    already validated all deductions before calling).
+    /// 2. Execute all deductions — each is a single call to
+    ///    [`adjust_stock_at_location_with_reason`](Self::adjust_stock_at_location_with_reason).
+    ///
+    /// The caller is responsible for `BEGIN IMMEDIATE` and COMMIT/ROLLBACK.
+    pub fn adjust_stock_batch(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        deductions: &[crate::sale_deduction::StockDeduction],
+        reason: Option<&str>,
+        inventory_transaction_id: Option<&crate::inventory_transaction::InventoryTransactionId>,
+        terminal_id: Option<&crate::terminal::TerminalId>,
+        source_user_id: Option<&crate::user::UserId>,
+    ) -> Result<(), CoreError> {
+        if deductions.is_empty() {
+            return Ok(());
+        }
+
+        // Phase 1: pre-check all deductions against current stock.
+        for d in deductions {
+            let product_id =
+                self.product_id_by_sku(&d.sku)?
+                    .ok_or_else(|| CoreError::NotFound {
+                        entity: "product",
+                        id: d.sku.clone(),
+                    })?;
+
+            let current_qty: i64 = tx
+                .query_row(
+                    "SELECT COALESCE(qty, 0) FROM stock_summary \
+                     WHERE item_id = ?1 AND location_id = ?2",
+                    rusqlite::params![product_id, d.location_id.as_str()],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            let mut allow_negative = false;
+            if let Some(t_id) = terminal_id
+                && let Ok(ws_id) = tx.query_row(
+                    "SELECT workspace_instance_id FROM terminals WHERE id = ?1",
+                    rusqlite::params![t_id.as_str()],
+                    |row| row.get::<_, String>(0),
+                )
+                && let Ok(allowed) = tx.query_row(
+                    "SELECT COALESCE(allow_negative_stock, 0) FROM workspace_inventory_locations \
+                         WHERE instance_id = ?1 AND location_id = ?2",
+                    rusqlite::params![ws_id, d.location_id.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )
+            {
+                allow_negative = allowed == 1;
+            }
+
+            if !allow_negative {
+                let _new_qty = current_qty
+                    .checked_add(d.delta)
+                    .filter(|&v| v >= 0)
+                    .ok_or_else(|| CoreError::InsufficientStockAtLocation {
+                        sku: d.sku.clone(),
+                        location_id: d.location_id.clone(),
+                        requested_delta: d.delta,
+                        available_qty: current_qty,
+                    })?;
+            }
+        }
+
+        // Phase 2: execute all deductions (all pre-checks passed).
+        for d in deductions {
+            self.adjust_stock_at_location_with_reason(
+                tx,
+                &d.sku,
+                d.delta,
+                &d.location_id,
+                reason,
+                inventory_transaction_id,
+                terminal_id,
+                source_user_id,
+            )?;
+        }
+
+        Ok(())
     }
 
     /// Adjust stock with an explicit reason for the delta ledger (ADR #6).
     ///
-    /// Records the reason (e.g. "sale", "restock", "correction") in the
-    /// `stock_movements` row for audit and sync purposes.
+    /// **ADR-19 §3.4** (deferred): this function is preserved verbatim from the
+    /// pre-ADR-19 v0.0.10 baseline. The §3.4 demotion to a wrapper around
+    /// [`adjust_stock_at_location_with_reason`](Self::adjust_stock_at_location_with_reason)
+    /// is **deferred to v0.1.0** because the wrapper's contract (NULL
+    /// location_id → canonical-default via column-DFT, single-PK inventory
+    /// upsert) is depended on by 8+ downstream cargo tests across
+    /// `db::products`, `db::purchase_orders`, `db::stock_transfers`, and
+    /// `db::workspaces`. Routing it through the canonical fn during the
+    /// v0.0.10 transition would require updating those tests + the
+    /// production callsites in `app/*/commands/products.rs` +
+    /// `modules/inventory/src/handlers.rs` — out of scope for Criterion
+    /// 19-2 (which delivers the new canonical API surface, not the
+    /// migration of existing callers).
     ///
-    /// `source_terminal_id` and `source_user_id` are audit columns
-    /// populated from the caller's `SessionContext` (ADR #6). Pass
-    /// `None` for test/deprecated callers.
+    /// **Layer-1 stale-source note for §3.4 follow-up**: this wrapper reads
+    /// `previous_qty` from the **legacy `inventory` table** via
+    /// `self.get_stock(&product_id)`. The canonical §3.1 fn reads from
+    /// `stock_summary` (post-ADR-18 §3 authoritative per-location surface).
+    /// A future test or production flow that seeds ONLY `stock_summary`
+    /// (not `inventory`) will pass the §3.1 path but fail this wrapper with
+    /// phantom zero stock — a §3.4 migration foot-gun. The §3.4 follow-up
+    /// should explicitly migrate Layer-1 reads to `stock_summary`.
+    #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
     pub fn adjust_stock_with_reason(
         &self,
         sku: &str,
@@ -727,12 +1086,18 @@ impl Store<'_> {
             params![product_id, new_qty, now],
         )?;
 
-        // 3. Update the stock_summary materialised view (perf — ADR #6).
-        tx.execute(
-            "INSERT INTO stock_summary (item_id, qty, updated_at) VALUES (?1, ?2, ?3)
-             ON CONFLICT(item_id) DO UPDATE SET qty = excluded.qty,
-                                                 updated_at = excluded.updated_at",
-            params![product_id, new_qty, now],
+        // 3. Update the stock_summary materialised view (perf — ADR #6 + ADR-19 §3).
+        // Uses the canonical default location UUID per ADR-18 §13-36 frozen seed.
+        // The helper targets the composite PRIMARY KEY (item_id, location_id)
+        // introduced by migration 089 — pre-refactor single-column
+        // ON CONFLICT(item_id) raise "ON CONFLICT clause does not match any
+        // PRIMARY KEY or UNIQUE constraint" and cascade-fail 46+ tests.
+        upsert_stock_summary_in_tx(
+            &tx,
+            &product_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            new_qty,
+            &now,
         )?;
 
         tx.commit()?;
@@ -768,41 +1133,73 @@ impl Store<'_> {
     }
 
     /// Rebuild the materialised `stock_summary` and `inventory` tables from the
-    /// delta ledger (ADR #6).
+    /// delta ledger (ADR #6 + ADR-18 §2c + ADR-19 §1).
+    ///
+    /// After ADR-18 migration 089, `stock_summary` has a composite PRIMARY
+    /// KEY (item_id, location_id). The rebuild MUST aggregate the delta ledger
+    /// by BOTH columns — not by `item_id` alone — otherwise per-location stock
+    /// is silently funneled into the canonical default UUID and the §9 alert
+    /// system queries return aggregated cross-location totals instead of
+    /// per-location vectors. This is ADR-19 §15 criterion 19-1.
+    ///
+    /// `inventory` still has a single-PK on `product_id` (ADR-18 §2a's
+    /// composite-PK rebuild is deferred), so it aggregates per product across
+    /// all locations. Per-location authoritative stock now lives in
+    /// `stock_summary`. Legacy `inventory` is preserved here as a sum-of-all
+    /// locations approximation for backward-compat callers.
     ///
     /// This is called after a sync cycle receives new deltas from other
     /// registers or the cloud, ensuring the materialised cache is consistent
     /// with the authoritative ledger. Runs in a single transaction for atomicity.
     ///
-    /// Returns the number of products whose stock was rebuilt.
+    /// **Returns** the number of `(item_id, location_id)` tuples rebuilt —
+    /// NOT the number of distinct products. Post-refactor the count is
+    /// higher for products stored across multiple locations.
     pub fn rebuild_stock_summary(&self) -> Result<usize, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        // ADR-18 §13-36 frozen canonical default-location UUID (see
+        // `crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID`). This is also
+        // the column DEFAULT on `stock_movements.location_id` (migration 080)
+        // and `inventory.location_id` (migration 079), so legacy pre-790
+        // stock_movements rows uniformly land at this location_id and the
+        // rebuild stays backward-compatible.
+        let canonical_default_loc = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
 
         let tx = self.conn.unchecked_transaction()?;
 
         // Clear the materialised caches.
         tx.execute("DELETE FROM stock_summary", [])?;
 
-        // Rebuild stock_summary from the delta ledger.
+        // Rebuild stock_summary from the delta ledger. MUST group by both
+        // (item_id, location_id) per ADR-18 migration 089's composite PK.
+        // Without this, multi-location data silently collapses to one row
+        // per item_id at the canonical default UUID — the dormant bug
+        // originally flagged in the ADR-18 final-review.
         let rebuilt = tx.execute(
-            "INSERT INTO stock_summary (item_id, qty, updated_at)
-             SELECT item_id, SUM(delta), ?1
+            "INSERT INTO stock_summary (item_id, location_id, qty, updated_at)
+             SELECT item_id, location_id, SUM(delta), ?1
              FROM stock_movements
-             GROUP BY item_id",
+             GROUP BY item_id, location_id",
             params![now],
         )?;
 
-        // Rebuild the inventory table (backward compat) to match.
-        // Upsert: set qty for products with deltas, leave others untouched.
+        // Rebuild the inventory table (backward compat, single-PK preserved).
+        // Aggregates per product (sums ALL location deltas into one row),
+        // and pins the row's location_id to the canonical default UUID to
+        // match how `adjust_stock_with_reason` writes (it doesn't specify
+        // location_id, relying on the column DEFAULT). This keeps `inventory`
+        // a representative aggregate for pre-refactor callers while
+        // `stock_summary` becomes the per-location authoritative surface.
         tx.execute(
-            "INSERT INTO inventory (product_id, qty, updated_at)
-             SELECT item_id, SUM(delta), ?1
+            "INSERT INTO inventory (product_id, location_id, qty, updated_at)
+             SELECT item_id, ?2 AS location_id, SUM(delta), ?1
              FROM stock_movements
              GROUP BY item_id
              ON CONFLICT(product_id) DO UPDATE SET
                 qty = excluded.qty,
+                location_id = excluded.location_id,
                 updated_at = excluded.updated_at",
-            params![now],
+            params![now, canonical_default_loc],
         )?;
 
         // Zero out inventory for products whose ledger SUM is 0 or negative
@@ -904,12 +1301,21 @@ impl Store<'_> {
         for item_id in &item_ids {
             let tx = self.conn.unchecked_transaction()?;
 
-            // 1. Copy old rows to archive (skip previous rollup rows).
+            // 1. Copy old rows to archive (skip previous rollup rows). Post
+            //    ADR-18 §2b + migration 080 stock_movements_archive gained
+            //    a `location_id` column (NOT NULL DEFAULT canonical UUID);
+            //    post ADR-18 §9c + migration 085 it also gained a nullable
+            //    `inventory_transaction_id` FK column. The select-list below
+            //    must enumerate ALL 10 columns in the same order as the
+            //    CREATE TABLE from migration 072 + ALTERs from 080/085,
+            //    otherwise SQLite rejects with "X columns but Y values
+            //    were supplied" and the archive transaction rolls back.
             tx.execute(
                 "INSERT INTO stock_movements_archive
                  SELECT id, item_id, delta, reason,
                         source_terminal_id, source_user_id,
-                        store_id, created_at
+                        store_id, created_at,
+                        location_id, inventory_transaction_id
                  FROM stock_movements
                  WHERE item_id = ?1
                    AND created_at < ?2
@@ -918,10 +1324,21 @@ impl Store<'_> {
             )?;
 
             // 2. Insert a rollup row consolidating all archived deltas.
+            //    Post migration 080 location_id is NOT NULL DEFAULT canonical
+            //    UUID on stock_movements, so we anchor the rollup to the
+            //    canonical default explicitly (the COALESCE would otherwise
+            //    surface a NULL on pre-080 stock_movements rows). Post
+            //    migration 085 inventory_transaction_id is NULLABLE; the
+            //    rollup row has no original inventory_transaction session
+            //    because it consolidates multiple sessions — NULL is correct.
             let rollup_id = uuid::Uuid::now_v7().to_string();
             tx.execute(
-                "INSERT INTO stock_movements (id, item_id, delta, reason, store_id, created_at)
-                 SELECT ?1, ?2, COALESCE(SUM(delta), 0), 'archive-rollup', '', ?3
+                "INSERT INTO stock_movements
+                     (id, item_id, delta, reason, store_id, created_at,
+                      location_id, inventory_transaction_id)
+                 SELECT ?1, ?2, COALESCE(SUM(delta), 0), 'archive-rollup',
+                        '', ?3,
+                        '01926b3a-0000-7000-8000-000000000001', NULL
                  FROM stock_movements
                  WHERE item_id = ?2
                    AND created_at < ?4
@@ -1101,6 +1518,7 @@ impl Store<'_> {
 mod tests {
     use super::*;
     use crate::Money;
+    use crate::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
     use crate::migrations;
     use rusqlite::Connection;
 
@@ -1119,13 +1537,61 @@ mod tests {
                 ('prod-3', 'DRINK-002', 'Green Tea',  275, 'USD', 'cat-drinks', NULL,           '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO inventory (product_id, qty) VALUES
                 ('prod-1', 50),
-                ('prod-2', 12);",
+                ('prod-2', 12);
+             -- Post ADR-18 §2c + migration 089: stock_summary has the
+             -- composite PRIMARY KEY (item_id, location_id). Seed both
+             -- legacy inventory AND stock_summary at the canonical default
+             -- UUID so the canonical adjust_stock_at_location_with_reason
+             -- Layer-1 read returns the seeded qty (was 0 pre-fix because
+             -- the Runner-only-saw-inventory-table fixtures missed the
+             -- post-refactor aggregate surface).
+             INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES
+                ('prod-1', '01926b3a-0000-7000-8000-000000000001', 50, '2025-01-01T00:00:00.000Z'),
+                ('prod-2', '01926b3a-0000-7000-8000-000000000001', 12, '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    fn seed_for_canonical_test(conn: &Connection) {
+        // Seed canonical default-location stock_summary rows so that
+        // Store::adjust_stock_at_location_with_reason's Layer 1 read of
+        // `stock_summary` returns realistic (>=0) values — without this
+        // seed, Layer 1 reads 0 and the `>=0` filter rejects every test
+        // deduction. Mirrors seed_everything's inventory seed but routes
+        // through the post-ADR-18 §3 authoritative per-location surface.
+        //
+        // Idempotent (INSERT OR IGNORE): after the seed_everything change
+        // that also seeds stock_summary at canonical UUID, tests calling
+        // BOTH helpers land the same (item_id, location_id) twice. The
+        // ignore-on-conflict clause turns the second seed into a no-op,
+        // preserving the realistic qty=50 / qty=12 fixture without
+        // tripping the composite-PK UNIQUE constraint.
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty, updated_at) VALUES
+                ('prod-1', '01926b3a-0000-7000-8000-000000000001', 50, '2025-01-01T00:00:00.000Z'),
+                ('prod-2', '01926b3a-0000-7000-8000-000000000001', 12, '2025-01-01T00:00:00.000Z');",
         )
         .unwrap();
     }
 
     fn store(conn: &Connection) -> Store<'_> {
         Store::new(conn)
+    }
+
+    /// Helper: canonical wrapper around `adjust_stock_at_location_with_reason`
+    /// that creates a transaction and uses the canonical default location.
+    fn adjust_stock(
+        s: &Store<'_>,
+        conn: &Connection,
+        sku: &str,
+        delta: i64,
+    ) -> Result<i64, CoreError> {
+        let tx = conn.unchecked_transaction()?;
+        let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
+        let result =
+            s.adjust_stock_at_location_with_reason(&tx, sku, delta, &loc, None, None, None, None)?;
+        tx.commit()?;
+        Ok(result)
     }
 
     fn usd() -> Currency {
@@ -1287,6 +1753,33 @@ mod tests {
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "initial_stock"));
     }
 
+    #[test]
+    fn create_service_product_never_gets_inventory_row() {
+        let conn = fresh();
+        // Even with initial_stock > 0, service products skip inventory.
+        let p = store(&conn)
+            .create_product(
+                "CARWASH",
+                "Car Wash",
+                price(5000),
+                None,
+                None,
+                10,
+                Some("service"),
+            )
+            .unwrap();
+        assert_eq!(p.product_type, crate::ProductType::Service);
+        // get_stock returns 0 when no inventory row exists.
+        let qty = store(&conn).get_stock(&p.id).unwrap();
+        assert_eq!(qty, 0);
+        // list_products returns stock_qty = None via LEFT JOIN.
+        let pwd = store(&conn).get_product("CARWASH").unwrap().unwrap();
+        assert_eq!(
+            pwd.stock_qty, None,
+            "service product should have null stock_qty"
+        );
+    }
+
     // ── Product update / delete ─────────────────────────────────
 
     #[test]
@@ -1440,7 +1933,7 @@ mod tests {
     fn adjust_stock_add() {
         let conn = fresh();
         seed_everything(&conn);
-        let new_qty = store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+        let new_qty = adjust_stock(&store(&conn), &conn, "DRINK-001", 5).unwrap();
         assert_eq!(new_qty, 55);
     }
 
@@ -1448,7 +1941,7 @@ mod tests {
     fn adjust_stock_remove() {
         let conn = fresh();
         seed_everything(&conn);
-        let new_qty = store(&conn).adjust_stock("DRINK-001", -10).unwrap();
+        let new_qty = adjust_stock(&store(&conn), &conn, "DRINK-001", -10).unwrap();
         assert_eq!(new_qty, 40);
     }
 
@@ -1456,14 +1949,14 @@ mod tests {
     fn adjust_stock_negative_error() {
         let conn = fresh();
         seed_everything(&conn);
-        let err = store(&conn).adjust_stock("DRINK-001", -100).unwrap_err();
-        assert!(matches!(err, CoreError::Validation { field, .. } if field == "delta"));
+        let err = adjust_stock(&store(&conn), &conn, "DRINK-001", -100).unwrap_err();
+        assert!(matches!(err, CoreError::InsufficientStockAtLocation { .. }));
     }
 
     #[test]
     fn adjust_stock_unknown_sku() {
         let conn = fresh();
-        let err = store(&conn).adjust_stock("NO-SKU", 5).unwrap_err();
+        let err = adjust_stock(&store(&conn), &conn, "NO-SKU", 5).unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
@@ -1836,15 +2329,22 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        store(&conn)
-            .adjust_stock_with_reason(
-                "DRINK-001",
-                -3,
-                Some("sale"),
-                Some("term-1"),
-                Some("user-1"),
-            )
-            .unwrap();
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "DRINK-001",
+            -3,
+            &loc,
+            Some("sale"),
+            None,
+            Some(&crate::terminal::TerminalId::from("term-1")),
+            Some(&crate::user::UserId::from("user-1")),
+        )
+        .unwrap();
+        tx.commit().unwrap();
 
         // Verify ledger row was written.
         let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
@@ -1859,7 +2359,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 5).unwrap();
 
         let movements = store(&conn).list_stock_movements("prod-1", 10, 0).unwrap();
         assert_eq!(movements.len(), 1);
@@ -1879,13 +2379,13 @@ mod tests {
         assert_eq!(initial, 50, "fallback to inventory returns 50");
 
         // Adjustment writes a delta row. SUM(delta) = 10 (just the adjustment).
-        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 10).unwrap();
         let after = store(&conn).get_stock_from_ledger("prod-1").unwrap();
         assert_eq!(after, 10, "SUM(delta) should be 10 (only adjustment row)");
 
         // Multiple adjustments accumulate.
-        store(&conn).adjust_stock("DRINK-001", -5).unwrap();
-        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", -5).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 20).unwrap();
         let after2 = store(&conn).get_stock_from_ledger("prod-1").unwrap();
         assert_eq!(after2, 25, "SUM of deltas: 10 + (-5) + 20 = 25");
     }
@@ -1906,15 +2406,23 @@ mod tests {
         // Write 5 movements (migration backfill ran against empty inventory,
         // so only these 5 adjust_stock calls create rows).
         for _i in 0..5 {
-            store(&conn)
-                .adjust_stock_with_reason(
-                    "DRINK-001",
-                    1,
-                    Some("restock"),
-                    Some("term-1"),
-                    Some("user-1"),
-                )
-                .unwrap();
+            let s = store(&conn);
+            let tx = conn.unchecked_transaction().unwrap();
+            let loc = crate::inventory::LocationId::from(
+                crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            );
+            s.adjust_stock_at_location_with_reason(
+                &tx,
+                "DRINK-001",
+                1,
+                &loc,
+                Some("restock"),
+                None,
+                Some(&crate::terminal::TerminalId::from("term-1")),
+                Some(&crate::user::UserId::from("user-1")),
+            )
+            .unwrap();
+            tx.commit().unwrap();
         }
 
         // With limit 3, should return 3 most recent.
@@ -1931,15 +2439,22 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        store(&conn)
-            .adjust_stock_with_reason(
-                "DRINK-001",
-                -5,
-                Some("sale"),
-                Some("term-kitchen"),
-                Some("user-alice"),
-            )
-            .unwrap();
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "DRINK-001",
+            -5,
+            &loc,
+            Some("sale"),
+            None,
+            Some(&crate::terminal::TerminalId::from("term-kitchen")),
+            Some(&crate::user::UserId::from("user-alice")),
+        )
+        .unwrap();
+        tx.commit().unwrap();
 
         let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
         assert_eq!(movements.len(), 1);
@@ -1957,8 +2472,8 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
 
-        // adjust_stock (the backward-compat wrapper) passes None for audit fields.
-        store(&conn).adjust_stock("DRINK-001", 10).unwrap();
+        // adjust_stock_at_location_with_reason passes None for audit fields.
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 10).unwrap();
 
         let movements = store(&conn).list_stock_movements("prod-1", 1, 0).unwrap();
         assert_eq!(movements.len(), 1);
@@ -2026,6 +2541,95 @@ mod tests {
         assert_eq!(rows, 0);
     }
 
+    /// ADR-19 §15 criterion 19-1: rebuild_stock_summary() aggregates per
+    /// (item_id, location_id), not per item_id alone. This test seeds stock
+    /// movements in TWO different locations for the same SKU and asserts the
+    /// rebuild produces TWO stock_summary rows (one per location) instead of
+    /// single aggregated row at the canonical default UUID (the dormant
+    /// bug pre-refactor).
+    #[test]
+    fn rebuild_stock_summary_aggregates_per_location() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let canonical = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let transit = "01926b3a-0000-7000-8000-000000000002";
+        let s = store(&conn);
+
+        // Seed stock_movements in two locations for the same SKU (prod-1).
+        // Pre-refactor these would collapse into ONE stock_summary row at
+        // canonical with qty=80; post-refactor they must produce TWO rows.
+        conn.execute_batch(&format!(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,\n                                          source_terminal_id, source_user_id,\n                                          store_id, created_at, location_id)\n             VALUES ('mv-loc-c', 'prod-1',  30, 'restock', NULL, NULL, '', '2025-01-01T00:00:00.000Z', '{canonical}'),\n                    ('mv-loc-t', 'prod-1',  50, 'restock', NULL, NULL, '', '2025-01-01T00:00:00.000Z', '{transit}'),\n                    ('mv-loc-c2','prod-2',  12, 'restock', NULL, NULL, '', '2025-01-01T00:00:00.000Z', '{canonical}')"
+        ))
+        .unwrap();
+
+        let count = s.rebuild_stock_summary().unwrap();
+        assert_eq!(
+            count, 3,
+            "three (item_id, location_id) tuples should be rebuilt, got {count}"
+        );
+
+        // Verify TWO rows for prod-1: per-location qty breakdown.
+        let canonical_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1' AND location_id = ?1",
+                params![canonical],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            canonical_qty, 30,
+            "canonical default location must hold 30, got {canonical_qty}"
+        );
+
+        let transit_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1' AND location_id = ?1",
+                params![transit],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            transit_qty, 50,
+            "transit location must hold 50 (NOT aggregated to 80), got {transit_qty}"
+        );
+
+        // Single canonical-only row for prod-2.
+        let prod2_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-2' AND location_id = ?1",
+                params![canonical],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(prod2_qty, 12, "prod-2 canonical row must hold 12");
+
+        // Verify NO aggregated single row at wrong total of 80 somewhere.
+        let total: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(qty), 0) FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            total, 80,
+            "sum across locations must equal 80, but row count must be 2 not 1"
+        );
+
+        let prod1_row_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stock_summary WHERE item_id = 'prod-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            prod1_row_count, 2,
+            "prod-1 must have exactly 2 stock_summary rows (one per location), got {prod1_row_count}"
+        );
+    }
+
     // ── Archive Stock Movements (ADR #6 Q4) ─────────────────────
 
     #[test]
@@ -2056,7 +2660,7 @@ mod tests {
         let conn = fresh();
         seed_everything(&conn);
         // Write a recent movement.
-        store(&conn).adjust_stock("DRINK-001", 5).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 5).unwrap();
 
         // All rows are recent — nothing to archive.
         let count = store(&conn).archive_stock_movements(90, 50).unwrap();
@@ -2125,7 +2729,7 @@ mod tests {
         )
         .unwrap();
         // New row via normal API (gets current timestamp).
-        s.adjust_stock("DRINK-001", 5).unwrap();
+        adjust_stock(&s, &conn, "DRINK-001", 5).unwrap();
 
         let count = s.archive_stock_movements(30, 50).unwrap();
         assert_eq!(count, 1, "one item group archived");
@@ -2271,7 +2875,7 @@ mod tests {
 
         // Migration backfill ran against empty inventory, so stock_summary starts empty.
         // After the first adjust_stock call, the summary row is created.
-        store(&conn).adjust_stock("DRINK-001", 20).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", 20).unwrap();
         let qty: i64 = conn
             .query_row(
                 "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
@@ -2286,7 +2890,7 @@ mod tests {
         );
 
         // Second adjustment updates the summary.
-        store(&conn).adjust_stock("DRINK-001", -10).unwrap();
+        adjust_stock(&store(&conn), &conn, "DRINK-001", -10).unwrap();
         let qty2: i64 = conn
             .query_row(
                 "SELECT qty FROM stock_summary WHERE item_id = 'prod-1'",
@@ -2295,5 +2899,256 @@ mod tests {
             )
             .unwrap();
         assert_eq!(qty2, 60);
+    }
+
+    // ── ADR-19 §15 criterion 19-2: per-location stock adjustment core API ──
+
+    /// `adjust_stock_at_location_with_reason` deducts exact available qty to zero
+    /// without returning the `InsufficientStockAtLocation` variant.
+    /// (ADR-19 §16.2 — `adjust_stock_at_location_with_reason_deducts_to_zero`.)
+    #[test]
+    fn adjust_stock_at_location_with_reason_deducts_to_zero() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        // DRINK-001 seeded at qty=50 by `seed_everything`.
+        let tx = conn.unchecked_transaction().unwrap();
+        let new_qty = s
+            .adjust_stock_at_location_with_reason(
+                &tx,
+                "DRINK-001",
+                -50,
+                &loc,
+                Some("sale"),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(new_qty, 0, "deducting exact qty should leave 0 stock");
+        tx.commit().unwrap();
+
+        let product_id = s.product_id_by_sku("DRINK-001").unwrap().unwrap();
+        let summary_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![product_id, loc.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            summary_qty, 0,
+            "stock_summary row should reflect on-disk post-update qty"
+        );
+    }
+
+    /// `adjust_stock_at_location_with_reason` over-deducting returns
+    /// `CoreError::InsufficientStockAtLocation` with the original available qty.
+    /// (ADR-19 §16.2 — `adjust_stock_at_location_with_reason_insufficient_qty_errors`.)
+    #[test]
+    fn adjust_stock_at_location_with_reason_insufficient_qty_errors() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let tx = conn.unchecked_transaction().unwrap();
+        let err = s
+            .adjust_stock_at_location_with_reason(
+                &tx,
+                "DRINK-001",
+                -100,
+                &loc,
+                Some("sale"),
+                None,
+                None,
+                None,
+            )
+            .unwrap_err();
+        tx.rollback().unwrap();
+
+        match err {
+            CoreError::InsufficientStockAtLocation {
+                sku,
+                requested_delta,
+                available_qty,
+                ..
+            } => {
+                assert_eq!(sku, "DRINK-001");
+                assert_eq!(requested_delta, -100);
+                assert_eq!(
+                    available_qty, 50,
+                    "DRINK-001 is seeded at qty=50 by seed_everything"
+                );
+            }
+            other => panic!("expected InsufficientStockAtLocation, got {other:?}"),
+        }
+    }
+
+    // `adjust_stock_at_location_with_reason` with positive delta credits the
+    // location from zero — covers the restock path used by purchase-order
+    // receive + manual restock flows (ADR-19 §3.2 + §6 sale-void inverse).
+    // ── adjust_stock_batch tests (ADR-19 §3) ──────────────────
+
+    /// ADR-19 §16.2: empty batch is a no-op.
+    #[test]
+    fn adjust_stock_batch_empty_batch_returns_ok() {
+        let conn = fresh();
+        seed_everything(&conn);
+        seed_for_canonical_test(&conn);
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_batch(&tx, &[], Some("sale"), None, None, None)
+            .unwrap();
+        tx.commit().unwrap();
+    }
+
+    /// ADR-19 §16.2: single deduction against sufficient stock.
+    #[test]
+    fn adjust_stock_batch_single_deduction_succeeds() {
+        let conn = fresh();
+        seed_everything(&conn);
+        seed_for_canonical_test(&conn);
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_batch(
+            &tx,
+            &[crate::sale_deduction::StockDeduction {
+                sku: "DRINK-001".into(),
+                location_id: crate::inventory::LocationId::from(
+                    crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+                ),
+                delta: -5,
+            }],
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+        let qty = s.get_stock("prod-1").unwrap();
+        assert_eq!(qty, 45);
+    }
+
+    /// ADR-19 §16.2: split deduction across two locations succeeds.
+    #[test]
+    fn adjust_stock_batch_split_deduction_succeeds() {
+        let conn = fresh();
+        seed_everything(&conn);
+        seed_for_canonical_test(&conn);
+        // Create a second location so we can split.
+        conn.execute_batch(
+            "INSERT INTO inventory_locations (id, name, type) VALUES ('loc-wh-a', 'WH A', 'warehouse');
+             INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-1', 'loc-wh-a', 100);",
+        )
+        .unwrap();
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_batch(
+            &tx,
+            &[
+                crate::sale_deduction::StockDeduction {
+                    sku: "DRINK-001".into(),
+                    location_id: crate::inventory::LocationId::from(
+                        crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+                    ),
+                    delta: -10,
+                },
+                crate::sale_deduction::StockDeduction {
+                    sku: "DRINK-001".into(),
+                    location_id: crate::inventory::LocationId::from("loc-wh-a"),
+                    delta: -20,
+                },
+            ],
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+        // Stock at canonical default: 50 - 10 = 40
+        let default_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1' AND location_id = ?1",
+                rusqlite::params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(default_qty, 40);
+        // Stock at WH A: 100 - 20 = 80
+        let wh_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-1' AND location_id = 'loc-wh-a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(wh_qty, 80);
+    }
+
+    /// ADR-19 §16.2: insufficient stock at one location errors on first shortfall.
+    #[test]
+    fn adjust_stock_batch_insufficient_stock_errors() {
+        let conn = fresh();
+        seed_everything(&conn);
+        seed_for_canonical_test(&conn);
+        let s = store(&conn);
+        let tx = conn.unchecked_transaction().unwrap();
+        let err = s
+            .adjust_stock_batch(
+                &tx,
+                &[crate::sale_deduction::StockDeduction {
+                    sku: "DRINK-001".into(),
+                    location_id: crate::inventory::LocationId::from(
+                        crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+                    ),
+                    delta: -999,
+                }],
+                Some("sale"),
+                None,
+                None,
+                None,
+            )
+            .unwrap_err();
+        assert!(matches!(err, CoreError::InsufficientStockAtLocation { .. }));
+        // Transaction should be rolled back — stock unchanged.
+        tx.rollback().unwrap();
+        let qty = s.get_stock("prod-1").unwrap();
+        assert_eq!(qty, 50);
+    }
+
+    #[test]
+    fn adjust_stock_at_location_with_reason_credits_positive_delta() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        // DRINK-002 is seeded with no inventory row (qty=0).
+        let tx = conn.unchecked_transaction().unwrap();
+        let new_qty = s
+            .adjust_stock_at_location_with_reason(
+                &tx,
+                "DRINK-002",
+                25,
+                &loc,
+                Some("restock"),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            new_qty, 25,
+            "restocking into an empty location should yield the credited qty"
+        );
+        tx.commit().unwrap();
     }
 }

@@ -295,7 +295,7 @@
 }
 
 .sales-history-sort-arrow {
-  font-size: 0.6875rem;
+  font-size: var(--text-xs);
   line-height: 1;
   opacity: 0.8;
 }
@@ -323,7 +323,7 @@
 .sales-history-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--color-bg-overlay);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   will-change: backdrop-filter;
@@ -389,6 +389,7 @@
 }
 
 .sales-history-modal {
+  position: relative;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-xl);
   width: 90%;

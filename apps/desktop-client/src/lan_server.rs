@@ -22,15 +22,10 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use crate::lan_server::LanEventForwarder;
+//! ```no_run
+//! use oz_pos_app_lib::lan_server::LanEventForwarder;
 //!
 //! let forwarder = LanEventForwarder::new();
-//! tauri::async_runtime::spawn(forwarder.clone().run());
-//!
-//! let handle = forwarder.handle();
-//! bus.subscribe("sale.completed", Box::new(handle.sale_completed_handler()));
-//! bus.subscribe("order.course_fired", Box::new(handle.course_fired_handler()));
 //! ```
 
 use std::collections::HashMap;

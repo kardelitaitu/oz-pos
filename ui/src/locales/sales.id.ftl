@@ -16,6 +16,25 @@ sales-report-export-csv = Ekspor CSV
 sales-report-export-pdf = Ekspor PDF
 
 pos-title = Terminal POS
+# ── Shortfall Resolution ──
+shortfall-dialog-aria =
+    .aria-label = Resolusi stok tidak mencukupi
+shortfall-title = Stok Tidak Mencukupi
+shortfall-description = Beberapa item tidak memiliki stok yang cukup di lokasi utama. Pilih sumber alternatif di bawah.
+shortfall-wanted = Dibutuhkan
+shortfall-available = Tersedia
+shortfall-alternatives-label = Lokasi alternatif:
+shortfall-alt-available = tersedia
+shortfall-split-qty-aria =
+    .aria-label = Jumlah dari lokasi ini
+shortfall-simple-mode = Gunakan satu lokasi
+shortfall-split-mode = Bagi antar lokasi
+shortfall-no-alternatives = Tidak ada lokasi alternatif dengan stok tersedia.
+shortfall-negative-override = Izinkan stok negatif (Override PIN Manajer)
+shortfall-warehouse-warning = ⚠ Pemenuhan gudang mungkin dikenakan biaya pengiriman.
+shortfall-cancel-btn = Batalkan Penjualan
+shortfall-confirm-btn = Konfirmasi &amp; Lanjutkan
+
 pos-scan-barcode = Pindai Barcode
 pos-search-product = Cari Produk…
 pos-add-to-cart = Tambah ke Keranjang
@@ -35,6 +54,9 @@ pos-item-removed = Item dihapus
 pos-cart-remove = Hapus
 pos-cart-title = Penjualan Saat Ini
 pos-cart-panel-title = Penjualan Saat Ini
+pos-cart-deducting-label = Mengurangkan: { $name }
+pos-cart-deduction-badge-aria = Mengurangkan dari { $name }
+pos-cart-unbound-error = Keranjang tidak memiliki lokasi pengurangan — tidak dapat menambahkan item
 pos-cart-lock = Kunci
 pos-cart-subtotal = Subtotal
 pos-cart-discount-label = Diskon ({ $label })
@@ -89,6 +111,9 @@ pos-shift-notes = Catatan
 pos-shift-summary-done = Selesai
 
 payment-title = Pembayaran
+payment-table-number =
+    .aria-label = Nomor meja
+    Meja { $number }
 payment-cash = Tunai
 payment-card = Kartu
 payment-other = Lainnya

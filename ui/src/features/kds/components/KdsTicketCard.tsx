@@ -10,6 +10,10 @@ export interface KdsTicketCardProps {
   order: KdsOrder;
   /** Called when the ticket is tapped to advance to the next status. */
   onAdvance: (order: KdsOrder) => void;
+  /** Whether to show the order number (#123). */
+  showOrderId?: boolean;
+  /** Whether to show the table number. */
+  showTableNumber?: boolean;
 }
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -18,7 +22,7 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
  * KdsTicketCard renders a single KDS ticket with SLA aging indicators
  * and plays an audio alert when the ticket enters the red threshold.
  */
-export function KdsTicketCard({ order, onAdvance }: KdsTicketCardProps) {
+export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, display } = useTicketSla(order.received_at);
   const { playAlert } = useSound();
@@ -46,7 +50,12 @@ export function KdsTicketCard({ order, onAdvance }: KdsTicketCardProps) {
       aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA, ${display}`}
     >
       <div className="kds-ticket-header">
-        <span className="kds-ticket-number">#{order.display_number}</span>
+        <span className="kds-ticket-id-group">
+          {showOrderId && <span className="kds-ticket-number">#{order.display_number}</span>}
+          {showTableNumber && !!((order as unknown as Record<string, unknown>)['table_number']) && (
+            <span className="kds-ticket-table">{(order as unknown as Record<string, unknown>)['table_number'] as string}</span>
+          )}
+        </span>
         <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
       </div>
       <span className="kds-ticket-items">{order.items_summary}</span>

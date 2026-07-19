@@ -38,6 +38,8 @@ pub enum CoreErrorKind {
     SubscriptionUpgradeRequired,
     /// System clock tampering detected (ADR #5).
     SystemClockTampered,
+    /// Stock insufficient at a specific location (ADR-19 §3.3).
+    InsufficientStockAtLocation,
 }
 
 /// Errors that can originate in `oz-core` domain logic.
@@ -113,6 +115,25 @@ pub enum CoreError {
     /// System clock rollback detected — possible tampering (ADR #5).
     #[error("system clock tampered: {0}")]
     SystemClockTampered(String),
+
+    /// Requested stock deduction exceeds available quantity at the specified
+    /// location (ADR-19 §3.3 — translated from SQLite `CHECK (qty >= 0)`
+    /// violation + Rust pre-check in
+    /// [`Store::adjust_stock_at_location_with_reason`](crate::db::Store::adjust_stock_at_location_with_reason)).
+    #[error(
+        "insufficient stock for SKU {sku} at location {location_id}: \
+         requested delta {requested_delta}, available {available_qty}"
+    )]
+    InsufficientStockAtLocation {
+        /// SKU of the product.
+        sku: String,
+        /// Location where the insufficiency occurred (FK to `inventory_locations.id`).
+        location_id: crate::inventory::LocationId,
+        /// The attempted adjustment amount (negative for deductions).
+        requested_delta: i64,
+        /// The currently available stock at the location.
+        available_qty: i64,
+    },
 }
 
 impl CoreError {
@@ -133,6 +154,9 @@ impl CoreError {
             }
             CoreError::SubscriptionUpgradeRequired(_) => CoreErrorKind::SubscriptionUpgradeRequired,
             CoreError::SystemClockTampered(_) => CoreErrorKind::SystemClockTampered,
+            CoreError::InsufficientStockAtLocation { .. } => {
+                CoreErrorKind::InsufficientStockAtLocation
+            }
         }
     }
 }

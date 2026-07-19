@@ -17,8 +17,7 @@ use crate::types::{PaymentMethod, PaymentReceipt, PaymentRequest, PaymentResult}
 /// A builder for [`MockPaymentProcessor`].
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```
 /// let proc = MockPaymentProcessor::builder()
 ///     .decline_next(true)
 ///     .build();

@@ -54,6 +54,7 @@ use tauri::Manager;
 /// registers all Tauri commands, and starts the event loop. Mobile
 /// builds use the same code via `#[cfg_attr(mobile, tauri::mobile_entry_point)]`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(deprecated)]
 pub fn run() {
     // Initialise tokio-console before any other tracing setup.
     platform_startup::console::init_console_subscriber();
@@ -242,10 +243,13 @@ pub fn run() {
             commands::pos::add_line_scoped,
             commands::pos::complete_sale,
             commands::pos::complete_sale_scoped,
+            commands::pos::complete_sale_with_resolved_shortfalls_scoped,
             commands::pos::set_cart_discount,
             commands::pos::set_cart_discount_scoped,
             commands::pos::override_line_price,
             commands::pos::override_line_price_scoped,
+            commands::pos::override_cart_deduction_location_scoped,
+            commands::pos::get_cart_deduction_location,
             commands::pos::list_active_carts,
             commands::pos::list_active_carts_scoped,
             commands::pos::get_active_cart,
@@ -262,6 +266,24 @@ pub fn run() {
             commands::pos::compute_cart_tax_scoped,
             commands::pos::delete_held_cart,
             commands::pos::delete_held_cart_scoped,
+            commands::inventory::create_inventory_location,
+            commands::inventory::list_inventory_locations,
+            commands::inventory::update_inventory_location,
+            commands::inventory::deactivate_inventory_location,
+            commands::inventory::set_workspace_inventory_locations,
+            commands::inventory::get_workspace_inventory_locations,
+            commands::inventory::start_inventory_shift,
+            commands::inventory::end_inventory_shift,
+            commands::inventory::get_active_inventory_shift,
+            commands::inventory::list_inventory_shifts,
+            commands::inventory::create_inventory_transaction,
+            commands::inventory::list_inventory_transactions,
+            commands::inventory::get_inventory_transaction,
+            commands::inventory::set_stock_threshold,
+            commands::inventory::get_stock_thresholds,
+            commands::inventory::delete_stock_threshold,
+            commands::inventory::finalize_sale,
+            commands::inventory::void_pending_sale,
             commands::plugins::reload_plugins,
             commands::kds::list_kds_orders,
             commands::kds::list_kds_orders_scoped,
@@ -318,6 +340,8 @@ pub fn run() {
             commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
             commands::products::list_products_scoped,
+            commands::products::list_warehouse_products,
+            commands::products::list_warehouse_products_scoped,
             commands::products::create_product,
             commands::products::create_product_scoped,
             commands::products::update_product,

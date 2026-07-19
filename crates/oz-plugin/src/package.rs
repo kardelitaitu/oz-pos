@@ -8,11 +8,14 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```no_run
+//! # use oz_plugin::package::OzpkArchive;
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let archive = OzpkArchive::open("path/to/plugin.ozpkg")?;
 //! let manifest = archive.manifest();
 //! let scripts = archive.scripts();
-//! ```
+//! # Ok(())
+//! # }
 
 use std::collections::HashMap;
 use std::io::Read;

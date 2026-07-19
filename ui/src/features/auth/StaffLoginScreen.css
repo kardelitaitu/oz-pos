@@ -131,6 +131,13 @@
   background: var(--color-bg-hover, var(--color-bg-input));
 }
 
+@media (pointer: coarse) {
+  .staff-login-close-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}
+
 /* ── Animations ──────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: no-preference) {
@@ -187,6 +194,22 @@
   @keyframes login-spin {
     to { transform: rotate(360deg); }
   }
+
+  /* ── Step dot pulse + slow blink ───────────── */
+  .staff-login-step-dot--active {
+    animation: login-step-dot-pulse var(--duration-3000) var(--ease-out) infinite;
+  }
+
+  @keyframes login-step-dot-pulse {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 3px var(--color-accent-dim);
+    }
+    50% {
+      opacity: 0.35;
+      box-shadow: 0 0 0 6px var(--color-accent-subtle);
+    }
+  }
 }
 
 /* ── Logo area ───────────────────────────────────────────────────── */
@@ -212,7 +235,6 @@
   object-fit: contain;
 }
 
-/* Small logo + store name for the PIN step */
 .staff-login-logo--small .staff-login-logo-img {
   width: clamp(48px, 10vw, 72px);
   height: clamp(48px, 10vw, 72px);
@@ -222,15 +244,6 @@
 .staff-login-logo--small svg {
   width: clamp(40px, 8vw, 56px);
   height: clamp(40px, 8vw, 56px);
-}
-
-.staff-login-store-name {
-  margin: 0;
-  font-size: clamp(var(--text-base), 3vw, var(--text-lg));
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-fg);
-  text-align: center;
-  letter-spacing: var(--tracking-tight);
 }
 
 /* ── Username form ───────────────────────────────────────────────── */
@@ -359,8 +372,11 @@
   align-items: center;
 }
 
-.staff-login-pin-wrap:focus-visible,
 .staff-login-pin-wrap:focus-visible {
+  /* The PIN pad wrapper is focused programmatically for keyboard capture.
+     Visual feedback comes from the PIN dots and keypad interactions —
+     no need for an additional focus ring on the container itself. */
+  outline: none;
 }
 
 /* ── PIN dots ────────────────────────────────────────────────────── */
@@ -525,7 +541,7 @@
   width: clamp(20px, 5vw, 32px);
   height: 2px;
   background: var(--color-border);
-  border-radius: 1px;
+  border-radius: var(--radius-sm);
   transition: background var(--duration-200) var(--ease-out);
 }
 
@@ -569,7 +585,7 @@
 }
 
 .staff-login-footer-copyright {
-  font-size: clamp(10px, 1.3vw, 10px);
+  font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   opacity: 0.7;
 }

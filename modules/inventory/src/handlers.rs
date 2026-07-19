@@ -21,6 +21,9 @@ use tracing::{error, info};
 /// composite item itself. If no recipe exists, the handler falls back
 /// to deducting the sold product's own stock directly.
 ///
+/// Non-inventory product types (e.g. `service`) are silently skipped —
+/// they have no stock to deduct.
+///
 /// If a product is not found by SKU, the handler logs a warning
 /// and continues (the product may be a non-inventory item).
 #[derive(Debug)]
@@ -39,6 +42,7 @@ impl InventoryStockHandler {
     /// If the product has a recipe, deduct each ingredient by
     /// `qty_sold × quantity_required`. Otherwise, deduct the
     /// product itself.
+    #[allow(deprecated)]
     fn handle_line(&self, store: &Store<'_>, sku: &str, qty: i64) {
         // Look up the product ID by SKU.
         let product_id = match store.product_id_by_sku(sku) {
@@ -52,6 +56,18 @@ impl InventoryStockHandler {
                 return;
             }
         };
+
+        // Non-inventory product types (service, etc.) have no stock — skip.
+        if let Ok(Some(ref pt)) = store.product_type_by_id(&product_id)
+            && let Some(product_type) = oz_core::ProductType::parse_str(pt)
+            && !product_type.tracks_inventory()
+        {
+            info!(
+                sku,
+                "inventory handler: skipping non-inventory product — no stock to deduct"
+            );
+            return;
+        }
 
         // Check if this product has a recipe (BOM ingredients).
         let ingredients = match store.get_recipe_ingredients(&product_id) {
@@ -442,6 +458,40 @@ mod tests {
         let store = Store::new(&conn);
         let cheese_id = store.product_id_by_sku("CHEESE").unwrap().unwrap();
         assert_eq!(store.get_stock(&cheese_id).unwrap(), 198); // 200 - 2 (1 burger * 2 cheese)
+    }
+
+    #[test]
+    fn handler_skips_service_products() {
+        let db = fresh_db();
+        {
+            let conn = db.lock().unwrap();
+            // Create a service product (no inventory row needed).
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, created_at, updated_at)
+                 VALUES ('svc-1', 'CARWASH', 'Car Wash', 5000, 'USD', 'service', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+            ).unwrap();
+        }
+
+        let handler = InventoryStockHandler::new(db.clone());
+
+        let event = SaleCompleted {
+            sale_id: "sale-svc-1".into(),
+            store_id: None,
+            line_items: vec![oz_core::events::SaleCompletedLine {
+                sku: "CARWASH".into(),
+                qty: 1,
+                unit_price_minor: 5000,
+                tax_minor: 0,
+                tax_rate_id: None,
+            }],
+            total_minor: 5000,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        // Should succeed without error — service products are skipped silently.
+        let result = handler.handle(&event);
+        assert!(result.is_ok());
     }
 
     #[test]

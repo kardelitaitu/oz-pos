@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: oz-lua | status: SAFE | lint: CLEAN
+findings: unsafe impl Send + Sync for LuaRuntime (wraps raw *mut lua_State). SAFETY comment present — always behind Mutex, serialized access on Tokio thread pool. No other unsafe code.
+next: none | perf: N/A
+*/
+
 //! Embedded Lua scripting runtime for OZ-POS.
 //!
 //! `oz-lua` lets merchants customize business rules, promotions, and

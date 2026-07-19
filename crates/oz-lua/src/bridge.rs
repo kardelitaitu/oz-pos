@@ -13,8 +13,7 @@
 //! ```
 //!
 //! # Example (Rust)
-//!
-//! ```ignore
+//!    //! ```no_run
 //! let bridge = LuaEventBridge::new();
 //! let lua = LuaRuntime::new()?;
 //!

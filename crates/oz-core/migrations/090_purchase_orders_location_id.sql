@@ -1,0 +1,34 @@
+-- 090_purchase_orders_location_id.sql
+-- ADR #18 §8: Purchase Order Receiving Flow — link purchase_orders rows
+-- to the inventory location the goods will be received into.
+--
+-- Per ADR §8 verbatim:
+--
+--   ALTER TABLE purchase_orders ADD COLUMN location_id TEXT
+--       REFERENCES inventory_locations(id);
+--
+-- Adopting the same pattern as migrations 079, 080, 082, 085: a
+-- NULLABLE column with NO DEFAULT so existing pre-§8 rows keep valid
+-- NULL semantics ("PO not yet associated with a receiving location").
+--
+-- Why nullable (NOT NULL with a canonical default would be wrong here):
+--
+--   1. PO drafts may be created before a receiving location is decided
+--      (e.g. "purchase request", "incoming shipment pending routing").
+--      The §8 receive flow `adjust_stock_at_location_with_reason(sku, +qty,
+--      location_id, 'purchase-order', ...)` REQUIRES a non-null location_id
+--      at receive time — that constraint lives in Rust, not in the column
+--      default.
+--
+--   2. Legacy single-location deployments import as NULL => the
+--      application-layer resolver at receive time fills in the canonical
+--      default-location UUID transparently from migration 078.
+--
+--   3. Mirroring the migration 079/080 philosophy: existing rows are
+--      pre-§8 facts, NULL means "not yet decided", not "lost provenance".
+--
+-- ON DELETE RESTRICT enforces the §2 / §5 invariant: a PO record cannot
+-- outlive its receiving location via hard-delete.
+
+ALTER TABLE purchase_orders ADD COLUMN location_id TEXT
+    REFERENCES inventory_locations(id) ON DELETE RESTRICT;

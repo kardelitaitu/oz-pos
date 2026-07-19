@@ -7,13 +7,16 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```no_run
+//! # use oz_plugin::db::PluginDb;
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let conn = rusqlite::Connection::open_in_memory()?;
-//! let db = PluginDb::new(conn, "my-plugin")?;
+//! let db = PluginDb::new(conn, "my-plugin");
 //! db.exec("CREATE TABLE plugin_my_plugin_items (id INTEGER PRIMARY KEY)")?;
 //! db.exec("INSERT INTO plugin_my_plugin_items VALUES (1)")?;
 //! let result = db.query("SELECT * FROM plugin_my_plugin_items")?;
-//! ```
+//! # Ok(())
+//! # }
 
 use std::sync::{Arc, Mutex};
 

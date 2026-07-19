@@ -98,7 +98,7 @@
 
 .ws-particle {
   position: absolute;
-  bottom: -0.625rem;
+  bottom: -0.625rem; /* ribbon offset — sub-token value */ /* design exception: particle positioning, dynamic per nth-child */
   width: 0.25rem;
   height: 0.25rem;
   background: var(--ws-accent, var(--color-accent));
@@ -116,8 +116,8 @@
 
 .ws-particle:nth-child(2) {
   left: 25%;
-  width: 0.3125rem;
-  height: 0.3125rem;
+  width: var(--space-1_5);
+  height: var(--space-1_5);
   animation-duration: 22s;
   animation-delay: 2s;
 }
@@ -496,7 +496,7 @@
 .workspace-card-badge {
   display: inline-block;
   padding: 0 var(--space-2);
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-danger-fg);
   background: var(--color-danger);
@@ -635,7 +635,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1_5);
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   color: var(--color-fg-secondary);
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.3px;
@@ -934,7 +934,7 @@
 }
 
 .workspace-home-user-role {
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.3px;
@@ -943,7 +943,7 @@
 .role-badge--owner   { color: var(--color-warning); }
 .role-badge--manager { color: var(--color-info); }
 .role-badge--cashier { color: var(--color-success); }
-.role-badge--kitchen { color: #a855f7; }
+.role-badge--kitchen {  color: var(--color-link-visited, #a855f7); } /* design exception: semantic workspace accent color */
 .role-badge--default { color: var(--color-fg-tertiary); }
 
 /* ═══════════════════════════════════════════════════════════════════

@@ -13,6 +13,9 @@ sale-pay-button = Pay
 sale-pay-button-aria = Charge the customer for the current cart
 pos-title = POS Terminal
 pos-cart-panel-title = Current Sale
+pos-cart-deducting-label = Deducting: { $name }
+pos-cart-deduction-badge-aria = Deducting from { $name }
+pos-cart-unbound-error = Cart has no deduction location — cannot add items
 pos-cart-empty = Cart is empty
 pos-cart-empty-subtitle = Tap a menu item to start the order
 pos-cart-total = Total
@@ -39,6 +42,9 @@ pos-scanner-error = Scanner error: { $detail }
 payment-dialog-aria =
     .aria-label = Payment
 payment-title = Complete Order
+payment-table-number =
+    .aria-label = Table number
+    Table { $number }
 payment-close-aria =
     .aria-label = Cancel payment
 payment-done-title = Sale Complete
@@ -121,6 +127,25 @@ payment-customer-search-heading = Select Customer
 payment-customer-search-loading = Loading…
 payment-customer-search-empty = No customers found
 payment-complete = Complete
+
+# ── Stock Shortfall Dialog ──
+shortfall-dialog-aria =
+    .aria-label = Insufficient stock resolution
+shortfall-title = Insufficient Stock
+shortfall-description = Some items don&apos;t have enough stock at the primary location. Choose alternative sources below.
+shortfall-wanted = Wanted
+shortfall-available = Available
+shortfall-alternatives-label = Alternative locations:
+shortfall-alt-available = available
+shortfall-split-qty-aria =
+    .aria-label = Quantity from this location
+shortfall-simple-mode = Use single location
+shortfall-split-mode = Split across locations
+shortfall-no-alternatives = No alternative locations with stock available.
+shortfall-negative-override = Allow negative stock (Manager PIN override)
+shortfall-warehouse-warning = ⚠ Warehouse fulfillment may incur delivery charges.
+shortfall-cancel-btn = Cancel Sale
+shortfall-confirm-btn = Confirm &amp; Continue
 
 # Sales History
 sales-history-title = Sales History

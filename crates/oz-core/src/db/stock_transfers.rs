@@ -34,19 +34,34 @@ impl Store<'_> {
         let short = &id[..8];
         let transfer_number = format!("TRF-{ts}-{short}");
 
+        // ADR-18 §13-36 canonical default-location UUID (see
+        // `crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID` for the
+        // frozen-invariant rationale). Migration 081's
+        // `source_location_id` and `destination_location_id` columns are
+        // NOT NULL with this canonical UUID as DEFAULT. SQLite does NOT
+        // fall back to DEFAULT when VALUES provides an explicit NULL —
+        // a NOT NULL constraint violation fires instead. We resolve the
+        // None → canonical mapping at the Rust layer so the bound value
+        // is always a non-NULL FK string, while keeping the function
+        // signature ergonomic (Option<&str> for callers that don't care
+        // to specify a location).
+        let canonical_default_loc = crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let source_loc = source_location.unwrap_or(canonical_default_loc);
+        let destination_loc = destination_location.unwrap_or(canonical_default_loc);
+
         let tx = self.conn.unchecked_transaction()?;
 
         tx.execute(
             "INSERT INTO stock_transfers
-                (id, transfer_number, status, source_location, destination_location,
+                (id, transfer_number, status, source_location_id, destination_location_id,
                  source_terminal_id, destination_terminal_id, notes, created_by,
                  created_at, updated_at)
              VALUES (?1, ?2, 'draft', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 id,
                 transfer_number,
-                source_location,
-                destination_location,
+                source_loc,
+                destination_loc,
                 source_terminal_id,
                 destination_terminal_id,
                 notes,
@@ -88,9 +103,15 @@ impl Store<'_> {
     /// Get a single transfer by id (with lines populated via
     /// [`get_transfer_lines`]).
     pub fn get_transfer(&self, id: &str) -> Result<Option<StockTransfer>, CoreError> {
+        // ADR-18 §2d: read the FK columns (source_location_id, destination_location_id)
+        // introduced by migration 081's column rename (`source_location` →
+        // `source_location_old` audit + `source_location_id` FK). The domain
+        // field names `source_location`/`destination_location` are preserved
+        // for JSON contract backward compat — callers receive FK UUID strings.
         let mut stmt = self.conn.prepare(
             "SELECT id, transfer_number, status,
-                    source_location, destination_location,
+                    source_location_id AS source_location,
+                    destination_location_id AS destination_location,
                     source_terminal_id, destination_terminal_id,
                     notes, created_by, received_by,
                     created_at, sent_at, received_at, updated_at
@@ -123,9 +144,13 @@ impl Store<'_> {
 
     /// List all transfers, newest first.
     pub fn list_transfers(&self) -> Result<Vec<StockTransfer>, CoreError> {
+        // ADR-18 §2d: read the FK columns (source_location_id, destination_location_id)
+        // introduced by migration 081. Domain field names preserved via column
+        // aliasing; actual storage is FK UUID strings (NOT NULL DEFAULT canonical).
         let mut stmt = self.conn.prepare(
             "SELECT id, transfer_number, status,
-                    source_location, destination_location,
+                    source_location_id AS source_location,
+                    destination_location_id AS destination_location,
                     source_terminal_id, destination_terminal_id,
                     notes, created_by, received_by,
                     created_at, sent_at, received_at, updated_at

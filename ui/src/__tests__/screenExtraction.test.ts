@@ -120,6 +120,7 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'auth/StaffLoginScreen.tsx',
     css: ['auth/StaffLoginScreen.css'],
     dynamicClassPrefixes: ['staff-login-logo', 'staff-login-card'],
+    knownDynamicFragments: ['skeleton'],
   },
 
   // ── Audit ─────────────────────────────────────────────
@@ -150,6 +151,7 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css'],
     dynamicClassPrefixes: ['kds-column--', 'kds-ticket', 'kds-workspace'],
+    externalClasses: ['kds-empty'],
   },
 
   // ── Loyalty ───────────────────────────────────────────
@@ -180,6 +182,15 @@ const SCREENS: ScreenEntry[] = [
     name: 'SettingsPage',
     tsx: 'settings/SettingsPage.tsx',
     css: ['settings/SettingsPage.css'],
+    knownDynamicFragments: [
+      // Object-key strings inside template-literal interpolations that
+      // the static class-name parser falsely extracts as CSS classes.
+      'store-name',
+      'address',
+      'tax-id',
+      'settings-sync-token-actions',
+      'settings-sync-status-text',
+    ],
     externalClasses: [
       'card',
       'tab-list',
@@ -202,13 +213,11 @@ const SCREENS: ScreenEntry[] = [
       // SettingsPage.tsx, so the static parser can't extract them.
       'settings-btn-revert--hidden',
       'settings-save-dot--hidden',
-    ],
-    knownDynamicFragments: [
-      // Object-key strings inside template-literal interpolations that
-      // the static class-name parser falsely extracts as CSS classes.
-      'store-name',
-      'address',
-      'tax-id',
+      // Sync status classes used in SettingsPage.tsx
+      'settings-sync-dot--err',
+      'settings-sync-expiry-badge--good',
+      'settings-sync-expiry-badge--warn',
+      'settings-sync-expiry-badge--critical',
     ],
   },
   {

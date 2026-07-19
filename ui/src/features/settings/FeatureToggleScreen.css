@@ -140,7 +140,7 @@
 }
 
 .feature-toggle-group-icon {
-  font-size: 1.2em;
+  font-size: 1.2em; /* relative em unit — no --text-* token equivalent */
 }
 
 .feature-toggle-bulk-actions {
@@ -178,9 +178,9 @@
 }
 
 .feature-toggle-bulk-btn--disable:hover {
-  border-color: var(--color-danger, #ef4444);
-  color: var(--color-danger, #ef4444);
-  background: rgba(239, 68, 68, 0.08);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-danger-bg); /* semantic hover */
 }
 
 .feature-toggle-bulk-btn:disabled {
@@ -230,18 +230,16 @@
 
 /* ── Row flash animation ────────────────────────────────────────────
  * Brief background pulse on the toggled row to draw attention to
- * the change. Green flash for enabled, amber for disabled. */
-
-@keyframes flash-enabled {
-  0%, 100% { background-color: transparent; }
-  20% { background-color: rgba(34, 197, 94, 0.10); }
-  50% { background-color: rgba(34, 197, 94, 0.06); }
-}
-
-@keyframes flash-disabled {
-  0%, 100% { background-color: transparent; }
-  20% { background-color: rgba(245, 158, 11, 0.10); }
-  50% { background-color: rgba(245, 158, 11, 0.06); }
+ * the change. Green flash for enabled, amber for disabled. */  /* Design exception: animation-only flash colors, no token for opacity variants */
+  @keyframes flash-enabled {
+    0%, 100% { background-color: transparent; }
+    20% { background-color: rgba(34, 197, 94, 0.10); }
+    50% { background-color: rgba(34, 197, 94, 0.06); }
+}  /* Design exception: animation-only flash colors, no token for opacity variants */
+  @keyframes flash-disabled {
+    0%, 100% { background-color: transparent; }
+    20% { background-color: rgba(245, 158, 11, 0.10); }
+    50% { background-color: rgba(245, 158, 11, 0.06); }
 }
 
 .feature-toggle-item {
@@ -322,7 +320,7 @@
   cursor: pointer;
   inset: 0;
   background: var(--color-border-hover);
-  border-radius: 1.5rem;
+  border-radius: var(--radius-3xl);
   transition: background var(--duration-200) var(--ease-out);
 }
 
@@ -336,7 +334,7 @@
   background: var(--color-bg-elevated);
   border-radius: 50%;
   transition: transform var(--duration-200) var(--ease-out);
-  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
 .feature-toggle-switch input:checked + .feature-toggle-slider {
@@ -428,7 +426,7 @@
 
 [data-theme='dark'] .feature-toggle-slider::before {
   background: var(--color-bg-elevated);
-  box-shadow: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 [data-theme='dark'] .feature-toggle-item {

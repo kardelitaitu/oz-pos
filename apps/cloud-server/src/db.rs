@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: cloud-server | status: SAFE | lint: CLEAN
+findings: 6 unsafe blocks in #[cfg(test)] only — std::env::set_var/remove_var (Rust 2024 edition). SAFETY comments added 19-07-26.
+next: none | perf: N/A
+*/
+
 //! Database abstraction for the cloud server.
 //!
 //! Supports two backends determined by environment variables:
@@ -260,10 +267,15 @@ mod tests {
     #[tokio::test]
     async fn from_env_defaults_to_sqlite() {
         let _guard = ENV_LOCK.lock().await;
+        // SAFETY: env var mutations are serialized via ENV_LOCK (held by _guard)
+        // to prevent data races on the process-global environment. The Mutex guard
+        // ensures exclusive access; the environment is restored in reverse order.
         unsafe { std::env::set_var("DATABASE_URL", "") };
         unsafe { std::env::set_var("OZ_DB_PATH", ":memory:") };
         let pool = DbPool::from_env().await.unwrap();
         assert!(pool.is_sqlite());
+        // SAFETY: Same ENV_LOCK serialization as above. These restore env vars
+        // to their prior state (empty/unset) before the guard is released.
         unsafe { std::env::remove_var("DATABASE_URL") };
         unsafe { std::env::remove_var("OZ_DB_PATH") };
     }
@@ -271,8 +283,11 @@ mod tests {
     #[tokio::test]
     async fn from_env_detects_postgres_url() {
         let _guard = ENV_LOCK.lock().await;
+        // SAFETY: ENV_LOCK (held by _guard) serializes access to the process-global
+        // environment. The set_var is paired with a remove_var before the guard drops.
         unsafe { std::env::set_var("DATABASE_URL", "postgresql://localhost:5432/test") };
         let pool = DbPool::from_env().await;
+        // SAFETY: Restores the environment — see SAFETY note on set_var above.
         unsafe { std::env::remove_var("DATABASE_URL") };
         // Should attempt connection but fail
         assert!(pool.is_err());

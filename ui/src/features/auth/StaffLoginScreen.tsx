@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
-import { useOptionalBrand } from '@/contexts/BrandContext';
+import { useBrand } from '@/contexts/BrandContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import './StaffLoginScreen.css';
 
 // ── SVG icons ───────────────────────────────────────────────────────
@@ -91,10 +92,21 @@ type Step = 'username' | 'pin';
 /** Staff login screen — two-step authentication flow with username entry followed by PIN pad input and shake animation on error. */
 export default function StaffLoginScreen() {
   const { l10n } = useLocalization();
-  const { login, loading, error, clearError } = useAuth();
-  const brandSettings = useOptionalBrand();
-  const rawLogoPath = brandSettings?.logo_path || '/256x256.png';
-  const { resizedUrl, error: primaryLogoError } = useResizedLogo(rawLogoPath, 256);
+  const { login, loading: authLoading, error, clearError } = useAuth();
+  const { settings: brandSettings, loading: brandLoading } = useBrand();
+  // Convert local filesystem path to a Tauri-compatible asset URL.
+  const logoUrl = useMemo(() => {
+    if (brandLoading) return null;
+    const path = brandSettings?.logo_path;
+    if (!path) return null;
+    try {
+      return convertFileSrc(path);
+    } catch {
+      return path; // fallback — may show broken image but won't crash
+    }
+  }, [brandLoading, brandSettings?.logo_path]);
+
+  const { resizedUrl, error: primaryLogoError } = useResizedLogo(logoUrl, 256);
   const [fallbackSvgError, setFallbackSvgError] = useState(false);
   const { addToast } = useToast();
   const [step, setStep] = useState<Step>('username');
@@ -179,7 +191,7 @@ export default function StaffLoginScreen() {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (step !== 'pin') return;
-      if (loading) return;
+      if (authLoading) return;
 
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
@@ -196,7 +208,7 @@ export default function StaffLoginScreen() {
         if (pin.length >= 1 && !pinSubmitted.current) attemptLogin();
       }
     },
-    [step, loading, handlePinDigit, handlePinBackspace, handlePinClear, goBack, attemptLogin, pin.length],
+    [step, authLoading, handlePinDigit, handlePinBackspace, handlePinClear, goBack, attemptLogin, pin.length],
   );
 
   // ── Username handlers ────────────────────────────────────────
@@ -231,6 +243,13 @@ export default function StaffLoginScreen() {
     setUsername(e.target.value);
   }, []);
 
+  const handleUsernameKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setUsername('');
+    }
+  }, []);
+
   // ── Auto-submit when PIN reaches max length ──────────────────
 
   useEffect(() => {
@@ -238,14 +257,14 @@ export default function StaffLoginScreen() {
     if (pin.length === 1) {
       toastShownForError.current = null;
     }
-    if (pin.length === MAX_PIN_LENGTH && !loading && !pinSubmitted.current) {
+    if (pin.length === MAX_PIN_LENGTH && !authLoading && !pinSubmitted.current) {
       pinSubmitted.current = true;
       attemptLogin();
     }
     if (pin.length < MAX_PIN_LENGTH) {
       pinSubmitted.current = false;
     }
-  }, [pin, loading, attemptLogin]);
+  }, [pin, authLoading, attemptLogin]);
 
   // ── Focus on screen tap ──────────────────────────────────────
 
@@ -262,6 +281,16 @@ export default function StaffLoginScreen() {
   const renderLogo = (small = false) => {
     const logoClass = `staff-login-logo${small ? ' staff-login-logo--small' : ''}`;
     const storeName = brandSettings?.store_name || '';
+
+    // While brand settings are loading, show a skeleton placeholder
+    // so the logo doesn't flash between different images.
+    if (brandLoading) {
+      return (
+        <div className={logoClass}>
+          <div className="staff-login-logo skeleton" />
+        </div>
+      );
+    }
 
     return (
       <div className={logoClass}>
@@ -321,13 +350,12 @@ export default function StaffLoginScreen() {
                   type="button"
                   className="staff-login-pad-key"
                   onClick={() => handlePinDigit(digit)}
-                  aria-label={digit}
-                  disabled={loading}
-                >
-                  {digit}
-                </button>
-              </Localized>
-            ))}
+                  aria-label={digit}                      disabled={authLoading}
+                    >
+                      {digit}
+                    </button>
+                  </Localized>
+                ))}
           </div>
         ))}
         <div className="staff-login-pad-row">
@@ -337,7 +365,7 @@ export default function StaffLoginScreen() {
               className="staff-login-pad-key staff-login-pad-key--action"
               onClick={handlePinClear}
               aria-label="Clear"
-              disabled={loading || pin.length === 0}
+              disabled={authLoading || pin.length === 0}
             >
               <Localized id="staff-login-clear">Clear</Localized>
             </button>
@@ -348,7 +376,7 @@ export default function StaffLoginScreen() {
               className="staff-login-pad-key"
               onClick={() => handlePinDigit('0')}
               aria-label="0"
-              disabled={loading}
+              disabled={authLoading}
             >
               0
             </button>
@@ -359,7 +387,7 @@ export default function StaffLoginScreen() {
               className="staff-login-pad-key staff-login-pad-key--action"
               onClick={handlePinBackspace}
               aria-label="Backspace"
-              disabled={loading || pin.length === 0}
+              disabled={authLoading || pin.length === 0}
             >
               <BackspaceIcon />
             </button>
@@ -371,12 +399,25 @@ export default function StaffLoginScreen() {
 
   // ── Render ───────────────────────────────────────────────────
 
-  const storeName = brandSettings?.store_name || '';
-
   // Focus management: clicking anywhere refocuses the active input
-  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
+  const handleScreenKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === ' ') {
+        e.preventDefault();
+        handleScreenClick();
+      }
+    },
+    [handleScreenClick],
+  );
+
   return (
-    <div className="staff-login-screen" onClick={handleScreenClick}>
+    /* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- focus convenience, keyboard covered below */
+    <div
+      className="staff-login-screen"
+      onClick={handleScreenClick}
+      onKeyDown={handleScreenKeyDown}
+      tabIndex={-1}
+    >
       <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={cardRef}>
         {step === 'pin' && (
           <button
@@ -397,7 +438,6 @@ export default function StaffLoginScreen() {
           {step === 'username' && renderLogo()}
           {step === 'pin' && (
             <div className="staff-login-pin-top">
-              {storeName && <p className="staff-login-store-name">{storeName}</p>}
               {renderPinDots()}
             </div>
           )}
@@ -419,12 +459,13 @@ export default function StaffLoginScreen() {
                       placeholder="Username"
                       value={username}
                       onChange={handleUsernameChange}
+                      onKeyDown={handleUsernameKeyDown}
                       autoComplete="off"
                       autoCorrect="off"
                       spellCheck={false}
                       data-1p-ignore="true"
                       aria-label="Username"
-                      disabled={loading}
+                      disabled={authLoading}
                     />
                   </Localized>
                 </Localized>
@@ -485,7 +526,7 @@ export default function StaffLoginScreen() {
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.9</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.10</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

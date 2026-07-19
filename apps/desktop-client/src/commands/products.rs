@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
+use oz_core::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
+use oz_core::inventory_transaction::InventoryTransactionId;
 use oz_core::{Money, Store};
 
 use oz_core::events::{ProductCreated, StockAdjusted};
@@ -36,6 +38,8 @@ pub struct AdjustStockArgs {
 ///
 /// Positive `delta` restocks, negative `delta` removes stock.
 /// Returns the new quantity on success.
+#[deprecated(note = "use adjust_stock_scoped instead")]
+#[allow(deprecated)]
 #[command]
 pub async fn adjust_stock(
     args: AdjustStockArgs,
@@ -108,13 +112,25 @@ pub async fn adjust_stock_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = state.store_with_tid(&db, tid);
-        store.adjust_stock_with_reason(
+        let tx = db
+            .unchecked_transaction()
+            .map_err(|e| AppError::Internal(format!("starting tx: {e}")))?;
+        let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
+        let new_qty = store.adjust_stock_at_location_with_reason(
+            &tx,
             &args.sku,
             args.delta,
+            &loc,
             Some(&args.reason),
-            Some(&session.terminal_id),
-            Some(&session.user_id),
-        )?
+            Some(&InventoryTransactionId::new()),
+            Some(&oz_core::terminal::TerminalId::from(
+                session.terminal_id.as_str(),
+            )),
+            Some(&oz_core::user::UserId::from(session.user_id.clone())),
+        )?;
+        tx.commit()
+            .map_err(|e| AppError::Internal(format!("commit tx: {e}")))?;
+        new_qty
     };
 
     // Publish the StockAdjusted domain event.
@@ -211,11 +227,51 @@ pub async fn list_products_scoped(
     run_list_products(&db)
 }
 
+/// Fetch warehouse-tracked products only (excludes services).
+/// Used by the warehouse workspace to avoid showing non-inventory
+/// items like "car wash".
+#[command]
+pub async fn list_warehouse_products(
+    state: State<'_, AppState>,
+) -> Result<Vec<ProductDto>, AppError> {
+    let db = state.db.lock().await;
+    run_list_warehouse_products(&db)
+}
+
+/// Scoped variant: fetch warehouse-tracked products for the store
+/// resolved from a session token.
+#[command]
+pub async fn list_warehouse_products_scoped(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> Result<Vec<ProductDto>, AppError> {
+    let (_session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_list_warehouse_products(&db)
+}
+
 /// Business logic for listing products (extracted for testing).
 fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, AppError> {
     let store = Store::new(conn);
     let products = store.list_products()?;
+    map_products_to_dtos(&store, products)
+}
 
+/// Business logic for listing warehouse-tracked products only
+/// (excludes services like "car wash").
+fn run_list_warehouse_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, AppError> {
+    let store = Store::new(conn);
+    let products = store.list_warehouse_products()?;
+    map_products_to_dtos(&store, products)
+}
+
+/// Shared mapping from a vec of ProductWithDetails to ProductDto vec.
+fn map_products_to_dtos(
+    store: &Store<'_>,
+    products: Vec<oz_core::db::ProductWithDetails>,
+) -> Result<Vec<ProductDto>, AppError> {
     let dtos: Vec<ProductDto> = products
         .into_iter()
         .map(|pwd| {
@@ -242,7 +298,6 @@ fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, App
             }
         })
         .collect();
-
     Ok(dtos)
 }
 

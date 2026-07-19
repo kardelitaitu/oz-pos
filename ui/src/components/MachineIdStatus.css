@@ -1,14 +1,14 @@
 /* Machine ID chip — extends .connection-status base styles from ConnectionStatus.css */
 
 .machine-id-chip {
-  gap: 0.4rem;
+  gap: var(--space-1_5);
   font-family: var(--font-mono);
   letter-spacing: 0.01em;
   transition: background var(--duration-150), border-color var(--duration-150), box-shadow var(--duration-150);
 }
 .machine-id-value {
   letter-spacing: 0.06em;
-  font-size: 0.7rem;
+  font-size: var(--text-xs);
   max-width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -13,7 +13,7 @@ use foundation::Barcode;
 use crate::{Money, Sku};
 
 /// Product type classification that determines which workspace(s)
-/// a product appears in.
+/// a product appears in and how it behaves across the system.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProductType {
     /// Appears in Retail POS only (track_serial, weight scale, etc.).
@@ -26,6 +26,10 @@ pub enum ProductType {
     /// Appears in both workspaces.
     #[serde(rename = "both")]
     Both,
+    /// Non-inventory item sold at POS (e.g. "car wash", "delivery fee").
+    /// No stock tracking, no KDS routing, no warehouse visibility.
+    #[serde(rename = "service")]
+    Service,
 }
 
 impl ProductType {
@@ -36,6 +40,7 @@ impl ProductType {
             "retail" => Some(Self::Retail),
             "restaurant" => Some(Self::Restaurant),
             "both" => Some(Self::Both),
+            "service" => Some(Self::Service),
             _ => None,
         }
     }
@@ -46,6 +51,16 @@ impl ProductType {
             Self::Retail => "retail",
             Self::Restaurant => "restaurant",
             Self::Both => "both",
+            Self::Service => "service",
+        }
+    }
+
+    /// Whether this product type consumes inventory stock.
+    /// Services and other non-physical items return `false`.
+    pub fn tracks_inventory(&self) -> bool {
+        match self {
+            Self::Retail | Self::Restaurant | Self::Both => true,
+            Self::Service => false,
         }
     }
 }
@@ -307,6 +322,7 @@ mod tests {
             ("retail", ProductType::Retail),
             ("restaurant", ProductType::Restaurant),
             ("both", ProductType::Both),
+            ("service", ProductType::Service),
         ] {
             assert_eq!(ProductType::parse_str(s), Some(expected));
             assert_eq!(expected.as_str(), s);
@@ -326,6 +342,22 @@ mod tests {
     #[test]
     fn product_type_default_is_retail() {
         assert_eq!(ProductType::default(), ProductType::Retail);
+    }
+
+    #[test]
+    fn service_product_type_tracks_inventory_false() {
+        assert!(ProductType::Retail.tracks_inventory());
+        assert!(ProductType::Restaurant.tracks_inventory());
+        assert!(ProductType::Both.tracks_inventory());
+        assert!(!ProductType::Service.tracks_inventory());
+    }
+
+    #[test]
+    fn builder_sets_service_product_type() {
+        let p = Product::new("CARWASH", "Car Wash", test_price())
+            .with_product_type(ProductType::Service);
+        assert_eq!(p.product_type, ProductType::Service);
+        assert_eq!(p.product_type.as_str(), "service");
     }
 
     #[test]

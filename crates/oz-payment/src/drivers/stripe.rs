@@ -35,8 +35,7 @@ const STRIPE_API_BASE: &str = "https://api.stripe.com/v1";
 /// - **Card-present** payments (when constructed with `card_present: true`)
 ///
 /// # Example
-///
-/// ```ignore
+///    /// ```no_run
 /// use oz_payment::drivers::stripe::StripePaymentProcessor;
 /// use oz_payment::PaymentProcessor;
 ///

@@ -20,13 +20,13 @@
 }
 
 .kiosk-attract-title {
-  font-size: 4rem;
-  font-weight: 700;
+  font-size: var(--text-hero);
+  font-weight: var(--font-weight-bold);
   text-align: center;
 }
 
 .kiosk-attract-subtitle {
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   text-align: center;
 }
 
@@ -56,14 +56,14 @@
 }
 
 .kiosk-cat-chip {
-  padding: 0.75rem 1.5rem;
-  border-radius: 999px;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-full);
   border: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
-  font-size: 1rem;
+  font-size: var(--text-md);
   cursor: pointer;
   white-space: nowrap;
-  min-height: 3rem;
+  min-height: var(--space-12);
 }
 
 .kiosk-cat-chip.active {
@@ -104,10 +104,10 @@
 
 .kiosk-price-volatility-hint {
   position: absolute;
-  top: 0.375rem;
-  left: 0.375rem;
-  width: 0.625rem;
-  height: 0.625rem;
+  top: var(--space-1_5);
+  left: var(--space-1_5);
+  width: var(--space-2_5);
+  height: var(--space-2_5);
   border-radius: 50%;
   background: var(--color-warning, #eab308);
   z-index: 1;
@@ -124,14 +124,14 @@
 }
 
 .kiosk-product-name {
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
   text-align: center;
 }
 
 .kiosk-product-price {
-  font-size: 1.375rem;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
   color: var(--color-accent);
   margin-top: var(--space-1);
 }
@@ -161,11 +161,11 @@
 
 .kiosk-cart-name {
   flex: 1;
-  font-size: 1rem;
+  font-size: var(--text-md);
 }
 
 .kiosk-cart-price {
-  font-size: 1rem;
+  font-size: var(--text-md);
   font-weight: 700;
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -178,20 +178,20 @@
 }
 
 .kiosk-cart-controls button {
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--space-11);
+  height: var(--space-11);
   border-radius: 50%;
   border: 1px solid var(--color-border);
   background: var(--color-bg-secondary);
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   cursor: pointer;
 }
 
 .kiosk-cart-total {
   display: flex;
   justify-content: space-between;
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
   padding: var(--space-3) 0;
   border-top: 2px solid var(--color-border);
 }
@@ -202,10 +202,10 @@
   color: var(--color-accent-fg);
   border: none;
   border-radius: var(--radius-md);
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
-  min-height: 3.5rem;
+  min-height: var(--space-14);
 }
 
 /* Checkout screen */
@@ -225,7 +225,7 @@
 .kiosk-checkout-row {
   display: flex;
   justify-content: space-between;
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--color-border);
 }
@@ -233,8 +233,8 @@
 .kiosk-checkout-total {
   display: flex;
   justify-content: space-between;
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
   padding: var(--space-3) 0;
   border-top: 2px solid var(--color-border);
 }
@@ -245,26 +245,26 @@
   color: var(--color-accent-fg);
   border: none;
   border-radius: var(--radius-md);
-  font-size: 1.5rem;
+  font-size: var(--text-2xl);
   font-weight: var(--font-weight-bold);
   cursor: pointer;
-  min-height: 4rem;
+  min-height: var(--space-16);
   margin-bottom: var(--space-2);
 }
 
 .kiosk-checkout-back {
-  padding: 1rem;
+  padding: var(--space-4);
   background: var(--color-bg-secondary);
   color: var(--color-fg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   cursor: pointer;
-  min-height: 3.5rem;
+  min-height: var(--space-14);
 }
 
 .kiosk-stock-badge {
-  font-size: 0.875rem;
+  font-size: var(--text-base);
   color: var(--color-danger);
   margin-top: var(--space-1);
 }

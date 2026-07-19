@@ -137,6 +137,7 @@
  * is updated via poll or manual refresh. */
 
 @media (prefers-reduced-motion: no-preference) {
+  /* Design exception: animation-only flash opacity variants */
   @keyframes license-flash-updated {
     0%, 100% { background-color: transparent; }
     20% { background-color: rgba(34, 197, 94, 0.10); }
@@ -147,6 +148,7 @@
     animation: license-flash-updated var(--duration-1200) var(--ease-out) forwards;
   }
 
+  /* Design exception: animation-only flash opacity variants */
   @keyframes license-section-flash {
     0%, 100% { background-color: transparent; }
     20% { background-color: rgba(34, 197, 94, 0.08); }
@@ -208,8 +210,8 @@
 .settings-license-value--tier {
   display: inline-flex;
   align-items: center;
-  padding: 0.125rem 0.625rem;
-  border-radius: 0.75rem;
+  padding: var(--space-0_5) var(--space-2_5);
+  border-radius: var(--radius-xl);
   font-weight: 600;
   font-size: var(--text-xs);
   text-transform: uppercase;
@@ -221,27 +223,27 @@
 
 .settings-license-value--tier:hover {
   opacity: 0.85;
-  box-shadow: inset 0 0 0 1px currentColor;
+  box-shadow: inset 0 0 0 1px currentColor; /* functional border */
 }
 
 .settings-license-value--tier-free {
-  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in srgb, var(--color-fg-tertiary) 12%, transparent);
   color: var(--color-fg-secondary);
 }
 
 .settings-license-value--tier-pro {
-  background: rgba(59, 130, 246, 0.12);
-  color: rgb(59, 130, 246);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-info);
 }
 
 .settings-license-value--tier-premium {
-  background: rgba(139, 92, 246, 0.12);
-  color: rgb(139, 92, 246);
+  background: color-mix(in srgb, var(--color-link-visited, #8b5cf6) 12%, transparent);
+  color: var(--color-link-visited, #8b5cf6);
 }
 
 .settings-license-value--tier-enterprise {
-  background: rgba(16, 185, 129, 0.12);
-  color: rgb(16, 185, 129);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
 }
 
 /* ── Server status sub-section ──────────────────────────── */

@@ -285,6 +285,7 @@ impl Store<'_> {
     }
 
     /// Mark a purchase order as received and adjust inventory quantities.
+    #[allow(deprecated)]
     pub fn receive_purchase_order(&self, id: &str) -> Result<PurchaseOrderWithLines, CoreError> {
         let mut po = self.get_purchase_order(id)?.ok_or(CoreError::NotFound {
             entity: "purchase_order",

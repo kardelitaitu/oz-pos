@@ -145,6 +145,41 @@
   border-radius: var(--radius-full);
 }
 
+/* ADR-19 §17: locked deduction location badge ──────── */
+
+.pos-cart-deduction-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-0_5) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-warning-fg, #856404);
+  background: var(--color-warning-bg, #fff3cd);
+  border: 1px solid var(--color-warning-border, #ffc107);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  line-height: 1.4;
+  transition: box-shadow 0.15s ease;
+}
+
+.pos-cart-deduction-badge:hover,
+.pos-cart-deduction-badge:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-warning-border, #ffc107);
+  outline: none;
+}
+
+.pos-cart-deduction-badge svg {
+  flex-shrink: 0;
+}
+
+.pos-cart-deduction-override {
+  color: var(--color-danger-fg, #dc3545);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ── Cart lines list ────────────────────────────────── */
 
 .pos-cart-lines {
@@ -167,7 +202,7 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  box-shadow: var(--shadow-md);
   z-index: 2;
   font-size: var(--text-sm);
   color: var(--color-fg);
@@ -387,8 +422,8 @@
   justify-content: center;
   min-width: 1.125rem;
   height: 1.125rem;
-  padding: 0 0.3125rem;
-  font-size: 0.625rem;
+  padding: 0 var(--space-1_5);
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   color: var(--color-accent-fg);
   background: var(--color-accent);

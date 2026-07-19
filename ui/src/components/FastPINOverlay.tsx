@@ -91,6 +91,8 @@ export interface FastPINOverlayProps {
   open: boolean;
   /** Called when the overlay should close (cancel or Escape). */
   onClose: () => void;
+  /** Optional callback invoked after successful PIN verification and session swap. */
+  onVerified?: () => void;
 }
 
 // ── Component ───────────────────────────────────────────────────────
@@ -112,7 +114,7 @@ type Step = "username" | "pin";
  * 3. On verification: swaps AuthContext session + WorkspaceContext token
  * 4. Overlay dismisses
  */
-export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
+export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOverlayProps) {
   const { l10n } = useLocalization();
   const { session, swapSession } = useAuth();
   const { swapSessionToken } = useWorkspace();
@@ -212,7 +214,9 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
       // but the same scope (store, instance, terminal).
       await swapSessionToken(newSession.user_id, newSession.role_id);
 
-      // Step 4: Dismiss the overlay (after successful verify — snap close intentional).
+      // Step 4: Fire verified callback (e.g. for deduction location override)
+      onVerified?.();
+      // Step 5: Dismiss the overlay (after successful verify — snap close intentional).
       onClose();
     } catch (err) {
       const message =
@@ -222,7 +226,7 @@ export default function FastPINOverlay({ open, onClose }: FastPINOverlayProps) {
     } finally {
       setLoading(false);
     }
-  }, [pin, username, swapSession, swapSessionToken, onClose]);
+  }, [pin, username, swapSession, swapSessionToken, onClose, onVerified]);
 
   // ── Auto-submit when PIN reaches max length ─────────────────
 

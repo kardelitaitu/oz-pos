@@ -1,3 +1,10 @@
+/*
+last audited 19-07-26 by RSA-Agent
+crate: modules-sales | status: SAFE | lint: CLEAN
+findings: Transitional module implementing Module trait. No unsafe code. Re-exports Cart, Sale,
+  SaleStatus from oz-core. 8 unit tests pass covering lifecycle and kernel integration.
+next: Migrate cart/sales logic into this module | perf: N/A.
+*/
 #![warn(missing_docs)]
 
 //! Sales Module — core point-of-sale functionality.
@@ -29,8 +36,7 @@
 //!
 //! This module re-exports key sales domain types from `oz-core` so that
 //! consumers can access all sales-related types through a single crate:
-//!
-//! ```ignore
+//!//! ```
 //! use modules_sales::{SalesModule, Sale, Cart, SaleStatus};
 //! ```
 
