@@ -174,7 +174,7 @@ export default function PaymentModal({
         })
         .catch(() => addToast({ message: l10n.getString('payment-toast-currency-failed'), type: 'error' }));
     }
-  }, [open, multiCurrency, addToast]);
+  }, [open, multiCurrency, addToast, l10n]);
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -772,7 +772,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast]);
+  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError]);
 
   useEffect(() => {
     if (!done) return;
