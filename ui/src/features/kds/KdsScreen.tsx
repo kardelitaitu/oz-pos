@@ -9,6 +9,7 @@ import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
 import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
 import { KdsLayoutSwitcher } from '@/features/kds/KdsLayoutSwitcher';
+import { KdsSettingsPanel, type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -34,11 +35,11 @@ export default function KdsScreen() {
   const userId = session?.user_id ?? '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [soundEnabled] = useState(true); // P3-5: wire to settings toggle
+  const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, loading: prefsLoading } = useKdsPreferences();
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
-  useNewTicketSound(orders, soundEnabled);
+  useNewTicketSound(orders, settings.soundEnabled);
 
   const fetchOrders = useCallback(() => {
     const zone = prefs.kdsZone || undefined;
@@ -85,7 +86,15 @@ export default function KdsScreen() {
           <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}><span>{orders.length} orders</span></Localized></span>
         </div>
         <div className="kds-header-right">
-          {!prefsLoading && (
+          {!prefsLoading && (<>
+            <KdsSettingsPanel
+              settings={settings}
+              onChangeSound={(v) => setSettings((s) => ({ ...s, soundEnabled: v }))}
+              onChangeYellowThreshold={(v) => setSettings((s) => ({ ...s, yellowThresholdMin: v }))}
+              onChangeRedThreshold={(v) => setSettings((s) => ({ ...s, redThresholdMin: v }))}
+              onChangeAutoAcknowledge={(v) => setSettings((s) => ({ ...s, autoAcknowledge: v }))}
+              onChangeDensity={(v) => setSettings((s) => ({ ...s, density: v }))}
+            />
             <KdsLayoutSwitcher
               currentLayout={prefs.layout}
               showOrderId={prefs.showOrderId}
@@ -94,7 +103,7 @@ export default function KdsScreen() {
               onToggleOrderId={setShowOrderId}
               onToggleTableNumber={setShowTableNumber}
             />
-          )}
+          </>)}
         </div>
       </div>
       {error && <p className="kds-error">{error}</p>}

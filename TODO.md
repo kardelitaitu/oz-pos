@@ -13,7 +13,7 @@
 | 🔴 P0 — Plugin Security | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P1 — Sync Reliability | 6 | **5** | **████████▱▱▱▱ 83%** |
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🔵 P3 — KDS Enhancements | 5 | **4** | **████████▱▱▱▱ 80%** |
+| 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **18** | **██████████████▱ 26%** |
+| **Total** | **70** | **19** | **███████████████▱ 27%** |
 
 ---
 
@@ -108,7 +108,7 @@ The KDS system (kitchen display) has multi-layout support (Focus/Kanban/Metro) b
 - [x] **P3-2: Sound alerts** ✅ — Added `useNewTicketSound` hook: tracks known order IDs in a `Set<string>` ref, detects new IDs on each orders update, plays `playBeep()` chime via `useSound` debounced to max 1 per 5s. Supports enabled/disabled toggle. Wired into `KdsScreen.tsx`. TypeScript passes.
 - [x] **P3-3: Layout persistence** ✅ — Added localStorage cache layer to `useKdsPreferences` hook: `readLocalPrefs` (instant restore on mount with validation), `writeLocalPrefs` (on every layout/setting change). Combined with existing server persistence for seamless online/offline restore. TypeScript passes.
 - [x] **P3-4: Ticket count badge animation** ✅ — Added `useCountAnim` hook (tracks previous count via `useRef`, returns `'up' | 'down' | ''` animation direction). CSS `@keyframes kds-count-up` (scale 1→1.35→0.9→1 with bounce) and `kds-count-down` (scale 1→0.75→1.05→1). Classes `.kds-column-count--up` and `.kds-column-count--down` with 300ms duration. Respects `prefers-reduced-motion: reduce`. TypeScript passes.
-- [ ] **P3-5: KDS settings panel** — Add a settings gear icon in KDS header that opens a popover with: sound toggle, overdue escalation time thresholds (slider: 3-15min), auto-acknowledge new tickets toggle, and display density (comfortable/compact).
+- [x] **P3-5: KDS settings panel** ✅ — Added `KdsSettingsPanel` component with gear icon button and popover portal (same escape/click-outside pattern as `KdsLayoutSwitcher`). Contains: sound toggle (wired to `useNewTicketSound`), yellow escalation slider (3-10min), red escalation slider (dynamically constrained > yellow, 6-15min), auto-acknowledge toggle, and display density selector (comfortable/compact). Default settings via `DEFAULT_SETTINGS`. TypeScript passes.
 
 ---
 
