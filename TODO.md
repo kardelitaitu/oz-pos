@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 84 / 101 items complete (83.2%) · Updated 2026-07-19
+**Current state:** 87 / 101 items complete (86.1%) · Updated 2026-07-19
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| ♿ Accessibility | 17 | 13 | ████████░░ 76% |
+| ♿ Accessibility | 17 | 14 | █████████░ 82% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **84** | **████████░░ 84%** |
+| **Total** | **101** | **87** | **████████░░ 87%** |
 
 ---
 
@@ -85,9 +85,9 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 
 ### ♿ 4. `aria-live` Regions for Dynamic Content
 
-- [ ] `AuditLogScreen.tsx` — real-time log feed
-- [ ] `TransactionLogScreen.tsx` — transaction feed
-- [ ] `StockShortfallDialog.tsx` — dynamic stock count updates
+- [x] `AuditLogScreen.tsx` — `aria-live="polite"` + `aria-relevant="additions text"` on table feed wrapper
+- [x] `TransactionLogScreen.tsx` — `aria-live="polite"` + `aria-relevant="additions text"` on transaction table + loading lines
+- [x] `StockShortfallDialog.tsx` — `aria-live="polite"` + `aria-atomic="true"` on dynamic stock count region
 
 ### ♿ 5. ARIA Role Audit on Custom Components
 
@@ -389,3 +389,4 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 | 2026-07-19 | CreatePinScreen | Hardcoded strings | ✅ Fixed 17 strings |
 | 2026-07-19 | 7 feature files | Fluent strings audit — 34 new keys in 5 bundles | ✅ All violations fixed |
 | 2026-07-19 | All CSS | Tablet viewport — touch targets + overflow-x: hidden | ✅ All passing |
+| 2026-07-19 | 3 feature files | aria-live regions — AuditLog, TransactionLog, StockShortfall | ✅ All passing |
