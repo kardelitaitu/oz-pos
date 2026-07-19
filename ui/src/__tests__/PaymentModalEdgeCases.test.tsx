@@ -11,7 +11,7 @@ import type { Money, CartLine, Sku, LineId } from '@/types/domain';
 
 async function renderWithFluent(ui: React.ReactElement) {
   const wrapped = withFluent(<ToastProvider>{ui}</ToastProvider>, salesFtl);
-  await renderInAct(wrapped);
+  return renderInAct(wrapped);
 }
 
 const usd = (minor: number): Money => ({ minor_units: minor, currency: 'USD' });
@@ -180,7 +180,105 @@ describe('PaymentModal — edge cases', () => {
     });
   });
 
-  // ── Error handling ────────────────────────────────────────────
+  it('shows inline error banner with role="alert" when complete_sale fails (retryable error)', async () => {
+    setErrorMock();
+
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const tenderInput = screen.getByLabelText(/amount tendered/i);
+    await userEvent.type(tenderInput, '10');
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    // Wait for the error banner to appear
+    await waitFor(() => {
+      const banner = document.querySelector('.payment-error-banner');
+      expect(banner).toBeInTheDocument();
+      expect(banner).toHaveAttribute('role', 'alert');
+      expect(banner).toHaveTextContent(/timeout/i);
+    });
+  });
+
+  it('shows retry button for retryable errors', async () => {
+    setErrorMock();
+
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const tenderInput = screen.getByLabelText(/amount tendered/i);
+    await userEvent.type(tenderInput, '10');
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    await waitFor(() => {
+      const retryBtn = document.querySelector('.payment-error-retry-btn');
+      expect(retryBtn).toBeInTheDocument();
+      expect(retryBtn).toHaveTextContent(/retry/i);
+    });
+  });
+
+  it('retry button re-attempts the sale', async () => {
+    let callCount = 0;
+    invokeMock.mockImplementation((cmd: string): Promise<unknown> => {
+      if (cmd === 'complete_sale') {
+        callCount++;
+        if (callCount === 1) return Promise.reject(new Error('Payment gateway timeout'));
+        return Promise.resolve({ saleId: 'sale-1', total: null, lineCount: 1 });
+      }
+      if (cmd === 'start_sale') return Promise.resolve({ cartId: 'test-cart' });
+      if (cmd === 'add_line') return Promise.resolve({ lineId: 'test-line', lineTotal: null });
+      if (cmd === 'print_sales_receipt') return Promise.resolve({ printed: true });
+      if (cmd === 'get_enabled_features') return Promise.resolve({ features: [] });
+      return Promise.resolve({});
+    });
+
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const tenderInput = screen.getByLabelText(/amount tendered/i);
+    await userEvent.type(tenderInput, '10');
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    // Wait for error banner
+    await waitFor(() => {
+      expect(document.querySelector('.payment-error-banner')).toBeInTheDocument();
+    });
+
+    // Click retry
+    const retryBtn = document.querySelector('.payment-error-retry-btn') as HTMLButtonElement;
+    await userEvent.click(retryBtn);
+
+    // Should succeed now
+    await waitFor(() => {
+      expect(screen.getByText(/sale complete/i)).toBeInTheDocument();
+    });
+
+    // complete_sale was called twice (first fail, second success)
+    expect(callCount).toBe(2);
+  });
 
   it('handles complete sale failure gracefully (processing resets)', async () => {
     setErrorMock();
@@ -208,6 +306,54 @@ describe('PaymentModal — edge cases', () => {
     // Modal should still be open — no done state
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByText(/sale complete/i)).not.toBeInTheDocument();
+  });
+
+  it('clears error banner when modal is reopened', async () => {
+    // First render: fail
+    setErrorMock();
+    const onClose = vi.fn();
+    const { unmount } = await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    const tenderInput = screen.getByLabelText(/amount tendered/i);
+    await userEvent.type(tenderInput, '10');
+    await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
+
+    await waitFor(() => {
+      expect(document.querySelector('.payment-error-banner')).toBeInTheDocument();
+    });
+
+    // Close modal
+    await userEvent.click(screen.getByRole('button', { name: /cancel payment/i }));
+    await waitFor(() => { expect(onClose).toHaveBeenCalled(); }, { timeout: 2000 });
+
+    // Reopen with a fresh render — error banner should be gone
+    unmount();
+    // Reset mock to not error on reopen
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(defaultImpl);
+    await renderWithFluent(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('.payment-error-banner')).not.toBeInTheDocument();
+    });
   });
 
   // ── Customer search modal ────────────────────────────────────

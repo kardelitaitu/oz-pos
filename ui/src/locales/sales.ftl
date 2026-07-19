@@ -127,6 +127,9 @@ payment-customer-search-heading = Select Customer
 payment-customer-search-loading = Loading…
 payment-customer-search-empty = No customers found
 payment-complete = Complete
+payment-retry-aria =
+    .aria-label = Retry payment
+payment-retry = Retry
 
 # ── Stock Shortfall Dialog ──
 shortfall-dialog-aria =

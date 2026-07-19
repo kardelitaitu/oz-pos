@@ -618,6 +618,9 @@ payment-customer-search-heading = Pilih Pelanggan
 payment-customer-search-loading = Memuat…
 payment-customer-search-empty = Tidak ada pelanggan
 payment-complete = Selesaikan
+payment-retry-aria =
+    .aria-label = Coba lagi pembayaran
+payment-retry = Coba Lagi
 
 # ── Shift (remaining) ──
 pos-open-bill-title = Tagihan Terbuka

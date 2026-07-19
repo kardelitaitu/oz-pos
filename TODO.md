@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 69 / 101 items complete (68.3%) · Updated 2026-07-19
+**Current state:** 72 / 101 items complete (71.3%) · Updated 2026-07-19
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| ♿ Accessibility | 17 | 7 | ████░░░░░░ 41% |
+| ♿ Accessibility | 17 | 10 | ██████░░░░ 59% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **69** | **████████░░ 80%** |
+| **Total** | **101** | **72** | **████████░░ 80%** |
 
 ---
 
@@ -45,9 +45,11 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 - [x] `role="alert"` already present on error banner — confirmed via existing `getByRole('alert')` tests
 
 **1.3 PaymentModal** — insufficient stock, payment declined, connection lost
-- [ ] Surface backend error messages with `role="alert"`
-- [ ] Differentiate between retryable (network) vs terminal (declined) errors
-- [ ] Add retry button for recoverable errors
+- [x] Inline error banner with `role="alert"` — shows error message with icon
+- [x] Error classification: retryable (timeout, network, connection) vs terminal (declined, invalid)
+- [x] Retry button for retryable errors — re-attempts the full sale flow
+- [x] Error clears automatically when modal closes and reopens
+- [x] Stock shortfall errors still handled separately via `StockShortfallDialog`
 
 **1.4 PriceOverrideModal** — reason required, amount out of range
 - [ ] Add inline field validation with error messages

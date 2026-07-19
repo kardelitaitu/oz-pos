@@ -102,6 +102,31 @@ export default function PaymentModal({
 
   const MS_200 = animDuration(200);
 
+  // ── Error classification ───────────────────────────────────────
+
+  /** Determine whether an error is likely retryable (network) or terminal (declined). */
+  const classifyError = useCallback((err: unknown): { message: string; retryable: boolean } => {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const lower = errMsg.toLowerCase();
+    // Retryable: network, timeout, connection, server errors
+    const retryablePatterns = [
+      'timeout', 'timed out', 'network', 'econnrefused', 'etimedout',
+      'econnreset', 'enotfound', 'connection', 'server error',
+      'try again', 'unavailable', 'offline',
+    ];
+    const isRetryable = retryablePatterns.some((p) => lower.includes(p));
+    // Terminal: explicitly declined or invalid — NOT retryable even if also matches retryable patterns
+    const terminalPatterns = [
+      'declined', 'invalid', 'not found', 'insufficient',
+      'unauthorized', 'forbidden', 'already',
+    ];
+    const isTerminal = terminalPatterns.some((p) => lower.includes(p));
+    return {
+      message: errMsg,
+      retryable: isRetryable && !isTerminal,
+    };
+  }, []);
+
   const animateLeave = useCallback((done: () => void) => {
     setLeaving(true);
     leaveCb.current = done;
@@ -117,6 +142,8 @@ export default function PaymentModal({
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
   const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
+
+  const [paymentError, setPaymentError] = useState<{ message: string; retryable: boolean } | null>(null);
 
   const [splitMode, setSplitMode] = useState(false);
   const [splits, setSplits] = useState<SplitRow[]>([
@@ -177,6 +204,7 @@ export default function PaymentModal({
       setProcessing(false);
       setDone(false);
       setChangeDue(null);
+      setPaymentError(null);
       setSplitMode(false);
       setShowQr(false);
       setQrReference('');
@@ -736,7 +764,11 @@ export default function PaymentModal({
         setShortfallResult(parsed);
         return; // Don't show generic error — let the ShortfallDialog handle it
       }
-      addToast({ message: 'Failed to complete sale. Please try again.', type: 'error' });
+      const classified = classifyError(err);
+      setPaymentError(classified);
+      if (!classified.retryable) {
+        addToast({ message: classified.message, type: 'error' });
+      }
     } finally {
       setProcessing(false);
     }
@@ -1385,6 +1417,32 @@ export default function PaymentModal({
                       </button>
                     </Localized>
                   </div>
+                )}
+              </div>
+            )}
+
+            {paymentError && (
+              <div className="payment-error-banner" role="alert">
+                <svg className="payment-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span className="payment-error-text">{paymentError.message}</span>
+                {paymentError.retryable && (
+                  <button
+                    type="button"
+                    className="payment-error-retry-btn"
+                    onClick={() => {
+                      setPaymentError(null);
+                      complete();
+                    }}
+                    aria-label={l10n.getString('payment-retry-aria', null, 'Retry payment')}
+                  >
+                    <Localized id="payment-retry">
+                      <span>Retry</span>
+                    </Localized>
+                  </button>
                 )}
               </div>
             )}
