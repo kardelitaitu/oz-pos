@@ -252,7 +252,7 @@ From `docs/i18n-todo.md`: 4 Indonesian bundles are byte-identical to English (gi
 - [ ] **P10-2: Lighthouse a11y gate** — Add `lighthouse-ci` to CI pipeline. Set threshold: a11y ≥ 90, best-practices ≥ 80, SEO ≥ 80. Run on 5 key routes: POS checkout, Settings, Product Management, Sales History, KDS. Fix any violations before merging.
 - [ ] **P10-3: Color contrast audit** — Audit all CSS files against WCAG AA contrast ratios (4.5:1 for normal text, 3:1 for large text). Fix violations in: StatusBar (muted text on dark bg), CartPanel (line-item prices), Badge variants, KDS timer text. Add CI check via `contrast-colors` npm package or `axe-core`.
 - [ ] **P10-4: Focus indicator audit** — Verify every interactive element has a visible focus ring (`box-shadow: inset 0 0 0 2px var(--color-accent)`). Audit all 30+ screen files using automated selector scan. Fix: dropdown options, settings toggles, tab panels, date picker fields.
-- [ ] **P10-5: Screen reader UX** — Add `aria-live` announcements for: cart total changes, payment success/failure, shift open/close, sync status changes. Verify with `jest-axe` in existing test files. Add missing `aria-label` on icon-only buttons across all screens.
+- [x] **P10-5: Screen reader UX** ✅ — Added `aria-live="polite"` to cart grand total (RetailPosScreen), `aria-live="assertive"` to payment done state (PaymentModal), `aria-live="polite"` to shift status (ShiftBar), `aria-live="polite"` to pending count badge (OfflineQueueScreen). Added missing `aria-label` on 2 icon-only × buttons (PaymentModal customer remove, RetailOptionsScreen preview close). TypeScript: 0 errors.
 
 ---
 

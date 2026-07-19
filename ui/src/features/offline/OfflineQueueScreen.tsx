@@ -141,7 +141,7 @@ export default function OfflineQueueScreen() {
           </Localized>
           {pendingCount > 0 && (
             <Localized id="offline-queue-pending-count" vars={{ count: String(pendingCount) }}>
-              <span className="offline-queue-badge" aria-label={`${pendingCount} pending`}>
+              <span className="offline-queue-badge" aria-label={`${pendingCount} pending`} aria-live="polite">
                 {pendingCount} pending
               </span>
             </Localized>

@@ -1293,7 +1293,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                     <span>{formatMoney({ minor_units: cartTax, currency: subtotal?.currency ?? 'IDR' })}</span>
                   </div>
                 )}
-                <div className="retail-total-row retail-total-row--grand">
+                <div className="retail-total-row retail-total-row--grand" aria-live="polite" aria-atomic="true">
                   <span>{l10n.getString('cart-total-label')}</span>
                   <span>{total ? formatMoney(total) : '—'}</span>
                 </div>

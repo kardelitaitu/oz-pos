@@ -135,7 +135,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     <>
       <div className="inventory-shift-bar" role="region" aria-label="Shift Info">
         {activeShift ? (
-          <div className="shift-status-active">
+          <div className="shift-status-active" aria-live="polite">
             <div className="status-indicator" />
             <span className="shift-info-text">
               <Localized

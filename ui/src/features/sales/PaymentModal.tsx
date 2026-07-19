@@ -926,7 +926,7 @@ export default function PaymentModal({
       {!shortfallResult && (
       <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
         {done ? (
-          <div className="payment-done">
+          <div className="payment-done" role="status" aria-live="assertive">
             <svg className="payment-done-checkmark" viewBox="0 0 64 64" aria-hidden="true">
               <circle className="payment-done-checkmark-circle" cx="32" cy="32" r="26" />
               <path className="payment-done-checkmark-path" d="M20 32 l8 8 l16 -16" />
@@ -1374,6 +1374,7 @@ export default function PaymentModal({
                     type="button"
                     className="payment-customer-remove"
                     onClick={() => notifyCustomerChange(null)}
+                    aria-label={l10n.getString('payment-customer-remove-aria', null, 'Remove customer')}
                   >
                     &times;
                   </button>
