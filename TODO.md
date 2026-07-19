@@ -13,7 +13,7 @@
 | 🔴 Backend — Critical | 2 | **2** | **███████████████ 100% 🎉** |
 | 🟡 Backend — Medium | 2 | **2** | **███████████████ 100% 🎉** |
 | 🧪 Rust Test Coverage | 14 | **14** | **███████████████ 100% 🎉** |
-| 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
+| 🧪 UI Test Coverage | 7 | **7** | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🔴 §13 Amendments | 1 | **1** | **███████████████ 100% 🎉** |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
@@ -79,7 +79,7 @@
 | `KdsLayoutFocus` | kds | **8** ✅ | Urgency sorting, status filter pills, active class, empty state, counts |
 | `KdsLayoutKanban` | kds | **8** ✅ | Column rendering, per-column counts, column class names, ticket placement, empty state, onAdvance |
 | `KdsLayoutMetro` | kds | **8** ✅ | Responsive grid, overdue tile styling, action buttons per tile |
-| `KdsLayoutSwitcher` | kds | 6 | Popover open/close, layout selection, display toggles, persistence |
+| `KdsLayoutSwitcher` | kds | **13** ✅ | Popover open/close (click, Escape, outside), layout selection with aria-pressed, display toggle callbacks |
 | `ShiftBar` | inventory | **8** ✅ | Active shift display, end-shift flow, transaction summary, empty state, start form, location selection, modal close |
 | `ThresholdConfigScreen` | inventory | **8** ✅ | Table rendering, add/edit/delete threshold, validation, location filter, dialog, delete |
 | `TransitAuditScreen` | inventory | **8** ✅ | Overdue detection, reverse transfer, empty state, line items, confirm/cancel dialog |
