@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 55 / 101 items complete (54.5%) · Updated 2026-07-19
+**Current state:** 56 / 101 items complete (55.4%) · Updated 2026-07-19
 
 ---
 
@@ -170,7 +170,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
   - [ ] `RetailPosScreenCheckout.test.tsx` — discount + refund in retail
   - [ ] `RetailPosScreenInteractions.test.tsx` — multi-tender edge cases
   - [x] `StockShortfallDialog.test.tsx` — error role=alert, allow-negative, split↔simple toggle, mixed modes
-  - [ ] `TransactionLogScreen.test.tsx` — new component, needs coverage
+  - [x] `TransactionLogScreen.test.tsx` — baseline: loading, filters, expand/collapse, date filter, 9 tests
   - [ ] `SettingsPage.test.tsx` — all tabs render correctly
   - [x] `FastPINOverlay.test.tsx` — onVerified callback, loading state, Enter PIN, error clears dots
   - [ ] `QrisQrDisplay.test.tsx` — QR renders, expiry handling
