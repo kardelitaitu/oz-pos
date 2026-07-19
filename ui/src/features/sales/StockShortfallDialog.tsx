@@ -264,7 +264,7 @@ export default function StockShortfallDialog({
           </div>
         </div>
 
-        <div className="shortfall-list">
+        <div className="shortfall-list" aria-live="polite" aria-atomic="true">
           {shortfallResult.shortfalls.map((shortfall) => {
             const resolution = resolutions.find((r) => r.sku === shortfall.sku);
             const isSplit = splitMode[shortfall.sku] ?? false;

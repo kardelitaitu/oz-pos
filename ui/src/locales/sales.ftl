@@ -127,6 +127,16 @@ payment-customer-search-heading = Select Customer
 payment-customer-search-loading = Loading…
 payment-customer-search-empty = No customers found
 payment-complete = Complete
+payment-retry-aria =
+    .aria-label = Retry payment
+payment-retry = Retry
+payment-toast-currency-failed = Failed to load currency data
+payment-customer-placeholder =
+    .placeholder = e.g. John Doe
+payment-loyalty-points-aria =
+    .aria-label = Points
+payment-search-customers-aria = Search customers
+payment-search-customers-placeholder = Search by name, phone, or email...
 
 # ── Stock Shortfall Dialog ──
 shortfall-dialog-aria =

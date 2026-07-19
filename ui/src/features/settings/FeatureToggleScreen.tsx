@@ -476,7 +476,9 @@ export default function FeatureToggleScreen() {
                     <label className="feature-toggle-switch" aria-label={l10n.getString('feature-toggle-toggle-aria', { name: feat.name })}>
                       <input
                         type="checkbox"
+                        role="switch"
                         checked={feat.enabled}
+                        aria-checked={feat.enabled}
                         disabled={toggling === feat.key}
                         onChange={() => handleToggle(feat.key, feat.enabled)}
                         aria-describedby={`desc-${feat.key}`}

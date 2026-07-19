@@ -330,4 +330,145 @@ mod tests {
         let err = store(&conn).delete_supplier("nope").unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
+
+    #[test]
+    fn supplier_full_crud_lifecycle() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Create
+        let created = s
+            .create_supplier(
+                "SUP100",
+                "Lifecycle Co",
+                "Alice",
+                "555-0100",
+                "alice@test.com",
+                "789 Pine St",
+                "TAX-100",
+                "Net 60",
+                "First order",
+            )
+            .unwrap();
+        assert_eq!(created.name, "Lifecycle Co");
+        assert_eq!(created.status, "active");
+        let sid = created.id.clone();
+
+        // Get
+        let fetched = s.get_supplier(&sid).unwrap().unwrap();
+        assert_eq!(fetched.name, "Lifecycle Co");
+
+        // Update
+        let updated = s
+            .update_supplier(
+                &sid,
+                "SUP100",
+                "Lifecycle Updated",
+                "Alice",
+                "555-0100",
+                "alice@test.com",
+                "789 Pine St",
+                "TAX-100",
+                "Net 60",
+                "Updated notes",
+                "active",
+            )
+            .unwrap();
+        assert_eq!(updated.name, "Lifecycle Updated");
+
+        // Get again — verify update persisted
+        let refetched = s.get_supplier(&sid).unwrap().unwrap();
+        assert_eq!(refetched.name, "Lifecycle Updated");
+
+        // Delete
+        s.delete_supplier(&sid).unwrap();
+        assert!(s.get_supplier(&sid).unwrap().is_none());
+    }
+
+    #[test]
+    fn supplier_empty_code_rejected() {
+        let conn = fresh();
+        let err = store(&conn)
+            .create_supplier("  ", "Valid Name", "", "", "", "", "", "", "")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "code", .. }));
+    }
+
+    #[test]
+    fn supplier_update_status_to_inactive() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let created = s
+            .create_supplier("SUP200", "Status Co", "", "", "", "", "", "", "")
+            .unwrap();
+        assert_eq!(created.status, "active");
+
+        let updated = s
+            .update_supplier(
+                &created.id,
+                "SUP200",
+                "Status Co",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "inactive",
+            )
+            .unwrap();
+        assert_eq!(updated.status, "inactive");
+    }
+
+    #[test]
+    fn supplier_create_with_all_fields() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let supplier = s
+            .create_supplier(
+                "SUP300",
+                "Full Co",
+                "Bob Smith",
+                "+62-812-3456",
+                "bob@full.com",
+                "Jl. Merdeka No. 1",
+                "ID-123456",
+                "Net 30",
+                "Preferred partner",
+            )
+            .unwrap();
+        assert_eq!(supplier.code, "SUP300");
+        assert_eq!(supplier.name, "Full Co");
+        assert_eq!(supplier.contact_person, "Bob Smith");
+        assert_eq!(supplier.phone, "+62-812-3456");
+        assert_eq!(supplier.email, "bob@full.com");
+        assert_eq!(supplier.address, "Jl. Merdeka No. 1");
+        assert_eq!(supplier.tax_id, "ID-123456");
+        assert_eq!(supplier.payment_terms, "Net 30");
+        assert_eq!(supplier.notes, "Preferred partner");
+        assert_eq!(supplier.status, "active");
+        assert!(!supplier.created_at.is_empty());
+    }
+
+    #[test]
+    fn supplier_list_ordered_by_name() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.create_supplier("C", "Charlie Co", "", "", "", "", "", "", "")
+            .unwrap();
+        s.create_supplier("A", "Alpha Inc", "", "", "", "", "", "", "")
+            .unwrap();
+        s.create_supplier("B", "Beta Ltd", "", "", "", "", "", "", "")
+            .unwrap();
+
+        let list = s.list_suppliers().unwrap();
+        assert_eq!(list.len(), 3);
+        assert_eq!(list[0].name, "Alpha Inc");
+        assert_eq!(list[1].name, "Beta Ltd");
+        assert_eq!(list[2].name, "Charlie Co");
+    }
 }

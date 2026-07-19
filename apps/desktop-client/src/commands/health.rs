@@ -104,12 +104,12 @@ mod tests {
     fn version_info_field_access() {
         let v = VersionInfo {
             name: "oz-pos-app",
-            version: "0.0.10",
+            version: "0.0.11",
             rust_version: "1.80",
             target: "wasm32",
         };
         assert_eq!(v.name, "oz-pos-app");
-        assert_eq!(v.version, "0.0.10");
+        assert_eq!(v.version, "0.0.11");
         assert_eq!(v.rust_version, "1.80");
         assert_eq!(v.target, "wasm32");
     }

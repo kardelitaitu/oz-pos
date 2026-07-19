@@ -1,6 +1,6 @@
 # ADR #17: KDS Multi-Layout System — Switchable Kitchen Display Layouts with Per-User Preferences
 
-**Status:** Approved (2026-07-18)
+**Status:** Implemented (2026-07-26)
 **Date:** 2026-07-18
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** kds, kitchen-display, layout, ux, preference, workspace

@@ -189,6 +189,7 @@ export default function TransactionLogScreen() {
           </Localized>
         </div>
       ) : (
+        <div aria-live="polite" aria-relevant="additions text">
         <table className="log-table">
           <thead>
             <tr>
@@ -235,8 +236,9 @@ export default function TransactionLogScreen() {
                               <strong>Notes:</strong> {tx.notes}
                             </div>
                           )}
+                          <div aria-live="polite">
                           {loadingLines ? (
-                            <div>Loading lines...</div>
+                            <span>Loading lines...</span>
                           ) : (
                             <table className="details-table">
                               <thead>
@@ -270,6 +272,7 @@ export default function TransactionLogScreen() {
                             </table>
                           )}
                         </div>
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -278,6 +281,7 @@ export default function TransactionLogScreen() {
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

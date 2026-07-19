@@ -102,6 +102,31 @@ export default function PaymentModal({
 
   const MS_200 = animDuration(200);
 
+  // ── Error classification ───────────────────────────────────────
+
+  /** Determine whether an error is likely retryable (network) or terminal (declined). */
+  const classifyError = useCallback((err: unknown): { message: string; retryable: boolean } => {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const lower = errMsg.toLowerCase();
+    // Retryable: network, timeout, connection, server errors
+    const retryablePatterns = [
+      'timeout', 'timed out', 'network', 'econnrefused', 'etimedout',
+      'econnreset', 'enotfound', 'connection', 'server error',
+      'try again', 'unavailable', 'offline',
+    ];
+    const isRetryable = retryablePatterns.some((p) => lower.includes(p));
+    // Terminal: explicitly declined or invalid — NOT retryable even if also matches retryable patterns
+    const terminalPatterns = [
+      'declined', 'invalid', 'not found', 'insufficient',
+      'unauthorized', 'forbidden', 'already',
+    ];
+    const isTerminal = terminalPatterns.some((p) => lower.includes(p));
+    return {
+      message: errMsg,
+      retryable: isRetryable && !isTerminal,
+    };
+  }, []);
+
   const animateLeave = useCallback((done: () => void) => {
     setLeaving(true);
     leaveCb.current = done;
@@ -117,6 +142,8 @@ export default function PaymentModal({
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
   const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
+
+  const [paymentError, setPaymentError] = useState<{ message: string; retryable: boolean } | null>(null);
 
   const [splitMode, setSplitMode] = useState(false);
   const [splits, setSplits] = useState<SplitRow[]>([
@@ -145,9 +172,9 @@ export default function PaymentModal({
           setExchangeRates(rates);
           if (base) setBaseCurrency(base);
         })
-        .catch(() => addToast({ message: 'Failed to load currency data', type: 'error' }));
+        .catch(() => addToast({ message: l10n.getString('payment-toast-currency-failed'), type: 'error' }));
     }
-  }, [open, multiCurrency, addToast]);
+  }, [open, multiCurrency, addToast, l10n]);
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -177,6 +204,7 @@ export default function PaymentModal({
       setProcessing(false);
       setDone(false);
       setChangeDue(null);
+      setPaymentError(null);
       setSplitMode(false);
       setShowQr(false);
       setQrReference('');
@@ -736,11 +764,15 @@ export default function PaymentModal({
         setShortfallResult(parsed);
         return; // Don't show generic error — let the ShortfallDialog handle it
       }
-      addToast({ message: 'Failed to complete sale. Please try again.', type: 'error' });
+      const classified = classifyError(err);
+      setPaymentError(classified);
+      if (!classified.retryable) {
+        addToast({ message: classified.message, type: 'error' });
+      }
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast]);
+  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast, classifyError]);
 
   useEffect(() => {
     if (!done) return;
@@ -1068,7 +1100,7 @@ export default function PaymentModal({
                             type="text"
                             className="payment-customer-input"
                             aria-label={l10n.getString('payment-customer-name-aria', null, 'Customer name for open bill')}
-                            placeholder="e.g. John Doe"
+                            placeholder={l10n.getString('payment-customer-placeholder')}
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                           />
@@ -1359,7 +1391,7 @@ export default function PaymentModal({
                         onChange={(e) => setPointsToRedeem(Math.max(0, parseInt(e.target.value, 10) || 0))}
                         min={0}
                         max={loyaltyAccount.account.points}
-                        aria-label="Points"
+                        aria-label={l10n.getString('payment-loyalty-points-aria')}
                       />
                       <span className="payment-loyalty-input-hint">
                         / {loyaltyAccount.account.points}
@@ -1389,6 +1421,32 @@ export default function PaymentModal({
               </div>
             )}
 
+            {paymentError && (
+              <div className="payment-error-banner" role="alert">
+                <svg className="payment-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span className="payment-error-text">{paymentError.message}</span>
+                {paymentError.retryable && (
+                  <button
+                    type="button"
+                    className="payment-error-retry-btn"
+                    onClick={() => {
+                      setPaymentError(null);
+                      complete();
+                    }}
+                    aria-label={l10n.getString('payment-retry-aria', null, 'Retry payment')}
+                  >
+                    <Localized id="payment-retry">
+                      <span>Retry</span>
+                    </Localized>
+                  </button>
+                )}
+              </div>
+            )}
+
             {showCustomerSearch && (
               /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape key provides keyboard dismissal, role=button for AT */
               <div
@@ -1414,8 +1472,8 @@ export default function PaymentModal({
                   <input
                     className="payment-customer-search-input"
                     type="text"
-                    aria-label="Search customers"
-                    placeholder="Search by name, phone, or email..."
+                    aria-label={l10n.getString('payment-search-customers-aria')}
+                    placeholder={l10n.getString('payment-search-customers-placeholder')}
                     value={customerSearchQuery}
                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
                   />

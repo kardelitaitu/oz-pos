@@ -390,6 +390,22 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
 
         for rl in received_lines {
+            // Validate that received_qty does not exceed the line's ordered qty.
+            let ordered_qty: i64 = tx.query_row(
+                "SELECT qty FROM stock_transfer_lines WHERE id = ?1 AND transfer_id = ?2",
+                params![rl.line_id, id],
+                |row| row.get(0),
+            )?;
+            if rl.received_qty > ordered_qty {
+                return Err(CoreError::Validation {
+                    field: "received_qty",
+                    message: format!(
+                        "received_qty ({}) exceeds ordered qty ({}) for line {}",
+                        rl.received_qty, ordered_qty, rl.line_id
+                    ),
+                });
+            }
+
             // Update received_qty on the line.
             tx.execute(
                 "UPDATE stock_transfer_lines SET received_qty = ?1 WHERE id = ?2 AND transfer_id = ?3",
@@ -817,5 +833,170 @@ mod tests {
             .add_transfer_line(&t.id, "SKU-001", "Widget", 5)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn transfer_full_lifecycle() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_user(&conn, "user-2");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 100);
+
+        // Step 1: Create draft
+        let lines = vec![make_line("SKU-001", "Widget", 20)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "lifecycle test", "user-1", &lines)
+            .unwrap();
+        assert_eq!(t.status, "draft");
+        assert!(t.transfer_number.starts_with("TRF-"));
+
+        // Step 2: Send → in_transit
+        let sent = store(&conn).send_transfer(&t.id).unwrap();
+        assert_eq!(sent.status, "in_transit");
+        assert!(sent.sent_at.is_some());
+
+        // Step 3: Receive full → received
+        let transfer_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(transfer_lines[0].qty, 20);
+
+        let received = store(&conn)
+            .receive_transfer(
+                &t.id,
+                "user-2",
+                &[ReceivedLine {
+                    line_id: transfer_lines[0].id.clone(),
+                    received_qty: 20,
+                }],
+            )
+            .unwrap();
+        assert_eq!(received.status, "received");
+        assert!(received.received_at.is_some());
+        assert_eq!(received.received_by.unwrap(), "user-2");
+
+        // Verify received_qty persisted on the line
+        let final_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(final_lines[0].received_qty, 20);
+    }
+
+    #[test]
+    fn cancel_in_transit_transfer() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 50);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+
+        // Send first
+        let sent = store(&conn).send_transfer(&t.id).unwrap();
+        assert_eq!(sent.status, "in_transit");
+
+        // Cancel while in_transit
+        let cancelled = store(&conn).cancel_transfer(&t.id).unwrap();
+        assert_eq!(cancelled.status, "cancelled");
+        // Note: inventory is NOT restored on cancel (intentional design)
+    }
+
+    #[test]
+    fn receive_excess_stock_errors() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_user(&conn, "user-2");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 50);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let transfer_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+
+        // Try to receive 15 when only 10 were ordered
+        let err = store(&conn)
+            .receive_transfer(
+                &t.id,
+                "user-2",
+                &[ReceivedLine {
+                    line_id: transfer_lines[0].id.clone(),
+                    received_qty: 15,
+                }],
+            )
+            .unwrap_err();
+        assert!(
+            matches!(&err, CoreError::Validation { field, message } if *field == "received_qty" && message.contains("15"))
+        );
+
+        // Transfer should still be in_transit (receive was rolled back)
+        let after = store(&conn).get_transfer(&t.id).unwrap().unwrap();
+        assert_eq!(after.status, "in_transit");
+    }
+
+    #[test]
+    fn receive_zero_qty_keeps_in_transit() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_user(&conn, "user-2");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 30);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let transfer_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+
+        // Receive 0 — no inventory increment, status stays in_transit
+        let result = store(&conn)
+            .receive_transfer(
+                &t.id,
+                "user-2",
+                &[ReceivedLine {
+                    line_id: transfer_lines[0].id.clone(),
+                    received_qty: 0,
+                }],
+            )
+            .unwrap();
+        assert_eq!(result.status, "in_transit");
+
+        // Verify received_qty was recorded as 0
+        let lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(lines[0].received_qty, 0);
+    }
+
+    #[test]
+    fn cancel_nonexistent_transfer_errors() {
+        let conn = fresh();
+        let err = store(&conn).cancel_transfer("i-do-not-exist").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "stock_transfer"));
+    }
+
+    #[test]
+    fn receive_draft_transfer_rejected() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_user(&conn, "user-2");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 30);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+
+        // Transfer is still 'draft' — cannot receive
+        let err = store(&conn)
+            .receive_transfer(&t.id, "user-2", &[])
+            .unwrap_err();
+        assert!(
+            matches!(&err, CoreError::Validation { field, message } if *field == "status" && message.contains("draft"))
+        );
     }
 }

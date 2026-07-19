@@ -224,15 +224,23 @@ export default function SuppliersScreen() {
       ) : suppliers.length === 0 ? (
         <Card shadow="sm">
           <div className="suppliers-empty">
-            <p>No suppliers yet.</p>
-            <Button variant="secondary" onClick={openCreate}>Add your first supplier</Button>
+            <Localized id="suppliers-no-data">
+              <p>No suppliers yet.</p>
+            </Localized>
+            <Localized id="suppliers-add-first">
+              <Button variant="secondary" onClick={openCreate}>Add your first supplier</Button>
+            </Localized>
           </div>
         </Card>
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
           <div className="suppliers-empty">
-            <p>No suppliers match your search.</p>
-            <Button variant="ghost" onClick={() => setSearchQuery('')}>Clear search</Button>
+            <Localized id="suppliers-no-results">
+              <p>No suppliers match your search.</p>
+            </Localized>
+            <Localized id="suppliers-clear-search">
+              <Button variant="ghost" onClick={() => setSearchQuery('')}>Clear search</Button>
+            </Localized>
           </div>
         </Card>
       ) : (

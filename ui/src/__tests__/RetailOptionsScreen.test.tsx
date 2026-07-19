@@ -226,7 +226,7 @@ describe('RetailOptionsScreen', () => {
     fireEvent.click(screen.getByText('System'));
 
     expect(screen.getByText(/App version/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('0.0.10')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('0.0.11')).toBeInTheDocument();
     expect(screen.getByDisplayValue(/Budi Manager/)).toBeInTheDocument();
   });
 

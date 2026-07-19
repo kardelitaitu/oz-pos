@@ -220,13 +220,13 @@ describe('FeatureToggleScreen', () => {
       expect(screen.getByText('Barcode Scanner')).toBeInTheDocument();
     });
 
-    const toggle = screen.getByRole('checkbox', { name: 'Toggle Barcode Scanner' });
+    const toggle = screen.getByRole('switch', { name: 'Toggle Barcode Scanner' });
     expect(toggle).not.toBeChecked();
 
     await userEvent.click(toggle);
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: 'Toggle Barcode Scanner' })).toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Toggle Barcode Scanner' })).toBeChecked();
     });
   });
 
@@ -238,13 +238,13 @@ describe('FeatureToggleScreen', () => {
       expect(screen.getByText('POS Core')).toBeInTheDocument();
     });
 
-    const toggle = screen.getByRole('checkbox', { name: 'Toggle POS Core' });
+    const toggle = screen.getByRole('switch', { name: 'Toggle POS Core' });
     expect(toggle).toBeChecked();
 
     await userEvent.click(toggle);
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: 'Toggle POS Core' })).not.toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Toggle POS Core' })).not.toBeChecked();
     });
   });
 
@@ -256,7 +256,7 @@ describe('FeatureToggleScreen', () => {
       expect(screen.getByText('Barcode Scanner')).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Toggle Barcode Scanner' }));
+    await userEvent.click(screen.getByRole('switch', { name: 'Toggle Barcode Scanner' }));
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
@@ -274,7 +274,7 @@ describe('FeatureToggleScreen', () => {
     });
 
     mockInvoke.mockRejectedValueOnce(new Error('toggle failed'));
-    const toggle = screen.getByRole('checkbox', { name: 'Toggle Barcode Scanner' });
+    const toggle = screen.getByRole('switch', { name: 'Toggle Barcode Scanner' });
     await userEvent.click(toggle);
 
     await waitFor(() => {
@@ -283,7 +283,7 @@ describe('FeatureToggleScreen', () => {
       );
     });
 
-    expect(screen.getByRole('checkbox', { name: 'Toggle Barcode Scanner' })).not.toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Toggle Barcode Scanner' })).not.toBeDisabled();
   });
 
   it('bulk enable all features in a group', async () => {
@@ -297,8 +297,8 @@ describe('FeatureToggleScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Enable all features in Hardware' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: 'Toggle Barcode Scanner' })).toBeChecked();
-      expect(screen.getByRole('checkbox', { name: 'Toggle Receipt Printer' })).toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Toggle Barcode Scanner' })).toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Toggle Receipt Printer' })).toBeChecked();
     });
   });
 
@@ -313,8 +313,8 @@ describe('FeatureToggleScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Disable all features in Core' }));
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: 'Toggle POS Core' })).not.toBeChecked();
-      expect(screen.getByRole('checkbox', { name: 'Toggle Inventory Management' })).not.toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Toggle POS Core' })).not.toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Toggle Inventory Management' })).not.toBeChecked();
     });
   });
 

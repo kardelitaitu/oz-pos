@@ -327,6 +327,8 @@ export interface HoldCartArgs {
   currency: string;
   bill_type?: string;
   customer_name?: string;
+  /** ADR-19 §6.3: deduction location UUID locked at cart-start time. */
+  deduction_location_id?: string;
 }
 
 /** A summary row of a held (parked) cart. */
@@ -352,6 +354,8 @@ export interface HeldCartFull {
   created_at: string;
   bill_type: string;
   customer_name: string | null;
+  /** ADR-19 §6.3: deduction location UUID locked at cart-start time. */
+  deduction_location_id: string | null;
 }
 
 /** Park the current cart for later retrieval. */

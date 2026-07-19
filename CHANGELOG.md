@@ -4,6 +4,93 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.11] — 2026-07-19
+
+### Added
+
+#### ♿ Accessibility — P0 Section (100% Complete)
+
+- **♿ 1. Form Validation Errors** — 5 screens with inline `role='alert'` error messages:
+  - **PriceOverrideModal**: Zero-price and max-price validation with `role='alert'`, auto-clears on edit. 4 new tests.
+  - **PaymentModal**: Inline error banner with `role='alert'` + retry button for retryable errors (timeout/network). 4 new tests, 2 Fluent keys (EN + ID).
+  - **StaffLoginScreen**: PIN-step inline error, `aria-live='polite'` on username error, client-side rate-limit lockout (3 attempts → warning, 5 → 30s lockout with countdown). 3 new tests, 2 Fluent keys (EN + ID).
+  - **CreatePinScreen**: Already compliant — `role='alert'` present and verified by existing tests.
+  - **SettingsPage**: Inline validation hints on store name, address, tax ID fields with `maxLength`/`pattern`/`onBlur` guards.
+
+- **♿ 2. Fluent Strings Audit** — 7 files fixed, 34 new Fluent keys across 5 bundles (EN + ID):
+  - **SuppliersScreen.tsx**: 4 strings wrapped (`no-results`, `clear-search`, `no-data`, `add-first`)
+  - **CategoryManagementScreen.tsx**: 7 hardcoded aria-labels → `l10n.getString()` with icon lookup table
+  - **StaffLoginScreen.tsx**: Close/Next aria-labels localized
+  - **PaymentModal.tsx**: 5 strings (toast error, placeholder, 3 aria-labels)
+  - **GiftCardPayment.tsx**: 12 strings wrapped (title, subtitle, buttons, labels, placeholders)
+
+- **♿ 3. Tablet Viewport** — Touch targets + overflow protection:
+  - `touchTargetSizing.test.tsx` passes with 0 violations (all interactive elements ≥ 44px)
+  - `responsiveViewport.test.tsx` passes with 16 tests
+  - Added `overflow-x: hidden` to 5 CSS root containers: TransactionLogScreen, MultiStoreDashboardScreen, FeatureToggleScreen, KdsLayoutMetro, LicenseSettings
+
+- **♿ 4. aria-live Regions for Dynamic Content** — 3 screens:
+  - **AuditLogScreen**: `aria-live='polite'` + `aria-relevant='additions text'` on table feed wrapper
+  - **TransactionLogScreen**: `aria-live='polite'` on transaction table; persistent `aria-live` wrapper around async loading lines
+  - **StockShortfallDialog**: `aria-live='polite'` + `aria-atomic='true'` on dynamic stock count region
+
+- **♿ 5. ARIA Role Audit** — Toggle switches, sliders, chip groups, context menus:
+  - **FeatureToggleScreen**: Added `role='switch'` + `aria-checked` — the only missing switch (7 others already compliant)
+  - **Sliders**: No custom slider components exist
+  - **Chip groups**: Already use correct `role='radio'` + `aria-checked` for single-select
+  - **Context menus**: Already have `role='menu'` + `role='menuitem'`; right-click triggers don't need `aria-expanded`
+
+#### 🧪 UI Test Coverage Expansion
+
+- **§7.1 — Payment tests** (5 new): list order, multi-sale isolation, partial gateway, 10-split transaction, split-sum verification. Total: 15+.
+- **§7.2 — Stock Transfer tests** (6 new + 1 bug fix): full lifecycle, cancel in-transit, excess-stock validation, zero-qty receive, nonexistent cancellation, draft receive rejection. **Fix**: `receive_transfer` now validates `received_qty <= ordered_qty`.
+- **§7.3 — Purchase Order tests** (5 new): full lifecycle (draft→approved→received), status chain, cancel→reopen→receive, nonexistent update/receive error handling. Total: 15+.
+- **§7.4 — Cash Payout tests** (8 new): 10M amount, empty reason, shift-scoped listing, sequential total accumulation, multiple reasons, 700-char reason, ISO-8601 timestamp, exact float amount. Total: 15+.
+- **§7.5 — Audit Log tests** (5 new): 2000+ char JSON details, same-action order, LIMIT 0, exact-limit matches, 193-char action name. Total: 15+.
+- **§7.6 — Supplier tests** (5 new): full CRUD lifecycle, whitespace code rejection, inactive status transition, all-fields creation, alphabetical ordering. Total: 15+.
+- **§8 — Targeted Screen Tests** (31 new across 7 screens):
+  - FastPINOverlay: 4 tests (`onVerified`, loading, Enter key, error-clear)
+  - StockShortfallDialog: 4 tests (a11y, negative stock, split↔simple toggle, mixed modes)
+  - TransactionLogScreen: 9 tests (loading, title, rows, filters, expand/collapse, empty)
+  - RetailPosScreenCheckout: 2 tests (percentage discount, over-tender with change)
+  - QrisQrDisplay: 5 tests (QR grid, amount, spinner, polling confirmed, close-reset)
+  - RetailPosScreenInteractions: 7 tests (F5/F6/F7/F8 shortcuts, Pay disabled when cart empty/no shift)
+  - SettingsPage: 3 tests (License, Data, Feature tab rendering; fixed mock handlers). Total: 48 tests.
+
+#### 📦 Theme Token Compliance
+
+- **Tokenization sweep (64 CSS files)**: Replaced 720 hardcoded CSS values with design tokens across:
+  - 8 component CSS files (FastPINOverlay, PermissionDenied, QrisQrDisplay, RoleBadge, StoreSwitcher, etc.)
+  - 21 feature CSS files (CartPanel, RetailPosScreen, RestaurantMenu, KDS, inventory, products, categories, etc.)
+  - 26 misc CSS files (sales, settings, retail, frontend)
+  - `#fff` references → `var(--color-accent-fg)` or `var(--color-fg-primary)`
+  - `rgba()` overlays → `color-mix()` or `var(--color-bg-overlay)`
+  - Fixed-width px → `var(--space-*)` tokens
+- **Compliance scanner test**: Added `themeTokenCompliance.test.tsx` with baseline of 101 known exceptions documented in `EXCEPTIONS` array — fails-closed on any new untracked hardcoded value. Replaced `rgba(0,0,0,0.65)` overlays with `var(--color-bg-overlay)` across StockTransfers, ProductManagement, PromotionManagement, and ShiftManagement screens, with `backdrop-filter: blur(3px)` and `will-change` hints.
+- **Shadow-glow design tokens**: Added 3 `--shadow-glow-*` tokens (green, amber, red) and applied to ConnectionStatus and QrisQrDisplay.
+- **Design exceptions register**: Created `docs/design-exceptions.md` documenting 101 expected hardcoded values with rationale.
+- **Dev-mode Tauri mock**: Full stubbed IPC in `index.html` for browser-only preview — handles 20+ Tauri commands (staff login, brand settings, currency, terminals, sales, carts, licensing). Created `ui/src/dev-mock/tauri-api.ts` with mock providers for Auth, Workspace, Brand, Currency, HardwareAccel contexts.
+
+### Changed
+
+- **ADR-19 Multi-Location Implementation**: Full backend implementation of `sale_deduction` modules with location-scoped stock deduction, FIFO refund reversal, cart-start location lock, `StockShortfallDialog` UI with split fulfillment, and `complete_sale_with_resolved_shortfalls`. Includes 3-layer drift defence for the canonical default-location UUID const. See `docs/decisions/2026-07-19-sale-deduction-multi-location.md`.
+- **ADR-18 Multi-Location Inventory**: Schema foundation with 13 migrations for per-location stock tracking, `warehouse_id`/`deduction_location_id` columns, and inventory transaction routing.
+- **Login screen UX repairs**: Keyboard handler for Enter/Escape, improved input background contrast, fixed touch targets, removed dead CSS classes, replaced hardcoded colours with tokens.
+- **CreatePin & LicenseActivation screen repairs**: Replaced inline styles with CSS tokens, added/improved entry/exit animations, removed dead CSS.
+- **Version bump**: 0.0.10 → 0.0.11 across 16 files (Cargo workspace, Dockerfile, tauri configs, package.json, health routes, UI components).
+- **TODO.md**: Complete rewrite as a structured project tracker with progress summary (101 items), 16 numbered sections, dependency graph, and release ops checklist.
+
+### Fixed
+
+- **Stock Transfer validation**: `receive_transfer` now rejects quantities exceeding the ordered quantity (`Validation` error instead of silent over-receipt).
+- **ui/..violations.txt cleanup**: Removed auto-generated compliance violation dump file from repository.
+- **Test mock handlers**: Fixed SettingsPage tests with proper `get_license_status`, `check_license_status`, `get_backup_status`, `list_audit_log`, `create_backup`, and `get_machine_id` mock shapes for Tauri IPC.
+
+### Performance
+
+- **UI Test Suite**: **31 new tests** added across 7 screens, bringing total UI tests to ~2,685+.
+- **Rust Test Suite**: **39 new tests** added across payment, stock transfer, purchase order, cash payout, audit log, and supplier modules.
+
 ## [0.0.9] — 2026-07-17
 
 ### Added

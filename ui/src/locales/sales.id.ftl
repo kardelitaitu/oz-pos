@@ -584,6 +584,13 @@ payment-qris-description = Hasilkan kode QR QRIS untuk dipindai pelanggan dengan
 payment-qris-btn-aria =
     .aria-label = Hasilkan kode QR QRIS
 payment-qris-pay = Bayar dengan QR
+payment-toast-currency-failed = Gagal memuat data mata uang
+payment-customer-placeholder =
+    .placeholder = mis. John Doe
+payment-loyalty-points-aria =
+    .aria-label = Poin
+payment-search-customers-aria = Cari pelanggan
+payment-search-customers-placeholder = Cari berdasarkan nama, telepon, atau email...
 payment-split-title = Pembayaran Terpisah
 payment-split-evenly-aria =
     .aria-label = Bagi rata
@@ -618,6 +625,9 @@ payment-customer-search-heading = Pilih Pelanggan
 payment-customer-search-loading = Memuat…
 payment-customer-search-empty = Tidak ada pelanggan
 payment-complete = Selesaikan
+payment-retry-aria =
+    .aria-label = Coba lagi pembayaran
+payment-retry = Coba Lagi
 
 # ── Shift (remaining) ──
 pos-open-bill-title = Tagihan Terbuka

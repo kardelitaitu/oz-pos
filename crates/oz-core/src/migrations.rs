@@ -472,6 +472,14 @@ pub const ALL: &[Migration] = &[
         id: "094_active_carts_location_lock.sql",
         sql: include_str!("../migrations/094_active_carts_location_lock.sql"),
     },
+    // 095: adds deduction_location_id FK to held_carts so restoring a held
+    // cart also restores its deduction location lock (§6.3). Pre-095 held
+    // carts have NULL — the Rust layer enforces non-NULL at runtime for
+    // new carts in scoped workspaces.
+    Migration {
+        id: "095_held_carts_deduction_location.sql",
+        sql: include_str!("../migrations/095_held_carts_deduction_location.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around

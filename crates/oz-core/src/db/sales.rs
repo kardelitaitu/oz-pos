@@ -92,6 +92,9 @@ pub struct HeldCartFull {
     pub bill_type: String,
     /// Customer name (set when bill_type = 'open_bill').
     pub customer_name: Option<String>,
+    /// ADR-19 §6.3: deduction location UUID locked at cart-start time.
+    /// `None` for pre-095 held carts or legacy single-location deployments.
+    pub deduction_location_id: Option<String>,
 }
 
 // ── Sale Deduction (ADR-19) ────────────────────────────────────────
@@ -1121,6 +1124,11 @@ impl Store<'_> {
     ///
     /// `bill_type` should be `"hold"` or `"open_bill"`. When `customer_name`
     /// is set, it is stored alongside the cart for open-bill listing.
+    ///
+    /// `deduction_location_id` — ADR-19 §5.3 / §6.3: the deduction location
+    /// locked on the active cart at cart-start time. Pass `None` for legacy
+    /// single-location deployments. When restoring a held cart, the caller
+    /// should set this value on the new active cart via `save_active_cart`.
     #[allow(clippy::too_many_arguments)]
     pub fn hold_cart(
         &self,
@@ -1131,11 +1139,12 @@ impl Store<'_> {
         currency: &str,
         bill_type: &str,
         customer_name: Option<&str>,
+        deduction_location_id: Option<&str>,
     ) -> Result<String, CoreError> {
         let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
-            "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency, bill_type, customer_name)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO held_carts (id, label, cart_data, item_count, total_minor, currency, bill_type, customer_name, deduction_location_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 id,
                 label.trim(),
@@ -1145,6 +1154,7 @@ impl Store<'_> {
                 currency,
                 bill_type,
                 customer_name,
+                deduction_location_id,
             ],
         )?;
         Ok(id)
@@ -1195,7 +1205,7 @@ impl Store<'_> {
     /// Look up a held cart by id.
     pub fn get_held_cart(&self, id: &str) -> Result<Option<HeldCartFull>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, label, cart_data, item_count, total_minor, currency, created_at, bill_type, customer_name
+            "SELECT id, label, cart_data, item_count, total_minor, currency, created_at, bill_type, customer_name, deduction_location_id
              FROM held_carts WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], |row| {
@@ -1209,6 +1219,7 @@ impl Store<'_> {
                 created_at: row.get("created_at")?,
                 bill_type: row.get("bill_type")?,
                 customer_name: row.get("customer_name")?,
+                deduction_location_id: row.get("deduction_location_id")?,
             })
         });
         match result {
@@ -1728,7 +1739,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let id = s
-            .hold_cart("Cart 1", r#"{"items":[]}"#, 0, 0, "USD", "hold", None)
+            .hold_cart("Cart 1", r#"{"items":[]}"#, 0, 0, "USD", "hold", None, None)
             .unwrap();
         assert!(!id.is_empty());
 
@@ -1736,6 +1747,39 @@ mod tests {
         assert_eq!(carts.len(), 1);
         assert_eq!(carts[0].label, "Cart 1");
         assert_eq!(carts[0].total_minor, 0);
+    }
+
+    #[test]
+    fn hold_cart_roundtrips_deduction_location_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Need to insert an inventory location first (FK constraint).
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-wh-a', 'Warehouse A', 'warehouse')",
+            [],
+        )
+        .unwrap();
+
+        let id = s
+            .hold_cart(
+                "Loc-Locked",
+                r#"{"items":[{"sku":"COFFEE","qty":2}]}"#,
+                2,
+                700,
+                "USD",
+                "hold",
+                None,
+                Some("loc-wh-a"),
+            )
+            .unwrap();
+
+        // Verify get_held_cart returns the deduction_location_id.
+        let full = s.get_held_cart(&id).unwrap().unwrap();
+        assert_eq!(
+            full.deduction_location_id.as_deref(),
+            Some("loc-wh-a"),
+            "deduction_location_id must roundtrip through hold_cart → get_held_cart"
+        );
     }
 
     #[test]
@@ -1749,6 +1793,7 @@ mod tests {
             700,
             "USD",
             "hold",
+            None,
             None,
         )
         .unwrap();
@@ -1772,6 +1817,7 @@ mod tests {
                 1500,
                 "EUR",
                 "hold",
+                None,
                 None,
             )
             .unwrap();
@@ -1806,7 +1852,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let id = s
-            .hold_cart("Delete Me", "{}", 0, 0, "USD", "hold", None)
+            .hold_cart("Delete Me", "{}", 0, 0, "USD", "hold", None, None)
             .unwrap();
         s.delete_held_cart(&id).unwrap();
         let result = s.get_held_cart(&id).unwrap();
@@ -1826,7 +1872,7 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         let id = s
-            .hold_cart("  My Cart  ", "{}", 0, 0, "USD", "hold", None)
+            .hold_cart("  My Cart  ", "{}", 0, 0, "USD", "hold", None, None)
             .unwrap();
         let full = s.get_held_cart(&id).unwrap().unwrap();
         assert_eq!(full.label, "My Cart", "label should be trimmed");
@@ -1861,6 +1907,7 @@ mod tests {
                 "USD",
                 "open_bill",
                 Some("John"),
+                None,
             )
             .unwrap();
 
@@ -1888,9 +1935,9 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
 
-        s.hold_cart("Hold 1", "{}", 0, 0, "USD", "hold", None)
+        s.hold_cart("Hold 1", "{}", 0, 0, "USD", "hold", None, None)
             .unwrap();
-        s.hold_cart("Hold 2", "{}", 0, 0, "USD", "hold", None)
+        s.hold_cart("Hold 2", "{}", 0, 0, "USD", "hold", None, None)
             .unwrap();
         s.hold_cart(
             "Table 7 — Mary",
@@ -1900,6 +1947,7 @@ mod tests {
             "USD",
             "open_bill",
             Some("Mary"),
+            None,
         )
         .unwrap();
 
@@ -1914,7 +1962,7 @@ mod tests {
         let s = store(&conn);
 
         let id = s
-            .hold_cart("Walk-in", "{}", 0, 0, "USD", "open_bill", None)
+            .hold_cart("Walk-in", "{}", 0, 0, "USD", "open_bill", None, None)
             .unwrap();
 
         let open = s.list_open_bills().unwrap();

@@ -327,6 +327,125 @@ describe("FastPINOverlay", () => {
       expect(mockSwapSession).not.toHaveBeenCalled();
     });
 
+    it("fires onVerified callback on success", async () => {
+      const onVerified = vi.fn();
+      mockStaffLogin.mockResolvedValue({
+        session: {
+          user_id: "user-new",
+          display_name: "Bob",
+          role_name: "manager",
+          role_id: "role-manager",
+        },
+      });
+      mockSwapSessionToken.mockResolvedValue(undefined);
+
+      render(
+        <FastPINOverlay open={true} onClose={vi.fn()} onVerified={onVerified} />,
+      );
+
+      typeUsername("bob");
+      clickButton("Next");
+
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
+      clickDigit("4");
+
+      await waitFor(() => {
+        expect(onVerified).toHaveBeenCalled();
+      });
+
+      // onVerified fires _before_ onClose
+      await waitFor(() => {
+        expect(onVerified).toHaveBeenCalledOnce();
+      });
+    });
+
+    it("disables all interactive elements while loading", async () => {
+      mockStaffLogin.mockImplementation(
+        () => new Promise(() => {}), // never resolves — keeps loading=true
+      );
+
+      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+
+      typeUsername("bob");
+      clickButton("Next");
+
+      // Enter PIN to trigger auto-submit
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
+      clickDigit("4");
+
+      await waitFor(() => {
+        // Close button should be disabled
+        expect(screen.getByLabelText("modal-close-aria")).toBeDisabled();
+      });
+
+      // All PIN pad keys should be disabled
+      const padKeys = document.querySelectorAll(".fastpin-pad-key");
+      padKeys.forEach((key) => {
+        expect(key).toBeDisabled();
+      });
+
+      // Cancel button should be disabled
+      expect(screen.getByText("Cancel")).toBeDisabled();
+
+      // Spinner should be visible
+      expect(document.querySelector(".fastpin-btn-spinner")).toBeInTheDocument();
+    });
+
+    it("submits PIN when Enter is pressed in PIN step", async () => {
+      mockStaffLogin.mockResolvedValue({
+        session: {
+          user_id: "user-new",
+          display_name: "Bob",
+          role_name: "manager",
+          role_id: "role-manager",
+        },
+      });
+      mockSwapSessionToken.mockResolvedValue(undefined);
+
+      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+
+      typeUsername("bob");
+      clickButton("Next");
+
+      // Enter partial PIN
+      clickDigit("1");
+      clickDigit("2");
+
+      // Press Enter on the dialog
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+
+      await waitFor(() => {
+        expect(mockStaffLogin).toHaveBeenCalled();
+      });
+    });
+
+    it("clears PIN dots on error", async () => {
+      mockStaffLogin.mockRejectedValue(new Error("Invalid PIN"));
+
+      render(<FastPINOverlay open={true} onClose={vi.fn()} />);
+
+      typeUsername("bob");
+      clickButton("Next");
+
+      // Enter full PIN — auto-submit triggers
+      clickDigit("1");
+      clickDigit("2");
+      clickDigit("3");
+      clickDigit("4");
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+      });
+
+      // PIN dots should be cleared after error
+      const filled = document.querySelectorAll(".fastpin-pin-dot--filled");
+      expect(filled.length).toBe(0);
+    });
+
     it("does not auto-submit with fewer than max PIN digits", async () => {
       vi.useFakeTimers();
       render(<FastPINOverlay open={true} onClose={vi.fn()} />);

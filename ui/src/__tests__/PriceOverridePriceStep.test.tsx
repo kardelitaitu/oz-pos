@@ -43,10 +43,34 @@ describe('PriceOverrideModal — price step', () => {
     expect(screen.getByText('Next')).toBeDisabled();
   });
 
-  it('clamps negative typed value to minimum of 1 via onChange', () => {
+  it('shows inline error with role="alert" when price is zero or negative on mount', () => {
+    render(<PriceOverrideModal {...defaultProps} currentPrice={{ minor_units: 0, currency: 'IDR' }} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/greater than 0/i);
+  });
+
+  it('shows inline error with role="alert" when price exceeds 10x current price', () => {
     render(<PriceOverrideModal {...defaultProps} />);
     const input = screen.getByLabelText('Enter new price in minor units') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '-1' } });
-    expect(screen.getByText('Next')).toBeEnabled();
+    fireEvent.change(input, { target: { value: '550000' } });
+    fireEvent.click(screen.getByText('Next'));
+    expect(screen.getByRole('alert')).toHaveTextContent(/10x|exceeds|maximum/i);
+  });
+
+  it('clears price error when user edits the price input', () => {
+    render(<PriceOverrideModal {...defaultProps} />);
+    const input = screen.getByLabelText('Enter new price in minor units') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '550000' } });
+    fireEvent.click(screen.getByText('Next'));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: '50000' } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('error has role="alert" for validation errors', () => {
+    render(<PriceOverrideModal {...defaultProps} currentPrice={{ minor_units: 0, currency: 'IDR' }} />);
+    const alert = screen.getByRole('alert');
+    expect(alert).toBeInTheDocument();
+    expect(alert.tagName.toLowerCase()).toBe('div');
   });
 });

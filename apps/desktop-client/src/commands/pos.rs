@@ -1332,6 +1332,10 @@ pub struct HoldCartArgs {
     pub bill_type: String,
     /// Customer Name.
     pub customer_name: Option<String>,
+    /// ADR-19 §6.3: deduction location UUID locked at cart-start time.
+    /// When restoring a held cart, the caller should pass the same
+    /// `deduction_location_id` that was stored when the cart was held.
+    pub deduction_location_id: Option<String>,
 }
 
 fn default_bill_type() -> String {
@@ -1363,6 +1367,7 @@ pub async fn hold_cart(
         &args.currency,
         &args.bill_type,
         args.customer_name.as_deref(),
+        args.deduction_location_id.as_deref(),
     )?;
     drop(db);
     tracing::info!(held_cart_id = %id, label = %args.label, "cart held");
@@ -1389,6 +1394,7 @@ pub async fn hold_cart_scoped(
         &args.currency,
         &args.bill_type,
         args.customer_name.as_deref(),
+        args.deduction_location_id.as_deref(),
     )?;
     drop(db);
     tracing::info!(held_cart_id = %id, label = %args.label, "cart held (scoped)");

@@ -1,5 +1,6 @@
 .multi-store-dashboard {
   padding: var(--space-6) var(--space-8);
+  overflow-x: hidden;
 }
 
 .multi-store-dashboard-header {

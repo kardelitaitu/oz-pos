@@ -243,6 +243,11 @@ pub async fn create_session(
         store.insert(token.clone(), context.clone());
     }
 
+    // Invalidate the location cache — a new session means either a fresh
+    // login or a workspace switch, so cached location bindings from the
+    // previous session should not carry over.
+    oz_core::location_resolver::invalidate_location_cache();
+
     tracing::info!(
         user_id = %args.user_id,
         store_id = %args.store_id,

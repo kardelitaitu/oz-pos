@@ -220,5 +220,16 @@ categories-save = Simpan
 categories-delete-confirm = Hapus Kategori
 categories-delete-warning = Ini akan memutuskan tautan semua produk dalam kategori ini.
 categories-preview = Pratinjau
+categories-name-aria =
+    .aria-label = Nama Kategori
+categories-icon-picker-aria =
+    .aria-label = Pilih ikon
+categories-colour-picker-aria =
+    .aria-label = Pilih warna
+categories-icon-food = Makanan
+categories-icon-snack = Camilan
+categories-icon-hot-drink = Minuman panas
+categories-icon-cold-drink = Minuman dingin
+categories-icon-generic = Generik
 
 # ── Customer Management (remaining) ──

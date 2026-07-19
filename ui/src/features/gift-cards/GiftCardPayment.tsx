@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useLocalization } from '@fluent/react';
+import { useLocalization, Localized } from '@fluent/react';
 import { getGiftCardBalance, redeemGiftCard } from '@/api/giftCards';
 import { Button } from '@/components/Button';
 
@@ -59,7 +59,7 @@ export default function GiftCardPayment({
       }
       setCardBalance({ minor: result.balance_minor, currency: result.currency, status: result.status });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lookup failed');
+      setError(err instanceof Error ? err.message : l10n.getString('gift-cards-payment-lookup-failed'));
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ export default function GiftCardPayment({
       onApplied(amountToRedeem, code);
       onComplete();
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Redemption failed');
+      onError(err instanceof Error ? err.message : l10n.getString('gift-cards-payment-redemption-failed'));
     } finally {
       setLoading(false);
     }
@@ -100,10 +100,14 @@ export default function GiftCardPayment({
   return (
     <div className="gift-card-payment">
       <div className="gift-card-payment-header">
-        <h3 className="gift-card-payment-title">Gift Card</h3>
-        <p className="gift-card-payment-subtitle">
-          Total due: {formatMoney(totalMinor, currency)}
-        </p>
+        <Localized id="gift-cards-payment-title">
+          <h3 className="gift-card-payment-title">Gift Card</h3>
+        </Localized>
+        <Localized id="gift-cards-payment-total-due" vars={{ amount: formatMoney(totalMinor, currency) }}>
+          <p className="gift-card-payment-subtitle">
+            Total due: {formatMoney(totalMinor, currency)}
+          </p>
+        </Localized>
       </div>
 
       <div className="gift-card-payment-input-row">
@@ -112,15 +116,17 @@ export default function GiftCardPayment({
           className="gift-card-payment-input"
           id="gift-card-payment-input"
           name="gift-card-payment-input"
-          placeholder="Scan or enter gift card number"
+          placeholder={l10n.getString('gift-cards-payment-input-placeholder')}
           value={cardInput}
           onChange={(e) => { setCardInput(e.target.value); setCardBalance(null); setError(''); }}
           disabled={loading}
-          aria-label="Gift card number"
+          aria-label={l10n.getString('gift-cards-payment-input-aria')}
         />
-        <Button variant="primary" onClick={handleLookup} disabled={loading || !cardInput.trim()}>
-          Check
-        </Button>
+        <Localized id="gift-cards-payment-check-btn">
+          <Button variant="primary" onClick={handleLookup} disabled={loading || !cardInput.trim()}>
+            Check
+          </Button>
+        </Localized>
       </div>
 
       {error && <div className="gift-card-payment-error">{error}</div>}
@@ -128,13 +134,17 @@ export default function GiftCardPayment({
       {cardBalance && (
         <div className="gift-card-payment-balance">
           <div className="gift-card-payment-balance-row">
-            <span>Available Balance</span>
+            <Localized id="gift-cards-payment-available-balance">
+              <span>Available Balance</span>
+            </Localized>
             <span className="gift-card-payment-balance-amount">
               {formatMoney(cardBalance.minor, cardBalance.currency)}
             </span>
           </div>
           <div className="gift-card-payment-balance-row">
-            <span>To Apply</span>
+            <Localized id="gift-cards-payment-to-apply">
+              <span>To Apply</span>
+            </Localized>
             <span className="gift-card-payment-balance-amount">
               {formatMoney(Math.min(totalMinor, cardBalance.minor), currency)}
             </span>
@@ -143,12 +153,14 @@ export default function GiftCardPayment({
       )}
 
       <div className="gift-card-payment-actions">
-        <Button variant="ghost" onClick={onCancel} disabled={loading}>
-          Cancel
-        </Button>
+        <Localized id="gift-cards-payment-cancel-btn">
+          <Button variant="ghost" onClick={onCancel} disabled={loading}>
+            Cancel
+          </Button>
+        </Localized>
         {cardBalance && (
           <Button variant="primary" onClick={handleApply} disabled={loading || cardBalance.minor <= 0}>
-            {loading ? 'Processing...' : 'Apply Gift Card'}
+            {loading ? l10n.getString('gift-cards-payment-processing') : l10n.getString('gift-cards-payment-apply-btn')}
           </Button>
         )}
       </div>

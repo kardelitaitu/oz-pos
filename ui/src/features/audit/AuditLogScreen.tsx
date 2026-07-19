@@ -252,7 +252,7 @@ export default function AuditLogScreen() {
           </div>
         </Card>
       ) : (
-        <div className="audit-log-table-wrap">
+        <div className="audit-log-table-wrap" aria-live="polite" aria-relevant="additions text">
           <table className="audit-log-table" aria-label={l10n.getString('audit-log-table-label')}>
             <thead>
               <tr>

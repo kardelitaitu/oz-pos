@@ -150,3 +150,121 @@ describe('QrisQrDisplay exit-animation polish', () => {
     expect(document.querySelector('.qris-overlay')).toBeNull();
   });
 });
+
+describe('QrisQrDisplay — QR rendering & payment flow', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('renders 21×21 QR grid (441 cells)', () => {
+    const hostRef = makeHostRef();
+    render(<HostModal hostRef={hostRef} />);
+    const cells = document.querySelectorAll('.qris-qr-cell');
+    expect(cells.length).toBe(441);
+    // Some cells should be filled (deterministic from reference hash)
+    const filled = document.querySelectorAll('.qris-qr-cell--filled');
+    expect(filled.length).toBeGreaterThan(0);
+    expect(filled.length).toBeLessThan(441);
+  });
+
+  it('displays amount and reference correctly', () => {
+    const hostRef = makeHostRef();
+    render(<HostModal hostRef={hostRef} />);
+    // 25000 / 100 = 250.00 IDR
+    expect(screen.getByText('250.00 IDR')).toBeInTheDocument();
+    expect(screen.getByText('REF-1234')).toBeInTheDocument();
+    expect(screen.getByText('OZ-POS Store')).toBeInTheDocument();
+    expect(screen.getByText('QRIS')).toBeInTheDocument();
+    expect(screen.getByText('Scan with your payment app')).toBeInTheDocument();
+  });
+
+  it('shows spinner and waiting status initially', () => {
+    const hostRef = makeHostRef();
+    render(<HostModal hostRef={hostRef} />);
+    const status = document.querySelector('.qris-status');
+    expect(status).toBeTruthy();
+    expect(status).toHaveAttribute('role', 'status');
+    expect(screen.getByText('Waiting for payment...')).toBeInTheDocument();
+    expect(document.querySelector('.qris-spinner')).toBeInTheDocument();
+    expect(document.querySelector('.qris-status--success')).toBeNull();
+  });
+
+  it('transitions to confirmed status after polling completes', () => {
+    const hostRef = makeHostRef();
+    render(<HostModal hostRef={hostRef} />);
+
+    // Initial: waiting
+    expect(screen.getByText('Waiting for payment...')).toBeInTheDocument();
+
+    // Advance by 4 polls (4 × 2000ms = 8000ms) to trigger confirmation
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+
+    // Status should transition to confirmed
+    expect(screen.getByText('Payment confirmed!')).toBeInTheDocument();
+    expect(document.querySelector('.qris-status--success')).toBeInTheDocument();
+    expect(document.querySelector('.qris-spinner')).toBeNull();
+  });
+
+  it('calls onPaymentConfirmed after confirmation + delay', () => {
+    const onPaymentConfirmed = vi.fn();
+    const hostRef = makeHostRef();
+    render(
+      <HostModal
+        hostRef={hostRef}
+        onPaymentConfirmed={onPaymentConfirmed}
+      />,
+    );
+
+    // Advance polls to trigger confirmation
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+
+    // After confirmation, there's a 1200ms delay before calling onPaymentConfirmed
+    expect(onPaymentConfirmed).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1199);
+    });
+    expect(onPaymentConfirmed).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onPaymentConfirmed).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets poll state when isOpen changes', () => {
+    const hostRef = makeHostRef();
+    render(<HostModal hostRef={hostRef} />);
+
+    // Advance partially through polls
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    // Close
+    act(() => { hostRef.setOpen(false); });
+    act(() => { vi.advanceTimersByTime(200); }); // Exit animation clears DOM
+    expect(document.querySelector('.qris-overlay')).toBeNull();
+
+    // Reopen via state setter
+    act(() => { hostRef.setOpen(true); });
+    act(() => { vi.advanceTimersByTime(50); });
+
+    // Should be back to waiting (poll state reset on isOpen change)
+    expect(screen.getByText('Waiting for payment...')).toBeInTheDocument();
+    expect(document.querySelector('.qris-spinner')).toBeInTheDocument();
+
+    // Advance by 8000ms again to confirm
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+    expect(screen.getByText('Payment confirmed!')).toBeInTheDocument();
+  });
+});

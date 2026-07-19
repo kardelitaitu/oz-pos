@@ -29,6 +29,8 @@ staff-login-error-not-found = Pengguna tidak ditemukan
 staff-login-error-connection = Tidak dapat memverifikasi nama pengguna. Periksa koneksi Anda.
 staff-login-back = ← Kembali
 staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
+staff-login-attempts-remaining = ({ $count } percobaan tersisa)
+staff-login-lockout = Terkunci. Coba lagi dalam { $seconds }d
 
 # ── Product Bundles ──
 staff-title = Staf
@@ -125,6 +127,11 @@ staff-ws-role-defaults = Gunakan default peran
 staff-ws-custom = Kustom
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
+
+staff-login-close-aria =
+    .aria-label = Tutup
+staff-login-next-aria =
+    .aria-label = Lanjut
 
 fastpin-switch-user = Ganti Pengguna
 fastpin-active-user = Aktif: { $name }

@@ -385,4 +385,114 @@ describe('StockShortfallDialog', () => {
       ).toBeInTheDocument();
     });
   });
+
+  it('renders error with role="alert"', async () => {
+    mockCompleteSaleWithResolvedShortfalls.mockRejectedValueOnce(
+      new Error('Network failure'),
+    );
+
+    await renderWithFluent(<StockShortfallDialog {...defaultProps} />);
+
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeInTheDocument();
+      expect(alert).toHaveTextContent('Network failure');
+    });
+  });
+
+  it('allows negative stock checkbox to be checked and confirms successfully', async () => {
+    const onComplete = vi.fn();
+    mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
+      saleId: 'sale-1',
+      total: null,
+      lineCount: 1,
+    });
+
+    await renderWithFluent(
+      <StockShortfallDialog
+        {...defaultProps}
+        shortfallResult={partialStockResult({
+          shortfalls: [shortfall({ alternatives: [] })],
+        })}
+        onComplete={onComplete}
+      />,
+    );
+
+    // Check allow-negative checkbox
+    const checkbox = screen.getByRole('checkbox');
+    await userEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    // Confirm
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+
+    await waitFor(() => {
+      expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+    });
+
+    const argsPayload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as {
+      resolutions: Array<{ sku: string; allocations: Array<{ locationId: string; qty: number }> }>;
+    };
+    expect(argsPayload.resolutions).toHaveLength(1);
+    const resolution = argsPayload.resolutions[0]!;
+    // With no alternatives, allocation falls back to primaryLocationId
+    expect(resolution.sku).toBe('SKU-001');
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles split mode back to simple mode', async () => {
+    await renderWithFluent(<StockShortfallDialog {...defaultProps} />);
+
+    // Switch to split mode
+    await userEvent.click(screen.getByText('Split across locations'));
+    expect(screen.getByText('Use single location')).toBeInTheDocument();
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+
+    // Switch back to simple mode
+    await userEvent.click(screen.getByText('Use single location'));
+    expect(screen.getByText('Split across locations')).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+  });
+
+  it('handles multiple shortfalls with mixed modes', async () => {
+    mockCompleteSaleWithResolvedShortfalls.mockResolvedValueOnce({
+      saleId: 'sale-1',
+      total: null,
+      lineCount: 2,
+    });
+
+    await renderWithFluent(
+      <StockShortfallDialog
+        {...defaultProps}
+        shortfallResult={partialStockResult({
+          shortfalls: [
+            shortfall({ sku: 'SKU-001', productName: 'Product A' }),
+            shortfall({ sku: 'SKU-002', productName: 'Product B', alternatives: [] }),
+          ],
+        })}
+      />,
+    );
+
+    // First shortfall: switch to split mode
+    const splitToggle = screen.getAllByText('Split across locations');
+    await userEvent.click(splitToggle[0]!);
+    expect(screen.getByText('Use single location')).toBeInTheDocument();
+
+    // Second shortfall has no alternatives — no radio buttons shown
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+
+    // Confirm
+    await userEvent.click(screen.getByText('Confirm & Continue'));
+
+    await waitFor(() => {
+      expect(mockCompleteSaleWithResolvedShortfalls).toHaveBeenCalledTimes(1);
+    });
+
+    const argsPayload = mockCompleteSaleWithResolvedShortfalls.mock.calls[0]![1] as {
+      resolutions: Array<{ sku: string; allocations: Array<{ locationId: string; qty: number }> }>;
+    };
+    expect(argsPayload.resolutions).toHaveLength(2);
+  });
 });

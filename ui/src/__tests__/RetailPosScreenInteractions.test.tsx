@@ -509,6 +509,176 @@ describe('RetailPosScreen — interactions', () => {
     await waitFor(() => expect(screen.getByText(/Clear Cart/)).toBeInTheDocument());
   });
 
+  // ── Pay button edge cases ──────────────────────────────────
+
+  it('disables Pay button when cart is empty (no lines)', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    const payBtns = await screen.findAllByRole('button', { name: /pay/i });
+    expect(payBtns[0]).toBeDisabled();
+  });
+
+  it('keeps Pay button disabled when cart has items but no shift', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    vi.mocked(posState.usePosState).mockReturnValue({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      total: { minor_units: 3500, currency: 'IDR' },
+      subtotal: { minor_units: 3500, currency: 'IDR' },
+      discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
+      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    const payBtns = await screen.findAllByRole('button', { name: /pay/i });
+    expect(payBtns[0]).toBeDisabled();
+  });
+
+  // ── Cart line removal ────────────────────────────────────────
+
+  it('calls removeLine when cart remove button is clicked', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    const removeLine = vi.fn();
+    vi.mocked(posState.usePosState).mockReturnValue({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      total: { minor_units: 3500, currency: 'IDR' },
+      subtotal: { minor_units: 3500, currency: 'IDR' },
+      discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
+      addProduct: vi.fn(), removeLine, updateQty: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      // Product name appears in both the product grid AND the cart panel.
+      const names = screen.getAllByText('Indomie Goreng');
+      expect(names.length).toBeGreaterThanOrEqual(1);
+    });
+    const removeBtns = document.querySelectorAll('.retail-cart-remove-btn');
+    expect(removeBtns.length).toBeGreaterThanOrEqual(1);
+    await userEvent.click(removeBtns[0]!);
+    expect(removeLine).toHaveBeenCalledTimes(1);
+    expect(removeLine).toHaveBeenCalledWith('line-1');
+  });
+
+  it('removes multiple line items individually from cart panel', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    const removeLine = vi.fn();
+    vi.mocked(posState.usePosState).mockReturnValue({
+      lines: [
+        { id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } },
+        { id: 'line-2' as LineId, sku: 'SKU-002' as Sku, name: 'Teh Botol Sosro', category: 'cat-drink', qty: 2, unit_price: { minor_units: 5000, currency: 'IDR' } },
+      ],
+      total: { minor_units: 13500, currency: 'IDR' },
+      subtotal: { minor_units: 13500, currency: 'IDR' },
+      discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
+      addProduct: vi.fn(), removeLine, updateQty: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      const names = screen.getAllByText('Indomie Goreng');
+      expect(names.length).toBeGreaterThanOrEqual(1);
+    });
+    const names = screen.getAllByText('Teh Botol Sosro');
+    expect(names.length).toBeGreaterThanOrEqual(1);
+    // Find all remove buttons and click each
+    const removeBtns = document.querySelectorAll('.retail-cart-remove-btn');
+    for (const btn of removeBtns) {
+      await userEvent.click(btn);
+    }
+    expect(removeLine).toHaveBeenCalledTimes(2);
+    expect(removeLine).toHaveBeenCalledWith('line-1');
+    expect(removeLine).toHaveBeenCalledWith('line-2');
+  });
+
+  // ── Keyboard shortcut: F5 → SKU focus ────────────────────────
+
+  it('focuses SKU input when F5 is pressed', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    vi.mocked(posState.usePosState).mockReturnValue({
+      lines: [], total: null, subtotal: null,
+      discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
+      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
+      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
+      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
+      resetCart: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
+    const skuInput = skuInputs[0];
+    expect(skuInput).not.toBe(document.activeElement);
+    await userEvent.keyboard('{F5}');
+    await waitFor(() => {
+      expect(skuInput).toBe(document.activeElement);
+    });
+  });
+
+  // ── Keyboard shortcut: F6 → Sales History ────────────────────
+
+  it('opens Sales History screen when F6 is pressed', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('sales-history-screen')).not.toBeInTheDocument();
+    await userEvent.keyboard('{F6}');
+    await waitFor(() => {
+      expect(screen.getByTestId('sales-history-screen')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Sales History')).toBeInTheDocument();
+  });
+
+  // ── Keyboard shortcut: F7 → Customer Search ──────────────────
+
+  it('opens Customer Search overlay when F7 is pressed', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
+    });
+    await userEvent.keyboard('{F7}');
+    // Customer search shows an input field for searching
+    await waitFor(() => {
+      // The customer search renders a search input
+      const searchInputs = screen.getAllByPlaceholderText(/search|cari|find/i);
+      expect(searchInputs.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ── Keyboard shortcut: F8 → Stock Inquiry ────────────────────
+
+  it('opens Stock Inquiry screen when F8 is pressed', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('stock-inquiry-screen')).not.toBeInTheDocument();
+    await userEvent.keyboard('{F8}');
+    await waitFor(() => {
+      expect(screen.getByTestId('stock-inquiry-screen')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Stock Inquiry')).toBeInTheDocument();
+  });
+
   it('resets cart when clear is confirmed', async () => {
     const posState = await import('@/features/sales/usePosState');
     const resetCart = vi.fn();

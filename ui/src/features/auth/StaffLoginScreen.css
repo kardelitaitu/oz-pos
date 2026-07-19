@@ -545,6 +545,24 @@
   transition: background var(--duration-200) var(--ease-out);
 }
 
+/* ── Rate-limit indicator within error banner ──────────────────── */
+
+.staff-login-rate-limit {
+  display: inline;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-danger);
+}
+
+.staff-login-rate-limit--lockout {
+  color: var(--color-warning);
+  animation: login-rate-limit-pulse var(--duration-1000) var(--ease-in-out) infinite;
+}
+
+@keyframes login-rate-limit-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
 /* ── Shake — applied via JS when login fails ─────────────────────── */
 
 @media (prefers-reduced-motion: no-preference) {
