@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 12 / 31 items complete (39%) · Updated 2026-07-26
+**Current state:** 13 / 31 items complete (42%) · Updated 2026-07-26
 
 ---
 
@@ -12,14 +12,14 @@
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
-| 🧪 Rust Test Coverage | 14 | 12 | ███████████░░░░ 86% |
+| 🧪 Rust Test Coverage | 14 | 13 | █████████████░░░ 93% |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🔴 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **12** | **██████████░░░░ 39%** |
+| **Total** | **31** | **13** | **██████████████░░ 42%** |
 
 ---
 
@@ -41,7 +41,7 @@
 | `cart.rs` | 12 → **21** | 20+ | ✅ |
 | `gift_cards.rs` | 12 → **18** | 15+ | ✅ |
 | `kds.rs` | 12 → **21** | 20+ | ✅ |
-| `customers.rs` | 13 | 15+ | 2 |
+| `customers.rs` | 13 → **16** | 15+ | ✅ |
 | `offline.rs` | 14 | 20+ | 6 |
 | `store_profiles.rs` | 14 | 20+ | 6 |
 | `audit.rs` | 15 | 20+ | 5 |

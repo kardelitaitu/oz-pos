@@ -343,4 +343,49 @@ mod tests {
         let err = store(&conn).delete_customer("nope").unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
+
+    // ── Additional edge cases ─────────────────────────────────────
+
+    #[test]
+    fn list_customers_ordered_by_name() {
+        let conn = fresh();
+        // Seed out of alphabetical order.
+        conn.execute_batch(
+            "INSERT INTO customers (id, name, created_at, updated_at) VALUES
+                ('c-z', 'Zara',  '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('c-a', 'Alpha', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('c-m', 'Mike',  '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+        let customers = store(&conn).list_customers().unwrap();
+        assert_eq!(customers.len(), 3);
+        assert_eq!(customers[0].name, "Alpha");
+        assert_eq!(customers[1].name, "Mike");
+        assert_eq!(customers[2].name, "Zara");
+    }
+
+    #[test]
+    fn update_customer_clear_email_and_phone() {
+        let conn = fresh();
+        seed_customers(&conn);
+        // cust-1 had email and phone; update to clear them.
+        let updated = store(&conn)
+            .update_customer("cust-1", "Alice", None, None, Some("Cleared fields"))
+            .unwrap();
+        assert_eq!(updated.name, "Alice");
+        assert!(updated.email.is_none(), "email should be cleared");
+        assert!(updated.phone.is_none(), "phone should be cleared");
+        assert_eq!(updated.notes, "Cleared fields");
+    }
+
+    #[test]
+    fn create_customer_invalid_email_saved_as_none() {
+        let conn = fresh();
+        let c = store(&conn)
+            .create_customer("Test", Some("not-an-email"), None, None)
+            .unwrap();
+        // Email::new("not-an-email") returns Err, so and_then returns None.
+        assert!(c.email.is_none());
+        assert_eq!(c.name, "Test");
+    }
 }
