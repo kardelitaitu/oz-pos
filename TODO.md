@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 94 / 101 items complete (93.1%) · Updated 2026-07-19
+**Current state:** 95 / 101 items complete (94.1%) · Updated 2026-07-19
 
 ---
 
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 8 | ████░░░░░░ 42% |
-| **Total** | **101** | **94** | **█████████░ 94%** |
+| **Total** | **101** | **95** | **██████████░ 95%** |
 
 ---
 
@@ -177,7 +177,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 
 ### 🧪 8. UI Test Coverage
 
-- [ ] **Cross-reference all 55+ feature components against their test files**
+- [x] **Cross-reference all 55+ feature components against their test files**
   - [x] `DataManagementScreen.test.tsx` — backup/export/import all flows (56 tests across 4 dedicated files)
   - [x] `RetailPosScreenCheckout.test.tsx` — discount flow, over-tender/change edge case (+2 tests)
   - [x] `RetailPosScreenInteractions.test.tsx` — keyboard shortcut edge cases (F5/F6/F7/F8), Pay disabled states, cart line removal (+7 tests)
@@ -323,8 +323,8 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 **Code quality gates**
 - [ ] `cargo test --workspace` — all passing
 - [ ] `npm run test` — all passing
-- [ ] `npm run lint` — 0 errors, 0 warnings
-- [ ] `npm run typecheck` — 0 errors
+- [x] `npm run lint` — 0 errors, 0 warnings
+- [x] `npm run typecheck` — 0 errors
 - [ ] Migration idempotency — all clean
 - [ ] `skill-drift-guard` — 0 findings
 - [ ] Design token compliance — 0 violations
@@ -335,7 +335,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 - [x] Review `CHANGELOG.md` for accuracy and completeness
 
 **Release & PR**
-- [ ] All P0 items complete
+- [x] All P0 items complete
 - [ ] Push `0.0.11` branch
 - [ ] Create PR with changelog summary
 - [ ] Run CI checks on PR
