@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 58 / 101 items complete (57.4%) · Updated 2026-07-19
+**Current state:** 63 / 101 items complete (62.4%) · Updated 2026-07-19
 
 ---
 
@@ -13,7 +13,7 @@
 | ♿ Accessibility | 17 | 4 | ███░░░░░░░ 24% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
-| 🧪 UI Test Coverage | 8 | 2 | ██░░░░░░░░ 25% |
+| 🧪 UI Test Coverage | 8 | 5 | ██████░░░░ 63% |
 | 🧹 Tech Debt | 11 | 2 | █░░░░░░░░░ 18% |
 | 🍳 KDS Enhancements | 9 | 0 | ░░░░░░░░░░ 0% |
 | 🧾 Reporting & Analytics | 6 | 0 | ░░░░░░░░░░ 0% |
@@ -173,7 +173,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
   - [x] `TransactionLogScreen.test.tsx` — baseline: loading, filters, expand/collapse, date filter, 9 tests
   - [ ] `SettingsPage.test.tsx` — all tabs render correctly
   - [x] `FastPINOverlay.test.tsx` — onVerified callback, loading state, Enter PIN, error clears dots
-  - [ ] `QrisQrDisplay.test.tsx` — QR renders, expiry handling
+  - [x] `QrisQrDisplay.test.tsx` — QR grid 21×21, amount/ref display, spinner, poll→confirmed transition, delay timing, reopen reset
 
 ---
 
