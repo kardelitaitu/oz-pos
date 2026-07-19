@@ -1,4 +1,4 @@
-# 0.0.14 — Plugin Hardening + Sync Reliability + Performance
+# 0.0.13 — Plugin Hardening + Sync Reliability + Performance
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
