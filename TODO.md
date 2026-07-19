@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 0 / 14 items complete (0%) · Updated 2026-07-26
+**Current state:** 1 / 31 items complete (3%) · Updated 2026-07-26
 
 ---
 
@@ -12,14 +12,14 @@
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
-| 🧪 Rust Test Coverage | 14 | 0 | ░░░░░░░░░░ 0% |
+| 🧪 Rust Test Coverage | 14 | 1 | █░░░░░░░░░ 7% |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🔴 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **0** | **░░░░░░░░░░ 0%** |
+| **Total** | **31** | **1** | **█░░░░░░░░░ 3%** |
 
 ---
 
@@ -29,7 +29,7 @@
 
 | Module | Current | Target | New tests needed |
 |--------|---------|--------|-----------------|
-| `recipes.rs` | 4 | 15+ | 11 |
+| `recipes.rs` | 4 → **16** | 15+ | ✅ |
 | `product_bundles.rs` | 8 | 15+ | 7 |
 | `promotions.rs` | 9 | 15+ | 6 |
 | `loyalty.rs` | 10 | 15+ | 5 |
