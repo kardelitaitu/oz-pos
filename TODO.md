@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 40 / 71 items complete (56%) · Updated 2026-07-20
+**Current state:** 45 / 71 items complete (63%) · Updated 2026-07-20
 
 ---
 
@@ -16,7 +16,7 @@
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **4** | **███████████████████████████████ 100% 🎉** |
-| ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| ⚪ P6 — Hardware Integration | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **44** | **████████████████████████████▱ 62%** |
+| **Total** | **71** | **45** | **██████████████████████████████▱ 63%** |
 
 ---
 
@@ -166,7 +166,7 @@ The HAL (`crates/oz-hal/`) supports USB, Bluetooth, serial, and TCP/IP devices. 
 
 ### Checklist
 
-- [ ] **P6-1: Auto-discovery** — Add USB device enumeration (using `rusb` or platform-specific APIs) to detect connected printers, scanners, and scales by vendor/product ID. Show discovered devices in TerminalManagementScreen as selectable options. Fall back to manual config when auto-detect fails.
+- [x] **P6-1: Auto-discovery** ✅ — Added `classify_device()` VID/PID lookup helper, `probe_scales()` (HID+KNOWN_SCALES), `probe_all()` (unified scanners+printers+scales). Added `discover_hardware` Tauri command + `discoverHardware()` frontend API. Fixed `probe_by_class()` to populate `category`/`label`. Fixed all 11 test constructors across `usb.rs` and `usb_printer.rs`. Added 9 new tests (classify_device 4 scenarios, KNOWN_SCALES, serde roundtrip, DeviceCategory serde). oz-hal: 212/212 tests pass, TypeScript: 0 errors.
 - [ ] **P6-2: ESC/POS barcode & QR printing** — Add `print_barcode()` and `print_qr()` commands to `escpos.rs` printer driver. Wire into receipt printing flow: print QR code (payment link) and barcode (receipt number) on each receipt. Add test with mock transport.
 - [ ] **P6-3: Printer status polling** — Add `get_status()` to the printer trait returning: `PaperStatus(ok/low/empty)`, `CoverOpen(bool)`, `DrawerOpen(bool)`. Poll before every print job; warn user if paper is low or cover is open. Add mock status simulation.
 - [ ] **P6-4: Receipt preview in UI** — Add a "Print Preview" modal in PaymentModal that shows a styled receipt rendering before printing. Include: store name/logo, line items, totals, payment method, QR code, barcode. Use CSS for layout, then send to printer. Add test.

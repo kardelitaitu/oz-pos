@@ -458,6 +458,7 @@ pub fn run() {
             commands::hardware::list_displays,
             commands::hardware::display_show,
             commands::hardware::display_clear,
+            commands::hardware::discover_hardware,
             commands::scale::read_scale_weight,
             commands::store_profiles::list_store_profiles,
             commands::store_profiles::get_store_profile,
