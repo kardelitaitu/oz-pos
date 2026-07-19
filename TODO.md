@@ -13,7 +13,7 @@
 | 🔴 P0 — Plugin Security | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P1 — Sync Reliability | 6 | **5** | **████████▱▱▱▱ 83%** |
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🔵 P3 — KDS Enhancements | 5 | **2** | **████▱▱▱▱▱▱ 40%** |
+| 🔵 P3 — KDS Enhancements | 5 | **3** | **██████▱▱▱▱ 60%** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **16** | **████████████▱▱ 23%** |
+| **Total** | **70** | **17** | **█████████████▱ 24%** |
 
 ---
 
@@ -106,7 +106,7 @@ The KDS system (kitchen display) has multi-layout support (Focus/Kanban/Metro) b
 
 - [x] **P3-1: Overdue escalation** ✅ — Progressive visual escalation implemented: green <5min (on-time), yellow 5-10min (amber border+pulse), red 10-15min (red border+shake animation via `kds-shake` keyframes), urgent ≥15min (gradient red background + `URGENT` badge + gradient top bar sweep). Updated `useTicketSla` hook thresholds, added `urgent` boolean, dual audio alerts at 10min and 15min transitions. TypeScript checks pass.
 - [ ] **P3-2: Sound alerts** — Add optional sound notification when a new ticket arrives: short chime via `AudioContext` oscillator (no external audio file needed). One sound per ticket, debounced to max 1 sound per 5 seconds. Toggle in KDS settings.
-- [ ] **P3-3: Layout persistence** — Save selected KDS layout (Focus/Kanban/Metro) per terminal to localStorage. Restore on reload. Add `lastLayout` to `KdsLayoutSwitcher` state.
+- [x] **P3-3: Layout persistence** ✅ — Added localStorage cache layer to `useKdsPreferences` hook: `readLocalPrefs` (instant restore on mount with validation), `writeLocalPrefs` (on every layout/setting change). Combined with existing server persistence for seamless online/offline restore. TypeScript passes.
 - [x] **P3-4: Ticket count badge animation** ✅ — Added `useCountAnim` hook (tracks previous count via `useRef`, returns `'up' | 'down' | ''` animation direction). CSS `@keyframes kds-count-up` (scale 1→1.35→0.9→1 with bounce) and `kds-count-down` (scale 1→0.75→1.05→1). Classes `.kds-column-count--up` and `.kds-column-count--down` with 300ms duration. Respects `prefers-reduced-motion: reduce`. TypeScript passes.
 - [ ] **P3-5: KDS settings panel** — Add a settings gear icon in KDS header that opens a popover with: sound toggle, overdue escalation time thresholds (slider: 3-15min), auto-acknowledge new tickets toggle, and display density (comfortable/compact).
 
