@@ -109,6 +109,23 @@ jobs:
         if: always()
         run: bash scripts/lint-i18n.sh
 
+  lighthouse:
+    name: Lighthouse a11y audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm run build
+
+      - name: Run Lighthouse CI
+        run: npx -p @lhci/cli@0.14.x -- lhci autorun
+
   docker:
     name: Docker (cloud-server build)
     runs-on: ubuntu-latest
