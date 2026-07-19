@@ -1,47 +1,25 @@
 # Compilation caching for OZ-POS local development.
 #
-# This file is committed to the repo so every contributor gets fast
-# `cargo check` / `cargo test` out of the box.
-#
-# Required tools (one-time setup):
-#   choco install sccache    # Windows
-#   brew install sccache     # macOS
-#   cargo install sccache    # any platform
-#
 # After installing sccache, run the one-time setup script:
 #   powershell -File scripts/setup-cache.ps1   # Windows
 #   bash scripts/setup-cache.sh                 # Linux / macOS
 
 [build]
-# Uncomment the line below AFTER running the one-time setup script:
-#   powershell -File scripts/setup-cache.ps1   # Windows
-#   bash scripts/setup-cache.sh                 # Linux / macOS
-#
 # sccache wraps rustc and caches compiled artifacts on disk.
 # A cold `cargo check --workspace` drops from ~22s to ~0.6s on the
-# second run (38× speedup on a 32-thread dev machine).
-#
-# CI uses Swatinem/rust-cache@v2 instead; sccache is local-dev only.
-#rustc-wrapper = "sccache"
+# second run (38x speedup on a 32-thread dev machine).
+# CI also uses sccache via RUSTC_WRAPPER env var in .github/workflows/.
+rustc-wrapper = "sccache"
 
 # ------------------------------------------------------------------
-# Fast linkers (local dev only — CI doesn't have mold / ld64.lld)
+# Fast linkers (local dev only)
 # ------------------------------------------------------------------
 # Uncomment the [target] sections below after installing the linker.
-# On Linux, mold is ~3-5× faster than GNU ld.
-# On macOS, ld64.lld shaves ~20% off link time.
-# Windows MSVC link.exe is already fast — no config needed.
-#
 # One-time install:
 #   sudo apt install mold        # Debian / Ubuntu
-#   sudo dnf install mold        # Fedora
-#   brew install llvm            # macOS — then add to PATH:
-#     echo 'export PATH="$(brew --prefix llvm)/bin:$PATH"' >> ~/.zshrc
-
-# [target.x86_64-unknown-linux-gnu]
-# linker = "mold"
+#   brew install llvm            # macOS -- then add to PATH
 #
-# [target.aarch64-unknown-linux-gnu]
+# [target.x86_64-unknown-linux-gnu]
 # linker = "mold"
 #
 # [target.x86_64-apple-darwin]
