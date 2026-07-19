@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 47 / 71 items complete (66%) · Updated 2026-07-20
+**Current state:** 48 / 71 items complete (67%) · Updated 2026-07-20
 
 ---
 
@@ -16,7 +16,7 @@
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **4** | **███████████████████████████████ 100% 🎉** |
-| ⚪ P6 — Hardware Integration | 4 | **3** | **███████████▱▱ 75%** |
+| ⚪ P6 — Hardware Integration | 4 | **4** | **██████████████████ 100% 🎉** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **47** | **████████████████████████████████▱ 66%** |
+| **Total** | **71** | **48** | **██████████████████████████████████▱ 67%** |
 
 ---
 
@@ -169,7 +169,7 @@ The HAL (`crates/oz-hal/`) supports USB, Bluetooth, serial, and TCP/IP devices. 
 - [x] **P6-1: Auto-discovery** ✅ — Added `classify_device()` VID/PID lookup helper, `probe_scales()` (HID+KNOWN_SCALES), `probe_all()` (unified scanners+printers+scales). Added `discover_hardware` Tauri command + `discoverHardware()` frontend API. Fixed `probe_by_class()` to populate `category`/`label`. Fixed all 11 test constructors across `usb.rs` and `usb_printer.rs`. Added 9 new tests (classify_device 4 scenarios, KNOWN_SCALES, serde roundtrip, DeviceCategory serde). oz-hal: 212/212 tests pass, TypeScript: 0 errors.
 - [x] **P6-2: ESC/POS barcode & QR printing** ✅ — Added `BarcodeType` enum with 7 variants and `barcode()`/`qr_code()` ESC/POS command builders in `escpos.rs`. Added `barcode_enabled` and `payment_link_template` fields to `ReceiptConfig`. Wired barcode (Code128 receipt number) and QR (payment link with `{receipt}`/`{amount}` templates) into `format_sales_receipt`. 15 new tests across escpos (9) and receipt (6). oz-hal: 226/226 tests pass.
 - [x] **P6-3: Printer status polling** ✅ — Added `PaperStatus` enum (Ok/Low/Empty) and `PrinterStatus` struct (paper, cover_open, drawer_open) with `is_ready()`/`has_fault()` helpers. Added `get_status()` to `ReceiptPrinter` trait (default returns ok/closed). Implemented programmable status in `MockReceiptPrinter` with `set_status()` + 4 new tests. Added pre-print status check in `hardware.rs` (fault→error, low→warn). oz-hal: 230/230 tests pass.
-- [ ] **P6-4: Receipt preview in UI** — Add a "Print Preview" modal in PaymentModal that shows a styled receipt rendering before printing. Include: store name/logo, line items, totals, payment method, QR code, barcode. Use CSS for layout, then send to printer. Add test.
+- [x] **P6-4: Receipt preview in UI** ✅ — Created `ReceiptPreview` component with monospace-styled receipt paper layout (store header, date/number, column headers, line items, subtotal/tax/total, payments with change, barcode bars, QR code SVG, footer). Integrated into PaymentModal done state with Print/Skip buttons. Dual-print eliminated — only user-initiated. QRIS path also gets preview. TypeScript: 0 errors.
 
 ---
 

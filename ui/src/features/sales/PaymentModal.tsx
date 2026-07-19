@@ -20,6 +20,8 @@ import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { animDuration } from '@/utils/animation';
 import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
+import ReceiptPreview from '@/features/sales/ReceiptPreview';
+import type { PrintSalesReceiptArgs } from '@/api/sales';
 import './PaymentModal.css';
 
 type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
@@ -142,6 +144,7 @@ export default function PaymentModal({
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
   const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
+  const [receiptArgs, setReceiptArgs] = useState<PrintSalesReceiptArgs | null>(null);
 
   const [paymentError, setPaymentError] = useState<{ message: string; retryable: boolean } | null>(null);
 
@@ -209,6 +212,7 @@ export default function PaymentModal({
       setShowQr(false);
       setQrReference('');
       setShortfallResult(null);
+      setReceiptArgs(null);
       setSelectedCurrency(total.currency);
       notifyCustomerChange(null);
       setCustomerSearchQuery('');
@@ -406,7 +410,7 @@ export default function PaymentModal({
       try {
         const completedSale = await getSale(saleResult.saleId);
 
-        await printSalesReceipt({
+        const qrisReceiptData: PrintSalesReceiptArgs = {
           date: new Date().toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric',
           }),
@@ -442,9 +446,10 @@ export default function PaymentModal({
             },
           ],
           ...(tableNumber ? { tableNumber } : {}),
-        });
+        };
+        setReceiptArgs(qrisReceiptData);
       } catch {
-        // Printer may not be connected.
+        // Sale fetch may fail in edge cases — non-blocking.
       }
 
       try {
@@ -723,8 +728,7 @@ export default function PaymentModal({
         console.log('[Sale] Fetching completed sale...');
         const completedSale = await getSale(saleResult.saleId);
 
-        console.log('[Sale] Printing receipt...');
-        await printSalesReceipt({
+        const receiptData: PrintSalesReceiptArgs = {
           date: new Date().toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric',
           }),
@@ -768,7 +772,9 @@ export default function PaymentModal({
                 },
               ],
           ...(tableNumber ? { tableNumber } : {}),
-        });
+        };
+        // Store receipt data for preview (user chooses to print or skip)
+        setReceiptArgs(receiptData);
       } catch (e) {
         console.warn('[Sale] Receipt/KDS step failed (non-blocking):', e);
       }
@@ -925,7 +931,21 @@ export default function PaymentModal({
 
       {!shortfallResult && (
       <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
-        {done ? (
+        {done && receiptArgs ? (
+          <ReceiptPreview
+            receipt={receiptArgs}
+            onPrint={async () => {
+              try {
+                await printSalesReceipt(receiptArgs);
+                animateLeave(onComplete);
+              } catch {
+                // Printer error — still dismiss
+                animateLeave(onComplete);
+              }
+            }}
+            onSkip={() => animateLeave(onComplete)}
+          />
+        ) : done ? (
           <div className="payment-done" role="status" aria-live="assertive">
             <svg className="payment-done-checkmark" viewBox="0 0 64 64" aria-hidden="true">
               <circle className="payment-done-checkmark-circle" cx="32" cy="32" r="26" />
