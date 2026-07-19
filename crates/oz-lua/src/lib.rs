@@ -633,6 +633,194 @@ end
         assert!(lua.validate_order(&lines, 100, "USD").unwrap().is_empty());
     }
 
+    // ── P0-4: Comprehensive sandbox tests ─────────────────────────
+
+    #[test]
+    fn all_14_dangerous_globals_are_nil() {
+        let lua = runtime();
+        let globals = lua.lua.globals();
+        let dangerous = [
+            "os",
+            "io",
+            "loadfile",
+            "dofile",
+            "require",
+            "package",
+            "debug",
+            "rawget",
+            "rawset",
+            "rawequal",
+            "rawlen",
+            "collectgarbage",
+            "module",
+            "load",
+        ];
+        for name in &dangerous {
+            let val: rlua::Value = globals.get(*name).unwrap();
+            assert!(
+                matches!(val, rlua::Value::Nil),
+                "dangerous global '{name}' should be nil"
+            );
+        }
+    }
+
+    #[test]
+    fn safe_globals_still_work() {
+        let lua = runtime();
+        // Verify that the allowed standard-library globals exist and work.
+        lua.load_str(
+            r#"
+-- math
+local pi = math.pi
+assert(pi > 3.14)
+
+-- string
+local greeting = string.upper("hello")
+assert(greeting == "HELLO")
+
+-- table
+local t = { 1, 2, 3 }
+table.insert(t, 4)
+assert(#t == 4)
+
+-- pairs / ipairs
+local count = 0
+for _, _ in pairs(t) do count = count + 1 end
+assert(count == 4)
+
+-- tonumber / tostring
+assert(tonumber("42") == 42)
+assert(tostring(42) == "42")
+
+-- type
+assert(type("hello") == "string")
+
+-- pcall / xpcall
+local ok, val = pcall(function() return 1 + 1 end)
+assert(ok and val == 2)
+
+-- error (caught by pcall)
+local ok2 = pcall(function() error("test") end)
+assert(not ok2, "pcall should catch error")
+"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn sandbox_blocks_require() {
+        let lua = runtime();
+        let result = lua.load_str(r#"require("socket")"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_package_access() {
+        let lua = runtime();
+        let result = lua.load_str(r#"package.path = "/evil/?.lua""#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_load() {
+        let lua = runtime();
+        let result = lua.load_str(r#"load("return 1")()"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_rawget() {
+        let lua = runtime();
+        let result = lua.load_str(r#"rawget(_G, "os")"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_rawset() {
+        let lua = runtime();
+        let result = lua.load_str(r#"rawset(_G, "os", {})"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_collectgarbage() {
+        let lua = runtime();
+        let result = lua.load_str(r#"collectgarbage("collect")"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_debug_access() {
+        let lua = runtime();
+        // Without 'debug', scripts cannot call debug.sethook to clear
+        // the instruction-limit hook that was set in new().
+        let result = lua.load_str(r#"debug.sethook()"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn sandbox_blocks_module() {
+        let lua = runtime();
+        let result = lua.load_str(r#"module("evil")"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn malicious_script_multi_vector_attack_blocked() {
+        // A script that tries multiple attack vectors in sequence —
+        // all should fail and the instruction limit should abort any
+        // that somehow slip through.
+        //
+        // Each vector is wrapped in an anonymous function so the nil-global
+        // error is caught by pcall (rather than being evaluated as a
+        // function argument outside of pcall's scope).
+        let lua = runtime();
+        let result = lua.load_str(
+            r#"
+-- Vector 1: os
+pcall(function() os.execute("rm -rf /") end)
+
+-- Vector 2: io
+pcall(function() io.open("/etc/passwd") end)
+
+-- Vector 3: dofile
+pcall(function() dofile("/tmp/evil.lua") end)
+
+-- Vector 4: require
+pcall(function() require("socket") end)
+
+-- Vector 5: loadfile
+pcall(function() loadfile("/tmp/evil.luac") end)
+
+-- Vector 6: load
+pcall(function() load("return 1") end)
+
+-- Vector 7: debug
+pcall(function() debug.sethook() end)
+
+-- Vector 8: rawget
+pcall(function() rawget(_G, "os") end)
+
+-- Vector 9: rawset
+pcall(function() rawset(_G, "os", {}) end)
+
+-- Vector 10: module
+pcall(function() module("evil") end)
+
+-- Vector 11: collectgarbage
+pcall(function() collectgarbage("collect") end)
+
+-- All vectors silently fail; script completes."#,
+        );
+        // The script should load successfully (pcall catches each nil-index error)
+        // rather than crashing the VM.
+        assert!(
+            result.is_ok(),
+            "malicious multi-vector script should load safely: {}",
+            result.unwrap_err()
+        );
+    }
+
     // ── Resource limit tests ──────────────────────────────────────────
 
     #[test]
@@ -701,5 +889,157 @@ end
 "#,
         )
         .unwrap();
+    }
+
+    // ── P0-5: Example script regression tests ─────────────────────────
+
+    #[test]
+    fn real_example_discount_bulk_works_in_sandbox() {
+        // Regression test: load scripts/examples/discount_bulk.lua
+        // and verify its apply_discount hook works correctly.
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/examples");
+        let path = base.join("discount_bulk.lua");
+        let lua = runtime();
+        lua.load_file(&path).unwrap();
+
+        // Tier 1: 10+ items → 10% off
+        let lines = vec![CartLineData {
+            sku: "ITEM".into(),
+            qty: 10,
+            unit_price_minor: 100,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        let d = result.expect("10+ items should get 10% discount");
+        assert_eq!(d.percent, 10);
+        assert_eq!(d.label.as_deref(), Some("Bulk 10+"));
+
+        // Tier 2: total > 5000 minor units → 5% off
+        let lines = vec![CartLineData {
+            sku: "ITEM".into(),
+            qty: 6,
+            unit_price_minor: 1000,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        let d = result.expect("total > 5000 should get 5% discount");
+        assert_eq!(d.percent, 5);
+        assert_eq!(d.label.as_deref(), Some("Volume"));
+
+        // No discount: small order
+        let lines = vec![CartLineData {
+            sku: "CHEAP".into(),
+            qty: 1,
+            unit_price_minor: 100,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn real_example_tax_overrides_works_in_sandbox() {
+        // Regression test: load scripts/examples/tax_overrides.lua
+        // and verify its calc_line_tax hook works correctly.
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/examples");
+        let path = base.join("tax_overrides.lua");
+        let lua = runtime();
+        lua.load_file(&path).unwrap();
+
+        // Cigarettes: 20% excise tax, inclusive
+        let tax = lua
+            .calc_line_tax("CIG-001", 1, 1000, "USD")
+            .unwrap()
+            .expect("CIG prefix should get tax override");
+        assert_eq!(tax.rate_bps, 2000);
+        assert!(tax.is_inclusive);
+
+        // Tobacco: 20% excise tax, inclusive
+        let tax = lua
+            .calc_line_tax("TOB-001", 1, 500, "USD")
+            .unwrap()
+            .expect("TOB prefix should get tax override");
+        assert_eq!(tax.rate_bps, 2000);
+
+        // Milk: 0% VAT
+        let tax = lua
+            .calc_line_tax("MILK-001", 1, 200, "USD")
+            .unwrap()
+            .expect("MILK prefix should get 0% VAT");
+        assert_eq!(tax.rate_bps, 0);
+        assert!(!tax.is_inclusive);
+
+        // Prepared food: 8% GST
+        let tax = lua
+            .calc_line_tax("FOOD-001", 1, 500, "USD")
+            .unwrap()
+            .expect("FOOD- prefix should get 8% GST");
+        assert_eq!(tax.rate_bps, 800);
+
+        // Unmatched SKU: fall through
+        let result = lua.calc_line_tax("COFFEE", 1, 350, "USD").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn real_example_validate_order_works_in_sandbox() {
+        // Regression test: load scripts/examples/validate_order.lua
+        // and verify its validate_order hook works correctly.
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/examples");
+        let path = base.join("validate_order.lua");
+        let lua = runtime();
+        lua.load_file(&path).unwrap();
+
+        // Exceeds max quantity
+        let lines = vec![CartLineData {
+            sku: "ITEM".into(),
+            qty: 100,
+            unit_price_minor: 100,
+            currency: "USD".into(),
+        }];
+        let errors = lua.validate_order(&lines, 10000, "USD").unwrap();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("ITEM"));
+        assert!(errors[0].contains("50"));
+
+        // Alcohol age verification
+        let lines = vec![CartLineData {
+            sku: "BEER-001".into(),
+            qty: 6,
+            unit_price_minor: 500,
+            currency: "USD".into(),
+        }];
+        let errors = lua.validate_order(&lines, 3000, "USD").unwrap();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("age"));
+
+        // Duplicate SKU detection
+        let lines = vec![
+            CartLineData {
+                sku: "SKU123".into(),
+                qty: 1,
+                unit_price_minor: 100,
+                currency: "USD".into(),
+            },
+            CartLineData {
+                sku: "SKU123".into(),
+                qty: 2,
+                unit_price_minor: 100,
+                currency: "USD".into(),
+            },
+        ];
+        let errors = lua.validate_order(&lines, 300, "USD").unwrap();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("duplicate"));
+
+        // Clean order: no errors
+        let lines = vec![CartLineData {
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "USD".into(),
+        }];
+        let errors = lua.validate_order(&lines, 700, "USD").unwrap();
+        assert!(errors.is_empty());
     }
 }

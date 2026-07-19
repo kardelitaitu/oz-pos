@@ -639,6 +639,25 @@ oz.apply_discount("line:SKU123", 20)
         assert!(discounts.is_empty());
     }
 
+    #[test]
+    fn real_example_plugin_hook_executes_without_error() {
+        // Regression test for P0-5: verify the real example-discount
+        // plugin's hook fires without crashing or errors.
+        // The plugin applies a 10% discount on Tuesdays (wday == 3),
+        // so the discount may or may not be created depending on the
+        // current day — this test verifies the hook machinery works.
+        let plugins_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let mgr = PluginManager::new(&plugins_dir).unwrap();
+
+        let lines = [line("TEST", 1, 1000, "USD")];
+        let result = mgr.fire_sale_before_complete(&lines, 1000, "USD", "user-1");
+        assert!(result.is_ok(), "hook should execute without error");
+
+        // Hook may or may not push a discount (depends on day of week),
+        // but drain must succeed without panic.
+        let _ = mgr.drain_pending_discounts();
+    }
+
     // ── drain_pending_discounts tests ──────────────────────────────────
 
     #[test]
