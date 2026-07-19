@@ -1,39 +1,50 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { getKeyRotationInfo } from '@/api/security';
 
-const KEY_CREATED_KEY = 'oz-key-created-at';
 const ROTATION_DAYS = 90;
-const WARN_DAYS = 85; // Start warning 5 days before expiry
+const STORAGE_KEY = 'oz-key-created-at';
 
-/** Get the stored key creation timestamp. */
-export function getKeyCreatedAt(): string | null {
-  return localStorage.getItem(KEY_CREATED_KEY);
+/** Fallback: get key creation timestamp from localStorage. */
+function getLocalCreatedAt(): string | null {
+  return localStorage.getItem(STORAGE_KEY);
 }
 
-/** Set the key creation timestamp (call after initial key generation). */
-export function setKeyCreatedAt(iso: string) {
-  localStorage.setItem(KEY_CREATED_KEY, iso);
+/** Fallback: store key creation timestamp in localStorage. */
+export function setLocalCreatedAt(iso: string) {
+  localStorage.setItem(STORAGE_KEY, iso);
 }
 
-/** Calculate days since key creation. Returns null if not tracked. */
-export function getKeyAgeDays(): number | null {
-  const stored = getKeyCreatedAt();
+/**
+ * Get the key age in days, trying the backend first and falling back
+ * to localStorage. Returns null if not tracked.
+ */
+export async function getKeyAgeDays(): Promise<number | null> {
+  try {
+    const status = await getKeyRotationInfo();
+    // Sync localStorage cache from authoritative backend value
+    if (status.createdAt) {
+      setLocalCreatedAt(status.createdAt);
+    }
+    if (status.ageDays !== null) {
+      return status.ageDays;
+    }
+  } catch {
+    // Backend unavailable — fall through to localStorage
+  }
+
+  const stored = getLocalCreatedAt();
   if (!stored) return null;
   const created = new Date(stored).getTime();
-  const now = Date.now();
-  return Math.floor((now - created) / (1000 * 60 * 60 * 24));
+  return Math.floor((Date.now() - created) / (1000 * 60 * 60 * 24));
 }
 
-/** Check if the key needs rotation. */
-export function isKeyRotationDue(): boolean {
-  const age = getKeyAgeDays();
-  if (age === null) return false;
-  return age >= ROTATION_DAYS;
-}
-
-/** Get days until rotation is due (negative if overdue). */
-export function getDaysUntilRotation(): number | null {
-  const age = getKeyAgeDays();
+/**
+ * Get days until rotation is due (negative if overdue).
+ * Async because it may query the backend.
+ */
+export async function getDaysUntilRotation(): Promise<number | null> {
+  const age = await getKeyAgeDays();
   if (age === null) return null;
   return ROTATION_DAYS - age;
 }
@@ -41,33 +52,31 @@ export function getDaysUntilRotation(): number | null {
 /**
  * Hook that shows a toast notification when the key is approaching
  * 90 days old. Checks once on mount and sets up a daily check.
+ * Uses the Tauri backend if available, falls back to localStorage.
  */
 export function useKeyRotationReminder() {
   const { addToast } = useToast();
   const [dismissed, setDismissed] = useState(false);
 
-  const check = useCallback(() => {
+  const check = useCallback(async () => {
     if (dismissed) return;
-    const age = getKeyAgeDays();
-    if (age === null) return;
 
-    const daysLeft = ROTATION_DAYS - age;
+    const daysLeft = await getDaysUntilRotation();
+    if (daysLeft === null) return;
+
     if (daysLeft <= 0) {
       addToast({
         type: 'warning',
         message: 'Encryption key rotation is overdue. Please rotate keys from Security settings to maintain PCI-DSS compliance.',
         duration: 0, // Persistent until dismissed
       });
-    } else if (daysLeft <= WARN_DAYS - (ROTATION_DAYS - age) + 5) {
-      // Only warn when within 5 days of due date
-      if (daysLeft <= 5) {
-        addToast({
-          type: 'info',
-          message: `Encryption key rotation due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. Please rotate from Security settings.`,
-          duration: 10000,
-        });
-        setDismissed(true);
-      }
+    } else if (daysLeft <= 5) {
+      addToast({
+        type: 'info',
+        message: `Encryption key rotation due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. Please rotate from Security settings.`,
+        duration: 10000,
+      });
+      setDismissed(true);
     }
   }, [addToast, dismissed]);
 

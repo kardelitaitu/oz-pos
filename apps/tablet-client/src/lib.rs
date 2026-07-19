@@ -63,7 +63,6 @@ pub fn run() {
     {
         let result: Result<(), AppError> = tauri::Builder::default()
             .plugin(tauri_plugin_clipboard_manager::init())
-            .plugin(tauri_plugin_window_state::Builder::default().build())
             .setup(|app| {
                 let state = AppState::new(app.handle())
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

@@ -101,7 +101,7 @@ zstd = { version = "0.13", features = ["zstdmt"] }
 aead = "0.5"
 rand = "0.8"
 tracing-appender = "0.2"
-reqwest = { version = "0.12", features = ["json", "blocking", "gzip"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "gzip", "rustls-tls"] }
 hmac = "0.12"
 sha2 = "0.10"
 rlua = "0.20"

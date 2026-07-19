@@ -52,10 +52,6 @@ export default defineConfig({
     // maxConcurrency controls parallel tests per-worker, helping files with
     // many tests (DataManagementScreen: 55) finish faster.
     pool: 'threads',
-    minThreads: 8,
-    maxThreads: 28,
-    singleThread: false,
-    maxConcurrency: 15,
     fileParallelism: true,
 
     environment: 'jsdom',

@@ -206,6 +206,9 @@ impl Keyring for LibSecretKeyring {
 
         Ok(true)
     }
+
+    // `rotate_key` and `key_created_at` use the default implementations
+    // from the `Keyring` trait.
 }
 
 fn attributes(name: &str) -> HashMap<String, String> {

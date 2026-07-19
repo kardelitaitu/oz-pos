@@ -445,6 +445,8 @@ pub fn run() {
             commands::reports::get_hourly_heatmap,
             commands::reports::get_low_stock_alerts,
             commands::reports::get_category_breakdown,
+            commands::security::get_key_rotation_info,
+            commands::security::rotate_encryption_key,
             commands::shifts::open_shift,
             commands::shifts::open_shift_scoped,
             commands::shifts::close_shift,

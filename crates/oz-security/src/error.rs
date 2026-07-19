@@ -17,6 +17,10 @@ pub enum SecurityError {
     /// The caller does not have the required permission.
     #[error("permission denied: {0}")]
     PermissionDenied(String),
+
+    /// Cryptographic key generation failed.
+    #[error("key generation failed: {0}")]
+    KeyGenerationFailed(String),
 }
 
 #[cfg(test)]
@@ -35,6 +39,15 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "decryption failed: ciphertext is corrupt or has been tampered with"
+        );
+    }
+
+    #[test]
+    fn key_generation_failed_display() {
+        let err = SecurityError::KeyGenerationFailed("entropy source exhausted".into());
+        assert_eq!(
+            err.to_string(),
+            "key generation failed: entropy source exhausted"
         );
     }
 

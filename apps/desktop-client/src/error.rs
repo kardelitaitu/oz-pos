@@ -120,6 +120,12 @@ impl From<tauri::Error> for AppError {
     }
 }
 
+impl From<oz_security::SecurityError> for AppError {
+    fn from(e: oz_security::SecurityError) -> Self {
+        Self::Internal(e.to_string())
+    }
+}
+
 impl From<anyhow::Error> for AppError {
     fn from(e: anyhow::Error) -> Self {
         Self::Internal(format!("{e:#}"))

@@ -237,6 +237,8 @@ pub async fn print_sales_receipt(
             if f.is_empty() { None } else { Some(f) }
         },
         show_table_number: Settings::get_receipt_show_table_number(&conn)?,
+        barcode_enabled: false,
+        payment_link_template: None,
     };
     drop(conn); // release lock before printing
 
