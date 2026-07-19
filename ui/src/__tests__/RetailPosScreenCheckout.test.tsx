@@ -344,4 +344,97 @@ describe('RetailPosScreen — checkout & navigation', () => {
     await waitFor(() => expect(screen.queryByTestId('stock-inquiry-screen')).not.toBeInTheDocument());
     expect(screen.getByText('F1')).toBeInTheDocument();
   });
+
+  // ── Discount flow ──────────────────────────────────────────────
+
+  it('completes checkout with a percentage discount applied', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    const addProduct = vi.fn();
+    const resetCart = vi.fn();
+    vi.mocked(posState.usePosState).mockReturnValue({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 2, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      total: { minor_units: 6300, currency: 'IDR' },
+      subtotal: { minor_units: 7000, currency: 'IDR' },
+      discountPercent: 10,
+      discountLabel: 'Staff meal',
+      discountAmount: { minor_units: 700, currency: 'IDR' },
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
+      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
+      setDiscount: vi.fn(), resetCart,
+      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    } as any);
+    const shiftsApi = await import('@/api/shifts');
+    vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
+      id: 'shift-1', userId: 'user-1', terminalId: null,
+      openedAt: '2026-07-06T08:00:00Z', closedAt: null,
+      openingBalanceMinor: 100000, closingBalanceMinor: null,
+      expectedCashMinor: null, cashDifferenceMinor: null,
+      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0,
+      totalOtherMinor: 0, totalVoidsMinor: 0, totalRefundsMinor: 0,
+      totalPayoutsMinor: 0, notes: '', status: 'open',
+      createdAt: '2026-07-06T08:00:00Z', updatedAt: '2026-07-06T08:00:00Z',
+    });
+    const salesApi = await import('@/api/sales');
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    const payBtn = await screen.findByRole('button', { name: /^pay$/i });
+    await userEvent.click(payBtn);
+    await waitFor(() => expect(screen.getByText(/^Complete$/)).toBeInTheDocument());
+    const exactBtn = Array.from(document.querySelectorAll('.payment-quick-btn')).find(
+      (btn) => btn.textContent?.includes('Exact'),
+    )!;
+    await userEvent.click(exactBtn);
+    await userEvent.click(screen.getByRole('button', { name: /^Complete$/i }));
+    await waitFor(() => expect(screen.getByText(/Sale Complete/i)).toBeInTheDocument(), { timeout: 5000 });
+    // Verify sale completed with the discounted total
+    expect(salesApi.completeSale).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentMethod: 'CASH',
+        tenderedMinor: 6300,
+      }),
+    );
+  });
+
+  it('completes checkout with over-tender and displays change', async () => {
+    const posState = await import('@/features/sales/usePosState');
+    const addProduct = vi.fn();
+    const resetCart = vi.fn();
+    vi.mocked(posState.usePosState).mockReturnValue({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
+      total: { minor_units: 3500, currency: 'IDR' },
+      subtotal: { minor_units: 3500, currency: 'IDR' },
+      discountPercent: 0, discountLabel: '', discountAmount: null,
+      tipPercent: 0, tipAmount: null,
+      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
+      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
+      setDiscount: vi.fn(), resetCart,
+      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
+      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
+    } as any);
+    const shiftsApi = await import('@/api/shifts');
+    vi.mocked(shiftsApi.getActiveShift).mockResolvedValueOnce({
+      id: 'shift-1', userId: 'user-1', terminalId: null,
+      openedAt: '2026-07-06T08:00:00Z', closedAt: null,
+      openingBalanceMinor: 100000, closingBalanceMinor: null,
+      expectedCashMinor: null, cashDifferenceMinor: null,
+      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0,
+      totalOtherMinor: 0, totalVoidsMinor: 0, totalRefundsMinor: 0,
+      totalPayoutsMinor: 0, notes: '', status: 'open',
+      createdAt: '2026-07-06T08:00:00Z', updatedAt: '2026-07-06T08:00:00Z',
+    });
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    const payBtn = await screen.findByRole('button', { name: /^pay$/i });
+    await userEvent.click(payBtn);
+    await waitFor(() => expect(screen.getByText(/^Complete$/)).toBeInTheDocument());
+    // Click Rp10.000 quick-tender button (over-tender by 6500)
+    const tenKBtn = Array.from(document.querySelectorAll('.payment-quick-btn')).find(
+      (btn) => btn.textContent?.includes('10.000'),
+    )!;
+    await userEvent.click(tenKBtn);
+    // Change should be displayed
+    expect(screen.getByText(/Change/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^Complete$/i }));
+    await waitFor(() => expect(screen.getByText(/Sale Complete/i)).toBeInTheDocument(), { timeout: 5000 });
+  });
 });
