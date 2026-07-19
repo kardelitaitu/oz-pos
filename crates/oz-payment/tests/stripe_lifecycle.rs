@@ -40,6 +40,7 @@ fn request(major_amount: i64, description: Option<&str>) -> PaymentRequest {
         amount: Money::from_major(major_amount, usd()).unwrap(),
         reference: None,
         description: description.map(String::from),
+        idempotency_key: None,
     }
 }
 
@@ -101,6 +102,7 @@ async fn full_authorize_capture_refund_lifecycle() {
         gateway_reference: Some(txn_id.clone()),
         gateway_status: Some("requires_capture".into()),
         gateway_response: None,
+        idempotency_key: None,
     };
     assert_eq!(split.gateway_reference.as_deref(), Some("pi_e2e_auth_001"));
     assert_eq!(split.gateway_status.as_deref(), Some("requires_capture"));
@@ -201,6 +203,7 @@ async fn sale_happy_path_with_gateway_fields() {
         gateway_reference: result.transaction_id.clone(),
         gateway_status: result.message.clone(),
         gateway_response: None,
+        idempotency_key: None,
     };
     assert_eq!(split.gateway_reference, Some("pi_e2e_sale_001".into()));
     assert_eq!(split.gateway_status, Some("succeeded".into()));
@@ -543,6 +546,7 @@ async fn stripe_amount_roundtrip_preserves_currency() {
         amount: Money::from_major(100, eur).unwrap(),
         reference: None,
         description: None,
+        idempotency_key: None,
     };
 
     Mock::given(method("POST"))

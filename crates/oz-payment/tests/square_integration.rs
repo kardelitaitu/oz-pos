@@ -31,6 +31,7 @@ fn request(major_amount: i64) -> PaymentRequest {
         amount: Money::from_major(major_amount, usd()).unwrap(),
         reference: None,
         description: None,
+        idempotency_key: None,
     }
 }
 
@@ -439,6 +440,7 @@ async fn authorize_sends_correct_json_body() {
         amount: Money::from_major(50, usd()).unwrap(),
         reference: Some("inv-001".into()),
         description: Some("Test order".into()),
+        idempotency_key: None,
     };
 
     let _ = proc.authorize(&req).await.unwrap();

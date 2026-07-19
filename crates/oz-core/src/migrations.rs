@@ -490,6 +490,16 @@ pub const ALL: &[Migration] = &[
         id: "096_pending_sale_status.sql",
         sql: include_str!("../migrations/096_pending_sale_status.sql"),
     },
+    // 097: ADR-20 §5 — idempotency key support for payment gateway
+    // requests. Adds `idempotency_key TEXT` column to payments table
+    // with a UNIQUE index (allows multiple NULLs for pre-097 payments).
+    // The key is generated as UUIDv7 before each payment gateway request
+    // and stored with the payment record; retries with the same key are
+    // detected and prevented at the database layer.
+    Migration {
+        id: "097_payment_idempotency_keys.sql",
+        sql: include_str!("../migrations/097_payment_idempotency_keys.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around

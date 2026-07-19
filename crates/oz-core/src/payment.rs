@@ -41,6 +41,10 @@ pub struct Payment {
 
     /// Raw JSON response returned by the payment gateway.
     pub gateway_response: Option<String>,
+
+    /// Idempotency key (UUIDv7) used for the payment gateway request.
+    /// Prevents duplicate charges on retry.
+    pub idempotency_key: Option<String>,
 }
 
 /// Argument used to describe a payment split when completing a sale.
@@ -63,6 +67,10 @@ pub struct PaymentSplitArg {
 
     /// Optional raw response returned by the payment gateway.
     pub gateway_response: Option<String>,
+
+    /// Idempotency key (UUIDv7) used for the payment gateway request.
+    /// Prevents duplicate charges on retry when the same key is reused.
+    pub idempotency_key: Option<String>,
 }
 
 #[cfg(test)]
@@ -86,6 +94,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         let json = serde_json::to_string(&payment).unwrap();
         let back: Payment = serde_json::from_str(&json).unwrap();
@@ -109,9 +118,11 @@ mod tests {
             gateway_reference: Some("txn_abc123".into()),
             gateway_status: Some("approved".into()),
             gateway_response: Some(r#"{"id":"txn_abc123"}"#.into()),
+            idempotency_key: Some("key_abc".into()),
         };
         let json = serde_json::to_string(&payment).unwrap();
         let back: Payment = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.idempotency_key.as_deref(), Some("key_abc"));
         assert_eq!(back.gateway_reference.as_deref(), Some("txn_abc123"));
         assert_eq!(back.gateway_status.as_deref(), Some("approved"));
         assert!(back.gateway_response.is_some());
@@ -125,6 +136,7 @@ mod tests {
             gateway_reference: Some("txn_def456".into()),
             gateway_status: Some("approved".into()),
             gateway_response: None,
+            idempotency_key: Some("key_def".into()),
         };
         let json = serde_json::to_string(&split).unwrap();
         let back: PaymentSplitArg = serde_json::from_str(&json).unwrap();
@@ -143,6 +155,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         assert_eq!(split.method, "cash");
         assert_eq!(split.amount_minor, 50000);
@@ -163,6 +176,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         let p2 = p1.clone();
         assert_eq!(p1, p2);
@@ -176,6 +190,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         let s2 = PaymentSplitArg {
             method: "cash".into(),
@@ -183,6 +198,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         assert_eq!(s1, s2);
     }
@@ -201,6 +217,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         let p2 = Payment {
             id: "p1".into(),
@@ -214,6 +231,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         assert_ne!(p1, p2);
     }
@@ -234,6 +252,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         let debug = format!("{:?}", payment);
         assert!(debug.contains("pay-1"));
@@ -248,6 +267,7 @@ mod tests {
             gateway_reference: Some("txn_123".into()),
             gateway_status: Some("approved".into()),
             gateway_response: None,
+            idempotency_key: None,
         };
         let debug = format!("{:?}", split);
         assert!(debug.contains("card"));
@@ -270,6 +290,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         assert_eq!(payment.amount.minor_units, 0);
     }
@@ -288,6 +309,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         assert_eq!(payment.method, "");
     }
@@ -306,6 +328,7 @@ mod tests {
             gateway_reference: Some("txn_fail".into()),
             gateway_status: Some("declined".into()),
             gateway_response: Some(r#"{"error":"insufficient_funds"}"#.into()),
+            idempotency_key: None,
         };
         assert_eq!(payment.gateway_status.as_deref(), Some("declined"));
         assert!(payment.gateway_response.is_some());
@@ -319,6 +342,7 @@ mod tests {
             gateway_reference: Some("txn_full".into()),
             gateway_status: Some("approved".into()),
             gateway_response: Some(r#"{"id":"txn_full","amount":75000}"#.into()),
+            idempotency_key: None,
         };
         assert_eq!(split.gateway_reference.as_deref(), Some("txn_full"));
         assert_eq!(split.gateway_status.as_deref(), Some("approved"));
@@ -339,6 +363,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         };
         assert_eq!(payment.amount.minor_units, i64::MAX);
     }
@@ -357,6 +382,7 @@ mod tests {
             gateway_reference: Some("ref_1".into()),
             gateway_status: Some("approved".into()),
             gateway_response: None,
+            idempotency_key: None,
         };
         let json = serde_json::to_value(&payment).unwrap();
         assert_eq!(json["method"], "cash");
@@ -374,6 +400,7 @@ mod tests {
             gateway_reference: Some("txn_abc".into()),
             gateway_status: Some("approved".into()),
             gateway_response: None,
+            idempotency_key: None,
         };
         let json = serde_json::to_value(&split).unwrap();
         assert_eq!(json["method"], "card");
@@ -383,10 +410,11 @@ mod tests {
 
     #[test]
     fn payment_split_arg_from_camel_case_json() {
-        let json = r#"{"method":"cash","amountMinor":25000}"#;
+        let json = r#"{"method":"cash","amountMinor":25000,"idempotencyKey":null}"#;
         let split: PaymentSplitArg = serde_json::from_str(json).unwrap();
         assert_eq!(split.method, "cash");
         assert_eq!(split.amount_minor, 25000);
+        assert!(split.idempotency_key.is_none());
     }
 
     #[test]
@@ -403,8 +431,51 @@ mod tests {
             gateway_reference: Some("txn_abc".into()),
             gateway_status: Some("approved".into()),
             gateway_response: Some(r#"{"ok":true}"#.into()),
+            idempotency_key: None,
         };
         let p2 = p1.clone();
         assert_eq!(p1, p2);
+    }
+
+    // ── Idempotency key tests ──────────────────────────────────
+
+    #[test]
+    fn payment_with_idempotency_key_serde() {
+        let payment = Payment {
+            id: "pay-ikey".into(),
+            sale_id: "sale-1".into(),
+            method: "card".into(),
+            amount: Money {
+                minor_units: 1000,
+                currency: "USD".parse().unwrap(),
+            },
+            created_at: String::new(),
+            gateway_reference: Some("txn_456".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: None,
+            idempotency_key: Some("01926b3a-0000-7000-8000-000000000001".into()),
+        };
+        let json = serde_json::to_string(&payment).unwrap();
+        let back: Payment = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.idempotency_key.as_deref(),
+            Some("01926b3a-0000-7000-8000-000000000001")
+        );
+    }
+
+    #[test]
+    fn payment_split_arg_with_idempotency_key() {
+        let split = PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 1000,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: Some("01926b3a-0000-7000-8000-000000000002".into()),
+        };
+        assert_eq!(
+            split.idempotency_key.as_deref(),
+            Some("01926b3a-0000-7000-8000-000000000002")
+        );
     }
 }

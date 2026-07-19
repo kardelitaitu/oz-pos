@@ -233,6 +233,7 @@ mod tests {
             amount: Money::from_major(10, usd()).unwrap(),
             reference: None,
             description: None,
+            idempotency_key: None,
         }
     }
 

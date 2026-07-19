@@ -8,6 +8,7 @@ use crate::Store;
 use crate::error::CoreError;
 use crate::money::{Currency, Money};
 use crate::payment::{Payment, PaymentSplitArg};
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 
 impl Store<'_> {
@@ -30,10 +31,54 @@ impl Store<'_> {
 
         for split in splits {
             let id = uuid::Uuid::now_v7().to_string();
+
+            // If the split has an idempotency key, check whether a payment
+            // with this key already exists — if so, return the existing
+            // payment instead of creating a duplicate.
+            if let Some(ref key) = split.idempotency_key {
+                let existing: Option<String> = tx
+                    .query_row(
+                        "SELECT id FROM payments WHERE idempotency_key = ?1",
+                        params![key],
+                        |row| row.get(0),
+                    )
+                    .optional()?
+                    .flatten();
+                if let Some(existing_id) = existing {
+                    // Return the existing payment record — no duplicate created.
+                    let existing_payment = tx.query_row(
+                        "SELECT id, sale_id, method, amount_minor, currency, created_at,
+                                gateway_reference, gateway_status, gateway_response, idempotency_key
+                         FROM payments WHERE id = ?1",
+                        params![existing_id],
+                        |row| {
+                            let cur_str: String = row.get("currency")?;
+                            let currency: Currency = cur_str.parse().expect("valid currency in DB");
+                            Ok(Payment {
+                                id: row.get("id")?,
+                                sale_id: row.get("sale_id")?,
+                                method: row.get("method")?,
+                                amount: Money {
+                                    minor_units: row.get("amount_minor")?,
+                                    currency,
+                                },
+                                created_at: row.get("created_at")?,
+                                gateway_reference: row.get("gateway_reference")?,
+                                gateway_status: row.get("gateway_status")?,
+                                gateway_response: row.get("gateway_response")?,
+                                idempotency_key: row.get("idempotency_key")?,
+                            })
+                        },
+                    )?;
+                    payments.push(existing_payment);
+                    continue;
+                }
+            }
+
             tx.execute(
                 "INSERT INTO payments (id, sale_id, method, amount_minor, currency, created_at,
-                                       gateway_reference, gateway_status, gateway_response)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                                       gateway_reference, gateway_status, gateway_response, idempotency_key)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     id,
                     sale_id,
@@ -44,6 +89,7 @@ impl Store<'_> {
                     split.gateway_reference,
                     split.gateway_status,
                     split.gateway_response,
+                    split.idempotency_key,
                 ],
             )?;
             payments.push(Payment {
@@ -58,6 +104,7 @@ impl Store<'_> {
                 gateway_reference: split.gateway_reference.clone(),
                 gateway_status: split.gateway_status.clone(),
                 gateway_response: split.gateway_response.clone(),
+                idempotency_key: split.idempotency_key.clone(),
             });
         }
 
@@ -69,7 +116,7 @@ impl Store<'_> {
     pub fn list_payments_for_sale(&self, sale_id: &str) -> Result<Vec<Payment>, CoreError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, method, amount_minor, currency, created_at,
-                    gateway_reference, gateway_status, gateway_response
+                    gateway_reference, gateway_status, gateway_response, idempotency_key
              FROM payments WHERE sale_id = ?1 ORDER BY created_at ASC",
         )?;
         let rows = stmt.query_map(params![sale_id], |row| {
@@ -87,6 +134,7 @@ impl Store<'_> {
                 gateway_reference: row.get("gateway_reference")?,
                 gateway_status: row.get("gateway_status")?,
                 gateway_response: row.get("gateway_response")?,
+                idempotency_key: row.get("idempotency_key")?,
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
@@ -139,6 +187,7 @@ mod tests {
                 gateway_reference: None,
                 gateway_status: None,
                 gateway_response: None,
+                idempotency_key: None,
             },
             PaymentSplitArg {
                 method: "card".into(),
@@ -146,6 +195,7 @@ mod tests {
                 gateway_reference: None,
                 gateway_status: None,
                 gateway_response: None,
+                idempotency_key: None,
             },
         ];
 
@@ -178,6 +228,7 @@ mod tests {
             gateway_reference: Some("txn_abc123".into()),
             gateway_status: Some("approved".into()),
             gateway_response: Some(r#"{"id":"txn_abc123","status":"approved"}"#.into()),
+            idempotency_key: None,
         }];
 
         let currency: Currency = "USD".parse().unwrap();
@@ -237,6 +288,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         }];
 
         let currency: Currency = "USD".parse().unwrap();
@@ -266,6 +318,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         }];
 
         let currency: Currency = "USD".parse().unwrap();
@@ -291,6 +344,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         }];
 
         let currency: Currency = "USD".parse().unwrap();
@@ -316,6 +370,7 @@ mod tests {
             gateway_reference: Some("txn_declined".into()),
             gateway_status: Some("declined".into()),
             gateway_response: Some(r#"{"error":"insufficient_funds"}"#.into()),
+            idempotency_key: None,
         }];
 
         let currency: Currency = "USD".parse().unwrap();
@@ -349,6 +404,7 @@ mod tests {
                     gateway_reference: None,
                     gateway_status: None,
                     gateway_response: None,
+                    idempotency_key: None,
                 }],
                 &currency,
                 now,
@@ -363,6 +419,7 @@ mod tests {
                     gateway_reference: None,
                     gateway_status: None,
                     gateway_response: None,
+                    idempotency_key: None,
                 }],
                 &currency,
                 now,
@@ -407,6 +464,7 @@ mod tests {
                     gateway_reference: None,
                     gateway_status: None,
                     gateway_response: None,
+                    idempotency_key: None,
                 }],
                 &currency,
                 now,
@@ -442,6 +500,7 @@ mod tests {
                         gateway_reference: None,
                         gateway_status: None,
                         gateway_response: None,
+                        idempotency_key: None,
                     },
                     PaymentSplitArg {
                         method: "card".into(),
@@ -449,6 +508,7 @@ mod tests {
                         gateway_reference: Some("txn_b1".into()),
                         gateway_status: Some("approved".into()),
                         gateway_response: None,
+                        idempotency_key: None,
                     },
                 ],
                 &currency,
@@ -467,6 +527,7 @@ mod tests {
                     gateway_reference: None,
                     gateway_status: None,
                     gateway_response: None,
+                    idempotency_key: None,
                 }],
                 &currency,
                 now,
@@ -497,6 +558,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         }];
 
         let payments = store
@@ -529,6 +591,7 @@ mod tests {
             gateway_reference: Some(long_ref.clone()),
             gateway_status: Some("approved".into()),
             gateway_response: None,
+            idempotency_key: None,
         }];
 
         let payments = store
@@ -568,6 +631,7 @@ mod tests {
             gateway_reference: Some("txn_big".into()),
             gateway_status: Some("approved".into()),
             gateway_response: Some(large_response.clone()),
+            idempotency_key: None,
         }];
 
         let payments = store
@@ -614,6 +678,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         }];
 
         let payments = store
@@ -625,5 +690,158 @@ mod tests {
 
         let listed = store.list_payments_for_sale(&sale_id).unwrap();
         assert_eq!(listed[0].amount.currency.to_string(), "IDR");
+    }
+
+    // ── Idempotency key tests (P5-2) ─────────────────────────────
+
+    #[test]
+    fn create_payments_with_idempotency_key_dedup() {
+        let conn = fresh();
+        let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
+
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        insert_sale(&conn, &sale_id, 300, now);
+
+        let ik = uuid::Uuid::now_v7().to_string();
+
+        // First call — creates the payment with idempotency_key
+        let splits1 = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 300,
+            gateway_reference: Some("txn_first".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: None,
+            idempotency_key: Some(ik.clone()),
+        }];
+        let payments1 = store
+            .create_payments(&sale_id, &splits1, &currency, now)
+            .unwrap();
+        assert_eq!(payments1.len(), 1);
+        assert_eq!(payments1[0].gateway_reference.as_deref(), Some("txn_first"));
+        assert_eq!(payments1[0].idempotency_key.as_deref(), Some(ik.as_str()));
+
+        // Second call — same idempotency_key, should return existing payment (dedup)
+        let splits2 = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 999, // different amount, should be ignored due to dedup
+            gateway_reference: Some("txn_second".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: None,
+            idempotency_key: Some(ik.clone()),
+        }];
+        let payments2 = store
+            .create_payments(&sale_id, &splits2, &currency, now)
+            .unwrap();
+        assert_eq!(payments2.len(), 1);
+        // Should return the original payment, not the new one
+        assert_eq!(payments2[0].gateway_reference.as_deref(), Some("txn_first"));
+        assert_eq!(payments2[0].amount.minor_units, 300);
+
+        // Only 1 payment should exist in the DB
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].gateway_reference.as_deref(), Some("txn_first"));
+    }
+
+    #[test]
+    fn create_payments_different_idempotency_keys_create_separate_records() {
+        let conn = fresh();
+        let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
+
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        insert_sale(&conn, &sale_id, 1000, now);
+
+        let ik1 = uuid::Uuid::now_v7().to_string();
+        let ik2 = uuid::Uuid::now_v7().to_string();
+        assert_ne!(ik1, ik2);
+
+        // Two different sales with different idempotency keys — both should be created
+        store
+            .create_payments(
+                &sale_id,
+                &[PaymentSplitArg {
+                    method: "cash".into(),
+                    amount_minor: 500,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                    idempotency_key: Some(ik1),
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+
+        store
+            .create_payments(
+                &sale_id,
+                &[PaymentSplitArg {
+                    method: "card".into(),
+                    amount_minor: 500,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                    idempotency_key: Some(ik2),
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed.len(), 2);
+    }
+
+    #[test]
+    fn create_payments_idempotency_key_none_allows_duplicates() {
+        // Without idempotency key, duplicate payments are NOT deduplicated
+        // (no implicit dedup for None keys)
+        let conn = fresh();
+        let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
+
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        insert_sale(&conn, &sale_id, 2000, now);
+
+        store
+            .create_payments(
+                &sale_id,
+                &[PaymentSplitArg {
+                    method: "cash".into(),
+                    amount_minor: 1000,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                    idempotency_key: None,
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+
+        // Same data, no idempotency key — creates a new record
+        store
+            .create_payments(
+                &sale_id,
+                &[PaymentSplitArg {
+                    method: "cash".into(),
+                    amount_minor: 1000,
+                    gateway_reference: None,
+                    gateway_status: None,
+                    gateway_response: None,
+                    idempotency_key: None,
+                }],
+                &currency,
+                now,
+            )
+            .unwrap();
+
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed.len(), 2);
     }
 }

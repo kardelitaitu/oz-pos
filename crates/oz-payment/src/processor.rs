@@ -97,6 +97,7 @@ mod tests {
             amount: Money::from_major(10, usd()).unwrap(),
             reference: None,
             description: None,
+            idempotency_key: None,
         };
 
         let result = proc.sale(&req).await.unwrap();
@@ -112,6 +113,7 @@ mod tests {
             amount: Money::from_major(10, usd()).unwrap(),
             reference: None,
             description: None,
+            idempotency_key: None,
         };
 
         let result = proc.sale(&req).await;
@@ -131,6 +133,7 @@ mod tests {
             amount: Money::from_major(25, usd()).unwrap(),
             reference: Some("inv-001".into()),
             description: None,
+            idempotency_key: None,
         };
 
         let result = proc.authorize(&req).await.unwrap();

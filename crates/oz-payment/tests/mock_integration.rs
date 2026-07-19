@@ -30,6 +30,7 @@ fn request(major_amount: i64) -> PaymentRequest {
         amount: Money::from_major(major_amount, usd()).unwrap(),
         reference: None,
         description: None,
+        idempotency_key: None,
     }
 }
 

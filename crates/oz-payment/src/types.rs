@@ -41,6 +41,9 @@ pub struct PaymentRequest {
     pub reference: Option<String>,
     /// Optional description shown on the cardholder's statement.
     pub description: Option<String>,
+    /// Idempotency key (UUIDv7) to prevent duplicate charges on retry.
+    /// If `None`, the processor will generate a fallback key.
+    pub idempotency_key: Option<String>,
 }
 
 /// The outcome of a payment attempt.
@@ -113,6 +116,7 @@ mod tests {
             amount: Money::from_major(10, usd()).unwrap(),
             reference: None,
             description: None,
+            idempotency_key: None,
         };
         assert_eq!(req.amount.minor_units, 1000);
     }
