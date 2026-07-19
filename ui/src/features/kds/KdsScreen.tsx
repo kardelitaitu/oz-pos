@@ -117,7 +117,7 @@ export default function KdsScreen() {
     };
   }, [fetchOrders, orders.length]);
 
-  const advanceStatus = async (order: KdsOrder) => {
+  const advanceStatus = useCallback(async (order: KdsOrder) => {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
     if (currentIdx < 0 || currentIdx >= STATUS_ORDER.length - 1) return;
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
@@ -127,7 +127,7 @@ export default function KdsScreen() {
     } catch (e) {
       setError(String(e));
     }
-  };
+  }, [userId, fetchOrders]);
 
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 

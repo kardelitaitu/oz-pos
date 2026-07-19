@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
@@ -22,7 +22,7 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
  * KdsTicketCard renders a single KDS ticket with SLA aging indicators
  * and plays an audio alert when the ticket enters the red threshold.
  */
-export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true }: KdsTicketCardProps) {
+export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, urgent, display } = useTicketSla(order.received_at);
   const { playAlert } = useSound();
@@ -81,4 +81,4 @@ export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableN
       </span>
     </button>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, memo } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { StockAlertEvent } from '@/api/inventory';
 import { getActiveStockAlerts, acknowledgeStockAlert } from '@/api/inventory';
@@ -20,7 +20,7 @@ interface StockAlertPanelProps {
  * Displays active stock alerts for a given location with product info,
  * severity indicators, and acknowledge buttons. Supports optional polling.
  */
-export function StockAlertPanel({
+export const StockAlertPanel = memo(function StockAlertPanel({
   locationId,
   pollIntervalMs = 30_000,
   maxAlerts = 20,
@@ -202,7 +202,7 @@ export function StockAlertPanel({
       ))}
     </div>
   );
-}
+});
 
 /** Inline helper to wrap text in a label span without importing another component. */
 function LocalizedText({ label, children }: { label: string; children: React.ReactNode }) {
