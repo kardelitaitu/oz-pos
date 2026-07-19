@@ -82,6 +82,21 @@ impl SyncQueue {
         store.enqueue_offline(action, payload)
     }
 
+    /// Enqueue a transaction with dedup by action + payload.
+    ///
+    /// If a pending item with the same `action` and `payload` already
+    /// exists, returns `Ok(None)` — no duplicate is created.
+    /// This prevents duplicate entries when the same event is enqueued
+    /// multiple times across different terminals or due to retry logic.
+    pub fn enqueue_dedup(
+        &self,
+        store: &Store<'_>,
+        action: &str,
+        payload: &str,
+    ) -> Result<Option<OfflineQueueItem>, CoreError> {
+        store.enqueue_offline_dedup(action, payload)
+    }
+
     /// Mark an item as successfully synced.
     pub fn mark_synced(&self, store: &Store<'_>, id: &str) -> Result<(), CoreError> {
         store.mark_offline_synced(id)
@@ -368,6 +383,117 @@ mod tests {
         let pending = queue.list_pending(&store).unwrap();
         assert_eq!(pending[0].id, item1.id, "oldest item should be first");
         assert_eq!(pending[1].id, item2.id);
+    }
+
+    // ── Dedup tests (P1-5) ────────────────────────────────────────────
+
+    #[test]
+    fn queue_enqueue_dedup_skips_duplicate() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"sale_id":"s-1"}"#;
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(first.is_some(), "first call should enqueue");
+
+        let second = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(second.is_none(), "duplicate should be skipped");
+
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_allows_different_payload() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(first.is_some());
+
+        let second = queue
+            .enqueue_dedup(&store, "complete_sale", r#"{"sale_id":"s-2"}"#)
+            .unwrap();
+        assert!(second.is_some(), "different sale_id should not be deduped");
+
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_allows_different_action() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"id":"x"}"#;
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(first.is_some());
+
+        let second = queue.enqueue_dedup(&store, "void_sale", payload).unwrap();
+        assert!(second.is_some(), "different action should not be deduped");
+
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_cross_terminal_scenario() {
+        // Simulate: Terminal A completes a sale and enqueues it.
+        // That sale syncs to Terminal B, which also tries to enqueue
+        // the exact same payload — the dedup should prevent duplicates.
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"sale_id":"s-cross-1","items":[{"sku":"COFFEE","qty":2}]}"#;
+
+        // Terminal A enqueues
+        let a = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(a.is_some(), "Terminal A should enqueue");
+
+        // Terminal B receives the same payload via sync and tries to enqueue
+        let b = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(b.is_none(), "Terminal B duplicate should be deduped");
+
+        // Verify only one pending item exists
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_allows_after_mark_synced() {
+        // After an item is synced, a new enqueue with the same payload
+        // should not be deduped (only checks Pending items).
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"sale_id":"s-1"}"#;
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(first.is_some());
+        let id = first.unwrap().id.clone();
+
+        queue.mark_synced(&store, &id).unwrap();
+
+        let second = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(
+            second.is_some(),
+            "should re-enqueue after original is synced"
+        );
     }
 
     #[test]

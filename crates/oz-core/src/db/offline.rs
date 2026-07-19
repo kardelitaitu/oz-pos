@@ -17,6 +17,36 @@ impl Store<'_> {
         self.enqueue_offline_with_tenant(action, payload, "default")
     }
 
+    /// Enqueue a transaction with dedup by action + payload.
+    ///
+    /// If a pending item with the same `action` and `payload` already
+    /// exists, returns `Ok(None)` — no duplicate is created.
+    /// Otherwise, enqueues normally and returns `Ok(Some(item))`.
+    ///
+    /// This prevents duplicate entries when the same sale completion,
+    /// void, or adjustment is enqueued multiple times (e.g. due to
+    /// network retry or cross-terminal propagation).
+    pub fn enqueue_offline_dedup(
+        &self,
+        action: &str,
+        payload: &str,
+    ) -> Result<Option<OfflineQueueItem>, CoreError> {
+        let exists: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM offline_queue
+                  WHERE status = 'pending' AND action = ?1 AND payload = ?2)",
+                params![action, payload],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if exists {
+            return Ok(None);
+        }
+        self.enqueue_offline(action, payload).map(Some)
+    }
+
     /// Enqueue a transaction for later sync, scoped to the given tenant.
     pub fn enqueue_offline_with_tenant(
         &self,
@@ -411,6 +441,124 @@ mod tests {
         // Verify state unchanged.
         let count = s.pending_offline_count().unwrap();
         assert_eq!(count, 0);
+    }
+
+    // ── Dedup tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn enqueue_dedup_first_call_inserts() {
+        let conn = fresh();
+        let s = store(&conn);
+        let result = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(result.is_some(), "first call should enqueue");
+        let count = s.pending_offline_count().unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn enqueue_dedup_second_call_skips() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // First call — inserts
+        let first = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(first.is_some());
+
+        // Second call — dedup skips
+        let second = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(second.is_none(), "duplicate should be deduped");
+
+        let count = s.pending_offline_count().unwrap();
+        assert_eq!(count, 1, "only one item should be pending");
+    }
+
+    #[test]
+    fn enqueue_dedup_same_action_different_payload_passes() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let first = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(first.is_some());
+
+        // Different sale_id — should insert
+        let second = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-2"}"#)
+            .unwrap();
+        assert!(second.is_some(), "different payload should not be deduped");
+
+        let count = s.pending_offline_count().unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn enqueue_dedup_different_action_same_payload_passes() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let first = s
+            .enqueue_offline_dedup("complete_sale", r#"{"id":"x"}"#)
+            .unwrap();
+        assert!(first.is_some());
+
+        // Different action — should insert
+        let second = s
+            .enqueue_offline_dedup("void_sale", r#"{"id":"x"}"#)
+            .unwrap();
+        assert!(second.is_some(), "different action should not be deduped");
+
+        let count = s.pending_offline_count().unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn enqueue_dedup_synced_item_does_not_block() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Enqueue, mark synced, then try to enqueue same again
+        let first = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(first.is_some());
+        let id = first.as_ref().unwrap().id.clone();
+        s.mark_offline_synced(&id).unwrap();
+
+        // Same action+payload — but the original is synced, not pending
+        let second = s
+            .enqueue_offline_dedup("complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        // The original item is synced so this should be treated as a new item.
+        // (We only dedup against items still pending.)
+        assert!(second.is_some(), "synced item should not block re-enqueue");
+    }
+
+    #[test]
+    fn enqueue_dedup_cross_terminal_scenario() {
+        // Simulate: Terminal A enqueues sale, Terminal B receives it via
+        // sync and tries to re-enqueue. The dedup should prevent the
+        // duplicate if the payload is byte-identical.
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Terminal A completes the sale
+        let payload = r#"{"sale_id":"s-A-1","items":[{"sku":"COFFEE","qty":2}]}"#;
+        let result = s.enqueue_offline_dedup("complete_sale", payload).unwrap();
+        assert!(result.is_some(), "Terminal A: first enqueue should succeed");
+
+        // Same sale arrives from Terminal B via sync (byte-identical payload)
+        let result = s.enqueue_offline_dedup("complete_sale", payload).unwrap();
+        assert!(result.is_none(), "Terminal B: duplicate should be deduped");
+
+        let count = s.pending_offline_count().unwrap();
+        assert_eq!(count, 1, "only one pending item after cross-terminal dedup");
     }
 
     #[test]
