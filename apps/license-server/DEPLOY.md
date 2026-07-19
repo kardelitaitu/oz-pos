@@ -112,7 +112,7 @@ Verify the health check:
 
 ```bash
 curl http://localhost:8080/api/health
-# → "OK" (or PocketBase health response)
+# → {"status":"ok","db_connected":true,"uptime_secs":42,"go_version":"go1.25","go_os":"linux","go_arch":"amd64"}
 ```
 
 ---
@@ -433,6 +433,6 @@ Alternatively, export manually from the admin UI (`/_/` → **Settings** → **E
 | Can't log into admin UI | Create the superuser via the Shell (Step 9). |
 | Collections not showing | Import `pb_schema.json` via Settings → Import Collections (Step 8). |
 | Rate limited in testing | Wait 1 hour for IP bucket to refill, or restart the container (rate limiter is in-memory). |
-| Health check failing | PocketBase doesn't expose `/api/health` by default. The Dockerfile healthcheck may need adjustment — check service logs. |
+| Health check failing | The Go healthcheck binary pings `/api/health` with a 5s timeout. If the server is slow to start (e.g., first boot after volume attach), the container may flap as unhealthy for ~15s until PocketBase finishes initialisation. Run `docker inspect` to check `State.Health`. |
 
-> 💡 **Tip:** The Dockerfile healthcheck uses `curl -f http://localhost:8080/api/` — PocketBase always responds on `/api/` even before collections are loaded. This was set up correctly in the Dockerfile.
+> 💡 **Tip:** The Dockerfile healthcheck uses the standalone `/pb/healthcheck` Go binary (no curl dependency). It pings `/api/health` which returns `{"status":"ok"}` when PocketBase is healthy. The healthcheck was set up correctly in the Dockerfile.
