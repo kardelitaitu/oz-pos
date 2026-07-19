@@ -196,6 +196,26 @@ export interface PartialStockResult {
   shortfalls: Shortfall[];
 }
 
+/** ADR-20: Pending sale info returned after stock reservation. */
+export interface PendingSale {
+  saleId: string;
+  receiptNumber: string;
+  deductTxId: string;
+  total: Money | null;
+  lineCount: number;
+}
+
+/** ADR-20: Finalize a pending sale after successful payment capture.
+ *  Transitions status from 'pending' to 'completed'. */
+export const finalizeSale = (sessionToken: string, saleId: string): Promise<void> =>
+  invoke<void>('finalize_sale', { sessionToken, saleId });
+
+/** ADR-20: Void a pending sale and restore reserved stock back to
+ *  original deduction locations. Called when payment capture fails
+ *  or the transaction is abandoned. */
+export const voidPendingSale = (sessionToken: string, saleId: string): Promise<void> =>
+  invoke<void>('void_pending_sale', { sessionToken, saleId });
+
 /** ADR-19 §17: Record a manager override of the deduction location on an active cart. */
 export const overrideCartDeductionLocation = (sessionToken: string, cartId: string): Promise<void> =>
   invoke<void>('override_cart_deduction_location_scoped', { sessionToken, cartId });

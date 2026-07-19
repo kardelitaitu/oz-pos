@@ -1,18 +1,18 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "303.9k lines",
+    "message":  "312.5k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  303921,
-                  "totalFiles":  1432,
+                  "totalLines":  312479,
+                  "totalFiles":  1446,
                   "languages":  {
                                     "sql":  {
-                                                "lines":  2945,
-                                                "files":  93
+                                                "lines":  3017,
+                                                "files":  94
                                             },
                                     "rust":  {
-                                                 "lines":  134178,
+                                                 "lines":  139996,
                                                  "files":  344
                                              },
                                     "go":  {
@@ -20,16 +20,16 @@
                                                "files":  9
                                            },
                                     "css":  {
-                                                "lines":  33039,
-                                                "files":  102
+                                                "lines":  33493,
+                                                "files":  104
                                             },
                                     "html":  {
                                                  "lines":  29329,
                                                  "files":  488
                                              },
                                     "typescript":  {
-                                                       "lines":  98074,
-                                                       "files":  396
+                                                       "lines":  100288,
+                                                       "files":  407
                                                    }
                                 }
               }

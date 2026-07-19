@@ -575,9 +575,9 @@ mod tests {
         let r1 = s.create_tax_rate("Old", 100, false, false).unwrap();
         let r2 = s.create_tax_rate("New", 200, false, false).unwrap();
 
-        s.set_category_tax_rates("cat-ow", &[r1.id.clone()])
+        s.set_category_tax_rates("cat-ow", std::slice::from_ref(&r1.id))
             .unwrap();
-        s.set_category_tax_rates("cat-ow", &[r2.id.clone()])
+        s.set_category_tax_rates("cat-ow", std::slice::from_ref(&r2.id))
             .unwrap();
 
         let ids = s.get_category_tax_rates("cat-ow").unwrap();

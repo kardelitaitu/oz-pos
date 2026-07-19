@@ -939,17 +939,18 @@ impl Store<'_> {
         // 5. stock.negative warning event (ADR-18 §4).
         // Emitted when allow_negative_stock is enabled and the resulting qty
         // is negative — the deduction went below zero.
-        if allow_negative && new_qty < 0 {
-            if let Some(cache) = &self.cache {
-                cache.publish_negative_stock_event(
-                    &product_id,
-                    sku,
-                    location_id.as_str(),
-                    delta,
-                    new_qty,
-                    self.terminal_id.as_deref(),
-                );
-            }
+        if allow_negative
+            && new_qty < 0
+            && let Some(cache) = &self.cache
+        {
+            cache.publish_negative_stock_event(
+                &product_id,
+                sku,
+                location_id.as_str(),
+                delta,
+                new_qty,
+                self.terminal_id.as_deref(),
+            );
         }
 
         Ok(new_qty)
@@ -3669,11 +3670,13 @@ mod tests {
     /// A test-only Cache implementation that records calls to
     /// `publish_negative_stock_event` in an `Arc<Mutex<Vec>>` so tests
     /// can verify the event was emitted.
+    #[allow(clippy::type_complexity)]
     struct TestNegativeEventCache {
         events: std::sync::Arc<std::sync::Mutex<Vec<(String, String, String, i64, i64)>>>,
     }
 
     impl TestNegativeEventCache {
+        #[allow(clippy::type_complexity)]
         fn new() -> (
             Self,
             std::sync::Arc<std::sync::Mutex<Vec<(String, String, String, i64, i64)>>>,

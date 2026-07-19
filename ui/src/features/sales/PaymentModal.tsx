@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
+import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
@@ -453,6 +453,23 @@ export default function PaymentModal({
         // KDS may not be configured — non-blocking.
       }
 
+      // ADR-20: Finalize the pending sale after QR confirmation
+      if (sessionToken) {
+        try {
+          await finalizeSale(sessionToken, saleResult.saleId);
+          console.log('[Sale] QR sale finalized:', saleResult.saleId);
+        } catch (finalizeErr) {
+          console.error('[Sale] QR finalize FAILED, attempting void:', finalizeErr);
+          try {
+            await voidPendingSale(sessionToken, saleResult.saleId);
+            console.log('[Sale] QR pending sale voided:', saleResult.saleId);
+          } catch (voidErr) {
+            console.error('[Sale] QR void ALSO failed:', voidErr);
+          }
+          throw finalizeErr;
+        }
+      }
+
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
           await redeemLoyaltyPoints(
@@ -468,6 +485,8 @@ export default function PaymentModal({
       setDone(true);
     } catch (err) {
       console.error('QR payment failed:', err);
+      const classified = classifyError(err);
+      setPaymentError(classified);
     } finally {
       setProcessing(false);
     }
@@ -678,6 +697,27 @@ export default function PaymentModal({
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
           });
       console.log('[Sale] Sale completed:', saleResult.saleId);
+
+      // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')
+      // For cash/credit/other/split methods, capture is instantaneous — finalize immediately.
+      // Note: open_bill returns early above, so this only runs for paid methods.
+      if (sessionToken) {
+        try {
+          await finalizeSale(sessionToken, saleResult.saleId);
+          console.log('[Sale] Sale finalized:', saleResult.saleId);
+        } catch (finalizeErr) {
+          // If finalize fails, attempt to void the pending sale to restore stock
+          console.error('[Sale] Finalize FAILED, attempting void:', finalizeErr);
+          try {
+            await voidPendingSale(sessionToken, saleResult.saleId);
+            console.log('[Sale] Pending sale voided:', saleResult.saleId);
+          } catch (voidErr) {
+            console.error('[Sale] Void ALSO failed:', voidErr);
+          }
+          // Throw the original finalize error so the outer catch handles it
+          throw finalizeErr;
+        }
+      }
 
       try {
         console.log('[Sale] Fetching completed sale...');
