@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 16 / 31 items complete (52%) · Updated 2026-07-26
+**Current state:** 17 / 31 items complete (55%) · Updated 2026-07-26
 
 ---
 
@@ -11,7 +11,7 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | **2** | **███████████████ 100% 🎉** |
-| 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
+| 🟡 Backend — Medium | 2 | 1 | █████░░░░░░░ 50% |
 | 🧪 Rust Test Coverage | 14 | **14** | **███████████████ 100% 🎉** |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
@@ -19,7 +19,7 @@
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **16** | **████████████████████████ 52%** |
+| **Total** | **31** | **17** | **███████████████████████████ 55%** |
 
 ---
 
@@ -132,18 +132,19 @@
 
 ### 3. `low_stock_alerts_at_location` — Location-Aware Variant
 
-**Status:** ❌ Still uses global
+**Status:** ✅ IMPLEMENTED (backend only)
 **File:** `crates/oz-core/src/db/reports.rs`
 
 The existing `get_low_stock_alerts` Tauri command takes only a global `threshold` parameter — no `location_id` filter.
 
 **Acceptance criteria:**
-- [ ] Add `pub fn low_stock_alerts_at_location(&self, location_id: &str, default_threshold: i64) -> Result<Vec<LowStockAlert>, CoreError>`
-- [ ] Add `pub fn active_stock_alerts(&self, location_id: &str) -> Result<Vec<StockAlertEvent>, CoreError>`
-- [ ] Add scoped Tauri command: `get_low_stock_alerts_at_location_scoped`
-- [ ] Add frontend API wrapper: `getLowStockAlertsAtLocation`
-- [ ] Unit tests: per-location alerts, location with no alerts, mixed thresholds
-- [ ] Deprecate old `get_low_stock_alerts` with `#[deprecated]` note
+- [x] Add `pub fn low_stock_alerts_at_location(&self, location_id: &str, default_threshold: i64) -> Result<Vec<LowStockAlert>, CoreError>` — uses `stock_summary` per-location + COALESCE of custom/product-global/default threshold
+- [x] Add `pub fn active_stock_alerts(&self, location_id: &str) -> Result<Vec<StockAlertEvent>, CoreError>` — queries `stock_alert_events` LEFT JOINed with `products` for SKU/name enrichment
+- [x] `StockAlertEvent` struct with 13 fields (incl. product_sku, product_name)
+- [ ] Scoped Tauri command: `get_low_stock_alerts_at_location_scoped` — deferred
+- [ ] Frontend API wrapper: `getLowStockAlertsAtLocation` — deferred
+- [x] 6 unit tests: per-location alerts, location with no alerts, custom threshold, active-only, excludes resolved
+- [x] Deprecated old `low_stock_alerts` with `#[deprecated]` note
 
 ### 4. `stock.negative` Event Emission
 
@@ -265,7 +266,7 @@ Draft a new ADR for "Payment-Capture Ordering" that specifies the stock-reservat
 |----------|------|-------------|--------------|
 | 🔴 | `get_workspace_locations` resolver | 2–3 hrs | ✅ Done |
 | 🔴 | Synchronous alert engine | 3–4 hrs | ✅ Done |
-| 🟡 | `low_stock_alerts_at_location` | 1–2 hrs | None (parallel with alert engine) |
+| 🟡 | `low_stock_alerts_at_location` | 1–2 hrs | ✅ Done (backend) — Tauri + frontend deferred |
 | 🟡 | `stock.negative` event emission | 1 hr | None |
 | 🔵 | `StockAlertPanel` frontend | 2–3 hrs | Alert engine + API |
 | 🔵 | Location picker in header | 2–3 hrs | location CRUD commands |
