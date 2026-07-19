@@ -109,3 +109,30 @@ fi
 # ── Done ──────────────────────────────────────────────────────────────────
 total_end=$(date +%s)
 echo -e "${GREEN}all checks passed ($((total_end - total_start))s)${NC}"
+
+# ── Commit suggestion ─────────────────────────────────────────────────────
+cat <<'COMMIT_GUIDE'
+
+Now make a local commit:
+
+  1. git add <files>     # stage only intended files
+  2. git commit          # write a message following the guidelines below
+
+Commit message guidelines:
+  • Keep the summary line under 50 characters, imperative mood, no period
+  • Leave a blank line after the summary
+  • Use bullet points (- or *) for the body — focus on WHAT and WHY, not how
+  • Reference related docs/decisions or issue numbers where relevant
+  • Keep each bullet under 72 characters
+
+Example:
+
+    feat(sales): add deduction location override via PIN
+
+    - Clicking the badge opens FastPINOverlay for PIN verification
+    - Store method overrides deduction location with IMMEDIATE transaction
+    - Badge shows "(Override)" indicator after successful override
+
+    References ADR-19
+
+COMMIT_GUIDE
