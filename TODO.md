@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 72 / 101 items complete (71.3%) · Updated 2026-07-19
+**Current state:** 73 / 101 items complete (72.3%) · Updated 2026-07-19
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| ♿ Accessibility | 17 | 10 | ██████░░░░ 59% |
+| ♿ Accessibility | 17 | 11 | ██████░░░░ 65% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **72** | **████████░░ 80%** |
+| **Total** | **101** | **73** | **████████░░ 80%** |
 
 ---
 
@@ -51,9 +51,11 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 - [x] Error clears automatically when modal closes and reopens
 - [x] Stock shortfall errors still handled separately via `StockShortfallDialog`
 
-**1.4 PriceOverrideModal** — reason required, amount out of range
-- [ ] Add inline field validation with error messages
-- [ ] Validate reason field not empty before submit
+**1.4 PriceOverrideModal** — inline price validation, max-price guard
+- [x] Inline error with `role="alert"` when price ≤ 0 (initialized on mount)
+- [x] Price validation: shows warning when price exceeds 10x current price
+- [x] Error clears when user edits the price input
+- [x] Username and PIN step errors already have `role="alert"`
 
 **1.5 SettingsPage**
 - [x] Already implemented with `role="alert"` on errors

@@ -51,6 +51,9 @@ export default function PriceOverrideModal({
   const [pin, setPin] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(
+    currentPrice.minor_units <= 0 ? 'Price must be greater than 0' : null,
+  );
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
@@ -95,11 +98,19 @@ export default function PriceOverrideModal({
 
 
   const handlePriceConfirm = useCallback(() => {
-    if (newPriceMinor > 0) {
-      setStep('username');
-      setError(null);
+    if (newPriceMinor <= 0) {
+      setPriceError('Price must be greater than 0');
+      return;
     }
-  }, [newPriceMinor]);
+    const maxPrice = currentPrice.minor_units * 10;
+    if (newPriceMinor > maxPrice) {
+      setPriceError(`Price exceeds 10x the current price. Maximum allowed is ${maxPrice}.`);
+      return;
+    }
+    setStep('username');
+    setError(null);
+    setPriceError(null);
+  }, [newPriceMinor, currentPrice.minor_units]);
 
   const handleUsernameSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -221,9 +232,14 @@ export default function PriceOverrideModal({
               type="number"
               min="1"
               value={newPriceMinor}
-              onChange={(e) => setNewPriceMinor(Math.max(1, parseInt(e.target.value, 10) || 0))}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 0;
+                setNewPriceMinor(val);
+                setPriceError(null);
+              }}
               aria-label="Enter new price in minor units"
             />
+            {priceError && <div className="price-override-error" role="alert">{priceError}</div>}
             <div className="price-override-actions">
               <button type="button" className="price-override-cancel-btn" onClick={handleClose}>Cancel</button>
               <button
