@@ -156,31 +156,86 @@ async fn serve(app: Router) {
 }
 
 /// Build the combined router: REST API + sync endpoints.
-/// Response from the health endpoint.
+/// Response from the health endpoint (P8-3: enhanced with DB ping and queue depth).
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: &'static str,
     version: &'static str,
-    db: &'static str,
+    db: String,
     uptime_seconds: u64,
+    /// Whether the database is reachable (actual ping, not static).
+    db_connected: bool,
+    /// Database ping latency in microseconds.
+    db_latency_us: u64,
+    /// Number of items in the sync queue with status `pending`.
+    sync_queue_depth: i64,
+    /// ISO-8601 timestamp of the most recent sync activity, or null.
+    last_sync_at: Option<String>,
 }
 
-/// `GET /metrics` — Prometheus metrics endpoint (P-3 Step 7).
+/// `GET /metrics` — Prometheus metrics endpoint.
 /// Public, no auth required (same as /health).
 async fn metrics_handler() -> String {
     crate::metrics::render_metrics()
 }
 
 /// `GET /health` — public health check, no auth required.
+///
+/// Performs an actual DB ping, reports sync queue depth, last sync
+/// timestamp, and uptime. Used by the Tauri app's ConnectionStatus
+/// component and by Docker healthchecks.
+///
+/// All DB queries are performed in a single lock acquisition to
+/// minimise contention with concurrent sync handlers (P8-3).
 async fn health_handler(
     axum::extract::State(state): axum::extract::State<CloudServerState>,
 ) -> Json<HealthResponse> {
     let uptime = state.started_at.elapsed().as_secs();
+
+    // P8-3: all DB queries in a single lock acquisition.
+    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at) = {
+        let db_start = std::time::Instant::now();
+        let conn = state.db.lock().await;
+
+        let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
+        let latency = db_start.elapsed().as_micros() as u64;
+        let connected = ping_result.is_ok();
+
+        let depth = conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+
+        let last = conn
+            .query_row(
+                "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .unwrap_or(None);
+
+        (connected, latency, depth, last)
+    };
+
+    // P8-3: record health check Prometheus metrics.
+    crate::metrics::HEALTH_CHECKS_TOTAL.inc();
+    if !db_connected {
+        crate::metrics::HEALTH_CHECK_FAILURES_TOTAL.inc();
+    }
+    crate::metrics::HEALTH_DB_LATENCY_MICROS.observe(db_latency_us as f64);
+
     Json(HealthResponse {
-        status: "ok",
+        status: if db_connected { "ok" } else { "degraded" },
         version: env!("CARGO_PKG_VERSION"),
-        db: "sqlite",
+        db: "sqlite".into(),
         uptime_seconds: uptime,
+        db_connected,
+        db_latency_us,
+        sync_queue_depth,
+        last_sync_at,
     })
 }
 
@@ -216,6 +271,7 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
 
     Router::new()
         .route("/health", axum::routing::get(health_handler))
+        .route("/api/health", axum::routing::get(health_handler))
         .route("/metrics", axum::routing::get(metrics_handler))
         .with_state(health_state)
         .merge(api_router)
@@ -301,12 +357,121 @@ mod tests {
     #[tokio::test]
     async fn health_returns_ok() {
         let app = test_app();
+        // oz-api health endpoint
         let req = Request::builder()
             .uri("/api/v1/health")
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn cloud_health_api_alias_returns_ok() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/api/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+        assert!(json["db_connected"].as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn cloud_health_returns_ok_with_db_ping() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+        assert!(json["version"].is_string());
+        assert_eq!(json["db"], "sqlite");
+        assert!(json["uptime_seconds"].as_u64().unwrap() >= 0);
+        assert_eq!(json["db_connected"], true);
+        assert!(json["db_latency_us"].as_u64().unwrap() > 0);
+        assert_eq!(json["sync_queue_depth"], 0);
+        assert!(json["last_sync_at"].is_null());
+    }
+
+    #[tokio::test]
+    async fn cloud_health_reports_queue_depth() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+
+        // Seed some pending queue items
+        {
+            let conn = state.db.lock().await;
+            conn.execute_batch(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, synced_at, tenant_id) VALUES
+                 ('h-1', 'act', '{}', 'pending', '2026-06-01T00:00:00Z', NULL, 't1'),
+                 ('h-2', 'act', '{}', 'pending', '2026-06-02T00:00:00Z', NULL, 't1'),
+                 ('h-3', 'act', '{}', 'synced', '2026-06-03T00:00:00Z', '2026-06-03T12:00:00Z', 't1')"
+            )
+            .unwrap();
+        }
+
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["sync_queue_depth"], 2);
+        assert!(!json["last_sync_at"].is_null());
+    }
+
+    #[tokio::test]
+    async fn cloud_health_reports_last_sync_at() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+
+        // Seed some items with various synced_at times
+        {
+            let conn = state.db.lock().await;
+            conn.execute_batch(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, synced_at, tenant_id) VALUES
+                 ('h-a', 'act', '{}', 'synced', '2026-06-01T00:00:00Z', '2026-06-02T12:00:00Z', 't1'),
+                 ('h-b', 'act', '{}', 'synced', '2026-06-03T00:00:00Z', '2026-06-04T08:30:00Z', 't1')"
+            )
+            .unwrap();
+        }
+
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["last_sync_at"], "2026-06-04T08:30:00Z");
     }
 
     #[tokio::test]

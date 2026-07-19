@@ -73,6 +73,37 @@ pub static SYNC_BATCH_SIZE_BYTES: LazyLock<Histogram> = LazyLock::new(|| {
     h
 });
 
+// ── P8-3: Health-check metrics ──────────────────────────────────────
+
+/// Total number of health check requests served.
+pub static HEALTH_CHECKS_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new("health_checks_total", "Total health check requests served").unwrap();
+    REGISTRY.register(Box::new(c.clone())).unwrap();
+    c
+});
+
+/// Total number of health check failures (DB unreachable).
+pub static HEALTH_CHECK_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "health_check_failures_total",
+        "Total health check requests where DB ping failed",
+    )
+    .unwrap();
+    REGISTRY.register(Box::new(c.clone())).unwrap();
+    c
+});
+
+/// Database ping latency in microseconds.
+pub static HEALTH_DB_LATENCY_MICROS: LazyLock<Histogram> = LazyLock::new(|| {
+    let h = Histogram::with_opts(HistogramOpts::new(
+        "health_db_latency_micros",
+        "Database ping latency in microseconds",
+    ))
+    .unwrap();
+    REGISTRY.register(Box::new(h.clone())).unwrap();
+    h
+});
+
 /// Duration of database lock acquisitions in seconds.
 pub static DB_CONTENTION_SECONDS: LazyLock<HistogramVec> = LazyLock::new(|| {
     let h = HistogramVec::new(
@@ -102,6 +133,9 @@ fn ensure_registered() {
     let _ = &*SYNC_PUSH_DURATION_MS;
     let _ = &*SYNC_PULL_DURATION_MS;
     let _ = &*SYNC_BATCH_SIZE_BYTES;
+    let _ = &*HEALTH_CHECKS_TOTAL;
+    let _ = &*HEALTH_CHECK_FAILURES_TOTAL;
+    let _ = &*HEALTH_DB_LATENCY_MICROS;
     let _ = &*DB_CONTENTION_SECONDS;
 }
 
