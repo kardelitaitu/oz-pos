@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, Profiler } from 'react';
 import { useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/components/Localized';
@@ -207,6 +207,11 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
   );
 
   return (
+    <Profiler id="ProductLookupScreen" onRender={(...args) => {
+      if (typeof args[2] === 'number' && args[2] > 1) {
+        console.debug('[Profiler] ProductLookupScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
+      }
+    }}>
     <div className="product-lookup">
       {/* ── Toolbar: Search + Barcode ────────────── */}
       <div className="product-toolbar">
@@ -336,6 +341,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
         </div>
       )}
     </div>
+    </Profiler>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Profiler } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspaceScope } from '@/contexts/WorkspaceContext';
@@ -132,6 +132,11 @@ export default function KdsScreen() {
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 
   return (
+    <Profiler id="KdsScreen" onRender={(...args) => {
+      if (typeof args[2] === 'number' && args[2] > 1) {
+        console.debug('[Profiler] KdsScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
+      }
+    }}>
     <div className="kds" role="region" aria-label="Kitchen Display System">
       <div className="kds-header">
         <div className="kds-header-left">
@@ -169,5 +174,6 @@ export default function KdsScreen() {
         />
       )}
     </div>
+    </Profiler>
   );
 }

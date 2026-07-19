@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, Profiler } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listSales,
@@ -440,6 +440,11 @@ export default function SalesHistoryScreen() {
   }, [filteredSales, cashierName, l10n]);
 
   return (
+    <Profiler id="SalesHistoryScreen" onRender={(...args) => {
+      if (typeof args[2] === 'number' && args[2] > 1) {
+        console.debug('[Profiler] SalesHistoryScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
+      }
+    }}>
     <div className="sales-history">
       <div className="sales-history-header">
         <div className="sales-history-header-left">
@@ -1098,5 +1103,6 @@ export default function SalesHistoryScreen() {
         </Localized>
       )}
     </div>
+    </Profiler>
   );
 }
