@@ -17,5 +17,6 @@ kds-tap-to-advance-label = Pesanan { $number }, ketuk untuk lanjut
 kds-order-count = { $count } pesanan
 kds-time-ago-now = sekarang
 kds-time-ago = { $minutes }m
+kds-urgent-badge = URGENT
 
 # ── Kiosk (remaining) ──

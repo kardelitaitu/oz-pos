@@ -15,3 +15,4 @@ kds-no-orders = No orders yet
 kds-order-count = { $count } orders
 kds-time-ago-now = now
 kds-time-ago = { $minutes }m
+kds-urgent-badge = URGENT

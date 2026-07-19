@@ -11,9 +11,9 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🔴 P0 — Plugin Security | 5 | **5** | **███████████████████████████████ 100% 🎉** |
-| 🟢 P1 — Sync Reliability | 6 | **4** | **██████▱▱▱▱ 67%** |
+| 🟢 P1 — Sync Reliability | 6 | **5** | **████████▱▱▱▱ 83%** |
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🔵 P3 — KDS Enhancements | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🔵 P3 — KDS Enhancements | 5 | **1** | **██▱▱▱▱▱▱▱▱ 20%** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **13** | **█████████▱▱▱ 19%** |
+| **Total** | **70** | **15** | **███████████▱▱ 21%** |
 
 ---
 
@@ -104,7 +104,7 @@ The KDS system (kitchen display) has multi-layout support (Focus/Kanban/Metro) b
 
 ### Checklist
 
-- [ ] **P3-1: Overdue escalation** — Add progressive visual escalation for tickets: 5min overdue → amber border + pulse, 10min overdue → red border + shake animation, 15min overdue → red background + urgent badge. Use CSS `@keyframes` with `animation-delay` tied to elapsed time.
+- [x] **P3-1: Overdue escalation** ✅ — Progressive visual escalation implemented: green <5min (on-time), yellow 5-10min (amber border+pulse), red 10-15min (red border+shake animation via `kds-shake` keyframes), urgent ≥15min (gradient red background + `URGENT` badge + gradient top bar sweep). Updated `useTicketSla` hook thresholds, added `urgent` boolean, dual audio alerts at 10min and 15min transitions. TypeScript checks pass.
 - [ ] **P3-2: Sound alerts** — Add optional sound notification when a new ticket arrives: short chime via `AudioContext` oscillator (no external audio file needed). One sound per ticket, debounced to max 1 sound per 5 seconds. Toggle in KDS settings.
 - [ ] **P3-3: Layout persistence** — Save selected KDS layout (Focus/Kanban/Metro) per terminal to localStorage. Restore on reload. Add `lastLayout` to `KdsLayoutSwitcher` state.
 - [ ] **P3-4: Ticket count badge animation** — Animate ticket count changes on column headers with a brief scale-up bounce (0.3s) when count increases, scale-down when count decreases. CSS-only via `@keyframes`.
