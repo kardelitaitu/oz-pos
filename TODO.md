@@ -11,7 +11,7 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🔴 P0 — Plugin Security | 5 | **5** | **███████████████████████████████ 100% 🎉** |
-| 🟢 P1 — Sync Reliability | 6 | **1** | **██▱▱▱▱▱▱▱▱ 17%** |
+| 🟢 P1 — Sync Reliability | 6 | **2** | **████▱▱▱▱▱▱ 33%** |
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P3 — KDS Enhancements | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **10** | **██████▱▱▱▱ 14%** |
+| **Total** | **70** | **11** | **██████▱▱▱▱ 16%** |
 
 ---
 
@@ -70,7 +70,7 @@ The sync system (`platform/sync/`) uses cursor-based push/pull with exponential 
 - [ ] **P1-1: Conflict resolution strategy** — Define and implement a last-writer-wins (LWW) strategy using `updated_at` timestamps for reference data (products, categories, tax rates) and CRDT-merge for sales and stock movements. Document in ADR-21.
 - [ ] **P1-2: Sync integration tests** — Add integration tests covering: full push→pull lifecycle, auth expiry mid-batch retry, concurrent edits from two terminals (LWW resolution), partial batch failure recovery, and snapshot import after anchor expiry.
 - [ ] **P1-3: Conflict UI indicators** — Add visual indicators in the UI when sync conflicts are detected: warning badge on OfflineQueueScreen, conflict count in StatusBar, and a "Resolve Conflicts" sub-screen showing conflicted items with resolution options.
-- [ ] **P1-4: Snapshot import error handling** — Test `import_snapshot` with corrupted/malformed snapshots, partial imports (abort mid-way), and concurrent snapshot imports during active sync. Add idempotency guards.
+- [x] **P1-4: Snapshot import error handling** ✅ — 13 tests covering: empty snapshot, single/multiple products, missing SKU/name, idempotent re-import (ON CONFLICT upsert), product/user overwrite, corrupted product missing all fields, corrupted user with default role_id, out-of-schema fields ignored, 6-entity multi-type bundle, FK violation rollback, null barcode. platform-sync: 139/139.
 - [x] **P1-5: Offline queue dedup hardening** ✅ — Added `enqueue_offline_dedup` (checks pending items by action+payload) and `SyncQueue::enqueue_dedup`. 11 new tests cover dedup, cross-terminal scenario, different action/payload, and re-enqueue after sync. oz-core: 1445/1445, platform-sync: 126/126.
 - [ ] **P1-6: Sync observability** — Add per-terminal sync status to the dashboard, including: last sync time, pending item count, failed item count, average sync duration, and conflict count. Expose via new Tauri command + settings screen.
 
