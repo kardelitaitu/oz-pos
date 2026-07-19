@@ -256,7 +256,7 @@
   border: none;
   border-radius: var(--radius-md, 8px);
   background: var(--color-accent);
-  color: #fff; /* design exception: white text on colored accent button */
+  color: var(--color-accent-fg); /* high-contrast text on accent button */
   font-size: var(--text-base, 16px);
   font-weight: var(--font-weight-semibold, 600);
   font-family: inherit;
@@ -292,8 +292,8 @@
   display: inline-block;
   width: var(--space-4);
   height: var(--space-4);
-  border: 2px solid rgba(255, 255, 255, 0.3); /* design exception: spinner on colored bg */
-  border-top-color: #fff; /* design exception: spinner white on colored bg */
+  border: 2px solid color-mix(in srgb, var(--color-fg-primary) 30%, transparent);
+  border-top-color: var(--color-fg-primary);
   border-radius: 50%;
 }
 

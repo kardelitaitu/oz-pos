@@ -395,9 +395,9 @@
 }
 
 .product-card--added .product-card-add-icon {
-  /* --color-accent-fg is dark in default/dark themes; must be white for visibility on success-green background */
+  /* Use --color-accent-fg for high contrast: dark (#07111d) on success-green in dark themes, white (#fff) on success-green in light themes */
   background-color: var(--color-success);
-  color: #fff;
+  color: var(--color-accent-fg);
 }
 
 .product-card-add-icon svg {

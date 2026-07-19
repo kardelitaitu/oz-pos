@@ -7,8 +7,8 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--kds-muted);
@@ -16,7 +16,7 @@
 }
 
 .kds-layout-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-bg-surface);
   color: var(--kds-text);
 }
 
@@ -35,7 +35,7 @@
   position: fixed;
   top: var(--space-14);
   right: var(--space-8);
-  z-index: 1000;
+  z-index: var(--z-overlay);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -44,7 +44,7 @@
   background: var(--kds-header-bg, #16213e);
   border: 1px solid var(--kds-header-border, #0f3460);
   border-radius: var(--radius-xl);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-xl);
 }
 
 .kds-layout-popover-section-title {

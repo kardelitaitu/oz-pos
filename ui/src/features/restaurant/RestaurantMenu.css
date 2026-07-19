@@ -468,9 +468,9 @@
 }
 
 .restaurant-card--added .restaurant-card-add-icon {
-  /* --color-accent-fg is dark in default/dark themes; must be white for visibility on success-green background */
+  /* --color-accent-fg gives high-contrast: dark (#07111d) on light green in dark themes, white (#fff) on dark green in light themes */
   background-color: var(--color-success);
-  color: #fff;
+  color: var(--color-accent-fg);
 }
 
 .restaurant-card-add-icon svg {

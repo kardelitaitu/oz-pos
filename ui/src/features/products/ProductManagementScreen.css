@@ -97,8 +97,8 @@
 }
 /* Restaurant badge uses specific pink/magenta shades for visual distinction from other types */
 .product-mgmt-type--restaurant {
-  background: #fce7f3;
-  color: #9d174d;
+  background: var(--color-danger-bg, rgba(239, 68, 68, 0.1));
+  color: var(--color-danger-700, #b91c1c);
 }
 .product-mgmt-type--both {
   background: var(--color-success-bg);
@@ -106,8 +106,8 @@
 }
 /* Service badge uses muted indigo/violet to distinguish non-inventory items */
 .product-mgmt-type--service {
-  background: #ede9fe;
-  color: #5b21b6;
+  background: var(--color-accent-dim);
+  color: var(--color-accent-active);
 }
 
 .product-mgmt-stock-ok {

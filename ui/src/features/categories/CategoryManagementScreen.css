@@ -79,7 +79,7 @@
   align-items: center;
   justify-content: center;
   /* Must be white for visibility on dynamic-colour badges (set via --cat-color) */
-  color: #fff;
+  color: var(--color-fg-primary);
   box-shadow: var(--shadow-sm);
 }
 

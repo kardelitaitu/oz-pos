@@ -149,7 +149,8 @@
   display: grid;
   grid-template-columns: repeat(21, 1fr);
   grid-template-rows: repeat(21, 1fr);
-  gap: 1px; /* design exception: QR grid, sub-token spacing */
+  /* 1px: QR grid gap — sub-token spacing for visual grid effect */
+  gap: 1px;
   width: 100%;
   height: 100%;
 }

@@ -43,7 +43,7 @@
 .data-mgmt-tab::after {
   content: '';
   position: absolute;
-  bottom: -0.0625rem;
+  bottom: -0.0625rem; /* -1px offset — sub-token exempt */
   left: 50%;
   width: 0;
   height: 2px;
@@ -333,7 +333,7 @@
 }
 
 .data-mgmt-file-icon {
-  font-size: 2rem;
+  font-size: 2rem; /* file icon size — no --text-* token at 2rem ({--text-4xl=2.25rem}) */
 }
 
 /* ── Metadata preview ────────────────────────────────────────────── */

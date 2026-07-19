@@ -126,7 +126,8 @@
 
 .settings-popup-error svg {
   flex-shrink: 0;
-  margin-top: 1px; /* sub-token value, design exception */
+  /* 1px = 0.0625rem — sub-token value for SVG icon alignment */
+  margin-top: 1px;
 }
 
 /* ── Footer ────────────────────────────────────────────── */

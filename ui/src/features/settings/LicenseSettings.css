@@ -223,28 +223,27 @@
 
 .settings-license-value--tier:hover {
   opacity: 0.85;
-  box-shadow: inset 0 0 0 1px currentColor; /* functional border, no token */
+  box-shadow: inset 0 0 0 1px currentColor; /* functional border */
 }
 
-/* Design exception: semantic tier badge colors — no token equivalents */
 .settings-license-value--tier-free {
-  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in srgb, var(--color-fg-tertiary) 12%, transparent);
   color: var(--color-fg-secondary);
 }
 
 .settings-license-value--tier-pro {
-  background: rgba(59, 130, 246, 0.12);
-  color: rgb(59, 130, 246);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-info);
 }
 
 .settings-license-value--tier-premium {
-  background: rgba(139, 92, 246, 0.12);
-  color: rgb(139, 92, 246);
+  background: color-mix(in srgb, var(--color-link-visited, #8b5cf6) 12%, transparent);
+  color: var(--color-link-visited, #8b5cf6);
 }
 
 .settings-license-value--tier-enterprise {
-  background: rgba(16, 185, 129, 0.12);
-  color: rgb(16, 185, 129);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
 }
 
 /* ── Server status sub-section ──────────────────────────── */

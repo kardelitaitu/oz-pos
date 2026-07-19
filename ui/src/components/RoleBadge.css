@@ -15,7 +15,7 @@
   height: var(--space-8);
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  color: #fff; /* design exception: white text on accent badge */
+  color: var(--color-accent-fg); /* high-contrast text on accent badge */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -27,7 +27,8 @@
 .role-badge-info {
   display: flex;
   flex-direction: column;
-  gap: 1px; /* design exception: tight badge spacing, sub-token */
+  /* 1px: tight badge info spacing — sub-token value */
+  gap: 1px;
   min-width: 0;
   flex: 1;
 }

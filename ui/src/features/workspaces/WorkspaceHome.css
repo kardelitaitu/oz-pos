@@ -98,7 +98,7 @@
 
 .ws-particle {
   position: absolute;
-  bottom: -0.625rem; /* design exception: particle positioning, dynamic per nth-child */
+  bottom: -0.625rem; /* ribbon offset — sub-token value */ /* design exception: particle positioning, dynamic per nth-child */
   width: 0.25rem;
   height: 0.25rem;
   background: var(--ws-accent, var(--color-accent));
@@ -943,7 +943,7 @@
 .role-badge--owner   { color: var(--color-warning); }
 .role-badge--manager { color: var(--color-info); }
 .role-badge--cashier { color: var(--color-success); }
-.role-badge--kitchen { color: #a855f7; } /* design exception: semantic workspace accent color */
+.role-badge--kitchen {  color: var(--color-link-visited, #a855f7); } /* design exception: semantic workspace accent color */
 .role-badge--default { color: var(--color-fg-tertiary); }
 
 /* ═══════════════════════════════════════════════════════════════════

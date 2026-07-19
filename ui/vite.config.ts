@@ -19,6 +19,10 @@ export default defineConfig({
     // path join clean (`…/foo`, never `…/srccomponents/foo`).
     alias: [
       {
+        find: /^@tauri-apps\/api\/core$/,
+        replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-api.ts', import.meta.url))}`,
+      },
+      {
         find: /^@\//,
         replacement: `${fileURLToPath(new URL('./src/', import.meta.url))}/`,
       },

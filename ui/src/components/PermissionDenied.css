@@ -55,7 +55,7 @@
   border: none;
   border-radius: var(--radius-lg);
   background: var(--color-accent);
-  color: #fff; /* design exception: white text on accent button */
+  color: var(--color-accent-fg); /* high-contrast text on accent button */
   cursor: pointer;
   transition: opacity var(--duration-150);
 }

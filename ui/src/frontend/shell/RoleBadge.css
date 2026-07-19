@@ -20,7 +20,7 @@
   height: var(--space-8);
   border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
-  color: #fff; /* design exception: white text on gradient avatar, no token for colored bg */
+  color: var(--color-accent-fg); /* high-contrast text on gradient avatar */
   display: flex;
   align-items: center;
   justify-content: center;

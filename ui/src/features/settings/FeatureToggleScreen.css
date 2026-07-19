@@ -140,7 +140,7 @@
 }
 
 .feature-toggle-group-icon {
-  font-size: 1.2em; /* relative unit, no token equivalent */
+  font-size: 1.2em; /* relative em unit — no --text-* token equivalent */
 }
 
 .feature-toggle-bulk-actions {
@@ -180,7 +180,7 @@
 .feature-toggle-bulk-btn--disable:hover {
   border-color: var(--color-danger);
   color: var(--color-danger);
-  background: rgba(239, 68, 68, 0.08); /* semantic hover, no token */
+  background: var(--color-danger-bg); /* semantic hover */
 }
 
 .feature-toggle-bulk-btn:disabled {
