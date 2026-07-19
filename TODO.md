@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 8 / 31 items complete (26%) · Updated 2026-07-26
+**Current state:** 9 / 31 items complete (29%) · Updated 2026-07-26
 
 ---
 
@@ -12,14 +12,14 @@
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
-| 🧪 Rust Test Coverage | 14 | 8 | ██████░░░░ 57% |
+| 🧪 Rust Test Coverage | 14 | 9 | ███████░░░ 64% |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🔴 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **8** | **██████░░░░ 26%** |
+| **Total** | **31** | **9** | **███████░░░ 29%** |
 
 ---
 
@@ -37,7 +37,7 @@
 | `tables.rs` | 10 → **18** | 15+ | ✅ |
 | `terminal_overrides.rs` | 10 → **16** | 15+ | ✅ |
 | `terminal_profiles.rs` | 10 → **16** | 15+ | ✅ |
-| `refunds.rs` | 11 | 20+ | 9 |
+| `refunds.rs` | 11 → **21** | 20+ | ✅ |
 | `cart.rs` | 12 | 20+ | 8 |
 | `gift_cards.rs` | 12 | 15+ | 3 |
 | `kds.rs` | 12 | 20+ | 8 |

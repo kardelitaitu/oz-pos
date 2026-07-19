@@ -784,4 +784,226 @@ mod tests {
             "total credited delta should match refund qty"
         );
     }
+
+    // ── Additional edge cases ─────────────────────────────────────
+
+    #[test]
+    fn create_refund_note_persisted() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        let line = RefundLine::new("ref-sl-1", "COFFEE", 2, price(350), price(700));
+        let refund = Refund::new(
+            "ref-sale-1",
+            price(700),
+            "defective",
+            "Customer reported broken seal",
+            "user-2",
+            vec![line],
+        );
+        s.create_refund(&refund).unwrap();
+
+        let refunds = s.list_refunds_for_sale("ref-sale-1").unwrap();
+        assert_eq!(refunds.len(), 1);
+        assert_eq!(refunds[0].note.as_str(), "Customer reported broken seal");
+        assert_eq!(refunds[0].processed_by, "user-2");
+    }
+
+    #[test]
+    fn list_refunds_nonexistent_sale_returns_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let refunds = s.list_refunds_for_sale("no-such-sale").unwrap();
+        assert!(refunds.is_empty());
+    }
+
+    #[test]
+    fn total_refunded_for_sale_accumulates() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        // First refund: 350
+        let line1 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+        let r1 = Refund::new(
+            "ref-sale-1",
+            price(350),
+            "partial",
+            "",
+            "user-1",
+            vec![line1],
+        );
+        s.create_refund(&r1).unwrap();
+
+        // Second refund: 350
+        let line2 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+        let r2 = Refund::new(
+            "ref-sale-1",
+            price(350),
+            "partial",
+            "",
+            "user-1",
+            vec![line2],
+        );
+        s.create_refund(&r2).unwrap();
+
+        let total = s.total_refunded_for_sale("ref-sale-1").unwrap();
+        assert_eq!(total.minor_units, 700);
+    }
+
+    #[test]
+    fn refund_line_not_in_deductions_fails() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        // Refund line references a sale_line_id that doesn't exist in deduction_locations JSON.
+        let line = RefundLine::new("non-existent-sl", "COFFEE", 1, price(350), price(350));
+        let refund = Refund::new("ref-sale-1", price(350), "test", "", "user-1", vec![line]);
+        let err = s.create_refund(&refund).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "deduction_locations")
+        );
+    }
+
+    #[test]
+    fn refund_malformed_deduction_locations_json_fails() {
+        let conn = fresh();
+        // Sale with deliberately bad JSON in deduction_locations.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
+                ('bad-p1', 'BAD', 'Bad Item', 100, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at,
+                                deduction_locations) VALUES
+                ('bad-sale-1', 100, 'USD', 1, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z',
+                 '{invalid json}');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                ('bad-sl-1', 'bad-sale-1', 'BAD', 1, 100, 100, 'USD', 1);"
+        ).unwrap();
+        let s = store(&conn);
+
+        let line = RefundLine::new("bad-sl-1", "BAD", 1, price(100), price(100));
+        let refund = Refund::new("bad-sale-1", price(100), "test", "", "user-1", vec![line]);
+        let err = s.create_refund(&refund).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "deduction_locations")
+        );
+    }
+
+    #[test]
+    fn list_refunds_multiple_sales_isolation() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        // Also seed a second sale with a different sale ID.
+        conn.execute_batch(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at,
+                                deduction_locations) VALUES
+                ('ref-sale-2', 350, 'USD', 1, 'completed', '2025-01-02T00:00:00.000Z', '2025-01-02T00:00:00.000Z',
+                 '{\"version\":1,\"lines\":[{\"sale_line_id\":\"ref-sl-2\",\"sku\":\"COFFEE\",\"deductions\":[{\"location_id\":\"01926b3a-0000-7000-8000-000000000001\",\"qty\":1}]}]}');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                ('ref-sl-2', 'ref-sale-2', 'COFFEE', 1, 350, 350, 'USD', 1);"
+        ).unwrap();
+        let s = store(&conn);
+
+        // Refund for sale-1
+        let line1 = RefundLine::new("ref-sl-1", "COFFEE", 1, price(350), price(350));
+        let r1 = Refund::new(
+            "ref-sale-1",
+            price(350),
+            "partial",
+            "",
+            "user-1",
+            vec![line1],
+        );
+        s.create_refund(&r1).unwrap();
+
+        // Only refunds for sale-1 should appear
+        let refunds1 = s.list_refunds_for_sale("ref-sale-1").unwrap();
+        assert_eq!(refunds1.len(), 1);
+
+        // Sale-2 should have zero refunds
+        let refunds2 = s.list_refunds_for_sale("ref-sale-2").unwrap();
+        assert!(refunds2.is_empty());
+    }
+
+    #[test]
+    fn total_refunded_for_nonexistent_sale_returns_not_found() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.total_refunded_for_sale("no-such-sale").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn refund_zero_price_line_restores_stock() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        // A refund with zero-price line but positive qty should still restore stock.
+        let line = RefundLine::new("ref-sl-1", "COFFEE", 1, price(0), price(0));
+        let refund = Refund::new(
+            "ref-sale-1",
+            price(0),
+            "zero price",
+            "",
+            "user-1",
+            vec![line],
+        );
+        s.create_refund(&refund).unwrap();
+
+        // Stock should still be restored despite zero monetary value.
+        let movement_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM stock_movements WHERE reason = 'refund' AND delta > 0",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            movement_count, 1,
+            "zero-price refund should still create stock movement"
+        );
+    }
+
+    #[test]
+    fn refund_empty_lines_vector_persists_refund_header() {
+        let conn = fresh();
+        seed_completed_sale(&conn);
+        let s = store(&conn);
+
+        // Refund with empty lines vec — still creates the refund header row.
+        let refund = Refund::new("ref-sale-1", price(0), "void", "", "user-1", vec![]);
+        s.create_refund(&refund).unwrap();
+
+        let refunds = s.list_refunds_for_sale("ref-sale-1").unwrap();
+        assert_eq!(refunds.len(), 1);
+        assert_eq!(refunds[0].reason, "void");
+        assert_eq!(refunds[0].lines.len(), 0);
+    }
+
+    #[test]
+    fn refund_partial_exact_qty_treated_as_full_forward_fifo() {
+        let conn = fresh();
+        seed_split_location_sale(&conn);
+        let s = store(&conn);
+
+        // Refund qty = total_deducted = 5 (exact match). Code does
+        // `if refund_qty >= total_deducted` → forward FIFO path.
+        let line = RefundLine::new("split-sl-1", "CHO-001", 5, price(500), price(2500));
+        let refund = Refund::new(
+            "split-sale-1",
+            price(2500),
+            "full refund",
+            "",
+            "user-1",
+            vec![line],
+        );
+        s.create_refund(&refund).unwrap();
+
+        // Forward FIFO: loc-store gets 2, loc-wh-a gets 3.
+        assert_eq!(get_stock_at(&conn, "CHO-001", "loc-store"), 2);
+        assert_eq!(get_stock_at(&conn, "CHO-001", "loc-wh-a"), 3);
+    }
 }
