@@ -317,4 +317,94 @@ mod tests {
 
         assert_eq!(s.get_total_payouts_for_shift(&shift_id).unwrap(), 2000);
     }
+
+    // ── Additional edge cases ───────────────────────────────────────
+
+    #[test]
+    fn payout_ordering_asc_by_created_at() {
+        let conn = fresh();
+        let (s, shift_id) = seed_user_and_shift(&conn);
+
+        let p1 = s.create_cash_payout(&shift_id, 1000, "first").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let p2 = s.create_cash_payout(&shift_id, 2000, "second").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let p3 = s.create_cash_payout(&shift_id, 3000, "third").unwrap();
+
+        let payouts = s.list_cash_payouts(&shift_id).unwrap();
+        assert_eq!(payouts.len(), 3);
+        assert_eq!(payouts[0].amount_minor, 1000);
+        assert_eq!(payouts[1].amount_minor, 2000);
+        assert_eq!(payouts[2].amount_minor, 3000);
+        assert!(payouts[0].created_at <= payouts[1].created_at);
+        assert!(payouts[1].created_at <= payouts[2].created_at);
+    }
+
+    #[test]
+    fn payout_minimum_amount_accepted() {
+        let conn = fresh();
+        let (s, shift_id) = seed_user_and_shift(&conn);
+
+        // 1 minor unit (e.g. Rp 1, $0.01) is the minimum valid amount
+        let payout = s.create_cash_payout(&shift_id, 1, "minimum drop").unwrap();
+        assert_eq!(payout.amount_minor, 1);
+
+        let total = s.get_total_payouts_for_shift(&shift_id).unwrap();
+        assert_eq!(total, 1);
+    }
+
+    #[test]
+    fn payout_special_chars_in_reason() {
+        let conn = fresh();
+        let (s, shift_id) = seed_user_and_shift(&conn);
+
+        // Unicode, emoji, and special characters in reason
+        let reason = "Bank drop ✅ — #さようなら & <safe> [deposit]";
+        let payout = s.create_cash_payout(&shift_id, 2500, reason).unwrap();
+        assert_eq!(payout.reason, reason);
+
+        let payouts = s.list_cash_payouts(&shift_id).unwrap();
+        assert_eq!(payouts[0].reason, reason);
+    }
+
+    #[test]
+    fn payout_same_reason_multiple_times() {
+        let conn = fresh();
+        let (s, shift_id) = seed_user_and_shift(&conn);
+
+        // Multiple drops with the same reason should all be stored
+        for _ in 0..5 {
+            s.create_cash_payout(&shift_id, 1000, "daily drop").unwrap();
+        }
+
+        let payouts = s.list_cash_payouts(&shift_id).unwrap();
+        assert_eq!(payouts.len(), 5);
+        assert!(payouts.iter().all(|p| p.reason == "daily drop"));
+        assert_eq!(s.get_total_payouts_for_shift(&shift_id).unwrap(), 5000);
+    }
+
+    #[test]
+    fn payout_ids_globally_unique() {
+        let conn = fresh();
+        let (s, shift_id) = seed_user_and_shift(&conn);
+
+        // UUID v7 IDs should be unique across multiple payout creates
+        use std::collections::HashSet;
+        let mut ids = HashSet::new();
+
+        for i in 0..20 {
+            let payout = s
+                .create_cash_payout(&shift_id, 1000 * (i + 1), &format!("drop {i}"))
+                .unwrap();
+            assert!(
+                ids.insert(payout.id.clone()),
+                "duplicate payout ID generated: {}",
+                payout.id
+            );
+        }
+
+        let payouts = s.list_cash_payouts(&shift_id).unwrap();
+        assert_eq!(payouts.len(), 20);
+        assert_eq!(s.get_total_payouts_for_shift(&shift_id).unwrap(), 210000);
+    }
 }
