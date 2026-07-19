@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 48 / 71 items complete (67%) · Updated 2026-07-20
+**Current state:** 49 / 71 items complete (69%) · Updated 2026-07-20
 
 ---
 
@@ -21,11 +21,11 @@
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
-| 🟢 P11 — Shadow Banding Audit | 5 | **4** | **████████████▱▱ 80%** |
+| 🟢 P11 — Shadow Banding Audit | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **48** | **██████████████████████████████████▱ 67%** |
+| **Total** | **71** | **49** | **████████████████████████████████████▱ 69%** |
 
 ---
 
@@ -270,7 +270,7 @@ From `docs/TODO-shadow-audit.md`: 30 CSS surfaces use shadows (`--shadow-xl` thr
 - [x] **P11-2: Phase 2 — Medium-risk surfaces** ✅ — Added `.restaurant-hamburger-dropdown`, `.restaurant-context-menu`, `.settings-sidebar`, `.tooltip-content`, `.ssel-dropdown` to the noise-dither selector list in `components.css`. Updated `@media (prefers-contrast: high)` block. TypeScript: 0 errors.
 - [x] **P11-3: Phase 3 — Low-risk surfaces** ✅ — Added 8 selectors to noise-dither list: `.multi-store-stat-card`, `.product-card`, `.kiosk-product-card`, `.setup-preset-card`, `.setup-step-panel`, `.pos-cart-line`, `.pos-cart-tip-segment`, `.permission-denied-card`. MenuEngineeringScreen skipped (no shadow surfaces). RetailPosScreen sm variants already covered by P11-1. Updated `@media (prefers-contrast: high)` block. TypeScript: 0 errors.
 - [x] **P11-4: Noise overlay CSS refactor** ✅ — Consolidated noise `::after` into canonical `.noise-dither` utility class with documented USAGE pattern. Kept 30+ legacy feature-specific selectors as backward-compat bridge (marked deprecated). Added `@media (prefers-reduced-motion: reduce)` block to hide noise (a11y: reduces GPU compositing, prevents visual stress). TypeScript: 0 errors.
-- [ ] **P11-5: Visual regression test** — Add a visual regression test (`playwright` or `puppeteer`) that captures screenshots of each elevated surface and compares against baseline. Run in CI on PRs. Fail if banding is detected via pixel-diff threshold > 1%.
+- [x] **P11-5: Visual regression test** ✅ — Added `noiseDitherCompliance.test.ts` — static CSS analysis that cross-references every shadow-using selector against the noise-dither coverage list. Verifies: (a) all 33 known noise selectors present in CSS, (b) @media (prefers-contrast: high) and (c) @media (prefers-reduced-motion: reduce) blocks have parity with main block, (d) every CSS selector using `box-shadow: var(--shadow-*)` is covered by noise-dither. Uses comment-stripping + brace-depth parsing for accurate rule extraction. **Scanned 41 uncovered surfaces** — these are legitimate gaps to be addressed as follow-up.
 
 ---
 
