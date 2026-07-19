@@ -78,6 +78,8 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'products/ProductManagementScreen.tsx',
     css: ['products/ProductManagementScreen.css'],
     dynamicClassPrefixes: ['product-mgmt-type--'],
+    // Classes used by child StockAlertPanel component rendered inside drawer
+    externalClasses: ['stock-alert-panel', 'product-mgmt-alert-badge'],
   },
   {
     name: 'BundleManagementScreen',

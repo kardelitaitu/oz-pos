@@ -830,7 +830,7 @@ mod tests {
         let sid = seed_supplier(&conn);
 
         // Create two POs, then verify newest is first
-        let po_a = store(&conn)
+        let _po_a = store(&conn)
             .create_purchase_order("PO-DESC-A", &sid, "", "older", None, &[])
             .unwrap();
 

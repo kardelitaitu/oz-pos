@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listInventoryLocations, type InventoryLocation } from '@/api/inventory';
 import './LocationPicker.css';
@@ -25,9 +24,8 @@ export default function LocationPicker({
   onChange,
   label = 'Location',
 }: LocationPickerProps) {
-  const { session } = useAuth();
   const { sessionToken } = useWorkspace();
-  const token = sessionToken ?? session?.session_token ?? '';
+  const token = sessionToken ?? '';
 
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [open, setOpen] = useState(false);

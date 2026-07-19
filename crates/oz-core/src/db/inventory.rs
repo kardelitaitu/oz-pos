@@ -1209,7 +1209,7 @@ mod tests {
         s.end_inventory_shift(&shift1.id).unwrap();
 
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let shift2 = s
+        let _shift2 = s
             .start_inventory_shift("u-ord", &loc_id, None, "second")
             .unwrap();
 

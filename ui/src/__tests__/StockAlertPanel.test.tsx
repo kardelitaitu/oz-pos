@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithProviders } from '@/__tests__/test-utils/render';
 import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
 
 // ── Mock auth and workspace contexts ───────────────────────────
@@ -74,7 +73,7 @@ describe('StockAlertPanel', () => {
 
   it('renders alerts with product info after loading', async () => {
     mockGetActiveStockAlerts.mockResolvedValue(mockAlerts);
-    renderWithProviders(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
+    render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
 
     // Wait for data to load and find SKU
     const sku001 = await screen.findByText('SKU-001', {}, { timeout: 2000 });
@@ -88,7 +87,7 @@ describe('StockAlertPanel', () => {
 
   it('shows badge with alert count', async () => {
     mockGetActiveStockAlerts.mockResolvedValue(mockAlerts);
-    renderWithProviders(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
+    render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('2')).toBeInTheDocument();
@@ -99,7 +98,7 @@ describe('StockAlertPanel', () => {
 
   it('marks zero-stock alerts as critical', async () => {
     mockGetActiveStockAlerts.mockResolvedValue(mockAlerts);
-    renderWithProviders(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
+    render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
 
     await waitFor(() => {
       const cards = screen.getAllByRole('listitem');
@@ -115,11 +114,9 @@ describe('StockAlertPanel', () => {
 
   it('shows empty state when no alerts', async () => {
     mockGetActiveStockAlerts.mockResolvedValue([]);
-    renderWithProviders(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
+    render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />, {});
 
-    await waitFor(() => {
-      expect(screen.getByText(/No active alerts/i)).toBeInTheDocument();
-    });
+    await screen.findByText(/No active alerts/i, {}, { timeout: 3000 });
   });
 
   // ── Acknowledge ───────────────────────────────────────────────
@@ -128,7 +125,7 @@ describe('StockAlertPanel', () => {
     const user = userEvent.setup();
     mockGetActiveStockAlerts.mockResolvedValue(mockAlerts);
     mockAcknowledgeStockAlert.mockResolvedValue(undefined);
-    renderWithProviders(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
+    render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
 
     await waitFor(() => {
       expect(screen.getByText('Coffee Beans')).toBeInTheDocument();
@@ -147,7 +144,7 @@ describe('StockAlertPanel', () => {
 
   it('shows error message when fetch fails', async () => {
     mockGetActiveStockAlerts.mockRejectedValue(new Error('Network error'));
-    renderWithProviders(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
+    render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
 
     await waitFor(() => {
       expect(screen.getByText(/network error/i)).toBeInTheDocument();

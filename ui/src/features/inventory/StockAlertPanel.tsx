@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { useAuth } from '@/contexts/AuthContext';
 import type { StockAlertEvent } from '@/api/inventory';
 import { getActiveStockAlerts, acknowledgeStockAlert } from '@/api/inventory';
 
@@ -26,7 +25,6 @@ export function StockAlertPanel({
   pollIntervalMs = 30_000,
   maxAlerts = 20,
 }: StockAlertPanelProps) {
-  const { session } = useAuth();
   const { sessionToken } = useWorkspace();
 
   const [alerts, setAlerts] = useState<StockAlertEvent[]>([]);
@@ -34,7 +32,7 @@ export function StockAlertPanel({
   const [error, setError] = useState<string | null>(null);
   const [acknowledging, setAcknowledging] = useState<Set<string>>(new Set());
 
-  const token = sessionToken ?? session?.session_token ?? '';
+  const token = sessionToken ?? '';
 
   // ── Fetch alerts ──────────────────────────────────────────────────
 

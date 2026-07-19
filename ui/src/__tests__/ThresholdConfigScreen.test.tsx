@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterAll } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
@@ -26,7 +26,7 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 
 // Mock window.confirm
 const originalConfirm = window.confirm;
-let confirmResult = true;
+const confirmResult = true;
 
 import ThresholdConfigScreen from '@/features/inventory/ThresholdConfigScreen';
 import {

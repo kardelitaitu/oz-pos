@@ -25,7 +25,6 @@ import type { KdsOrder } from '@/api/kds';
 
 const now = Date.now();
 const MIN = 60000;
-const HOUR = 3600000;
 
 const orders: KdsOrder[] = [
   {
