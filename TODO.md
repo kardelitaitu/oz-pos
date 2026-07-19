@@ -21,11 +21,11 @@
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P10 — i18n & Accessibility | 5 | **4** | **████████▱▱▱▱ 80%** |
-| 🟢 P11 — Shadow Banding Audit | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟢 P11 — Shadow Banding Audit | 5 | **1** | **██▱▱▱▱▱▱▱▱ 20%** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **30** | **█████████████████████▱ 42%** |
+| **Total** | **71** | **31** | **██████████████████████▱ 44%** |
 
 ---
 
@@ -266,7 +266,7 @@ From `docs/TODO-shadow-audit.md`: 30 CSS surfaces use shadows (`--shadow-xl` thr
 
 ### Checklist
 
-- [ ] **P11-1: Phase 1 — High-risk surfaces (15 items)** — Apply `.noise-dither` class or add CSS selector to noise overlay list for: WorkspaceHome (ws-grid-item), RetailPosScreen (6 modal classes), TableManagementScreen, SettingsPopup, LicenseActivationScreen, GiftCardsScreen, PromotionManagementScreen, ProductManagementScreen, PurchaseOrderForm, SalesHistoryScreen, ShiftManagementScreen, StockTransfersScreen, PaymentModal, PriceOverrideModal, DevToolbar. All use `--shadow-2xl` or `--shadow-xl`.
+- [x] **P11-1: Phase 1 — High-risk surfaces** ✅ — All 15 surfaces already have noise-dither selectors in `ui/src/frontend/themes/components.css` (`.workspace-card`, all 6 retail-* modals, `.tables-detail`, `.settings-popup`, `.license-activation-card`, `.gift-cards-modal`, `.promo-mgmt-modal`, `.product-mgmt-modal`, `.po-form-modal`, `.sales-history-modal`, `.shift-mgmt-modal`, `.stock-transfers-modal`, `.payment-modal`, `.price-override-modal`, `.dev-toolbar`). No code changes needed.
 - [ ] **P11-2: Phase 2 — Medium-risk surfaces (6 items)** — Apply noise overlay to: PosScreen (3× `--shadow-lg`), RestaurantMenu, SettingsPage, ContextMenu, Tooltip, SettingsSelect. All use `--shadow-lg`.
 - [ ] **P11-3: Phase 3 — Low-risk surfaces (9 items)** — Apply noise overlay to: MultiStoreDashboardScreen, MenuEngineeringScreen, ProductLookupScreen, KioskScreen, RetailPosScreen (sm variants), SetupWizard (×2), CartPanelFooterTotals, CartPanelLineItem, PermissionDenied.
 - [ ] **P11-4: Noise overlay CSS refactor** — Extract the noise overlay into a reusable CSS class `.noise-dither` in `components.css`. Replace inline `::after` in individual files with the shared class. Add `@media (prefers-reduced-motion: reduce)` to remove overlay for accessibility.
