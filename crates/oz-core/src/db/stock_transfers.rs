@@ -461,8 +461,19 @@ impl Store<'_> {
             partial == 0
         };
 
+        let has_any_received: bool = {
+            let mut stmt = tx.prepare(
+                "SELECT COUNT(*) FROM stock_transfer_lines
+                 WHERE transfer_id = ?1 AND received_qty > 0",
+            )?;
+            let count: i64 = stmt.query_row(params![id], |row| row.get(0))?;
+            count > 0
+        };
+
         let final_status = if all_received {
             "received"
+        } else if has_any_received {
+            "received_partial"
         } else {
             "in_transit"
         };
@@ -734,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_receive_leaves_in_transit() {
+    fn partial_receive_writes_received_partial_status() {
         let conn = fresh();
         seed_user(&conn, "user-1");
         seed_user(&conn, "user-2");
@@ -758,8 +769,46 @@ mod tests {
                 }],
             )
             .unwrap();
-        // Status stays in_transit because 4 < 10.
+        // Status becomes received_partial because 4 < 10 (ADR §13 finding 34).
+        assert_eq!(result.status, "received_partial");
+
+        // Verify the line's received_qty was recorded.
+        let lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(lines[0].received_qty, 4);
+    }
+
+    #[test]
+    fn receive_zero_qty_keeps_in_transit() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_user(&conn, "user-2");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 30);
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &lines)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let transfer_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+
+        // Receive 0 — no inventory increment, status stays in_transit
+        let result = store(&conn)
+            .receive_transfer(
+                &t.id,
+                "user-2",
+                &[ReceivedLine {
+                    line_id: transfer_lines[0].id.clone(),
+                    received_qty: 0,
+                }],
+            )
+            .unwrap();
         assert_eq!(result.status, "in_transit");
+
+        // Verify received_qty was recorded as 0
+        let lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(lines[0].received_qty, 0);
     }
 
     #[test]
@@ -935,40 +984,6 @@ mod tests {
         // Transfer should still be in_transit (receive was rolled back)
         let after = store(&conn).get_transfer(&t.id).unwrap().unwrap();
         assert_eq!(after.status, "in_transit");
-    }
-
-    #[test]
-    fn receive_zero_qty_keeps_in_transit() {
-        let conn = fresh();
-        seed_user(&conn, "user-1");
-        seed_user(&conn, "user-2");
-        seed_product(&conn, "SKU-001", "Widget");
-        seed_inventory(&conn, "SKU-001", 30);
-
-        let lines = vec![make_line("SKU-001", "Widget", 10)];
-        let t = store(&conn)
-            .create_transfer(None, None, None, None, "", "user-1", &lines)
-            .unwrap();
-        store(&conn).send_transfer(&t.id).unwrap();
-
-        let transfer_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
-
-        // Receive 0 — no inventory increment, status stays in_transit
-        let result = store(&conn)
-            .receive_transfer(
-                &t.id,
-                "user-2",
-                &[ReceivedLine {
-                    line_id: transfer_lines[0].id.clone(),
-                    received_qty: 0,
-                }],
-            )
-            .unwrap();
-        assert_eq!(result.status, "in_transit");
-
-        // Verify received_qty was recorded as 0
-        let lines = store(&conn).get_transfer_lines(&t.id).unwrap();
-        assert_eq!(lines[0].received_qty, 0);
     }
 
     #[test]

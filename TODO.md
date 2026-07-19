@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 18 / 31 items complete (58%) · Updated 2026-07-26
+**Current state:** 19 / 31 items complete (61%) · Updated 2026-07-26
 
 ---
 
@@ -15,11 +15,11 @@
 | 🧪 Rust Test Coverage | 14 | **14** | **███████████████ 100% 🎉** |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
-| 🔴 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
+| 🔴 §13 Amendments | 1 | **1** | **███████████████ 100% 🎉** |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **18** | **████████████████████████████████ 58%** |
+| **Total** | **31** | **19** | **██████████████████████████████████ 61%** |
 
 ---
 
@@ -197,15 +197,16 @@ The ADR §5 specifies a location switcher dropdown in the inventory workspace he
 
 ### 7. Finding #34 — `received_partial` CHECK + `receive_transfer` Code
 
-**Status:** ❓ NEED TO VERIFY
+**Status:** ✅ FIXED
 **Files:** `crates/oz-core/migrations/081_stock_transfers_received_partial.sql`, `crates/oz-core/src/db/stock_transfers.rs`
 
-Migration 081 adds `received_partial` to the CHECK constraint, but does `receive_transfer` actually write `'received_partial'` instead of keeping `'in_transit'`?
+Migration 081 adds `received_partial` to the CHECK constraint, but `receive_transfer` was writing `'in_transit'` instead of `'received_partial'` on partial receives.
 
-- [ ] Verify migration 081 CHECK allows `'received_partial'`
-- [ ] Verify `receive_transfer` in `stock_transfers.rs` writes `'received_partial'` on partial receive (qty < ordered)
-- [ ] If missing: update `receive_transfer` status-update branch
-- [ ] Test: partial receive writes `received_partial` status
+- [x] Migration 081 CHECK allows `'received_partial'` ✅
+- [x] `receive_transfer` was writing `'in_transit'` instead of `'received_partial'` ❌ **FIXED**
+- [x] Updated `receive_transfer` to write `'received_partial'` when at least one line has `received_qty > 0` but not all lines are fully received
+- [x] Added `has_any_received` guard: all-zero receipt stays `'in_transit'`
+- [x] Renamed test `partial_receive_leaves_in_transit` → `partial_receive_writes_received_partial_status`
 
 ---
 
@@ -269,5 +270,5 @@ Draft a new ADR for "Payment-Capture Ordering" that specifies the stock-reservat
 | 🟡 | `stock.negative` event emission | 1 hr | ✅ Done (test deferred — terminal FK setup) |
 | 🔵 | `StockAlertPanel` frontend | 2–3 hrs | Alert engine + API |
 | 🔵 | Location picker in header | 2–3 hrs | location CRUD commands |
-| 🔴 | Finding #34 verification | 30 min | Migration 081 |
+| 🔴 | Finding #34 verification | 30 min | ✅ Done |
 | 🟡 | Payment-Capture ADR draft | 2 hrs | None |
