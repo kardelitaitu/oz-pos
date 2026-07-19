@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 65 / 101 items complete (64.4%) · Updated 2026-07-19
+**Current state:** 66 / 101 items complete (65.3%) · Updated 2026-07-19
 
 ---
 
@@ -17,14 +17,14 @@
 | ♿ Accessibility | 17 | 4 | ███░░░░░░░ 24% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
-| 🧪 UI Test Coverage | 8 | 7 | ████████░░ 88% |
+| 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
 | 🧹 Tech Debt | 11 | 2 | █░░░░░░░░░ 18% |
 | 🍳 KDS Enhancements | 9 | 0 | ░░░░░░░░░░ 0% |
 | 🧾 Reporting & Analytics | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **65** | **████████░░ 80%** |
+| **Total** | **101** | **66** | **████████░░ 80%** |
 
 ---
 
@@ -170,7 +170,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 ### 🧪 8. UI Test Coverage
 
 - [ ] **Cross-reference all 55+ feature components against their test files**
-  - [ ] `DataManagementScreen.test.tsx` — backup/export/import all flows
+  - [x] `DataManagementScreen.test.tsx` — backup/export/import all flows (56 tests across 4 dedicated files)
   - [x] `RetailPosScreenCheckout.test.tsx` — discount flow, over-tender/change edge case (+2 tests)
   - [x] `RetailPosScreenInteractions.test.tsx` — keyboard shortcut edge cases (F5/F6/F7/F8), Pay disabled states, cart line removal (+7 tests)
   - [x] `StockShortfallDialog.test.tsx` — error role=alert, allow-negative, split↔simple toggle, mixed modes
