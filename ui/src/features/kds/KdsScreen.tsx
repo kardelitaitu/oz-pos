@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, Profiler } from 'react';
 import { Localized } from '@fluent/react';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspaceScope } from '@/contexts/WorkspaceContext';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
@@ -129,6 +130,11 @@ export default function KdsScreen() {
     }
   }, [userId, fetchOrders]);
 
+  // P7-3: Pull-to-refresh gesture on KDS ticket board
+  const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
+    onRefresh: fetchOrders,
+  });
+
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 
   return (
@@ -165,13 +171,29 @@ export default function KdsScreen() {
         </div>
       </div>
       {error && <p className="kds-error">{error}</p>}
+      {/* P7-3: Pull-to-refresh indicator */}
+      {pullState !== 'idle' && (
+        <div
+          className="kds-pull-indicator"
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            opacity: Math.min(1, pullDistance / 60),
+          }}
+        >
+          {pullState === 'loading' && <span className="kds-refresh-spinner" />}
+          {pullState === 'pulling' && <Localized id="kds-pull-to-refresh">Pull down to refresh</Localized>}
+          {pullState === 'ready' && <Localized id="kds-release-to-refresh">Release to refresh</Localized>}
+        </div>
+      )}
       {!prefsLoading && (
-        <LayoutComponent
-          orders={orders}
-          onAdvance={advanceStatus}
-          showOrderId={prefs.showOrderId}
-          showTableNumber={prefs.showTableNumber}
-        />
+        <div {...pullRefreshProps}>
+          <LayoutComponent
+            orders={orders}
+            onAdvance={advanceStatus}
+            showOrderId={prefs.showOrderId}
+            showTableNumber={prefs.showTableNumber}
+          />
+        </div>
       )}
     </div>
     </Profiler>

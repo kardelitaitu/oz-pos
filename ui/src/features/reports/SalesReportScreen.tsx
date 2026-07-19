@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
@@ -82,6 +82,10 @@ export default function SalesReportScreen() {
     CategoryBreakdownRow[]
   >([]);
 
+  // P9-3: Period comparison
+  const [comparePeriod, setComparePeriod] = useState(false);
+  const [prevRevenueData, setPrevRevenueData] = useState<RevenueRow[]>([]);
+
   const currency: string =
     revenueData.length > 0
       ? (revenueData[0] as RevenueRow).currency
@@ -124,9 +128,53 @@ export default function SalesReportScreen() {
       });
   }, [view, startDate, endDate]);
 
+  // P9-3: Fetch previous period data when comparison is enabled
+  const calcPrevRange = useCallback(() => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const periodMs = end.getTime() - start.getTime();
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - periodMs);
+    return {
+      prevStart: prevStart.toISOString().slice(0, 10),
+      prevEnd: prevEnd.toISOString().slice(0, 10),
+    };
+  }, [startDate, endDate]);
+
+  const fetchPrevData = useCallback(() => {
+    if (!comparePeriod) {
+      setPrevRevenueData([]);
+      return;
+    }
+
+    const { prevStart, prevEnd } = calcPrevRange();
+
+    let revenuePromise: Promise<RevenueRow[]>;
+    switch (view) {
+      case 'daily':
+        revenuePromise = getDailyRevenue(prevStart, prevEnd);
+        break;
+      case 'weekly':
+        revenuePromise = getWeeklyRevenue(prevStart, prevEnd);
+        break;
+      case 'monthly':
+        revenuePromise = getMonthlyRevenue(prevStart, prevEnd);
+        break;
+    }
+
+    revenuePromise
+      .then(setPrevRevenueData)
+      .catch(() => setPrevRevenueData([]))
+
+  }, [comparePeriod, view, calcPrevRange]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchPrevData();
+  }, [fetchPrevData]);
 
   const heatmapGrid: number[][] = Array.from({ length: 7 }, () =>
     Array(24).fill(0),
@@ -154,8 +202,9 @@ export default function SalesReportScreen() {
         r.sale_count,
       ].join(',');
     });
+    const bom = '\uFEFF';
     const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -248,9 +297,25 @@ export default function SalesReportScreen() {
     0,
   );
   const totalOrders = revenueData.reduce(
-    (s: number, r) => s + r.sale_count,
+    (s: number, r) => r.sale_count + s,
     0,
   );
+
+  // P9-3: Calculate deltas
+  const prevTotalRevenue = useMemo(
+    () => prevRevenueData.reduce((s: number, r) => s + r.total_minor, 0),
+    [prevRevenueData],
+  );
+  const prevTotalOrders = useMemo(
+    () => prevRevenueData.reduce((s: number, r) => r.sale_count + s, 0),
+    [prevRevenueData],
+  );
+  const revenueDelta = comparePeriod && prevTotalRevenue > 0
+    ? ((totalRevenue - prevTotalRevenue) / prevTotalRevenue) * 100
+    : null;
+  const ordersDelta = comparePeriod && prevTotalOrders > 0
+    ? ((totalOrders - prevTotalOrders) / prevTotalOrders) * 100
+    : null;
 
   return (
     <div className="sales-report" role="region" aria-label="Sales Report">
@@ -306,6 +371,19 @@ export default function SalesReportScreen() {
           </div>
 
           <Button
+            variant={comparePeriod ? 'primary' : 'secondary'}
+            onClick={() => setComparePeriod((p) => !p)}
+            aria-label={comparePeriod ? 'Disable period comparison' : 'Compare to previous period'}
+            aria-pressed={comparePeriod}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 'var(--space-1)' }}>
+              <line x1="12" y1="20" x2="12" y2="10" />
+              <line x1="18" y1="20" x2="18" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="16" />
+            </svg>
+            <Localized id="sales-report-compare">Compare</Localized>
+          </Button>
+          <Button
             variant="secondary"
             onClick={printReport}
             aria-label="Print report"
@@ -356,10 +434,28 @@ export default function SalesReportScreen() {
           <span>
             <Localized id="sales-report-total-revenue">Total</Localized>:{' '}
             {fmtCurrency(totalRevenue, currency)}
+            {revenueDelta !== null && (
+              <span className={`comparison-delta ${revenueDelta >= 0 ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
+                <span>{revenueDelta >= 0 ? '▲' : '▼'}</span>
+                <span>{Math.abs(revenueDelta).toFixed(1)}%</span>
+                <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '0.85em' }}>
+                  vs {fmtCurrency(prevTotalRevenue, currency)}
+                </span>
+              </span>
+            )}
           </span>
           <span>
             <Localized id="sales-report-total-orders">Orders</Localized>:{' '}
             {totalOrders}
+            {ordersDelta !== null && (
+              <span className={`comparison-delta ${ordersDelta >= 0 ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
+                <span>{ordersDelta >= 0 ? '▲' : '▼'}</span>
+                <span>{Math.abs(ordersDelta).toFixed(1)}%</span>
+                <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '0.85em' }}>
+                  vs {prevTotalOrders}
+                </span>
+              </span>
+            )}
           </span>
         </div>
       </Card>

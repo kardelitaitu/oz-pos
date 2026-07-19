@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
   listAllOffline,
   pendingOfflineCount,
@@ -68,8 +69,6 @@ export default function OfflineQueueScreen() {
   const [conflictCount, setConflictCount] = useState<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Load data ──────────────────────────────────────────────────
-
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -88,6 +87,13 @@ export default function OfflineQueueScreen() {
       setLoading(false);
     }
   }, [l10n]);
+
+  // P7-3: Pull-to-refresh gesture (defined after load so it's hoist-safe)
+  const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
+    onRefresh: load,
+  });
+
+  // ── Load data on mount ─────────────────────────────────────────
 
   useEffect(() => { load(); }, [load]);
 
@@ -195,8 +201,27 @@ export default function OfflineQueueScreen() {
         </div>
       )}
 
+      {/* P7-3: Pull-to-refresh indicator */}
+      {pullState !== 'idle' && (
+        <div
+          className="offline-queue-pull-indicator"
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            opacity: Math.min(1, pullDistance / 60),
+          }}
+        >
+          {pullState === 'pulling' && (
+            <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull to refresh'}</span>
+          )}
+          {pullState === 'ready' && (
+            <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+          )}
+          {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
+        </div>
+      )}
+
       {loading ? (
-        <div className="offline-queue-loading-skeleton">
+        <div className="offline-queue-loading-skeleton" {...pullRefreshProps}>
           {/* Header skeleton */}
           <div className="offline-queue-skeleton-header">
             <Skeleton variant="block" width="12rem" height="1.75rem" />
@@ -245,14 +270,32 @@ export default function OfflineQueueScreen() {
         </Card>
       ) : items.length === 0 ? (
         <Card shadow="sm">
-          <div className="offline-queue-empty">
+          <div className="offline-queue-empty" {...pullRefreshProps}>
             <Localized id="offline-queue-empty">
               <p>All transactions synced. No pending items.</p>
             </Localized>
           </div>
         </Card>
       ) : (
-        <div className="offline-queue-table-wrap">
+        <div className="offline-queue-table-wrap" {...pullRefreshProps}>
+          {/* P7-3: Pull-to-refresh indicator */}
+          {pullState !== 'idle' && (
+            <div
+              className="offline-queue-pull-indicator"
+              style={{
+                transform: `translateY(${pullDistance}px)`,
+                opacity: Math.min(1, pullDistance / 60),
+              }}
+            >
+              {pullState === 'pulling' && (
+                <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull down to refresh'}</span>
+              )}
+              {pullState === 'ready' && (
+                <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+              )}
+              {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
+            </div>
+          )}
           <table className="offline-queue-table" aria-label="Offline queue items">
             <thead>
               <tr>

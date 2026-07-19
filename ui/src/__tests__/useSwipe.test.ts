@@ -2,6 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useSwipe } from '@/hooks/useSwipe';
 
+/** Stub Date.now() to return a fixed time during tests. */
+let MOCK_NOW = 1000;
+vi.spyOn(Date, 'now').mockImplementation(() => MOCK_NOW);
+
+function advanceTime(ms: number) {
+  MOCK_NOW += ms;
+}
+
 function createTouchEvent(
   type: 'touchstart' | 'touchend',
   clientX: number,
@@ -51,27 +59,29 @@ describe('useSwipe', () => {
     expect(typeof result.current.onTouchEnd).toBe('function');
   });
 
-  it('calls onSwipeRight when swiping right past threshold', () => {
+  it('calls onSwipeRight when swiping right past threshold within time limit', () => {
     const onSwipeRight = vi.fn();
     const { result } = renderHook(() => useSwipe({ onSwipeRight }));
 
     // Start touch at x=50
     result.current.onTouchStart(createTouchEvent('touchstart', 50, 100));
+    advanceTime(50); // well within 300ms
 
-    // End touch at x=120 (delta=70, above 60 threshold)
-    result.current.onTouchEnd(createTouchEvent('touchend', 120, 100));
+    // End touch at x=110 (delta=60, above 50 threshold)
+    result.current.onTouchEnd(createTouchEvent('touchend', 110, 100));
 
     expect(onSwipeRight).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onSwipeLeft when swiping left past threshold', () => {
+  it('calls onSwipeLeft when swiping left past threshold within time limit', () => {
     const onSwipeLeft = vi.fn();
     const { result } = renderHook(() => useSwipe({ onSwipeLeft }));
 
     // Start touch at x=200
     result.current.onTouchStart(createTouchEvent('touchstart', 200, 100));
+    advanceTime(150); // within 300ms
 
-    // End touch at x=120 (delta=-80, below -60 threshold)
+    // End touch at x=120 (delta=-80, below -50 threshold)
     result.current.onTouchEnd(createTouchEvent('touchend', 120, 100));
 
     expect(onSwipeLeft).toHaveBeenCalledTimes(1);
@@ -82,9 +92,10 @@ describe('useSwipe', () => {
     const onSwipeRight = vi.fn();
     const { result } = renderHook(() => useSwipe({ onSwipeLeft, onSwipeRight }));
 
-    // Delta=40, below 60 threshold
+    // Delta=30, below 50 threshold
     result.current.onTouchStart(createTouchEvent('touchstart', 50, 100));
-    result.current.onTouchEnd(createTouchEvent('touchend', 90, 100));
+    advanceTime(50);
+    result.current.onTouchEnd(createTouchEvent('touchend', 80, 100));
 
     expect(onSwipeLeft).not.toHaveBeenCalled();
     expect(onSwipeRight).not.toHaveBeenCalled();
@@ -97,6 +108,7 @@ describe('useSwipe', () => {
 
     // Horizontal delta=70, vertical delta=90 — vertical dominates
     result.current.onTouchStart(createTouchEvent('touchstart', 50, 50));
+    advanceTime(100);
     result.current.onTouchEnd(createTouchEvent('touchend', 120, 140));
 
     expect(onSwipeLeft).not.toHaveBeenCalled();
@@ -108,6 +120,7 @@ describe('useSwipe', () => {
 
     expect(() => {
       result.current.onTouchStart(createTouchEvent('touchstart', 50, 50));
+      advanceTime(10);
       result.current.onTouchEnd(createTouchEvent('touchend', 150, 55));
     }).not.toThrow();
   });
@@ -122,21 +135,18 @@ describe('useSwipe', () => {
     expect(onSwipeRight).not.toHaveBeenCalled();
   });
 
-  it('does not trigger at exactly the threshold (deltaX = 60)', () => {
+  it('does not trigger when swipe exceeds time limit (too slow)', () => {
     const onSwipeRight = vi.fn();
-    const onSwipeLeft = vi.fn();
-    const { result } = renderHook(() => useSwipe({ onSwipeRight, onSwipeLeft }));
+    const { result } = renderHook(() => useSwipe({ onSwipeRight }));
 
-    // Start at x=50, end at x=110 — delta=60 exactly (positive)
+    // Start touch at x=50
     result.current.onTouchStart(createTouchEvent('touchstart', 50, 100));
-    result.current.onTouchEnd(createTouchEvent('touchend', 110, 100));
-    expect(onSwipeRight).not.toHaveBeenCalled();
+    advanceTime(301); // exceeds 300ms default
 
-    // Start at x=110, end at x=50 — delta=-60 exactly (negative)
-    result.current.onTouchStart(createTouchEvent('touchstart', 110, 100));
-    result.current.onTouchEnd(createTouchEvent('touchend', 50, 100));
-    // The condition uses strict greater-than, so exactly -60 should not trigger
-    expect(onSwipeLeft).not.toHaveBeenCalled();
+    // End touch at x=120 (delta=70, above 50 distance threshold but too slow)
+    result.current.onTouchEnd(createTouchEvent('touchend', 120, 100));
+
+    expect(onSwipeRight).not.toHaveBeenCalled();
   });
 
   it('uses latest callback when handlers change between touchStart and touchEnd', () => {
@@ -149,6 +159,7 @@ describe('useSwipe', () => {
 
     // Start touch with callback v1
     result.current.onTouchStart(createTouchEvent('touchstart', 200, 100));
+    advanceTime(20);
 
     // Rerender with a new callback before touchEnd
     rerender({ cb: onSwipeLeft2 });
@@ -158,5 +169,32 @@ describe('useSwipe', () => {
 
     expect(onSwipeLeft1).not.toHaveBeenCalled();
     expect(onSwipeLeft2).toHaveBeenCalledTimes(1);
+  });
+
+  it('respects custom minDistance and maxTimeMs options', () => {
+    const onSwipeRight = vi.fn();
+    const { result } = renderHook(() =>
+      useSwipe({ onSwipeRight }, { minDistance: 100, maxTimeMs: 200 }),
+    );
+
+    // Start touch at x=10
+    result.current.onTouchStart(createTouchEvent('touchstart', 10, 100));
+    advanceTime(100); // within 200ms
+
+    // End touch at x=100 (delta=90, above 50 but below 100 custom threshold)
+    result.current.onTouchEnd(createTouchEvent('touchend', 100, 100));
+    expect(onSwipeRight).not.toHaveBeenCalled();
+
+    // Now exceed custom distance
+    result.current.onTouchStart(createTouchEvent('touchstart', 10, 100));
+    advanceTime(100);
+    result.current.onTouchEnd(createTouchEvent('touchend', 130, 100));
+    expect(onSwipeRight).toHaveBeenCalledTimes(1);
+
+    // Exceed custom time limit
+    result.current.onTouchStart(createTouchEvent('touchstart', 10, 100));
+    advanceTime(201);
+    result.current.onTouchEnd(createTouchEvent('touchend', 130, 100));
+    expect(onSwipeRight).toHaveBeenCalledTimes(1); // no extra call — too slow
   });
 });

@@ -19,6 +19,7 @@ import {
   type MenuQuadrant,
 } from '@/api/reports';
 import { Card } from '@/components/Card';
+import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
 import './MenuEngineeringScreen.css';
 
@@ -226,6 +227,36 @@ export default function MenuEngineeringScreen() {
   }, [result]);
 
   // Recommendation text for a quadrant.
+  // ── CSV Export ──────────────────────────────────────────────────────
+  const exportCsv = () => {
+    if (!result) return;
+    const headers = [
+      'Name', 'SKU', 'Qty', 'Revenue', 'Margin', 'Margin/Unit',
+      'Unit Price', 'Unit Cost', 'Quadrant', 'Recommendation',
+    ];
+    const rows = rowsWithMeta.map((r) => [
+      `"${r.name}"`,
+      r.sku,
+      String(r.total_volume),
+      fmtCurrency(r.total_revenue_minor),
+      fmtCurrency(r.total_margin_minor),
+      fmtCurrency(r.margin_per_unit),
+      fmtCurrency(r.unit_price_minor),
+      fmtCurrency(r.unit_cost_minor),
+      r.quadrant,
+      `"${recommendation(r.quadrant)}"`,
+    ]);
+    const bom = '\uFEFF';
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `menu-engineering-${startDate}-${endDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   function recommendation(q: MenuQuadrant): string {
     switch (q) {
       case 'Star':
@@ -283,6 +314,15 @@ export default function MenuEngineeringScreen() {
             className="menu-eng-input"
             aria-label="End date"
           />
+
+          <Button
+            variant="secondary"
+            onClick={exportCsv}
+            disabled={!result || rowsWithMeta.length === 0}
+            aria-label="Export CSV"
+          >
+            <Localized id="inv-report-export-csv">Export CSV</Localized>
+          </Button>
         </div>
       </div>
 

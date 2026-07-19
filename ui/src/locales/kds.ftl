@@ -16,3 +16,5 @@ kds-order-count = { $count } orders
 kds-time-ago-now = now
 kds-time-ago = { $minutes }m
 kds-urgent-badge = URGENT
+kds-pull-to-refresh = Pull down to refresh
+kds-release-to-refresh = Release to refresh

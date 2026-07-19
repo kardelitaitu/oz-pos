@@ -18,6 +18,8 @@ import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useSwipe } from '@/hooks/useSwipe';
+import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { animDuration } from '@/utils/animation';
 import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
 import ReceiptPreview from '@/features/sales/ReceiptPreview';
@@ -143,6 +145,16 @@ export default function PaymentModal({
 
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
+  // P7-1: Swipe right on payment modal → go back to cart
+  const paymentSwipe = useSwipe({
+    onSwipeRight: () => {
+      if (!processing && !done) animateLeave(onClose);
+    },
+  });
+
+  // P7-4: Keyboard avoidance – scroll inputs into view on mobile
+  const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
+
   const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
   const [receiptArgs, setReceiptArgs] = useState<PrintSalesReceiptArgs | null>(null);
 
@@ -888,7 +900,7 @@ export default function PaymentModal({
   const modalStateClass = leaving ? 'payment-modal--exit' : 'payment-modal--enter';
 
   return (
-      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria', null, 'Payment')}>
+      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria', null, 'Payment')} {...paymentSwipe}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -930,7 +942,11 @@ export default function PaymentModal({
       )}
 
       {!shortfallResult && (
-      <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
+      <div className={`payment-modal ${modalStateClass}`} ref={(el) => {
+        // Combine panelRef (focus trap) with keyboardAvoidRef (scroll-into-view)
+        (panelRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        (keyboardAvoidRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+      }}>
         {done && receiptArgs ? (
           <ReceiptPreview
             receipt={receiptArgs}

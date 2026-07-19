@@ -244,6 +244,7 @@ export default function EodReportScreen() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [printing, setPrinting] = useState(false);
+  const [csvExporting, setCsvExporting] = useState(false);
   const reportRef = useRef(report);
   const shiftsRef = useRef(shifts);
 
@@ -340,6 +341,50 @@ export default function EodReportScreen() {
     }
   }, [lastRefresh]);
 
+  const exportCsv = useCallback(() => {
+    const r = reportRef.current;
+    if (!r) return;
+    setCsvExporting(true);
+    try {
+      const cur = r.currency ?? 'USD';
+      const money = (minor: number) => formatMoney({ minor_units: minor, currency: cur });
+
+      const headers = [
+        'Metric', 'Value',
+      ];
+      const rows: string[][] = [
+        ['Date', lastRefresh.toISOString().slice(0, 10)],
+        ['Total Revenue', money(r.total_revenue)],
+        ['Completed Sales', String(r.total_sales)],
+        ['Voided Sales', String(r.void_count)],
+        ['Voided Value', money(r.void_total)],
+        ['Discounts Applied', String(r.discount_count)],
+      ];
+
+      // Payment breakdown
+      for (const pmt of r.payment_breakdown) {
+        rows.push([`Payment - ${pmt.method}`, money(pmt.total)]);
+      }
+
+      // Hourly breakdown
+      for (const h of r.hourly_breakdown) {
+        rows.push([`Hour ${String(h.hour).padStart(2, '0')}:00`, money(h.total_minor)]);
+      }
+
+      const bom = '\uFEFF';
+      const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
+      const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `end-of-day-${lastRefresh.toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setCsvExporting(false);
+    }
+  }, [lastRefresh]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -406,6 +451,20 @@ export default function EodReportScreen() {
               <rect x="6" y="14" width="12" height="8" />
             </svg>
             {printing ? <Localized id="eod-printing">Printing…</Localized> : <Localized id="eod-print">Print</Localized>}
+          </button>
+          <button
+            type="button"
+            className="eod-report-refresh-btn"
+            onClick={exportCsv}
+            disabled={csvExporting || !report}
+            aria-label="Export CSV"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <Localized id="inv-report-export-csv">Export CSV</Localized>
           </button>
         </div>
       </div>

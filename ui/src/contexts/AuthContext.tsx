@@ -73,6 +73,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
       try {
         const result = await staffLogin({ username, pin });
         setSession(result.session);
+        try { sessionStorage.setItem('current-username', username); } catch { /* ignore */ }
         onLogin?.();
       } catch (err) {
         const message = (err as Record<string, unknown> | null)?.['message'] as string
@@ -89,6 +90,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   const logout = useCallback(() => {
     setSession(null);
     setError(null);
+    try { sessionStorage.removeItem('current-username'); } catch { /* ignore */ }
   }, []);
 
   const clearError = useCallback(() => {

@@ -54,3 +54,6 @@ menu-eng-star = Bintang
 menu-eng-plowhorse = Kuda Beban
 menu-eng-puzzle = Teka-teki
 menu-eng-dog = Anjing
+
+# Period comparison
+sales-report-compare = Bandingkan

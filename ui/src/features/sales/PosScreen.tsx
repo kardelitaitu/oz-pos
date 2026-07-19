@@ -758,6 +758,15 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     setShowPayment(true);
   }, [total, addToast]);
 
+  // P7-1: Swipe left on cart panel → open payment modal (tablet flow)
+  const cartSwipe = useSwipe({
+    onSwipeLeft: () => {
+      if (total && activeShiftRef.current) {
+        setShowPayment(true);
+      }
+    },
+  });
+
   // ── Open Bill state ──────────────────────────────────────────────
   const [activeOpenBillId, setActiveOpenBillId] = useState<string | null>(null);
   const [openBills, setOpenBills] = useState<HeldCartRow[]>([]);
@@ -1282,6 +1291,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         style={{ width: cartWidth }}
         tabIndex={-1}
         onKeyDown={handleCartPanelKeyDown}
+        {...cartSwipe}
       >
         <div className="pos-cart-header">
           <h2 className="pos-cart-title">

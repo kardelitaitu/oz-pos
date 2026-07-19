@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -26,6 +27,29 @@ const ACTION_FLUENT_IDS: Record<string, string> = {
   'system.export': 'audit-action-system-export',
   'system.import': 'audit-action-system-import',
 };
+
+// P12-3: Actions considered critical/security for audit review
+const CRITICAL_ACTIONS = new Set([
+  'login.failed', 'user.create', 'user.update',
+  'setting.change', 'system.backup', 'system.restore',
+  'system.export', 'system.import', 'product.delete',
+]);
+
+const REVIEW_STORAGE_KEY = 'audit-last-reviewed';
+
+function getLastReviewed(): string | null {
+  return localStorage.getItem(REVIEW_STORAGE_KEY);
+}
+
+function setLastReviewed(iso: string) {
+  localStorage.setItem(REVIEW_STORAGE_KEY, iso);
+}
+
+/** Count entries created after a timestamp. */
+function countUnreviewed(entries: AuditEntryDto[], since: string | null): number {
+  if (!since) return entries.length;
+  return entries.filter((e) => e.created_at > since).length;
+}
 
 function outcomeBadgeClass(outcome: string): string {
   switch (outcome) {
@@ -57,6 +81,7 @@ type OutcomeFilter = 'all' | 'success' | 'failure';
 /** Audit log screen — view filtered action history with date range, action type, and outcome filters for compliance monitoring. */
 export default function AuditLogScreen() {
   const { l10n } = useLocalization();
+  const { isManager } = useAuth();
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +89,9 @@ export default function AuditLogScreen() {
   const [hasMore, setHasMore] = useState(true);
   const limit = 50;
   const cancelledRef = useRef(false);
+
+  // P12-3: Last reviewed timestamp (tracked via localStorage)
+  const [lastReviewed, setLastReviewedState] = useState<string | null>(getLastReviewed);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -130,23 +158,57 @@ export default function AuditLogScreen() {
     load(offset + limit, true);
   }, [load, offset, limit]);
 
+  // P12-3: Unreviewed count & Mark Reviewed handler
+  const unreviewedCount = useMemo(
+    () => countUnreviewed(entries, lastReviewed),
+    [entries, lastReviewed],
+  );
+
+  const handleMarkReviewed = useCallback(() => {
+    const now = new Date().toISOString();
+    setLastReviewed(now);
+    setLastReviewedState(now);
+  }, []);
+
   // ── Render ────────────────────────────────────────────────────────
 
   return (
     <div className="audit-log">
       <div className="audit-log-header">
-        <Localized id="audit-log-title">
-          <h1 className="audit-log-title"><span>Audit Log</span></h1>
-        </Localized>
-        <Button variant="secondary" onClick={() => load(0)} loading={loading}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
-          </svg>
-          <Localized id="audit-log-refresh">
-            <span>Refresh</span>
+        <div className="audit-log-header-left">
+          <Localized id="audit-log-title">
+            <h1 className="audit-log-title"><span>Audit Log</span></h1>
           </Localized>
-        </Button>
+          {unreviewedCount > 0 && (
+            <span className="audit-log-unreviewed-badge" title={`${unreviewedCount} unreviewed events since last review`}>
+              {unreviewedCount} new
+            </span>
+          )}
+          {lastReviewed && (
+            <span className="audit-log-reviewed-at">
+              Reviewed: {new Date(lastReviewed).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+        <div className="audit-log-header-right">
+          {isManager && unreviewedCount > 0 && (
+            <Button variant="secondary" onClick={handleMarkReviewed} size="sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 4 }}>
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Mark Reviewed
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+            </svg>
+            <Localized id="audit-log-refresh">
+              <span>Refresh</span>
+            </Localized>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -195,12 +257,10 @@ export default function AuditLogScreen() {
       {/* Content */}
       {loading && entries.length === 0 ? (
         <div className="audit-log-loading-skeleton">
-          {/* Filters skeleton */}
           <div className="audit-log-skeleton-filters">
             <Skeleton variant="block" width="100%" height="2.25rem" />
             <Skeleton variant="block" width="10rem" height="2rem" />
           </div>
-          {/* Table skeleton */}
           <div className="audit-log-table-wrap">
             <table className="audit-log-table" aria-hidden="true">
               <thead>
@@ -256,6 +316,7 @@ export default function AuditLogScreen() {
           <table className="audit-log-table" aria-label={l10n.getString('audit-log-table-label')}>
             <thead>
               <tr>
+                <th style={{ width: '4px', padding: 0 }} />
                 <Localized id="audit-log-col-date"><th><span>Date</span></th></Localized>
                 <Localized id="audit-log-col-action"><th><span>Action</span></th></Localized>
                 <Localized id="audit-log-col-target"><th><span>Target</span></th></Localized>
@@ -265,44 +326,50 @@ export default function AuditLogScreen() {
               </tr>
             </thead>
             <tbody>
-              {filteredEntries.map((entry) => (
-                <tr key={entry.id}>
-                  <td className="audit-log-cell-date">{formatDate(entry.created_at)}</td>
-                  <td>
-                    <Localized id={ACTION_FLUENT_IDS[entry.action] ?? entry.action}>
-                      <span className="audit-log-action-label"><span>{entry.action}</span></span>
-                    </Localized>
-                    <span className="audit-log-action-key">{entry.action}</span>
-                  </td>
-                  <td>
-                    {entry.target_type ? (
-                      <span className="audit-log-target">
-                        <span className="audit-log-target-type">{entry.target_type}</span>
-                        {entry.target_id && (
-                          <span className="audit-log-target-id">{entry.target_id.slice(0, 8)}</span>
-                        )}
+              {filteredEntries.map((entry) => {
+                const isCritical = CRITICAL_ACTIONS.has(entry.action) || entry.outcome === 'failure';
+                return (
+                  <tr key={entry.id} className={isCritical ? 'audit-log-row--critical' : ''}>
+                    <td className="audit-log-critical-indicator" style={{ width: '4px', padding: 0 }}>
+                      {isCritical && <div className="audit-log-critical-bar" />}
+                    </td>
+                    <td className="audit-log-cell-date">{formatDate(entry.created_at)}</td>
+                    <td>
+                      <Localized id={ACTION_FLUENT_IDS[entry.action] ?? entry.action}>
+                        <span className="audit-log-action-label"><span>{entry.action}</span></span>
+                      </Localized>
+                      <span className="audit-log-action-key">{entry.action}</span>
+                    </td>
+                    <td>
+                      {entry.target_type ? (
+                        <span className="audit-log-target">
+                          <span className="audit-log-target-type">{entry.target_type}</span>
+                          {entry.target_id && (
+                            <span className="audit-log-target-id">{entry.target_id.slice(0, 8)}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="audit-log-target-none">&mdash;</span>
+                      )}
+                    </td>
+                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : 'system'}</td>
+                    <td>
+                      <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`}>
+                        {entry.outcome}
                       </span>
-                    ) : (
-                      <span className="audit-log-target-none">&mdash;</span>
-                    )}
-                  </td>
-                  <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : 'system'}</td>
-                  <td>
-                    <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`}>
-                      {entry.outcome}
-                    </span>
-                  </td>
-                  <td className="audit-log-cell-details">
-                    {entry.details && entry.details !== '{}' ? (
-                      <span className="audit-log-details-preview">
-                        {entry.details.slice(0, 60)}{entry.details.length > 60 ? '…' : ''}
-                      </span>
-                    ) : (
-                      <span className="audit-log-details-none">&mdash;</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="audit-log-cell-details">
+                      {entry.details && entry.details !== '{}' ? (
+                        <span className="audit-log-details-preview">
+                          {entry.details.slice(0, 60)}{entry.details.length > 60 ? '…' : ''}
+                        </span>
+                      ) : (
+                        <span className="audit-log-details-none">&mdash;</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {hasMore && (

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
@@ -121,6 +122,9 @@ export default function StaffLoginScreen() {
   const [pinAttempts, setPinAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const toastShownForError = useRef<string | null>(null);
+  // P7-4: Keyboard avoidance — scroll inputs into view on mobile
+  const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
+
   const cardRef = useRef<HTMLDivElement>(null);
 
   // ── Shake card + toast + rate-limit on PIN error ──────────────
@@ -459,7 +463,10 @@ export default function StaffLoginScreen() {
       onKeyDown={handleScreenKeyDown}
       tabIndex={-1}
     >
-      <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={cardRef}>
+      <div className={`staff-login-card ${step === 'pin' ? 'staff-login-card--pin' : ''}`} ref={(el) => {
+        (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        (keyboardAvoidRef as React.MutableRefObject<HTMLDivElement | null>).current = (el?.parentElement ?? null) as HTMLDivElement | null;
+      }}>
         {step === 'pin' && (
           <button
             type="button"

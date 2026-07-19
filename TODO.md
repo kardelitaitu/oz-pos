@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 55 / 71 items complete (77%) · Updated 2026-07-20
+**Current state:** 64 / 71 items complete (90%) · Updated 2026-07-20
 
 ---
 
@@ -17,15 +17,15 @@
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | ⚪ P6 — Hardware Integration | 4 | **4** | **██████████████████ 100% 🎉** |
-| 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟠 P7 — Tablet/Mobile Experience | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🔘 P8 — Cloud Server & License | 4 | **4** | **███████████████████████████████ 100% 🎉** |
-| 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟠 P9 — Reporting & Analytics | 3 | **3** | **███████████████████████████████ 100% 🎉** |
 | 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P11 — Shadow Banding Audit | 5 | **5** | **███████████████████████████████ 100% 🎉** |
-| 🔴 P12 — PCI-DSS Gap Closure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
+| 🔴 P12 — PCI-DSS Gap Closure | 4 | **3** | **█████████████████████████▱▱ 75%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **2** | **████▱▱▱▱▱▱ 50%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **55** | **██████████████████████████████████████████████████ 77%** |
+| **Total** | **71** | **64** | **████████████████████████████████████████████████████ 90%** |
 
 ---
 

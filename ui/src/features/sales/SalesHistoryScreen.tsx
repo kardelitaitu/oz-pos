@@ -19,6 +19,7 @@ import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
@@ -182,6 +183,11 @@ export default function SalesHistoryScreen() {
       setLoading(false);
     }
   }, []);
+
+  // P7-3: Pull-to-refresh gesture
+  const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
+    onRefresh: load,
+  });
 
   useEffect(() => { load(); }, [load]);
 
@@ -429,8 +435,9 @@ export default function SalesHistoryScreen() {
       s.paymentMethod ?? '',
       cashierName(s.userId),
     ]);
+    const bom = '\uFEFF';
     const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -445,7 +452,29 @@ export default function SalesHistoryScreen() {
         console.debug('[Profiler] SalesHistoryScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
       }
     }}>
-    <div className="sales-history">
+    <div className="sales-history" {...pullRefreshProps}>
+      {/* P7-3: Pull-to-refresh indicator */}
+      {pullState !== 'idle' && (
+        <div
+          className="sales-history-pull-indicator"
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            opacity: Math.min(1, pullDistance / 60),
+          }}
+        >
+          {pullState === 'pulling' && (
+            <Localized id="sales-history-pull-to-refresh">
+              <span>Pull down to refresh</span>
+            </Localized>
+          )}
+          {pullState === 'ready' && (
+            <Localized id="sales-history-release-to-refresh">
+              <span>Release to refresh</span>
+            </Localized>
+          )}
+          {pullState === 'loading' && <span className="sales-history-refresh-spinner" />}
+        </div>
+      )}
       <div className="sales-history-header">
         <div className="sales-history-header-left">
           <Localized id="sales-history-title">

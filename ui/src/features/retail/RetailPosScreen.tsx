@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
@@ -678,6 +679,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const [showPayment, setShowPayment] = useState(false);
 
+  // P7-1: Swipe left on cart panel → open payment modal (tablet flow)
+  const cartSwipe = useSwipe({
+    onSwipeLeft: () => {
+      if (!activeShift) { return; }
+      if (!total) return;
+      setShowPayment(true);
+    },
+  });
+
   const handlePay = useCallback(() => {
     if (!activeShift) { addToast({ message: l10n.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
     setShowPayment(true);
@@ -1165,7 +1175,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         {/* eslint-enable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
 
         {/* Right: cart */}
-        <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties}>
+        <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties} {...cartSwipe}>
           <div className="retail-cart-header">
             <span>{l10n.getString('cart-title')}</span>
             <span>{l10n.getString('retail-cart-items', { count: lineCount }) || `${lineCount} item${lineCount !== 1 ? 's' : ''}`}</span>

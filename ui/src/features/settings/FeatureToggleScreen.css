@@ -248,6 +248,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-4);
+  min-height: var(--touch-target-min);
   border-bottom: 1px solid var(--color-border, rgba(128, 128, 128, 0.15));
   gap: var(--space-4);
   transition: background-color var(--duration-200) var(--ease-out);
