@@ -46,7 +46,7 @@
 | `audit.rs` | 15 → **20** | 20+ | ✅ |
 | `cash_payouts.rs` | 15 → **20** | 20+ | ✅ |
 | `payments.rs` | 15 → **20** | 20+ | ✅ |
-| `purchase_orders.rs` | 15 | 20+ | 5 |
+| `purchase_orders.rs` | 15 → **21** | 20+ | ✅ |
 | `suppliers.rs` | 15 | 20+ | 5 |
 | `reports.rs` | 17 | 25+ | 8 |
 | `settings.rs` | 17 | 25+ | 8 |
