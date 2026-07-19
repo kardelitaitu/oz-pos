@@ -327,7 +327,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 - [x] `npm run typecheck` — 0 errors
 - [ ] Migration idempotency — all clean
 - [ ] `skill-drift-guard` — 0 findings
-- [ ] Design token compliance — 0 violations
+- [x] Design token compliance — 0 violations
 
 **Version & changelog**
 - [x] Bump version to 0.0.11 (done)
