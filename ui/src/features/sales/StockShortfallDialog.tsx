@@ -411,7 +411,7 @@ export default function StockShortfallDialog({
         </div>
 
         {error && (
-          <div className="shortfall-error">
+          <div className="shortfall-error" role="alert">
             <p>{error}</p>
           </div>
         )}

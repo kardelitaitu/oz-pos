@@ -75,12 +75,14 @@ vi.mock('@/contexts/BrandContext', () => ({
   BrandProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-vi.mock('@/utils/color', () => ({
-  deriveAccentPalette: vi.fn().mockReturnValue({}),
-  applyAccentPalette: vi.fn(),
-  applyThemeContrasts: vi.fn(),
-} as any));
-/* eslint-enable @typescript-eslint/no-explicit-any */
+vi.mock('@/utils/color', () => {
+  const mock = {
+    deriveAccentPalette: vi.fn().mockReturnValue({}),
+    applyAccentPalette: vi.fn(),
+    applyThemeContrasts: vi.fn(),
+  };
+  return mock;
+});
 
 const mockAddToast = vi.fn();
 vi.mock('@/frontend/shared/Toast', () => ({

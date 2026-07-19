@@ -28,6 +28,7 @@ export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
     getHeldCart: vi.fn(() => Promise.resolve(null)),
     deleteHeldCart: vi.fn(() => Promise.resolve()),
     startSale: vi.fn(() => Promise.resolve({ cartId: 'cart-1' })),
+    getCartDeductionLocation: vi.fn(() => Promise.resolve(null)),
     addLine: vi.fn(() => Promise.resolve({ lineId: 'line-added-1', lineTotal: null })),
     setCartDiscount: vi.fn(() => Promise.resolve()),
     completeSale: vi.fn(() => Promise.resolve({ saleId: 'sale-1', total: { minor_units: 3500, currency: 'IDR' }, lineCount: 1 })),

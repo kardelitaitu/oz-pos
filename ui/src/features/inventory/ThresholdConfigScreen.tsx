@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Localized } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listProductsScoped, type ProductDto } from '@/api/products';
@@ -31,7 +31,7 @@ export default function ThresholdConfigScreen() {
   const [thresholdVal, setThresholdVal] = useState('5');
   const [enabled, setEnabled] = useState(true);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!sessionToken) return;
     setLoading(true);
     try {
@@ -48,11 +48,11 @@ export default function ThresholdConfigScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionToken]);
 
   useEffect(() => {
     loadData();
-  }, [sessionToken]);
+  }, [loadData]);
 
   const handleOpenAddDialog = () => {
     setEditingId(null);

@@ -14,6 +14,8 @@ export interface StartSaleArgs {
 /** Result of starting a new sale, containing the new cart identifier. */
 export interface StartSaleResult {
   cartId: CartId;
+  /** ADR-19 §5.1: the deduction location locked at cart-start time. */
+  deductionLocationId?: string;
 }
 
 /** Arguments for adding a line item to a cart. */
@@ -82,6 +84,18 @@ export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
 /** ADR #7: Start a new sale in the store resolved from a session token. */
 export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
   invoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
+
+/** ADR-19: Info about the deduction location locked on a cart. */
+export interface DeductionLocationInfo {
+  locationId: string;
+  locationName: string;
+  /** ISO-8601 timestamp of the last manager override, or null. */
+  overriddenAt?: string;
+}
+
+/** ADR-19 §5.1: Get the deduction location info for an active cart. */
+export const getCartDeductionLocation = (cartId: string): Promise<DeductionLocationInfo | null> =>
+  invoke<DeductionLocationInfo | null>('get_cart_deduction_location', { cartId });
 
 /** Add a line item to a cart. */
 export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
@@ -181,6 +195,10 @@ export interface PartialStockResult {
   requiresResolution: boolean;
   shortfalls: Shortfall[];
 }
+
+/** ADR-19 §17: Record a manager override of the deduction location on an active cart. */
+export const overrideCartDeductionLocation = (sessionToken: string, cartId: string): Promise<void> =>
+  invoke<void>('override_cart_deduction_location_scoped', { sessionToken, cartId });
 
 /** Check whether a product is configured for serial number tracking. */
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>

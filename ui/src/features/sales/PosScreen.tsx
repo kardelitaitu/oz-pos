@@ -31,6 +31,7 @@ import {
   getHeldCart,
   deleteHeldCart,
   startSale,
+  getCartDeductionLocation,
   type HeldCartRow,
 } from '@/api/sales';
 import { getReceiptSettings } from '@/api/settings';
@@ -44,7 +45,8 @@ import { useBarcodeScanner } from './useBarcodeScanner';
 import { useCustomerDisplay } from './useCustomerDisplay';
 import PaymentModal from './PaymentModal';
 import PriceOverrideModal from './PriceOverrideModal';
-import { overrideLinePrice } from '@/api/sales';
+import FastPINOverlay from '@/components/FastPINOverlay';
+import { overrideLinePrice, overrideCartDeductionLocation } from '@/api/sales';
 import {
   getActiveShift,
   openShift,
@@ -434,7 +436,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   const { session, logout, isManager } = useAuth();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, sessionToken } = useWorkspace();
   const { isEnabled } = useFeatures();
   const userId = session!.user_id;
 
@@ -560,12 +562,26 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   activeShiftRef.current = activeShift;
   const [shiftLoading, setShiftLoading] = useState(true);
   const [overrideTarget, setOverrideTarget] = useState<CartLine | null>(null);
+  const [showFastPINOverlay, setShowFastPINOverlay] = useState(false);
   const [cartId, setCartId] = useState<CartId | null>(null);
+  // ADR-19 §5.1: deduction location locked at cart-start time.
+  // Use a ref for synchronous reads inside callbacks; state drives renders.
+  const deductionLocationIdRef = useRef<string | null>(null);
+  const [deductionLocationName, setDeductionLocationName] = useState<string | null>(null);
   const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
     if (cartId) return cartId;
     try {
-      const { cartId: newCartId } = await startSale({ currency });
+      const { cartId: newCartId, deductionLocationId: locId } = await startSale({ currency });
       setCartId(newCartId);
+      deductionLocationIdRef.current = locId ?? null;
+      if (locId) {
+        // Fetch the real location name from the backend
+        const info = await getCartDeductionLocation(newCartId);
+        setDeductionLocationName(info?.locationName ?? locId);
+        if (info?.overriddenAt) setDeductionOverridden(true);
+      } else {
+        setDeductionLocationName(null);
+      }
       return newCartId;
     } catch {
       addToast({ message: 'Failed to create sale cart', type: 'error' });
@@ -626,10 +642,34 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         addToast({ message: 'Open a shift first', type: 'warning' });
         return;
       }
+      // ADR-19 §5.1: reject add_line when cart exists but has no deduction location
+      if (cartId && !deductionLocationIdRef.current) {
+        addToast({ message: l10n.getString('pos-cart-unbound-error') || 'Cart has no deduction location — cannot add items', type: 'error' });
+        return;
+      }
       addProduct(product, qty);
     },
-    [addProduct, addToast],
+    [addProduct, addToast, cartId, l10n],
   );
+
+  // ADR-19 §17: badge click → FastPINOverlay for manager override
+  const handleDeductionBadgeClick = useCallback(() => {
+    setShowFastPINOverlay(true);
+  }, []);
+
+  const [deductionOverridden, setDeductionOverridden] = useState(false);
+
+  const handleDeductionPinVerified = useCallback(async () => {
+    if (!cartId) return;
+    if (!sessionToken) return;
+    try {
+      await overrideCartDeductionLocation(sessionToken, cartId);
+      setDeductionOverridden(true);
+      addToast({ message: 'Deduction location override recorded', type: 'success' });
+    } catch {
+      addToast({ message: 'Failed to record override', type: 'error' });
+    }
+  }, [cartId, sessionToken, addToast]);
 
   // Load active shift on mount and when session changes.
   useEffect(() => {
@@ -761,6 +801,9 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const handlePaymentComplete = useCallback(() => {
     setShowPayment(false);
     setCartId(null);
+    deductionLocationIdRef.current = null;
+    setDeductionLocationName(null);
+    setDeductionOverridden(false);
     // If this was an open bill being paid, delete it from DB.
     if (activeOpenBillId) {
       deleteHeldCart(activeOpenBillId).catch(() => {
@@ -1250,6 +1293,30 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             )}
           </h2>
 
+          {/* ADR-19 §17: locked deduction location badge (clickable → FastPINOverlay override) */}
+          {deductionLocationName && (
+            <button
+              type="button"
+              className="pos-cart-deduction-badge"
+              data-testid="deduction-location-badge"
+              onClick={handleDeductionBadgeClick}
+              aria-label={l10n.getString('pos-cart-deduction-badge-aria', { name: deductionLocationName })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <Localized id="pos-cart-deducting-label" vars={{ name: deductionLocationName }}>
+                <span>Deducting: {deductionLocationName}</span>
+              </Localized>
+              {deductionOverridden && (
+                <span className="pos-cart-deduction-override" data-testid="deduction-override-indicator">
+                  {' '}(Override)
+                </span>
+              )}
+            </button>
+          )}
+
           {/* ── Shift status (right side of header) ── */}
           <div className="pos-cart-header-right">
             {shiftLoading ? (
@@ -1718,7 +1785,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 <button
                   type="button"
                   className="pos-cart-clear-btn"
-                  onClick={() => { setCartId(null); resetCart(); }}
+                  onClick={() => { setCartId(null); deductionLocationIdRef.current = null; setDeductionLocationName(null); setDeductionOverridden(false); resetCart(); }}
                   aria-label={l10n.getString('pos-cart-clear-aria')}
                   title={l10n.getString('pos-cart-clear-aria')}
                 >
@@ -1795,6 +1862,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           discountPercent={discountPercent}
           discountLabel={discountLabel}
           userId={userId}
+          {...(sessionToken ? { sessionToken } : {})}
           tableNumber={tableNumber}
           onComplete={handlePaymentComplete}
           onClose={() => setShowPayment(false)}
@@ -2183,6 +2251,13 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           </div>
         </div>
       )}
+
+      {/* ── FastPIN Overlay (ADR-19 §17: badge click → manager override) ── */}
+      <FastPINOverlay
+        open={showFastPINOverlay}
+        onClose={() => setShowFastPINOverlay(false)}
+        onVerified={handleDeductionPinVerified}
+      />
     </div>
   );
 }

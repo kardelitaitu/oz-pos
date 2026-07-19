@@ -11,6 +11,7 @@ import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RefundModal from '@/features/sales/RefundModal';
 import { listProducts, listCategories, lookupProductBySku, lookupByBarcode, type ProductDto, type CategoryDto } from '@/api/products';
 import { listCustomers, type CustomerDto } from '@/api/customers';
@@ -66,6 +67,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
+  const { sessionToken } = useWorkspace();
   const userId = session!.user_id;
 
   const {
@@ -871,6 +873,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         discountPercent={discountPercent}
         discountLabel={discountLabel}
         userId={userId}
+        {...(sessionToken ? { sessionToken } : {})}
         selectedCustomer={selectedCustomer}
         {...(isEnabled(FEATURES.SERIAL_TRACKING) ? { serialNumbers } : {})}
         onCustomerChange={(c) => setSelectedCustomer(c)}

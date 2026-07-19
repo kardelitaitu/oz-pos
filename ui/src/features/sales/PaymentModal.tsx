@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
-import { startSale, addLine, completeSale, printSalesReceipt, getSale, setCartDiscount, holdCart, type SetCartDiscountArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
+import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
@@ -38,6 +38,8 @@ export interface PaymentModalProps {
   discountPercent?: number;
   discountLabel?: string;
   userId: string;
+  /** ADR #7 session token for scoped commands (deduction-aware cart lifecycle). */
+  sessionToken?: string;
   tableNumber?: string;
   selectedCustomer?: CustomerDto | null;
   onCustomerChange?: (customer: CustomerDto | null) => void;
@@ -57,6 +59,7 @@ export default function PaymentModal({
   discountPercent = 0,
   discountLabel,
   userId,
+  sessionToken,
   tableNumber,
   selectedCustomer: selectedCustomerProp,
   onCustomerChange,
@@ -299,21 +302,34 @@ export default function PaymentModal({
     setProcessing(true);
 
     try {
-      const { cartId } = await startSale({ currency: total.currency });
+      const { cartId } = sessionToken
+        ? await startSaleScoped(sessionToken, { currency: total.currency })
+        : await startSale({ currency: total.currency });
 
       if (discountPercent > 0) {
-        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-        if (discountLabel) discountArgs.label = discountLabel;
-        await setCartDiscount(discountArgs);
+        if (sessionToken) {
+          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+          if (discountLabel) scopedArgs.label = discountLabel;
+          await setCartDiscountScoped(sessionToken, scopedArgs);
+        } else {
+          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
+          if (discountLabel) discountArgs.label = discountLabel;
+          await setCartDiscount(discountArgs);
+        }
       }
 
       for (const line of lineItems) {
-        await addLine({
+        const lineArgs = {
           cartId,
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
-        });
+        };
+        if (sessionToken) {
+          await addLineScoped(sessionToken, lineArgs);
+        } else {
+          await addLine(lineArgs);
+        }
       }
 
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
@@ -324,23 +340,40 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
-      const saleResult = await completeSale({
-        cartId,
-        paymentMethod: 'QRIS',
-        tenderedMinor: null,
-        userId,
-        ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-        ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-        paymentSplits: [
-          {
-            method: 'QRIS',
-            amountMinor: Number(effectiveTotal),
-            gatewayReference: qrReference,
-            gatewayStatus: 'completed',
-            gatewayResponse: 'QRIS payment confirmed',
-          },
-        ],
-      });
+      const saleResult = sessionToken
+        ? await completeSaleScoped(sessionToken, {
+            cartId,
+            paymentMethod: 'QRIS',
+            tenderedMinor: null,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            paymentSplits: [
+              {
+                method: 'QRIS',
+                amountMinor: Number(effectiveTotal),
+                gatewayReference: qrReference,
+                gatewayStatus: 'completed',
+                gatewayResponse: 'QRIS payment confirmed',
+              },
+            ],
+          } as CompleteSaleScopedArgs)
+        : await completeSale({
+            cartId,
+            paymentMethod: 'QRIS',
+            tenderedMinor: null,
+            userId,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+            paymentSplits: [
+              {
+                method: 'QRIS',
+                amountMinor: Number(effectiveTotal),
+                gatewayReference: qrReference,
+                gatewayStatus: 'completed',
+                gatewayResponse: 'QRIS payment confirmed',
+              },
+            ],
+          });
 
       try {
         const completedSale = await getSale(saleResult.saleId);
@@ -410,7 +443,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -534,24 +567,37 @@ export default function PaymentModal({
       }
 
       console.log('[Sale] Creating cart...');
-      const { cartId } = await startSale({ currency: total.currency });
+      const { cartId } = sessionToken
+        ? await startSaleScoped(sessionToken, { currency: total.currency })
+        : await startSale({ currency: total.currency });
       console.log('[Sale] Cart created:', cartId);
 
       if (discountPercent > 0) {
         console.log('[Sale] Setting discount:', discountPercent);
-        const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
-        if (discountLabel) discountArgs.label = discountLabel;
-        await setCartDiscount(discountArgs);
+        if (sessionToken) {
+          const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
+          if (discountLabel) scopedArgs.label = discountLabel;
+          await setCartDiscountScoped(sessionToken, scopedArgs);
+        } else {
+          const discountArgs: SetCartDiscountArgs = { cartId, percent: discountPercent, userId };
+          if (discountLabel) discountArgs.label = discountLabel;
+          await setCartDiscount(discountArgs);
+        }
       }
 
       for (const line of lineItems) {
         console.log('[Sale] Adding line:', line.sku, 'qty:', line.qty);
-        await addLine({
+        const lineArgs = {
           cartId,
           sku: line.sku,
           qty: line.qty,
           unitPriceMinor: line.unit_price.minor_units,
-        });
+        };
+        if (sessionToken) {
+          await addLineScoped(sessionToken, lineArgs);
+        } else {
+          await addLine(lineArgs);
+        }
       }
 
       let paymentSplits: PaymentSplitArg[] | undefined;
@@ -583,16 +629,26 @@ export default function PaymentModal({
               return { sku: String(line?.sku ?? lineId), serial };
             })
         : undefined;
-      const saleResult = await completeSale({
-        cartId,
-        paymentMethod: methodLabel,
-        tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
-        userId,
-        ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
-        ...(paymentSplits ? { paymentSplits } : {}),
-        ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
-        ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
-      });
+      const saleResult = sessionToken
+        ? await completeSaleScoped(sessionToken, {
+            cartId,
+            paymentMethod: methodLabel,
+            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(paymentSplits ? { paymentSplits } : {}),
+            ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+          } as CompleteSaleScopedArgs)
+        : await completeSale({
+            cartId,
+            paymentMethod: methodLabel,
+            tenderedMinor: method === 'cash' && !splitMode ? Number(tenderedMinor) : null,
+            userId,
+            ...(selectedCustomer ? { customerId: selectedCustomer.id } : {}),
+            ...(paymentSplits ? { paymentSplits } : {}),
+            ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
+            ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
+          });
       console.log('[Sale] Sale completed:', saleResult.saleId);
 
       try {
@@ -684,7 +740,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
+  }, [method, customerName, lineItems, total, discountPercent, discountLabel, splitMode, splits, otherLabel, change, userId, sessionToken, tenderedMinor, selectedCustomer, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, addToast]);
 
   useEffect(() => {
     if (!done) return;

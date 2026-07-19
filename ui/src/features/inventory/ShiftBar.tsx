@@ -53,10 +53,10 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     getActiveInventoryShift(sessionToken, session.user_id)
       .then(shift => {
         setActiveShift(shift);
-        if (onShiftChange) onShiftChange(shift);
+        onShiftChange?.(shift);
       })
       .catch(console.error);
-  }, [sessionToken, session?.user_id]);
+  }, [sessionToken, session?.user_id, onShiftChange]);
 
   // Handle timer tick
   useEffect(() => {

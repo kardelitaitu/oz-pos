@@ -67,6 +67,57 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Dev-mode Tauri mock (stubbed IPC for browser-only preview) -->
+    <script type="module">
+      import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
+
+      mockWindows('main');
+      mockConvertFileSrc('windows');
+
+      const MOCK_STAFF = {
+        owner: { user_id: 'owner-1', pin: '1234', role: 'owner', is_active: true },
+        admin: { user_id: 'admin-1', pin: 'admin123', role: 'manager', is_active: true },
+        kasir: { user_id: 'kasir-1', pin: '1234', role: 'cashier', is_active: true },
+      };
+
+      mockIPC((cmd, args) => {
+        // Tauri passes invoke args inside an `args` property when using the API
+        const p = args?.args || args;
+        switch (cmd) {
+          case 'staff_check_username': {
+            const s = MOCK_STAFF[p?.username?.toLowerCase()];
+            return s ? { found: true, is_active: s.is_active } : { found: false, is_active: false };
+          }
+          case 'staff_login': {
+            const s = MOCK_STAFF[p?.username?.toLowerCase()];
+            if (!s || p?.pin !== s.pin) throw new Error('Invalid credentials');
+            return { session_token: 'mock-token-' + Date.now(), user_id: s.user_id, role_id: s.role === 'owner' ? 1 : 2, role: s.role };
+          }
+          case 'get_brand_settings':
+            return { primary_colour: '#10b981', logo_path: null, store_name: 'OZ-POS Demo' };
+          case 'get_default_currency':
+            return { code: 'IDR', symbol: 'Rp', name: 'Indonesian Rupiah', decimal_places: 0 };
+          case 'list_terminals':
+            return [{ id: 'term-1', name: 'Terminal 1', is_active: true }];
+          case 'get_terminal_profile':
+            return { id: 'term-1', name: 'Terminal 1', terminal_type: 'desktop' };
+          case 'get_enabled_features': return { features: ['sales', 'inventory', 'reporting', 'staff', 'settings'] };
+          case 'list_active_carts': return { carts: [] };
+          case 'get_active_shift': return null;
+          case 'open_shift': case 'close_shift': return null;
+          case 'hold_cart': case 'delete_held_cart': case 'get_sale': return null;
+          case 'get_held_carts': return { carts: [] };
+          case 'start_sale': case 'start_sale_scoped':
+            return { cartId: 'mock-cart-' + Date.now(), deduction_location_id: 'default' };
+          case 'add_line': return { lineId: 'mock-line-' + Date.now(), lineTotal: null };
+          case 'complete_sale': return { saleId: 'mock-sale-' + Date.now(), total: 0, lineCount: 0 };
+          case 'pending_sync_count': return 0;
+          case 'get_license_status': return { is_valid: true, license_type: 'Pro', expires_at: null };
+          case 'print_sales_receipt': return { printed: true };
+          default: console.warn('[MOCK] Unhandled:', cmd); return null;
+        }
+      }, { shouldMockEvents: true });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
