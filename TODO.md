@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 53 / 71 items complete (75%) · Updated 2026-07-20
+**Current state:** 54 / 71 items complete (76%) · Updated 2026-07-20
 
 ---
 
@@ -22,10 +22,10 @@
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P11 — Shadow Banding Audit | 5 | **5** | **███████████████████████████████ 100% 🎉** |
-| 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🔴 P12 — PCI-DSS Gap Closure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **53** | **██████████████████████████████████████████████ 75%** |
+| **Total** | **71** | **54** | **████████████████████████████████████████████████ 76%** |
 
 ---
 
@@ -285,7 +285,7 @@ The PCI-DSS v4.0 checklist has several items marked "Planned" or needing impleme
 ### Checklist
 
 - [ ] **P12-1: Key rotation policy** — Document and implement key rotation for `oz-security` Keyring. Add `rotate_key()` method that generates new key, re-encrypts existing KEK-wrapped data, and updates storage. Add 90-day rotation reminder via toast notification. Est: 2–3 hrs.
-- [ ] **P12-2: Incident response plan** — Write `docs/security/INCIDENT_RESPONSE.md` with: incident classification (P1-P4), containment steps, evidence preservation, notification contacts, post-mortem template. Integrate with audit log by adding `incident` action type. Est: 2 hrs.
+- [x] **P12-2: Incident response plan** ✅ — Created `docs/security/INCIDENT_RESPONSE.md` with: P1-P4 severity classification matrix, containment procedures (5 scenarios: credential compromise, payment data exposure, service outage, sandbox escape, audit log tampering), evidence preservation chain of custody, notification escalation matrix, post-mortem template, audit log integration using `"incident.report"` action type, and testing schedule.
 - [ ] **P12-3: Daily audit log review** — Add `unreviewed_audit_events` count to dashboard screen. Highlight events marked `critical` or `security` in red. Show last-reviewed timestamp. Add "Mark reviewed" button for managers. Est: 2–3 hrs.
 - [ ] **P12-4: Session timeout & lockout** — Implement automatic screen lock after configurable idle timeout (5/15/30/60 min). Require PIN re-entry to unlock. Store timeout preference in user preferences or settings. Lock screen shows blurred last screen + time. Est: 3–4 hrs.
 
