@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 87 / 101 items complete (86.1%) · Updated 2026-07-19
+**Current state:** 91 / 101 items complete (90.1%) · Updated 2026-07-19
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| ♿ Accessibility | 17 | 14 | █████████░ 82% |
+| ♿ Accessibility | 17 | 15 | ██████████░ 88% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **87** | **████████░░ 87%** |
+| **Total** | **101** | **91** | **████████░░ 91%** |
 
 ---
 
@@ -91,10 +91,10 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 
 ### ♿ 5. ARIA Role Audit on Custom Components
 
-- [ ] Toggle switches — `role="switch"`, `aria-checked`
-- [ ] Slider selects — `role="slider"`, `aria-valuemin/max/now`
-- [ ] Chip groups — `role="listbox"`, `aria-selected`
-- [ ] Context menus — `role="menu"`, `aria-expanded`
+- [x] Toggle switches — `role="switch"`, `aria-checked` — **FeatureToggleScreen fixed** (7 other switches already compliant: KdsLayoutSwitcher x2, AppearanceSettings x1, SettingsPage x4)
+- [x] Slider selects — No custom slider components exist in the codebase. No action needed.
+- [x] Chip groups — Already use correct `role="radio"` + `aria-checked` pattern (single-select). No `role="listbox"` pattern needed.
+- [x] Context menus — Already have `role="menu"` + `role="menuitem"` in `ContextMenu.tsx` and `RestaurantMenu.tsx`. Right-click triggers don't require `aria-expanded`.
 
 ---
 
@@ -390,3 +390,4 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 | 2026-07-19 | 7 feature files | Fluent strings audit — 34 new keys in 5 bundles | ✅ All violations fixed |
 | 2026-07-19 | All CSS | Tablet viewport — touch targets + overflow-x: hidden | ✅ All passing |
 | 2026-07-19 | 3 feature files | aria-live regions — AuditLog, TransactionLog, StockShortfall | ✅ All passing |
+| 2026-07-19 | FeatureToggleScreen | ARIA Role Audit — added role=switch + aria-checked | ✅ Fixed |
