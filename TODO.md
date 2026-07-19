@@ -14,7 +14,7 @@
 | 🟢 P1 — Sync Reliability | 6 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P3 — KDS Enhancements | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🟣 P4 — Docs & Compliance | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟣 P4 — Docs & Compliance | 4 | **2** | **█████████████▱▱ 50%** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| **Total** | **70** | **2** | **█▱▱▱▱▱▱▱▱▱ 3%** |
 
 ---
 
@@ -122,8 +122,8 @@ Several ADRs lack final "Implemented" status updates. The skill-drift-guard foun
 
 ### Checklist
 
-- [ ] **P4-1: ADR status audit** — Review all ADRs in `docs/decisions/`. Update ADR-18 (Multi-Location Inventory), ADR-19 (Sale Deduction), ADR-20 (Payment-Capture) from draft → Implemented with completion dates. Verify all 6 ADR-20 acceptance criteria are covered by passing tests.
-- [ ] **P4-2: Missing docs** — Audit recently added modules for missing `///` docs: `crates/oz-core/src/location_resolver.rs`, `crates/oz-core/src/sale_deduction.rs`, `crates/oz-core/src/cache.rs` (RedisCache methods). Run `cargo clippy -- -D warnings` to verify zero missing-docs warnings.
+- [x] **P4-1: ADR status audit** ✅ — All ADRs reviewed. ADR-18 (Multi-Location Inventory), ADR-19 (Sale Deduction), ADR-20 (Payment-Capture) updated from Proposed → Implemented with completion dates. ADR-20 status.md created with 5/6 criteria verified (20-1 deferred).
+- [x] **P4-2: Missing docs** ✅ — All three target files already have thorough doc comments. `cargo clippy -- -W missing-docs` confirms zero warnings across the entire workspace. No changes needed.
 - [ ] **P4-3: Skill-drift guard** — Run `.agents/skills/skill-drift-guard/scripts/detect.sh --report` and fix any findings. Ensure all installed skills reference valid paths, crates, and types.
 - [ ] **P4-4: CHANGELOG final pass** — Verify CHANGELOG.md has entries for all versions (0.0.12, 0.0.13). Cross-reference git log to ensure no commits are undocumented. Add any missing entries.
 

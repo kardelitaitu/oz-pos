@@ -1,6 +1,6 @@
 # ADR #18: Multi-Location Inventory — Workspace-Bound Stock Locations for Wholesale & Retail
 
-**Status:** Accepted — pending §13 Post-Decision Review Amendments (2026-07-18)
+**Status:** Implemented (2026-07-19)
 **Date:** 2026-07-18
 **Decision Record:** Reviewed and audited against current codebase (see §13)
 **Author:** Architecture Team & OZ-POS Contributors
