@@ -46,6 +46,8 @@ const ESSENTIAL_KEYFRAMES = new Set([
   'ws-card-hover-sway',
   // Settings toggle
   'toggle-pulse',
+  // Rate-limit status indication
+  'login-rate-limit-pulse',
   // Entrance / decorative
   'fadeIn',
 ]);

@@ -135,10 +135,8 @@ payment-customer-placeholder =
     .placeholder = e.g. John Doe
 payment-loyalty-points-aria =
     .aria-label = Points
-payment-search-customers-aria =
-    .aria-label = Search customers
-payment-search-customers-placeholder =
-    .placeholder = Search by name, phone, or email...
+payment-search-customers-aria = Search customers
+payment-search-customers-placeholder = Search by name, phone, or email...
 
 # ── Stock Shortfall Dialog ──
 shortfall-dialog-aria =

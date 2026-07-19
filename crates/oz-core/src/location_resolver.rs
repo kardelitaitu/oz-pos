@@ -47,10 +47,10 @@ const CACHE_TTL_SECS: u64 = 30;
 /// Returns `None` on cache miss or if the entry has expired (30s TTL).
 fn cache_get(workspace_instance_id: &str) -> Option<LocationId> {
     let cache = LOCATION_CACHE.lock().ok()?;
-    if let Some(entry) = cache.get(workspace_instance_id) {
-        if entry.cached_at.elapsed().as_secs() < CACHE_TTL_SECS {
-            return Some(entry.location_id.clone());
-        }
+    if let Some(entry) = cache.get(workspace_instance_id)
+        && entry.cached_at.elapsed().as_secs() < CACHE_TTL_SECS
+    {
+        return Some(entry.location_id.clone());
     }
     None
 }
