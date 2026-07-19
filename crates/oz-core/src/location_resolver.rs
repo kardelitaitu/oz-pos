@@ -76,6 +76,23 @@ pub fn invalidate_location_cache() {
     }
 }
 
+/// An enriched binding that pairs a location ID with its display name and
+/// workspace-specific flags (is_primary, allow_negative_stock).
+///
+/// Returned by [`get_workspace_locations`] for use in front-end location
+/// pickers and sale-deduction flows (ADR-19 §10).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WorkspaceLocationBinding {
+    /// Inventory location UUID.
+    pub location_id: String,
+    /// Human-readable location name (from `inventory_locations.name`).
+    pub location_name: String,
+    /// Whether this is the primary location for stock deductions.
+    pub is_primary: bool,
+    /// Whether this location allows negative stock.
+    pub allow_negative_stock: bool,
+}
+
 /// Return the frozen canonical default location UUID as a [`LocationId`].
 ///
 /// ADR-18 §13-36: this UUID is `01926b3a-0000-7000-8000-000000000001` and
@@ -84,6 +101,180 @@ pub fn invalidate_location_cache() {
 #[must_use]
 pub fn get_default_location_id() -> LocationId {
     LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID)
+}
+
+/// Unified workspace-location resolver (ADR-19 §10).
+///
+/// Resolves the inventory locations bound to a workspace instance,
+/// enriched with display names and binding flags. Behaviour differs
+/// by workspace type:
+///
+/// | `type_key` | Resolution strategy |
+/// |------------|----------------------|
+/// | `store-pos` | `workspace_inventory_locations` table (multi-binding via `set_workspace_inventory_locations`) |
+/// | `warehouse` | `workspace_instances.bound_location_id` (single FK); returns all active locations when NULL (admin view) |
+/// | other | Returns empty vec |
+///
+/// # Errors
+///
+/// Returns [`CoreError::Validation`] if **both** `bound_location_id` is set
+/// AND rows exist in `workspace_inventory_locations` (split-brain config).
+/// Returns [`CoreError::NotFound`] if the workspace instance does not exist.
+pub fn get_workspace_locations(
+    conn: &rusqlite::Connection,
+    instance_id: &str,
+    type_key: &str,
+) -> Result<Vec<WorkspaceLocationBinding>, CoreError> {
+    // Verify the instance exists and read its bound_location_id.
+    let (bound_location_id,): (Option<String>,) = conn
+        .query_row(
+            "SELECT bound_location_id FROM workspace_instances WHERE id = ?1",
+            params![instance_id],
+            |row| Ok((row.get(0)?,)),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                entity: "workspace_instance",
+                id: instance_id.to_owned(),
+            },
+            other => CoreError::Db(other),
+        })?;
+
+    let has_bound = bound_location_id.as_ref().is_some_and(|b| !b.is_empty());
+
+    // Check for multi-binding rows.
+    let multi_rows: Vec<(String, bool, bool)> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT wil.location_id, wil.is_primary, wil.allow_negative_stock \
+                 FROM workspace_inventory_locations wil \
+                 WHERE wil.instance_id = ?1 \
+                 ORDER BY wil.is_primary DESC, wil.sort_order ASC",
+            )
+            .map_err(CoreError::Db)?;
+        let rows = stmt
+            .query_map(params![instance_id], |row| {
+                let loc_id: String = row.get(0)?;
+                let prim: i64 = row.get(1)?;
+                let neg: i64 = row.get(2)?;
+                Ok((loc_id, prim == 1, neg == 1))
+            })
+            .map_err(CoreError::Db)?;
+        let mut ids = Vec::new();
+        for r in rows {
+            ids.push(r.map_err(CoreError::Db)?);
+        }
+        ids
+    };
+
+    // Split-brain detection.
+    if has_bound && !multi_rows.is_empty() {
+        return Err(CoreError::Validation {
+            field: "workspace_binding",
+            message: format!(
+                "workspace instance {instance_id} has both bound_location_id \
+                 and workspace_inventory_locations rows — split-brain config"
+            ),
+        });
+    }
+
+    match type_key {
+        "store-pos" => {
+            // Multi-binding via workspace_inventory_locations.
+            if multi_rows.is_empty() {
+                // No explicit bindings — return canonical default.
+                let (name,): (String,) = conn
+                    .query_row(
+                        "SELECT COALESCE(name, 'Default') FROM inventory_locations WHERE id = ?1",
+                        params![CANONICAL_DEFAULT_LOCATION_UUID],
+                        |row| Ok((row.get(0)?,)),
+                    )
+                    .unwrap_or(("Default".into(),));
+                return Ok(vec![WorkspaceLocationBinding {
+                    location_id: CANONICAL_DEFAULT_LOCATION_UUID.to_owned(),
+                    location_name: name,
+                    is_primary: true,
+                    allow_negative_stock: false,
+                }]);
+            }
+            enrich_bindings(conn, &multi_rows)
+        }
+        "warehouse" => {
+            if has_bound {
+                // Single-binding via bound_location_id.
+                let loc_id = bound_location_id.expect("has_bound is true");
+                let (name,): (String,) = conn
+                    .query_row(
+                        "SELECT COALESCE(name, '') FROM inventory_locations WHERE id = ?1",
+                        params![loc_id],
+                        |row| Ok((row.get(0)?,)),
+                    )
+                    .unwrap_or((loc_id.clone(),));
+                Ok(vec![WorkspaceLocationBinding {
+                    location_id: loc_id,
+                    location_name: name,
+                    is_primary: true,
+                    allow_negative_stock: multi_rows
+                        .first()
+                        .map(|(_, _, neg)| *neg)
+                        .unwrap_or(false),
+                }])
+            } else {
+                // Unbound warehouse: return ALL active inventory locations.
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, name, type FROM inventory_locations \
+                         WHERE is_active = 1 \
+                         ORDER BY name ASC",
+                    )
+                    .map_err(CoreError::Db)?;
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok(WorkspaceLocationBinding {
+                            location_id: row.get(0)?,
+                            location_name: row.get(1)?,
+                            is_primary: false,
+                            allow_negative_stock: false,
+                        })
+                    })
+                    .map_err(CoreError::Db)?;
+                let mut locs = Vec::new();
+                for r in rows {
+                    locs.push(r.map_err(CoreError::Db)?);
+                }
+                Ok(locs)
+            }
+        }
+        _ => {
+            // Unknown type: return empty (no location binding concept).
+            Ok(vec![])
+        }
+    }
+}
+
+/// Enrich raw workspace_inventory_locations rows with location names from
+/// the `inventory_locations` table. This is a helper for [`get_workspace_locations`].
+fn enrich_bindings(
+    conn: &rusqlite::Connection,
+    rows: &[(String, bool, bool)],
+) -> Result<Vec<WorkspaceLocationBinding>, CoreError> {
+    let mut results = Vec::with_capacity(rows.len());
+    for (loc_id, is_primary, allow_negative) in rows {
+        let name: String = conn
+            .query_row(
+                "SELECT COALESCE(name, '') FROM inventory_locations WHERE id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| loc_id.clone());
+        results.push(WorkspaceLocationBinding {
+            location_id: loc_id.clone(),
+            location_name: name,
+            is_primary: *is_primary,
+            allow_negative_stock: *allow_negative,
+        });
+    }
+    Ok(results)
 }
 
 /// Resolve the primary deduction location for a workspace instance.
@@ -719,5 +910,189 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ── get_workspace_locations tests (ADR-19 §10) ────────────────
+
+    #[test]
+    fn get_workspace_locations_unknown_type_returns_empty() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+             VALUES ('ws-admin', 'admin', 'store-1', 'Admin')",
+            [],
+        )
+        .unwrap();
+        let locs = get_workspace_locations(&conn, "ws-admin", "admin").unwrap();
+        assert!(locs.is_empty(), "admin type should have no locations");
+    }
+
+    #[test]
+    fn get_workspace_locations_store_pos_multi_binding() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-a', 'Store Front', 'store');\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-b', 'Back Room', 'warehouse');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('ws-pos', 'store-pos', 'store-1', 'Main POS');\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, allow_negative_stock, sort_order) \
+               VALUES ('wsl-1', 'ws-pos', 'loc-b', 1, 1, 0);\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, allow_negative_stock, sort_order) \
+               VALUES ('wsl-2', 'ws-pos', 'loc-a', 0, 0, 1);",
+        )
+        .unwrap();
+        let locs = get_workspace_locations(&conn, "ws-pos", "store-pos").unwrap();
+        assert_eq!(locs.len(), 2);
+        // Primary first (is_primary=1).
+        assert_eq!(locs[0].location_id, "loc-b");
+        assert_eq!(locs[0].location_name, "Back Room");
+        assert!(locs[0].is_primary);
+        assert!(locs[0].allow_negative_stock);
+        // Secondary.
+        assert_eq!(locs[1].location_id, "loc-a");
+        assert!(!locs[1].is_primary);
+    }
+
+    #[test]
+    fn get_workspace_locations_store_pos_no_bindings_returns_default() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+             VALUES ('ws-pos-empty', 'store-pos', 'store-1', 'Empty POS')",
+            [],
+        )
+        .unwrap();
+        let locs = get_workspace_locations(&conn, "ws-pos-empty", "store-pos").unwrap();
+        assert_eq!(locs.len(), 1);
+        assert_eq!(locs[0].location_id, CANONICAL_DEFAULT_LOCATION_UUID);
+        assert!(locs[0].is_primary);
+    }
+
+    #[test]
+    fn get_workspace_locations_warehouse_single_binding() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-wh', 'Main WH', 'warehouse')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name, bound_location_id) \
+             VALUES ('ws-wh', 'warehouse', 'store-1', 'Warehouse', 'loc-wh')",
+            [],
+        )
+        .unwrap();
+        let locs = get_workspace_locations(&conn, "ws-wh", "warehouse").unwrap();
+        assert_eq!(locs.len(), 1);
+        assert_eq!(locs[0].location_id, "loc-wh");
+        assert_eq!(locs[0].location_name, "Main WH");
+        assert!(locs[0].is_primary);
+    }
+
+    #[test]
+    fn get_workspace_locations_warehouse_unbound_returns_all_active() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type, is_active) VALUES ('loc-a', 'WH A', 'warehouse', 1);\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type, is_active) VALUES ('loc-b', 'Store B', 'store', 1);\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type, is_active) VALUES ('loc-c', 'Inactive C', 'warehouse', 0);\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('ws-wh-unbound', 'warehouse', 'store-1', 'Unbound WH');",
+        )
+        .unwrap();
+        // Unbound warehouse should return all active locations.
+        // Note: migration 078 seeds 2 canonical locations (default + transit),
+        // plus our 2 added locations = 4 active total. The inactive one is excluded.
+        let locs = get_workspace_locations(&conn, "ws-wh-unbound", "warehouse").unwrap();
+        assert_eq!(locs.len(), 4, "2 canonical + 2 added = 4 active");
+        assert!(locs.iter().any(|l| l.location_id == "loc-a"));
+        assert!(locs.iter().any(|l| l.location_id == "loc-b"));
+        assert!(
+            !locs.iter().any(|l| l.location_id == "loc-c"),
+            "inactive excluded"
+        );
+        // Verify canonical locations are included.
+        assert!(locs.iter().any(|l| l.location_name.contains("Default")));
+    }
+
+    #[test]
+    fn get_workspace_locations_split_brain_errors() {
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-x', 'X', 'store')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name, bound_location_id) \
+             VALUES ('ws-brain', 'store-pos', 'store-1', 'SplitBrain', 'loc-x')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+             VALUES ('wsl-brain', 'ws-brain', 'loc-x', 1, 0)",
+            [],
+        )
+        .unwrap();
+        let err = get_workspace_locations(&conn, "ws-brain", "store-pos").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "workspace_binding",
+                ..
+            }
+        ));
+        assert!(
+            err.to_string().contains("split-brain"),
+            "error should mention split-brain"
+        );
+    }
+
+    #[test]
+    fn get_workspace_locations_nonexistent_instance_errors() {
+        let conn = migrated();
+        seed_fks(&conn);
+        let err = get_workspace_locations(&conn, "ws-nonexistent", "store-pos").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "workspace_instance",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn get_workspace_locations_warehouse_type_key_from_instance() {
+        // Test with a workspace_instances row that has type_key='warehouse'
+        // but we pass type_key='store-pos' — verifies the parameter is honored.
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-wh', 'WH', 'warehouse')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name, bound_location_id) \
+             VALUES ('ws-wh', 'warehouse', 'store-1', 'WH Instance', 'loc-wh')",
+            [],
+        )
+        .unwrap();
+        // Call with type_key='store-pos' (different from instance's type_key).
+        // store-pos with single binding + no multi-rows → falls back to default.
+        let locs = get_workspace_locations(&conn, "ws-wh", "store-pos").unwrap();
+        // store-pos with bound_location_id set but no multi-rows: the bound is IGNORED
+        // (store-pos resolves from workspace_inventory_locations, not bound_location_id).
+        // No multi-rows means we go to default.
+        assert_eq!(locs.len(), 1);
+        assert_eq!(locs[0].location_id, CANONICAL_DEFAULT_LOCATION_UUID);
     }
 }

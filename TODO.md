@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 14 / 31 items complete (45%) · Updated 2026-07-26
+**Current state:** 15 / 31 items complete (48%) · Updated 2026-07-26
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 Backend — Critical | 2 | 0 | ░░░░░░░░░░ 0% |
+| 🔴 Backend — Critical | 2 | 1 | █████░░░░░░░ 50% |
 | 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 14 | **14** | **███████████████ 100% 🎉** |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
@@ -19,7 +19,7 @@
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **14** | **████████████████░░ 45%** |
+| **Total** | **31** | **15** | **███████████████████ 48%** |
 
 ---
 
@@ -103,18 +103,16 @@
 
 ### 1. `get_workspace_locations` — Unified Resolver (ADR §10)
 
-**Status:** ❌ NOT IMPLEMENTED
-**File:** `crates/oz-core/src/db/inventory.rs` (test reference exists at line 833)
-
-The single entry point that prevents split-brain between `bound_location_id` (on `workspace_instances`) and `workspace_inventory_locations` (the dedicated binding table). Without it, the dual-binding scenario silently creates undefined behavior.
+**Status:** ✅ IMPLEMENTED
+**File:** `crates/oz-core/src/location_resolver.rs`
 
 **Acceptance criteria:**
-- [ ] `pub fn get_workspace_locations(store: &Store, instance_id: &str, type_key: &str) -> Result<Vec<WorkspaceLocationBinding>, CoreError>` — resolves locations from `workspace_inventory_locations` for `store-pos` type, from `bound_location_id` for `warehouse` type, returns empty for other types
-- [ ] Returns `CoreError::Validation` if BOTH `bound_location_id` AND rows in `workspace_inventory_locations` exist (split-brain)
-- [ ] Returns ALL active locations when `bound_location_id IS NULL` on a `warehouse` type (unbound admin view)
-- [ ] `WorkspaceLocationBinding` struct with `location_id`, `location_name`, `is_primary`, `allow_negative_stock`
-- [ ] Unit tests: unbound, single-binding, dual-binding error, store-pos type, warehouse type, other type returns empty
-- [ ] Integration with existing callers (inventory commands, sale deduction flow)
+- [x] `pub fn get_workspace_locations(conn, instance_id, type_key) -> Result<Vec<WorkspaceLocationBinding>, CoreError>` — resolves from `workspace_inventory_locations` for `store-pos`, from `bound_location_id` for `warehouse`, returns empty for other types
+- [x] Returns `CoreError::Validation` on split-brain (both binding mechanisms active)
+- [x] Returns ALL active inventory_locations when `bound_location_id IS NULL` on `warehouse` type
+- [x] `WorkspaceLocationBinding` struct with `location_id`, `location_name`, `is_primary`, `allow_negative_stock`
+- [x] 8 unit tests covering all acceptance criteria
+- [ ] Integration with existing callers (Tauri commands) — deferred
 
 ### 2. Synchronous Alert Engine
 
