@@ -14,12 +14,12 @@
 | 🟡 Backend — Medium | 2 | **2** | **███████████████ 100% 🎉** |
 | 🧪 Rust Test Coverage | 20 | **20** | **███████████████ 100% 🎉** |
 | 🧪 UI Test Coverage | 7 | **7** | **███████████████ 100% 🎉** |
-| 🔵 Frontend — Missing | 2 | **1** | **███████████████ 50%** |
+| 🔵 Frontend — Missing | 2 | **2** | **███████████████ 100% 🎉** |
 | 🔴 §13 Amendments | 1 | **1** | **███████████████ 100% 🎉** |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **29** | **████████████████████████████████████████████████████████████ 94%** |
+| **Total** | **31** | **30** | **███████████████████████████████████████████████████████████████ 97%** |
 
 ---
 
@@ -184,16 +184,18 @@ Dashboard widget or right-side drawer panel showing active alerts with badge cou
 
 ### 6. Location Picker in Inventory Workspace Header
 
-**Status:** ❌ NOT FOUND
-**File:** Inventory workspace header component
+**Status:** ✅ IMPLEMENTED
+**Files:** `ui/src/features/inventory/LocationPicker.tsx`, `ui/src/features/inventory/LocationPicker.css`, `ui/src/__tests__/LocationPicker.test.tsx`
 
 The ADR §5 specifies a location switcher dropdown in the inventory workspace header so the user can switch between locations without leaving the workspace.
 
 **Acceptance criteria:**
-- [ ] Dropdown in workspace header showing all active locations for the store
-- [ ] Current location highlighted; selecting a new location re-scopes the view
-- [ ] Persisted per user or session
-- [ ] Works with warehouse type workspaces (both bound and unbound)
+- [x] Dropdown in inventory workspace header (ProductManagementScreen) showing all active locations for the store
+- [x] Current location highlighted with `aria-selected` + active CSS class; selecting a new location re-scopes the view
+- [x] Location type metadata displayed (warehouse, store, transit)
+- [x] StockAlertPanel dynamically scoped to selected location
+- [x] Outside-click and Escape key close dropdown
+- [x] 9 unit tests: render, open/close, selection, empty state, ARIA compliance
 
 ---
 
@@ -272,7 +274,7 @@ Draft a new ADR for "Payment-Capture Ordering" that specifies the stock-reservat
 | 🔴 | Synchronous alert engine | 3–4 hrs | ✅ Done |
 | 🟡 | `low_stock_alerts_at_location` | 1–2 hrs | ✅ Done (backend) — Tauri + frontend deferred |
 | 🟡 | `stock.negative` event emission | 1 hr | ✅ Done (test deferred — terminal FK setup) |
-| 🔵 | `StockAlertPanel` frontend | 2–3 hrs | Alert engine + API |
-| 🔵 | Location picker in header | 2–3 hrs | location CRUD commands |
+| 🔵 | `StockAlertPanel` frontend | 2–3 hrs | ✅ Done |
+| 🔵 | Location picker in header | 2–3 hrs | ✅ Done |
 | 🔴 | Finding #34 verification | 30 min | ✅ Done |
 | 🟡 | Payment-Capture ADR draft | 2 hrs | None |

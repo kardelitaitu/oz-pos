@@ -18,6 +18,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import VariantManagementScreen from './VariantManagementScreen';
 import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
+import LocationPicker from '@/features/inventory/LocationPicker';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './ProductManagementScreen.css';
 
@@ -80,6 +81,13 @@ export default function ProductManagementScreen() {
   const [variantProductName, setVariantProductName] = useState<string>('');
 
   const [showAlertPanel, setShowAlertPanel] = useState(false);
+  const [selectedLocationId, setSelectedLocationId] = useState('default');
+  const [selectedLocationName, setSelectedLocationName] = useState('Location');
+
+  const handleLocationChange = useCallback((locationId: string, locationName: string) => {
+    setSelectedLocationId(locationId);
+    setSelectedLocationName(locationName);
+  }, []);
 
   const { l10n } = useLocalization();
 
@@ -183,6 +191,11 @@ export default function ProductManagementScreen() {
           <h1 className="product-mgmt-title">Products</h1>
         </Localized>
         <div className="product-mgmt-header-actions">
+          <LocationPicker
+            value={selectedLocationId}
+            onChange={handleLocationChange}
+            label={selectedLocationName}
+          />
           <button
             type="button"
             className="product-mgmt-alert-toggle"
@@ -566,7 +579,7 @@ export default function ProductManagementScreen() {
             </button>
           </div>
           <StockAlertPanel
-            locationId="default"
+            locationId={selectedLocationId}
             pollIntervalMs={30_000}
             maxAlerts={50}
           />

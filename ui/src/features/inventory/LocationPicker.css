@@ -1,0 +1,109 @@
+.location-picker {
+  position: relative;
+}
+
+.location-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.location-picker-trigger:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-hover);
+}
+
+.location-picker-trigger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.location-picker-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.location-picker-chevron {
+  color: var(--color-fg-tertiary);
+  transition: transform var(--duration-150) var(--ease-out);
+}
+
+.location-picker-chevron--open {
+  transform: rotate(180deg);
+}
+
+.location-picker-dropdown {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+}
+
+.location-picker-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.location-picker-option:hover {
+  background: var(--color-bg-surface);
+}
+
+.location-picker-option:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.location-picker-option--active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-active);
+  font-weight: var(--font-weight-semibold);
+}
+
+.location-picker-option--active:hover {
+  background: var(--color-accent-subtle);
+}
+
+.location-picker-option-name {
+  font-weight: var(--font-weight-medium);
+}
+
+.location-picker-option-meta {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  text-transform: capitalize;
+}
+
+.location-picker-option--active .location-picker-option-meta {
+  color: var(--color-accent-active);
+}
