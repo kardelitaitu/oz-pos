@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 4 / 31 items complete (13%) · Updated 2026-07-26
+**Current state:** 5 / 31 items complete (16%) · Updated 2026-07-26
 
 ---
 
@@ -12,14 +12,14 @@
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
-| 🧪 Rust Test Coverage | 14 | 4 | ███░░░░░░░ 29% |
+| 🧪 Rust Test Coverage | 14 | 5 | ███░░░░░░░ 36% |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🔴 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **4** | **███░░░░░░░ 13%** |
+| **Total** | **31** | **5** | **████░░░░░░ 16%** |
 
 ---
 
@@ -33,7 +33,7 @@
 | `product_bundles.rs` | 8 → **20** | 15+ | ✅ |
 | `promotions.rs` | 9 → **18** | 15+ | ✅ |
 | `loyalty.rs` | 10 → **20** | 15+ | ✅ |
-| `stock_counts.rs` | 10 | 20+ | 10 |
+| `stock_counts.rs` | 10 → **20** | 20+ | ✅ |
 | `tables.rs` | 10 | 15+ | 5 |
 | `terminal_overrides.rs` | 10 | 15+ | 5 |
 | `terminal_profiles.rs` | 10 | 15+ | 5 |

@@ -700,4 +700,338 @@ mod tests {
         let result = store.get_stock_count("no-such-count").unwrap();
         assert!(result.is_none());
     }
+
+    // ── Additional edge-case tests (10 new) ────────────────────────
+
+    #[test]
+    fn complete_draft_count_allowed() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-A", "Product A");
+        let pid: String = conn
+            .query_row("SELECT id FROM products WHERE sku='SKU-A'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        seed_inventory(&conn, &pid, 10);
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-DRAFT-COMPLETE".into(),
+            status: StockCountStatus::Draft,
+            count_type: CountType::Full,
+            notes: "".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: None,
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        let line = StockCountLine {
+            id: uuid::Uuid::now_v7().to_string(),
+            count_id: count_id.clone(),
+            sku: "SKU-A".into(),
+            product_name: "Product A".into(),
+            expected_qty: 10,
+            counted_qty: Some(12),
+            difference: 2,
+            notes: "".into(),
+        };
+        store.add_count_line(&line).unwrap();
+
+        let adjustments = store
+            .complete_stock_count(&count_id, Some("user-1"))
+            .unwrap();
+        assert_eq!(adjustments.len(), 1);
+        assert_eq!(adjustments[0].adjusted_qty, 12);
+
+        let updated = store.get_stock_count(&count_id).unwrap().unwrap();
+        assert_eq!(updated.status, StockCountStatus::Completed);
+    }
+
+    #[test]
+    fn complete_stock_count_skip_zero_difference() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-A", "Product A");
+        let pid: String = conn
+            .query_row("SELECT id FROM products WHERE sku='SKU-A'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        seed_inventory(&conn, &pid, 10);
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-NOCHANGE".into(),
+            status: StockCountStatus::InProgress,
+            count_type: CountType::Full,
+            notes: "".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: None,
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        // counted = expected (10 = 10) → should skip adjustment
+        let line = StockCountLine {
+            id: uuid::Uuid::now_v7().to_string(),
+            count_id: count_id.clone(),
+            sku: "SKU-A".into(),
+            product_name: "Product A".into(),
+            expected_qty: 10,
+            counted_qty: Some(10),
+            difference: 0,
+            notes: "".into(),
+        };
+        store.add_count_line(&line).unwrap();
+
+        let adjustments = store.complete_stock_count(&count_id, None).unwrap();
+        assert!(adjustments.is_empty());
+    }
+
+    #[test]
+    fn complete_stock_count_multiple_lines() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-A", "Product A");
+        seed_product(&conn, "SKU-B", "Product B");
+        let pid_a: String = conn
+            .query_row("SELECT id FROM products WHERE sku='SKU-A'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let pid_b: String = conn
+            .query_row("SELECT id FROM products WHERE sku='SKU-B'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        seed_inventory(&conn, &pid_a, 10);
+        seed_inventory(&conn, &pid_b, 20);
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-MULTI".into(),
+            status: StockCountStatus::InProgress,
+            count_type: CountType::Full,
+            notes: "".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: None,
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        store
+            .add_count_line(&StockCountLine {
+                id: uuid::Uuid::now_v7().to_string(),
+                count_id: count_id.clone(),
+                sku: "SKU-A".into(),
+                product_name: "Product A".into(),
+                expected_qty: 10,
+                counted_qty: Some(12),
+                difference: 2,
+                notes: "".into(),
+            })
+            .unwrap();
+        store
+            .add_count_line(&StockCountLine {
+                id: uuid::Uuid::now_v7().to_string(),
+                count_id: count_id.clone(),
+                sku: "SKU-B".into(),
+                product_name: "Product B".into(),
+                expected_qty: 20,
+                counted_qty: Some(18),
+                difference: -2,
+                notes: "".into(),
+            })
+            .unwrap();
+
+        let adjustments = store
+            .complete_stock_count(&count_id, Some("user-1"))
+            .unwrap();
+        assert_eq!(adjustments.len(), 2);
+        assert_eq!(adjustments[0].sku, "SKU-A");
+        assert_eq!(adjustments[0].adjusted_qty, 12);
+        assert_eq!(adjustments[1].sku, "SKU-B");
+        assert_eq!(adjustments[1].adjusted_qty, 18);
+    }
+
+    #[test]
+    fn complete_stock_count_no_lines() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-EMPTY".into(),
+            status: StockCountStatus::InProgress,
+            count_type: CountType::Full,
+            notes: "".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: None,
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        // Completing a count with no lines (or all zero-diff) should
+        // still mark it as completed.
+        let adjustments = store.complete_stock_count(&count_id, None).unwrap();
+        assert!(adjustments.is_empty());
+
+        let updated = store.get_stock_count(&count_id).unwrap().unwrap();
+        assert_eq!(updated.status, StockCountStatus::Completed);
+    }
+
+    #[test]
+    fn complete_nonexistent_count_returns_not_found() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let err = store
+            .complete_stock_count("no-such-count", None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "stock_count"));
+    }
+
+    #[test]
+    fn update_stock_count_modifies_fields() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let count_id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        seed_user(&conn, "user-2");
+
+        let count = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-UPDATE-FIELDS".into(),
+            status: StockCountStatus::Draft,
+            count_type: CountType::Full,
+            notes: "Original".into(),
+            counted_by: None,
+            created_at: now.clone(),
+            completed_at: None,
+            updated_at: now.clone(),
+        };
+        store.create_stock_count(&count).unwrap();
+
+        let updated = StockCount {
+            id: count_id.clone(),
+            count_number: "CNT-UPDATE-FIELDS".into(),
+            status: StockCountStatus::InProgress,
+            count_type: CountType::Spot,
+            notes: "Modified".into(),
+            counted_by: Some("user-2".into()),
+            created_at: now.clone(),
+            completed_at: Some("2025-06-01T00:00:00.000Z".into()),
+            updated_at: "2025-06-01T00:00:00.001Z".into(),
+        };
+        store.update_stock_count(&updated).unwrap();
+
+        let fetched = store.get_stock_count(&count_id).unwrap().unwrap();
+        assert_eq!(fetched.status, StockCountStatus::InProgress);
+        assert_eq!(fetched.count_type, CountType::Spot);
+        assert_eq!(fetched.notes, "Modified");
+        assert_eq!(fetched.counted_by, Some("user-2".to_owned()));
+        assert!(fetched.completed_at.is_some());
+    }
+
+    #[test]
+    fn remove_nonexistent_line_is_noop() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        store.remove_count_line("no-such-line").unwrap();
+    }
+
+    #[test]
+    fn get_count_lines_empty() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let lines = store.get_count_lines("no-such-count").unwrap();
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn list_stock_adjustments_ordered() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-A", "Product A");
+        seed_product(&conn, "SKU-B", "Product B");
+        let pid_a: String = conn
+            .query_row("SELECT id FROM products WHERE sku='SKU-A'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let pid_b: String = conn
+            .query_row("SELECT id FROM products WHERE sku='SKU-B'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        seed_inventory(&conn, &pid_a, 10);
+        seed_inventory(&conn, &pid_b, 10);
+
+        // Two counts on different products to produce 2 adjustments
+        let pairs = [("SKU-A", 10, 12), ("SKU-B", 10, 8)];
+        for (i, (sku, _expected, counted)) in pairs.iter().enumerate() {
+            let cid = uuid::Uuid::now_v7().to_string();
+            let count = StockCount {
+                id: cid.clone(),
+                count_number: format!("CNT-ADJ-{}", i),
+                status: StockCountStatus::InProgress,
+                count_type: CountType::Full,
+                notes: "".into(),
+                counted_by: None,
+                created_at: now.clone(),
+                completed_at: None,
+                updated_at: now.clone(),
+            };
+            store.create_stock_count(&count).unwrap();
+            store
+                .add_count_line(&StockCountLine {
+                    id: uuid::Uuid::now_v7().to_string(),
+                    count_id: cid.clone(),
+                    sku: sku.to_string(),
+                    product_name: format!("Product {}", sku),
+                    expected_qty: 10,
+                    counted_qty: Some(*counted),
+                    difference: *counted - 10,
+                    notes: "".into(),
+                })
+                .unwrap();
+            store.complete_stock_count(&cid, None).unwrap();
+        }
+
+        let adjustments = store.list_stock_adjustments().unwrap();
+        assert_eq!(adjustments.len(), 2);
+        // Newest first
+        assert!(adjustments[0].created_at >= adjustments[1].created_at);
+    }
+
+    #[test]
+    fn list_stock_adjustments_empty() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let adjustments = store.list_stock_adjustments().unwrap();
+        assert!(adjustments.is_empty());
+    }
 }
