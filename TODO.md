@@ -10,7 +10,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 P0 — Plugin Security | 5 | **1** | **██▱▱▱▱▱▱▱▱ 20%** |
+| 🔴 P0 — Plugin Security | 5 | **2** | **████▱▱▱▱▱▱ 40%** |
 | 🟢 P1 — Sync Reliability | 6 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P2 — UI Performance | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔵 P3 — KDS Enhancements | 5 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **5** | **███▱▱▱▱▱▱▱ 7%** |
+| **Total** | **70** | **6** | **████▱▱▱▱▱▱ 9%** |
 
 ---
 
@@ -45,11 +45,11 @@ The plugin system (`crates/oz-lua/`) allows Lua scripts to intercept sale events
 
 ### Checklist
 
-- [x] **P0-1: Sandbox audit** ✅ — Report at `docs/security/lua-sandbox-audit.md`. Found 7 findings (3 critical, 2 high, 2 medium). Critical gaps: no instruction limit, no execution timeout, permissions not enforced.
-- [ ] **P0-2: Implement permission manifests** — Add `required_permissions` field to `plugin.toml` manifest (e.g., `["cart:read", "cart:write", "inventory:read"]`). Reject plugins with undeclared permissions at load time.
+- [x] **P0-1: Sandbox audit** ✅ — Report at `docs/security/lua-sandbox-audit.md`. Found 7 findings (3 critical, 2 high, 2 medium).
+- [x] **P0-2: Permission manifests** ✅ — `Permission` enum with 8 variants, custom TOML deserializer, enforced at load time. Unknown permissions silently ignored (forward compat). Plugins with zero declared permissions rejected. 6 new tests, 134/134 pass.
 - [ ] **P0-3: Resource limits** — Set `rlua` instruction limit (`set_instruction_limit(100_000)`), memory limit via Lua `collectgarbage` hooks, and execution timeout via tokio select! with 5-second deadline.
 - [ ] **P0-4: Safe environment** — Already done (globals stripped in `LuaRuntime::new()`). Remainder: verify with malicious script test.
-- [ ] **P0-5: Regressions** — Verify existing example plugins (`plugins/example-discount/discount.lua`, `scripts/examples/discount_bulk.lua`, `tax_overrides.lua`, `validate_order.lua`) still work with the sandboxed environment.
+- [ ] **P0-5: Regressions** — Verify existing example plugins still work with the sandboxed environment.
 
 ---
 

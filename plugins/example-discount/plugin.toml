@@ -12,3 +12,4 @@ hooks = ["sale.before_complete"]
 [permissions]
 allow_network = false
 allow_filesystem = false
+required_permissions = ["cart:read", "cart:write", "system:time", "log:write"]

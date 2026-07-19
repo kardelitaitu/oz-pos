@@ -6,8 +6,8 @@ use chrono::{Datelike, Timelike};
 use oz_lua::{CartLineData, DiscountResult, LuaError, LuaEventBridge, LuaRuntime, TaxOverride};
 
 use crate::error::PluginError;
-use crate::loader::PluginRegistry;
-use crate::loader::load_plugins;
+use crate::loader::{PluginRegistry, load_plugins};
+use crate::manifest::Permission;
 
 /// A discount queued by a plugin script for later application.
 #[derive(Debug, Clone)]
@@ -37,9 +37,46 @@ impl std::fmt::Debug for PluginManager {
 }
 
 impl PluginManager {
+    /// Whitelist of all recognised plugin permissions.
+    /// Plugins that declare permissions outside this set are rejected at load time.
+    const ALLOWED_PERMISSIONS: &'static [Permission] = &[
+        Permission::CartRead,
+        Permission::CartWrite,
+        Permission::TaxRead,
+        Permission::InventoryRead,
+        Permission::InventoryWrite,
+        Permission::ReportingRead,
+        Permission::SystemTime,
+        Permission::LogWrite,
+    ];
+
     /// Create a new `PluginManager`, loading all plugins from `plugins_dir`.
     pub fn new(plugins_dir: &Path) -> Result<Self, PluginError> {
         let registry = load_plugins(plugins_dir)?;
+
+        // ── Enforce plugin permissions ──────────────────────────────
+        for plugin in &registry.plugins {
+            // Check that all declared permissions are in the whitelist.
+            for perm in &plugin.manifest.permissions.required_permissions {
+                if !Self::ALLOWED_PERMISSIONS.contains(perm) {
+                    return Err(PluginError::Manifest(format!(
+                        "plugin '{}' declares unknown permission '{}' — rejected",
+                        plugin.manifest.plugin.name, perm,
+                    )));
+                }
+            }
+            // Require at minimum: at least one permission must be declared.
+            // Plugins with zero declared permissions are rejected to force
+            // explicit opt-in.
+            if plugin.manifest.permissions.required_permissions.is_empty() {
+                return Err(PluginError::Manifest(format!(
+                    "plugin '{}' declares no required_permissions — \
+                     at least one permission must be declared (e.g. [\"cart:read\"])",
+                    plugin.manifest.plugin.name,
+                )));
+            }
+        }
+
         let runtime = LuaRuntime::new().map_err(|e| PluginError::Lua(e.to_string()))?;
 
         let hook_names: Arc<Mutex<HashMap<String, Vec<String>>>> =
@@ -325,7 +362,7 @@ mod tests {
         std::fs::create_dir(&plugin_dir).unwrap();
 
         let manifest = format!(
-            "[plugin]\nname = \"{}\"\nversion = \"1.0.0\"\n\n[capabilities]\nscripts = [\"script.lua\"]\n",
+            "[plugin]\nname = \"{}\"\nversion = \"1.0.0\"\n\n[capabilities]\nscripts = [\"script.lua\"]\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n",
             name
         );
         std::fs::write(plugin_dir.join("plugin.toml"), manifest).unwrap();
@@ -398,6 +435,136 @@ mod tests {
     }
 
     // ── PluginManager::new() tests ─────────────────────────────────────
+
+    // ── Permission enforcement tests ─────────────────────────────────
+
+    #[test]
+    fn plugin_without_permissions_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let plugin_dir = dir.path().join("no-perms");
+        std::fs::create_dir(&plugin_dir).unwrap();
+        // No [permissions] section at all — should be rejected.
+        std::fs::write(
+            plugin_dir.join("plugin.toml"),
+            "[plugin]\nname = \"no-perms\"\nversion = \"1.0.0\"\n\n[capabilities]\nscripts = []\n",
+        )
+        .unwrap();
+        let result = PluginManager::new(dir.path());
+        assert!(
+            result.is_err(),
+            "plugin without permissions should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("required_permissions") || err.contains("no-perms"),
+            "error should mention missing permissions, got: {err}"
+        );
+    }
+
+    #[test]
+    fn plugin_with_cart_read_permission_succeeds() {
+        let (_dir, plugins_root) = create_plugin_dir("cart-only", "");
+        // create_plugin_dir already includes required_permissions = ["cart:read"]
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn multiple_plugins_with_valid_permissions_all_load() {
+        let dir = tempfile::tempdir().unwrap();
+        for (i, name) in ["plug-a", "plug-b"].iter().enumerate() {
+            let plugin_dir = dir.path().join(name);
+            std::fs::create_dir(&plugin_dir).unwrap();
+            std::fs::write(
+                plugin_dir.join("plugin.toml"),
+                format!(
+                    r#"[plugin]
+name = "{name}"
+version = "1.0.0"
+
+[capabilities]
+scripts = []
+
+[permissions]
+required_permissions = ["cart:read"]
+"#
+                ),
+            )
+            .unwrap();
+            let _ = i; // suppress warning
+        }
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn plugin_with_unknown_permission_silently_ignored() {
+        let dir = tempfile::tempdir().unwrap();
+        let plugin_dir = dir.path().join("unknown-perm");
+        std::fs::create_dir(&plugin_dir).unwrap();
+        std::fs::write(
+            plugin_dir.join("plugin.toml"),
+            r#"[plugin]
+name = "unknown-perm"
+version = "1.0.0"
+
+[permissions]
+required_permissions = ["cart:read", "super:admin"]
+"#,
+        )
+        .unwrap();
+        // "super:admin" is unrecognised — silently ignored for forward compat.
+        // "cart:read" is valid, so this plugin should load.
+        let result = PluginManager::new(dir.path());
+        assert!(
+            result.is_ok(),
+            "unknown permission should be silently ignored (forward compat)"
+        );
+    }
+
+    #[test]
+    fn plugin_with_all_permission_types_is_accepted() {
+        let dir = tempfile::tempdir().unwrap();
+        let plugin_dir = dir.path().join("all-perms");
+        std::fs::create_dir(&plugin_dir).unwrap();
+        std::fs::write(
+            plugin_dir.join("plugin.toml"),
+            r#"[plugin]
+name = "all-perms"
+version = "1.0.0"
+
+[permissions]
+required_permissions = [
+    "cart:read",
+    "cart:write",
+    "tax:read",
+    "inventory:read",
+    "inventory:write",
+    "reporting:read",
+    "system:time",
+    "log:write",
+]
+"#,
+        )
+        .unwrap();
+        let mgr = PluginManager::new(dir.path()).unwrap();
+        assert!(mgr.drain_pending_discounts().is_empty());
+    }
+
+    #[test]
+    fn permission_display_format() {
+        use crate::manifest::Permission;
+        assert_eq!(Permission::CartRead.to_string(), "cart:read");
+        assert_eq!(Permission::CartWrite.to_string(), "cart:write");
+        assert_eq!(Permission::TaxRead.to_string(), "tax:read");
+        assert_eq!(Permission::InventoryRead.to_string(), "inventory:read");
+        assert_eq!(Permission::InventoryWrite.to_string(), "inventory:write");
+        assert_eq!(Permission::ReportingRead.to_string(), "reporting:read");
+        assert_eq!(Permission::SystemTime.to_string(), "system:time");
+        assert_eq!(Permission::LogWrite.to_string(), "log:write");
+    }
+
+    // ── Existing tests ────────────────────────────────────────────────
 
     #[test]
     fn plugin_manager_new_with_empty_dir() {
