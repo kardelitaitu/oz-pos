@@ -130,6 +130,15 @@ payment-complete = Complete
 payment-retry-aria =
     .aria-label = Retry payment
 payment-retry = Retry
+payment-toast-currency-failed = Failed to load currency data
+payment-customer-placeholder =
+    .placeholder = e.g. John Doe
+payment-loyalty-points-aria =
+    .aria-label = Points
+payment-search-customers-aria =
+    .aria-label = Search customers
+payment-search-customers-placeholder =
+    .placeholder = Search by name, phone, or email...
 
 # ── Stock Shortfall Dialog ──
 shortfall-dialog-aria =

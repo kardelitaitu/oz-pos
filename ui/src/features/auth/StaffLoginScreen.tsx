@@ -465,7 +465,7 @@ export default function StaffLoginScreen() {
             type="button"
             className="staff-login-close-btn"
             onClick={goBack}
-            aria-label="Close"
+            aria-label={l10n.getString('staff-login-close-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -514,7 +514,7 @@ export default function StaffLoginScreen() {
                   type="submit"
                   className="staff-login-submit-btn"
                   disabled={!username.trim() || usernameChecking}
-                  aria-label="Next"
+                  aria-label={l10n.getString('staff-login-next-aria')}
                 >
                   {usernameChecking ? (
                     <span className="staff-login-btn-spinner" />

@@ -109,6 +109,11 @@ staff-login-lockout = Locked out. Try again in { $seconds }s
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
+staff-login-close-aria =
+    .aria-label = Close
+staff-login-next-aria =
+    .aria-label = Next
+
 fastpin-switch-user = Switch User
 fastpin-active-user = Active: { $name }
 fastpin-enter-pin = Enter PIN for { $user }

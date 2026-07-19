@@ -15,3 +15,8 @@ suppliers-btn-cancel = Cancel
 
 po-title = Purchase Orders
 po-add = New Purchase Order
+
+suppliers-no-results = No suppliers match your search.
+suppliers-clear-search = Clear search
+suppliers-no-data = No suppliers yet.
+suppliers-add-first = Add your first supplier

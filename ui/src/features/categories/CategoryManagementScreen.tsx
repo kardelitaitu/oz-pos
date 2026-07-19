@@ -434,17 +434,19 @@ export default function CategoryManagementScreen() {
             </Localized>
           </label>
           <Localized id="categories-name-placeholder" attrs={{ placeholder: true }}>
-            <input
-              className="cat-mgmt-input"
-              type="text"
-              id="cat-new-name"
-              name="cat-new-name"
-              placeholder="e.g. Bakery, Merchandise"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              ref={inputRef}
-              aria-label="Category Name"
-            />
+            <Localized id="categories-name-aria" attrs={{ 'aria-label': true }}>
+              <input
+                className="cat-mgmt-input"
+                type="text"
+                id="cat-new-name"
+                name="cat-new-name"
+                placeholder="e.g. Bakery, Merchandise"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                ref={inputRef}
+                aria-label="Category Name"
+              />
+            </Localized>
           </Localized>
           <span className="cat-mgmt-hint">
             <Localized id="categories-id-preview">
@@ -459,14 +461,20 @@ export default function CategoryManagementScreen() {
           <Localized id="categories-icon">
             <span className="cat-mgmt-label">Icon</span>
           </Localized>
-          <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label="Pick an icon">
+          <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label={l10n.getString('categories-icon-picker-aria')}>
             {ICON_OPTIONS.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 role="radio"
                 aria-checked={newIcon === opt.id}
-                aria-label={opt.label}
+                aria-label={l10n.getString(
+                  opt.id === 'food' ? 'categories-icon-food' :
+                  opt.id === 'snack' ? 'categories-icon-snack' :
+                  opt.id === 'hot-drink' ? 'categories-icon-hot-drink' :
+                  opt.id === 'cold-drink' ? 'categories-icon-cold-drink' :
+                  'categories-icon-generic'
+                )}
                 className={
                   newIcon === opt.id
                     ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
@@ -552,7 +560,7 @@ export default function CategoryManagementScreen() {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             ref={editInputRef}
-            aria-label="Category Name"
+            aria-label={l10n.getString('categories-name-aria')}
           />
         </div>
 
@@ -561,14 +569,20 @@ export default function CategoryManagementScreen() {
           <Localized id="categories-icon">
             <span className="cat-mgmt-label">Icon</span>
           </Localized>
-          <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label="Pick an icon">
+          <div className="cat-mgmt-icon-picker" role="radiogroup" aria-label={l10n.getString('categories-icon-picker-aria')}>
             {ICON_OPTIONS.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 role="radio"
                 aria-checked={editIcon === opt.id}
-                aria-label={opt.label}
+                aria-label={l10n.getString(
+                  opt.id === 'food' ? 'categories-icon-food' :
+                  opt.id === 'snack' ? 'categories-icon-snack' :
+                  opt.id === 'hot-drink' ? 'categories-icon-hot-drink' :
+                  opt.id === 'cold-drink' ? 'categories-icon-cold-drink' :
+                  'categories-icon-generic'
+                )}
                 className={
                   editIcon === opt.id
                     ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
@@ -588,22 +602,23 @@ export default function CategoryManagementScreen() {
           <Localized id="categories-colour">
             <span className="cat-mgmt-label">Colour</span>
           </Localized>
-          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label="Pick a colour">
+          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('categories-colour-picker-aria')}>
             {COLOURS.map((colour) => (
-              <button
-                key={colour}
-                type="button"
-                role="radio"
-                aria-checked={editColour === colour}
-                className={
-                  editColour === colour
-                    ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
-                    : 'cat-mgmt-colour-swatch'
-                }
-                style={{ background: colour }}
-                onClick={() => setEditColour(colour)}
-                aria-label={`Select colour ${colour}`}
-              />
+              <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={editColour === colour}
+                  className={
+                    editColour === colour
+                      ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
+                      : 'cat-mgmt-colour-swatch'
+                  }
+                  style={{ background: colour }}
+                  onClick={() => setEditColour(colour)}
+                  aria-label={`Select colour ${colour}`}
+                />
+              </Localized>
             ))}
           </div>
         </div>

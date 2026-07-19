@@ -15,3 +15,8 @@ suppliers-btn-cancel = Batal
 
 po-title = Pesanan Pembelian
 po-add = Pesanan Pembelian Baru
+
+suppliers-no-results = Tidak ada pemasok yang cocok dengan pencarian Anda.
+suppliers-clear-search = Hapus pencarian
+suppliers-no-data = Belum ada pemasok.
+suppliers-add-first = Tambah pemasok pertama

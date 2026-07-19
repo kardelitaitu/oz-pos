@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 73 / 101 items complete (72.3%) · Updated 2026-07-19
+**Current state:** 80 / 101 items complete (79.2%) · Updated 2026-07-19
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| ♿ Accessibility | 17 | 11 | ██████░░░░ 65% |
+| ♿ Accessibility | 17 | 12 | ███████░░░ 71% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **73** | **████████░░ 80%** |
+| **Total** | **101** | **80** | **████████░░ 80%** |
 
 ---
 
@@ -63,9 +63,14 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 
 ### ♿ 2. Fluent Strings Audit
 
-- [ ] Scan all TSX files in `src/features/` for hardcoded English strings
-- [ ] Fix all violations with `<Localized id="...">` wrappers
-- [ ] Add new Fluent keys to `sales.ftl`, `settings.ftl`, `inventory.ftl`, etc.
+- [x] Scan all TSX files in `src/features/` for hardcoded English strings
+- [x] Fix all violations with `<Localized id="...">` wrappers — **7 files** fixed:
+  - `SuppliersScreen.tsx` — 4 strings wrapped (`no-results`, `clear-search`, `no-data`, `add-first`)
+  - `CategoryManagementScreen.tsx` — hardcoded aria-labels replaced with `l10n.getString()`
+  - `StaffLoginScreen.tsx` — `aria-label="Close"` and `aria-label="Next"` localized
+  - `PaymentModal.tsx` — 5 hardcoded `addToast`/`placeholder`/`aria-label` strings fixed
+  - `GiftCardPayment.tsx` — 12 strings wrapped (title, subtitle, aria-labels, placeholders, buttons, fallback errors)
+- [x] Add new Fluent keys to 5 `.ftl` / `.id.ftl` bundles: **34 new keys** total
 
 ### ♿ 3. Mobile / Tablet Viewport
 
@@ -383,3 +388,4 @@ All forms must surface clear, specific validation errors with `role="alert"`.
 | 2026-07-19 | settings.ftl, sales.ftl | Fluent strings audit | ✅ No hardcoded English |
 | 2026-07-19 | SettingsPage | Form validation audit | ✅ Already complete |
 | 2026-07-19 | CreatePinScreen | Hardcoded strings | ✅ Fixed 17 strings |
+| 2026-07-19 | 7 feature files | Fluent strings audit — 34 new keys in 5 bundles | ✅ All violations fixed |

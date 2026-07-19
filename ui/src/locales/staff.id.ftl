@@ -128,6 +128,11 @@ staff-ws-custom = Kustom
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
+staff-login-close-aria =
+    .aria-label = Tutup
+staff-login-next-aria =
+    .aria-label = Lanjut
+
 fastpin-switch-user = Ganti Pengguna
 fastpin-active-user = Aktif: { $name }
 fastpin-enter-pin = Masukkan PIN untuk { $user }

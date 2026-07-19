@@ -172,7 +172,7 @@ export default function PaymentModal({
           setExchangeRates(rates);
           if (base) setBaseCurrency(base);
         })
-        .catch(() => addToast({ message: 'Failed to load currency data', type: 'error' }));
+        .catch(() => addToast({ message: l10n.getString('payment-toast-currency-failed'), type: 'error' }));
     }
   }, [open, multiCurrency, addToast]);
 
@@ -1100,7 +1100,7 @@ export default function PaymentModal({
                             type="text"
                             className="payment-customer-input"
                             aria-label={l10n.getString('payment-customer-name-aria', null, 'Customer name for open bill')}
-                            placeholder="e.g. John Doe"
+                            placeholder={l10n.getString('payment-customer-placeholder')}
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                           />
@@ -1391,7 +1391,7 @@ export default function PaymentModal({
                         onChange={(e) => setPointsToRedeem(Math.max(0, parseInt(e.target.value, 10) || 0))}
                         min={0}
                         max={loyaltyAccount.account.points}
-                        aria-label="Points"
+                        aria-label={l10n.getString('payment-loyalty-points-aria')}
                       />
                       <span className="payment-loyalty-input-hint">
                         / {loyaltyAccount.account.points}
@@ -1472,8 +1472,8 @@ export default function PaymentModal({
                   <input
                     className="payment-customer-search-input"
                     type="text"
-                    aria-label="Search customers"
-                    placeholder="Search by name, phone, or email..."
+                    aria-label={l10n.getString('payment-search-customers-aria')}
+                    placeholder={l10n.getString('payment-search-customers-placeholder')}
                     value={customerSearchQuery}
                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
                   />
