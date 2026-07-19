@@ -1,6 +1,6 @@
 # ADR #15: Shadow Banding Mitigation — Single-Layer Uniform Blur & CSS Noise Dithering
 
-**Status:** Accepted (2026-07-18)
+**Status:** Implemented (2026-07-26)
 **Date:** 2026-07-18
 **Author:** Architecture Team & OZ-POS Contributors
 **Tags:** shadows, banding, css, dithering, gpu, rendering, dark-theme, glassmorphism
