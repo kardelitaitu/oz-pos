@@ -1141,4 +1141,384 @@ mod tests {
             .unwrap();
         assert_eq!(stock, 60, "stock should have increased by 10");
     }
+
+    // ── Extended edge cases (coverage 19→30) ──────────────────────────
+
+    #[test]
+    fn start_shift_nonexistent_user_fk_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = s
+            .create_inventory_location("Test Loc", "store", "")
+            .unwrap();
+        let err = s
+            .start_inventory_shift("nonexistent-user", &loc_id, None, "")
+            .unwrap_err();
+        // FK violation on users(id) returns a rusqlite error wrapped in CoreError::Db
+        assert!(matches!(err, CoreError::Db(_)));
+    }
+
+    #[test]
+    fn end_already_ended_shift_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-eae', 'Role', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) \
+             VALUES ('u-eae', 'user', 'hash', 'User', 'r-eae')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+
+        let shift = s.start_inventory_shift("u-eae", &loc_id, None, "").unwrap();
+        s.end_inventory_shift(&shift.id).unwrap();
+
+        // Ending again should error
+        let err = s.end_inventory_shift(&shift.id).unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { entity, .. } if entity == "active_inventory_shift")
+        );
+    }
+
+    #[test]
+    fn list_shifts_orders_by_started_at_desc() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-ord', 'Role', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) \
+             VALUES ('u-ord', 'user', 'hash', 'User', 'r-ord')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+
+        let shift1 = s
+            .start_inventory_shift("u-ord", &loc_id, None, "first")
+            .unwrap();
+        // End shift1 first so we can start shift2
+        s.end_inventory_shift(&shift1.id).unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let _shift2 = s
+            .start_inventory_shift("u-ord", &loc_id, None, "second")
+            .unwrap();
+
+        let all = s.list_inventory_shifts().unwrap();
+        assert_eq!(all.len(), 2);
+        // Most recent first
+        assert_eq!(all[0].notes, "second");
+        assert_eq!(all[1].notes, "first");
+    }
+
+    #[test]
+    fn deactivate_location_with_pending_transfers_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+
+        // Seed user + transfer referencing this location
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) \
+             VALUES ('r-deact', 'Role', '', '[]', 'now', 'now')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) \
+             VALUES ('u-deact', 'user', 'hash', 'User', 'r-deact', 'now', 'now')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_transfers (id, transfer_number, status, source_location_id, destination_location_id, \
+             created_by, created_at, updated_at) \
+             VALUES ('tr-pend', 'TRF-1', 'in_transit', ?1, ?1, 'u-deact', 'now', 'now')",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let err = s.deactivate_inventory_location(&loc_id).unwrap_err();
+        assert!(
+            err.to_string().contains("pending stock transfers"),
+            "expected pending transfer message, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn create_transaction_with_multiple_lines_and_barcode() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-ml', 'Role', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-ml', 's', 'hash', 'S', 'r-ml')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('p-b', 'SKU-B', 'B', 200, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('p-a', ?1, 20)",
+            params![loc_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('p-b', ?1, 30)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let lines = vec![
+            InventoryTransactionLineInput {
+                sku: "SKU-A".into(),
+                product_name: "Product A".into(),
+                qty: 10,
+                delta: -5,
+                barcode_scanned: Some("BARCODE-A".into()),
+            },
+            InventoryTransactionLineInput {
+                sku: "SKU-B".into(),
+                product_name: "Product B".into(),
+                qty: 5,
+                delta: 3,
+                barcode_scanned: None,
+            },
+        ];
+        let tx_id = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::ManualAdjustment,
+                &loc_id,
+                "staff-ml",
+                "multi-line + barcode",
+                &lines,
+            )
+            .unwrap();
+
+        let (_, detail_lines) = s.get_inventory_transaction(&tx_id).unwrap().unwrap();
+        assert_eq!(detail_lines.len(), 2);
+        // Lines ordered by sort_order
+        assert_eq!(detail_lines[0].sku, "SKU-A");
+        assert_eq!(detail_lines[0].qty, 10);
+        assert_eq!(
+            detail_lines[0].barcode_scanned.as_deref(),
+            Some("BARCODE-A")
+        );
+        assert_eq!(detail_lines[1].sku, "SKU-B");
+        assert_eq!(detail_lines[1].qty, 5);
+        assert!(detail_lines[1].barcode_scanned.is_none());
+    }
+
+    #[test]
+    fn list_transactions_orders_by_created_at_desc() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-tord', 'Role', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) \
+             VALUES ('staff-tord', 's', 'hash', 'S', 'r-tord')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('p-tord', 'SKU-T', 'T', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('p-tord', ?1, 100)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let line = vec![InventoryTransactionLineInput {
+            sku: "SKU-T".into(),
+            product_name: "T".into(),
+            qty: 1,
+            delta: 0,
+            barcode_scanned: None,
+        }];
+        let tx1 = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_id,
+                "staff-tord",
+                "first",
+                &line,
+            )
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let tx2 = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_id,
+                "staff-tord",
+                "second",
+                &line,
+            )
+            .unwrap();
+
+        let all = s.list_inventory_transactions().unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].id.as_str(), tx2, "most recent first");
+        assert_eq!(all[1].id.as_str(), tx1);
+    }
+
+    #[test]
+    fn delete_nonexistent_threshold_succeeds() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Deleting a non-existent threshold should not error (DELETE with no match is a no-op)
+        s.delete_stock_threshold("nonexistent-id").unwrap();
+    }
+
+    #[test]
+    fn get_thresholds_for_location_with_none_returns_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = s
+            .create_inventory_location("Empty Loc", "store", "")
+            .unwrap();
+        let list = s.get_stock_thresholds(Some(&loc_id)).unwrap();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn create_transaction_without_stock_change_preserves_qty() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-d0', 'Role', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-d0', 's', 'hash', 'S', 'r-d0')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('p-d0', 'SKU-D0', 'D0', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('p-d0', ?1, 40)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let lines = vec![InventoryTransactionLineInput {
+            sku: "SKU-D0".into(),
+            product_name: "D0".into(),
+            qty: 10,
+            delta: 0, // zero delta — no stock change
+            barcode_scanned: None,
+        }];
+        s.create_inventory_transaction(
+            crate::inventory_transaction::InventoryTransactionType::StockCount,
+            &loc_id,
+            "staff-d0",
+            "zero delta audit",
+            &lines,
+        )
+        .unwrap();
+
+        // Stock should be unchanged
+        let stock: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = 'p-d0' AND location_id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock, 40, "zero-delta transaction should not change stock");
+    }
+
+    #[test]
+    fn start_shift_with_terminal_id_stores_terminal() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-term', 'Role', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) \
+             VALUES ('u-term', 'user', 'hash', 'User', 'r-term')",
+            [],
+        )
+        .unwrap();
+        let loc_id = s.create_inventory_location("Loc", "store", "").unwrap();
+
+        // Seed a terminal for the FK reference
+        conn.execute(
+            "INSERT INTO terminals (id, name, device_id, is_active, created_at, updated_at) \
+             VALUES ('term-1', 'Terminal 1', 'dev-term', 1, 'now', 'now')",
+            [],
+        )
+        .unwrap();
+
+        let shift = s
+            .start_inventory_shift("u-term", &loc_id, Some("term-1"), "with terminal")
+            .unwrap();
+        assert_eq!(shift.terminal_id.as_deref(), Some("term-1"));
+        assert_eq!(shift.notes, "with terminal");
+    }
+
+    #[test]
+    fn list_locations_returns_in_order_by_name() {
+        let conn = fresh();
+        let s = store(&conn);
+        let _c = s.create_inventory_location("Zebra", "store", "").unwrap();
+        let _a = s
+            .create_inventory_location("Alpha", "warehouse", "")
+            .unwrap();
+        let _m = s.create_inventory_location("Mike", "store", "").unwrap();
+
+        let locs = s.list_inventory_locations().unwrap();
+        // 2 seeded (canonical default + transit) + 3 new = 5
+        assert_eq!(locs.len(), 5);
+        // Our custom ones should be ordered: Alpha, Mike, Zebra (among the seeded ones)
+        let names: Vec<&str> = locs.iter().map(|l| l.name.as_str()).collect();
+        let alpha_pos = names.iter().position(|n| *n == "Alpha").unwrap();
+        let mike_pos = names.iter().position(|n| *n == "Mike").unwrap();
+        let zebra_pos = names.iter().position(|n| *n == "Zebra").unwrap();
+        assert!(alpha_pos < mike_pos, "Alpha should come before Mike");
+        assert!(mike_pos < zebra_pos, "Mike should come before Zebra");
+    }
 }

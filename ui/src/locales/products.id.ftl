@@ -134,6 +134,8 @@ product-mgmt-stock-placeholder =
 product-mgmt-no-category = — Tanpa Kategori —
 product-mgmt-col-type = Tipe
 product-mgmt-field-type = Tipe
+product-mgmt-alerts-title = Notifikasi Stok
+product-mgmt-alert-close = Tutup
 
 # ── Product Variants ──
 variant-mgmt-title = Varian — { $product }

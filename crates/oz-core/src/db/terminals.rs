@@ -486,4 +486,118 @@ mod tests {
         let err = store(&conn).delete_terminal("nope").unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
+
+    // ── Binding ──────────────────────────────────────────────────────
+
+    #[test]
+    fn update_terminal_binding_basic() {
+        let conn = fresh();
+        seed_terminals(&conn);
+        store(&conn)
+            .update_terminal_binding("term-1", "default", "instance-1", "sig-abc")
+            .unwrap();
+
+        let binding = store(&conn).get_terminal_binding("term-1").unwrap();
+        assert_eq!(
+            binding,
+            Some((
+                "default".to_string(),
+                "instance-1".to_string(),
+                "sig-abc".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn update_terminal_binding_overwrites() {
+        let conn = fresh();
+        seed_terminals(&conn);
+        store(&conn)
+            .update_terminal_binding("term-1", "default", "old-instance", "old-sig")
+            .unwrap();
+        store(&conn)
+            .update_terminal_binding("term-2", "default", "new-instance", "new-sig")
+            .unwrap();
+
+        let binding = store(&conn).get_terminal_binding("term-1").unwrap();
+        // Should NOT have changed term-2's update affected term-1
+        assert_eq!(
+            binding,
+            Some((
+                "default".to_string(),
+                "old-instance".to_string(),
+                "old-sig".to_string()
+            ))
+        );
+
+        let binding2 = store(&conn).get_terminal_binding("term-2").unwrap();
+        assert_eq!(
+            binding2,
+            Some((
+                "default".to_string(),
+                "new-instance".to_string(),
+                "new-sig".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn update_terminal_binding_not_found() {
+        let conn = fresh();
+        let err = store(&conn).update_terminal_binding("nope", "default", "i", "s");
+        assert!(matches!(err, Err(CoreError::NotFound { entity, .. }) if entity == "terminal"));
+    }
+
+    #[test]
+    fn get_terminal_binding_found() {
+        let conn = fresh();
+        seed_terminals(&conn);
+        store(&conn)
+            .update_terminal_binding("term-3", "default", "inst-kiosk", "sig-kiosk")
+            .unwrap();
+
+        let binding = store(&conn).get_terminal_binding("term-3").unwrap();
+        let (store_id, instance_id, sig) = binding.unwrap();
+        assert_eq!(store_id, "default");
+        assert_eq!(instance_id, "inst-kiosk");
+        assert_eq!(sig, "sig-kiosk");
+    }
+
+    #[test]
+    fn get_terminal_binding_on_unbound_terminal() {
+        let conn = fresh();
+        seed_terminals(&conn);
+        // term-1 has no binding set
+        let binding = store(&conn).get_terminal_binding("term-1").unwrap();
+        assert!(binding.is_none(), "unbound terminal should return None");
+    }
+
+    #[test]
+    fn get_terminal_binding_not_found() {
+        let conn = fresh();
+        let err = store(&conn).get_terminal_binding("nope");
+        assert!(matches!(err, Err(CoreError::NotFound { entity, .. }) if entity == "terminal"));
+    }
+
+    #[test]
+    fn clear_terminal_binding_removes() {
+        let conn = fresh();
+        seed_terminals(&conn);
+        store(&conn)
+            .update_terminal_binding("term-1", "default", "inst", "sig")
+            .unwrap();
+
+        // Clear it
+        store(&conn).clear_terminal_binding("term-1").unwrap();
+
+        let binding = store(&conn).get_terminal_binding("term-1").unwrap();
+        assert!(binding.is_none(), "binding should be cleared");
+    }
+
+    #[test]
+    fn clear_terminal_binding_not_found() {
+        let conn = fresh();
+        let err = store(&conn).clear_terminal_binding("nope");
+        assert!(matches!(err, Err(CoreError::NotFound { entity, .. }) if entity == "terminal"));
+    }
 }

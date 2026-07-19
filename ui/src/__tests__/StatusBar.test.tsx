@@ -48,7 +48,9 @@ function renderBar() {
 describe('StatusBar', () => {
   it('shows version string', () => {
     renderBar();
-    expect(screen.getByText(/v0\.0\.11/)).toBeTruthy();
+    // Version string comes from __APP_VERSION__ injected at build time
+    // Match any v0.0.x format for forward-compatibility
+    expect(screen.getByText(/v0\.0\.\d+/)).toBeTruthy();
   });
 
   it('shows connected dot when online', () => {

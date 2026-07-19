@@ -282,6 +282,8 @@ pub fn run() {
             commands::inventory::set_stock_threshold,
             commands::inventory::get_stock_thresholds,
             commands::inventory::delete_stock_threshold,
+            commands::inventory::active_stock_alerts_scoped,
+            commands::inventory::acknowledge_stock_alert_scoped,
             commands::inventory::finalize_sale,
             commands::inventory::void_pending_sale,
             commands::plugins::reload_plugins,

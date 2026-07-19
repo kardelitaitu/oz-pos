@@ -480,6 +480,16 @@ pub const ALL: &[Migration] = &[
         id: "095_held_carts_deduction_location.sql",
         sql: include_str!("../migrations/095_held_carts_deduction_location.sql"),
     },
+    // 096: ADR-20 — three-phase sale lifecycle with stock reservation
+    // before payment capture. Adds 'pending' to the sales.status CHECK
+    // constraint, plus pending_expires_at, payment_reference, and
+    // captured_at columns. Table is rebuilt because SQLite cannot ALTER
+    // CHECK constraints. Also adds a partial index on pending_expires_at
+    // for the stale-pending-sale reaper worker.
+    Migration {
+        id: "096_pending_sale_status.sql",
+        sql: include_str!("../migrations/096_pending_sale_status.sql"),
+    },
 ];
 
 /// Apply every unapplied migration. Convenience wrapper around

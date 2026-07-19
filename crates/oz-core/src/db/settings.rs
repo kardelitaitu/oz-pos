@@ -513,4 +513,103 @@ mod tests {
         let result = s.delete_exchange_rate("bad-id");
         assert!(matches!(result, Err(CoreError::NotFound { .. })));
     }
+
+    // ── Store Address ─────────────────────────────────────────────────
+
+    #[test]
+    fn store_address_default_none() {
+        let conn = fresh();
+        let s = store(&conn);
+        assert_eq!(s.get_store_address().unwrap(), None);
+    }
+
+    #[test]
+    fn store_address_set_and_get() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_store_address("123 Main St, Springfield").unwrap();
+        assert_eq!(
+            s.get_store_address().unwrap(),
+            Some("123 Main St, Springfield".into())
+        );
+    }
+
+    #[test]
+    fn store_address_overwrites() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_store_address("Old Address").unwrap();
+        s.set_store_address("New Address").unwrap();
+        assert_eq!(s.get_store_address().unwrap(), Some("New Address".into()));
+    }
+
+    #[test]
+    fn store_address_special_chars() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_store_address("Café & Bakery — 中文 Español\nFloor 2")
+            .unwrap();
+        let addr = s.get_store_address().unwrap();
+        assert!(addr.as_deref().unwrap().contains("Café"));
+        assert!(addr.as_deref().unwrap().contains("中文"));
+        assert!(addr.as_deref().unwrap().contains("Español"));
+    }
+
+    // ── Currency Format Settings ───────────────────────────────────────
+
+    #[test]
+    fn currency_format_default() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Default should be "symbol"
+        assert_eq!(s.get_currency_format().unwrap(), "symbol");
+    }
+
+    #[test]
+    fn currency_format_set_and_get() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_currency_format("code").unwrap();
+        assert_eq!(s.get_currency_format().unwrap(), "code");
+    }
+
+    #[test]
+    fn currency_symbol_position_default() {
+        let conn = fresh();
+        let s = store(&conn);
+        assert_eq!(s.get_currency_symbol_position().unwrap(), "prefix");
+    }
+
+    #[test]
+    fn currency_separators_roundtrip() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_currency_decimal_separator("comma").unwrap();
+        s.set_currency_thousands_separator("space").unwrap();
+        assert_eq!(s.get_currency_decimal_separator().unwrap(), "comma");
+        assert_eq!(s.get_currency_thousands_separator().unwrap(), "space");
+    }
+
+    #[test]
+    fn setting_overwrite_with_empty_string() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_setting("greeting", "hello").unwrap();
+        s.set_setting("greeting", "").unwrap();
+        assert_eq!(
+            s.get_setting("greeting").unwrap(),
+            Some("".into()),
+            "empty string should be a valid setting value"
+        );
+    }
+
+    #[test]
+    fn setting_with_long_value() {
+        let conn = fresh();
+        let s = store(&conn);
+        let long = "a".repeat(10_000);
+        s.set_setting("long.key", &long).unwrap();
+        let got = s.get_setting("long.key").unwrap();
+        assert_eq!(got, Some(long));
+    }
 }

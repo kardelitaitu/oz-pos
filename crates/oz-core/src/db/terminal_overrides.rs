@@ -303,4 +303,92 @@ mod tests {
         let overrides = s.list_terminal_overrides("term-2").unwrap();
         assert_eq!(overrides.len(), 1);
     }
+
+    // ── Additional edge-case tests ─────────────────────────────────
+
+    #[test]
+    fn list_overrides_ordered_by_feature_asc() {
+        let conn = fresh();
+        seed_terminal(&conn);
+        let s = store(&conn);
+        s.set_terminal_override("term-1", "z-feature", true)
+            .unwrap();
+        s.set_terminal_override("term-1", "a-feature", true)
+            .unwrap();
+        s.set_terminal_override("term-1", "m-feature", true)
+            .unwrap();
+
+        let overrides = s.list_terminal_overrides("term-1").unwrap();
+        assert_eq!(overrides.len(), 3);
+        assert_eq!(overrides[0].feature, "a-feature");
+        assert_eq!(overrides[1].feature, "m-feature");
+        assert_eq!(overrides[2].feature, "z-feature");
+    }
+
+    #[test]
+    fn set_override_multiple_features() {
+        let conn = fresh();
+        seed_terminal(&conn);
+        let s = store(&conn);
+        s.set_terminal_override("term-1", "a", true).unwrap();
+        s.set_terminal_override("term-1", "b", false).unwrap();
+        s.set_terminal_override("term-1", "c", true).unwrap();
+
+        let overrides = s.list_terminal_overrides("term-1").unwrap();
+        assert_eq!(overrides.len(), 3);
+    }
+
+    #[test]
+    fn clear_overrides_nonexistent_terminal_is_noop() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.clear_terminal_overrides("no-such-terminal").unwrap();
+    }
+
+    #[test]
+    fn set_override_update_timestamp_changes() {
+        let conn = fresh();
+        seed_terminal(&conn);
+        let s = store(&conn);
+        s.set_terminal_override("term-1", "feature-x", true)
+            .unwrap();
+        let original = s
+            .get_terminal_override("term-1", "feature-x")
+            .unwrap()
+            .unwrap();
+        let orig_updated = original.updated_at.clone();
+
+        // Sleep 1ms to ensure timestamp change
+        std::thread::sleep(std::time::Duration::from_millis(2));
+
+        s.set_terminal_override("term-1", "feature-x", false)
+            .unwrap();
+        let updated = s
+            .get_terminal_override("term-1", "feature-x")
+            .unwrap()
+            .unwrap();
+        assert_ne!(updated.updated_at, orig_updated);
+        assert!(!updated.enabled);
+    }
+
+    #[test]
+    fn list_overrides_for_nonexistent_terminal_returns_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let overrides = s.list_terminal_overrides("no-such-terminal").unwrap();
+        assert!(overrides.is_empty());
+    }
+
+    #[test]
+    fn delete_override_wrong_terminal_returns_not_found() {
+        let conn = fresh();
+        seed_terminal(&conn);
+        let s = store(&conn);
+        s.set_terminal_override("term-1", "feature-x", true)
+            .unwrap();
+        let err = s
+            .delete_terminal_override("term-2", "feature-x")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
 }

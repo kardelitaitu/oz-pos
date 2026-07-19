@@ -677,4 +677,175 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "purchase_order"));
     }
+
+    // ── Additional edge cases (coverage expansion) ──────────────────
+
+    #[test]
+    fn create_po_multiple_lines() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        let lines = vec![
+            CreatePoLineInput {
+                sku: "SKU-001".into(),
+                product_name: "Widget A".into(),
+                qty: 2,
+                unit_cost_minor: 1000,
+            },
+            CreatePoLineInput {
+                sku: "SKU-002".into(),
+                product_name: "Widget B".into(),
+                qty: 3,
+                unit_cost_minor: 2000,
+            },
+        ];
+
+        let po = store(&conn)
+            .create_purchase_order(
+                "PO-MULTI",
+                "sup-po",
+                "2025-03-01",
+                "multi line",
+                None,
+                &lines,
+            )
+            .unwrap();
+        assert_eq!(po.lines.len(), 2);
+        assert_eq!(po.lines[0].sku, "SKU-001");
+        assert_eq!(po.lines[1].sku, "SKU-002");
+        // subtotal = (2*1000) + (3*2000) = 8000
+        assert_eq!(po.order.subtotal_minor, 8000);
+        assert_eq!(po.order.total_minor, 8000);
+
+        // Verify via list and get
+        let fetched = store(&conn)
+            .get_purchase_order(&po.order.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(fetched.lines.len(), 2);
+
+        let listed = store(&conn).list_purchase_orders().unwrap();
+        assert_eq!(listed[0].lines.len(), 2);
+    }
+
+    #[test]
+    fn create_po_empty_lines() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        let po = store(&conn)
+            .create_purchase_order("PO-EMPTY", "sup-po", "", "no items", None, &[])
+            .unwrap();
+        assert!(po.lines.is_empty());
+        assert_eq!(po.order.subtotal_minor, 0);
+        assert_eq!(po.order.status, "draft");
+    }
+
+    #[test]
+    fn create_po_negative_unit_cost_rejected() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        let lines = vec![CreatePoLineInput {
+            sku: "SKU-001".into(),
+            product_name: "Widget".into(),
+            qty: 1,
+            unit_cost_minor: -100,
+        }];
+        let err = store(&conn)
+            .create_purchase_order("PO-NEG-COST", "sup-po", "", "", None, &lines)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "unit_cost_minor"));
+    }
+
+    #[test]
+    fn create_po_with_notes() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        let lines = vec![CreatePoLineInput {
+            sku: "SKU-001".into(),
+            product_name: "Widget".into(),
+            qty: 1,
+            unit_cost_minor: 500,
+        }];
+        let po = store(&conn)
+            .create_purchase_order(
+                "PO-NOTES",
+                "sup-po",
+                "2025-04-01",
+                "Rush order — urgent restock",
+                None,
+                &lines,
+            )
+            .unwrap();
+        assert_eq!(po.order.notes, "Rush order — urgent restock");
+        assert_eq!(po.order.expected_date, "2025-04-01");
+
+        // Verify round-trip
+        let fetched = store(&conn)
+            .get_purchase_order(&po.order.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(fetched.order.notes, "Rush order — urgent restock");
+        assert_eq!(fetched.order.expected_date, "2025-04-01");
+    }
+
+    #[test]
+    fn create_po_with_created_by() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        // Seed role + user so FK constraints are satisfied
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-po', 'procurement', 'PO mgr', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) VALUES
+                ('user-42', 'procurement', 'h', 'Procurement', 'role-po', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        ).unwrap();
+
+        let po = store(&conn)
+            .create_purchase_order(
+                "PO-CREATOR",
+                "sup-po",
+                "",
+                "created by user-42",
+                Some("user-42"),
+                &[],
+            )
+            .unwrap();
+        assert_eq!(po.order.created_by.as_deref(), Some("user-42"));
+
+        // Verify round-trip
+        let fetched = store(&conn)
+            .get_purchase_order(&po.order.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(fetched.order.created_by.as_deref(), Some("user-42"));
+    }
+
+    #[test]
+    fn po_list_orders_descending_by_date() {
+        let conn = fresh();
+        let sid = seed_supplier(&conn);
+
+        // Create two POs, then verify newest is first
+        let _po_a = store(&conn)
+            .create_purchase_order("PO-DESC-A", &sid, "", "older", None, &[])
+            .unwrap();
+
+        // Sleep briefly so timestamps differ
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let _po_b = store(&conn)
+            .create_purchase_order("PO-DESC-B", &sid, "", "newer", None, &[])
+            .unwrap();
+
+        let list = store(&conn).list_purchase_orders().unwrap();
+        assert_eq!(list.len(), 2);
+        // PO B (newer) should be first
+        assert_eq!(list[0].order.po_number, "PO-DESC-B");
+        assert_eq!(list[1].order.po_number, "PO-DESC-A");
+        assert!(list[0].order.created_at >= list[1].order.created_at);
+    }
 }

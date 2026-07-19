@@ -274,7 +274,7 @@ fn receive_transfer_increments_inventory_and_sets_received() {
 }
 
 #[test]
-fn partial_receive_stays_in_transit() {
+fn partial_receive_writes_received_partial_status() {
     let conn = setup();
     seed_user(&conn, "staff-1");
     seed_user(&conn, "staff-2");
@@ -298,8 +298,8 @@ fn partial_receive_stays_in_transit() {
         )
         .unwrap();
 
-    assert_eq!(result.status, "in_transit");
-    // Only 4 received, 10 total — status stays in_transit.
+    assert_eq!(result.status, "received_partial");
+    // Only 4 received of 10 total — status becomes received_partial per ADR-18 §34.
 }
 
 #[test]

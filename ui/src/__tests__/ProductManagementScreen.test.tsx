@@ -55,6 +55,16 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ session: { user_id: 'test-user' }, logout: vi.fn() }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: 'mock-session-token',
+    currentInstanceId: 'inst-1',
+    swapSessionToken: vi.fn(),
+  }),
+  useWorkspaceScope: () => null,
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));

@@ -623,4 +623,162 @@ mod tests {
             .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "customer"));
     }
+
+    // ── Additional edge-case tests ─────────────────────────────────
+
+    #[test]
+    fn list_loyalty_accounts_ordered_by_points() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_customer(&conn, "cust-2", "Bob");
+        seed_customer(&conn, "cust-3", "Charlie");
+        seed_sale(&conn, "sale-1");
+        seed_sale(&conn, "sale-2");
+
+        let s = store(&conn);
+        // Create accounts
+        s.get_or_create_loyalty_account("cust-1").unwrap();
+        s.get_or_create_loyalty_account("cust-2").unwrap();
+        s.get_or_create_loyalty_account("cust-3").unwrap();
+
+        // Earn different point amounts
+        s.earn_points("cust-1", "sale-1", 5000).unwrap(); // 500 points
+        s.earn_points("cust-2", "sale-2", 10000).unwrap(); // 1000 points
+
+        let accounts = s.list_loyalty_accounts().unwrap();
+        assert_eq!(accounts.len(), 3);
+        // ORDER BY lifetime_points DESC: cust-2 (1000) first, cust-1 (500) second, cust-3 (0) third
+        assert_eq!(accounts[0].account.customer_id, "cust-2");
+        assert_eq!(accounts[1].account.customer_id, "cust-1");
+        assert_eq!(accounts[2].account.customer_id, "cust-3");
+    }
+
+    #[test]
+    fn list_loyalty_accounts_empty() {
+        let conn = fresh();
+        // Seed a customer but don't create any loyalty accounts
+        seed_customer(&conn, "cust-1", "Alice");
+        let accounts = store(&conn).list_loyalty_accounts().unwrap();
+        assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn earn_points_validation_zero_total() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        // total_minor = 0 → 0 points → Validation error
+        let err = store(&conn).earn_points("cust-1", "sale-1", 0).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "total_minor"));
+    }
+
+    #[test]
+    fn earn_points_small_total_rounds_to_zero() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        // total_minor = 9 → 9 * 10 / 100 * 1.0 = 0.9 → rounds to 0 → Validation error
+        let err = store(&conn).earn_points("cust-1", "sale-1", 9).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "total_minor"));
+    }
+
+    #[test]
+    fn redeem_points_zero_returns_validation_error() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        seed_sale(&conn, "sale-2");
+        store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
+
+        let err = store(&conn)
+            .redeem_points("cust-1", 0, "sale-2")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "points"));
+    }
+
+    #[test]
+    fn redeem_points_negative_returns_validation_error() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        seed_sale(&conn, "sale-2");
+        store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
+
+        let err = store(&conn)
+            .redeem_points("cust-1", -50, "sale-2")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "points"));
+    }
+
+    #[test]
+    fn redeem_points_no_account_returns_not_found() {
+        let conn = fresh();
+        seed_sale(&conn, "sale-1");
+        let err = store(&conn)
+            .redeem_points("nonexistent", 100, "sale-1")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "loyalty_account"));
+    }
+
+    #[test]
+    fn update_tier_not_found() {
+        let conn = fresh();
+        let err = store(&conn)
+            .update_tier("nonexistent", "No Tier", 0, 10, 1.0, "#000")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "loyalty_tier"));
+    }
+
+    #[test]
+    fn earn_points_updates_tier_automatically() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        seed_sale(&conn, "sale-2");
+
+        let s = store(&conn);
+        s.get_or_create_loyalty_account("cust-1").unwrap();
+
+        // Earn enough points to reach Silver tier (min_points = 200 for Silver)
+        // 2000 * 10 / 100 * 1.0 = 200 points → should auto-upgrade to Silver
+        s.earn_points("cust-1", "sale-1", 2000).unwrap();
+
+        let details = s.get_loyalty_account("cust-1").unwrap().unwrap();
+        assert_eq!(details.account.tier_id.as_deref(), Some("tier-silver"));
+        assert!(details.tier.is_some());
+        assert_eq!(details.tier.as_ref().unwrap().name, "Silver");
+    }
+
+    #[test]
+    fn earn_points_multiple_stacked() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        seed_sale(&conn, "sale-2");
+        seed_sale(&conn, "sale-3");
+
+        let s = store(&conn);
+        s.get_or_create_loyalty_account("cust-1").unwrap();
+
+        // sale-1: Bronze 1.0x → 1000*10/100=100 points. Upgrades to Silver.
+        // sale-2: Silver 1.25x → 2000*10/100*1.25=250 points. Total: 350.
+        // sale-3: Silver 1.25x → 3000*10/100*1.25=375 points. Total: 725.
+        s.earn_points("cust-1", "sale-1", 1000).unwrap();
+        s.earn_points("cust-1", "sale-2", 2000).unwrap();
+        s.earn_points("cust-1", "sale-3", 3000).unwrap();
+
+        let details = s.get_loyalty_account("cust-1").unwrap().unwrap();
+        assert_eq!(details.account.points, 725);
+        assert_eq!(details.account.lifetime_points, 725);
+        // Should have 3 recent transactions
+        assert_eq!(details.recent_transactions.len(), 3);
+    }
 }

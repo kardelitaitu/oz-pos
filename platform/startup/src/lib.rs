@@ -136,6 +136,10 @@ pub fn init_module_system(
     }
 
     info!("module system initialised with event bus handlers");
+
+    // Spawn the stale-pending-sale reaper as a background daemon.
+    init_pending_sale_reaper(db_path);
+
     Ok(())
 }
 
@@ -166,6 +170,45 @@ pub fn spawn_daemon(
         // causes the watchdog to receive `Err(RecvError)`.
         fut.await;
         let _ = tx.send(());
+    });
+}
+
+/// Spawn the ADR-20 stale-pending-sale reaper as a periodic background task.
+///
+/// Every 60 seconds, queries for pending sales whose `pending_expires_at`
+/// has passed and auto-voids them, crediting stock back to original
+/// deduction locations. Uses a separate WAL-mode connection so the
+/// background task doesn't block or get blocked by the main connection.
+///
+/// # Panics
+///
+/// Panics if the database at `db_path` cannot be opened.
+pub fn init_pending_sale_reaper(db_path: &std::path::Path) {
+    use oz_core::db::Store;
+    use std::time::Duration;
+
+    let path = db_path.to_owned();
+    spawn_daemon("pending-sale-reaper", async move {
+        // Create a dedicated connection for the reaper.
+        let conn = Connection::open(&path).expect("pending sale reaper: open DB");
+        conn.pragma_update(None, "foreign_keys", "ON").ok();
+        conn.pragma_update(None, "journal_mode", "WAL").ok();
+
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+
+            let store = Store::new(&conn);
+            match store.reap_stale_pending_sales() {
+                Ok(count) => {
+                    if count > 0 {
+                        tracing::info!("pending sale reaper: voided {count} stale sale(s)");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("pending sale reaper: error: {e}");
+                }
+            }
+        }
     });
 }
 

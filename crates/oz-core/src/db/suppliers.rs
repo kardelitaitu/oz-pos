@@ -471,4 +471,159 @@ mod tests {
         assert_eq!(list[1].name, "Beta Ltd");
         assert_eq!(list[2].name, "Charlie Co");
     }
+
+    // ── Additional edge cases (coverage expansion) ──────────────────
+
+    #[test]
+    fn supplier_update_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let created = s
+            .create_supplier("SUP400", "Valid Co", "", "", "", "", "", "", "")
+            .unwrap();
+
+        let err = s
+            .update_supplier(
+                &created.id,
+                "SUP400",
+                "", // empty name
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "active",
+            )
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "name", .. }));
+    }
+
+    #[test]
+    fn supplier_update_empty_code_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let created = s
+            .create_supplier("SUP401", "Valid Co", "", "", "", "", "", "", "")
+            .unwrap();
+
+        let err = s
+            .update_supplier(
+                &created.id,
+                "  ", // empty code after trim
+                "Valid Co",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "active",
+            )
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "code", .. }));
+    }
+
+    #[test]
+    fn supplier_special_chars_in_contact() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Unicode, emoji, international characters in contact fields
+        let supplier = s
+            .create_supplier(
+                "SUP-UNI",
+                "Usaha Sejahtera 🌟",
+                "Sari Dewi à la carte",
+                "+62-821-2345-6789 ☎",
+                "sari@usaha.sejahtera.id",
+                "Jl. カフェ No. 5, 北区",
+                "ID-PKP-123.456",
+                "Net 30",
+                "Предпочтение",
+            )
+            .unwrap();
+        assert_eq!(supplier.name, "Usaha Sejahtera 🌟");
+        assert_eq!(supplier.contact_person, "Sari Dewi à la carte");
+        assert_eq!(supplier.phone, "+62-821-2345-6789 ☎");
+        assert_eq!(supplier.email, "sari@usaha.sejahtera.id");
+        assert_eq!(supplier.address, "Jl. カフェ No. 5, 北区");
+        assert_eq!(supplier.tax_id, "ID-PKP-123.456");
+    }
+
+    #[test]
+    fn supplier_very_long_notes() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // 1000-char notes field
+        let long_notes = "x".repeat(1000);
+        let supplier = s
+            .create_supplier(
+                "SUP-LONG",
+                "Long Notes Co",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                &long_notes,
+            )
+            .unwrap();
+        assert_eq!(supplier.notes.len(), 1000);
+
+        // Round-trip
+        let fetched = s.get_supplier(&supplier.id).unwrap().unwrap();
+        assert_eq!(fetched.notes.len(), 1000);
+    }
+
+    #[test]
+    fn supplier_update_preserves_unchanged_fields() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let created = s
+            .create_supplier(
+                "SUP500",
+                "Original Co",
+                "Alice",
+                "555-0100",
+                "alice@orig.com",
+                "123 Main",
+                "TAX-500",
+                "Net 30",
+                "First",
+            )
+            .unwrap();
+
+        // Update only the name, keep everything else
+        let updated = s
+            .update_supplier(
+                &created.id,
+                "SUP500",
+                "Updated Co",
+                "Alice",          // same
+                "555-0100",       // same
+                "alice@orig.com", // same
+                "123 Main",       // same
+                "TAX-500",        // same
+                "Net 30",         // same
+                "First",          // same
+                "active",
+            )
+            .unwrap();
+        assert_eq!(updated.name, "Updated Co");
+        assert_eq!(updated.contact_person, "Alice");
+        assert_eq!(updated.phone, "555-0100");
+        assert_eq!(updated.email, "alice@orig.com");
+        assert_eq!(updated.address, "123 Main");
+        assert_eq!(updated.tax_id, "TAX-500");
+        assert_eq!(updated.payment_terms, "Net 30");
+        assert_eq!(updated.notes, "First");
+    }
 }

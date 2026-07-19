@@ -125,6 +125,8 @@ product-mgmt-stock-placeholder =
 product-mgmt-no-category = — No category —
 product-mgmt-col-type = Type
 product-mgmt-field-type = Type
+product-mgmt-alerts-title = Stock Alerts
+product-mgmt-alert-close = Close
 
 # Product Variants
 variant-mgmt-title = Variants — { $product }

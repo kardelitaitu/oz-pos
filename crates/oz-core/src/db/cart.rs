@@ -421,4 +421,168 @@ mod tests {
         let loc = s.get_active_cart_deduction_location(&id).unwrap();
         assert!(loc.is_none());
     }
+
+    // ── Additional edge cases ─────────────────────────────────────
+
+    #[test]
+    fn override_location_on_existing_cart_sets_override_at() {
+        let conn = fresh();
+        let s = store(&conn);
+        let cart = sample_cart();
+        let id = cart.id();
+        let loc_id = "01926b3a-0000-7000-8000-000000000001";
+
+        s.save_active_cart(&cart, Some(loc_id)).unwrap();
+
+        // Before override: override_at should be None.
+        let (_, _, before) = s
+            .get_active_cart_deduction_location_info(&id)
+            .unwrap()
+            .expect("cart with lock should have info");
+        assert!(before.is_none(), "no override before call");
+
+        // Override.
+        s.override_active_cart_deduction_location(&id).unwrap();
+
+        // After override: override_at should be Some.
+        let (_, _, after) = s
+            .get_active_cart_deduction_location_info(&id)
+            .unwrap()
+            .expect("cart with lock should have info");
+        assert!(after.is_some(), "override timestamp should be set");
+    }
+
+    #[test]
+    fn override_location_nonexistent_cart_fails() {
+        let conn = fresh();
+        let s = store(&conn);
+        let id = CartId::new();
+        let err = s.override_active_cart_deduction_location(&id).unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "active_cart"));
+    }
+
+    #[test]
+    fn deduction_location_info_none_for_cart_without_lock() {
+        let conn = fresh();
+        let s = store(&conn);
+        let cart = sample_cart();
+        let id = cart.id();
+
+        s.save_active_cart(&cart, None).unwrap();
+        let info = s.get_active_cart_deduction_location_info(&id).unwrap();
+        assert!(info.is_none(), "cart without lock has no location info");
+    }
+
+    #[test]
+    fn deduction_location_info_returns_location_name() {
+        let conn = fresh();
+        let s = store(&conn);
+        let cart = sample_cart();
+        let id = cart.id();
+        let loc_id = "01926b3a-0000-7000-8000-000000000001";
+
+        s.save_active_cart(&cart, Some(loc_id)).unwrap();
+        let (lid, name, _) = s
+            .get_active_cart_deduction_location_info(&id)
+            .unwrap()
+            .expect("cart with lock should have info");
+        assert_eq!(lid, loc_id);
+        // The default location is seeded in migration 078 with name "Default".
+        assert!(!name.is_empty(), "location name should be non-empty");
+    }
+
+    #[test]
+    fn ensure_lock_fails_for_nonexistent_cart() {
+        let conn = fresh();
+        let s = store(&conn);
+        let id = CartId::new();
+        let result = s.ensure_cart_deduction_location_lock(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn multiple_carts_isolated_location_locks() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = "01926b3a-0000-7000-8000-000000000001";
+
+        let cart_a = sample_cart();
+        let id_a = cart_a.id();
+        s.save_active_cart(&cart_a, Some(loc_id)).unwrap();
+
+        let cart_b = sample_cart();
+        let id_b = cart_b.id();
+        s.save_active_cart(&cart_b, None).unwrap();
+
+        // Cart A has lock, Cart B does not.
+        assert!(s.ensure_cart_deduction_location_lock(&id_a).is_ok());
+        assert!(s.ensure_cart_deduction_location_lock(&id_b).is_err());
+    }
+
+    #[test]
+    fn list_active_carts_excludes_deleted() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let cart_a = Cart::new(usd());
+        let id_a = cart_a.id();
+        s.save_active_cart(&cart_a, None).unwrap();
+
+        let cart_b = Cart::new(usd());
+        let id_b = cart_b.id();
+        s.save_active_cart(&cart_b, None).unwrap();
+
+        s.delete_active_cart(&id_a).unwrap();
+        let ids = s.list_active_carts().unwrap();
+        assert_eq!(ids.len(), 1);
+        assert_eq!(ids[0], id_b);
+    }
+
+    #[test]
+    fn save_multiple_carts_all_listed() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let ids: Vec<CartId> = (0..5)
+            .map(|_| {
+                let c = Cart::new(usd());
+                let id = c.id();
+                s.save_active_cart(&c, None).unwrap();
+                id
+            })
+            .collect();
+
+        let listed = s.list_active_carts().unwrap();
+        assert_eq!(listed.len(), 5);
+        for id in &ids {
+            assert!(listed.contains(id), "cart {id} should be in list");
+        }
+    }
+
+    #[test]
+    fn save_cart_with_location_override_then_check_info() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = "01926b3a-0000-7000-8000-000000000001";
+
+        let cart = Cart::new(usd());
+        let id = cart.id();
+        s.save_active_cart(&cart, Some(loc_id)).unwrap();
+
+        // Override twice to verify timestamp updates.
+        s.override_active_cart_deduction_location(&id).unwrap();
+        let (_, _, t1) = s
+            .get_active_cart_deduction_location_info(&id)
+            .unwrap()
+            .expect("info exists");
+
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        s.override_active_cart_deduction_location(&id).unwrap();
+        let (_, _, t2) = s
+            .get_active_cart_deduction_location_info(&id)
+            .unwrap()
+            .expect("info exists");
+
+        assert_ne!(t1, t2, "second override should update timestamp");
+    }
 }

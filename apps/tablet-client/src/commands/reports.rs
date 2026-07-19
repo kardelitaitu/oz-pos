@@ -87,6 +87,7 @@ pub async fn get_hourly_heatmap(
 
 #[command]
 /// Get low stock alerts.
+#[allow(deprecated)]
 pub async fn get_low_stock_alerts(
     state: State<'_, AppState>,
     threshold: i64,

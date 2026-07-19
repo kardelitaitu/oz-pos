@@ -5,7 +5,11 @@ use crate::state::AppState;
 use oz_core::{
     InventoryLocation, InventoryShift, InventoryTransaction, InventoryTransactionLine,
     StockThreshold, Store, WorkspaceInventoryLocation,
-    db::inventory::InventoryTransactionLineInput, inventory_transaction::InventoryTransactionType,
+    db::inventory::InventoryTransactionLineInput,
+    inventory_transaction::InventoryTransactionType,
+    location_resolver::{
+        WorkspaceLocationBinding, get_workspace_locations, invalidate_location_cache,
+    },
 };
 use tauri::{State, command};
 
@@ -96,6 +100,37 @@ pub async fn deactivate_inventory_location(
     let store = Store::new(&db);
 
     store.deactivate_inventory_location(&id)?;
+    Ok(())
+}
+
+/// Resolve locations bound to a workspace instance (unified resolver ADR-19 §10).
+#[command]
+pub async fn get_workspace_locations_scoped(
+    session_token: String,
+    instance_id: String,
+    type_key: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkspaceLocationBinding>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let binding = get_workspace_locations(&db, &instance_id, &type_key)?;
+    Ok(binding)
+}
+
+/// Invalidate the location resolver cache.
+#[command]
+pub async fn invalidate_location_cache_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let _session = state.resolve_session(&session_token)?;
+    invalidate_location_cache();
     Ok(())
 }
 
@@ -369,6 +404,71 @@ pub async fn delete_stock_threshold(
     let store = Store::new(&db);
 
     store.delete_stock_threshold(&id)?;
+    Ok(())
+}
+
+/// Get per-location low stock alerts.
+#[command]
+pub async fn get_low_stock_alerts_at_location_scoped(
+    session_token: String,
+    location_id: String,
+    default_threshold: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_core::db::reports::LowStockAlert>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let alerts = store.low_stock_alerts_at_location(&location_id, default_threshold)?;
+    Ok(alerts)
+}
+
+// ── Stock Alerts ─────────────────────────────────────────────────────
+
+/// Get active stock alerts for a location (enriched with product SKU/name).
+#[command]
+pub async fn active_stock_alerts_scoped(
+    session_token: String,
+    location_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_core::db::reports::StockAlertEvent>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    let alerts = store.active_stock_alerts(&location_id)?;
+    Ok(alerts)
+}
+
+/// Acknowledge a stock alert event (records who acknowledged it).
+#[command]
+pub async fn acknowledge_stock_alert_scoped(
+    session_token: String,
+    alert_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    store.acknowledge_stock_alert(&alert_id, &session.user_id)?;
     Ok(())
 }
 

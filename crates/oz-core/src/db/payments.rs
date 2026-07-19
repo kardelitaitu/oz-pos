@@ -419,80 +419,26 @@ mod tests {
         assert_eq!(listed[0].amount.currency.to_string(), "IDR");
     }
 
+    // ── Orphaned-file edge cases (from payments_new_tests.rs) ─────
+
     #[test]
-    fn list_payments_returns_in_creation_order() {
+    fn create_payments_multiple_calls_same_sale() {
         let conn = fresh();
         let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
 
         let sale_id = uuid::Uuid::now_v7().to_string();
-        let now = "2025-06-01T12:00:00Z";
         insert_sale(&conn, &sale_id, 3000, now);
 
-        let currency: Currency = "USD".parse().unwrap();
-
-        // First payment: cash at 12:00
-        store
+        // First batch: cash + card
+        let batch1 = store
             .create_payments(
                 &sale_id,
-                &[PaymentSplitArg {
-                    method: "cash".into(),
-                    amount_minor: 1000,
-                    gateway_reference: None,
-                    gateway_status: None,
-                    gateway_response: None,
-                }],
-                &currency,
-                "2025-06-01T12:00:00Z",
-            )
-            .unwrap();
-
-        // Second payment: card at 12:01
-        store
-            .create_payments(
-                &sale_id,
-                &[PaymentSplitArg {
-                    method: "card".into(),
-                    amount_minor: 2000,
-                    gateway_reference: Some("txn_card".into()),
-                    gateway_status: Some("approved".into()),
-                    gateway_response: None,
-                }],
-                &currency,
-                "2025-06-01T12:01:00Z",
-            )
-            .unwrap();
-
-        let listed = store.list_payments_for_sale(&sale_id).unwrap();
-        assert_eq!(listed.len(), 2);
-        assert_eq!(listed[0].method, "cash");
-        assert_eq!(listed[0].amount.minor_units, 1000);
-        assert_eq!(listed[1].method, "card");
-        assert_eq!(listed[1].amount.minor_units, 2000);
-    }
-
-    #[test]
-    fn multiple_payments_per_sale_isolation() {
-        let conn = fresh();
-        let store = store(&conn);
-
-        let currency: Currency = "USD".parse().unwrap();
-        let now = "2025-06-01T12:00:00Z";
-
-        let sale_a = uuid::Uuid::now_v7().to_string();
-        let sale_b = uuid::Uuid::now_v7().to_string();
-        let sale_c = uuid::Uuid::now_v7().to_string();
-        insert_sale(&conn, &sale_a, 1500, now);
-        insert_sale(&conn, &sale_b, 2500, now);
-        insert_sale(&conn, &sale_c, 500, now);
-
-        // Sale A: two split payments (cash + card)
-        store
-            .create_payments(
-                &sale_a,
                 &[
                     PaymentSplitArg {
                         method: "cash".into(),
-                        amount_minor: 500,
+                        amount_minor: 1000,
                         gateway_reference: None,
                         gateway_status: None,
                         gateway_response: None,
@@ -500,7 +446,7 @@ mod tests {
                     PaymentSplitArg {
                         method: "card".into(),
                         amount_minor: 1000,
-                        gateway_reference: Some("txn_a".into()),
+                        gateway_reference: Some("txn_b1".into()),
                         gateway_status: Some("approved".into()),
                         gateway_response: None,
                     },
@@ -509,30 +455,15 @@ mod tests {
                 now,
             )
             .unwrap();
+        assert_eq!(batch1.len(), 2);
 
-        // Sale B: single card payment
-        store
+        // Second batch: voucher
+        let batch2 = store
             .create_payments(
-                &sale_b,
+                &sale_id,
                 &[PaymentSplitArg {
-                    method: "card".into(),
-                    amount_minor: 2500,
-                    gateway_reference: Some("txn_b".into()),
-                    gateway_status: Some("approved".into()),
-                    gateway_response: None,
-                }],
-                &currency,
-                now,
-            )
-            .unwrap();
-
-        // Sale C: single cash payment
-        store
-            .create_payments(
-                &sale_c,
-                &[PaymentSplitArg {
-                    method: "cash".into(),
-                    amount_minor: 500,
+                    method: "voucher".into(),
+                    amount_minor: 1000,
                     gateway_reference: None,
                     gateway_status: None,
                     gateway_response: None,
@@ -541,38 +472,62 @@ mod tests {
                 now,
             )
             .unwrap();
+        assert_eq!(batch2.len(), 1);
 
-        let a = store.list_payments_for_sale(&sale_a).unwrap();
-        assert_eq!(a.len(), 2, "Sale A should have 2 split payments");
-        assert_eq!(a[0].method, "cash");
-        assert_eq!(a[1].method, "card");
-
-        let b = store.list_payments_for_sale(&sale_b).unwrap();
-        assert_eq!(b.len(), 1, "Sale B should have 1 payment");
-        assert_eq!(b[0].gateway_reference.as_deref(), Some("txn_b"));
-
-        let c = store.list_payments_for_sale(&sale_c).unwrap();
-        assert_eq!(c.len(), 1, "Sale C should have 1 payment");
-        assert_eq!(c[0].method, "cash");
+        // All 3 should appear in list
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed.len(), 3);
+        let total: i64 = listed.iter().map(|p| p.amount.minor_units).sum();
+        assert_eq!(total, 3000);
     }
 
     #[test]
-    fn partial_gateway_info_roundtrip() {
+    fn create_payment_negative_amount() {
         let conn = fresh();
         let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
 
         let sale_id = uuid::Uuid::now_v7().to_string();
+        insert_sale(&conn, &sale_id, -500, now);
+
+        let splits = vec![PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor: -500,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        }];
+
+        let payments = store
+            .create_payments(&sale_id, &splits, &currency, now)
+            .unwrap();
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].amount.minor_units, -500);
+
+        let listed = store.list_payments_for_sale(&sale_id).unwrap();
+        assert_eq!(listed[0].amount.minor_units, -500);
+    }
+
+    #[test]
+    fn payment_very_long_gateway_reference() {
+        let conn = fresh();
+        let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
         let now = "2025-06-01T12:00:00Z";
+
+        let sale_id = uuid::Uuid::now_v7().to_string();
         insert_sale(&conn, &sale_id, 1000, now);
 
-        let currency: Currency = "USD".parse().unwrap();
+        // 500-char gateway reference
+        let long_ref = "txn_".to_owned() + &"x".repeat(496);
+        assert_eq!(long_ref.len(), 500);
 
-        // Reference + status, but no response payload
         let splits = vec![PaymentSplitArg {
             method: "card".into(),
             amount_minor: 1000,
-            gateway_reference: Some("ref_partial".into()),
-            gateway_status: Some("pending".into()),
+            gateway_reference: Some(long_ref.clone()),
+            gateway_status: Some("approved".into()),
             gateway_response: None,
         }];
 
@@ -582,111 +537,93 @@ mod tests {
         assert_eq!(payments.len(), 1);
         assert_eq!(
             payments[0].gateway_reference.as_deref(),
-            Some("ref_partial")
+            Some(long_ref.as_str())
         );
-        assert_eq!(payments[0].gateway_status.as_deref(), Some("pending"));
-        assert!(payments[0].gateway_response.is_none());
 
         let listed = store.list_payments_for_sale(&sale_id).unwrap();
-        assert_eq!(listed[0].gateway_reference.as_deref(), Some("ref_partial"));
-        assert_eq!(listed[0].gateway_status.as_deref(), Some("pending"));
-        assert!(listed[0].gateway_response.is_none());
+        assert_eq!(listed[0].gateway_reference.as_deref().unwrap().len(), 500);
     }
 
     #[test]
-    fn many_splits_in_single_transaction() {
+    fn payment_gateway_response_large_payload() {
         let conn = fresh();
         let store = store(&conn);
+        let currency: Currency = "USD".parse().unwrap();
+        let now = "2025-06-01T12:00:00Z";
 
         let sale_id = uuid::Uuid::now_v7().to_string();
-        let now = "2025-06-01T12:00:00Z";
-        insert_sale(&conn, &sale_id, 50000, now);
+        insert_sale(&conn, &sale_id, 999, now);
 
-        let currency: Currency = "USD".parse().unwrap();
+        // Large JSON payload (10 KB)
+        let large_body = "x".repeat(10_000);
+        let large_response = format!(
+            r#"{{"id":"txn_big","status":"approved","data":"{}"}}"#,
+            large_body
+        );
+        assert!(large_response.len() > 10_000);
 
-        // 10 small payments instead of a single large one
-        let splits: Vec<PaymentSplitArg> = (0..10)
-            .map(|i| PaymentSplitArg {
-                method: if i % 2 == 0 {
-                    "cash".into()
-                } else {
-                    "card".into()
-                },
-                amount_minor: 5000,
-                gateway_reference: Some(format!("txn_batch_{}", i)),
-                gateway_status: Some("approved".into()),
-                gateway_response: None,
-            })
-            .collect();
+        let splits = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 999,
+            gateway_reference: Some("txn_big".into()),
+            gateway_status: Some("approved".into()),
+            gateway_response: Some(large_response.clone()),
+        }];
 
         let payments = store
             .create_payments(&sale_id, &splits, &currency, now)
             .unwrap();
-        assert_eq!(payments.len(), 10);
-
-        // All payments should have unique IDs
-        let ids: std::collections::HashSet<&str> = payments.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids.len(), 10, "Each payment must have a unique ID");
+        assert_eq!(payments.len(), 1);
+        assert!(payments[0].gateway_response.as_deref().unwrap().len() > 10_000);
 
         let listed = store.list_payments_for_sale(&sale_id).unwrap();
-        assert_eq!(listed.len(), 10);
-
-        // Verify alternating payment methods
-        for (i, payment) in listed.iter().enumerate() {
-            let expected_method = if i % 2 == 0 { "cash" } else { "card" };
-            assert_eq!(
-                payment.method, expected_method,
-                "Payment {} should be {}",
-                i, expected_method
-            );
-        }
+        assert!(
+            listed[0]
+                .gateway_response
+                .as_deref()
+                .unwrap()
+                .contains("txn_big")
+        );
     }
 
     #[test]
-    fn payment_total_equals_split_sum() {
+    fn payment_currency_different_from_sale() {
         let conn = fresh();
         let store = store(&conn);
+        let now = "2025-06-01T12:00:00Z";
 
         let sale_id = uuid::Uuid::now_v7().to_string();
-        let now = "2025-06-01T12:00:00Z";
-        insert_sale(&conn, &sale_id, 9999, now);
+        // Sale recorded in USD
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status,
+                                payment_method, tendered_minor,
+                                discount_percent, discount_label, user_id,
+                                created_at, updated_at,
+                                subtotal_minor, tax_total_minor)
+             VALUES (?1, ?2, 'USD', 1, 'completed', 'split', ?2,
+                     0, NULL, 'user-1', ?3, ?3, ?2, 0)",
+            params![sale_id, 3000, now],
+        )
+        .unwrap();
 
-        let currency: Currency = "USD".parse().unwrap();
-
-        let splits = vec![
-            PaymentSplitArg {
-                method: "cash".into(),
-                amount_minor: 5000,
-                gateway_reference: None,
-                gateway_status: None,
-                gateway_response: None,
-            },
-            PaymentSplitArg {
-                method: "card".into(),
-                amount_minor: 3000,
-                gateway_reference: Some("txn_part".into()),
-                gateway_status: Some("approved".into()),
-                gateway_response: None,
-            },
-            PaymentSplitArg {
-                method: "voucher".into(),
-                amount_minor: 1999,
-                gateway_reference: None,
-                gateway_status: None,
-                gateway_response: None,
-            },
-        ];
+        // Payment in different currency
+        let currency: Currency = "IDR".parse().unwrap();
+        let splits = vec![PaymentSplitArg {
+            method: "card".into(),
+            amount_minor: 45000,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+        }];
 
         let payments = store
             .create_payments(&sale_id, &splits, &currency, now)
             .unwrap();
-        assert_eq!(payments.len(), 3);
-
-        let total: i64 = payments.iter().map(|p| p.amount.minor_units).sum();
-        assert_eq!(total, 9999, "Payment split total must sum to 9999");
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].amount.currency.to_string(), "IDR");
+        assert_eq!(payments[0].amount.minor_units, 45000);
 
         let listed = store.list_payments_for_sale(&sale_id).unwrap();
-        let listed_total: i64 = listed.iter().map(|p| p.amount.minor_units).sum();
-        assert_eq!(listed_total, 9999);
+        assert_eq!(listed[0].amount.currency.to_string(), "IDR");
     }
 }

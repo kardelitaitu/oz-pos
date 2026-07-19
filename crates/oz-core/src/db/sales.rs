@@ -344,19 +344,26 @@ impl Store<'_> {
         let cur_str =
             std::str::from_utf8(&sale.currency.0).expect("currency bytes are valid UTF-8");
 
+        // ADR-20 §6: pending_expires_at = NOW + 30 min for stale-reaper.
+        let pending_expires_at = chrono::Utc::now()
+            .checked_add_signed(chrono::Duration::minutes(30))
+            .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+            .unwrap_or_else(|| now.clone());
+
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
-                                 customer_id, deduction_locations, version)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)",
+                                 customer_id, deduction_locations, version,
+                                 pending_expires_at)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16)",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
                 sale.discount_percent, sale.discount_label, sale.user_id,
                 sale.created_at, now,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
-                sale.customer_id, deduction_json,
+                sale.customer_id, deduction_json, pending_expires_at,
             ],
         )?;
 
@@ -688,19 +695,26 @@ impl Store<'_> {
         })
         .to_string();
 
+        // ADR-20 §6: pending_expires_at = NOW + 30 min for stale-reaper.
+        let pending_expires_at = chrono::Utc::now()
+            .checked_add_signed(chrono::Duration::minutes(30))
+            .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+            .unwrap_or_else(|| now.clone());
+
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method,
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
-                                 customer_id, deduction_locations, version)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)",
+                                 customer_id, deduction_locations, version,
+                                 pending_expires_at)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16)",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
                 sale.discount_percent, sale.discount_label, sale.user_id,
                 sale.created_at, now,
                 sale.subtotal.minor_units, sale.tax_total.minor_units,
-                sale.customer_id, deduction_json,
+                sale.customer_id, deduction_json, pending_expires_at,
             ],
         )?;
 
@@ -832,6 +846,60 @@ impl Store<'_> {
 
         tx.commit()?;
         Ok(())
+    }
+
+    /// Find all pending sales whose `pending_expires_at` is in the past.
+    ///
+    /// ADR-20 §6: uses the partial index `idx_sales_pending_expires` (created
+    /// by migration 096) for efficient lookups. A sale is considered "stale"
+    /// when `pending_expires_at < datetime('now')` — the 30-min expiry window
+    /// was set at creation time in `complete_sale_deduction`.
+    /// Find all pending sales whose `pending_expires_at` is in the past.
+    ///
+    /// ADR-20 §6: uses the partial index `idx_sales_pending_expires` (created
+    /// by migration 096) for efficient lookups. A sale is considered "stale"
+    /// when `pending_expires_at < NOW` — the 30-min expiry window was set at
+    /// creation time in `complete_sale_deduction`.
+    ///
+    /// The threshold is computed in Rust using the exact same format
+    /// (`chrono::SecondsFormat::Millis`) as the stored `pending_expires_at`
+    /// values, avoiding format mismatches with SQLite's `strftime`.
+    pub fn find_stale_pending_sales(&self) -> Result<Vec<String>, CoreError> {
+        let now_rfc = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let mut stmt = self.conn.prepare(
+            "SELECT id FROM sales \
+             WHERE status = 'pending' \
+               AND pending_expires_at IS NOT NULL \
+               AND pending_expires_at < ?1",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![now_rfc], |row| row.get(0))?;
+        rows.map(|r| r.map_err(CoreError::from)).collect()
+    }
+
+    /// Auto-void all stale pending sales whose `pending_expires_at` has passed.
+    ///
+    /// ADR-20 §6: intended to be called every 60 seconds by a background
+    /// worker. Each stale sale is voided via [`void_pending_sale`](Self::void_pending_sale)
+    /// which credits stock back to original deduction locations.
+    ///
+    /// Returns the number of stale sales that were voided.
+    ///
+    /// # Errors
+    ///
+    /// - Returns `CoreError::Db` if the query fails.
+    /// - Individual void failures are logged but do NOT abort the batch.
+    pub fn reap_stale_pending_sales(&self) -> Result<u32, CoreError> {
+        let stale = self.find_stale_pending_sales()?;
+        let mut count = 0u32;
+        for sale_id in &stale {
+            if let Err(e) = self.void_pending_sale(sale_id) {
+                // Log but don't abort — other stale sales may succeed.
+                tracing::warn!("failed to void stale pending sale {}: {}", sale_id, e);
+            } else {
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 }
 
@@ -2118,9 +2186,12 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        // Manually corrupt the status in the DB.
+        // Set a status that is valid at the SQL CHECK level ('refunded' is
+        // in the CHECK constraint from migration 096) but NOT recognized
+        // by SaleStatus::from_stored_str — this tests the Rust-layer
+        // defensive guard against unknown stored values.
         conn.execute(
-            "UPDATE sales SET status = 'bogus_status' WHERE id = ?1",
+            "UPDATE sales SET status = 'refunded' WHERE id = ?1",
             rusqlite::params![sale.id],
         )
         .unwrap();
@@ -3249,5 +3320,164 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ── ADR-20 stale-pending-sale reaper ─────────────────────────
+
+    #[test]
+    fn reap_stale_pending_sales_voids_expired_sales() {
+        // ADR-20 criterion 20-5: stale pending sale after 30 min is auto-voided.
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed a product and stock.
+        conn.execute(
+            "INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-reap', 'REAP-1', 'Reap Test', 1000, 'IDR', 'retail')",
+            [],
+        )
+        .unwrap();
+        let default_loc = crate::location_resolver::get_default_location_id();
+        conn.execute(
+            "INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) \
+             VALUES ('prod-reap', ?1, 10)",
+            rusqlite::params![default_loc.as_str()],
+        )
+        .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("REAP-1"), 2, price(1000)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+
+        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+            .unwrap();
+
+        // Manually set pending_expires_at to 1 hour in the past.
+        let past = chrono::Utc::now()
+            .checked_sub_signed(chrono::Duration::hours(1))
+            .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+            .unwrap();
+        conn.execute(
+            "UPDATE sales SET pending_expires_at = ?1 WHERE id = ?2",
+            rusqlite::params![past, sale.id],
+        )
+        .unwrap();
+
+        // Reap should find and void the stale sale.
+        let count = s.reap_stale_pending_sales().unwrap();
+        assert_eq!(count, 1, "expected 1 stale sale to be voided");
+
+        // Verify sale is now voided.
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM sales WHERE id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "voided");
+
+        // Verify stock was credited back (original qty restored).
+        let qty: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = 'prod-reap' AND location_id = ?1",
+                rusqlite::params![default_loc.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty, 10, "stock should be restored to 10 after void");
+    }
+
+    #[test]
+    fn reap_stale_pending_sales_skips_fresh_sales() {
+        // Verify that non-expired pending sales are NOT voided.
+        let conn = fresh();
+        let s = store(&conn);
+
+        conn.execute(
+            "INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-fresh', 'FRESH-1', 'Fresh Test', 1000, 'IDR', 'retail')",
+            [],
+        )
+        .unwrap();
+        let default_loc = crate::location_resolver::get_default_location_id();
+        conn.execute(
+            "INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) \
+             VALUES ('prod-fresh', ?1, 10)",
+            rusqlite::params![default_loc.as_str()],
+        )
+        .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("FRESH-1"), 1, price(1000)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+
+        // Use complete_sale_deduction which sets pending_expires_at = NOW + 30 min.
+        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+            .unwrap();
+
+        // Reap should NOT touch this fresh sale.
+        let count = s.reap_stale_pending_sales().unwrap();
+        assert_eq!(count, 0, "fresh pending sale should not be reaped");
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM sales WHERE id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "pending");
+    }
+
+    #[test]
+    fn finalize_and_void_concurrent_exclusive() {
+        // ADR-20 criterion 20-6: concurrent finalize and void on same sale
+        // — only the first should succeed; second must see status already changed.
+        let conn = fresh();
+        let s = store(&conn);
+
+        conn.execute(
+            "INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-c20-6', 'C206-1', 'C206', 1000, 'IDR', 'retail')",
+            [],
+        )
+        .unwrap();
+        let default_loc = crate::location_resolver::get_default_location_id();
+        conn.execute(
+            "INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) \
+             VALUES ('prod-c20-6', ?1, 10)",
+            rusqlite::params![default_loc.as_str()],
+        )
+        .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("C206-1"), 1, price(1000)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+
+        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+            .unwrap();
+
+        // First operation succeeds (finalize).
+        s.finalize_sale(&sale.id).unwrap();
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM sales WHERE id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "completed");
+
+        // Second operation (void) should fail because status is now 'completed'.
+        let err = s.void_pending_sale(&sale.id).unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { .. }),
+            "expected NotFound for already-finalized sale, got: {err:?}"
+        );
     }
 }
