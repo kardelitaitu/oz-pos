@@ -77,7 +77,7 @@
 | Screen | Feature area | Suggested test count | Key coverage areas |
 |--------|--------------|---------------------|-------------------|
 | `KdsLayoutFocus` | kds | **8** ✅ | Urgency sorting, status filter pills, active class, empty state, counts |
-| `KdsLayoutKanban` | kds | 8 | Column rendering, drag-between-columns, SLA colour thresholds |
+| `KdsLayoutKanban` | kds | **8** ✅ | Column rendering, per-column counts, column class names, ticket placement, empty state, onAdvance |
 | `KdsLayoutMetro` | kds | 8 | Responsive grid, overdue tile styling, action buttons per tile |
 | `KdsLayoutSwitcher` | kds | 6 | Popover open/close, layout selection, display toggles, persistence |
 | `ShiftBar` | inventory | **8** ✅ | Active shift display, end-shift flow, transaction summary, empty state, start form, location selection, modal close |
