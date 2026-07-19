@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspaceScope } from '@/contexts/WorkspaceContext';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
+import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
 import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
@@ -33,7 +34,11 @@ export default function KdsScreen() {
   const userId = session?.user_id ?? '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [soundEnabled] = useState(true); // P3-5: wire to settings toggle
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, loading: prefsLoading } = useKdsPreferences();
+
+  // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
+  useNewTicketSound(orders, soundEnabled);
 
   const fetchOrders = useCallback(() => {
     const zone = prefs.kdsZone || undefined;
