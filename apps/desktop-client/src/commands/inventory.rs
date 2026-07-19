@@ -372,6 +372,50 @@ pub async fn delete_stock_threshold(
     Ok(())
 }
 
+// ── Stock Alerts ─────────────────────────────────────────────────────
+
+/// Get active stock alerts for a location (enriched with product SKU/name).
+#[command]
+pub async fn active_stock_alerts_scoped(
+    session_token: String,
+    location_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_core::db::reports::StockAlertEvent>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    let alerts = store.active_stock_alerts(&location_id)?;
+    Ok(alerts)
+}
+
+/// Acknowledge a stock alert event (records who acknowledged it).
+#[command]
+pub async fn acknowledge_stock_alert_scoped(
+    session_token: String,
+    alert_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    store.acknowledge_stock_alert(&alert_id, &session.user_id)?;
+    Ok(())
+}
+
 // ── Pending Sale Capture / Void ─────────────────────────────────────
 
 /// Transition a pending sale's status to completed after payment capture.

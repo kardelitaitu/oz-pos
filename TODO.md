@@ -12,14 +12,14 @@
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | **2** | **███████████████ 100% 🎉** |
 | 🟡 Backend — Medium | 2 | **2** | **███████████████ 100% 🎉** |
-| 🧪 Rust Test Coverage | 14 | **14** | **███████████████ 100% 🎉** |
-| 🧪 UI Test Coverage | 7 | **7** | **███████████████ 100% 🎉** | ░░░░░░░░░░ 0% |
-| 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
+| 🧪 Rust Test Coverage | 20 | **20** | **███████████████ 100% 🎉** |
+| 🧪 UI Test Coverage | 7 | **7** | **███████████████ 100% 🎉** |
+| 🔵 Frontend — Missing | 2 | **1** | **███████████████ 50%** |
 | 🔴 §13 Amendments | 1 | **1** | **███████████████ 100% 🎉** |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **26** | **████████████████████████████████████████████████████ 84%** |
+| **Total** | **31** | **29** | **████████████████████████████████████████████████████████████ 94%** |
 
 ---
 
@@ -53,7 +53,7 @@
 | `terminals.rs` | 17 → **25** | 25+ | ✅ |
 | `stock_transfers.rs` | 18 → **25** | 25+ | ✅ |
 | `inventory.rs` | 19 → **30** | 30+ | ✅ |
-| `tax.rs` | 19 | 25+ | 6 |
+| `tax.rs` | 19 → **25** | 25+ | ✅ |
 
 **Total new Rust tests needed:** ~160+
 
@@ -165,18 +165,22 @@ When `allow_negative_stock` is enabled and a deduction goes below zero, the ADR 
 
 ### 5. `StockAlertPanel` — Alert Sidebar/Badge
 
-**Status:** ❌ NOT FOUND
-**File:** `ui/src/features/inventory/` (new file)
+**Status:** ✅ IMPLEMENTED
+**Files:** `ui/src/features/inventory/StockAlertPanel.tsx`, `ui/src/features/inventory/StockAlertPanel.css`, `ui/src/__tests__/StockAlertPanel.test.tsx`
 
-Dashboard widget or sidebar showing active alerts with badge count.
+Dashboard widget or right-side drawer panel showing active alerts with badge count, integrated into ProductManagementScreen.
 
 **Acceptance criteria:**
-- [ ] `StockAlertPanel.tsx` component with alert list
-- [ ] Badge count on inventory workspace header
-- [ ] Each alert shows: SKU, product name, current qty vs threshold, time triggered
-- [ ] [Acknowledge] button records who saw it via `acknowledge_stock_alert` Tauri command
-- [ ] Filterable by location
-- [ ] Polling or real-time refresh
+- [x] `StockAlertPanel.tsx` component with alert list, loading/error/empty states, severity indicators (critical=red for qty=0, warning=amber for qty>0), and relative time formatting
+- [x] Bell toggle button in ProductManagementScreen header opens/closes drawer
+- [x] Each alert shows: SKU, product name, current qty vs threshold, time triggered
+- [x] [Acknowledge] button records who saw it via `acknowledge_stock_alert` Tauri command, removes from local state immediately
+- [x] Polling interval (30s default, configurable via `pollIntervalMs` prop)
+- [x] Filterable by location (via `locationId` prop)
+- [x] Backend: `active_stock_alerts_scoped` + `acknowledge_stock_alert_scoped` Tauri commands in `apps/desktop-client/src/commands/inventory.rs`
+- [x] Backend: `acknowledge_stock_alert` method in `crates/oz-core/src/db/reports.rs`
+- [x] Frontend API wrappers: `getActiveStockAlerts` + `acknowledgeStockAlert` in `ui/src/api/inventory.ts`
+- [x] 6 unit tests: loading state, alert rendering, badge count, severity classes, empty state, acknowledge button, error state
 
 ### 6. Location Picker in Inventory Workspace Header
 

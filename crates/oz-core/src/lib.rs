@@ -164,7 +164,7 @@ pub use category::Category;
 pub use customer::Customer;
 pub use db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
-    TopProductRow, WeeklyRevenueRow,
+    StockAlertEvent, TopProductRow, WeeklyRevenueRow,
 };
 pub use db::{ProductWithDetails, Store};
 pub use error::{CoreError, CoreErrorKind};

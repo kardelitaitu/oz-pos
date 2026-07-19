@@ -166,6 +166,36 @@ export const getStockThresholds = (sessionToken: string, locationId: string | nu
 export const deleteStockThreshold = (sessionToken: string, id: string): Promise<void> =>
   invoke<void>('delete_stock_threshold', { sessionToken, id });
 
+// ── Stock Alert Events ──
+
+export interface StockAlertEvent {
+  id: string;
+  threshold_id: string;
+  product_id: string;
+  location_id: string;
+  current_qty: number;
+  threshold: number;
+  status: 'active' | 'acknowledged' | 'resolved';
+  triggered_at: string;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  acknowledged_by: string | null;
+  product_sku: string;
+  product_name: string;
+}
+
+export const getActiveStockAlerts = (
+  sessionToken: string,
+  locationId: string
+): Promise<StockAlertEvent[]> =>
+  invoke<StockAlertEvent[]>('active_stock_alerts_scoped', { sessionToken, locationId });
+
+export const acknowledgeStockAlert = (
+  sessionToken: string,
+  alertId: string
+): Promise<void> =>
+  invoke<void>('acknowledge_stock_alert_scoped', { sessionToken, alertId });
+
 // ── Pending Sale Capture / Void ──
 
 export const finalizeSale = (sessionToken: string, saleId: string): Promise<void> =>

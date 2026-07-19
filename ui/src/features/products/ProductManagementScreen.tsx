@@ -17,6 +17,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import VariantManagementScreen from './VariantManagementScreen';
+import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import './ProductManagementScreen.css';
 
@@ -77,6 +78,8 @@ export default function ProductManagementScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
   const [variantProductName, setVariantProductName] = useState<string>('');
+
+  const [showAlertPanel, setShowAlertPanel] = useState(false);
 
   const { l10n } = useLocalization();
 
@@ -179,9 +182,22 @@ export default function ProductManagementScreen() {
         <Localized id="product-mgmt-title">
           <h1 className="product-mgmt-title">Products</h1>
         </Localized>
-        <Localized id="product-mgmt-add">
-          <Button onClick={openCreate}>Add Product</Button>
-        </Localized>
+        <div className="product-mgmt-header-actions">
+          <button
+            type="button"
+            className="product-mgmt-alert-toggle"
+            onClick={() => setShowAlertPanel((prev) => !prev)}
+            aria-label={showAlertPanel ? 'Close stock alerts' : 'Open stock alerts'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </button>
+          <Localized id="product-mgmt-add">
+            <Button onClick={openCreate}>Add Product</Button>
+          </Localized>
+        </div>
       </div>
 
       {loading ? (
@@ -524,6 +540,36 @@ export default function ProductManagementScreen() {
               </Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Stock Alert Panel (right-side drawer) ──────────── */}
+      {showAlertPanel && (
+        <div className="product-mgmt-alert-drawer">
+          <div className="product-mgmt-alert-drawer-header">
+            <Localized id="product-mgmt-alerts-title">
+              <span className="product-mgmt-alert-drawer-title">Stock Alerts</span>
+            </Localized>
+            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+            <button
+              type="button"
+              className="product-mgmt-alert-drawer-close"
+              onClick={() => setShowAlertPanel(false)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              <Localized id="product-mgmt-alert-close">
+                <span>Close</span>
+              </Localized>
+            </button>
+          </div>
+          <StockAlertPanel
+            locationId="default"
+            pollIntervalMs={30_000}
+            maxAlerts={50}
+          />
         </div>
       )}
 

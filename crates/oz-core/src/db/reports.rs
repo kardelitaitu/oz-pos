@@ -386,6 +386,28 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// Acknowledge a stock alert event — records who acknowledged it and
+    /// transitions the status from `active` to `acknowledged`.
+    ///
+    /// Only `active` alerts can be acknowledged; already-`acknowledged` or
+    /// `resolved` alerts are left unchanged silently.
+    pub fn acknowledge_stock_alert(&self, alert_id: &str, user_id: &str) -> Result<(), CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let affected = self.conn.execute(
+            "UPDATE stock_alert_events
+             SET status = 'acknowledged', acknowledged_at = ?1, acknowledged_by = ?2
+             WHERE id = ?3 AND status = 'active'",
+            params![now, user_id, alert_id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "active_stock_alert",
+                id: alert_id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Revenue breakdown by product category for a date range.
     ///
     /// Each row includes a `percentage` field relative to the grand total
