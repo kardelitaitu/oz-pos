@@ -238,6 +238,12 @@
 .sales-history-modal::after,
 .price-override-modal::after,
 .dev-toolbar::after,
+/* ── P11-2: Medium-risk surfaces ────────────────────────── */
+.restaurant-hamburger-dropdown::after,
+.restaurant-context-menu::after,
+.settings-sidebar::after,
+.tooltip-content::after,
+.ssel-dropdown::after,
 .noise-dither::after {
   content: '';
   position: absolute;
@@ -281,6 +287,11 @@
   .sales-history-modal::after,
   .price-override-modal::after,
   .dev-toolbar::after,
+  .restaurant-hamburger-dropdown::after,
+  .restaurant-context-menu::after,
+  .settings-sidebar::after,
+  .tooltip-content::after,
+  .ssel-dropdown::after,
   .noise-dither::after { display: none; }
 }
 
