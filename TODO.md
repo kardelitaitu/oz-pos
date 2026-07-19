@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 15 / 31 items complete (48%) · Updated 2026-07-26
+**Current state:** 16 / 31 items complete (52%) · Updated 2026-07-26
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 Backend — Critical | 2 | 1 | █████░░░░░░░ 50% |
+| 🔴 Backend — Critical | 2 | **2** | **███████████████ 100% 🎉** |
 | 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 14 | **14** | **███████████████ 100% 🎉** |
 | 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
@@ -19,7 +19,7 @@
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **15** | **███████████████████ 48%** |
+| **Total** | **31** | **16** | **████████████████████████ 52%** |
 
 ---
 
@@ -116,17 +116,15 @@
 
 ### 2. Synchronous Alert Engine
 
-**Status:** ❌ NOT WIRED
-**Files:** `crates/oz-core/src/db/inventory.rs`, `crates/oz-core/src/db/products.rs`
-
-`stock_thresholds` and `stock_alert_events` tables exist (migration 087) but no code checks thresholds during stock changes.
+**Status:** ✅ IMPLEMENTED
+**File:** `crates/oz-core/src/db/products.rs` (private method `check_stock_threshold_and_alert_in_tx`, called from `adjust_stock_at_location_with_reason` step 4)
 
 **Acceptance criteria:**
-- [ ] After any `adjust_stock_at_location_with_reason` call, check configured thresholds for the changed product+location
-- [ ] If stock drops below threshold: INSERT into `stock_alert_events` (deduped — no duplicate active alerts per threshold)
-- [ ] If stock recovers above threshold: UPDATE active alerts to `resolved` status (auto-resolve)
-- [ ] Threshold lookup order: product+location specific → product+global (location_id NULL) → skip
-- [ ] Unit tests: threshold trigger, recovery auto-resolve, dedup, global threshold, no-threshold skips
+- [x] After any `adjust_stock_at_location_with_reason` call, check configured thresholds for the changed product+location
+- [x] If stock drops below threshold: INSERT into `stock_alert_events` (deduped — no duplicate active alerts per threshold)
+- [x] If stock recovers above threshold: UPDATE active alerts to `resolved` status (auto-resolve)
+- [x] Threshold lookup order: product+location specific → product+global (location_id NULL) → skip
+- [x] 7 unit tests: threshold trigger, no alert above, dedup, recovery auto-resolve, global fallback, no-threshold skips, location-specific precedence
 
 ---
 
@@ -265,8 +263,8 @@ Draft a new ADR for "Payment-Capture Ordering" that specifies the stock-reservat
 
 | Priority | Item | Est. Effort | Dependencies |
 |----------|------|-------------|--------------|
-| 🔴 | `get_workspace_locations` resolver | 2–3 hrs | None |
-| 🔴 | Synchronous alert engine | 3–4 hrs | stock_thresholds table exists |
+| 🔴 | `get_workspace_locations` resolver | 2–3 hrs | ✅ Done |
+| 🔴 | Synchronous alert engine | 3–4 hrs | ✅ Done |
 | 🟡 | `low_stock_alerts_at_location` | 1–2 hrs | None (parallel with alert engine) |
 | 🟡 | `stock.negative` event emission | 1 hr | None |
 | 🔵 | `StockAlertPanel` frontend | 2–3 hrs | Alert engine + API |

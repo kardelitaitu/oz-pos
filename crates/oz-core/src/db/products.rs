@@ -903,12 +903,104 @@ impl Store<'_> {
             rusqlite::params![product_id, location_id.as_str(), new_qty, now],
         )?;
 
+        // 4. Synchronous threshold check (ADR-18 §9e-ii).
+        // Errors are silent — threshold alerts are advisory and should not
+        // block the stock adjustment transaction.
+        let _ = self.check_stock_threshold_and_alert_in_tx(
+            tx,
+            &product_id,
+            location_id.as_str(),
+            new_qty,
+            &now,
+        );
+
         if let Some(cache) = &self.cache {
             cache.invalidate_inventory(&product_id);
             cache.publish_inventory_change(&product_id, sku, new_qty, self.terminal_id.as_deref());
         }
 
         Ok(new_qty)
+    }
+
+    /// Check stock thresholds for a product at a location after a stock change
+    /// and INSERT / UPDATE `stock_alert_events` accordingly.
+    ///
+    /// Lookup order (ADR-18 §9e-i):
+    /// 1. Product+location specific threshold
+    /// 2. Product+global threshold (location_id IS NULL)
+    /// 3. No threshold configured → skip (no alert)
+    ///
+    /// If stock is below threshold: INSERT alert with `status = 'active'`
+    /// (deduped — no duplicate active alerts per threshold_id).
+    /// If stock recovers above threshold: UPDATE any active/acknowledged
+    /// alerts to `status = 'resolved'` (auto-resolve).
+    fn check_stock_threshold_and_alert_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        product_id: &str,
+        location_id: &str,
+        new_qty: i64,
+        now: &str,
+    ) -> Result<(), CoreError> {
+        // Lookup: product+location specific, then product+global.
+        let threshold_row: Option<(String, i64)> = tx
+            .query_row(
+                "SELECT id, threshold FROM stock_thresholds \
+                 WHERE product_id = ?1 AND location_id = ?2 AND enabled = 1 \
+                 LIMIT 1",
+                rusqlite::params![product_id, location_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+            )
+            .ok()
+            .or_else(|| {
+                tx.query_row(
+                    "SELECT id, threshold FROM stock_thresholds \
+                     WHERE product_id = ?1 AND location_id IS NULL AND enabled = 1 \
+                     LIMIT 1",
+                    rusqlite::params![product_id],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .ok()
+            });
+
+        let (threshold_id, threshold) = match threshold_row {
+            Some(row) => row,
+            None => return Ok(()), // No threshold configured — skip.
+        };
+
+        // Check if stock went below threshold.
+        if new_qty < threshold {
+            // Dedup: don't insert if there's already an active alert for this threshold.
+            let existing: bool = tx
+                .query_row(
+                    "SELECT 1 FROM stock_alert_events \
+                     WHERE threshold_id = ?1 AND status IN ('active', 'acknowledged') \
+                     LIMIT 1",
+                    rusqlite::params![threshold_id],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+
+            if !existing {
+                let alert_id = uuid::Uuid::now_v7().to_string();
+                tx.execute(
+                    "INSERT INTO stock_alert_events \
+                     (id, threshold_id, product_id, location_id, current_qty, threshold, status, triggered_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', ?7)",
+                    rusqlite::params![alert_id, threshold_id, product_id, location_id, new_qty, threshold, now],
+                )?;
+            }
+        } else {
+            // Stock recovered above threshold — auto-resolve active alerts.
+            tx.execute(
+                "UPDATE stock_alert_events \
+                 SET status = 'resolved', resolved_at = ?1 \
+                 WHERE threshold_id = ?2 AND status IN ('active', 'acknowledged')",
+                rusqlite::params![now, threshold_id],
+            )?;
+        }
+
+        Ok(())
     }
 
     /// Atomically deduct from multiple locations for one or more SKUs
@@ -3150,5 +3242,392 @@ mod tests {
             "restocking into an empty location should yield the credited qty"
         );
         tx.commit().unwrap();
+    }
+
+    // ── Synchronous alert engine tests (ADR-18 §9e) ────────────────
+
+    /// Helper: seed a product with some stock at the default location,
+    /// then create a stock_threshold row.
+    fn seed_with_threshold(
+        conn: &rusqlite::Connection,
+        product_id: &str,
+        location_id: &str,
+        threshold_qty: i64,
+    ) -> String {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let threshold_id = uuid::Uuid::now_v7().to_string();
+        if location_id.is_empty() {
+            conn.execute(
+                "INSERT INTO stock_thresholds (id, product_id, location_id, threshold, enabled, created_at, updated_at)
+                 VALUES (?1, ?2, NULL, ?3, 1, ?4, ?4)",
+                rusqlite::params![threshold_id, product_id, threshold_qty, now],
+            ).unwrap();
+        } else {
+            conn.execute(
+                "INSERT INTO stock_thresholds (id, product_id, location_id, threshold, enabled, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)",
+                rusqlite::params![threshold_id, product_id, location_id, threshold_qty, now],
+            ).unwrap();
+        }
+        threshold_id
+    }
+
+    fn count_active_alerts(conn: &rusqlite::Connection, threshold_id: &str) -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM stock_alert_events \
+             WHERE threshold_id = ?1 AND status = 'active'",
+            rusqlite::params![threshold_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0)
+    }
+
+    fn count_resolved_alerts(conn: &rusqlite::Connection, threshold_id: &str) -> i64 {
+        conn.query_row(
+            "SELECT COUNT(*) FROM stock_alert_events \
+             WHERE threshold_id = ?1 AND status = 'resolved'",
+            rusqlite::params![threshold_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0)
+    }
+
+    #[test]
+    fn threshold_triggers_alert_on_deduction_below_threshold() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        // FOOD-001 is seeded with 12 stock at default location.
+        let prod_id = s.product_id_by_sku("FOOD-001").unwrap().unwrap();
+        let tid = seed_with_threshold(
+            &conn,
+            &prod_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            10,
+        );
+
+        // Deduct 3 → qty goes to 9 which is below threshold 10.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -3,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        // Verify alert was created.
+        assert_eq!(
+            count_active_alerts(&conn, &tid),
+            1,
+            "one active alert should exist when stock drops below threshold"
+        );
+
+        // Verify alert content.
+        let alert: (String, i64, i64) = conn
+            .query_row(
+                "SELECT product_id, current_qty, threshold FROM stock_alert_events \
+                 WHERE threshold_id = ?1 AND status = 'active' LIMIT 1",
+                rusqlite::params![tid],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            alert.0, prod_id,
+            "alert should reference the correct product"
+        );
+        assert_eq!(alert.1, 9, "current_qty should be 9 after deduction");
+        assert_eq!(alert.2, 10, "threshold should be 10");
+    }
+
+    #[test]
+    fn threshold_no_alert_when_above_threshold() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let prod_id = s.product_id_by_sku("FOOD-001").unwrap().unwrap();
+        let tid = seed_with_threshold(
+            &conn,
+            &prod_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            10,
+        );
+
+        // Deduct only 1 → qty goes to 11 which is still above threshold 10.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -1,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        assert_eq!(
+            count_active_alerts(&conn, &tid),
+            0,
+            "no alert when stock remains above threshold"
+        );
+    }
+
+    #[test]
+    fn threshold_dedup_repeated_deduction_does_not_duplicate_alert() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let prod_id = s.product_id_by_sku("FOOD-001").unwrap().unwrap();
+        let tid = seed_with_threshold(
+            &conn,
+            &prod_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            10,
+        );
+
+        // First deduction below threshold.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -3,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        assert_eq!(
+            count_active_alerts(&conn, &tid),
+            1,
+            "first trigger creates one alert"
+        );
+
+        // Restock to go above threshold (alert gets resolved).
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            5,
+            &loc,
+            Some("restock"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        // Deduct again to trigger below threshold (old alert was resolved,
+        // new one is created — dedup doesn't block since previous is resolved).
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -10,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        assert_eq!(
+            count_active_alerts(&conn, &tid),
+            1,
+            "only one active alert at a time after recreate cycle"
+        );
+    }
+
+    #[test]
+    fn threshold_recovery_auto_resolves_alert() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let prod_id = s.product_id_by_sku("FOOD-001").unwrap().unwrap();
+        let tid = seed_with_threshold(
+            &conn,
+            &prod_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            10,
+        );
+
+        // Deduct 3 → qty=9 < 10 → active alert.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -3,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        assert_eq!(count_active_alerts(&conn, &tid), 1);
+
+        // Restock 5 → qty=14 >= 10 → auto-resolve.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            5,
+            &loc,
+            Some("restock"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        assert_eq!(
+            count_active_alerts(&conn, &tid),
+            0,
+            "active alert should be resolved after stock recovers"
+        );
+        assert_eq!(
+            count_resolved_alerts(&conn, &tid),
+            1,
+            "resolved alert should exist after stock recovers"
+        );
+    }
+
+    #[test]
+    fn threshold_global_fallback_creates_alert() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let prod_id = s.product_id_by_sku("FOOD-001").unwrap().unwrap();
+        // No location-specific threshold — only global (location_id IS NULL).
+        let tid = seed_with_threshold(&conn, &prod_id, "", 10);
+
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -3,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        assert_eq!(
+            count_active_alerts(&conn, &tid),
+            1,
+            "global (location_id IS NULL) threshold should create an alert"
+        );
+    }
+
+    #[test]
+    fn threshold_no_threshold_skips_alert() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        // Deduct to zero — no threshold configured → no alert.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -12,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let alert_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM stock_alert_events", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            alert_count, 0,
+            "no alert should be created when no threshold is configured"
+        );
+    }
+
+    #[test]
+    fn threshold_location_specific_takes_precedence_over_global() {
+        let conn = fresh();
+        seed_everything(&conn);
+        let s = store(&conn);
+        let loc =
+            crate::inventory::LocationId::from(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
+
+        let prod_id = s.product_id_by_sku("FOOD-001").unwrap().unwrap();
+        // Location-specific threshold = 5
+        let _loc_tid = seed_with_threshold(
+            &conn,
+            &prod_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            5,
+        );
+        // Global threshold = 10
+        let global_tid = seed_with_threshold(&conn, &prod_id, "", 10);
+
+        // Deduct 7 → qty=5. Location-specific threshold is 5, so stock is NOT below it.
+        // But global threshold is 10, so if the global fallback were used (qty=5 < 10), it would trigger.
+        let tx = conn.unchecked_transaction().unwrap();
+        s.adjust_stock_at_location_with_reason(
+            &tx,
+            "FOOD-001",
+            -7,
+            &loc,
+            Some("sale"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        // No alert because location-specific threshold (5) takes precedence and qty (5) >= 5.
+        assert_eq!(
+            count_active_alerts(&conn, &global_tid),
+            0,
+            "location-specific threshold should take precedence over global"
+        );
     }
 }
