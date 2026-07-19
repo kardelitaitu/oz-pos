@@ -2,7 +2,11 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 63 / 101 items complete (62.4%) · Updated 2026-07-19
+**Current state:** 64 / 101 items complete (63.4%) · Updated 2026-07-19
+
+---
+
+
 
 ---
 
@@ -13,14 +17,14 @@
 | ♿ Accessibility | 17 | 4 | ███░░░░░░░ 24% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
-| 🧪 UI Test Coverage | 8 | 5 | ██████░░░░ 63% |
+| 🧪 UI Test Coverage | 8 | 6 | ███████░░░ 75% |
 | 🧹 Tech Debt | 11 | 2 | █░░░░░░░░░ 18% |
 | 🍳 KDS Enhancements | 9 | 0 | ░░░░░░░░░░ 0% |
 | 🧾 Reporting & Analytics | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **55** | **█████░░░░░ 54%** |
+| **Total** | **101** | **64** | **██████░░░░ 64%** |
 
 ---
 
@@ -174,6 +178,7 @@ All forms must surface clear, specific validation errors with `role="alert"`.
   - [ ] `SettingsPage.test.tsx` — all tabs render correctly
   - [x] `FastPINOverlay.test.tsx` — onVerified callback, loading state, Enter PIN, error clears dots
   - [x] `QrisQrDisplay.test.tsx` — QR grid 21×21, amount/ref display, spinner, poll→confirmed transition, delay timing, reopen reset
+  - [x] `SettingsPage.test.tsx` — 3 new tests for License, Data, Feature tabs (48 total)
 
 ---
 

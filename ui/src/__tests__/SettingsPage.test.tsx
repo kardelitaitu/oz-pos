@@ -78,6 +78,48 @@ const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
     if (cmd === 'sync_run') {
       return Promise.resolve({ synced: 0, failed: 0, error: null });
     }
+    if (cmd === 'get_backup_status') {
+      return Promise.resolve({ lastBackup: null, lastBackupSize: null });
+    }
+    if (cmd === 'list_audit_log') {
+      return Promise.resolve([]);
+    }
+    if (cmd === 'get_license_status') {
+      return Promise.resolve({
+        is_active: true,
+        status: 'valid',
+        payload: JSON.stringify({
+          tenant_id: 'tenant-1',
+          tier_key: 'pro',
+          status: 'active',
+          max_stores: 5,
+          max_pos_instances: 10,
+          allowed_types: ['retail', 'restaurant'],
+          starts_at: '2026-01-01T00:00:00Z',
+          expires_at: '2027-01-01T00:00:00Z',
+          grace_until: '2027-02-01T00:00:00Z',
+          issued_at: '2026-01-01T00:00:00Z',
+        }),
+        message: null,
+      });
+    }
+    if (cmd === 'create_backup') {
+      return Promise.resolve({ sizeBytes: 1024 });
+    }
+    if (cmd === 'check_license_status') {
+      return Promise.resolve({
+        tenantId: 'tenant-1',
+        status: 'active',
+        tier: 'pro',
+        active: true,
+        expiresAt: '2027-01-01T00:00:00Z',
+        graceUntil: '2027-02-01T00:00:00Z',
+        maxStores: 5,
+      });
+    }
+    if (cmd === 'get_machine_id') {
+      return Promise.resolve('test-machine-id');
+    }
     return Promise.resolve(undefined);
   };
   return { invokeMock: vi.fn(impl), defaultImpl: impl, failCommands };
@@ -897,5 +939,46 @@ describe('SettingsPage', () => {
     window.dispatchEvent(event);
 
     expect(preventDefaultSpy).not.toHaveBeenCalled();
+  });
+
+  // ── Management tabs ────────────────────────────────────────────
+
+  it('renders License section when navigating to License tab', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /system/i }));
+    fireEvent.click(screen.getByRole('button', { name: /license/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: /license/i })).toBeInTheDocument();
+    });
+  });
+
+  it('renders Data Management section when navigating to Data tab', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /system/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^data$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /data management/i })).toBeInTheDocument();
+    });
+  });
+
+  it('renders Features section when navigating to Features tab', async () => {
+    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /system/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^features$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /feature toggles/i })).toBeInTheDocument();
+    });
   });
 });
