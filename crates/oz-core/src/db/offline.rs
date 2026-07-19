@@ -1,11 +1,30 @@
 //! Offline Queue — enqueue, list, mark, delete offline sync items.
 
 use rusqlite::params;
+use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
 use crate::offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 
 use super::Store;
+
+/// Summary of offline queue status — counts by status and sync timing.
+/// Used by P1-6 sync observability dashboard widgets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncStatusSummary {
+    /// Number of pending (unsynced) items.
+    pub pending_count: i64,
+    /// Number of successfully synced items.
+    pub synced_count: i64,
+    /// Number of failed items.
+    pub failed_count: i64,
+    /// Total retry count across all failed items.
+    pub total_retry_count: i64,
+    /// ISO-8601 timestamp of the most recently synced item, if any.
+    pub last_synced_at: Option<String>,
+    /// ISO-8601 timestamp of the oldest pending item, if any.
+    pub oldest_pending_at: Option<String>,
+}
 
 impl Store<'_> {
     /// Enqueue a transaction for later sync (default tenant).
@@ -157,6 +176,73 @@ impl Store<'_> {
         self.conn
             .execute("DELETE FROM offline_queue WHERE id = ?1", params![id])?;
         Ok(())
+    }
+
+    /// Get a summary of the offline queue status (P1-6 sync observability).
+    ///
+    /// Returns counts by status, total retry count, last sync timestamp,
+    /// and oldest pending timestamp — all in a single query.
+    pub fn offline_queue_status_summary(&self) -> Result<SyncStatusSummary, CoreError> {
+        // Status counts
+        let counts: Vec<(String, i64)> = self
+            .conn
+            .prepare("SELECT status, COUNT(*) FROM offline_queue GROUP BY status")?
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut pending_count: i64 = 0;
+        let mut synced_count: i64 = 0;
+        let mut failed_count: i64 = 0;
+        for (status, count) in &counts {
+            match status.as_str() {
+                "pending" => pending_count = *count,
+                "synced" => synced_count = *count,
+                "failed" => failed_count = *count,
+                _ => {}
+            }
+        }
+
+        // Total retry count across all failed items
+        let total_retry_count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(SUM(retry_count), 0) FROM offline_queue WHERE status = 'failed'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        // Last synced at (most recent synced_at timestamp)
+        let last_synced_at: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT synced_at FROM offline_queue WHERE status = 'synced' AND synced_at IS NOT NULL ORDER BY synced_at DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+
+        // Oldest pending at (earliest created_at among pending items)
+        let oldest_pending_at: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT created_at FROM offline_queue WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+
+        Ok(SyncStatusSummary {
+            pending_count,
+            synced_count,
+            failed_count,
+            total_retry_count,
+            last_synced_at,
+            oldest_pending_at,
+        })
     }
 
     fn row_to_offline_queue_item(row: &rusqlite::Row) -> rusqlite::Result<OfflineQueueItem> {
@@ -582,5 +668,120 @@ mod tests {
         assert!(remaining.iter().any(|i| i.id == "oq-2"));
         assert!(remaining.iter().any(|i| i.id == "oq-3"));
         assert!(remaining.iter().any(|i| i.id == "oq-4"));
+    }
+
+    // ── P1-6: SyncStatusSummary tests ────────────────────────────────
+
+    #[test]
+    fn status_summary_empty_db() {
+        let conn = fresh();
+        let s = store(&conn);
+        let summary = s.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.pending_count, 0);
+        assert_eq!(summary.synced_count, 0);
+        assert_eq!(summary.failed_count, 0);
+        assert_eq!(summary.total_retry_count, 0);
+        assert!(summary.last_synced_at.is_none());
+        assert!(summary.oldest_pending_at.is_none());
+    }
+
+    #[test]
+    fn status_summary_with_seeded_data() {
+        let conn = fresh();
+        seed_pending_and_synced(&conn);
+        let s = store(&conn);
+        let summary = s.offline_queue_status_summary().unwrap();
+
+        // oq-1 (pending), oq-2 (pending), oq-3 (synced), oq-4 (failed)
+        assert_eq!(summary.pending_count, 2);
+        assert_eq!(summary.synced_count, 1);
+        assert_eq!(summary.failed_count, 1);
+        // oq-4 has retry_count = 3
+        assert_eq!(summary.total_retry_count, 3);
+
+        // oq-3 is synced at '2025-01-01T11:01:00.000Z'
+        assert_eq!(
+            summary.last_synced_at.as_deref(),
+            Some("2025-01-01T11:01:00.000Z")
+        );
+
+        // oq-1 is the oldest pending at '2025-01-01T12:00:00.000Z'
+        assert_eq!(
+            summary.oldest_pending_at.as_deref(),
+            Some("2025-01-01T12:00:00.000Z")
+        );
+    }
+
+    #[test]
+    fn status_summary_updates_after_operations() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Empty
+        let summary = s.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.pending_count, 0);
+
+        // Enqueue an item
+        let item = s.enqueue_offline("test", "{}").unwrap();
+        let summary = s.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.pending_count, 1);
+        assert_eq!(summary.synced_count, 0);
+        assert!(summary.oldest_pending_at.is_some());
+
+        // Mark it synced
+        s.mark_offline_synced(&item.id).unwrap();
+        let summary = s.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.pending_count, 0);
+        assert_eq!(summary.synced_count, 1);
+        assert!(summary.last_synced_at.is_some());
+    }
+
+    #[test]
+    fn status_summary_total_retry_across_multiple_failed() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Insert two failed items with retry counts
+        s.enqueue_offline("a", "{}").unwrap();
+        let b = s.enqueue_offline("b", "{}").unwrap();
+        s.mark_offline_failed(&b.id, "err").unwrap();
+        s.mark_offline_failed(&b.id, "err").unwrap();
+
+        let summary = s.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.failed_count, 1);
+        assert_eq!(summary.total_retry_count, 2);
+    }
+
+    #[test]
+    fn status_summary_serde_roundtrip() {
+        let summary = SyncStatusSummary {
+            pending_count: 5,
+            synced_count: 10,
+            failed_count: 2,
+            total_retry_count: 7,
+            last_synced_at: Some("2025-06-01T12:00:00Z".into()),
+            oldest_pending_at: None,
+        };
+        let json = serde_json::to_string(&summary).unwrap();
+        let rt: SyncStatusSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(rt.pending_count, 5);
+        assert_eq!(rt.synced_count, 10);
+        assert_eq!(rt.failed_count, 2);
+        assert_eq!(rt.total_retry_count, 7);
+    }
+
+    #[test]
+    fn status_summary_debug_output() {
+        let summary = SyncStatusSummary {
+            pending_count: 1,
+            synced_count: 2,
+            failed_count: 0,
+            total_retry_count: 0,
+            last_synced_at: None,
+            oldest_pending_at: None,
+        };
+        let debug = format!("{summary:?}");
+        assert!(debug.contains("pending_count: 1"));
+        assert!(debug.contains("synced_count: 2"));
     }
 }

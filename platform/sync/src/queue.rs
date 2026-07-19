@@ -4,6 +4,7 @@
 //! with additional tracking for conflict resolution and last-sync timing.
 
 use oz_core::db::Store;
+use oz_core::db::offline::SyncStatusSummary;
 use oz_core::error::CoreError;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 use serde::Deserialize;
@@ -115,6 +116,14 @@ impl SyncQueue {
     /// Delete an item from the queue.
     pub fn delete(&self, store: &Store<'_>, id: &str) -> Result<(), CoreError> {
         store.delete_offline_item(id)
+    }
+
+    /// Get a summary of the offline queue status.
+    ///
+    /// Returns counts by status, total retries, last sync timestamp,
+    /// and oldest pending timestamp — for dashboard observability.
+    pub fn status_summary(&self, store: &Store<'_>) -> Result<SyncStatusSummary, CoreError> {
+        store.offline_queue_status_summary()
     }
 
     /// Get the timestamp of the most recently synced item.
@@ -494,6 +503,51 @@ mod tests {
             second.is_some(),
             "should re-enqueue after original is synced"
         );
+    }
+
+    // ── P1-6: SyncStatusSummary tests ────────────────────────────
+
+    #[test]
+    fn queue_status_summary_empty() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let summary = queue.status_summary(&store).unwrap();
+        assert_eq!(summary.pending_count, 0);
+        assert_eq!(summary.synced_count, 0);
+        assert_eq!(summary.failed_count, 0);
+        assert!(summary.last_synced_at.is_none());
+        assert!(summary.oldest_pending_at.is_none());
+    }
+
+    #[test]
+    fn queue_status_summary_with_data() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let item1 = queue.enqueue(&store, "a", "{}").unwrap();
+        queue.enqueue(&store, "b", "{}").unwrap();
+        queue.mark_synced(&store, &item1.id).unwrap();
+
+        let summary = queue.status_summary(&store).unwrap();
+        assert_eq!(summary.pending_count, 1);
+        assert_eq!(summary.synced_count, 1);
+        assert_eq!(summary.failed_count, 0);
+        assert!(summary.last_synced_at.is_some());
+        assert!(summary.oldest_pending_at.is_some());
+    }
+
+    #[test]
+    fn queue_status_summary_after_mark_failed() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let item = queue.enqueue(&store, "test", "{}").unwrap();
+        queue.mark_failed(&store, &item.id, "timeout").unwrap();
+
+        let summary = queue.status_summary(&store).unwrap();
+        assert_eq!(summary.pending_count, 0);
+        assert_eq!(summary.failed_count, 1);
+        assert_eq!(summary.total_retry_count, 1);
     }
 
     #[test]
