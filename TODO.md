@@ -2,7 +2,7 @@
 
 > **Goal:** Close all remaining ADR-18 Multi-Location Inventory gaps — unified resolver, alert engine, frontend components, and §13 amendments.
 
-**Current state:** 19 / 31 items complete (61%) · Updated 2026-07-26
+**Current state:** 31 / 31 items complete (100%) · Updated 2026-07-19 🎉
 
 ---
 
@@ -16,10 +16,10 @@
 | 🧪 UI Test Coverage | 7 | **7** | **███████████████ 100% 🎉** |
 | 🔵 Frontend — Missing | 2 | **2** | **███████████████ 100% 🎉** |
 | 🔴 §13 Amendments | 1 | **1** | **███████████████ 100% 🎉** |
-| 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
-| ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
-| 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **31** | **30** | **███████████████████████████████████████████████████████████████ 97%** |
+| 🟡 §13 Amendments | 1 | **1** | **███████████████ 100% 🎉** |
+| ❓ Verification | 1 | **1** | **███████████████ 100% 🎉** |
+| 🟡 New ADR | 1 | **1** | **███████████████ 100% 🎉** |
+| **Total** | **31** | **31** | **██████████████████████████████████████████████████████████████████ 100% 🎉** |
 
 ---
 
@@ -220,14 +220,19 @@ Migration 081 adds `received_partial` to the CHECK constraint, but `receive_tran
 
 ### 8. Finding #31 — Payment-Capture Ordering (Stock Reservation)
 
-**Status:** ❌ NEW ADR NEEDED
+**Status:** ✅ DRAFTED
+**File:** `docs/decisions/2026-07-19-payment-capture-ordering.md`
 
-Draft a new ADR for "Payment-Capture Ordering" that specifies the stock-reservation-before-payment-capture pattern to prevent stranded funds during concurrent checkout races.
+Draft ADR-20 for "Payment-Capture Ordering" specifying the stock-reservation-before-payment-capture pattern to prevent stranded funds during concurrent checkout races.
 
-- [ ] Draft ADR-20 (or ADR-21) spec in `docs/decisions/`
-- [ ] Define `create_pending_sale` / `create_pending_sale_with_resolution` flow
-- [ ] Define `finalize_sale` (on capture success) and `void_pending_sale` (on capture failure/abandon)
-- [ ] Acceptance criteria for the reservation flow
+- [x] Draft ADR-20 spec in `docs/decisions/2026-07-19-payment-capture-ordering.md`
+- [x] Define `create_pending_sale` / `create_pending_sale_with_resolution` flow with `BEGIN IMMEDIATE` atomicity
+- [x] Define `finalize_sale` (on capture success) and `void_pending_sale` (on capture failure/abandon) with FIFO oldest-credit stock restoration
+- [x] Acceptance criteria (6 criteria: dedup, serialization, finalize, void, stale-reap, concurrent finalize/void)
+- [x] Migration spec (095: add `pending` status to sales CHECK constraint)
+- [x] Tauri command spec (3 scoped commands)
+- [x] Background worker spec (30-min pending sale timeout reaper)
+- [x] Frontend impact (PaymentModal three-phase flow with error states)
 
 ---
 
