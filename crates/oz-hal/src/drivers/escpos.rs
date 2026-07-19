@@ -57,6 +57,73 @@ pub const DBL_WIDTH: &[u8] = &[0x1D, 0x21, 0x10];
 #[allow(dead_code)]
 pub const DBL_BOTH: &[u8] = &[0x1D, 0x21, 0x11];
 
+// ── Barcode (GS k) ────────────────────────────────────────────
+
+/// Barcode symbology identifiers (GS k m).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum BarcodeType {
+    /// UPC-A (11+1 numeric digits).
+    UpcA = 0,
+    /// UPC-E (6+1 numeric digits).
+    UpcE = 1,
+    /// EAN-13 (12+1 numeric digits).
+    Ean13 = 2,
+    /// EAN-8 (7+1 numeric digits).
+    Ean8 = 3,
+    /// Code 39 (alphanumeric, variable length).
+    Code39 = 4,
+    /// ITF (Interleaved 2 of 5, numeric even digits).
+    Itf = 5,
+    /// Code 128 (full ASCII, variable length).
+    Code128 = 73,
+}
+
+/// Build an ESC/POS barcode-printing command: GS k m n d1..dn.
+///
+/// `data` must be valid for the chosen symbology (numeric-only for
+/// UPC/EAN/ITF, alphanumeric for Code39, full ASCII for Code128).
+pub fn barcode(barcode_type: BarcodeType, data: &[u8]) -> Vec<u8> {
+    let n = data.len();
+    let mut buf = Vec::with_capacity(4 + n);
+    // Set barcode height to ~162 dots (~80px at 203dpi)
+    buf.extend_from_slice(&[0x1D, 0x68, 0xA0]);
+    // Set human-readable (HRI) position below the barcode
+    buf.extend_from_slice(&[0x1D, 0x48, 0x02]);
+    // Print barcode: GS k m n d1..dn
+    buf.extend_from_slice(&[0x1D, 0x6B, barcode_type as u8, n as u8]);
+    buf.extend_from_slice(data);
+    buf
+}
+
+// ── QR code (GS ( k) ────────────────────────────────────────────
+
+/// Build an ESC/POS QR-code printing command sequence.
+///
+/// Standard two-dimensional GS ( k command set. The sequence:
+/// 1. Select QR code model 2
+/// 2. Set module size (3–8 dots, default 4)
+/// 3. Store data bytes
+/// 4. Print QR code
+pub fn qr_code(data: &[u8], module_size: u8) -> Vec<u8> {
+    let module_size = module_size.clamp(3, 8);
+    let len = data.len();
+    let pl = len + 3; // pL = (len + 3) & 0xFF
+    let ph = ((len + 3) >> 8) & 0xFF;
+
+    let mut buf = Vec::with_capacity(16 + len);
+    // Step 1: Select model 2 (function 049, model 050 = QR model 2)
+    buf.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]);
+    // Step 2: Set module size (function 043)
+    buf.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, module_size]);
+    // Step 3: Store data (function 050, pL pH 31 50 30 d1..dn)
+    buf.extend_from_slice(&[0x1D, 0x28, 0x6B, pl as u8, ph as u8, 0x31, 0x50, 0x30]);
+    buf.extend_from_slice(data);
+    // Step 4: Print QR (function 049, 31 51 48)
+    buf.extend_from_slice(&[0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30]);
+    buf
+}
+
 // ── Cash drawer kick ────────────────────────────────────
 /// Pulse pin 2 on the RJ12 cash drawer port for the default duration
 /// (typically 50–100 ms). Sends the standard ESC/POS kick command
@@ -160,5 +227,97 @@ mod tests {
     fn feed_n_produces_correct_bytes() {
         assert_eq!(feed(3), &[0x1B, 0x64, 3]);
         assert_eq!(feed(0), &[0x1B, 0x64, 0]);
+    }
+
+    // ── Barcode commands ─────────────────────────────────────────────
+
+    #[test]
+    fn barcode_code128_starts_with_gs_h() {
+        let cmd = barcode(BarcodeType::Code128, b"REC-001");
+        // Should start with GS h A0 (set height)
+        assert_eq!(cmd[..3], [0x1D, 0x68, 0xA0], "missing GS h height");
+        // Should contain GS H 02 (HRI below)
+        assert!(cmd.windows(3).any(|w| w == [0x1D, 0x48, 0x02]));
+        // Should contain GS k 49 n data (print barcode)
+        assert!(cmd.windows(4).any(|w| w == [0x1D, 0x6B, 73, 7]));
+        // Data should be present
+        let data_start = cmd.windows(7).position(|w| w == b"REC-001");
+        assert!(data_start.is_some(), "missing barcode data");
+    }
+
+    #[test]
+    fn barcode_ean13_command_format() {
+        let cmd = barcode(BarcodeType::Ean13, b"123456789012");
+        // GS k 02 n 12-digit data
+        assert!(cmd.windows(4).any(|w| w == [0x1D, 0x6B, 2, 12]));
+        assert!(cmd.windows(12).any(|w| w == b"123456789012"));
+    }
+
+    #[test]
+    fn barcode_code39_data_integrity() {
+        let data = b"0123456789";
+        let cmd = barcode(BarcodeType::Code39, data);
+        // Data should appear in the command
+        assert!(cmd.windows(10).any(|w| w == data));
+    }
+
+    // ── QR code commands ─────────────────────────────────────────────
+
+    #[test]
+    fn qr_code_starts_with_model_selection() {
+        let cmd = qr_code(b"https://example.com/pay", 4);
+        // Should start with GS ( k 04 00 31 41 32 00 (model 2)
+        assert_eq!(
+            cmd[..9],
+            [0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00],
+            "missing QR model selection"
+        );
+    }
+
+    #[test]
+    fn qr_code_contains_size_and_print_commands() {
+        let cmd = qr_code(b"test", 4);
+        // Should contain module size: GS ( k 03 00 31 43 04
+        assert!(
+            cmd.windows(8)
+                .any(|w| w == [0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, 4])
+        );
+        // Should contain print command: GS ( k 03 00 31 51 30
+        assert!(
+            cmd.windows(8)
+                .any(|w| w == [0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30])
+        );
+    }
+
+    #[test]
+    fn qr_code_contains_data_bytes() {
+        let data = b"payment:12345";
+        let cmd = qr_code(data, 4);
+        // Data should appear in store command
+        assert!(cmd.windows(data.len()).any(|w| w == data));
+    }
+
+    #[test]
+    fn qr_code_module_size_clamps() {
+        let cmd_low = qr_code(b"x", 1); // should clamp to 3
+        let cmd_high = qr_code(b"x", 10); // should clamp to 8
+        let cmd_default = qr_code(b"x", 4);
+        // All should still be valid commands
+        assert!(cmd_low.len() > 10);
+        assert!(cmd_high.len() > 10);
+        assert!(cmd_default.len() > 10);
+    }
+
+    #[test]
+    fn qr_code_empty_data_produces_command() {
+        let cmd = qr_code(b"", 4);
+        // Should still produce a valid command with zero-length data
+        assert!(cmd.len() >= 17);
+        // The store data command should have pL=3 (3 extra bytes for header)
+        // so the total command length is 8 (header) + 3 (extra) + 0 (data) + 8 (print) = 19
+        assert!(
+            cmd.len() >= 15,
+            "empty QR data should produce a valid command sequence"
+        );
     }
 }

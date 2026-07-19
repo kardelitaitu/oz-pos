@@ -98,6 +98,12 @@ pub struct ReceiptConfig {
     pub footer: Option<String>,
     /// Whether to print the table number line.
     pub show_table_number: bool,
+    /// Whether to print a barcode (receipt number) at the bottom.
+    pub barcode_enabled: bool,
+    /// Optional payment link template. If set, a QR code is printed
+    /// below the barcode. Use `{receipt}` and `{amount}` as placeholders.
+    /// Example: `"https://pay.example.com/{receipt}"`
+    pub payment_link_template: Option<String>,
 }
 
 impl Default for ReceiptConfig {
@@ -109,6 +115,8 @@ impl Default for ReceiptConfig {
             show_tax: true,
             footer: None,
             show_table_number: false,
+            barcode_enabled: false,
+            payment_link_template: None,
         }
     }
 }
@@ -311,6 +319,21 @@ impl ReceiptBuilder {
         self.buf.extend_from_slice(escpos::CUT_FULL);
     }
 
+    fn barcode(&mut self, barcode_type: escpos::BarcodeType, data: &[u8]) {
+        self.left();
+        self.blank();
+        self.buf
+            .extend_from_slice(&escpos::barcode(barcode_type, data));
+        self.buf.extend_from_slice(escpos::LF);
+    }
+
+    fn qr_code(&mut self, data: &[u8], module_size: u8) {
+        self.blank();
+        self.buf
+            .extend_from_slice(&escpos::qr_code(data, module_size));
+        self.buf.extend_from_slice(escpos::LF);
+    }
+
     fn build(self) -> Vec<u8> {
         self.buf
     }
@@ -492,6 +515,23 @@ pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8>
     }
 
     b.blank();
+
+    // ── Barcode (receipt number) ──────────────────
+    if config.barcode_enabled {
+        let receipt_barcode = format!("#{}", r.receipt_number);
+        b.barcode(escpos::BarcodeType::Code128, receipt_barcode.as_bytes());
+    }
+
+    // ── QR code (payment link) ────────────────────
+    if let Some(ref template) = config.payment_link_template {
+        let qr_data = template
+            .replace("{receipt}", &r.receipt_number)
+            .replace("{amount}", &r.total.minor_units.to_string());
+        if !qr_data.is_empty() {
+            b.qr_code(qr_data.as_bytes(), 5);
+        }
+    }
+
     b.feed(3);
     b.cut();
     b.build()
@@ -863,6 +903,115 @@ mod tests {
         assert!(
             !text.contains("Table:"),
             "receipt should not contain 'Table:'"
+        );
+    }
+
+    // ── Barcode & QR code tests ───────────────────────────────────────
+
+    #[test]
+    fn barcode_appears_when_enabled() {
+        let cfg = ReceiptConfig {
+            barcode_enabled: true,
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        // Should contain GS h A0 (barcode height command)
+        assert!(
+            data.windows(3).any(|w| w == [0x1D, 0x68, 0xA0]),
+            "missing GS h barcode height command"
+        );
+        // Should contain GS k (barcode print command)
+        assert!(
+            data.windows(2).any(|w| w == [0x1D, 0x6B]),
+            "missing GS k barcode print command"
+        );
+        // Should contain the receipt number data
+        let receipt_bytes = b"#REC-001";
+        assert!(
+            data.windows(receipt_bytes.len())
+                .any(|w| w == receipt_bytes),
+            "barcode should encode receipt number"
+        );
+    }
+
+    #[test]
+    fn barcode_omitted_when_disabled() {
+        let cfg = ReceiptConfig {
+            barcode_enabled: false,
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        // Should NOT contain GS h A0 (barcode command prefix)
+        // But could contain other GS commands, so we check for GS h specifically
+        let gs_h_count = data.windows(2).filter(|w| *w == [0x1D, 0x68]).count();
+        assert_eq!(gs_h_count, 0, "no GS h commands expected");
+    }
+
+    #[test]
+    fn qr_code_appears_when_template_provided() {
+        let cfg = ReceiptConfig {
+            payment_link_template: Some("https://pay.example.com/{receipt}".into()),
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        // Should contain GS ( k (QR code command prefix)
+        assert!(
+            data.windows(3).any(|w| w == [0x1D, 0x28, 0x6B]),
+            "missing GS ( k QR code commands"
+        );
+        // Should contain the payment URL
+        let url = b"https://pay.example.com/REC-001";
+        assert!(
+            data.windows(url.len()).any(|w| w == url),
+            "QR code should contain payment URL with receipt number"
+        );
+    }
+
+    #[test]
+    fn qr_code_with_amount_placeholder() {
+        let cfg = ReceiptConfig {
+            payment_link_template: Some("https://pay.example.com/{receipt}/{amount}".into()),
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        let expected = b"https://pay.example.com/REC-001/1320";
+        assert!(
+            data.windows(expected.len()).any(|w| w == expected),
+            "QR should encode URL with amount"
+        );
+    }
+
+    #[test]
+    fn qr_code_omitted_when_template_none() {
+        let cfg = ReceiptConfig {
+            payment_link_template: None,
+            ..default_config()
+        };
+        let data = format_sales_receipt(&sample_receipt(), &cfg);
+        let url = b"pay.example.com";
+        assert!(
+            !data.windows(url.len()).any(|w| w == url),
+            "QR payment URL should not appear when template is None"
+        );
+    }
+
+    #[test]
+    fn barcode_and_qr_both_appear_when_configured() {
+        let item = sample_receipt();
+        let cfg = ReceiptConfig {
+            barcode_enabled: true,
+            payment_link_template: Some("https://pay.example.com/qr".into()),
+            ..default_config()
+        };
+        let data = format_sales_receipt(&item, &cfg);
+        // Both barcode and QR commands should appear
+        assert!(
+            data.windows(2).any(|w| w == [0x1D, 0x6B]),
+            "barcode command missing"
+        );
+        assert!(
+            data.windows(3).any(|w| w == [0x1D, 0x28, 0x6B]),
+            "QR command missing"
         );
     }
 }
