@@ -1,5 +1,6 @@
 .feature-toggle {
   padding: var(--space-6);
+  overflow-x: hidden;
 }
 
 .feature-toggle-header {
