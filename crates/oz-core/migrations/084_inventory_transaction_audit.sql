@@ -33,7 +33,14 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
                           'transfer-out',   -- goods sent to another location
                           'transfer-in',    -- goods received from another location
                           'adjust',         -- manual stock correction
-                          'count'           -- stock take / physical count
+                          'count',          -- stock take / physical count
+                          'sale',           -- POS sale deduction (ADR-19 §2)
+                          'void',           -- sale void compensating credit (ADR-19 §5.3)
+                          'refund',         -- sale refund compensating credit (ADR-19 §5.3)
+                          'transfer',       -- generic stock transfer
+                          'purchase-order-receive', -- PO receipt
+                          'stock-count',    -- inventory stock-take / physical count
+                          'manual-adjustment' -- manager override adjustment
                       )),
     location_id       TEXT NOT NULL REFERENCES inventory_locations(id) ON DELETE RESTRICT,
     staff_id          TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
