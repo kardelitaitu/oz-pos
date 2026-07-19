@@ -124,6 +124,44 @@ pub async fn list_all_offline(
     Ok(dtos)
 }
 
+/// Summary of offline queue status — counts by status and sync timing.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfflineQueueSummaryDto {
+    /// Number of pending (unsynced) items.
+    pub pending_count: i64,
+    /// Number of successfully synced items.
+    pub synced_count: i64,
+    /// Number of failed items.
+    pub failed_count: i64,
+    /// Number of items resolved via conflict (P1-3).
+    pub conflict_count: i64,
+    /// ISO-8601 timestamp of the most recently synced item, if any.
+    pub last_synced_at: Option<String>,
+    /// ISO-8601 timestamp of the oldest pending item, if any.
+    pub oldest_pending_at: Option<String>,
+}
+
+/// Get a summary of the offline queue status (P1-6 sync observability).
+/// Returns counts by status, conflict count, and timing info.
+#[command]
+pub async fn offline_queue_status_summary(
+    state: State<'_, AppState>,
+) -> Result<OfflineQueueSummaryDto, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let summary = store.offline_queue_status_summary()?;
+    drop(db);
+    Ok(OfflineQueueSummaryDto {
+        pending_count: summary.pending_count,
+        synced_count: summary.synced_count,
+        failed_count: summary.failed_count,
+        conflict_count: summary.conflict_count,
+        last_synced_at: summary.last_synced_at,
+        oldest_pending_at: summary.oldest_pending_at,
+    })
+}
+
 /// Get the count of pending offline items.
 #[command]
 pub async fn pending_offline_count(state: State<'_, AppState>) -> Result<i64, AppError> {

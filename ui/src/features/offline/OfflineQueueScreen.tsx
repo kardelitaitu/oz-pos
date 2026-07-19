@@ -5,6 +5,7 @@ import {
   pendingOfflineCount,
   retryOfflineSync,
   deleteOfflineItem,
+  getOfflineQueueStatusSummary,
   type OfflineQueueItemDto,
   type SyncResult,
 } from '@/api/offline';
@@ -64,6 +65,7 @@ export default function OfflineQueueScreen() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [conflictCount, setConflictCount] = useState<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load data ──────────────────────────────────────────────────
@@ -72,12 +74,14 @@ export default function OfflineQueueScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [data, count] = await Promise.all([
+      const [data, count, summary] = await Promise.all([
         listAllOffline(),
         pendingOfflineCount(),
+        getOfflineQueueStatusSummary().catch(() => null),
       ]);
       setItems(data);
       setPendingCount(count);
+      if (summary) setConflictCount(summary.conflictCount);
     } catch {
       setError(l10n.getString('offline-queue-error'));
     } finally {
@@ -87,12 +91,16 @@ export default function OfflineQueueScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll pending count every 10 seconds.
+  // Poll pending count and conflict count every 10 seconds (P1-3).
   useEffect(() => {
     pollRef.current = setInterval(async () => {
       try {
-        const count = await pendingOfflineCount();
+        const [count, summary] = await Promise.all([
+          pendingOfflineCount(),
+          getOfflineQueueStatusSummary().catch(() => null),
+        ]);
         setPendingCount(count);
+        if (summary) setConflictCount(summary.conflictCount);
       } catch {
         // Silently ignore poll errors.
       }
@@ -159,6 +167,14 @@ export default function OfflineQueueScreen() {
           </Localized>
         </Button>
       </div>
+
+      {conflictCount > 0 && (
+        <div className="offline-queue-sync-result" role="alert" style={{ borderColor: 'var(--color-warning-border, #ffc107)' }}>
+          <Localized id="offline-queue-conflict-count" vars={{ count: String(conflictCount) }}>
+            <span>{conflictCount} item(s) resolved via sync conflict.</span>
+          </Localized>
+        </div>
+      )}
 
       {syncResult && (
         <div className="offline-queue-sync-result" role="status">

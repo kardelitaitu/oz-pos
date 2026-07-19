@@ -24,6 +24,9 @@ pub struct SyncStatusSummary {
     pub last_synced_at: Option<String>,
     /// ISO-8601 timestamp of the oldest pending item, if any.
     pub oldest_pending_at: Option<String>,
+    /// Number of items resolved via conflict during the last sync cycle.
+    /// (P1-3: items whose last_error starts with "resolved: conflict").
+    pub conflict_count: i64,
 }
 
 impl Store<'_> {
@@ -151,6 +154,25 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Mark an offline queue item as resolved via conflict (P1-3).
+    ///
+    /// Sets status to 'synced' and records the resolution type in
+    /// `last_error` so the status summary can count conflict resolutions.
+    pub fn mark_offline_resolved(&self, id: &str, resolution: &str) -> Result<(), CoreError> {
+        let marker = format!("resolved: conflict ({})", resolution);
+        let affected = self.conn.execute(
+            "UPDATE offline_queue SET status = 'synced', synced_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), last_error = ?1 WHERE id = ?2",
+            params![marker, id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "offline_queue",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Mark an offline queue item as failed with an error message.
     pub fn mark_offline_failed(&self, id: &str, error: &str) -> Result<(), CoreError> {
         self.conn.execute(
@@ -235,6 +257,16 @@ impl Store<'_> {
             )
             .ok();
 
+        // P1-3: Count items resolved via conflict (last_error starts with "resolved: conflict")
+        let conflict_count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE last_error LIKE 'resolved: conflict%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
         Ok(SyncStatusSummary {
             pending_count,
             synced_count,
@@ -242,6 +274,7 @@ impl Store<'_> {
             total_retry_count,
             last_synced_at,
             oldest_pending_at,
+            conflict_count,
         })
     }
 
@@ -761,6 +794,7 @@ mod tests {
             total_retry_count: 7,
             last_synced_at: Some("2025-06-01T12:00:00Z".into()),
             oldest_pending_at: None,
+            conflict_count: 0,
         };
         let json = serde_json::to_string(&summary).unwrap();
         let rt: SyncStatusSummary = serde_json::from_str(&json).unwrap();
@@ -779,6 +813,7 @@ mod tests {
             total_retry_count: 0,
             last_synced_at: None,
             oldest_pending_at: None,
+            conflict_count: 0,
         };
         let debug = format!("{summary:?}");
         assert!(debug.contains("pending_count: 1"));

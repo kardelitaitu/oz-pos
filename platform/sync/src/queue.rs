@@ -141,16 +141,23 @@ impl SyncQueue {
 
     /// Apply a conflict-resolution outcome to the queue.
     ///
-    /// If the local item lost, it is marked as failed/superseded. If the
-    /// winner is a merged item, a new queue entry is created.
+    /// Marks the local item with a conflict-resolution marker in its
+    /// `last_error` field so the status summary can count it. If the
+    /// winner is a merged (CRDT) item, a new queue entry is created.
     pub fn apply_resolution(
         &self,
         store: &Store<'_>,
         resolved: &ResolvedItem,
     ) -> Result<(), CoreError> {
-        // Mark the local item as synced (the conflict was resolved)
+        // Determine the resolution type from the winner identity.
+        let resolution_tag = match (&resolved.local, &resolved.remote) {
+            (Some(local), _) if resolved.winner.id == local.id => "local won",
+            (_, Some(remote)) if resolved.winner.id == remote.id => "remote won",
+            _ => "crdt merge",
+        };
+        // Mark the local item with a conflict marker and sync it.
         if let Some(ref local) = resolved.local {
-            store.mark_offline_synced(&local.id)?;
+            store.mark_offline_resolved(&local.id, resolution_tag)?;
         }
         // If the winner is a merged item (neither purely local nor remote),
         // enqueue it for the next sync cycle.

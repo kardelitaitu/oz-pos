@@ -419,6 +419,7 @@ pub fn run() {
             commands::terminals::delete_terminal_profile_scoped,
             commands::offline::enqueue_offline,
             commands::offline::list_pending_offline,
+            commands::offline::offline_queue_status_summary,
             commands::offline::list_all_offline,
             commands::offline::pending_offline_count,
             commands::offline::retry_offline_sync,
