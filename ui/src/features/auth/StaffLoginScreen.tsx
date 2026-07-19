@@ -42,6 +42,8 @@ function AlertIcon() {
 // ── Constants ───────────────────────────────────────────────────────
 
 const MAX_PIN_LENGTH = 4;
+const MAX_PIN_ATTEMPTS = 5;
+const RATE_LIMIT_WARN_AFTER = 3;
 
 // ── Resized Logo Helper (1:1 PNG at target size) ───────────────────
 
@@ -116,10 +118,12 @@ export default function StaffLoginScreen() {
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const pinSubmitted = useRef(false);
+  const [pinAttempts, setPinAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const toastShownForError = useRef<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // ── Shake card + toast on PIN error ──────────────────────────
+  // ── Shake card + toast + rate-limit on PIN error ──────────────
 
   useEffect(() => {
     if (!error || step !== 'pin' || error === toastShownForError.current) return;
@@ -133,8 +137,43 @@ export default function StaffLoginScreen() {
 
     addToast({ type: 'error', message: error, duration: 5000 });
     setPin([]);
+
+    // Track failed PIN attempts for client-side rate limiting
+    setPinAttempts((prev) => {
+      const next = prev + 1;
+      if (next >= MAX_PIN_ATTEMPTS) {
+        // Lock out for 30 seconds
+        setLockedUntil(Date.now() + 30_000);
+      }
+      return next;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
+
+  // ── Auto-unlock after lockout period ──────────────────────────
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const remaining = lockedUntil - Date.now();
+    if (remaining <= 0) {
+      setLockedUntil(null);
+      setPinAttempts(0);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLockedUntil(null);
+      setPinAttempts(0);
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [lockedUntil]);
+
+  // ── Rate-limit display helpers ─────────────────────────────────
+
+  const remainingAttempts = Math.max(0, MAX_PIN_ATTEMPTS - pinAttempts);
+  const isLocked = lockedUntil !== null;
+  const lockoutRemainingSec = lockedUntil !== null
+    ? Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000))
+    : 0;
 
   // ── Focus appropriate element when step changes ──────────────
 
@@ -155,20 +194,23 @@ export default function StaffLoginScreen() {
   // ── PIN pad handlers ─────────────────────────────────────────
 
   const handlePinDigit = useCallback((digit: string) => {
+    if (isLocked) return;
     setPin((prev) => {
       if (prev.length >= MAX_PIN_LENGTH) return prev;
       return [...prev, digit];
     });
-  }, []);
+  }, [isLocked]);
 
   const handlePinBackspace = useCallback(() => {
+    if (isLocked) return;
     setPin((prev) => prev.slice(0, -1));
-  }, []);
+  }, [isLocked]);
 
   const handlePinClear = useCallback(() => {
+    if (isLocked) return;
     setPin([]);
     pinSubmitted.current = false;
-  }, []);
+  }, [isLocked]);
 
   // ── Attempt login ────────────────────────────────────────────
 
@@ -341,7 +383,7 @@ export default function StaffLoginScreen() {
     ];
 
     return (
-      <div className="staff-login-pad" role="group" aria-label={l10n.getString('staff-login-keypad-aria')}>
+      <div className="staff-login-pad" role="group" aria-label={l10n.getString('staff-login-keypad-aria')} aria-disabled={isLocked || undefined}>
         {keys.map((row) => (
           <div className="staff-login-pad-row" key={row[0]}>
             {row.map((digit) => (
@@ -349,8 +391,7 @@ export default function StaffLoginScreen() {
                 <button
                   type="button"
                   className="staff-login-pad-key"
-                  onClick={() => handlePinDigit(digit)}
-                  aria-label={digit}                      disabled={authLoading}
+                  onClick={() => handlePinDigit(digit)}                          aria-label={digit}                      disabled={authLoading || isLocked}
                     >
                       {digit}
                     </button>
@@ -365,7 +406,7 @@ export default function StaffLoginScreen() {
               className="staff-login-pad-key staff-login-pad-key--action"
               onClick={handlePinClear}
               aria-label="Clear"
-              disabled={authLoading || pin.length === 0}
+              disabled={authLoading || pin.length === 0 || isLocked}
             >
               <Localized id="staff-login-clear">Clear</Localized>
             </button>
@@ -376,7 +417,7 @@ export default function StaffLoginScreen() {
               className="staff-login-pad-key"
               onClick={() => handlePinDigit('0')}
               aria-label="0"
-              disabled={authLoading}
+              disabled={authLoading || isLocked}
             >
               0
             </button>
@@ -387,7 +428,7 @@ export default function StaffLoginScreen() {
               className="staff-login-pad-key staff-login-pad-key--action"
               onClick={handlePinBackspace}
               aria-label="Backspace"
-              disabled={authLoading || pin.length === 0}
+              disabled={authLoading || pin.length === 0 || isLocked}
             >
               <BackspaceIcon />
             </button>
@@ -503,9 +544,26 @@ export default function StaffLoginScreen() {
           )}
 
           {error && step === 'username' && (
-            <div className="staff-login-error" role="alert">
+            <div className="staff-login-error" role="alert" aria-live="polite">
               <AlertIcon />
               {error}
+            </div>
+          )}
+
+          {error && step === 'pin' && (
+            <div className="staff-login-error" role="alert" aria-live="polite">
+              <AlertIcon />
+              {error}
+              {pinAttempts >= RATE_LIMIT_WARN_AFTER && pinAttempts < MAX_PIN_ATTEMPTS && (
+                <span className="staff-login-rate-limit">
+                  {' '}{l10n.getString('staff-login-attempts-remaining', { count: String(remainingAttempts) })}
+                </span>
+              )}
+              {isLocked && (
+                <span className="staff-login-rate-limit staff-login-rate-limit--lockout">
+                  {' '}{l10n.getString('staff-login-lockout', { seconds: String(lockoutRemainingSec) })}
+                </span>
+              )}
             </div>
           )}
         </div>

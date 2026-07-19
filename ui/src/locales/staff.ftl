@@ -104,6 +104,8 @@ staff-login-error-not-found = User not found
 staff-login-error-connection = Could not verify username. Check your connection.
 staff-login-back = ← Back
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.
+staff-login-attempts-remaining = ({ $count } attempt{ $count -> [1] { "" } *{ "s" } } remaining)
+staff-login-lockout = Locked out. Try again in { $seconds }s
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 

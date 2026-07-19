@@ -2,7 +2,7 @@
 
 > **Goal:** Polish everything for release-quality — close all a11y gaps, harden offline resilience, push test coverage, add KDS/reporting features.
 
-**Current state:** 66 / 101 items complete (65.3%) · Updated 2026-07-19
+**Current state:** 69 / 101 items complete (68.3%) · Updated 2026-07-19
 
 ---
 
@@ -14,7 +14,7 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| ♿ Accessibility | 17 | 4 | ███░░░░░░░ 24% |
+| ♿ Accessibility | 17 | 7 | ████░░░░░░ 41% |
 | 🔌 Offline & Data | 8 | 0 | ░░░░░░░░░░ 0% |
 | 🧪 Rust Test Coverage | 13 | 13 | ██████████ 100% ✅ |
 | 🧪 UI Test Coverage | 8 | 8 | ██████████ 100% ✅ |
@@ -24,7 +24,7 @@
 | 🛒 Payment Gateway | 6 | 0 | ░░░░░░░░░░ 0% |
 | 🏪 Multi-Store UX | 4 | 0 | ░░░░░░░░░░ 0% |
 | 📦 Release Ops | 19 | 5 | ██░░░░░░░░ 26% |
-| **Total** | **101** | **66** | **████████░░ 80%** |
+| **Total** | **101** | **69** | **████████░░ 80%** |
 
 ---
 
@@ -35,9 +35,9 @@
 All forms must surface clear, specific validation errors with `role="alert"`.
 
 **1.1 StaffLoginScreen** — PIN mismatch, username not found, rate-limit lockout
-- [ ] Add `role="alert"` wrapper around error display
-- [ ] Ensure `aria-live="polite"` for dynamic error appearance
-- [ ] Show rate-limit remaining attempts countdown
+- [x] PIN-step inline error with `role="alert"` + `aria-live="polite"` (username step already had `role="alert"`)
+- [x] `aria-live="polite"` added to username error display
+- [x] Rate-limit countdown shown after 3 failed PIN attempts, lockout after 5 attempts
 
 **1.2 CreatePinScreen** — min length, mismatch, complexity requirements
 - [x] 17 hardcoded strings already fixed

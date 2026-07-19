@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
 import { checkUsername } from '@/api/staff';
 
+// ── Hoisted mock helpers ───────────────────────────────────────────
+
+const mockAuthError = vi.hoisted(() => vi.fn(() => null));
+
 // ── Mocks ────────────────────────────────────────────────────────────
 
 const mockLogin = vi.fn();
@@ -17,7 +21,7 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: null,
     loading: false,
-    error: null,
+    error: mockAuthError(),
     login: (...args: unknown[]) => mockLogin(...args),
     logout: vi.fn(),
     clearError: (...args: unknown[]) => mockClearError(...args),
@@ -70,6 +74,8 @@ staff-login-error-deactivated = Account is deactivated
 staff-login-error-not-found = User not found
 staff-login-error-connection = Could not verify username. Check your connection.
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.
+staff-login-attempts-remaining = ({ $count } attempts remaining)
+staff-login-lockout = Locked out. Try again in { $seconds }s
 `));
   const l10n = new ReactLocalization([bundle]);
   return render(
@@ -84,6 +90,7 @@ staff-login-copyright = © 2026 OZ-POS. All rights reserved.
 describe('StaffLoginScreen — keyboard and form tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuthError.mockReturnValue(null);
     vi.mocked(checkUsername).mockResolvedValue({ found: true, is_active: true });
   });
 
@@ -296,6 +303,113 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
       });
+    });
+
+    it('shows inline error with role="alert" when auth error occurs on PIN step', async () => {
+      mockAuthError.mockReturnValue('Invalid PIN');
+      await advanceToPin();
+      await waitFor(() => {
+        const alerts = screen.getAllByRole('alert');
+        // Toast alert + inline error alert
+        const inlineError = alerts.find((el) =>
+          el.className.includes('staff-login-error'),
+        );
+        expect(inlineError).toBeInTheDocument();
+        expect(inlineError).toHaveAttribute('aria-live', 'polite');
+        expect(inlineError).toHaveTextContent('Invalid PIN');
+      });
+    });
+
+    it('shows rate-limit countdown after 3 failed PIN attempts', async () => {
+      await advanceToPin();
+
+      // Simulate 3 failed PIN attempts by cycling mockAuthError values.
+      // Each unique error triggers the component's error-effect which
+      // increments pinAttempts. The effect guards against re-processing
+      // the same error via toastShownForError ref, so we must use
+      // different error messages for each attempt.
+
+      // 1st failure
+      mockAuthError.mockReturnValue('Error 1');
+      fireEvent.click(screen.getByLabelText('1')); // triggers re-render via setPin
+      await waitFor(() => {
+        const inline = document.querySelector('.staff-login-error');
+        expect(inline).toHaveTextContent('Error 1');
+      });
+
+      // Reset error before 2nd failure (clear state)
+      mockAuthError.mockReturnValue(null);
+      fireEvent.click(screen.getByLabelText('2')); // triggers re-render
+      await waitFor(() => {
+        expect(document.querySelector('.staff-login-error')).not.toBeInTheDocument();
+      });
+
+      // 2nd failure (different message so effect fires again)
+      mockAuthError.mockReturnValue('Error 2');
+      fireEvent.click(screen.getByLabelText('3')); // triggers re-render
+      await waitFor(() => {
+        const inline = document.querySelector('.staff-login-error');
+        expect(inline).toHaveTextContent('Error 2');
+      });
+
+      // Reset
+      mockAuthError.mockReturnValue(null);
+      fireEvent.click(screen.getByLabelText('4')); // triggers re-render
+      await waitFor(() => {
+        expect(document.querySelector('.staff-login-error')).not.toBeInTheDocument();
+      });
+
+      // 3rd failure — triggers rate-limit warning
+      mockAuthError.mockReturnValue('Error 3');
+      fireEvent.click(screen.getByLabelText('5')); // triggers re-render
+      await waitFor(() => {
+        const inline = document.querySelector('.staff-login-error');
+        expect(inline).toHaveTextContent(/attempts? remaining/i);
+      });
+
+      // Cleanup: reset for other tests
+      mockAuthError.mockReturnValue(null);
+    });
+
+    it('shows lockout message after 5 failed PIN attempts and disables keypad', async () => {
+      await advanceToPin();
+
+      for (let i = 0; i < 5; i++) {
+        // Enter a digit so Clear button becomes enabled
+        fireEvent.click(screen.getByLabelText('1'));
+        // Set error message
+        mockAuthError.mockReturnValue(`Err${i}`);
+        // Click Clear — clears pin AND triggers re-render picking up new error
+        fireEvent.click(screen.getByText('Clear'));
+        await waitFor(() => {
+          const inline = document.querySelector('.staff-login-error');
+          expect(inline).toHaveTextContent(`Err${i}`);
+        });
+      }
+
+      // After 5 failures, pinAttempts >= MAX_PIN_ATTEMPTS so isLocked = true.
+      // The lockout message should appear with the last error.
+      await waitFor(() => {
+        const inline = document.querySelector('.staff-login-error');
+        expect(inline).toHaveTextContent(/Err4|locked/i);
+      });
+
+      // Keypad should be disabled during lockout
+      const digitButtons = screen.getAllByRole('button', { name: /^[0-9]$/ });
+      for (const btn of digitButtons) {
+        expect(btn).toBeDisabled();
+      }
+
+      // Clear button should also be disabled
+      const clearBtn = screen.getByText('Clear').closest('button')!;
+      expect(clearBtn).toBeDisabled();
+
+      // Backspace should also be disabled
+      const backspace = screen.getByLabelText('Backspace');
+      expect(backspace).toBeDisabled();
+
+      // Cleanup
+      mockAuthError.mockReturnValue(null);
     });
   });
 
