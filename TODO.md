@@ -49,7 +49,7 @@
 | `purchase_orders.rs` | 15 → **21** | 20+ | ✅ |
 | `suppliers.rs` | 15 → **20** | 20+ | ✅ |
 | `reports.rs` | 17 → **30** | 25+ | ✅ |
-| `settings.rs` | 17 | 25+ | 8 |
+| `settings.rs` | 17 → **27** | 25+ | ✅ |
 | `terminals.rs` | 17 | 25+ | 8 |
 | `stock_transfers.rs` | 18 | 25+ | 7 |
 | `inventory.rs` | 19 | 30+ | 11 |
