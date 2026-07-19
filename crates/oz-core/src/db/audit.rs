@@ -297,4 +297,148 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].action.len(), 193);
     }
+
+    /// ── Additional edge cases (ADR-8 PCI-DSS §10) ───────────────────
+
+    #[test]
+    fn audit_log_duplicate_id_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let entry = AuditEntry::new(
+            "user-1",
+            "test.dup",
+            Some("x".to_string()),
+            None::<String>,
+            None::<String>,
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+
+        // Attempt to insert a second entry with the same ID via raw SQL
+        let result = conn.execute(
+            "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                &entry.id, "user-1", "test.dup", "x", std::option::Option::<&str>::None,
+                "{}", "success", &entry.created_at,
+            ],
+        );
+        assert!(
+            result.is_err(),
+            "duplicate PK should produce SQLITE_CONSTRAINT"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("UNIQUE") || err.to_string().contains("constraint"),
+            "expected constraint error, got: {err}"
+        );
+
+        // Verify only one entry exists
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn audit_log_html_in_details_preserved() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // HTML strings should be stored as-is (no sanitization at the DB layer)
+        let html_details = r#"{"message":"<script>alert('xss')</script>","input":"<b>bold</b>"}"#;
+        let entry = AuditEntry::new(
+            "admin",
+            "form.submit",
+            Some("form".to_string()),
+            Some("form-1".to_string()),
+            Some(html_details.to_string()),
+            "failure",
+        );
+        s.log_audit(&entry).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(
+            entries[0].details.contains("<script>"),
+            "HTML in details should be stored as-is"
+        );
+        assert!(entries[0].details.contains("<b>bold</b>"));
+    }
+
+    #[test]
+    fn audit_log_unicode_in_details() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let unicode_details = r#"{"message":"Selamat pagi 🌏","emoji":"✅🚀","cjk":"你好世界"}"#;
+        let entry = AuditEntry::new(
+            "user-1",
+            "i18n.test",
+            None::<String>,
+            None::<String>,
+            Some(unicode_details.to_string()),
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(
+            entries[0].details.contains("🌏"),
+            "emoji should survive round-trip"
+        );
+        assert!(
+            entries[0].details.contains("你好世界"),
+            "CJK should survive round-trip"
+        );
+    }
+
+    #[test]
+    fn audit_log_long_user_id() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // 200-char user ID
+        let long_user = "user-".to_owned() + &"a".repeat(195);
+        assert_eq!(long_user.len(), 200);
+
+        let entry = AuditEntry::new(
+            &long_user,
+            "bulk.import",
+            None::<String>,
+            None::<String>,
+            None::<String>,
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].user_id.len(), 200);
+    }
+
+    #[test]
+    fn audit_log_special_chars_target_type() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Dotted namespace path, hyphenated, with numbers
+        let entry = AuditEntry::new(
+            "system",
+            "setting.update",
+            Some("oz-pos.settings.v3".to_string()),
+            Some("workspace.123".to_string()),
+            None::<String>,
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].target_type.as_deref(),
+            Some("oz-pos.settings.v3")
+        );
+        assert_eq!(entries[0].target_id.as_deref(), Some("workspace.123"));
+    }
 }

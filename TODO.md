@@ -43,7 +43,7 @@
 | `kds.rs` | 12 → **21** | 20+ | ✅ |
 | `customers.rs` | 13 → **16** | 15+ | ✅ |
 | `offline.rs` | 14 → **21** | 20+ | ✅ |
-| `audit.rs` | 15 | 20+ | 5 |
+| `audit.rs` | 15 → **20** | 20+ | ✅ |
 | `cash_payouts.rs` | 15 | 20+ | 5 |
 | `payments.rs` | 15 | 20+ | 5 |
 | `purchase_orders.rs` | 15 | 20+ | 5 |
