@@ -237,7 +237,7 @@ if should_run crates; then
     skill_crates="$(cat .agents/skills/*/SKILL.md | grep -oE 'oz-[a-z-]+' | sort -u)"
 
     while read -r c; do
-      [ -z "$c" ] || [ "$c" = "oz-pos" ] && continue
+      [ -z "$c" ] || [ "$c" = "oz-pos" ] || [[ "$c" = oz-pos-* ]] && continue
       if ! echo "$workspace_crates" | grep -qx "$c"; then
         FINDINGS[crates]+="missing in workspace: ${c}"$'\n'
       fi
