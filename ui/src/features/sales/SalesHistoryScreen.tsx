@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listSales,
@@ -128,6 +128,14 @@ export default function SalesHistoryScreen() {
   const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session, isManager } = useAuth();
 
+  // P2-4: Sale detail cache — avoids re-fetching the same sale on modal re-open.
+  // Invalidated when a sale is voided or refunded (status-changing events).
+  const detailCacheRef = useRef<Map<string, SaleDetail>>(new Map());
+
+  const invalidateCache = useCallback((saleId: string) => {
+    detailCacheRef.current.delete(saleId);
+  }, []);
+
   // ── Filters ────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -207,6 +215,7 @@ export default function SalesHistoryScreen() {
         userId: session?.user_id ?? 'unknown',
         reason: voidReason || l10n.getString('sales-history-void-default-reason'),
       });
+      invalidateCache(voidTarget.id);
       setVoidTarget(null);
       setVoidReason('');
       load();
@@ -277,8 +286,23 @@ export default function SalesHistoryScreen() {
     return filteredSales.slice(from, from + pageSize);
   }, [filteredSales, safePage, pageSize]);
 
-  // ── Detail modal ───────────────────────────────────────────────
+  // ── Detail modal (P2-4: cached) ────────────────────────────────
   const openDetail = useCallback(async (id: string) => {
+    // Check cache first to avoid re-fetching recently viewed sales
+    const cached = detailCacheRef.current.get(id);
+    if (cached) {
+      setDetail(cached);
+      setDetailLoading(false);
+      // Still fetch refunds (they may have changed)
+      try {
+        const refundData = await listRefunds(id).catch(() => [] as RefundDto[]);
+        setRefunds(refundData);
+      } catch {
+        setRefunds([]);
+      }
+      return;
+    }
+
     setDetailLoading(true);
     setRefunds([]);
     try {
@@ -286,6 +310,10 @@ export default function SalesHistoryScreen() {
         getSale(id),
         listRefunds(id).catch(() => [] as RefundDto[]),
       ]);
+      // Cache the result for future re-opens (null-safe: getSale can return null)
+      if (sale) {
+        detailCacheRef.current.set(id, sale);
+      }
       setDetail(sale);
       setRefunds(refundData);
     } catch {
@@ -368,10 +396,11 @@ export default function SalesHistoryScreen() {
   const handleRefunded = useCallback(() => {
     closeRefund();
     if (detail) {
+      invalidateCache(detail.id);
       loadRefunds(detail.id);
     }
     load();
-  }, [closeRefund, detail, loadRefunds, load]);
+  }, [closeRefund, detail, loadRefunds, load, invalidateCache]);
 
   // ── Cashier display helper ─────────────────────────────────────
   const cashierName = useCallback((userId: string | null): string => {

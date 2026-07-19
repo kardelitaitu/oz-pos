@@ -12,7 +12,7 @@
 |------|-------|------|----------|
 | 🔴 P0 — Plugin Security | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P1 — Sync Reliability | 6 | **5** | **████████▱▱▱▱ 83%** |
-| 🟡 P2 — UI Performance | 5 | **1** | **██▱▱▱▱▱▱▱▱ 20%** |
+| 🟡 P2 — UI Performance | 5 | **2** | **████▱▱▱▱▱▱ 40%** |
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟤 P5 — Payment Gateway Hardening | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
@@ -25,7 +25,7 @@
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **70** | **24** | **████████████████▱ 34%** |
+| **Total** | **70** | **25** | **████████████████▱ 36%** |
 
 ---
 
@@ -89,7 +89,7 @@ Current UI test suite runs in ~19s. The product grid (ProductLookupScreen/Retail
 - [ ] **P2-1: Profile baseline** — Add React Profiler traces to ProductLookupScreen, KDS ticket board, and SalesHistoryScreen. Record baseline render times and re-render counts in CI test output.
 - [ ] **P2-2: Product grid virtualization** — Replace flat product list with `react-window` virtualized grid (FixedSizeGrid for desktop, FixedSizeList for tablet). Render only visible products + 2 rows overscan. Expected: 40%+ reduction in initial render time.
 - [x] **P2-3: KDS adaptive polling** ✅ — Replaced fixed 15s interval with recursive setTimeout adaptive polling: 2s when active (<30s idle), 10s when idle (30s–2min), 30s when idle (>2min). Pauses when tab hidden (visibilityState), resumes with immediate fetch on tab show. Idle timer resets on every order count change via effect dependency. TypeScript: 0 errors.
-- [ ] **P2-4: Sale detail caching** — Cache sale details in a `Map<saleId, Sale>` after first fetch in SalesHistoryScreen. Invalidate on any status change (void, refund, complete). Avoid re-fetching the same sale on modal re-open.
+- [x] **P2-4: Sale detail caching** ✅ — Added `useRef<Map<string, SaleDetail>>` cache in SalesHistoryScreen. Cache checked before fetch on `openDetail`; hit returns instantly (only refunds re-fetched). `invalidateCache(id)` called on void (`handleConfirmVoid`) and refund (`handleRefunded`) to ensure stale entries are cleared. TypeScript: 0 errors.
 - [ ] **P2-5: Memo audit** — Add `React.memo` to the top 10 most-rendered components identified by profiling: ProductCard, CartLineItem, KDSTicket, KDSTicketTimer, PaymentMethodCard, SearchResultItem, TransactionRow, ShiftSummaryCard, AlertItem, LocationOption. Verify with before/after render counts.
 
 ---
