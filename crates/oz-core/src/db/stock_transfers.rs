@@ -1014,4 +1014,127 @@ mod tests {
             matches!(&err, CoreError::Validation { field, message } if *field == "status" && message.contains("draft"))
         );
     }
+
+    // ── Extended error paths ─────────────────────────────────────────
+
+    #[test]
+    fn send_nonexistent_transfer_errors() {
+        let conn = fresh();
+        let err = store(&conn).send_transfer("nonexistent").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "stock_transfer"));
+    }
+
+    #[test]
+    fn receive_nonexistent_transfer_errors() {
+        let conn = fresh();
+        let err = store(&conn)
+            .receive_transfer("nonexistent", "user-2", &[])
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "stock_transfer"));
+    }
+
+    #[test]
+    fn add_line_to_nonexistent_transfer_errors() {
+        let conn = fresh();
+        let err = store(&conn)
+            .add_transfer_line("nonexistent", "SKU-001", "Widget", 5)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "stock_transfer"));
+    }
+
+    #[test]
+    fn remove_nonexistent_line_errors() {
+        let conn = fresh();
+        let err = store(&conn)
+            .remove_transfer_line("nonexistent-line")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { entity, .. } if entity == "stock_transfer_line")
+        );
+    }
+
+    #[test]
+    fn remove_line_from_sent_transfer_rejected() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 50);
+
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "", "user-1", &[])
+            .unwrap();
+        let line = store(&conn)
+            .add_transfer_line(&t.id, "SKU-001", "Widget", 5)
+            .unwrap();
+        store(&conn).send_transfer(&t.id).unwrap();
+
+        let err = store(&conn).remove_transfer_line(&line.id).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn create_transfer_with_multiple_lines() {
+        let conn = fresh();
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_product(&conn, "SKU-002", "Gadget");
+        seed_inventory(&conn, "SKU-001", 100);
+        seed_inventory(&conn, "SKU-002", 50);
+
+        let lines = vec![
+            make_line("SKU-001", "Widget", 10),
+            make_line("SKU-002", "Gadget", 5),
+        ];
+        let t = store(&conn)
+            .create_transfer(None, None, None, None, "multi-line", "user-1", &lines)
+            .unwrap();
+        assert_eq!(t.status, "draft");
+
+        let fetched_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(fetched_lines.len(), 2);
+        assert_eq!(fetched_lines[0].sku, "SKU-001");
+        assert_eq!(fetched_lines[1].sku, "SKU-002");
+    }
+
+    #[test]
+    fn create_transfer_with_explicit_locations() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_inventory(&conn, "SKU-001", 100);
+
+        // Create inventory locations for FK compliance.
+        let loc_wh_a_id = s
+            .create_inventory_location("Warehouse A", "warehouse", "Main warehouse")
+            .unwrap();
+        let loc_store_b_id = s
+            .create_inventory_location("Store B", "store", "Retail store B")
+            .unwrap();
+
+        let lines = vec![make_line("SKU-001", "Widget", 10)];
+        let t = s
+            .create_transfer(
+                Some(&loc_wh_a_id),
+                Some(&loc_store_b_id),
+                None,
+                None,
+                "warehouse to store",
+                "user-1",
+                &lines,
+            )
+            .unwrap();
+
+        let fetched = s.get_transfer(&t.id).unwrap().unwrap();
+        assert_eq!(
+            fetched.source_location,
+            Some(loc_wh_a_id),
+            "explicit source location should be preserved"
+        );
+        assert_eq!(
+            fetched.destination_location,
+            Some(loc_store_b_id),
+            "explicit destination location should be preserved"
+        );
+    }
 }

@@ -51,7 +51,7 @@
 | `reports.rs` | 17 → **30** | 25+ | ✅ |
 | `settings.rs` | 17 → **27** | 25+ | ✅ |
 | `terminals.rs` | 17 → **25** | 25+ | ✅ |
-| `stock_transfers.rs` | 18 | 25+ | 7 |
+| `stock_transfers.rs` | 18 → **25** | 25+ | ✅ |
 | `inventory.rs` | 19 | 30+ | 11 |
 | `tax.rs` | 19 | 25+ | 6 |
 
