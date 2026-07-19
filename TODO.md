@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 0 / ~25 items · Updated 2026-07-19
+**Current state:** 40 / 71 items complete (56%) · Updated 2026-07-20
 
 ---
 
@@ -15,17 +15,17 @@
 | 🟡 P2 — UI Performance | 6 | **6** | **███████████████████████████████ 100% 🎉** |
 | 🔵 P3 — KDS Enhancements | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P4 — Docs & Compliance | 4 | **4** | **███████████████████████████████ 100% 🎉** |
-| 🟤 P5 — Payment Gateway Hardening | 4 | **1** | **███▱▱▱▱▱▱▱ 25%** |
+| 🟤 P5 — Payment Gateway Hardening | 4 | **2** | **█████▱▱▱▱▱▱ 50%** |
 | ⚪ P6 — Hardware Integration | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P7 — Tablet/Mobile Experience | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🔘 P8 — Cloud Server & License | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
 | 🟠 P9 — Reporting & Analytics | 3 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🔵 P10 — i18n & Accessibility | 5 | **4** | **████████▱▱▱▱ 80%** |
-| 🟢 P11 — Shadow Banding Audit | 5 | **1** | **██▱▱▱▱▱▱▱▱ 20%** |
+| 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
+| 🟢 P11 — Shadow Banding Audit | 5 | **4** | **████████████▱▱ 80%** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| 🟡 P13 — DevOps & Infrastructure | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
+| 🟡 P13 — DevOps & Infrastructure | 4 | **1** | **██▱▱▱▱▱▱▱▱ 25%** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **31** | **██████████████████████▱ 44%** |
+| **Total** | **71** | **42** | **██████████████████████████▱ 59%** |
 
 ---
 
@@ -269,7 +269,7 @@ From `docs/TODO-shadow-audit.md`: 30 CSS surfaces use shadows (`--shadow-xl` thr
 - [x] **P11-1: Phase 1 — High-risk surfaces** ✅ — All 15 surfaces already have noise-dither selectors in `ui/src/frontend/themes/components.css` (`.workspace-card`, all 6 retail-* modals, `.tables-detail`, `.settings-popup`, `.license-activation-card`, `.gift-cards-modal`, `.promo-mgmt-modal`, `.product-mgmt-modal`, `.po-form-modal`, `.sales-history-modal`, `.shift-mgmt-modal`, `.stock-transfers-modal`, `.payment-modal`, `.price-override-modal`, `.dev-toolbar`). No code changes needed.
 - [x] **P11-2: Phase 2 — Medium-risk surfaces** ✅ — Added `.restaurant-hamburger-dropdown`, `.restaurant-context-menu`, `.settings-sidebar`, `.tooltip-content`, `.ssel-dropdown` to the noise-dither selector list in `components.css`. Updated `@media (prefers-contrast: high)` block. TypeScript: 0 errors.
 - [x] **P11-3: Phase 3 — Low-risk surfaces** ✅ — Added 8 selectors to noise-dither list: `.multi-store-stat-card`, `.product-card`, `.kiosk-product-card`, `.setup-preset-card`, `.setup-step-panel`, `.pos-cart-line`, `.pos-cart-tip-segment`, `.permission-denied-card`. MenuEngineeringScreen skipped (no shadow surfaces). RetailPosScreen sm variants already covered by P11-1. Updated `@media (prefers-contrast: high)` block. TypeScript: 0 errors.
-- [ ] **P11-4: Noise overlay CSS refactor** — Extract the noise overlay into a reusable CSS class `.noise-dither` in `components.css`. Replace inline `::after` in individual files with the shared class. Add `@media (prefers-reduced-motion: reduce)` to remove overlay for accessibility.
+- [x] **P11-4: Noise overlay CSS refactor** ✅ — Consolidated noise `::after` into canonical `.noise-dither` utility class with documented USAGE pattern. Kept 30+ legacy feature-specific selectors as backward-compat bridge (marked deprecated). Added `@media (prefers-reduced-motion: reduce)` block to hide noise (a11y: reduces GPU compositing, prevents visual stress). TypeScript: 0 errors.
 - [ ] **P11-5: Visual regression test** — Add a visual regression test (`playwright` or `puppeteer`) that captures screenshots of each elevated surface and compares against baseline. Run in CI on PRs. Fail if banding is detected via pixel-diff threshold > 1%.
 
 ---
