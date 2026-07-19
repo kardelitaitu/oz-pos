@@ -11,13 +11,92 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🔴 Backend — Critical | 2 | 0 | ░░░░░░░░░░ 0% |
-| 🟡 Backend — Medium | 1 | 0 | ░░░░░░░░░░ 0% |
+| 🟡 Backend — Medium | 2 | 0 | ░░░░░░░░░░ 0% |
+| 🧪 Rust Test Coverage | 14 | 0 | ░░░░░░░░░░ 0% |
+| 🧪 UI Test Coverage | 7 | 0 | ░░░░░░░░░░ 0% |
 | 🔵 Frontend — Missing | 2 | 0 | ░░░░░░░░░░ 0% |
 | 🔴 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 §13 Amendments | 1 | 0 | ░░░░░░░░░░ 0% |
 | ❓ Verification | 1 | 0 | ░░░░░░░░░░ 0% |
 | 🟡 New ADR | 1 | 0 | ░░░░░░░░░░ 0% |
-| **Total** | **14** | **0** | **░░░░░░░░░░ 0%** |
+| **Total** | **31** | **0** | **░░░░░░░░░░ 0%** |
+
+---
+
+## 🧪 Rust Test Coverage — Low-Coverage Modules
+
+**Goal:** Bring all `oz-core` sub-modules to **20+ tests each**. Current: 27+ modules with <20 tests.
+
+| Module | Current | Target | New tests needed |
+|--------|---------|--------|-----------------|
+| `recipes.rs` | 4 | 15+ | 11 |
+| `product_bundles.rs` | 8 | 15+ | 7 |
+| `promotions.rs` | 9 | 15+ | 6 |
+| `loyalty.rs` | 10 | 15+ | 5 |
+| `stock_counts.rs` | 10 | 20+ | 10 |
+| `tables.rs` | 10 | 15+ | 5 |
+| `terminal_overrides.rs` | 10 | 15+ | 5 |
+| `terminal_profiles.rs` | 10 | 15+ | 5 |
+| `refunds.rs` | 11 | 20+ | 9 |
+| `cart.rs` | 12 | 20+ | 8 |
+| `gift_cards.rs` | 12 | 15+ | 3 |
+| `kds.rs` | 12 | 20+ | 8 |
+| `customers.rs` | 13 | 15+ | 2 |
+| `offline.rs` | 14 | 20+ | 6 |
+| `store_profiles.rs` | 14 | 20+ | 6 |
+| `audit.rs` | 15 | 20+ | 5 |
+| `cash_payouts.rs` | 15 | 20+ | 5 |
+| `payments.rs` | 15 | 20+ | 5 |
+| `purchase_orders.rs` | 15 | 20+ | 5 |
+| `suppliers.rs` | 15 | 20+ | 5 |
+| `reports.rs` | 17 | 25+ | 8 |
+| `settings.rs` | 17 | 25+ | 8 |
+| `terminals.rs` | 17 | 25+ | 8 |
+| `stock_transfers.rs` | 18 | 25+ | 7 |
+| `inventory.rs` | 19 | 30+ | 11 |
+| `tax.rs` | 19 | 25+ | 6 |
+
+**Total new Rust tests needed:** ~160+
+
+### Key test scenarios to add
+
+- **Recipes**: BOM deduction edge cases, fractional ingredient handling, no-recipe product fallback
+- **Cart**: Tax re-computation on line change, multi-line discount interactions, empty cart edge cases
+- **Offline queue**: Serialization roundtrips, priority ordering, deduplication by sale ID
+- **Inventory**: Location-aware stock movements, threshold CRUD edge cases, negative stock guards
+- **Stock transfers**: Partial receipt lifecycle, cancelled-draft interactions, transit expiry
+- **Reports**: Date-range bounds, empty data periods, multi-currency aggregation
+
+---
+
+## 🧪 UI Test Coverage — Untested Screens
+
+**Goal:** Add dedicated test files for all screens missing test coverage.
+
+### Completely untested screens (7 screens, no test file exists)
+
+| Screen | Feature area | Suggested test count | Key coverage areas |
+|--------|--------------|---------------------|-------------------|
+| `KdsLayoutFocus` | kds | 8 | Urgency sorting, status filter pills, action buttons, empty state |
+| `KdsLayoutKanban` | kds | 8 | Column rendering, drag-between-columns, SLA colour thresholds |
+| `KdsLayoutMetro` | kds | 8 | Responsive grid, overdue tile styling, action buttons per tile |
+| `KdsLayoutSwitcher` | kds | 6 | Popover open/close, layout selection, display toggles, persistence |
+| `ShiftBar` | inventory | 6 | Active shift display, end-shift flow, transaction summary, empty state |
+| `ThresholdConfigScreen` | inventory | 8 | Table rendering, add/edit/delete threshold, validation, location filter |
+| `TransitAuditScreen` | inventory | 8 | Overdue detection, reverse transfer, empty state, location filter |
+
+### Screens with existing tests but <25 tests (low coverage)
+
+| Screen | Current | Target | New tests needed |
+|--------|---------|--------|-----------------|
+| `RetailPosScreen` | 24 | 35+ | 11 |
+| `PosScreen` | 22 | 35+ | 13 |
+| `SalesHistoryScreen` | 14 | 25+ | 11 |
+| `InventoryAdjustmentScreen` | 8 | 20+ | 12 |
+| `ProductLookupScreen` | 14 | 25+ | 11 |
+| `StaffLoginScreen` | 17 | 30+ | 13 |
+
+**Total new UI tests needed:** ~120+
 
 ---
 
