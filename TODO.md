@@ -80,7 +80,7 @@
 | `KdsLayoutKanban` | kds | 8 | Column rendering, drag-between-columns, SLA colour thresholds |
 | `KdsLayoutMetro` | kds | 8 | Responsive grid, overdue tile styling, action buttons per tile |
 | `KdsLayoutSwitcher` | kds | 6 | Popover open/close, layout selection, display toggles, persistence |
-| `ShiftBar` | inventory | 6 | Active shift display, end-shift flow, transaction summary, empty state |
+| `ShiftBar` | inventory | **8** ✅ | Active shift display, end-shift flow, transaction summary, empty state, start form, location selection, modal close |
 | `ThresholdConfigScreen` | inventory | 8 | Table rendering, add/edit/delete threshold, validation, location filter |
 | `TransitAuditScreen` | inventory | 8 | Overdue detection, reverse transfer, empty state, location filter |
 
