@@ -188,10 +188,11 @@ impl Store<'_> {
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let Some(zone) = zone_filter {
             if zone.is_empty() {
                 sql.push_str(" AND (kitchen_zone IS NULL OR kitchen_zone = '')");
+                vec![]
             } else {
                 sql.push_str(" AND kitchen_zone = ?1");
+                vec![Box::new(zone.to_owned())]
             }
-            vec![Box::new(zone.to_owned())]
         } else {
             vec![]
         };
@@ -891,5 +892,331 @@ mod tests {
             let fetched = s.get_kds_order(&order_id).unwrap().unwrap();
             assert_eq!(fetched.status, *status);
         }
+    }
+
+    // ── Additional edge cases ─────────────────────────────────────
+
+    #[test]
+    fn update_kds_status_nonexistent_order_fails() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.update_kds_status("no-such-order", "pending").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+    }
+
+    #[test]
+    fn get_kds_queue_excludes_served_and_cancelled() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Create 4 orders with different statuses.
+        let mut ids = Vec::new();
+        for st in &["pending", "preparing", "served", "cancelled"] {
+            let sale_id = uuid::Uuid::now_v7().to_string();
+            let test_sale = Sale {
+                id: sale_id.clone(),
+                status: crate::SaleStatus::Completed,
+                total: price(0),
+                currency: usd(),
+                line_count: 0,
+                payment_method: None,
+                tendered_minor: None,
+                discount_percent: 0,
+                discount_label: None,
+                user_id: None,
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                subtotal: price(0),
+                tax_total: price(0),
+                customer_id: None,
+                lines: vec![],
+                version: 1,
+            };
+            s.create_sale(&test_sale).unwrap();
+            let order = s
+                .create_kds_order(CreateKdsOrderInput {
+                    sale_id,
+                    store_id: None,
+                    items_summary: st.to_string(),
+                    item_count: 1,
+                    kitchen_zone: None,
+                    notes: String::new(),
+                })
+                .unwrap();
+            if *st != "pending" {
+                s.update_kds_status(&order.id, st).unwrap();
+            }
+            ids.push(order.id);
+        }
+
+        let queue = s.get_kds_queue(None).unwrap();
+        assert_eq!(queue.len(), 2, "should only have pending + preparing");
+        assert!(queue.iter().any(|o| o.status == "pending"));
+        assert!(queue.iter().any(|o| o.status == "preparing"));
+    }
+
+    #[test]
+    fn get_kds_queue_with_zone_filter() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        for zone in &["grill", "salad"] {
+            let sale_id = uuid::Uuid::now_v7().to_string();
+            let test_sale = Sale {
+                id: sale_id.clone(),
+                status: crate::SaleStatus::Completed,
+                total: price(0),
+                currency: usd(),
+                line_count: 0,
+                payment_method: None,
+                tendered_minor: None,
+                discount_percent: 0,
+                discount_label: None,
+                user_id: None,
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                subtotal: price(0),
+                tax_total: price(0),
+                customer_id: None,
+                lines: vec![],
+                version: 1,
+            };
+            s.create_sale(&test_sale).unwrap();
+            s.create_kds_order(CreateKdsOrderInput {
+                sale_id,
+                store_id: None,
+                items_summary: format!("Order in {zone}"),
+                item_count: 1,
+                kitchen_zone: Some(zone.to_string()),
+                notes: String::new(),
+            })
+            .unwrap();
+        }
+
+        let grill = s.get_kds_queue(Some("grill")).unwrap();
+        assert_eq!(grill.len(), 1);
+        assert!(grill[0].items_summary.contains("grill"));
+
+        let salad = s.get_kds_queue(Some("salad")).unwrap();
+        assert_eq!(salad.len(), 1);
+        assert!(salad[0].items_summary.contains("salad"));
+    }
+
+    #[test]
+    fn get_kds_queue_empty_zone_returns_unzoned_orders() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // One order with zone, one without.
+        for (suffix, zone) in &[("zoned", Some("grill")), ("unzoned", None)] {
+            let sale_id = uuid::Uuid::now_v7().to_string();
+            let test_sale = Sale {
+                id: sale_id.clone(),
+                status: crate::SaleStatus::Completed,
+                total: price(0),
+                currency: usd(),
+                line_count: 0,
+                payment_method: None,
+                tendered_minor: None,
+                discount_percent: 0,
+                discount_label: None,
+                user_id: None,
+                created_at: now.clone(),
+                updated_at: now.clone(),
+                subtotal: price(0),
+                tax_total: price(0),
+                customer_id: None,
+                lines: vec![],
+                version: 1,
+            };
+            s.create_sale(&test_sale).unwrap();
+            s.create_kds_order(CreateKdsOrderInput {
+                sale_id,
+                store_id: None,
+                items_summary: format!("Order {suffix}"),
+                item_count: 1,
+                kitchen_zone: zone.map(|z| z.to_string()),
+                notes: String::new(),
+            })
+            .unwrap();
+        }
+
+        let unzoned = s.get_kds_queue(Some("")).unwrap();
+        assert_eq!(unzoned.len(), 1);
+        assert!(unzoned[0].items_summary.contains("unzoned"));
+    }
+
+    #[test]
+    fn complete_sale_to_kds_no_restaurant_lines_returns_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed a retail-type product.
+        s.create_product(
+            "RETAIL-1",
+            "Retail Item",
+            price(500),
+            None,
+            None,
+            100,
+            Some("retail"),
+        )
+        .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("RETAIL-1"), 1, price(500)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+
+        let orders = s.complete_sale_to_kds(&sale.id, None).unwrap();
+        assert!(orders.is_empty(), "no KDS orders for retail-only sale");
+    }
+
+    fn seed_product_with_zone(conn: &Connection, sku: &str, name: &str, zone: &str) {
+        let s = store(conn);
+        s.create_product(sku, name, price(500), None, None, 100, Some("restaurant"))
+            .unwrap();
+        // Set kitchen_zone directly via SQL (not exposed on create_product API).
+        conn.execute(
+            "UPDATE products SET kitchen_zone = ?1 WHERE sku = ?2",
+            params![zone, sku],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn complete_sale_to_kds_groups_same_zone_items() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Seed products in the SAME zone (schema has UNIQUE constraint on sale_id).
+        seed_product_with_zone(&conn, "STEAK", "Steak", "grill");
+        seed_product_with_zone(&conn, "BURGER", "Burger", "grill");
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("STEAK"), 2, price(500)))
+            .unwrap();
+        cart.add_line(CartLine::new(Sku::new("BURGER"), 3, price(300)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+
+        let orders = s.complete_sale_to_kds(&sale.id, None).unwrap();
+        // One order because both products are in the same zone.
+        assert_eq!(orders.len(), 1, "same zone items grouped into one order");
+        let order = &orders[0];
+        assert_eq!(order.kitchen_zone.as_deref(), Some("grill"));
+        assert_eq!(order.item_count, 5);
+        assert!(order.items_summary.contains("Steak"));
+        assert!(order.items_summary.contains("Burger"));
+    }
+
+    #[test]
+    fn complete_sale_to_kds_with_store_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product(&conn, "BURGER", "Burger");
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("BURGER"), 1, price(500)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+
+        let orders = s.complete_sale_to_kds(&sale.id, Some("store-1")).unwrap();
+        assert_eq!(orders.len(), 1);
+        assert_eq!(orders[0].store_id, Some("store-1".to_string()));
+    }
+
+    #[test]
+    fn get_kds_order_by_sale_not_found() {
+        let conn = fresh();
+        let s = store(&conn);
+        let result = s.get_kds_order_by_sale("no-such-sale").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn list_kds_orders_ordered_by_received_at_desc() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Create two orders with distinct timing (sleep to separate timestamps).
+        let sale_id1 = uuid::Uuid::now_v7().to_string();
+        let ts1 = Sale {
+            id: sale_id1.clone(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            lines: vec![],
+            version: 1,
+        };
+        s.create_sale(&ts1).unwrap();
+        let o1 = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: sale_id1,
+                store_id: None,
+                items_summary: "First".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+            })
+            .unwrap();
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        let sale_id2 = uuid::Uuid::now_v7().to_string();
+        let ts2 = Sale {
+            id: sale_id2.clone(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            lines: vec![],
+            version: 1,
+        };
+        s.create_sale(&ts2).unwrap();
+        let o2 = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: sale_id2,
+                store_id: None,
+                items_summary: "Second".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+            })
+            .unwrap();
+
+        let all = s.list_kds_orders(None).unwrap();
+        assert_eq!(all.len(), 2);
+        // Most recent first.
+        assert_eq!(all[0].id, o2.id);
+        assert_eq!(all[1].id, o1.id);
     }
 }
