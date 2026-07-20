@@ -36,26 +36,18 @@ unfamiliar code without reading every file.
 | `graphify path "A" "B"` | Shortest path between two concepts | Checking if two modules are connected |
 | `graphify explain "<node>"` | Everything connected to a node | Learning what a type/trait/hook touches |
 
-### Recommended workflow
+### Agent workflow
 
-```bash
-# 1. Auto-rebuild graph on code changes (AST-only, no LLM cost)
-graphify --watch .
+- **At session start:** run `graphify --watch .` in the background to auto-rebuild
+the graph on file saves (AST-only, no LLM cost, deterministic).
+- **When stuck on unfamiliar code:** use `graphify query`/`path`/`explain` to
+navigate the graph instead of reading every file manually.
+- **On commit:** the post-commit hook (already installed) auto-rebuilds the graph
+so it stays in sync across sessions.
 
-# 2. Install git commit hook for automatic rebuilds
-graphify hook install
-
-# 3. When stuck on unfamiliar code
-graphify query "how does authentication work"
-graphify query "what connects the data layer to the API"
-graphify path "PlatformError" "Settings"
-graphify explain "useAuth"
-```
-
-The graph is persisted in `graphify-out/` (gitignored). The `--watch` mode
-re-runs AST extraction automatically on file saves — no manual rebuilds needed
-for code changes. Doc changes (`.md`, `.ftl`) require a manual `graphify --update .`
-to re-extract, but are not needed for day-to-day coding.
+The graph is persisted in `graphify-out/` (gitignored). Doc changes (`.md`, `.ftl`)
+require a manual `graphify --update .` to re-extract, but are not needed for
+day-to-day coding.
 
 ## Running UI CLI Tools on Windows (tsc / eslint)
 
