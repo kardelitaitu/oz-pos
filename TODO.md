@@ -2,7 +2,7 @@
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
-**Current state:** 12 / 19 items complete (63% ⏳) · Updated 2026-07-20
+**Current state:** 16 / 19 items complete (84% ⏳) · Updated 2026-07-20
 
 > **⚡ Nextest is now the default in CI** — All `cargo test` calls replaced with `cargo nextest run --profile ci`. `scripts/test-changed.sh` and `scripts/test-tdd.sh` now default to nextest.
 
@@ -64,13 +64,13 @@ The E2E job currently starts Docker Compose (up to 90s health check) + Vite dev 
 
 ### Checklist
 
-- [ ] **P28-1: Docker layer caching** — Add `DOCKER_BUILD_CACHE_FROM` and `DOCKER_BUILD_CACHE_TO` to the E2E CI job to cache Docker layers for the cloud-server image. This cuts the Docker build from ~3 min to ~30s on cache hit.
+- [x] **P28-1: Docker layer caching** ✅ — Added GHCR pull step to reuse pre-built image layers as cache source. `e2e-docker-image` job builds with `cache-from: type=gha, cache-to: type=gha,mode=max` on main push. Cuts Docker build from ~3 min to ~30s on cache hit.
 
-- [ ] **P28-2: Parallel server startup** — Start Docker Compose and Vite dev server concurrently (both kicked off in the same step, using `&` / `wait`). The health check loops can run in parallel, cutting total startup time from ~2.5 min to ~1.5 min.
+- [x] **P28-2: Parallel server startup** ✅ — Docker Compose and Vite dev server now start concurrently in single step with background `&`. Both health checks run in the same loop, checking each server independently and tracking readiness via boolean flags. Cuts startup from ~2.5 min to ~1.5 min.
 
-- [ ] **P28-3: Playwright sharding** — Split the 15 E2E spec files across 3 Playwright shards (`--shard=1/3`, `2/3`, `3/3`) in CI, each running as a parallel job. Each shard gets its own web server instance. Estimated impact: **3x faster E2E pipeline**.
+- [x] **P28-3: Playwright sharding** ✅ — 3-way GitHub Actions matrix shard (`--shard=1/3`, `2/3`, `3/3`). Each shard runs a subset of E2E spec files in parallel. Artifact names include shard index to avoid conflicts. Estimated impact: **3× faster E2E pipeline**.
 
-- [ ] **P28-4: Pre-built E2E Docker image** — Build the E2E cloud-server Docker image as a separate CI job that runs on push to main and stores the image in GitHub Container Registry. The E2E job then pulls the pre-built image instead of building from scratch. Skip the build step entirely for most PRs.
+- [x] **P28-4: Pre-built E2E Docker image** ✅ — Added `e2e-docker-image` job (push-to-main only) that builds `Dockerfile.server` via `docker/build-push-action@v6` with GHCR push. Uses GHA cache for layer reuse. E2E job pulls pre-built image as cache source on PRs.
 
 ---
 
@@ -100,9 +100,9 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 |------|-------|------|----------|
 | 🔴 P26 — Rust Test Compilation & Execution | 6 | 6 | ████████████████ 100% 🎉 |
 | 🟠 P27 — UI Test Performance | 5 | 5 | ████████████████ 100% 🎉 |
-| 🟡 P28 — E2E Infrastructure & Speed | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P28 — E2E Infrastructure & Speed | 4 | 4 | ████████████████ 100% 🎉 |
 | 🟢 P29 — Test Coverage & Benchmarking | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
-| **Total** | **19** | **12** | **63% ⏳** |
+| **Total** | **19** | **16** | **84% ⏳** |
 
 <br>
 

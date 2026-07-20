@@ -279,16 +279,47 @@ jobs:
       - name: Bats test suite
         run: bash .agents/skills/skill-drift-guard/scripts/run-tests.sh
 
+  # ── E2E: Pre-build Docker image (main only, GHCR push) ───────────
+  e2e-docker-image:
+    name: E2E Docker Image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push E2E cloud-server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: true
+          tags: ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   # ── E2E Tests (Playwright) ───────────────────────────────────────
   #
-  # Runs the 5 critical user flows against the Vite dev server with
-  # Tauri IPC mock + Docker Compose backend for API tests.
-  #
-  # Uses Docker BuildKit cache for faster cloud-server image rebuilds.
+  # P28: 3-way Playwright sharding + parallel server startup +
+  # Docker layer caching via GHCR pre-built image on cache hit.
+  # Target: < 8 min (down from ~20 min).
   e2e:
-    name: E2E Tests
+    name: E2E Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+        totalShards: [3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -313,55 +344,63 @@ jobs:
         run: cd ui && npm ci --no-audit --no-fund
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
-      - name: Start Docker E2E backend
+      # P28-1: Docker layer caching — pull pre-built GHCR image
+      # as cache source to reuse layers
+      - name: Docker layer cache (GHCR)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
+          docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
+      # P28-2: Parallel server startup — Docker + Vite concurrently
+      - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
           OZ_API_SECRET: ci-test-secret
         run: |
-          docker compose -f docker-compose.e2e.yml up -d
-          # Wait for cloud server to become healthy (up to 90s on cold build)
-          for i in $(seq 1 45); do
-            if curl -sf http://localhost:3099/api/v1/health > /dev/null 2>&1; then
-              echo "Cloud server ready (attempt $i)"
-              break
-            fi
-            if [ "$i" -eq 45 ]; then
-              echo "::error::Cloud server failed to start within timeout"
-              docker compose -f docker-compose.e2e.yml logs e2e-cloud-server --tail=50
-              exit 1
-            fi
-            sleep 2
-          done
-      - name: Start Vite dev server
-        run: |
+          # Start Docker Compose in background
+          docker compose -f docker-compose.e2e.yml up -d &
+          DOCKER_PID=$!
+          # Start Vite dev server in background
           cd ui && npm run dev &
           VITE_PID=$!
           echo "VITE_PID=$VITE_PID" >> $GITHUB_ENV
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:1420 > /dev/null 2>&1; then
+          # Wait for BOTH to become healthy in parallel
+          DOCKER_READY=false
+          VITE_READY=false
+          for i in $(seq 1 45); do
+            if [ "$DOCKER_READY" != "true" ] && curl -sf http://localhost:3099/api/v1/health > /dev/null 2>&1; then
+              echo "Docker backend ready (attempt $i)"
+              DOCKER_READY=true
+            fi
+            if [ "$VITE_READY" != "true" ] && curl -sf http://localhost:1420 > /dev/null 2>&1; then
               echo "Vite dev server ready (attempt $i)"
+              VITE_READY=true
+            fi
+            if [ "$DOCKER_READY" = "true" ] && [ "$VITE_READY" = "true" ]; then
+              echo "Both servers ready (attempt $i)"
               break
             fi
-            if [ "$i" -eq 30 ]; then
-              echo "::error::Vite dev server failed to start"
+            if [ "$i" -eq 45 ]; then
+              echo "::error::Server startup timed out (Docker: $DOCKER_READY, Vite: $VITE_READY)"
+              docker compose -f docker-compose.e2e.yml logs e2e-cloud-server --tail=50 2>/dev/null || true
               exit 1
             fi
             sleep 2
           done
-      - name: Run E2E tests
+      # P28-3: Playwright sharding — each shard runs 1/3 of spec files
+      - name: Run E2E tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
         run: |
-          cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop 2>&1 | tee e2e-output.log
+          cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop --shard=${{ matrix.shard }}/${{ matrix.totalShards }} 2>&1 | tee e2e-output.log
       - name: Upload E2E test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
+          name: e2e-results-shard-${{ matrix.shard }}
           path: ui/e2e-results/
           retention-days: 7
       - name: Upload Playwright trace
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-traces
+          name: e2e-traces-shard-${{ matrix.shard }}
           path: ui/test-results/
           retention-days: 7
       - name: Stop Docker E2E backend

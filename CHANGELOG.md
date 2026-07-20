@@ -4,6 +4,39 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.14] — 2026-07-20
+
+### Added
+
+#### 📊 Analytics & Reporting
+- **Analytics Export Pipeline**: Implemented `Store::export_analytics_bundle()` to batch-export 8 report types (revenue, top products, heatmaps, stock alerts) with metadata.
+- **Scheduled Reports**: Added `ReportScheduleConfig` (persistence + JSON serde) to allow configuring recurring report delivery.
+- **Chart Visualizations**: Added lightweight Canvas 2D charts to the Reporting Dashboard (daily revenue, category breakdown pie chart, hourly heatmap).
+- **CSV Export**: Added frontend CSV generation to all report screens with BOM support for Excel compatibility.
+- **Period Comparison**: Added "Compare to previous period" feature to revenue reports, calculating deltas and rendering trend indicators.
+
+#### 🛒 Loyalty & Promotions
+- **Loyalty Program Engine**: Shipped `LoyaltyAccount` and `LoyaltyTransaction` domain types with auto-tiering (Bronze/Silver/Gold/Platinum) and point redemption logic.
+- **Loyalty UI**: Added loyalty balance and point redemption to the Payment Modal, plus a dedicated `LoyaltyManagementScreen` for account administration.
+- **Promotions Engine**: Added `PromotionType` engine (BuyXGetY, PercentageOff, FixedAmount) with campaign scheduling and a management UI.
+
+#### 🔌 Ecosystem & DX
+- **Stable Plugin API**: Formalized v1.0 API backward compatibility guarantees and documented the 5 HAL driver traits (`BarcodeScanner`, `ReceiptPrinter`, etc.).
+- **Hot-Reloading**: Added background file watcher for `plugins/` that seamlessly reloads the Lua runtime without restart when scripts change.
+- **Developer Docs**: Overhauled `CONTRIBUTING.md`, `QUICKSTART.md`, and added a custom driver example.
+- **CI Documentation**: Added automated `cargo doc` generation and deployment to GitHub Pages.
+
+#### 🎨 Theming & Brand
+- **Brand Colour Picker**: Added interactive colour picker to `AppearanceSettings` that automatically derives the full accessible palette.
+- **Logo Support**: Added store logo upload with receipt and Kiosk screen integration.
+- **Live Preview**: Added real-time theme application as the user adjusts appearance settings.
+
+### Research
+- **AI Demand Forecasting**: Completed ADR evaluating ONNX/burn-rs for on-device ML forecasting (deferred to post-1.0).
+- **CRDT Sync**: Completed ADR evaluating Automerge/Yrs against the current hybrid LWW approach (decision: retain current LWW model).
+
+---
+
 ## [0.0.13] — 2026-07-20
 
 ### Added
@@ -772,7 +805,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - `oz-hal` has no real hardware probes (USB/Bluetooth/serial). Drivers
   added in follow-ups.
 
-[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.14...HEAD
+[0.0.14]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.13...v0.0.14
+[0.0.13]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.12...v0.0.13
+[0.0.12]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.11...v0.0.12
+[0.0.11]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.9...v0.0.11
 [0.0.9]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/kardelitaitu/oz-pos/compare/v0.0.6...v0.0.7
