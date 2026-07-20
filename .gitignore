@@ -3,6 +3,8 @@
 /crates/*/target/
 /apps/*/gen/
 /apps/license-server/license-server.exe
+/ui/playwright-report
+/ui/test-results/s
 
 # Cargo workspaces have a single Cargo.lock at the workspace root, not
 # one per crate. OZ-POS ships binaries (oz-cli, and the Tauri app in
