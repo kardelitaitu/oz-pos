@@ -28,12 +28,12 @@
 ## 📊 Sprint 3: Reporting & Diagnostics
 *Target: Complete reporting interface & performance profiling tooling.*
 
-- [ ] Wire Home Dashboard to real SQLite data via Tauri IPC
-- [ ] Wire "Print Report" button to ESC/POS printer driver
-- [ ] Implement empty states for report screens
-- [ ] Add `tokio-console` integration macros
-- [ ] Add `cargo flamegraph` helpers
-- [ ] Run Criterion benchmarks
+- [x] Wire Home Dashboard to real SQLite data via Tauri IPC (`export_daily_summary`, `get_daily_revenue`, etc.)
+- [x] Wire "Print Report" button to ESC/POS printer driver (`printSalesReceipt` integration)
+- [x] Implement empty states for report screens (`SalesReportScreen`, `InventoryReportScreen`, `SalesDashboardScreen`)
+- [x] Add `tokio-console` integration macros (`platform/startup/src/console.rs`)
+- [x] Add `cargo flamegraph` helpers (`scripts/flamegraph.ps1` & `scripts/flamegraph.sh`)
+- [x] Run Criterion benchmarks (`barcode_lookup`, `transaction_commit`)
 
 ---
 
