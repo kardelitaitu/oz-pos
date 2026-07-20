@@ -98,23 +98,23 @@ jobs:
               cargo nextest run -p oz-core --profile ci
               ;;
             crates)
-              for crate in crates/oz-api crates/oz-cli crates/oz-hal crates/oz-logging crates/oz-lua crates/oz-payment crates/oz-plugin crates/oz-reporting crates/oz-security; do
-                cargo nextest run -p "$(basename "$crate")" --profile ci || exit 1
+              for pkg in oz-api oz-cli oz-hal oz-logging oz-lua oz-payment oz-plugin oz-reporting oz-security; do
+                cargo nextest run -p "$pkg" --profile ci || exit 1
               done
               ;;
             platform)
-              for crate in foundation platform/core platform/kernel platform/startup platform/sync; do
-                cargo nextest run -p "$(basename "$crate")" --profile ci || exit 1
+              for pkg in foundation platform-core platform-kernel platform-startup platform-sync; do
+                cargo nextest run -p "$pkg" --profile ci || exit 1
               done
               ;;
             modules)
-              for crate in modules/crm modules/currency modules/inventory modules/reporting modules/sales modules/settings modules/staff modules/tax modules/terminal; do
-                cargo nextest run -p "$(basename "$crate")" --profile ci || exit 1
+              for pkg in modules-crm modules-currency modules-inventory modules-reporting modules-sales modules-settings modules-staff modules-tax modules-terminal; do
+                cargo nextest run -p "$pkg" --profile ci || exit 1
               done
               ;;
             apps)
-              for crate in apps/cloud-server apps/desktop-client apps/license-server apps/tablet-client; do
-                cargo nextest run -p "$(basename "$crate")" --profile ci 2>/dev/null || true
+              for pkg in oz-cloud-server oz-pos-app oz-pos-tablet; do
+                cargo nextest run -p "$pkg" --profile ci 2>/dev/null || true
               done
               ;;
           esac
@@ -267,7 +267,7 @@ jobs:
           echo "Binary size check passed"
       - name: Trivy vulnerability scan (non-blocking)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: oz-pos-cloud:ci
           format: table
