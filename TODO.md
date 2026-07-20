@@ -1,3 +1,33 @@
+# 0.0.14 — Final Cleanup & Verification
+
+> **Goal:** Fix remaining doc warnings, run full pipeline check, and do a final code quality pass.
+
+**Current state:** 0 / 4 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P48 — Final Cleanup
+
+- [ ] **P48-1: Fix remaining doc warnings** — Fix the most impactful remaining cargo doc warnings. Target: reduce from 98 to < 50.
+
+- [ ] **P48-2: Run check.ps1 full pipeline** — Execute `scripts/check.ps1` (fmt + clippy + nextest + lint + typecheck + i18n). Document results.
+
+- [ ] **P48-3: Final git status check** — Verify clean working tree, no untracked temp files, all generated files in .gitignore.
+
+- [ ] **P48-4: Final test run** — Run `cargo nextest run --workspace --all-features` + `cd ui && npm run test`. Verify all 7,600+ tests pass.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P48 — Final Cleanup | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+
+<br>
+
+---
+
 # 0.0.14 — Build Verification & Coverage
 
 > **Goal:** Verify the full CI pipeline passes locally, check release builds compile, and identify test coverage gaps.
