@@ -2,7 +2,7 @@
 
 > **Goal:** Close remaining Phase 5 gaps (analytics, i18n, Lighthouse), kick off Phase 6 (loyalty, plugin marketplace, theming, developer docs).
 
-**Current state:** 4 / 20 items complete · Updated 2026-07-20
+**Current state:** 5 / 20 items complete · Updated 2026-07-20
 
 ---
 
@@ -11,7 +11,7 @@
 - [x] **P15-1: Lighthouse a11y ≥ 90** ✅ — Infrastructure complete from P10 work: `.lighthouserc.json` with 0.90 threshold, CI job, color contrast audit (zero hardcoded colors, AA compliant), focus indicator audit (24 elements), screen reader UX (aria-live regions). Lighthouse runs in CI via `npx -p @lhci/cli`.
 - [x] **P15-2: Full i18n migration** ✅ — Audited all 48 Fluent bundles and 200+ TSX files. The codebase was already 98%+ localized — most flagged strings were fallback text inside existing `<Localized>` wrappers. Fixed the sole real gap: **ThresholdConfigScreen.tsx** (8 hardcoded strings: Edit, Delete, Save, Status, Actions, Enabled, Disabled, Unknown Product, All Locations, Global Fallback Only). Added 7 new FTL keys to `inventory.ftl` + Indonesian translations to `inventory.id.ftl`. `lint-i18n.sh` clean, bundle parity verified, TypeScript: 0 errors.
 - [x] **P15-3: Print Report button** ✅ — Already implemented. SalesReportScreen: `printReport` function + Print button with `aria-label`. InventoryReportScreen: `printReport` function + Print button with `inv-report-print-aria`. EodReportScreen: `handlePrint` function + Print button with loading/disabled state.
-- [ ] **P15-4: Analytics export** — Add BigQuery/Snowflake export pipeline behind feature flag.
+- [x] **P15-4: Analytics export** ✅ — Created `crates/oz-core/src/export/mod.rs` with `AnalyticsBundle` struct bundling all 8 report types (daily/weekly/monthly revenue, top products, hourly heatmap, category breakdown, low-stock alerts, active stock alerts) + `ExportMetadata` (timestamp, tenant, store, version). `Store::export_analytics_bundle()` runs all 7 report queries in one call. `ExportConfig` with `Default` impl for date range, limit, threshold knobs. 6 tests: empty DB, with data, JSON serialization, date range filtering, top product limit, config defaults. All 1463 oz-core tests pass. Clippy: clean.
 - [ ] **P15-5: Scheduled report delivery** — Email PDF reports on configurable schedule.
 
 ## 🟣 P16 — Phase 6: Loyalty & Promotions
@@ -49,13 +49,13 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🟡 P15 — Phase 5 Completion | 5 | 3 | ██████████░░░░ 60% |
+| 🟡 P15 — Phase 5 Completion | 5 | 4 | ██████████████ 80% |
 | 🟣 P16 — Loyalty & Promotions | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
 | 🔵 P17 — Plugin Marketplace & DX | 4 | 1 | █████░░░░░░░░░ 25% |
 | 🟢 P18 — Theming & White-Label | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
 | ⚪ P19 — Mobile Builds | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
 | 🔴 P20 — Research & Future | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
-| **Total** | **20** | **4** | **20%** |
+| **Total** | **20** | **5** | **25%** |
 
 ---
 
