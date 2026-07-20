@@ -1,3 +1,41 @@
+# 0.0.14 — Migration Hardening & Code Cleanup
+
+> **Goal:** Implement the concrete recommendations from previous audits: add WAL mode to migrations, add missing DB indexes, fix cargo doc warnings.
+
+**Current state:** 0 / 6 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P44 — Migration Hardening
+
+- [ ] **P44-1: Add WAL mode to migrations** — Add `PRAGMA journal_mode=WAL` + `PRAGMA busy_timeout=5000` to `migrations::run()` so desktop/tablet clients get WAL by default.
+
+- [ ] **P44-2: Add customers name index** — Create a migration that adds `CREATE INDEX idx_customers_name ON customers(name)` for faster customer name-based lookups.
+
+- [ ] **P44-3: Add inventory transaction index** — Create a migration that adds `CREATE INDEX idx_inventory_transactions_created ON inventory_transactions(created_at)` for faster audit log queries.
+
+## 🟡 P45 — Code Cleanup
+
+- [ ] **P45-1: Fix cargo doc warnings** — Run `cargo doc` and fix the 22 remaining warnings. Add missing doc comments to public items.
+
+- [ ] **P45-2: Remove unused imports** — Run `cargo +nightly fix --allow-dirty` to remove any unused imports across the workspace.
+
+- [ ] **P45-3: Standardize error messages** — Audit `CoreError` and `AppError` variants. Ensure all have `#[error("...")]` attributes with consistent formatting.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P44 — Migration Hardening | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P45 — Code Cleanup | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **6** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — Database Optimization & Developer Experience
 
 > **Goal:** Audit and optimize database performance (WAL mode, indexes, vacuum), and polish developer tooling (pre-commit hooks, devcontainer, scripts).
