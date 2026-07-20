@@ -36,6 +36,8 @@ graph TD
 | **Integrated QRIS Payments (Midtrans)** | — | ✓ | ✓ | ✓ |
 | **Stripe Credit/Debit Card Payments** | — | — | ✓ | ✓ |
 | **Embedded Lua VM Rules Engine** | — | — | ✓ | ✓ |
+| **Visual Node Topology Builder** | ✓ (Single Store / 1 WS) | ✓ (Single Store / 2 WS) | ✓ (Unlimited Stores/Workspaces) | ✓ (With Regional Zone Containers) |
+| **Multi-Warehouse Stock Fallback Wires** | — | — | ✓ | ✓ |
 | **Multi-Store Centralized Dashboard** | — | — | ✓ | ✓ |
 | **Support SLA** | Forum Only | Email/Chat (24h) | Priority 24/7 SLA | Dedicated Account Manager |
 | **Custom ERP & API Adaptors** | — | — | — | ✓ (SAP, Odoo, custom APIs) |
