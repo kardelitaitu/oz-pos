@@ -41,7 +41,7 @@
 
 ## Pre-Merge Validation Gates
 
-The following jobs must pass before a PR can be merged (configured in GitHub branch protection rules):
+The following jobs must pass before a PR can be merged. **Note:** These gates are enforced via GitHub branch protection rules which must be configured manually in **Settings → Branches → Branch protection rules → `main` → Require status checks to pass before merging**. The CI config alone does not auto-enforce these — it only defines the jobs.
 
 | Gate | Job | Blocks Merge |
 |------|-----|-------------|

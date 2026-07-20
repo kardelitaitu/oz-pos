@@ -267,7 +267,7 @@ jobs:
           echo "Binary size check passed"
       - name: Trivy vulnerability scan (non-blocking)
         continue-on-error: true
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: oz-pos-cloud:ci
           format: table
