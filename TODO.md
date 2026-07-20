@@ -1,3 +1,41 @@
+# 0.0.14 — UI Polish & Integration Testing
+
+> **Goal:** Harden UI states (loading/empty/error) and add integration tests for critical failure scenarios.
+
+**Current state:** 0 / 6 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P38 — UI State Hardening
+
+- [ ] **P38-1: Loading states audit** — Audit all screens for loading indicators. Add skeleton/spinner where missing. Verify every async fetch shows loading state within 200ms.
+
+- [ ] **P38-2: Empty states audit** — Audit all list/tables for empty states. Add friendly messages + actions ("No products yet — Create one"). Cover: product grid, sales history, inventory, KDS, staff list.
+
+- [ ] **P38-3: Error states audit** — Audit error handling in UI components. Ensure all `catch` blocks show user-friendly error messages via toast or inline error. Verify retry buttons on network failures.
+
+## 🟡 P39 — Integration Testing
+
+- [ ] **P39-1: Backup/restore integration test** — Add a Rust integration test that: creates store → seeds data → runs backup → deletes DB → restores → verifies all data intact.
+
+- [ ] **P39-2: Sync failure recovery test** — Add a test that: enqueues offline items → simulates network failure → verifies items remain pending → restores network → verifies sync completes.
+
+- [ ] **P39-3: Payment failure handling test** — Add a test that: creates a sale → attempts payment with insufficient funds → verifies error handling → verifies cart preserved.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P38 — UI State Hardening | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P39 — Integration Testing | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **6** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — Code Quality & Documentation
 
 > **Goal:** Eliminate dead code, fill doc gaps, and create user-facing documentation.
