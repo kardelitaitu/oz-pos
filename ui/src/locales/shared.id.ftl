@@ -95,6 +95,7 @@ language-selector-select-aria =
     .aria-label = Pilih bahasa
 locale-en = English
 locale-id = Bahasa Indonesia
+locale-th = ไทย
 
 # Permission denied
 permission-denied-title = Akses Ditolak

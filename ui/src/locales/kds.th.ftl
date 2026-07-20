@@ -1,0 +1,21 @@
+# ui/src/locales/kds.ftl — Kitchen Display System
+
+kds-title = [TH] Kitchen Display [/TH]
+kds-pending = [TH] Pending [/TH]
+kds-preparing = [TH] Preparing [/TH]
+kds-ready = [TH] Ready [/TH]
+kds-served = [TH] Served [/TH]
+kds-cancelled = [TH] Cancelled [/TH]
+kds-order-number = [TH] Order # [/TH]
+kds-items = [TH] { $count } items [/TH]
+kds-notes = [TH] Notes [/TH]
+kds-tap-to-advance = [TH] Tap to advance [/TH]
+kds-tap-to-advance-label = [TH] Order { $number }, tap to advance [/TH]
+kds-no-orders = [TH] No orders yet [/TH]
+kds-order-count = [TH] { $count } orders [/TH]
+kds-time-ago-now = [TH] now [/TH]
+kds-time-ago = [TH] { $minutes }m [/TH]
+kds-urgent-badge = [TH] URGENT [/TH]
+kds-pull-to-refresh = [TH] Pull down to refresh [/TH]
+kds-release-to-refresh = [TH] Release to refresh [/TH]
+

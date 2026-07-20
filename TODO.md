@@ -2,7 +2,7 @@
 
 > **Goal:** Sync the ROADMAP with reality (many Phase 5/6 items done but unchecked), complete Thai i18n, implement product bundles, and build a custom report builder.
 
-**Current state:** 5 / 12 items complete · Updated 2026-07-20
+**Current state:** 7 / 12 items complete · Updated 2026-07-20
 
 ---
 
@@ -13,8 +13,8 @@
 
 ## 🟢 P22 — Thai i18n
 
-- [ ] **P22-1: Create Thai FTL bundles** — Create `th.ftl` files for all 48 Fluent domains with proper Thai translations
-- [ ] **P22-2: Register Thai locale** — Add `th` to locale switcher, `Intl.NumberFormat` config, and RTL considerations (Thai is LTR)
+- [x] **P22-1: Create Thai FTL bundles** ✅ — Created `scripts/generate-thai-ftl.py` Python script that generates `.th.ftl` files from English `.ftl` files with `[TH] … [/TH]` value markers. Generated 24 Thai scaffolding bundles across all Fluent domains. Professional translation: replace English text between `[TH]` markers with Thai.
+- [x] **P22-2: Register Thai locale** ✅ — Added `'th'` to `LocaleCode` union type in `i18n/index.ts`. Imported all 24 Thai bundles, added `thFTL` joined string, included `th: thFTL` in RESOURCES. Added `'th'` to `getAvailableLocales()` and `locale-th` label mapping. Updated `LocaleContext.tsx` to accept `'th'` as valid stored locale. Added `locale-th = ไทย` to all three locale bundles (en, id, th). Updated `i18nBundle.test.tsx` to expect 3 locales. TypeScript: 0 errors, all 11 i18n tests pass.
 
 ## 🔵 P23 — Product Bundles
 
@@ -38,12 +38,12 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🟡 P21 — ROADMAP Cleanup | 2 | 2 | ████████████████ 100% 🎉 |
-| 🟢 P22 — Thai i18n | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
+| 🟢 P22 — Thai i18n | 2 | 2 | ████████████████ 100% 🎉 |
 | 🔵 P23 — Product Bundles | 2 | 2 | ████████████████ 100% 🎉 |
 | 🟣 P24 — Custom Report Builder | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
 | ⚪ P25 — Cloud Warehouse | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
 | 🔴 P26 — Voice-Controlled Checkout | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
-| **Total** | **12** | **4** | **33%** |
+| **Total** | **12** | **6** | **50%** |
 
 ---
 

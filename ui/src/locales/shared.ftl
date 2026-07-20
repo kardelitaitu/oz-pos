@@ -125,6 +125,7 @@ language-selector-select-aria = Select language
 # Locale labels
 locale-en = English
 locale-id = Bahasa Indonesia
+locale-th = ไทย
 
 # Accessibility
 a11y-skip-to-content = Skip to main content

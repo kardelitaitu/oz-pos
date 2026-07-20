@@ -37,7 +37,7 @@ const STORAGE_KEY = 'oz-pos-locale';
 export function LocaleProvider({ children }: LocaleProviderProps) {
   const [locale, setLocaleState] = useState<LocaleCode>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'en' || stored === 'id') return stored;
+    if (stored === 'en' || stored === 'id' || stored === 'th') return stored;
     return 'id';
   });
 

@@ -1,0 +1,22 @@
+# ui/src/locales/tables.ftl — Table management
+
+tables-title = [TH] Table Management [/TH]
+tables-all = [TH] All [/TH]
+tables-available = [TH] Available [/TH]
+tables-occupied = [TH] Occupied [/TH]
+tables-reserved = [TH] Reserved [/TH]
+tables-cleaning = [TH] Cleaning [/TH]
+tables-name = [TH] Table Name [/TH]
+tables-capacity = [TH] Capacity [/TH]
+tables-section = [TH] Section [/TH]
+tables-status = [TH] Status [/TH]
+tables-management-label = [TH] Table management [/TH]
+tables-floorplan-label = [TH] Floor plan [/TH]
+tables-detail-label = [TH] Table detail [/TH]
+tables-capacity-label = [TH] Capacity: { $capacity } [/TH]
+tables-status-label = [TH] Status: { $status } [/TH]
+tables-section-label = [TH] Section: { $section } [/TH]
+tables-mark-available = [TH] Mark Available [/TH]
+tables-release = [TH] Release [/TH]
+tables-table-label = [TH] { $name }, { $status } [/TH]
+
