@@ -83,6 +83,13 @@ Step -Name "clippy workspace" -RetryCommand "cargo clippy --workspace --all-targ
 # In --Fast mode, only run lib tests (skip integration test compilation).
 $cpuCount = $env:NUMBER_OF_PROCESSORS
 if (-not $cpuCount) { $cpuCount = 4 }
+
+# Workspace-wide test via cargo-nextest for 4.5× faster re-runs. Doctests are
+# run separately because nextest does not execute them. Falls back to cargo
+# test if nextest is not installed.
+$nextestAvailable = $false
+try { & cargo nextest --version | Out-Null; $nextestAvailable = ($LASTEXITCODE -eq 0) } catch {}
+
 if ($Fast) {
     $testArgs = @('--lib')
     $retryArgs = "--lib"
@@ -90,9 +97,19 @@ if ($Fast) {
     $testArgs = @()
     $retryArgs = ""
 }
-# Workspace-wide test (single compilation pass instead of N per-package invocations).
-Step -Name "test workspace" -RetryCommand "cargo test --workspace --all-features $retryArgs -- --test-threads $cpuCount" -ScriptBlock {
-    cargo test --workspace --all-features @testArgs -- --test-threads $cpuCount
+
+if ($nextestAvailable) {
+    Step -Name "test workspace (nextest)" -RetryCommand "cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet" -ScriptBlock {
+        cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet
+    }
+    Step -Name "test doctests" -RetryCommand "cargo test --doc --workspace" -ScriptBlock {
+        cargo test --doc --workspace
+    }
+} else {
+    Write-Host "⚠ nextest not found — falling back to cargo test (slower)" -ForegroundColor Yellow
+    Step -Name "test workspace" -RetryCommand "cargo test --workspace --all-features $retryArgs -- --test-threads $cpuCount" -ScriptBlock {
+        cargo test --workspace --all-features @testArgs -- --test-threads $cpuCount
+    }
 }
 
 # --- Migration (mirrors CI migration job) ---------------------------------

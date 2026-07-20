@@ -47,11 +47,13 @@ step "clippy workspace" "cargo clippy --workspace --all-targets -- -D warnings" 
 step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bash scripts/verify-no-raw-params.sh
 
 # Workspace-wide test via cargo-nextest — runs each test in its own process
-# for 4.5× faster re-runs after compilation. Falls back to cargo test if
-# nextest is not installed.
+# for 4.5× faster re-runs after compilation. Also run doctests separately
+# because nextest does not execute them. Falls back to cargo test if nextest
+# is not installed.
 cpu_count=$(nproc --all 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 if command -v cargo-nextest &>/dev/null || cargo nextest --version &>/dev/null 2>&1; then
-    step "test workspace (nextest)" "cargo nextest run --workspace --exclude oz-pos-app --exclude oz-pos-tablet" cargo nextest run --workspace --exclude oz-pos-app --exclude oz-pos-tablet
+    step "test workspace (nextest)" "cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet" cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet
+    step "test doctests" "cargo test --doc --workspace" cargo test --doc --workspace
 else
     echo -e "${YELLOW}⚠ nextest not found — falling back to cargo test (slower)${NC}"
     step "test workspace" "cargo test --workspace --all-features -- --test-threads $cpu_count" cargo test --workspace --all-features -- --test-threads "$cpu_count"

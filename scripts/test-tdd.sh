@@ -6,9 +6,9 @@
 # possible edit-compile-test cycle.
 #
 # Usage:
-#   bash scripts/test-tdd.sh                  # auto-detect crate from cwd
+#   bash scripts/test-tdd.sh                  # auto-detect crate from cwd (nextest)
 #   bash scripts/test-tdd.sh -p oz-core       # specific crate
-#   bash scripts/test-tdd.sh --nextest        # use cargo-nextest (parallel)
+#   bash scripts/test-tdd.sh --vanilla        # use cargo test instead of nextest
 #   bash scripts/test-tdd.sh --watch          # watch mode (re-run on changes)
 #
 # Recommended for local TDD workflow:
@@ -23,7 +23,7 @@ cd "$PROJECT_ROOT"
 
 export CARGO_PROFILE=tdd
 
-USE_NEXTEST=false
+USE_NEXTEST=true
 WATCH_MODE=false
 TARGET_CRATE=""
 
@@ -31,7 +31,7 @@ TARGET_CRATE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -p) TARGET_CRATE="$2"; shift 2 ;;
-    --nextest) USE_NEXTEST=true; shift ;;
+    --vanilla) USE_NEXTEST=false; shift ;;
     --watch) WATCH_MODE=true; shift ;;
     *) echo "Unknown flag: $1"; exit 1 ;;
   esac

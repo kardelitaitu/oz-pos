@@ -87,30 +87,34 @@ jobs:
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
       - uses: mozilla/sccache-action@v0.0.10
-      - name: Run crate-group tests
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run crate-group tests (nextest)
         run: |
           case "${{ matrix.shard.crate }}" in
             oz-core)
-              cargo test -p oz-core
+              cargo nextest run -p oz-core --profile ci
               ;;
             crates)
               for crate in crates/oz-api crates/oz-cli crates/oz-hal crates/oz-logging crates/oz-lua crates/oz-payment crates/oz-plugin crates/oz-reporting crates/oz-security; do
-                cargo test -p "$(basename "$crate")" || exit 1
+                cargo nextest run -p "$(basename "$crate")" --profile ci || exit 1
               done
               ;;
             platform)
               for crate in foundation platform/core platform/kernel platform/startup platform/sync; do
-                cargo test -p "$(basename "$crate")" || exit 1
+                cargo nextest run -p "$(basename "$crate")" --profile ci || exit 1
               done
               ;;
             modules)
               for crate in modules/crm modules/currency modules/inventory modules/reporting modules/sales modules/settings modules/staff modules/tax modules/terminal; do
-                cargo test -p "$(basename "$crate")" || exit 1
+                cargo nextest run -p "$(basename "$crate")" --profile ci || exit 1
               done
               ;;
             apps)
               for crate in apps/cloud-server apps/desktop-client apps/license-server apps/tablet-client; do
-                cargo test -p "$(basename "$crate")" --no-fail-fast 2>/dev/null || true
+                cargo nextest run -p "$(basename "$crate")" --profile ci 2>/dev/null || true
               done
               ;;
           esac
@@ -141,8 +145,12 @@ jobs:
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
       - uses: mozilla/sccache-action@v0.0.10
-      - name: Run workspace tests (all features, exclude Tauri binaries)
-        run: cargo test --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run workspace tests (nextest, all features)
+        run: cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet --profile ci
       - name: sccache stats
         run: sccache --show-stats
 

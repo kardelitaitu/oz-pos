@@ -2,26 +2,26 @@
 # scripts/test-changed.sh — Run tests only for crates affected by changes
 #
 # Compares against origin/main (or the branch specified by BASE_BRANCH)
-# and runs `cargo test -p <crate>` only for crates whose source files
-# have changed. Uses `cargo metadata` to resolve the crate for each
-# changed file.
+# and runs `cargo nextest run -p <crate>` only for crates whose source files
+# have changed.
 #
 # Usage:
-#   bash scripts/test-changed.sh              # compare against origin/main
+#   bash scripts/test-changed.sh              # compare against origin/main (nextest)
 #   bash scripts/test-changed.sh --all        # run all tests (skip detection)
+#   bash scripts/test-changed.sh --vanilla    # use cargo test instead of nextest
 #   BASE_BRANCH=origin/dev bash scripts/test-changed.sh
 #
 # Options:
 #   --all      Run the full workspace test suite
 #   --check    Only list affected crates, don't run tests
-#   --nextest  Use `cargo nextest run` instead of `cargo test`
+#   --vanilla  Use `cargo test` instead of `cargo nextest run`
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BASE_BRANCH="${BASE_BRANCH:-origin/main}"
-USE_NEXTEST=false
+USE_NEXTEST=true
 LIST_ONLY=false
 RUN_ALL=false
 
@@ -30,7 +30,7 @@ for arg in "$@"; do
   case "$arg" in
     --all)     RUN_ALL=true ;;
     --check)   LIST_ONLY=true ;;
-    --nextest) USE_NEXTEST=true ;;
+    --vanilla) USE_NEXTEST=false ;;
   esac
 done
 

@@ -4,6 +4,8 @@
 
 **Current state:** 8 / 19 items complete (42% ⏳) · Updated 2026-07-20
 
+> **⚡ Nextest is now the default in CI** — All `cargo test` calls replaced with `cargo nextest run --profile ci`. `scripts/test-changed.sh` and `scripts/test-tdd.sh` now default to nextest.
+
 ---
 
 ## 🔴 P26 — Rust Test Compilation & Execution Speed
