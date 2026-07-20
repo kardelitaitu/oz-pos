@@ -565,6 +565,58 @@ mod tests {
         assert_eq!(stored.api_key, "oz_test_api_key_123");
     }
 
+    #[test]
+    fn store_subscription_handles_all_tier_keys() {
+        use crate::migrations;
+        use crate::subscription::SubscriptionTier;
+
+        let conn = migrations::fresh_db();
+
+        let tiers = vec![
+            ("free", SubscriptionTier::Free, 1, 1),
+            ("one_time", SubscriptionTier::OneTime, 1, 1),
+            ("standard", SubscriptionTier::Standard, 1, 2),
+            ("pro", SubscriptionTier::Pro, 0, 0),
+            ("enterprise", SubscriptionTier::Enterprise, 0, 0),
+        ];
+
+        for (key, expected_tier, stores, pos) in tiers {
+            let payload = format!(
+                r#"{{
+                "tenant_id": "tenant-{key}",
+                "tier_key": "{key}",
+                "status": "active",
+                "max_stores": {stores},
+                "max_pos_instances": {pos},
+                "allowed_types": ["store-pos"],
+                "starts_at": "2026-01-01T00:00:00Z",
+                "expires_at": "2027-01-01T00:00:00Z",
+                "grace_until": "2027-01-15T00:00:00Z",
+                "issued_at": "2026-01-01T00:00:00Z"
+            }}"#
+            );
+
+            let result = store_subscription(
+                &conn,
+                &format!("tenant-{key}"),
+                &payload,
+                "TESTSIG",
+                "api_key_test",
+            );
+            assert!(
+                result.is_ok(),
+                "store_subscription for {key} failed: {result:?}"
+            );
+
+            let stored = TenantSubscription::load(&conn, &format!("tenant-{key}"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(stored.tier, expected_tier);
+            assert_eq!(stored.max_stores, stores);
+            assert_eq!(stored.max_pos_instances, pos);
+        }
+    }
+
     // We need to import TenantSubscription for the test above.
     use crate::subscription::TenantSubscription;
 

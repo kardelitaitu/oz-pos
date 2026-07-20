@@ -86,16 +86,20 @@ struct SquareEventData {
 fn extract_stripe_payment_id(object: &serde_json::Value) -> Option<String> {
     // payment_intent.succeeded → object.id = "pi_xxx"
     // charge.captured → object.payment_intent = "pi_xxx"
-    if let Some(id) = object.get("id").and_then(|v| v.as_str()) {
-        if id.starts_with("pi_") {
-            return Some(id.to_owned());
-        }
+    if let Some(id) = object
+        .get("id")
+        .and_then(|v| v.as_str())
+        .filter(|id| id.starts_with("pi_"))
+    {
+        return Some(id.to_owned());
     }
     // Try payment_intent field on charge objects
-    if let Some(pi) = object.get("payment_intent").and_then(|v| v.as_str()) {
-        if pi.starts_with("pi_") {
-            return Some(pi.to_owned());
-        }
+    if let Some(pi) = object
+        .get("payment_intent")
+        .and_then(|v| v.as_str())
+        .filter(|pi| pi.starts_with("pi_"))
+    {
+        return Some(pi.to_owned());
     }
     None
 }
@@ -195,7 +199,7 @@ async fn stripe_webhook_handler(
     })?;
 
     // 3. Verify signature
-    if !verify_stripe_signature(&body_bytes, signature_header, &secret) {
+    if !verify_stripe_signature(&body_bytes, signature_header, secret) {
         return Err((StatusCode::UNAUTHORIZED, "invalid webhook signature".into()));
     }
 
@@ -277,8 +281,8 @@ async fn square_webhook_handler(
     if !verify_square_signature(
         &body_bytes,
         signature_header,
-        &webhook_url,
-        &secret,
+        webhook_url,
+        secret,
         timestamp,
     ) {
         return Err((StatusCode::UNAUTHORIZED, "invalid webhook signature".into()));

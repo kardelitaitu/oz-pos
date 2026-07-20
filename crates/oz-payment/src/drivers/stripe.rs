@@ -249,7 +249,7 @@ impl StripePaymentProcessor {
                     || code == Some("expired_card")
                     || code == Some("incorrect_cvc")
                     || code == Some("incorrect_zip")
-                    || message.map_or(false, |m| m.contains("card")) =>
+                    || message.is_some_and(|m| m.contains("card")) =>
             {
                 PaymentError::InvalidCard(msg)
             }
