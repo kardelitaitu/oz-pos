@@ -55,3 +55,13 @@ menu-eng-dog = Dog
 
 # Period comparison
 sales-report-compare = Compare
+
+# Custom Report Builder
+custom-report-title = Custom Report
+custom-report-dataset = Dataset
+custom-report-start = Start
+custom-report-end = End
+custom-report-columns = Columns
+custom-report-run = Run Report
+custom-report-results = Results
+custom-report-export-csv = Export CSV

@@ -177,6 +177,7 @@ nav-promotions = Promotions
 nav-suppliers = Suppliers
 nav-purchase-orders = Purchase Orders
 nav-stock-transfers = Stock Transfers
+nav-custom-report = Custom Report
 nav-pos = POS
 nav-stock = Stock
 nav-history = History

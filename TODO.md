@@ -1,8 +1,118 @@
+# 0.0.16 — Test Optimization Sprint
+
+> **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
+
+**Current state:** 0 / 18 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P26 — Rust Test Compilation & Execution Speed
+
+**Goal:** Cut Rust test CI time from serial crate compilation to a parallel, cached, nextest-powered pipeline.
+
+### Background
+
+Currently `cargo test --workspace --all-features` compiles every crate from scratch under `profile.dev` (opt-level=0, debug=true, codegen-units=256, no strip). No `[profile.test]` section exists. Tests run serially inside each crate binary via the default test harness. The workspace has 28 members, so a full compilation + test pass can take 5–10+ minutes depending on cache state.
+
+### Checklist
+
+- [ ] **P26-1: Add `[profile.test]`** — Introduce a dedicated test profile that inherits from `dev` but sets `strip = "symbols"`, `debug = 1`, and `codegen-units = 16` (down from 256). This reduces the test binary size by ~60% and speeds up `rustc` link time without losing useful backtrace info. Estimated impact: **30–50% faster compile**.
+
+- [ ] **P26-2: cargo-nextest** — Replace `cargo test` with `cargo nextest run` in CI and `check.sh`. Nextest runs each test in its own process (no shared state corruption), supports per-test timeouts, retries flaky tests, and outputs JUnit XML. On a workspace with hundreds of tests, nextest is typically **2–3x faster** than the default harness because it can run tests from different binaries concurrently.
+
+- [ ] **P26-3: Default-features fast track in CI** — Split `rust-test` CI job into two: `rust-test-fast` (default features, exclude `slow-tests` feature gate) and `rust-test-full` (all features, can be a separate job or manual trigger). The fast track should complete in **< 3 min** for most PRs. The full track runs nightly or on merge to main.
+
+- [ ] **P26-4: Crate-level test sharding in CI** — Shard the `rust-test` job by crate group: `crates/oz-core` (largest, shard alone), `crates/` (remaining oz-* crates), `platform/`, `modules/`, `apps/`. Each shard runs as a parallel CI job. Estimated impact: **linear speedup with shard count**.
+
+- [ ] **P26-5: `--changed` / `--affected` detection** — Add a `scripts/test-changed.sh` that uses `git diff --name-only origin/main` to detect changed crates and runs `cargo test -p <crate>` only for affected crates. Use `cargo metadata` to resolve dependency graph for transitive impact. Useful for local dev; CI can still run full workspace.
+
+- [ ] **P26-6: Activate `tdd` profile** — The `[profile.tdd]` already exists (`inherits = "dev"`, `debug = false`, `incremental = true`). Add a `scripts/test-tdd.sh` that sets `CARGO_PROFILE=tdd` and runs `cargo nextest run` for the current crate only. Document in `AGENTS.md` and `scripts/check.sh` as the recommended local TDD loop.
+
+---
+
+## 🟠 P27 — UI Test Performance
+
+**Goal:** Reduce Vitest runtime, split monolithic test files, and improve developer DX with faster watch-mode feedback.
+
+### Background
+
+UI tests are ~46,000 lines across 12 files in `ui/src/__tests__/` — averaging **~3,800 lines per file**. Large files slow down Vitest's file-watching, module resolution, and per-file re-run in watch mode. The current `vitest run` is a single monolithic pass with no sharding.
+
+### Checklist
+
+- [ ] **P27-1: Split large test files** — Break the 12 files into smaller, focused test files following the single-screen/single-hook pattern already used in `ui/src/features/*/__tests__/`. Target: **< 500 lines per test file**. Files that are integration-level (testing multiple screens) should be moved to `ui/src/__tests__/integration/`.
+
+- [ ] **P27-2: Vitest sharding in CI** — Add `--shard=1/4`, `--shard=2/4`, etc. to the `ui-test` CI job, splitting into 4 parallel workers. Each worker runs a subset of test files. Estimated impact: **3–4x faster UI test CI**.
+
+- [ ] **P27-3: `--changed` / `--affected` for UI** — Add a `scripts/test-ui-changed.sh` that detects changed `.ts`/`.tsx`/`.ftl` files and passes `--changed` to Vitest so only affected files and their dependents re-run. Use `--changedOrigin` to compare against `origin/main`.
+
+- [ ] **P27-4: `--pool=forks` isolation** — Switch Vitest from the default thread pool to `--pool=forks` for CI runs. Fork isolation is slower but catches module-level side effects that threads miss. Keep `--pool=threads` for local watch mode (faster).
+
+- [ ] **P27-5: Vitest cache warm-up** — Persist Vitest cache (`node_modules/.cache/vitest/`) across CI runs using GitHub Actions `cache` action. This avoids re-transforming unchanged modules. Estimated impact: **20–40% faster Vitest startup** on cached runs.
+
+---
+
+## 🟡 P28 — E2E Infrastructure & Speed
+
+**Goal:** Reduce the E2E CI pipeline from ~20 min to under 8 min by parallelizing server startup, sharding test files, and optimizing Docker image caching.
+
+### Background
+
+The E2E job currently starts Docker Compose (up to 90s health check) + Vite dev server (up to 60s health check) — ~2.5 min of infrastructure before any test runs. All 15 spec files run serially against one Playwright project. Timeout is 20 min.
+
+### Checklist
+
+- [ ] **P28-1: Docker layer caching** — Add `DOCKER_BUILD_CACHE_FROM` and `DOCKER_BUILD_CACHE_TO` to the E2E CI job to cache Docker layers for the cloud-server image. This cuts the Docker build from ~3 min to ~30s on cache hit.
+
+- [ ] **P28-2: Parallel server startup** — Start Docker Compose and Vite dev server concurrently (both kicked off in the same step, using `&` / `wait`). The health check loops can run in parallel, cutting total startup time from ~2.5 min to ~1.5 min.
+
+- [ ] **P28-3: Playwright sharding** — Split the 15 E2E spec files across 3 Playwright shards (`--shard=1/3`, `2/3`, `3/3`) in CI, each running as a parallel job. Each shard gets its own web server instance. Estimated impact: **3x faster E2E pipeline**.
+
+- [ ] **P28-4: Pre-built E2E Docker image** — Build the E2E cloud-server Docker image as a separate CI job that runs on push to main and stores the image in GitHub Container Registry. The E2E job then pulls the pre-built image instead of building from scratch. Skip the build step entirely for most PRs.
+
+---
+
+## 🟢 P29 — Test Coverage & Benchmarking
+
+**Goal:** Close coverage gaps in under-tested crates, add baseline benchmarks, and enforce quality gates.
+
+### Background
+
+The workspace has 28 members but only a handful have meaningful test suites. `criterion` is already a workspace dependency but is unused. Several crates (`oz-api`, `oz-lua`, `oz-plugin`, `oz-security`, `oz-reporting`, `oz-cli`) have unknown or minimal test coverage.
+
+### Checklist
+
+- [ ] **P29-1: Coverage audit** — Run `cargo tarpaulin` or `grcov` on the workspace to identify crates with < 20% line coverage. Run `vitest --coverage` on the UI to identify uncovered components and hooks. Publish a `docs/coverage/` report.
+
+- [ ] **P29-2: Minimum coverage gate** — Add a CI job (non-blocking, informational) that flags PRs reducing overall coverage. Use `cargo llvm-cov --json` and `vitest --coverage` to compute delta. Fail only if coverage drops below a threshold (e.g., 50% workspace, 70% oz-core).
+
+- [ ] **P29-3: Criterion benchmarks** — Add baseline benchmarks for: `Money` arithmetic (add, subtract, multiply, divide), `Cart` operations (add line, remove line, apply discount), SQL query performance (product lookup by SKU, sale creation), and serialization (serde round-trip of key types). Register benchmarks in `benches/` under each crate. Wire into CI with `cargo bench` (non-blocking, store results).
+
+- [ ] **P29-4: Flaky test retry policy** — Add `nextest` retry configuration (`retry = 2` with `backoff = "exponential"`) for known flaky tests. Add a `scripts/report-flaky.sh` that runs tests 3 times and flags any that fail intermittently. Document the flaky test quarantine process in `CONTRIBUTING.md`.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P26 — Rust Test Compilation & Execution | 6 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟠 P27 — UI Test Performance | 5 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P28 — E2E Infrastructure & Speed | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟢 P29 — Test Coverage & Benchmarking | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **19** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
+---
+
 # 0.0.15 — ROADMAP Alignment & Final Features
 
 > **Goal:** Sync the ROADMAP with reality (many Phase 5/6 items done but unchecked), complete Thai i18n, implement product bundles, and build a custom report builder.
 
-**Current state:** 11 / 12 items complete · Updated 2026-07-20
+**Current state:** 12 / 12 items complete (100% 🎉) · Updated 2026-07-20
 
 ---
 
@@ -24,7 +134,7 @@
 ## 🟣 P24 — Custom Report Builder
 
 - [x] **P24-1: Report builder engine** ✅ — Added `CustomReportRequest`/`CustomReportResponse` types and `Store::build_custom_report()` to `crates/oz-core/src/export/mod.rs`. Column whitelist validation per dataset ("sales": 5 columns with date filter, "inventory": 5 columns). Safe SQL building — column names from whitelist, date values parameterized with `?` placeholders. `value_to_string()` helper for generic grid output. 5 tests: unknown dataset error, invalid columns filtered, sales basic query, inventory columns, empty columns shortcut. All 1471 oz-core tests pass, clippy clean.
-- [ ] **P24-2: Report builder UI** — Column picker, preview table, CSV export, Tauri command wiring. Deferred — backend is ready.
+- [x] **P24-2: Report builder UI** ✅ — Created `CustomReportScreen.tsx` component with dataset dropdown (sales/inventory), column picker checkboxes with human-readable labels, date range inputs (conditional on dataset), Run Report button with loading state, preview table with column headers, CSV export button. Added `build_custom_report` Tauri command in `apps/desktop-client/src/commands/reports.rs` (registered in lib.rs invoke_handler). Added API wrappers in `ui/src/api/reports.ts`. Registered as `custom-report` route with nav item in App.tsx. Added FTL keys to reports.ftl, reports.id.ftl, shared.ftl, shared.id.ftl. TypeScript: 0 errors.
 
 ## ⚪ P25 — Cloud Warehouse Analytics
 
@@ -40,10 +150,10 @@
 | 🟡 P21 — ROADMAP Cleanup | 2 | 2 | ████████████████ 100% 🎉 |
 | 🟢 P22 — Thai i18n | 2 | 2 | ████████████████ 100% 🎉 |
 | 🔵 P23 — Product Bundles | 2 | 2 | ████████████████ 100% 🎉 |
-| 🟣 P24 — Custom Report Builder | 2 | 1 | ████████████░░░░ 50% |
+| 🟣 P24 — Custom Report Builder | 2 | 2 | ████████████████ 100% 🎉 |
 | ⚪ P25 — Cloud Warehouse | 2 | 1 | ████████████░░░░ 50% |
 | 🔴 P26 — Voice-Controlled Checkout | 2 | 2 | ████████████████ 100% 🎉 |
-| **Total** | **12** | **10** | **83%** |
+| **Total** | **12** | **11** | **92%** |
 
 ---
 

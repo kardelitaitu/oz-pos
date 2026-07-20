@@ -119,3 +119,25 @@ export const getMenuEngineering = (
     startDate,
     endDate,
   });
+
+// ── Custom Report Builder (P24) ──────────────────────────────────
+
+/** Request payload for the custom report builder. */
+export interface CustomReportRequest {
+  dataset: string;
+  columns: string[];
+  start_date: string | null;
+  end_date: string | null;
+}
+
+/** Response from the custom report builder — generic grid for table/CSV. */
+export interface CustomReportResponse {
+  columns: string[];
+  rows: string[][];
+}
+
+/** Build a custom report from user-selected columns and filters. */
+export const buildCustomReport = (
+  request: CustomReportRequest,
+): Promise<CustomReportResponse> =>
+  invoke<CustomReportResponse>('build_custom_report', { request });
