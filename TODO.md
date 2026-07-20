@@ -10,7 +10,7 @@
 
 > **Goal:** Replace the current "no-crash" smoke tests with deterministic, assertion-rich Playwright suites that verify real user flows end-to-end against the Vite dev server + dev-mock IPC. No Rust backend required.
 >
-> **Current state:** 26 / 34 items complete · Updated 2026-07-20
+> **Current state:** 34 / 34 items complete (100% 🎉) · Updated 2026-07-20
 
 ### Background
 
@@ -62,18 +62,18 @@ The 6 existing spec files (`auth`, `sale`, `product`, `settings`, `shift`, `api`
 
 ### New flows (not currently covered)
 
-- [ ] **E2E-26: Workspace picker** — After login, assert all available workspace cards (Store POS, Restaurant POS, KDS, Inventory, Admin) are visible. Click `"Inventory"`. Assert the inventory workspace loads within 5s.
-- [ ] **E2E-27: Session lock / unlock** — Simulate idle timeout by calling `window.__triggerIdle?.()` (expose via dev-mock). Assert `session-lock-card` appears. Enter correct PIN. Assert workspace resumes.
-- [ ] **E2E-28: KDS ticket board** — Enter KDS workspace. Assert at least 1 `.kds-ticket` card is visible (dev-mock should return orders). Assert ticket has a table number and item list.
-- [ ] **E2E-29: Audit log screen** — In admin workspace, navigate to `#/audit`. Assert the `.audit-log-table` renders. Assert at least 1 row with an `outcome` badge. Assert the `Refresh` button triggers a re-load.
-- [ ] **E2E-30: Tablet viewport smoke** — Run `auth` + `sale` happy-path tests against the `tablet` project (1024×1366). Assert no layout overflow (`document.body.scrollWidth <= 1024`). Assert all touch targets are ≥ 44px tall.
+- [x] **E2E-26: Workspace picker** — After login, assert all available workspace cards (Store POS, Restaurant POS, KDS, Inventory, Admin) are visible. Click `"Inventory"`. Assert the inventory workspace loads within 5s.
+- [x] **E2E-27: Session lock / unlock** — Simulate idle timeout by calling `window.__triggerIdle?.()` (expose via dev-mock). Assert `session-lock-card` appears. Enter correct PIN. Assert workspace resumes.
+- [x] **E2E-28: KDS ticket board** — Enter KDS workspace. Assert at least 1 `.kds-ticket` card is visible (dev-mock should return orders). Assert ticket has a table number and item list.
+- [x] **E2E-29: Audit log screen** — In admin workspace, navigate to `#/audit`. Assert the `.audit-log-table` renders. Assert at least 1 row with an `outcome` badge. Assert the `Refresh` button triggers a re-load.
+- [x] **E2E-30: Tablet viewport smoke** — Run `auth` + `sale` happy-path tests against the `tablet` project (1024×1366). Assert no layout overflow (`document.body.scrollWidth <= 1024`). Assert all touch targets are ≥ 44px tall.
 
 ### Maintenance & quality
 
-- [ ] **E2E-31: Remove all `waitForTimeout`** — Replace every `page.waitForTimeout(N)` with `page.waitForSelector(selector)` or `expect(locator).toBeVisible()`. Magic sleeps are the #1 cause of flaky E2E tests.
-- [ ] **E2E-32: Add `test.step()` annotations** — Wrap each logical action in `await test.step('description', ...)` for readable HTML report traces when a test fails.
-- [ ] **E2E-33: Parallel-safe state** — Audit all tests for shared mutable state. Dev-mock resets on page load, so each test's `page.goto('/')` is already isolated. Document this in `e2e/README.md`.
-- [ ] **E2E-34: `npm run test:e2e` in `check.ps1`** — After `npm run test` (vitest), add an optional E2E gate: if Playwright is installed and port 1420 is free, run `npm run test:e2e`. Skip gracefully if the port is already in use.
+- [x] **E2E-31: Remove all `waitForTimeout`** — Replace every `page.waitForTimeout(N)` with `page.waitForSelector(selector)` or `expect(locator).toBeVisible()`. Magic sleeps are the #1 cause of flaky E2E tests.
+- [x] **E2E-32: Add `test.step()` annotations** — Wrap each logical action in `await test.step('description', ...)` for readable HTML report traces when a test fails.
+- [x] **E2E-33: Parallel-safe state** — Audit all tests for shared mutable state. Dev-mock resets on page load, so each test's `page.goto('/')` is already isolated. Document this in `e2e/README.md`.
+- [x] **E2E-34: `npm run test:e2e` in `check.ps1`** — After `npm run test` (vitest), add an optional E2E gate: if Playwright is installed and port 1420 is free, run `npm run test:e2e`. Skip gracefully if the port is already in use.
 
 ---
 
