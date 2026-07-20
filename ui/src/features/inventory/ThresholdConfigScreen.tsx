@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listProductsScoped, type ProductDto } from '@/api/products';
 import {
@@ -14,6 +15,7 @@ import './ThresholdConfigScreen.css';
 
 export default function ThresholdConfigScreen() {
   const { sessionToken } = useWorkspace();
+  const { addToast } = useToast();
 
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -83,7 +85,7 @@ export default function ThresholdConfigScreen() {
       const locId = selectedLocationId === '' ? null : selectedLocationId;
       const numVal = parseInt(thresholdVal, 10);
       if (isNaN(numVal) || numVal < 0) {
-        alert('Threshold must be a valid non-negative integer');
+        addToast({ message: 'Threshold must be a valid non-negative integer', type: 'error' });
         return;
       }
 
@@ -91,7 +93,7 @@ export default function ThresholdConfigScreen() {
       setIsDialogOpen(false);
       await loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save threshold');
+      addToast({ message: err instanceof Error ? err.message : 'Failed to save threshold', type: 'error' });
     }
   };
 
@@ -103,7 +105,7 @@ export default function ThresholdConfigScreen() {
       await deleteStockThreshold(sessionToken, id);
       await loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete threshold');
+      addToast({ message: err instanceof Error ? err.message : 'Failed to delete threshold', type: 'error' });
     }
   };
 
