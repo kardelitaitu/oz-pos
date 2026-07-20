@@ -10,7 +10,7 @@
 //!
 //! # Testing
 //!
-//! Use [`new_with_endpoint`](Self::new_with_endpoint) to direct requests
+//! Use [`new_with_endpoint`] to direct requests
 //! to a local mock server (e.g. `wiremock`) during integration tests.
 
 use async_trait::async_trait;

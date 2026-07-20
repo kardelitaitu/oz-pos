@@ -35,8 +35,9 @@ next: Migrate DB CRUD + Tauri commands into this module | perf: N/A — no hot p
 //!
 //! This module re-exports key CRM domain types from `oz-core` so that
 //! consumers can access all customer-related types through a single crate:
-//!//! ```
-//! use modules_crm::{CrmModule, Customer};
+//!
+//! ```
+//! # use modules_crm::{CrmModule, Customer};
 //! ```
 
 pub mod handlers;

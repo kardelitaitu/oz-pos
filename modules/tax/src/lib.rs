@@ -35,8 +35,9 @@ next: Migrate tax commands into this module | perf: N/A.
 //!
 //! This module re-exports key tax domain types from `oz-core` so that
 //! consumers can access all tax-related types through a single crate:
-//!//! ```
-//! use modules_tax::{TaxModule, TaxRate};
+//!
+//! ```
+//! # use modules_tax::{TaxModule, TaxRate};
 //! ```
 
 // Re-export key tax domain types from oz-core so consumers can

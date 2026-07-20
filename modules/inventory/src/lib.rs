@@ -36,8 +36,9 @@ next: Migrate DB CRUD + commands into this module | perf: N/A.
 //!
 //! This module re-exports key inventory domain types from `oz-core` so that
 //! consumers can access all inventory-related types through a single crate:
-//!//! ```
-//! use modules_inventory::{InventoryModule, Product, Category, Inventory};
+//!
+//! ```
+//! # use modules_inventory::{InventoryModule, Product, Category, Inventory};
 //! ```
 
 pub mod handlers;

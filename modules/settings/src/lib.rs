@@ -37,8 +37,9 @@ next: Migrate settings commands into this module | perf: N/A.
 //!
 //! This module re-exports key settings domain types from `oz-core` so that
 //! consumers can access all settings-related types through a single crate:
-//!//! ```
-//! use modules_settings::{SettingsModule, Settings, FeatureRegistry};
+//!
+//! ```
+//! # use modules_settings::{SettingsModule, Settings, FeatureRegistry};
 //! ```
 
 // Re-export key settings domain types from oz-core so consumers can
