@@ -80,7 +80,7 @@ impl SerialCustomerDisplay {
     /// Discover serial ports that could be pole displays.
     ///
     /// Returns a driver for every serial port matched via
-    /// [`KNOWN_SERIAL_ADAPTERS`](crate::transport::serial::KNOWN_SERIAL_ADAPTERS).
+    /// `crate::transport::serial::KNOWN_SERIAL_ADAPTERS`.
     pub fn discover_all() -> Vec<Self> {
         let ports = match serial::probe_ports(true) {
             Ok(p) => p,

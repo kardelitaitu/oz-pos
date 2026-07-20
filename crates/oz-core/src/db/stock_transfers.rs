@@ -101,7 +101,7 @@ impl Store<'_> {
     }
 
     /// Get a single transfer by id (with lines populated via
-    /// [`get_transfer_lines`]).
+    /// `get_transfer_lines`).
     pub fn get_transfer(&self, id: &str) -> Result<Option<StockTransfer>, CoreError> {
         // ADR-18 §2d: read the FK columns (source_location_id, destination_location_id)
         // introduced by migration 081's column rename (`source_location` →

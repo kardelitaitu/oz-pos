@@ -1,7 +1,7 @@
 //! Caching layer for frequently-accessed POS data.
 //!
 //! Provides a [`Cache`] trait, a [`NoopCache`] fallback, and an optional
-//! [`RedisCache`] implementation behind the `cache-redis` feature flag.
+//! `RedisCache` implementation behind the `cache-redis` feature flag.
 
 use std::sync::Arc;
 
@@ -468,7 +468,7 @@ pub mod redis_cache {
 /// Create a cache, attempting Redis first and falling back to no-op.
 ///
 /// When the `cache-redis` feature is enabled, tries to connect to the
-/// given Redis URL. On success, returns a [`RedisCache`]; on failure
+/// given Redis URL. On success, returns a `RedisCache`; on failure
 /// logs a warning and returns [`NoopCache`]. When the feature is
 /// disabled, always returns [`NoopCache`].
 #[cfg_attr(not(feature = "cache-redis"), allow(unused_variables))]

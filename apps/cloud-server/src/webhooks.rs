@@ -151,7 +151,7 @@ fn verify_stripe_signature(payload: &[u8], signature_header: &str, secret: &str)
 ///
 /// Square sends `x-square-hmacsha256-signature: <signature>`.
 /// The signature is HMAC-SHA256 of `<webhook_url>.<body>.<timestamp>`.
-/// See: https://developer.squareup.com/docs/webhooks/step-verify
+/// See: <https://developer.squareup.com/docs/webhooks/step-verify>
 fn verify_square_signature(
     payload: &[u8],
     signature_header: &str,

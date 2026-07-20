@@ -939,7 +939,7 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
 /// Complete a sale with cashier-resolved shortfalls (split fulfillment).
 ///
 /// This is the second command in the two-command flow (ADR-19 §6b).
-/// After `complete_sale_scoped` returns a [`PartialStockResult`] error,
+/// After `complete_sale_scoped` returns a `PartialStockResult` error,
 /// the cashier resolves shortfalls via the Stock Shortfall dialog.
 /// This command re-checks stock at the resolved locations and deducts
 /// accordingly.

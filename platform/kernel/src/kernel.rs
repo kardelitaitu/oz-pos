@@ -38,9 +38,8 @@ pub enum ModuleStatus {
 /// Manages module registration, dependency resolution, and lifecycle.
 /// The kernel operates exclusively through the [`Module`] and [`Service`]
 /// traits — it has no knowledge of specific module types.
-///
-/// # Example
-///    /// ```no_run
+////// # Example
+/// ```no_run
 /// let mut kernel = Kernel::new();
 /// kernel.register(Box::new(MyModule))?;
 /// kernel.register(Box::new(MyOtherModule))?;
@@ -96,7 +95,7 @@ impl Kernel {
         Ok(())
     }
 
-    /// Register a module together with its [`ModuleManifest`].
+    /// Register a module together with its `ModuleManifest`.
     ///
     /// Validates the manifest against the JSON Schema rules before
     /// registering. If validation fails, the module is **not** registered

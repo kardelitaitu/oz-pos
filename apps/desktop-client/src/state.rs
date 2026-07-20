@@ -266,7 +266,7 @@ impl AppState {
     /// to benefit from Redis caching (when configured) and to ensure
     /// inventory-change pub/sub messages are correctly tagged with the
     /// terminal's identity.
-    /// Create a [`Store`] with the shared cache layer and a pre-acquired
+    /// Create a `Store` with the shared cache layer and a pre-acquired
     /// terminal identity for pub/sub message tagging.
     ///
     /// Callers should acquire the terminal_id via

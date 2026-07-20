@@ -162,7 +162,7 @@ impl Money {
     /// Same currency.
     ///
     /// ⚠️ **Panics on `i64::MIN` in debug mode** (wraps in release) —
-    /// same behaviour as [`i64::neg`]. Use [`checked_sub`](Self::checked_sub)
+    /// same behaviour as `i64::neg`. Use [`checked_sub`](Self::checked_sub)
     /// on `Money::zero()` if you need overflow safety.
     #[must_use]
     pub fn negate(self) -> Money {

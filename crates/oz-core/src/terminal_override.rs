@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 pub struct TerminalFeatureOverride {
     /// The terminal this override applies to.
     pub terminal_id: String,
-    /// The feature key (kebab-case, matching [`crate::feature_key`]).
+    /// The feature key (kebab-case, matching `crate::feature_key`).
     pub feature: String,
     /// Whether the feature is enabled for this terminal.
     pub enabled: bool,
