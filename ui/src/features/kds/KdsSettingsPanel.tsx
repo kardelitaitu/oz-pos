@@ -18,6 +18,7 @@ export interface KdsSettings {
   density: DisplayDensity;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const DEFAULT_SETTINGS: KdsSettings = {
   soundEnabled: true,
   yellowThresholdMin: 5,

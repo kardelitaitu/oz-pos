@@ -230,7 +230,7 @@ export default function SalesHistoryScreen() {
     } finally {
       setVoiding(false);
     }
-  }, [voidTarget, voidReason, session, load, l10n]);
+  }, [voidTarget, voidReason, session, load, l10n, invalidateCache]);
 
   // ── Client-side filtering + sorting ────────────────────────────
   const filteredSales = useMemo(() => {

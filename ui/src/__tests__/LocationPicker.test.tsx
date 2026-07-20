@@ -30,6 +30,7 @@ const mockLocations = [
 const mockListLocations = vi.fn();
 
 vi.mock('@/api/inventory', async (importOriginal) => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   const actual = await importOriginal<typeof import('@/api/inventory')>();
   return {
     ...actual,

@@ -368,6 +368,7 @@ export default function NodeTopologyEditor({
         </div>
 
         {/* ── Interactive Node Graph Canvas ────────────────────────────── */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- canvas container for drag-and-drop topology */}
         <div
           className="node-canvas-container"
           onMouseMove={handleCanvasMouseMove}
@@ -488,6 +489,9 @@ export default function NodeTopologyEditor({
                   key={node.id}
                   className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}`}
                   style={{ left: `${node.x}px`, top: `${node.y}px` }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedNodeId(node.id); }}
                   onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
                 >
                   <div className="node-header">
