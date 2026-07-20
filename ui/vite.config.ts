@@ -52,16 +52,16 @@ export default defineConfig({
     // maxConcurrency controls parallel tests per-worker, helping files with
     // many tests (DataManagementScreen: 55) finish faster.
     pool: 'threads',
-    minThreads: 8,
-    maxThreads: 28,
-    singleThread: false,
-    maxConcurrency: 15,
     fileParallelism: true,
 
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+
+    // Exclude Playwright e2e tests (run via `npm run test:e2e`) and
+    // node_modules package tests picked up by the broad glob.
+    exclude: ['e2e/**', 'node_modules/**'],
 
     // Per-test timeout (ms). Default 5000 is fine for most tests;
     // DataManagementScreen (55 tests, ~225ms each) is the heaviest

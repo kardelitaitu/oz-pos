@@ -52,3 +52,6 @@ menu-eng-star = Star
 menu-eng-plowhorse = Plowhorse
 menu-eng-puzzle = Puzzle
 menu-eng-dog = Dog
+
+# Period comparison
+sales-report-compare = Compare

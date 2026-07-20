@@ -937,7 +937,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
               <h3 className="retail-options-heading">{l10n.getString('settings-system-heading')}</h3>
               <div className="retail-options-field">
                 <label htmlFor="system-app-version">{l10n.getString('settings-app-version-label')}</label>
-                <input id="system-app-version" value="0.0.12" disabled className="retail-options-input-disabled" />
+                <input id="system-app-version" value="0.0.13" disabled className="retail-options-input-disabled" />
               </div>
               <div className="retail-options-field">
                 <label htmlFor="system-cashier">{l10n.getString('settings-cashier-label')}</label>
@@ -1214,7 +1214,7 @@ export default function RetailOptionsScreen({ onClose, theme = 'light', onThemeC
           onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false); }}
         >
           <div className="retail-preview-modal" role="dialog" aria-modal="true" aria-label={l10n.getString('settings-receipt-heading')}>
-            <button type="button" className="retail-preview-close" onClick={() => setShowPreview(false)}>&times;</button>
+            <button type="button" className="retail-preview-close" onClick={() => setShowPreview(false)} aria-label={l10n.getString('retail-preview-close-aria', null, 'Close preview')}>&times;</button>
             <ReceiptPreview store={store} receipt={receipt} session={session} taxRates={taxRates} scale={SCALE} />
           </div>
         </div>

@@ -23,5 +23,7 @@ offline-queue-table-actions = Tindakan
 offline-queue-sync-all-label = Sinkron semua item offline tertunda
 offline-queue-delete-error = Gagal menghapus item
 offline-queue-sync-error = Sinkronisasi gagal
+# P1-3: Shown when sync conflicts were resolved during the last sync cycle
+offline-queue-conflict-count = { $count } item diselesaikan melalui konflik sinkron.
 
 # ── Terminal Management ──

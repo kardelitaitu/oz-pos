@@ -27,6 +27,21 @@ export interface SyncResult {
   failed: number;
 }
 
+/** Summary of offline queue status (P1-6 sync observability). */
+export interface OfflineQueueSummaryDto {
+  pendingCount: number;
+  syncedCount: number;
+  failedCount: number;
+  /** Number of items resolved via conflict during sync (P1-3). */
+  conflictCount: number;
+  lastSyncedAt: string | null;
+  oldestPendingAt: string | null;
+}
+
+/** Get a summary of the offline queue status. */
+export const getOfflineQueueStatusSummary = (): Promise<OfflineQueueSummaryDto> =>
+  invoke<OfflineQueueSummaryDto>('offline_queue_status_summary');
+
 /** Enqueue an action to be performed when back online. */
 export const enqueueOffline = (args: EnqueueOfflineArgs): Promise<OfflineQueueItemDto> =>
   invoke<OfflineQueueItemDto>('enqueue_offline', { args });

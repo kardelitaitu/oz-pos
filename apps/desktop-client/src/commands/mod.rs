@@ -67,6 +67,8 @@ pub mod reports;
 pub mod sales;
 /// Weight-scale commands.
 pub mod scale;
+/// Security / key-rotation commands.
+pub mod security;
 /// Settings CRUD commands.
 pub mod settings;
 /// Initial-setup commands.

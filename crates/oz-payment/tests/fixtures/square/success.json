@@ -1,0 +1,19 @@
+{
+  "name": "success",
+  "driver": "square",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/payments",
+      "status": 200,
+      "response_body": {
+        "payment": {
+          "id": "sq_fixture_success_001",
+          "status": "APPROVED",
+          "amount_money": { "amount": 1500, "currency": "USD" },
+          "created_at": "2026-07-01T12:00:00Z"
+        }
+      }
+    }
+  ]
+}

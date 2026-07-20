@@ -44,6 +44,8 @@ status-bar-connected = Backend terhubung
 status-bar-disconnected = Backend terputus
 status-bar-checking = Memeriksa koneksi backend
 status-bar-authenticating = Mengautentikasi…
+# P1-3: Tooltip for conflict count badge in StatusBar
+statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 
 # POS Cart Line Items
 shared-loading = Memuat…

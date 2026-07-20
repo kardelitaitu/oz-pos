@@ -16,6 +16,20 @@ vi.mock('@/api/audit', () => ({
   listAuditLog: (limit: number, offset: number) => mockListAuditLog(limit, offset),
 }));
 
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    session: { user_id: 'user-1', username: 'admin', role_name: 'admin', token: 'tok', role_id: 'r1', display_name: 'Admin' },
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    logout: vi.fn(),
+    clearError: vi.fn(),
+    swapSession: vi.fn(),
+    isManager: true,
+    isOwner: true,
+  }),
+}));
+
 const bundle = new FluentBundle('en-US');
 bundle.addResource(new FluentResource(sharedFtl));
 // Suppress Fluent errors for fallback test: 'shows fallback action key for unknown actions'

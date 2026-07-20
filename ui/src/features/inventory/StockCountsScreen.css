@@ -35,6 +35,11 @@
   transition: all var(--duration-150) var(--ease-out);
 }
 
+.sc-filter-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .sc-filter-btn--active {
   background: var(--color-accent);
   color: var(--color-accent-fg);
@@ -136,6 +141,12 @@
   cursor: pointer;
   font-size: var(--text-sm);
   padding: var(--space-1) 0;
+}
+
+.sc-card-action:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: var(--radius-sm);
 }
 
 @media (prefers-reduced-motion: no-preference) {

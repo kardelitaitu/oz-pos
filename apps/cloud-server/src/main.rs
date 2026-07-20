@@ -22,8 +22,10 @@
 mod db;
 mod metrics;
 mod prune;
+mod rate_limit;
 mod redirect;
 mod sync_api;
+mod webhooks;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -37,6 +39,7 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
+use crate::rate_limit::{RateLimiterState, start_rate_limit_cleanup};
 use crate::sync_api::{SyncState, sync_router};
 
 /// Shared application state for the cloud server.
@@ -48,6 +51,12 @@ pub struct CloudServerState {
     pub db: Arc<Mutex<Connection>>,
     /// Instant captured at startup for uptime calculation.
     pub started_at: Instant,
+    /// P5-3: Stripe webhook signing secret (loaded from `STRIPE_WEBHOOK_SECRET` env var).
+    pub stripe_webhook_secret: Option<String>,
+    /// P5-3: Square webhook signature key (loaded from `SQUARE_WEBHOOK_SIGNATURE_KEY` env var).
+    pub square_webhook_signature_key: Option<String>,
+    /// P5-3: Public Square webhook URL (loaded from `SQUARE_WEBHOOK_URL` env var).
+    pub square_webhook_url: Option<String>,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -90,10 +99,18 @@ async fn main() {
             let state = CloudServerState {
                 db: conn.clone(),
                 started_at: Instant::now(),
+                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
+                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
+                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
-            let app = build_router(state);
+
+            // P8-1: Per-tenant rate limiter state + background cleanup.
+            let rate_limiter = RateLimiterState::new();
+            start_rate_limit_cleanup(rate_limiter.clone());
+
+            let app = build_router(state, rate_limiter);
             serve(app).await;
         }
         db::DbPool::Postgres(_pg_pool) => {
@@ -107,8 +124,16 @@ async fn main() {
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
                 started_at: Instant::now(),
+                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
+                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
+                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
             };
-            let app = build_router(state);
+
+            // P8-1: Per-tenant rate limiter state + background cleanup.
+            let rate_limiter = RateLimiterState::new();
+            start_rate_limit_cleanup(rate_limiter.clone());
+
+            let app = build_router(state, rate_limiter);
             serve(app).await;
         }
     }
@@ -131,36 +156,91 @@ async fn serve(app: Router) {
 }
 
 /// Build the combined router: REST API + sync endpoints.
-/// Response from the health endpoint.
+/// Response from the health endpoint (P8-3: enhanced with DB ping and queue depth).
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: &'static str,
     version: &'static str,
-    db: &'static str,
+    db: String,
     uptime_seconds: u64,
+    /// Whether the database is reachable (actual ping, not static).
+    db_connected: bool,
+    /// Database ping latency in microseconds.
+    db_latency_us: u64,
+    /// Number of items in the sync queue with status `pending`.
+    sync_queue_depth: i64,
+    /// ISO-8601 timestamp of the most recent sync activity, or null.
+    last_sync_at: Option<String>,
 }
 
-/// `GET /metrics` — Prometheus metrics endpoint (P-3 Step 7).
+/// `GET /metrics` — Prometheus metrics endpoint.
 /// Public, no auth required (same as /health).
 async fn metrics_handler() -> String {
     crate::metrics::render_metrics()
 }
 
 /// `GET /health` — public health check, no auth required.
+///
+/// Performs an actual DB ping, reports sync queue depth, last sync
+/// timestamp, and uptime. Used by the Tauri app's ConnectionStatus
+/// component and by Docker healthchecks.
+///
+/// All DB queries are performed in a single lock acquisition to
+/// minimise contention with concurrent sync handlers (P8-3).
 async fn health_handler(
     axum::extract::State(state): axum::extract::State<CloudServerState>,
 ) -> Json<HealthResponse> {
     let uptime = state.started_at.elapsed().as_secs();
+
+    // P8-3: all DB queries in a single lock acquisition.
+    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at) = {
+        let db_start = std::time::Instant::now();
+        let conn = state.db.lock().await;
+
+        let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
+        let latency = db_start.elapsed().as_micros() as u64;
+        let connected = ping_result.is_ok();
+
+        let depth = conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0);
+
+        let last = conn
+            .query_row(
+                "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .unwrap_or(None);
+
+        (connected, latency, depth, last)
+    };
+
+    // P8-3: record health check Prometheus metrics.
+    crate::metrics::HEALTH_CHECKS_TOTAL.inc();
+    if !db_connected {
+        crate::metrics::HEALTH_CHECK_FAILURES_TOTAL.inc();
+    }
+    crate::metrics::HEALTH_DB_LATENCY_MICROS.observe(db_latency_us as f64);
+
     Json(HealthResponse {
-        status: "ok",
+        status: if db_connected { "ok" } else { "degraded" },
         version: env!("CARGO_PKG_VERSION"),
-        db: "sqlite",
+        db: "sqlite".into(),
         uptime_seconds: uptime,
+        db_connected,
+        db_latency_us,
+        sync_queue_depth,
+        last_sync_at,
     })
 }
 
-/// Build the combined router: REST API + sync endpoints.
-pub fn build_router(state: CloudServerState) -> Router {
+/// Build the combined router: REST API + sync endpoints + rate limiting.
+pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
@@ -176,7 +256,12 @@ pub fn build_router(state: CloudServerState) -> Router {
     let health_state = state.clone();
 
     // Build the sync router (push/pull endpoints) from sync_api module.
-    let sync_router = sync_router(SyncState::from(state));
+    // P8-1: Share the same RateLimiterState with the cleanup task.
+    let sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
+    let sync_router = sync_router(sync_state);
+
+    // Build the webhook router (unauthenticated — HMAC signature verification).
+    let webhook_router = webhooks::webhooks_router(state.clone());
 
     // P-2: Per-route-group concurrency limits prevent sync bursts
     // from starving the product/sales/health API routes.
@@ -186,10 +271,12 @@ pub fn build_router(state: CloudServerState) -> Router {
 
     Router::new()
         .route("/health", axum::routing::get(health_handler))
+        .route("/api/health", axum::routing::get(health_handler))
         .route("/metrics", axum::routing::get(metrics_handler))
         .with_state(health_state)
         .merge(api_router)
         .merge(sync_router)
+        .merge(webhook_router)
         .layer(axum::middleware::from_fn(redirect::redirect_middleware))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
@@ -217,8 +304,11 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
-        build_router(state)
+        build_router(state, crate::rate_limit::RateLimiterState::new())
     }
 
     /// Create a test JWT token.
@@ -267,12 +357,121 @@ mod tests {
     #[tokio::test]
     async fn health_returns_ok() {
         let app = test_app();
+        // oz-api health endpoint
         let req = Request::builder()
             .uri("/api/v1/health")
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn cloud_health_api_alias_returns_ok() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/api/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+        assert!(json["db_connected"].as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn cloud_health_returns_ok_with_db_ping() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "ok");
+        assert!(json["version"].is_string());
+        assert_eq!(json["db"], "sqlite");
+        assert!(json["uptime_seconds"].as_u64().is_some());
+        assert_eq!(json["db_connected"], true);
+        assert!(json["db_latency_us"].as_u64().unwrap() > 0);
+        assert_eq!(json["sync_queue_depth"], 0);
+        assert!(json["last_sync_at"].is_null());
+    }
+
+    #[tokio::test]
+    async fn cloud_health_reports_queue_depth() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+
+        // Seed some pending queue items
+        {
+            let conn = state.db.lock().await;
+            conn.execute_batch(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, synced_at, tenant_id) VALUES
+                 ('h-1', 'act', '{}', 'pending', '2026-06-01T00:00:00Z', NULL, 't1'),
+                 ('h-2', 'act', '{}', 'pending', '2026-06-02T00:00:00Z', NULL, 't1'),
+                 ('h-3', 'act', '{}', 'synced', '2026-06-03T00:00:00Z', '2026-06-03T12:00:00Z', 't1')"
+            )
+            .unwrap();
+        }
+
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["sync_queue_depth"], 2);
+        assert!(!json["last_sync_at"].is_null());
+    }
+
+    #[tokio::test]
+    async fn cloud_health_reports_last_sync_at() {
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+
+        // Seed some items with various synced_at times
+        {
+            let conn = state.db.lock().await;
+            conn.execute_batch(
+                "INSERT INTO offline_queue (id, action, payload, status, created_at, synced_at, tenant_id) VALUES
+                 ('h-a', 'act', '{}', 'synced', '2026-06-01T00:00:00Z', '2026-06-02T12:00:00Z', 't1'),
+                 ('h-b', 'act', '{}', 'synced', '2026-06-03T00:00:00Z', '2026-06-04T08:30:00Z', 't1')"
+            )
+            .unwrap();
+        }
+
+        let req = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["last_sync_at"], "2026-06-04T08:30:00Z");
     }
 
     #[tokio::test]
@@ -288,8 +487,12 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Seed an item directly with tenant_id
         {
@@ -356,8 +559,12 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Tenant A pushes two items
         let push_body = r#"[
@@ -395,8 +602,12 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Tenant A pushes one item
         let push_a = authed_post(
@@ -440,8 +651,12 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Tenant A pushes 3 items
         let push_a = authed_post(
@@ -485,8 +700,12 @@ mod tests {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
             started_at: Instant::now(),
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
         };
-        let app = build_router(state.clone());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter);
 
         // Push items as default tenant
         let push_d = authed_post(

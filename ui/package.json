@@ -1,7 +1,7 @@
 {
   "name": "oz-pos-ui",
   "private": true,
-  "version": "0.0.12",
+  "version": "0.0.13",
   "type": "module",
   "description": "OZ-POS front-end: React 18 + Vite + TypeScript + @fluent/react.",
   "license": "SEE LICENSE IN ../LICENSE",
@@ -17,6 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "test:e2e:headed": "playwright test --config e2e/playwright.config.ts --headed",
     "docs": "npx -y typedoc --skipErrorChecking --entryPointStrategy expand ./src/api ./src/types ./src/hooks --out ../docs/html/ui-docs"
   },
   "dependencies": {
@@ -28,9 +30,11 @@
     "@tauri-apps/plugin-updater": "^2.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-window": "^2.2.7",
     "recharts": "^3.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.4.6",
     "@testing-library/react": "^16.0.0",
@@ -38,6 +42,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/react-window": "^1.8.8",
     "@typescript-eslint/eslint-plugin": "^7.16.0",
     "@typescript-eslint/parser": "^7.16.0",
     "@vitejs/plugin-react": "^4.3.4",
@@ -55,5 +60,4 @@
   "engines": {
     "node": ">=22"
   }
-
 }

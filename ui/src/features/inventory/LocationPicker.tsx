@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listInventoryLocations, type InventoryLocation } from '@/api/inventory';
 import './LocationPicker.css';
@@ -19,7 +19,7 @@ interface LocationPickerProps {
  * them in a dropdown that follows the same pattern as StoreSwitcher.
  * Used in the inventory workspace header to filter views by location.
  */
-export default function LocationPicker({
+const LocationPicker = memo(function LocationPicker({
   value,
   onChange,
   label = 'Location',
@@ -167,4 +167,6 @@ export default function LocationPicker({
       )}
     </div>
   );
-}
+});
+
+export default LocationPicker;

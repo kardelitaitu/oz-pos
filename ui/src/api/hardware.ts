@@ -134,3 +134,26 @@ export interface WeightReading {
 /** Read the current weight from the registered scale, or null if none is registered. */
 export const readScaleWeight = (): Promise<WeightReading | null> =>
   invoke<WeightReading | null>('read_scale_weight');
+
+// ── Device Discovery ──────────────────────────────────────────────────
+
+/** Categories of USB hardware devices that can be discovered. */
+export type DeviceCategory = 'Scanner' | 'Printer' | 'Scale' | 'Other';
+
+/** Information about a discovered USB hardware device. */
+export interface UsbDeviceInfo {
+  vid: number;
+  pid: number;
+  manufacturer: string;
+  product: string;
+  serial: string;
+  interfaceNumber: number;
+  endpointIn: number;
+  endpointOut: number | null;
+  category: DeviceCategory;
+  label: string;
+}
+
+/** Discover all connected USB hardware devices (scanners, printers, scales). */
+export const discoverHardware = (): Promise<UsbDeviceInfo[]> =>
+  invoke<UsbDeviceInfo[]>('discover_hardware');

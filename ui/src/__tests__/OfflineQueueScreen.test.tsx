@@ -12,12 +12,14 @@ const mockListAllOffline = vi.fn();
 const mockPendingOfflineCount = vi.fn();
 const mockRetryOfflineSync = vi.fn();
 const mockDeleteOfflineItem = vi.fn();
+const mockOfflineQueueStatusSummary = vi.fn();
 
 vi.mock('@/api/offline', () => ({
   listAllOffline: (...args: unknown[]) => mockListAllOffline(...args),
   pendingOfflineCount: (...args: unknown[]) => mockPendingOfflineCount(...args),
   retryOfflineSync: (...args: unknown[]) => mockRetryOfflineSync(...args),
   deleteOfflineItem: (...args: unknown[]) => mockDeleteOfflineItem(...args),
+  getOfflineQueueStatusSummary: (...args: unknown[]) => mockOfflineQueueStatusSummary(...args),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -47,7 +49,13 @@ describe('OfflineQueueScreen', () => {
     mockPendingOfflineCount.mockReset();
     mockRetryOfflineSync.mockReset();
     mockDeleteOfflineItem.mockReset();
+    mockOfflineQueueStatusSummary.mockReset();
+    mockListAllOffline.mockResolvedValue([]);
     mockPendingOfflineCount.mockResolvedValue(0);
+    mockOfflineQueueStatusSummary.mockResolvedValue({
+      pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0,
+      lastSyncedAt: null, oldestPendingAt: null,
+    });
   });
 
   it('renders the title', async () => {
@@ -185,15 +193,14 @@ describe('OfflineQueueScreen', () => {
   });
 
   it('shows sync result after Sync All succeeds', async () => {
-    mockListAllOffline.mockResolvedValueOnce([makeQueueItem()]);
-    mockListAllOffline.mockResolvedValueOnce([]);
+    mockListAllOffline.mockResolvedValue([makeQueueItem()]);
     mockPendingOfflineCount.mockResolvedValue(1);
     mockRetryOfflineSync.mockResolvedValue({ synced: 1, failed: 0 });
 
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Sync All')).toBeTruthy();
+      expect(screen.getByText('Sync All')).not.toBeDisabled();
     });
 
     const user = userEvent.setup();
@@ -201,7 +208,12 @@ describe('OfflineQueueScreen', () => {
 
     await waitFor(() => {
       expect(mockRetryOfflineSync).toHaveBeenCalled();
-      expect(screen.getByText(/Synced/)).toBeTruthy();
+    });
+    // During load() the skeleton table re-renders with <th>Synced At</th>,
+    // which also matches /Synced/i — use a more specific check.
+    await waitFor(() => {
+      const syncMessages = screen.getAllByText(/Synced/i);
+      expect(syncMessages.some((el) => el.textContent?.includes('items'))).toBe(true);
     });
   });
 });

@@ -281,18 +281,32 @@ impl QrisPaymentProcessor {
         Ok((status, body_text))
     }
 
+    /// Classify a Midtrans status code into a specific PaymentError variant.
+    fn classify_midtrans_status(status_code: &str, status_message: &str) -> PaymentError {
+        match status_code {
+            "402" => PaymentError::InvalidCard(format!(
+                "midtrans card error: {} (code: {})",
+                status_message, status_code
+            )),
+            "406" => PaymentError::Duplicate(format!(
+                "midtrans duplicate: {} (code: {})",
+                status_message, status_code
+            )),
+            _ => {
+                let msg = if status_message.is_empty() {
+                    format!("midtrans_error: HTTP {}", status_code)
+                } else {
+                    format!("midtrans_error: {} (code: {})", status_message, status_code)
+                };
+                PaymentError::Network(msg)
+            }
+        }
+    }
+
     /// Parse a Midtrans API error from the response body.
     fn parse_error(status: u16, body: &str) -> PaymentError {
         if let Ok(err) = serde_json::from_str::<MidtransErrorResponse>(body) {
-            let msg = if err.status_message.is_empty() {
-                format!("midtrans_error: HTTP {}", status)
-            } else {
-                format!(
-                    "midtrans_error: {} (code: {})",
-                    err.status_message, err.status_code
-                )
-            };
-            PaymentError::Network(msg)
+            Self::classify_midtrans_status(&err.status_code, &err.status_message)
         } else {
             PaymentError::Network(format!("HTTP {}: {}", status, body))
         }
@@ -347,13 +361,16 @@ impl QrisPaymentProcessor {
             if let Ok(tx) = serde_json::from_str::<TransactionStatusResponse>(&text) {
                 match tx.transaction_status.as_str() {
                     "settlement" | "capture" => return Ok(tx),
-                    "deny" | "expire" | "cancel" => {
+                    "deny" | "cancel" => {
                         let msg = tx.status_message.clone();
                         return Err(PaymentError::Declined(if msg.is_empty() {
                             format!("QRIS payment {}", tx.transaction_status)
                         } else {
                             msg
                         }));
+                    }
+                    "expire" => {
+                        return Err(PaymentError::InvalidCard(tx.status_message.clone()));
                     }
                     _ => {
                         // Still pending — keep polling.

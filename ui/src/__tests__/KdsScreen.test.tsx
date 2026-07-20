@@ -155,10 +155,8 @@ describe('KdsScreen', () => {
   });
 
   it('advances pending order to preparing on click', async () => {
-    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'pending' })]);
+    mockGetKdsQueue.mockResolvedValue([makeOrder({ status: 'pending' })]);
     mockUpdateKdsStatus.mockResolvedValue({});
-    // After status update, re-fetch
-    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'preparing' })]);
 
     renderScreen();
     await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());
@@ -172,9 +170,8 @@ describe('KdsScreen', () => {
   });
 
   it('advances preparing order to ready on click', async () => {
-    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'preparing' })]);
+    mockGetKdsQueue.mockResolvedValue([makeOrder({ status: 'preparing' })]);
     mockUpdateKdsStatus.mockResolvedValue({});
-    mockGetKdsQueue.mockResolvedValueOnce([makeOrder({ status: 'ready' })]);
 
     renderScreen();
     await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeDefined());

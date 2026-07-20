@@ -1,6 +1,6 @@
 # ADR #20: Payment-Capture Ordering — Stock Reservation Before Payment Capture
 
-**Status:** Proposed
+**Status:** Implemented (2026-07-19)
 **Date:** 2026-07-19
 **Decision Record:** Closes ADR-18 §13 Finding #31 — the pre-capture ordering requirement that the deduction location must be locked BEFORE payment gateway capture is initiated.
 **Author:** Architecture Team & OZ-POS Contributors

@@ -20,6 +20,11 @@
   color: var(--kds-text);
 }
 
+.kds-layout-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 /* ── Popover portal ────────────────────────────────────────────────── */
 
 .kds-layout-popover {
@@ -85,6 +90,11 @@
   border-color: var(--kds-ticket-border);
 }
 
+.kds-layout-option:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .kds-layout-option--active {
   background: var(--kds-ticket-bg);
   color: var(--kds-text);
@@ -138,6 +148,10 @@
 
 .kds-layout-toggle input[type="checkbox"]:checked::after {
   transform: translateX(1rem);
+}
+
+.kds-layout-toggle input[type="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 .kds-layout-toggle-label {

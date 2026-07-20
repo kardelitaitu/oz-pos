@@ -72,6 +72,9 @@ impl Keyring for MacOsKeychain {
             }
         }
     }
+
+    // `rotate_key` and `key_created_at` use the default implementations
+    // from the `Keyring` trait.
 }
 
 #[cfg(test)]

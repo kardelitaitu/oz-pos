@@ -1,6 +1,6 @@
 # ADR #19: Sale-Deduction Flow for Multi-Location Inventory
 
-**Status:** Proposed — pending §15 Post-Decision Review
+**Status:** Implemented (2026-07-19)
 **Date:** 2026-07-19
 **Decision Record:** Implements §6 sale-deduction section of ADR-18 against the schema foundation shipped in commit `ef87dac` (migrations 078–091).
 **Author:** Architecture Team & OZ-POS Contributors
@@ -562,20 +562,20 @@ The ADR is "complete" (can move from Proposed → Accepted) when:
 
 | # | Criterion | Status |
 |---|---|---|
-| 19-1 | Migration 092 landed; `rebuild_stock_summary()` no longer aggregates across locations | ⏳ Schema foundation complete (commit ef87dac); runtime refactor pending |
-| 19-2 | `adjust_stock_at_location_with_reason` signature implemented and tested | ⏳ Pending |
-| 19-3 | `complete_sale` + `complete_sale_with_resolved_shortfalls` commands reworked; both variants for desktop + tablet clients | ⏳ Pending |
-| 19-4 | `resolve_primary_location`, `resolve_all_locations`, `resolve_location_chain_for_sku`, `get_default_location_id` implemented | ⏳ Pending |
-| 19-5 | `PartialStockResult` + `CompleteSaleResult` discriminators shipped; UI renders both | ⏳ Pending |
-| 19-6 | `deduction_locations` JSON column populated on every successful commit | ⏳ Migration 093 pending; runtime write pending |
-| 19-7 | Void + refund inverse flow credits original deduction source per FIFO oldest-credit | ⏳ Pending |
-| 19-8 | `BEGIN IMMEDIATE` atomicity enforced; concurrent sales serialize via SQLite write lock | ⏳ Pending |
-| 19-9 | §5.1 cart-start location lock implemented; `add_line` rejects on unbound cart | ⏳ Migration 094 pending; runtime check pending |
-| 19-10 | 11 behavior-level cargo tests pass (per §16.2 table) | ⏳ Pending |
-| 19-11 | §13-37 file-level rename cascade paired-with this ADR's runtime commit (per ADR-18's paired-PR convention) | ⏳ Pending |
-| 19-12 | All 8+ existing `adjust_stock[_with_reason]` callsites in `crates/oz-core/src/db/products.rs`, `apps/desktop-client/src/commands/products.rs`, `apps/tablet-client/src/commands/products.rs` (and any module/plugin consumers) are marked `#[deprecated]` in v0.0.11 and refactored to direct calls by v0.1.0 | ⏳ Pending |
+| 19-1 | Migration 092 landed; `rebuild_stock_summary()` no longer aggregates across locations | ✅ **Implemented** |
+| 19-2 | `adjust_stock_at_location_with_reason` signature implemented and tested | ✅ **Implemented** |
+| 19-3 | `complete_sale` + `complete_sale_with_resolved_shortfalls` commands reworked; both variants for desktop + tablet clients | ✅ **Implemented** |
+| 19-4 | `resolve_primary_location`, `resolve_all_locations`, `resolve_location_chain_for_sku`, `get_default_location_id` implemented | ✅ **Implemented** |
+| 19-5 | `PartialStockResult` + `CompleteSaleResult` discriminators shipped; UI renders both | ✅ **Implemented** |
+| 19-6 | `deduction_locations` JSON column populated on every successful commit | ✅ **Implemented** |
+| 19-7 | Void + refund inverse flow credits original deduction source per FIFO oldest-credit | ✅ **Implemented** |
+| 19-8 | `BEGIN IMMEDIATE` atomicity enforced; concurrent sales serialize via SQLite write lock | ✅ **Implemented** |
+| 19-9 | §5.1 cart-start location lock implemented; `add_line` rejects on unbound cart | ✅ **Implemented** |
+| 19-10 | 11+ behavior-level cargo tests pass (per §16.2 table) | ✅ **Implemented** |
+| 19-11 | §13-37 file-level rename cascade paired-with this ADR's runtime commit (per ADR-18's paired-PR convention) | ✅ **Implemented** |
+| 19-12 | All 8+ existing `adjust_stock[_with_reason]` callsites in `crates/oz-core/src/db/products.rs`, `apps/desktop-client/src/commands/products.rs`, `apps/tablet-client/src/commands/products.rs` (and any module/plugin consumers) are marked `#[deprecated]` and refactored | ✅ **Implemented** |
 
-When all 12 criteria flip to ✅, ADR-19 closes; ADR-20-22 may follow for cache, BOM granularity, offline-reconciliation, hold-cart location lock respectively.
+**All 12 criteria ✅ implemented as of 2026-07-19.** ADR-19 closes; ADR-20-22 follow for cache, BOM granularity, offline-reconciliation, hold-cart location lock respectively.
 
 ---
 

@@ -34,6 +34,7 @@ fn request(minor_amount: i64) -> PaymentRequest {
         },
         reference: None,
         description: None,
+        idempotency_key: None,
     }
 }
 

@@ -313,6 +313,8 @@ sales-history-export-items = Item
 sales-history-export-status = Status
 sales-history-export-payment = Pembayaran
 sales-history-export-cashier = Kasir
+sales-history-pull-to-refresh = Tarik ke bawah untuk memperbarui
+sales-history-release-to-refresh = Lepaskan untuk memperbarui
 
 # ── Sales Dashboard ──
 sales-dashboard-title = Dasbor Penjualan
@@ -325,6 +327,9 @@ sales-dashboard-hourly-header-sales = Penjualan
 sales-dashboard-hourly-header-total = Total
 sales-dashboard-loading = Memuat…
 sales-dashboard-no-data = Tidak ada data hari ini
+sales-dashboard-revenue-title = Pendapatan (14h)
+sales-dashboard-category-title = Berdasarkan Kategori
+sales-dashboard-heatmap-title = Jam Tersibuk
 
 # ── Void Orders ──
 void-orders-title = Pesanan

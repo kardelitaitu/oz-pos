@@ -217,6 +217,8 @@ status-bar-connected = Backend connected
 status-bar-disconnected = Backend disconnected
 status-bar-checking = Checking backend connection
 status-bar-authenticating = Authenticating...
+# P1-3: Tooltip for conflict count badge in StatusBar
+statusbar-conflict-count = { $count } sync conflict(s) resolved
 
 # Audit Action Labels
 audit-action-sale-void = Void Sale

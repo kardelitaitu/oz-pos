@@ -33,8 +33,9 @@ export default function InventoryReportScreen() {
     const rows = items.map((i) =>
       [i.sku, `"${i.name}"`, i.current_qty, i.threshold].join(','),
     );
+    const bom = '\uFEFF';
     const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

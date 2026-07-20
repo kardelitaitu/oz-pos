@@ -17,5 +17,7 @@ multi-store-label-timezone = Zona Waktu
 multi-store-label-terminals = Terminal
 multi-store-section-stores-overview = Ikhtisar toko
 multi-store-section-terminal-status = Status terminal
+topology-builder-title = Builder Topologi Visual Toko & Workspace
+
 
 # ── Offline Queue ──

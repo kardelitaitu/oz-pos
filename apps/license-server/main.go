@@ -71,6 +71,10 @@ func main() {
 		// credential out of URLs (which would otherwise leak it to webserver
 		// access logs, CDN logs, browser history, and Referer headers).
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		// P8-2: Machine-level revocation is integrated into the /status
+		// endpoint (send revoke:true with machine_id in the request body).
+		// P8-4: Public health endpoint for Docker healthcheck and monitoring.
+		se.Router.GET("/api/health", handleHealth(app))
 		return se.Next()
 	})
 

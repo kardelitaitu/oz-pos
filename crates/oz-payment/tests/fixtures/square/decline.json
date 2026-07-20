@@ -1,0 +1,16 @@
+{
+  "name": "decline",
+  "driver": "square",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/payments",
+      "status": 402,
+      "response_body": {
+        "errors": [
+          { "code": "CARD_DECLINED", "detail": "The card was declined." }
+        ]
+      }
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 //! with additional tracking for conflict resolution and last-sync timing.
 
 use oz_core::db::Store;
+use oz_core::db::offline::SyncStatusSummary;
 use oz_core::error::CoreError;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 use serde::Deserialize;
@@ -82,6 +83,21 @@ impl SyncQueue {
         store.enqueue_offline(action, payload)
     }
 
+    /// Enqueue a transaction with dedup by action + payload.
+    ///
+    /// If a pending item with the same `action` and `payload` already
+    /// exists, returns `Ok(None)` — no duplicate is created.
+    /// This prevents duplicate entries when the same event is enqueued
+    /// multiple times across different terminals or due to retry logic.
+    pub fn enqueue_dedup(
+        &self,
+        store: &Store<'_>,
+        action: &str,
+        payload: &str,
+    ) -> Result<Option<OfflineQueueItem>, CoreError> {
+        store.enqueue_offline_dedup(action, payload)
+    }
+
     /// Mark an item as successfully synced.
     pub fn mark_synced(&self, store: &Store<'_>, id: &str) -> Result<(), CoreError> {
         store.mark_offline_synced(id)
@@ -102,6 +118,14 @@ impl SyncQueue {
         store.delete_offline_item(id)
     }
 
+    /// Get a summary of the offline queue status.
+    ///
+    /// Returns counts by status, total retries, last sync timestamp,
+    /// and oldest pending timestamp — for dashboard observability.
+    pub fn status_summary(&self, store: &Store<'_>) -> Result<SyncStatusSummary, CoreError> {
+        store.offline_queue_status_summary()
+    }
+
     /// Get the timestamp of the most recently synced item.
     ///
     /// Returns `None` if nothing has been synced yet.
@@ -117,16 +141,23 @@ impl SyncQueue {
 
     /// Apply a conflict-resolution outcome to the queue.
     ///
-    /// If the local item lost, it is marked as failed/superseded. If the
-    /// winner is a merged item, a new queue entry is created.
+    /// Marks the local item with a conflict-resolution marker in its
+    /// `last_error` field so the status summary can count it. If the
+    /// winner is a merged (CRDT) item, a new queue entry is created.
     pub fn apply_resolution(
         &self,
         store: &Store<'_>,
         resolved: &ResolvedItem,
     ) -> Result<(), CoreError> {
-        // Mark the local item as synced (the conflict was resolved)
+        // Determine the resolution type from the winner identity.
+        let resolution_tag = match (&resolved.local, &resolved.remote) {
+            (Some(local), _) if resolved.winner.id == local.id => "local won",
+            (_, Some(remote)) if resolved.winner.id == remote.id => "remote won",
+            _ => "crdt merge",
+        };
+        // Mark the local item with a conflict marker and sync it.
         if let Some(ref local) = resolved.local {
-            store.mark_offline_synced(&local.id)?;
+            store.mark_offline_resolved(&local.id, resolution_tag)?;
         }
         // If the winner is a merged item (neither purely local nor remote),
         // enqueue it for the next sync cycle.
@@ -368,6 +399,162 @@ mod tests {
         let pending = queue.list_pending(&store).unwrap();
         assert_eq!(pending[0].id, item1.id, "oldest item should be first");
         assert_eq!(pending[1].id, item2.id);
+    }
+
+    // ── Dedup tests (P1-5) ────────────────────────────────────────────
+
+    #[test]
+    fn queue_enqueue_dedup_skips_duplicate() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"sale_id":"s-1"}"#;
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(first.is_some(), "first call should enqueue");
+
+        let second = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(second.is_none(), "duplicate should be skipped");
+
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_allows_different_payload() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", r#"{"sale_id":"s-1"}"#)
+            .unwrap();
+        assert!(first.is_some());
+
+        let second = queue
+            .enqueue_dedup(&store, "complete_sale", r#"{"sale_id":"s-2"}"#)
+            .unwrap();
+        assert!(second.is_some(), "different sale_id should not be deduped");
+
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_allows_different_action() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"id":"x"}"#;
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(first.is_some());
+
+        let second = queue.enqueue_dedup(&store, "void_sale", payload).unwrap();
+        assert!(second.is_some(), "different action should not be deduped");
+
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_cross_terminal_scenario() {
+        // Simulate: Terminal A completes a sale and enqueues it.
+        // That sale syncs to Terminal B, which also tries to enqueue
+        // the exact same payload — the dedup should prevent duplicates.
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"sale_id":"s-cross-1","items":[{"sku":"COFFEE","qty":2}]}"#;
+
+        // Terminal A enqueues
+        let a = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(a.is_some(), "Terminal A should enqueue");
+
+        // Terminal B receives the same payload via sync and tries to enqueue
+        let b = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(b.is_none(), "Terminal B duplicate should be deduped");
+
+        // Verify only one pending item exists
+        let count = queue.pending_count(&store).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn queue_enqueue_dedup_allows_after_mark_synced() {
+        // After an item is synced, a new enqueue with the same payload
+        // should not be deduped (only checks Pending items).
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let payload = r#"{"sale_id":"s-1"}"#;
+        let first = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(first.is_some());
+        let id = first.unwrap().id.clone();
+
+        queue.mark_synced(&store, &id).unwrap();
+
+        let second = queue
+            .enqueue_dedup(&store, "complete_sale", payload)
+            .unwrap();
+        assert!(
+            second.is_some(),
+            "should re-enqueue after original is synced"
+        );
+    }
+
+    // ── P1-6: SyncStatusSummary tests ────────────────────────────
+
+    #[test]
+    fn queue_status_summary_empty() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let summary = queue.status_summary(&store).unwrap();
+        assert_eq!(summary.pending_count, 0);
+        assert_eq!(summary.synced_count, 0);
+        assert_eq!(summary.failed_count, 0);
+        assert!(summary.last_synced_at.is_none());
+        assert!(summary.oldest_pending_at.is_none());
+    }
+
+    #[test]
+    fn queue_status_summary_with_data() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let item1 = queue.enqueue(&store, "a", "{}").unwrap();
+        queue.enqueue(&store, "b", "{}").unwrap();
+        queue.mark_synced(&store, &item1.id).unwrap();
+
+        let summary = queue.status_summary(&store).unwrap();
+        assert_eq!(summary.pending_count, 1);
+        assert_eq!(summary.synced_count, 1);
+        assert_eq!(summary.failed_count, 0);
+        assert!(summary.last_synced_at.is_some());
+        assert!(summary.oldest_pending_at.is_some());
+    }
+
+    #[test]
+    fn queue_status_summary_after_mark_failed() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+
+        let item = queue.enqueue(&store, "test", "{}").unwrap();
+        queue.mark_failed(&store, &item.id, "timeout").unwrap();
+
+        let summary = queue.status_summary(&store).unwrap();
+        assert_eq!(summary.pending_count, 0);
+        assert_eq!(summary.failed_count, 1);
+        assert_eq!(summary.total_retry_count, 1);
     }
 
     #[test]

@@ -243,9 +243,10 @@ System fields: id, created, updated
 
 Custom fields:
   tenant_id         relation → tenants.id (required)
-  tier_key          select (required)             free | pro | premium | enterprise
-  max_stores        number (required)
-  max_pos_instances number (required)
+  tier_key          select (required)             free | one_time | standard | pro | enterprise
+  max_stores        number (required)             1 for free/one_time/standard, 0 for unlimited (pro/enterprise)
+  max_pos_instances number (required)             1 for free/one_time, 2 for standard, 0 for unlimited (pro/enterprise)
+  max_warehouses    number (required)             1 for free/one_time/standard, 0 for unlimited (pro/enterprise)
   allowed_types     json (required)
   status            select (required)             active | expired | grace_period | revoked
   starts_at         date (required)
@@ -271,6 +272,27 @@ Custom fields:
   tenant_id         relation → tenants.id (required)
   first_seen_at     date (auto-set on create)
   last_seen_at      date (updated by Go hook on each request)
+
+API Rules:
+  list/search:   @request.auth.id != ""           (admin only)
+  view:          @request.auth.id != ""           (admin only)
+  create:                                          (only via Go hook)
+  update:                                          (only via Go hook)
+  delete:        @request.auth.id != ""           (admin only)
+```
+
+#### `trial_registrations` collection (SPEC-2026-TRIAL-LOCK)
+
+```
+System fields: id, created, updated
+
+Custom fields:
+  hardware_fingerprint text (required, unique)     SHA-256 hash of motherboard + CPU + disk serial
+  first_seen_at        date (required)
+  trial_expires_at     date (required)            NOW() + 90 days
+  platform             select (required)          windows | android | linux
+  app_version          text (required)
+  ip_address           text
 
 API Rules:
   list/search:   @request.auth.id != ""           (admin only)

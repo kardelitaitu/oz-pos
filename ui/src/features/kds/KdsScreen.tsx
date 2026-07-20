@@ -1,13 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Profiler } from 'react';
 import { Localized } from '@fluent/react';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspaceScope } from '@/contexts/WorkspaceContext';
 import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
+import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
 import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
 import { KdsLayoutSwitcher } from '@/features/kds/KdsLayoutSwitcher';
+import { KdsSettingsPanel, type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -33,7 +36,11 @@ export default function KdsScreen() {
   const userId = session?.user_id ?? '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, loading: prefsLoading } = useKdsPreferences();
+
+  // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
+  useNewTicketSound(orders, settings.soundEnabled);
 
   const fetchOrders = useCallback(() => {
     const zone = prefs.kdsZone || undefined;
@@ -52,13 +59,66 @@ export default function KdsScreen() {
       .catch((e) => setError(e.message ?? String(e)));
   }, [userId, workspaceScope?.storeId, prefs.kdsZone]);
 
+  // P2-3: Adaptive polling with dynamic interval based on idle time.
+  // Uses recursive setTimeout so the duration recalculates after every
+  // fetch. Polls 2s when active, backs off to 10s after 30s idle, 30s
+  // after 2min idle. Pauses when the tab is hidden. Idle resets when
+  // orders.length changes (via effect dependency re-run).
   useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 15000);
-    return () => clearInterval(interval);
-  }, [fetchOrders]);
+    let idleMs = 0;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let isPaused = document.hidden;
 
-  const advanceStatus = async (order: KdsOrder) => {
+    const getInterval = (idle: number): number => {
+      if (idle < 30_000) return 2_000;   // active: 2s
+      if (idle < 120_000) return 10_000;  // idle 30s+: 10s
+      return 30_000;                        // idle 2min+: 30s
+    };
+
+    const clearTimer = () => {
+      if (timerId !== null) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+    };
+
+    // Recursive tick — recalculates interval after every fetch
+    const tick = () => {
+      if (!isPaused) {
+        fetchOrders();
+      }
+
+      // Advance idle time by the current interval, then schedule next tick
+      idleMs += getInterval(idleMs);
+      timerId = setTimeout(tick, getInterval(idleMs));
+    };
+
+    // Visibility change handler — pause polling when tab hidden
+    const onVisibilityChange = () => {
+      isPaused = document.hidden;
+      if (!isPaused) {
+        // Immediately fetch when tab becomes visible, then restart with fresh idle
+        clearTimer();
+        fetchOrders();
+        idleMs = 0;
+        timerId = setTimeout(tick, getInterval(0));
+      }
+    };
+
+    // Initial fetch and start polling
+    fetchOrders();
+    timerId = setTimeout(tick, getInterval(0));
+
+    // Wire up visibility change listener
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      clearTimer();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [fetchOrders, orders.length]);
+
+  const advanceStatus = useCallback(async (order: KdsOrder) => {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
     if (currentIdx < 0 || currentIdx >= STATUS_ORDER.length - 1) return;
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
@@ -68,11 +128,21 @@ export default function KdsScreen() {
     } catch (e) {
       setError(String(e));
     }
-  };
+  }, [userId, fetchOrders]);
+
+  // P7-3: Pull-to-refresh gesture on KDS ticket board
+  const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
+    onRefresh: fetchOrders,
+  });
 
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 
   return (
+    <Profiler id="KdsScreen" onRender={(...args) => {
+      if (typeof args[2] === 'number' && args[2] > 1) {
+        console.debug('[Profiler] KdsScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
+      }
+    }}>
     <div className="kds" role="region" aria-label="Kitchen Display System">
       <div className="kds-header">
         <div className="kds-header-left">
@@ -80,7 +150,15 @@ export default function KdsScreen() {
           <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}><span>{orders.length} orders</span></Localized></span>
         </div>
         <div className="kds-header-right">
-          {!prefsLoading && (
+          {!prefsLoading && (<>
+            <KdsSettingsPanel
+              settings={settings}
+              onChangeSound={(v) => setSettings((s) => ({ ...s, soundEnabled: v }))}
+              onChangeYellowThreshold={(v) => setSettings((s) => ({ ...s, yellowThresholdMin: v }))}
+              onChangeRedThreshold={(v) => setSettings((s) => ({ ...s, redThresholdMin: v }))}
+              onChangeAutoAcknowledge={(v) => setSettings((s) => ({ ...s, autoAcknowledge: v }))}
+              onChangeDensity={(v) => setSettings((s) => ({ ...s, density: v }))}
+            />
             <KdsLayoutSwitcher
               currentLayout={prefs.layout}
               showOrderId={prefs.showOrderId}
@@ -89,18 +167,35 @@ export default function KdsScreen() {
               onToggleOrderId={setShowOrderId}
               onToggleTableNumber={setShowTableNumber}
             />
-          )}
+          </>)}
         </div>
       </div>
       {error && <p className="kds-error">{error}</p>}
+      {/* P7-3: Pull-to-refresh indicator */}
+      {pullState !== 'idle' && (
+        <div
+          className="kds-pull-indicator"
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            opacity: Math.min(1, pullDistance / 60),
+          }}
+        >
+          {pullState === 'loading' && <span className="kds-refresh-spinner" />}
+          {pullState === 'pulling' && <Localized id="kds-pull-to-refresh">Pull down to refresh</Localized>}
+          {pullState === 'ready' && <Localized id="kds-release-to-refresh">Release to refresh</Localized>}
+        </div>
+      )}
       {!prefsLoading && (
-        <LayoutComponent
-          orders={orders}
-          onAdvance={advanceStatus}
-          showOrderId={prefs.showOrderId}
-          showTableNumber={prefs.showTableNumber}
-        />
+        <div {...pullRefreshProps}>
+          <LayoutComponent
+            orders={orders}
+            onAdvance={advanceStatus}
+            showOrderId={prefs.showOrderId}
+            showTableNumber={prefs.showTableNumber}
+          />
+        </div>
       )}
     </div>
+    </Profiler>
   );
 }

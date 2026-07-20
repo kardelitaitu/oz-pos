@@ -288,3 +288,9 @@
 .settings-license-value button[data-variant="ghost"]:hover {
   text-decoration: underline;
 }
+
+.settings-license-value button[data-variant="ghost"]:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-radius: var(--radius-sm);
+}

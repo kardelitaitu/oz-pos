@@ -375,6 +375,357 @@ mod tests {
             ),
         }
     }
+
+    // ── P1-4: import_snapshot tests ───────────────────────────────
+
+    /// Seed a role so user FK constraints are satisfied.
+    fn seed_role(conn: &rusqlite::Connection, id: &str) {
+        conn.execute(
+            "INSERT OR IGNORE INTO roles (id, name) VALUES (?1, ?2)",
+            rusqlite::params![id, format!("Role {id}")],
+        )
+        .unwrap();
+    }
+
+    fn verify_product_sku_exists(sku: &str, store: &Store<'_>) -> bool {
+        store.product_id_by_sku(sku).ok().flatten().is_some()
+    }
+
+    #[test]
+    fn import_snapshot_empty_returns_zero() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 0, "empty snapshot should import 0 rows");
+    }
+
+    #[test]
+    fn import_snapshot_single_product() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "COFFEE-001",
+                "name": "Coffee Beans",
+                "price_minor": 15000,
+                "currency": "IDR"
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 1, "one product should import 1 row");
+
+        // Verify the product was created.
+        assert!(store.product_id_by_sku("COFFEE-001").unwrap().is_some());
+    }
+
+    #[test]
+    fn import_snapshot_missing_sku_defaults_to_empty_string() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "name": "No SKU Product"
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 1, "product without sku should still import");
+    }
+
+    #[test]
+    fn import_snapshot_missing_name_defaults_to_empty_string() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "NO-NAME"
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 1, "product without name should still import");
+        assert!(store.product_id_by_sku("NO-NAME").unwrap().is_some());
+    }
+
+    #[test]
+    fn import_snapshot_idempotent_second_call_same_count() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_role(&conn, "role-1");
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "IDEMPOTENT-1",
+                "name": "Idempotent Product",
+                "price_minor": 5000
+            })],
+            tax_rates: vec![serde_json::json!({
+                "id": "tax-vat-10",
+                "name": "VAT 10%",
+                "rate_bps": 1000
+            })],
+            users: vec![serde_json::json!({
+                "username": "admin",
+                "pin_hash": "hash",
+                "display_name": "Admin",
+                "role_id": "role-1"
+            })],
+        };
+        let first = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(first, 3, "first import: 3 rows");
+
+        let second = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(
+            second, 3,
+            "second import should also return 3 (ON CONFLICT upserts)"
+        );
+    }
+
+    #[test]
+    fn import_snapshot_overwrites_existing_product() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot_v1 = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "UPDATABLE",
+                "name": "Old Name",
+                "price_minor": 1000
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        import_snapshot(&store, &snapshot_v1).unwrap();
+
+        let snapshot_v2 = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "UPDATABLE",
+                "name": "New Name",
+                "price_minor": 2000
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        import_snapshot(&store, &snapshot_v2).unwrap();
+
+        assert!(store.product_id_by_sku("UPDATABLE").unwrap().is_some());
+    }
+
+    #[test]
+    fn import_snapshot_overwrites_existing_user() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_role(&conn, "role-admin");
+        let store = Store::new(&conn);
+        let snapshot_v1 = transport::SyncSnapshotResponse {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![serde_json::json!({
+                "username": "staff-1",
+                "pin_hash": "old-hash",
+                "display_name": "Old Display",
+                "role_id": "role-admin",
+                "is_active": true
+            })],
+        };
+        import_snapshot(&store, &snapshot_v1).unwrap();
+
+        let snapshot_v2 = transport::SyncSnapshotResponse {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![serde_json::json!({
+                "username": "staff-1",
+                "pin_hash": "new-hash",
+                "display_name": "New Display",
+                "role_id": "role-admin",
+                "is_active": false
+            })],
+        };
+        import_snapshot(&store, &snapshot_v2).unwrap();
+
+        let users = store.list_users().unwrap();
+        let user = users.into_iter().find(|u| u.username == "staff-1").unwrap();
+        assert_eq!(user.pin_hash, "new-hash");
+        assert_eq!(user.display_name, "New Display");
+        assert!(!user.is_active);
+    }
+
+    #[test]
+    fn import_snapshot_corrupted_product_handles_missing_fields() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "CORRUPTED"
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 1, "corrupted product should import with defaults");
+
+        assert!(store.product_id_by_sku("CORRUPTED").unwrap().is_some());
+    }
+
+    #[test]
+    fn import_snapshot_corrupted_user_uses_default_role_id() {
+        // A user without role_id should import using default empty string.
+        // This requires a role with empty string id to avoid FK violation.
+        let conn = oz_core::migrations::fresh_db();
+        seed_role(&conn, "");
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![serde_json::json!({
+                "username": "corrupted-staff"
+            })],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 1, "corrupted user should still import");
+
+        let users = store.list_users().unwrap();
+        let user = users
+            .iter()
+            .find(|u| u.username == "corrupted-staff")
+            .unwrap();
+        assert!(user.is_active, "is_active should default to true");
+    }
+
+    #[test]
+    fn import_snapshot_out_of_schema_fields_ignored() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_role(&conn, "role-1");
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "EXTRA-FIELDS",
+                "name": "Has Extra",
+                "price_minor": 100,
+                "currency": "USD",
+                "unknown_field": "should be ignored",
+                "another_extra": 42
+            })],
+            tax_rates: vec![serde_json::json!({
+                "id": "tax-extra",
+                "name": "Extra Tax",
+                "rate_bps": 500,
+                "unexpected_flag": true
+            })],
+            users: vec![serde_json::json!({
+                "username": "extra-user",
+                "pin_hash": "hash",
+                "display_name": "Extra User",
+                "role_id": "role-1",
+                "metadata": "{\"key\":\"val\"}"
+            })],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 3, "all 3 entities with extra fields should import");
+    }
+
+    #[test]
+    fn import_snapshot_all_types_multiple_entities() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_role(&conn, "r1");
+        seed_role(&conn, "r2");
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![
+                serde_json::json!({"sku": "A", "name": "Product A", "price_minor": 100}),
+                serde_json::json!({"sku": "B", "name": "Product B", "price_minor": 200}),
+                serde_json::json!({"sku": "C", "name": "Product C", "price_minor": 300}),
+            ],
+            tax_rates: vec![serde_json::json!({"id": "tax-ppn", "name": "PPN", "rate_bps": 1100})],
+            users: vec![
+                serde_json::json!({"username": "user-a", "pin_hash": "a", "display_name": "A", "role_id": "r1"}),
+                serde_json::json!({"username": "user-b", "pin_hash": "b", "display_name": "B", "role_id": "r2"}),
+            ],
+        };
+        let count = import_snapshot(&store, &snapshot).unwrap();
+        assert_eq!(count, 6, "3 products + 1 tax rate + 2 users = 6 rows");
+
+        // Verify all products exist.
+        assert!(verify_product_sku_exists("A", &store));
+        assert!(verify_product_sku_exists("B", &store));
+        assert!(verify_product_sku_exists("C", &store));
+
+        // Verify tax rate exists.
+        let tax = store.get_tax_rate("tax-ppn").unwrap().unwrap();
+        assert_eq!(tax.rate_bps, 1100);
+
+        // Verify users exist.
+        let users = store.list_users().unwrap();
+        assert!(users.iter().any(|u| u.username == "user-a"));
+        assert!(users.iter().any(|u| u.username == "user-b"));
+    }
+
+    #[test]
+    fn import_snapshot_partial_rollback_on_error() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+
+        // First import valid product data.
+        let valid = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({"sku": "VALID", "name": "Valid"})],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        import_snapshot(&store, &valid).unwrap();
+        assert!(verify_product_sku_exists("VALID", &store));
+
+        // Now try to import a user with a non-existent role_id (FK violation).
+        let invalid = transport::SyncSnapshotResponse {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![serde_json::json!({
+                "username": "broken-user",
+                "pin_hash": "h",
+                "display_name": "Broken",
+                "role_id": "nonexistent-role"
+            })],
+        };
+        let result = import_snapshot(&store, &invalid);
+        assert!(result.is_err(), "FK violation should cause error");
+
+        // The invalid user should NOT be in the DB (transaction rolled back).
+        let users = store.list_users().unwrap();
+        assert!(
+            !users.iter().any(|u| u.username == "broken-user"),
+            "broken user should not exist after rollback"
+        );
+
+        // Previously valid product should still exist (separate transaction).
+        assert!(
+            verify_product_sku_exists("VALID", &store),
+            "previously imported product should survive"
+        );
+    }
+
+    #[test]
+    fn import_snapshot_null_barcode_stored_as_null() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            products: vec![serde_json::json!({
+                "sku": "NO-BARCODE",
+                "name": "No Barcode",
+                "barcode": null
+            })],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        import_snapshot(&store, &snapshot).unwrap();
+
+        let exists = verify_product_sku_exists("NO-BARCODE", &store);
+        assert!(exists, "product with null barcode should be created");
+    }
 }
 
 /// The top-level sync engine that orchestrates queue, transport, replication,
@@ -619,7 +970,7 @@ impl SyncEngine {
                             queue.mark_synced(store, &item.id)?;
                         }
                         transport::PushOutcome::Conflict(server_item) => {
-                            let resolved = conflict::resolve_lww(item, server_item);
+                            let resolved = conflict::resolve_conflict(item, server_item);
                             queue.apply_resolution(store, &resolved)?;
                         }
                         transport::PushOutcome::Rejected { reason } => {

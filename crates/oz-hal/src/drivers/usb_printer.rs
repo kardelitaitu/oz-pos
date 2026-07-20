@@ -137,6 +137,7 @@ impl ReceiptPrinter for UsbReceiptPrinter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transport::usb::DeviceCategory;
 
     #[test]
     fn try_new_stores_info() {
@@ -149,6 +150,8 @@ mod tests {
             interface_number: 0,
             endpoint_in: 0x81,
             endpoint_out: Some(0x02),
+            category: DeviceCategory::Printer,
+            label: String::new(),
         };
         let printer = UsbReceiptPrinter::try_new(usb_info);
         let info = printer.device_info();
@@ -168,6 +171,8 @@ mod tests {
             interface_number: 0,
             endpoint_in: 0x81,
             endpoint_out: Some(0x02),
+            category: DeviceCategory::Printer,
+            label: String::new(),
         };
         let printer = UsbReceiptPrinter::try_new(usb_info);
         assert_eq!(printer.device_info().vendor, "Star");
@@ -184,6 +189,8 @@ mod tests {
             interface_number: 0,
             endpoint_in: 0x81,
             endpoint_out: Some(0x02),
+            category: DeviceCategory::Printer,
+            label: String::new(),
         };
         let printer = UsbReceiptPrinter::try_new(usb_info).with_partial_cut(true);
         assert!(printer.partial_cut);
@@ -200,6 +207,8 @@ mod tests {
             interface_number: 0,
             endpoint_in: 0x81,
             endpoint_out: Some(0x02),
+            category: DeviceCategory::Printer,
+            label: String::new(),
         };
         let printer = UsbReceiptPrinter::try_new(usb_info);
         assert!(!printer.partial_cut);
@@ -223,6 +232,8 @@ mod tests {
             interface_number: 0,
             endpoint_in: 0x81,
             endpoint_out: Some(0x02),
+            category: DeviceCategory::Printer,
+            label: String::new(),
         };
         let printer = UsbReceiptPrinter::try_new(usb_info.clone());
         assert_eq!(printer.usb_info.vid, 0x0416);

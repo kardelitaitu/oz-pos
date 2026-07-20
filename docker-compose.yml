@@ -1,25 +1,32 @@
-# ── OZ-POS Cloud Server — Docker Compose ────────────────────────────
+# ── OZ-POS Full Stack — Docker Compose ───────────────────────────────
 #
-# Defines two services:
-#   1. pos-cloud-server — the headless sync & API binary
-#   2. pos-cloud-db    — optional PostgreSQL database (for enterprise
-#                        deployments using pg_transport replication)
+# Spins up the entire OZ-POS backend in one command:
+#   • pos-cloud-server — Rust headless sync & API binary
+#   • license-server  — Go/PocketBase license activation server
+#   • redis           — in-memory cache (product lookups, pub/sub)
+#   • pos-cloud-db    — optional PostgreSQL (enterprise profile `pg`)
 #
-# Usage (SQLite — default, no external DB needed):
+# Quick start (SQLite — no external DB needed):
 #
 #   docker compose up -d
 #   curl http://localhost:3099/api/v1/health
+#   curl http://localhost:8080/api/v1/license/status
 #
-# Usage (PostgreSQL — requires OZ_API_SECRET to be set):
+# With PostgreSQL + Redis cache:
 #
+#   export OZ_API_SECRET=$(openssl rand -hex 32)
 #   docker compose --profile pg up -d
-#   docker compose exec pos-cloud-server \
-#     /app/oz-cloud-server --help
+#
+# Required env vars in production:
+#   OZ_API_SECRET       — JWT signing secret (generate: openssl rand -hex 32)
+#   OZ_LICENSE_PRIVATE_KEY — PEM-encoded license signing private key
 #
 # Environment overrides:
-#
-#   OZ_API_SECRET=my-secret docker compose up -d
-#   OZ_API_PORT=8080 docker compose up -d
+#   OZ_LICENSE_PRIVATE_KEY   — from `scripts/generate-license-keys.ps1`
+#   OZ_API_SECRET            — JWT signing secret
+#   RUST_LOG                 — log level (default: info)
+#   PG_USER / PG_PASSWORD / PG_DATABASE — PostgreSQL credentials
+#   REDIS_URL                — Redis connection string (default: redis://redis:6379)
 
 services:
 
@@ -29,37 +36,99 @@ services:
       context: .
       dockerfile: Dockerfile.server
     ports:
-      - "3099:3099"
+      - "${OZ_API_PORT:-3099}:${OZ_API_PORT:-3099}"
     environment:
       # Runtime database — SQLite by default.
       OZ_DB_PATH: /data/oz-pos.db
-      OZ_API_PORT: "3099"
+      OZ_API_PORT: "${OZ_API_PORT:-3099}"
       RUST_LOG: "${RUST_LOG:-info}"
 
       # JWT signing secret — MUST be set in production.
-      # Generate: openssl rand -hex 32
       OZ_API_SECRET: "${OZ_API_SECRET:-}"
 
       # PostgreSQL connection string (set this to switch to PG backend).
       # Format: postgresql://user:pass@pos-cloud-db:5432/ozpos
       DATABASE_URL: "${DATABASE_URL:-}"
+
+      # Redis cache connection (default: redis://redis:6379 within Docker
+      # network). Override with REDIS_URL for external Redis instances.
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379}"
+      REDIS_CACHE_TTL: "${REDIS_CACHE_TTL:-300}"
     volumes:
       - oz_cloud_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
-             "http://localhost:3099/api/v1/health"]
+             "http://localhost:${OZ_API_PORT:-3099}/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 30s
+    depends_on:
+      redis:
+        condition: service_healthy
+      # When the `pg` profile is active, wait for PostgreSQL before starting.
+      pos-cloud-db:
+        condition: service_healthy
+        required: false  # graceful degradation when pg profile is inactive
     # The DB service is started only with the `pg` profile. When it's
     # not active, DATABASE_URL is empty and the server uses SQLite.
     profiles:
       - ""
       - pg
 
-  # ── PostgreSQL Database (optional) ────────────────────────────────
+  # ── License Server (Go / PocketBase) ───────────────────────────────
+  #
+  # Handles license activation, renewal, and status queries. Uses
+  # embedded SQLite (PocketBase) — no external database needed.
+  #
+  # Generate keys first:
+  #   powershell -File scripts/generate-license-keys.ps1   # Windows
+  #   bash scripts/generate-license-keys.sh                # Linux/macOS
+  #
+  # Then set OZ_LICENSE_PRIVATE_KEY to the contents of
+  # crates/oz-core/oz-license-private.pem.
+  license-server:
+    build:
+      context: ./apps/license-server
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      OZ_LICENSE_PRIVATE_KEY: "${OZ_LICENSE_PRIVATE_KEY:-}"
+    volumes:
+      - pb_data:/pb/pb_data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/pb/healthcheck", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Redis Cache ────────────────────────────────────────────────────
+  #
+  # In-memory cache for product lookups, inventory pub/sub, and
+  # rate-limiting token buckets. Always starts with the default profile.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ── PostgreSQL Database (optional, profile: pg) ───────────────────
+  #
+  # Enterprise-grade database backend. Only started when the `pg`
+  # profile is active. Without this profile, the cloud server uses
+  # SQLite (default).
   pos-cloud-db:
     image: postgres:16-alpine
     profiles:
@@ -79,7 +148,11 @@ services:
       retries: 5
       start_period: 15s
     restart: unless-stopped
+    profiles:
+      - pg
 
 volumes:
   oz_cloud_data:
+  pb_data:
+  redis_data:
   oz_pg_data:

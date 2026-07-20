@@ -22,6 +22,7 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import { getLicenseStatus } from '@/api/license';
 import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
 import CreatePinScreen from '@/features/auth/CreatePinScreen';
+import SessionLockScreen from '@/features/auth/SessionLockScreen';
 
 // ── Workspace navigation keyboard shortcuts ───────────────────────
 // Escape: return to workspace picker (only when no modal is open).
@@ -56,7 +57,7 @@ export default function AppShell() {
   const [licenseError, setLicenseError] = useState<string | null>(null);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
-  const { session, logout } = useAuth();
+  const { session } = useAuth();
   const { activeWorkspace } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
@@ -68,21 +69,19 @@ export default function AppShell() {
   const addToastRef = useRef(addToast);
   addToastRef.current = addToast;
 
+  const [isLocked, setIsLocked] = useState(false);
+
   useIdleTimer(() => {
-    if (activeWorkspace) {
+    if (session) {
+      setIsLocked(true);
+    } else if (activeWorkspace) {
       goToWorkspacePicker();
-      addToast({
-        type: 'info',
-        message: 'Returned to workspace picker due to inactivity. Configure auto-lock from Settings.',
-      });
-    } else if (session) {
-      addToast({
-        type: 'info',
-        message: 'Automatic logout enabled. Configure from Settings.',
-      });
-      logout();
     }
   });
+
+  const handleUnlock = useCallback(() => {
+    setIsLocked(false);
+  }, []);
 
   // On mount, check license status and whether setup was already completed.
   // addToastRef (not addToast) is used so this effect runs exactly once and
@@ -239,6 +238,11 @@ export default function AppShell() {
     }
     setCurrentRoute(route);
   }, [userRole]);
+
+  // P12-4: Session lock screen takes precedence over all other views
+  if (isLocked && session) {
+    return <SessionLockScreen onUnlock={handleUnlock} />;
+  }
 
   if (loading) {
     return (

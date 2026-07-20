@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
@@ -22,11 +22,12 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
  * KdsTicketCard renders a single KDS ticket with SLA aging indicators
  * and plays an audio alert when the ticket enters the red threshold.
  */
-export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true }: KdsTicketCardProps) {
+export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
-  const { level, display } = useTicketSla(order.received_at);
+  const { level, urgent, display } = useTicketSla(order.received_at);
   const { playAlert } = useSound();
   const prevLevel = useRef<'green' | 'yellow' | 'red' | null>(null);
+  const prevUrgent = useRef(false);
 
   // Play audio alert when ticket transitions into the red threshold.
   useEffect(() => {
@@ -35,6 +36,14 @@ export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableN
     }
     prevLevel.current = level;
   }, [level, playAlert]);
+
+  // Play a second alert when ticket escalates to red-urgent (≥15 min).
+  useEffect(() => {
+    if (urgent && !prevUrgent.current) {
+      playAlert();
+    }
+    prevUrgent.current = urgent;
+  }, [urgent, playAlert]);
 
   const handleClick = () => {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
@@ -45,9 +54,9 @@ export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableN
 
   return (
     <button
-      className={`kds-ticket kds-ticket--${level}`}
+      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}`}
       onClick={handleClick}
-      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA, ${display}`}
+      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? ', URGENT' : ''}, ${display}`}
     >
       <div className="kds-ticket-header">
         <span className="kds-ticket-id-group">
@@ -58,6 +67,11 @@ export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableN
         </span>
         <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
       </div>
+      {urgent && (
+        <span className="kds-ticket-urgent-badge">
+          <Localized id="kds-urgent-badge">URGENT</Localized>
+        </span>
+      )}
       <span className="kds-ticket-items">{order.items_summary}</span>
       {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}
       <span className="kds-ticket-count">
@@ -67,4 +81,4 @@ export function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableN
       </span>
     </button>
   );
-}
+});

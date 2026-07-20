@@ -273,6 +273,8 @@ sales-history-export-items = Items
 sales-history-export-status = Status
 sales-history-export-payment = Payment
 sales-history-export-cashier = Cashier
+sales-history-pull-to-refresh = Pull down to refresh
+sales-history-release-to-refresh = Release to refresh
 
 # Sales Dashboard
 sales-dashboard-title = Sales Dashboard
@@ -285,6 +287,9 @@ sales-dashboard-hourly-header-sales = Sales
 sales-dashboard-hourly-header-total = Total
 sales-dashboard-loading = Loading…
 sales-dashboard-no-data = No data for today
+sales-dashboard-revenue-title = Revenue (14d)
+sales-dashboard-category-title = By Category
+sales-dashboard-heatmap-title = Busiest Hours
 
 # Void Orders
 void-orders-title = Orders

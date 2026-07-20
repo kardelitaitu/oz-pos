@@ -47,6 +47,7 @@ import SettingsSelect from './SettingsSelect';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { useTheme } from '@/frontend/shell/ThemeProvider';
+import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { AppearanceSettings } from './AppearanceSettings';
 import FeatureToggleScreen from './FeatureToggleScreen';
 import DataManagementScreen from './DataManagementScreen';
@@ -504,6 +505,9 @@ export default function SettingsPage() {
   const [brandStoreName, setBrandStoreName] = useState('');
 
   const cm = useContextMenu();
+
+  // P7-4: Keyboard avoidance — scroll inputs into view on mobile
+  const { containerRef: settingsKeyboardRef } = useKeyboardAvoidance();
 
   const cmInput = useMemo(() => ({
     autoComplete: 'off' as const,
@@ -2127,7 +2131,7 @@ export default function SettingsPage() {
         </aside>
 
         {/* ── Main content ──────────────────────────────── */}
-        <main className="settings-content">
+        <main className="settings-content" ref={settingsKeyboardRef as React.Ref<HTMLElement>}>
           <div className="settings-content-header">
             {/* ── Section breadcrumb header ───────── */}
             {currentNavItem && (

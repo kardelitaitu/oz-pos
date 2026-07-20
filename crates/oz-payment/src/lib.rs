@@ -228,6 +228,7 @@ mod tests {
             },
             reference: Some("inv-001".into()),
             description: Some("Coffee order".into()),
+            idempotency_key: None,
         };
         let debug = format!("{:?}", req);
         assert!(debug.contains("50000"));
@@ -243,6 +244,7 @@ mod tests {
             },
             reference: None,
             description: None,
+            idempotency_key: None,
         };
         assert_eq!(req.amount.minor_units, 0);
         assert!(req.reference.is_none());

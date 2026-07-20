@@ -22,24 +22,30 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source files (explicit filenames to avoid test files).
-COPY main.go activate.go renew.go status.go helpers.go expiry.go ratelimit.go ./
+COPY main.go activate.go renew.go status.go helpers.go expiry.go ratelimit.go health.go ./
+COPY healthcheck.go ./
 COPY pb_schema.json ./
 
 RUN CGO_ENABLED=1 go build -o /pb/pocketbase -ldflags="-s -w" .
+# P8-4: Build standalone healthcheck binary (no curl dependency in runtime).
+RUN CGO_ENABLED=0 go build -o /pb/healthcheck -ldflags="-s -w" healthcheck.go
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata curl
+RUN apk add --no-cache ca-certificates tzdata
 
 RUN mkdir -p /pb/pb_data
 VOLUME ["/pb/pb_data"]
 
 COPY --from=builder /pb/pocketbase /pb/pocketbase
+COPY --from=builder /pb/healthcheck /pb/healthcheck
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/ || exit 1
+# P8-4: Use Go healthcheck binary instead of curl. Pings /api/health with
+# 5s interval, 5s timeout, 3 retries before marking container unhealthy.
+HEALTHCHECK --interval=5s --timeout=5s --retries=3 \
+    CMD /pb/healthcheck http://localhost:8080/api/health || exit 1
 
 ENTRYPOINT ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]

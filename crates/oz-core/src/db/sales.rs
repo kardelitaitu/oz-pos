@@ -2724,6 +2724,7 @@ mod tests {
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
+            idempotency_key: None,
         }];
         let result = s
             .complete_sale_deduction(&sale, None, &splits, "cashier-1", None)

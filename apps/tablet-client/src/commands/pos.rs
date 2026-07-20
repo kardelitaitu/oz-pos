@@ -799,6 +799,7 @@ pub async fn complete_sale_scoped(
                 gateway_reference: args.customer_name.clone(),
                 gateway_status: None,
                 gateway_response: None,
+                idempotency_key: None,
             }]
         };
 
@@ -1002,6 +1003,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
                 gateway_reference: args.customer_name.clone(),
                 gateway_status: None,
                 gateway_response: None,
+                idempotency_key: None,
             }]
         };
 

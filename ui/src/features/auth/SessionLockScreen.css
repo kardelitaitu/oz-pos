@@ -1,0 +1,174 @@
+/* ── Session Lock Screen ──────────────────────────────────────────── */
+
+.session-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.session-lock-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-bg-elevated) 65%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.session-lock-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-8);
+  background: var(--color-bg-surface, #fff);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  max-width: 360px;
+  width: 100%;
+  animation: session-lock-fade-in 0.3s ease-out;
+}
+
+@keyframes session-lock-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.session-lock-icon {
+  color: var(--color-accent, #4f46e5);
+  opacity: 0.8;
+  margin-bottom: var(--space-1);
+}
+
+.session-lock-time {
+  font-size: var(--text-4xl, 2.25rem);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-fg);
+  letter-spacing: 0.05em;
+}
+
+.session-lock-date {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.session-lock-label {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-fg);
+}
+
+.session-lock-sub {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-3);
+}
+
+/* ── PIN dots ──────────────────────────────── */
+
+.session-lock-pin-dots {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.session-lock-pin-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: transparent;
+  transition: background var(--duration-150) var(--ease-out);
+}
+
+.session-lock-pin-dot--filled {
+  background: var(--color-accent, #4f46e5);
+  border-color: var(--color-accent, #4f46e5);
+}
+
+/* ── Error ─────────────────────────────────── */
+
+.session-lock-error {
+  color: var(--color-danger, #ef4444);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+/* ── PIN pad ────────────────────────────────── */
+
+.session-lock-pad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  outline: none;
+  width: 100%;
+  max-width: 240px;
+}
+
+.session-lock-pad-row {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.session-lock-pad-key {
+  width: 64px;
+  height: 56px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-150) var(--ease-out),
+              transform var(--duration-100) var(--ease-out);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.session-lock-pad-key:hover {
+  background: var(--color-bg-hover);
+}
+
+.session-lock-pad-key:active {
+  transform: scale(0.95);
+  background: var(--color-bg-active);
+}
+
+.session-lock-pad-key:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.session-lock-pad-key:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.session-lock-pad-key--action {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-fg-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-lock-card {
+    animation: none;
+  }
+}

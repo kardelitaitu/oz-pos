@@ -4,13 +4,14 @@
 // (chef button), and the standalone kds workspace, plus back-button
 // navigation returning to the correct landing route.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import AppShell from '@/frontend/shell/AppShell';
+import type { AuthContextValue } from '@/contexts/AuthContext';
 
 // ── Mock sub-screens ─────────────────────────────────────────────
 
@@ -111,12 +112,11 @@ vi.mock('@/hooks/useFeatures', () => ({
 
 // ── Auth context mock (dynamic per test) ────────────────────
 
-const mockAuthSession = vi.fn(() => ({
+const mockAuthSession: Mock<() => AuthContextValue> =
+  vi.fn(() => ({
   session: {
     user_id: 'user-1',
-    username: 'testuser',
     role_name: 'cashier',
-    token: 'mock-token',
     role_id: 'role-1',
     display_name: 'Test User',
   },
@@ -125,6 +125,7 @@ const mockAuthSession = vi.fn(() => ({
   login: vi.fn(),
   logout: vi.fn(),
   clearError: vi.fn(),
+  swapSession: vi.fn(),
   isManager: false,
   isOwner: false,
 }));
@@ -187,9 +188,7 @@ function mockKitchenRole() {
   mockAuthSession.mockReturnValue({
     session: {
       user_id: 'user-1',
-      username: 'kitchen-staff',
       role_name: 'Kitchen',
-      token: 'mock-token',
       role_id: 'role-kitchen',
       display_name: 'Chef',
     },
@@ -198,6 +197,7 @@ function mockKitchenRole() {
     login: vi.fn(),
     logout: vi.fn(),
     clearError: vi.fn(),
+    swapSession: vi.fn(),
     isManager: false,
     isOwner: false,
   });
@@ -212,9 +212,7 @@ describe('AppShell — KDS workspace navigation', () => {
     mockAuthSession.mockReturnValue({
       session: {
         user_id: 'user-1',
-        username: 'testuser',
         role_name: 'cashier',
-        token: 'mock-token',
         role_id: 'role-1',
         display_name: 'Test User',
       },
@@ -223,6 +221,7 @@ describe('AppShell — KDS workspace navigation', () => {
       login: vi.fn(),
       logout: vi.fn(),
       clearError: vi.fn(),
+      swapSession: vi.fn(),
       isManager: false,
       isOwner: false,
     });
@@ -238,11 +237,27 @@ describe('AppShell — KDS workspace navigation', () => {
       idleCallback = null;
     });
 
-    it('returns to workspace picker on idle timeout when in an active workspace', async () => {
-      const mockSetActive = vi.fn();
+    it('locks screen when idle timeout fires with an active session', async () => {
+      mockAuthSession.mockReturnValue({
+        session: {
+          user_id: 'user-1',
+          role_name: 'cashier',
+          role_id: 'role-1',
+          display_name: 'Test User',
+        },
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: vi.fn(),
+        clearError: vi.fn(),
+        swapSession: vi.fn(),
+        isManager: false,
+        isOwner: false,
+      });
+
       mockWorkspace.mockReturnValue({
         activeWorkspace: 'store-pos',
-        setActiveWorkspace: mockSetActive,
+        setActiveWorkspace: vi.fn(),
         availableWorkspaces: [],
         workspaceScreens: [],
         loading: false,
@@ -250,39 +265,32 @@ describe('AppShell — KDS workspace navigation', () => {
 
       await renderWithProviders(<AppShell />);
 
-      // Flush pending microtask state updates from async useEffects
-      // (e.g. getSetupStatus, getStoreSettings) that resolve after the
-      // act() block of renderInAct has already returned.
       await act(async () => {});
 
       await waitFor(() => {
         expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
       });
 
-      // Invoke the idle callback to simulate timeout inside act
+      // Invoke the idle callback to simulate timeout
       await act(() => {
         idleCallback?.();
       });
 
-      expect(mockSetActive).toHaveBeenCalledWith(null);
+      // Screen should now be locked
+      await waitFor(() => {
+        expect(screen.getByText(/session locked/i)).toBeInTheDocument();
+      });
     });
 
-    it('calls logout when idle timeout fires on the workspace picker (no activeWorkspace)', async () => {
-      const mockLogout = vi.fn();
+    it('stays on login screen when idle fires with no session', async () => {
       mockAuthSession.mockReturnValue({
-        session: {
-          user_id: 'user-1',
-          username: 'testuser',
-          role_name: 'cashier',
-          token: 'mock-token',
-          role_id: 'role-1',
-          display_name: 'Test User',
-        },
+        session: null,
         loading: false,
         error: null,
         login: vi.fn(),
-        logout: mockLogout,
+        logout: vi.fn(),
         clearError: vi.fn(),
+        swapSession: vi.fn(),
         isManager: false,
         isOwner: false,
       });
@@ -297,68 +305,20 @@ describe('AppShell — KDS workspace navigation', () => {
 
       await renderWithProviders(<AppShell />);
 
-      // Flush pending microtask state updates from async useEffects
       await act(async () => {});
 
+      // When no session, AppShell shows the login screen
       await waitFor(() => {
-        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
+        expect(document.querySelector('.staff-login-screen')).toBeInTheDocument();
       });
 
-      // Invoke the idle callback to simulate timeout on the picker inside act
+      // Invoke the idle callback
       await act(() => {
         idleCallback?.();
       });
 
-      expect(mockLogout).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not call setActiveWorkspace when idle fires and there is no activeWorkspace', async () => {
-      const mockSetActive = vi.fn();
-      const mockLogout = vi.fn();
-      mockAuthSession.mockReturnValue({
-        session: {
-          user_id: 'user-1',
-          username: 'testuser',
-          role_name: 'cashier',
-          token: 'mock-token',
-          role_id: 'role-1',
-          display_name: 'Test User',
-        },
-        loading: false,
-        error: null,
-        login: vi.fn(),
-        logout: mockLogout,
-        clearError: vi.fn(),
-        isManager: false,
-        isOwner: false,
-      });
-
-      mockWorkspace.mockReturnValue({
-        activeWorkspace: null,
-        setActiveWorkspace: mockSetActive,
-        availableWorkspaces: [],
-        workspaceScreens: [],
-        loading: false,
-      });
-
-      await renderWithProviders(<AppShell />);
-
-      // Flush pending microtask state updates from async useEffects
-      await act(async () => {});
-
-      await waitFor(() => {
-        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
-      });
-
-      // Invoke the idle callback inside act
-      await act(() => {
-        idleCallback?.();
-      });
-
-      // Should NOT call setActiveWorkspace when already on picker
-      expect(mockSetActive).not.toHaveBeenCalled();
-      // Should call logout instead
-      expect(mockLogout).toHaveBeenCalledTimes(1);
+      // Should still be on the login screen (no change)
+      expect(document.querySelector('.staff-login-screen')).toBeInTheDocument();
     });
   });
 
@@ -571,13 +531,13 @@ describe('AppShell — KDS workspace navigation', () => {
     it('skips license check and renders login screen in dev mode', async () => {
       // Override auth to no session → login screen
       mockAuthSession.mockReturnValue({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        session: null as any,
+        session: null,
         loading: false,
         error: null,
         login: vi.fn(),
         logout: vi.fn(),
         clearError: vi.fn(),
+        swapSession: vi.fn(),
         isManager: false,
         isOwner: false,
       });

@@ -1000,6 +1000,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-height: var(--touch-target-min);
   font-size: var(--text-base);
   color: var(--color-fg);
   cursor: pointer;
@@ -1245,8 +1246,8 @@
 }
 
 .settings-size-btn {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -25,3 +25,5 @@ offline-queue-table-actions = Actions
 offline-queue-sync-all-label = Sync all pending offline items
 offline-queue-delete-error = Failed to delete item
 offline-queue-sync-error = Sync failed
+# P1-3: Shown when sync conflicts were resolved during the last sync cycle
+offline-queue-conflict-count = { $count } item(s) resolved via sync conflict.

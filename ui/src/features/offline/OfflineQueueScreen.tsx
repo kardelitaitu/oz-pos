@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
   listAllOffline,
   pendingOfflineCount,
   retryOfflineSync,
   deleteOfflineItem,
+  getOfflineQueueStatusSummary,
   type OfflineQueueItemDto,
   type SyncResult,
 } from '@/api/offline';
@@ -64,20 +66,21 @@ export default function OfflineQueueScreen() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [conflictCount, setConflictCount] = useState<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // ── Load data ──────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [data, count] = await Promise.all([
+      const [data, count, summary] = await Promise.all([
         listAllOffline(),
         pendingOfflineCount(),
+        getOfflineQueueStatusSummary().catch(() => null),
       ]);
       setItems(data);
       setPendingCount(count);
+      if (summary) setConflictCount(summary.conflictCount);
     } catch {
       setError(l10n.getString('offline-queue-error'));
     } finally {
@@ -85,14 +88,25 @@ export default function OfflineQueueScreen() {
     }
   }, [l10n]);
 
+  // P7-3: Pull-to-refresh gesture (defined after load so it's hoist-safe)
+  const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
+    onRefresh: load,
+  });
+
+  // ── Load data on mount ─────────────────────────────────────────
+
   useEffect(() => { load(); }, [load]);
 
-  // Poll pending count every 10 seconds.
+  // Poll pending count and conflict count every 10 seconds (P1-3).
   useEffect(() => {
     pollRef.current = setInterval(async () => {
       try {
-        const count = await pendingOfflineCount();
+        const [count, summary] = await Promise.all([
+          pendingOfflineCount(),
+          getOfflineQueueStatusSummary().catch(() => null),
+        ]);
         setPendingCount(count);
+        if (summary) setConflictCount(summary.conflictCount);
       } catch {
         // Silently ignore poll errors.
       }
@@ -141,7 +155,7 @@ export default function OfflineQueueScreen() {
           </Localized>
           {pendingCount > 0 && (
             <Localized id="offline-queue-pending-count" vars={{ count: String(pendingCount) }}>
-              <span className="offline-queue-badge" aria-label={`${pendingCount} pending`}>
+              <span className="offline-queue-badge" aria-label={`${pendingCount} pending`} aria-live="polite">
                 {pendingCount} pending
               </span>
             </Localized>
@@ -159,6 +173,14 @@ export default function OfflineQueueScreen() {
           </Localized>
         </Button>
       </div>
+
+      {conflictCount > 0 && (
+        <div className="offline-queue-sync-result" role="alert" style={{ borderColor: 'var(--color-warning-border, #ffc107)' }}>
+          <Localized id="offline-queue-conflict-count" vars={{ count: String(conflictCount) }}>
+            <span>{conflictCount} item(s) resolved via sync conflict.</span>
+          </Localized>
+        </div>
+      )}
 
       {syncResult && (
         <div className="offline-queue-sync-result" role="status">
@@ -179,8 +201,27 @@ export default function OfflineQueueScreen() {
         </div>
       )}
 
+      {/* P7-3: Pull-to-refresh indicator */}
+      {pullState !== 'idle' && (
+        <div
+          className="offline-queue-pull-indicator"
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            opacity: Math.min(1, pullDistance / 60),
+          }}
+        >
+          {pullState === 'pulling' && (
+            <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull to refresh'}</span>
+          )}
+          {pullState === 'ready' && (
+            <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+          )}
+          {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
+        </div>
+      )}
+
       {loading ? (
-        <div className="offline-queue-loading-skeleton">
+        <div className="offline-queue-loading-skeleton" {...pullRefreshProps}>
           {/* Header skeleton */}
           <div className="offline-queue-skeleton-header">
             <Skeleton variant="block" width="12rem" height="1.75rem" />
@@ -229,14 +270,32 @@ export default function OfflineQueueScreen() {
         </Card>
       ) : items.length === 0 ? (
         <Card shadow="sm">
-          <div className="offline-queue-empty">
+          <div className="offline-queue-empty" {...pullRefreshProps}>
             <Localized id="offline-queue-empty">
               <p>All transactions synced. No pending items.</p>
             </Localized>
           </div>
         </Card>
       ) : (
-        <div className="offline-queue-table-wrap">
+        <div className="offline-queue-table-wrap" {...pullRefreshProps}>
+          {/* P7-3: Pull-to-refresh indicator */}
+          {pullState !== 'idle' && (
+            <div
+              className="offline-queue-pull-indicator"
+              style={{
+                transform: `translateY(${pullDistance}px)`,
+                opacity: Math.min(1, pullDistance / 60),
+              }}
+            >
+              {pullState === 'pulling' && (
+                <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull down to refresh'}</span>
+              )}
+              {pullState === 'ready' && (
+                <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+              )}
+              {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
+            </div>
+          )}
           <table className="offline-queue-table" aria-label="Offline queue items">
             <thead>
               <tr>

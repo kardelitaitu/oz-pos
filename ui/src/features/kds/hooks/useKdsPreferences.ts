@@ -19,6 +19,31 @@ const DEFAULTS: KdsPreferences = {
   kdsZone: '',
 };
 
+const STORAGE_KEY_PREFIX = 'oz-kds-prefs-';
+
+/** Read KDS preferences from localStorage, or null if missing/invalid. */
+function readLocalPrefs(userId: string): KdsPreferences | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PREFIX + userId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<KdsPreferences>;
+    // Validate — ensure all required fields are present.
+    if (!parsed.layout || !['kanban', 'focus', 'metro'].includes(parsed.layout)) return null;
+    return { ...DEFAULTS, ...parsed };
+  } catch {
+    return null;
+  }
+}
+
+/** Write KDS preferences to localStorage. */
+function writeLocalPrefs(userId: string, prefs: KdsPreferences): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(prefs));
+  } catch {
+    // localStorage may be full or unavailable
+  }
+}
+
 export function useKdsPreferences(): {
   prefs: KdsPreferences;
   setLayout: (layout: KdsLayout) => void;
@@ -29,7 +54,11 @@ export function useKdsPreferences(): {
 } {
   const { session } = useAuth();
   const userId = session?.user_id ?? '';
-  const [prefs, setPrefs] = useState<KdsPreferences>(DEFAULTS);
+
+  // Initialize from localStorage first (instant restore), fall back to defaults.
+  const [prefs, setPrefs] = useState<KdsPreferences>(
+    () => (userId ? readLocalPrefs(userId) ?? DEFAULTS : DEFAULTS),
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,17 +66,20 @@ export function useKdsPreferences(): {
       setLoading(false);
       return;
     }
+    // Fetch from server and merge.
     getUserPreferences(userId)
       .then((raw) => {
-        setPrefs({
+        const serverPrefs: KdsPreferences = {
           layout: (raw['kds_layout'] as KdsLayout) || DEFAULTS.layout,
           showOrderId: raw['kds_show_order_id'] !== 'false',
           showTableNumber: raw['kds_show_table_number'] !== 'false',
           kdsZone: raw['kds_zone'] ?? DEFAULTS.kdsZone,
-        });
+        };
+        setPrefs(serverPrefs);
+        writeLocalPrefs(userId, serverPrefs);
       })
       .catch(() => {
-        // Fall back to defaults on error
+        // Server unavailable — keep localStorage defaults (already set).
       })
       .finally(() => setLoading(false));
   }, [userId]);
@@ -66,34 +98,50 @@ export function useKdsPreferences(): {
 
   const setLayout = useCallback(
     (layout: KdsLayout) => {
-      setPrefs((p) => ({ ...p, layout }));
+      setPrefs((p) => {
+        const next = { ...p, layout };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
       persist({ kds_layout: layout });
     },
-    [persist],
+    [userId, persist],
   );
 
   const setShowOrderId = useCallback(
     (show: boolean) => {
-      setPrefs((p) => ({ ...p, showOrderId: show }));
+      setPrefs((p) => {
+        const next = { ...p, showOrderId: show };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
       persist({ kds_show_order_id: String(show) });
     },
-    [persist],
+    [userId, persist],
   );
 
   const setShowTableNumber = useCallback(
     (show: boolean) => {
-      setPrefs((p) => ({ ...p, showTableNumber: show }));
+      setPrefs((p) => {
+        const next = { ...p, showTableNumber: show };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
       persist({ kds_show_table_number: String(show) });
     },
-    [persist],
+    [userId, persist],
   );
 
   const setKdsZone = useCallback(
     (zone: string) => {
-      setPrefs((p) => ({ ...p, kdsZone: zone }));
+      setPrefs((p) => {
+        const next = { ...p, kdsZone: zone };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
       persist({ kds_zone: zone });
     },
-    [persist],
+    [userId, persist],
   );
 
   return { prefs, setLayout, setShowOrderId, setShowTableNumber, setKdsZone, loading };

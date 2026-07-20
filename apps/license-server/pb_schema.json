@@ -517,6 +517,18 @@
         "primaryKey": false
       },
       {
+        "help": "When set, the machine has been revoked by the tenant admin and should not be allowed to activate.",
+        "hidden": false,
+        "id": "date1675890241",
+        "name": "revoked_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date",
+        "max": "",
+        "min": ""
+      },
+      {
         "hidden": false,
         "id": "autodate7039629861",
         "name": "created",

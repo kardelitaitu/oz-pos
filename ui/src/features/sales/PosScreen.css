@@ -671,6 +671,7 @@
 /* Settings sub-screen (tablet) tab bar */
 .pos-settings-tab {
   padding: var(--space-2) var(--space-4);
+  min-height: var(--touch-target-min);
   border: 0;
   background: transparent;
   border-bottom: 2px solid transparent;

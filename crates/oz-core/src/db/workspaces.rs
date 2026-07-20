@@ -1336,16 +1336,16 @@ mod tests {
             )
             .unwrap();
 
-        // Recover with Pro (3 limit)
-        let pro = SubscriptionTier::Pro;
-        let restored = store.auto_recover_instances("default", &pro).unwrap();
-        assert_eq!(restored, 3);
-        assert_eq!(store.count_active_instances("default").unwrap(), 3);
+        // Recover with Standard (2 limit)
+        let std = SubscriptionTier::Standard;
+        let restored = store.auto_recover_instances("default", &std).unwrap();
+        assert_eq!(restored, 2);
+        assert_eq!(store.count_active_instances("default").unwrap(), 2);
 
-        // Downgrade to Free (1 limit) — should suspend 2
+        // Downgrade to Free (1 limit) — should suspend 1
         let free = SubscriptionTier::Free;
         let suspended = store.suspend_surplus_instances("default", &free).unwrap();
-        assert_eq!(suspended, 2);
+        assert_eq!(suspended, 1);
         assert_eq!(store.count_active_instances("default").unwrap(), 1);
     }
 }

@@ -119,7 +119,59 @@ if ($gitBash) {
 # --- UI (mirrors CI ui job - auto-detected) -------------------------------
 if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
     Push-Location ui
-    Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" -ScriptBlock { npm ci --no-audit --no-fund }
+
+    # On Windows, Vite/Rollup native .node binaries (e.g. rollup-win32-x64-msvc.node)
+    # can remain locked by Node worker-thread processes for a few seconds after
+    # the previous step finishes, causing `npm ci` to fail with EPERM -4048.
+    #
+    # Strategy:
+    #   1. Give workers up to 5 s to release the file naturally.
+    #   2. If still locked, force-remove the specific .node file so npm ci
+    #      can re-download it cleanly — this is safe because npm ci always
+    #      performs a full, deterministic reinstall from package-lock.json.
+    #   3. Retry npm ci up to 3 times with a 3 s back-off on any EPERM.
+    Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" -ScriptBlock {
+        # Step 1: short wait for worker-thread DLL release
+        $lockedNode = "node_modules\@rollup\rollup-win32-x64-msvc\rollup.win32-x64-msvc.node"
+        if (Test-Path $lockedNode) {
+            $waited = 0
+            while ($waited -lt 5) {
+                try {
+                    $fs = [System.IO.File]::Open($lockedNode,
+                        [System.IO.FileMode]::Open,
+                        [System.IO.FileAccess]::ReadWrite,
+                        [System.IO.FileShare]::None)
+                    $fs.Close()
+                    break   # file is free
+                } catch {
+                    Start-Sleep -Seconds 1
+                    $waited++
+                }
+            }
+
+            # Step 2: if still locked after 5 s, force-remove it
+            if ($waited -ge 5) {
+                Remove-Item -LiteralPath $lockedNode -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Step 3: npm ci with up to 3 retries on EPERM
+        $maxAttempts = 3
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $global:LASTEXITCODE = 0
+            $result = npm ci --no-audit --no-fund 2>&1
+            if ($LASTEXITCODE -eq 0) { break }
+            $isEperm = $result -match 'EPERM|operation not permitted'
+            if ($isEperm -and $attempt -lt $maxAttempts) {
+                Write-Host "" # newline after the "checking..." prompt
+                Write-Host "  [npm ci] EPERM on attempt $attempt — waiting 3 s before retry..."
+                Start-Sleep -Seconds 3
+            } elseif ($attempt -eq $maxAttempts) {
+                # Final failure — let the Step wrapper report it
+                $result | Out-String | Write-Host
+            }
+        }
+    }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
     Step -Name "ui typecheck" -RetryCommand "cd ui; npm run typecheck" -ScriptBlock { npm run typecheck }
     Step -Name "ui test" -RetryCommand "cd ui; npm run test" -ScriptBlock { npm run test }

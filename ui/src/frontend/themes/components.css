@@ -203,21 +203,36 @@
   overflow: hidden;
 }
 
-/* ── Dithering noise overlay ────────────────────────
-   Breaks up 8-bit shadow/background banding on dark themes.
-   Uses SVG feTurbulence at 10% opacity with larger grains.
-   Applied to all common elevated surfaces, plus a reusable class. */
+/* ── Dithering noise overlay (P11) ──────────────────
+ *
+ * Breaks up 8-bit shadow/background banding on dark themes
+ * using SVG feTurbulence at 10% opacity with larger grains.
+ *
+ * USAGE (recommended for NEW components):
+ *   Add class="noise-dither" to any elevated surface element
+ *   (card, modal, dropdown, tooltip, etc.) that uses box-shadow.
+ *   No CSS changes needed — just add the className.
+ *
+ * LEGACY selectors (feature-specific classes) are kept below
+ * for backward compatibility. They are DEPRECATED — new
+ * components should use `.noise-dither` instead.
+ */
 
-/* Shared noise SVG data URI — stored as a CSS custom property
-   so it only appears once and can be tuned in one place. */
+/* Shared noise SVG data URI — stored as a CSS custom property */
 :root {
   --noise-uri: url("data:image/svg+xml,%3Csvg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.25' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='64' height='64' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* Core pattern classes get noise automatically.
+   Feature-specific legacy selectors are grouped below. */
 .card::after,
-.staff-login-card::after,
 .modal-panel::after,
+.staff-login-card::after,
 .workspace-card::after,
+/* Reusable utility class — recommended for new components */
+.noise-dither::after,
+/* ⚠ DEPRECATED LEGACY SELECTORS — do not add new ones here.
+   Instead, add className="noise-dither" to the TSX element. */
 .retail-shift-modal::after,
 .retail-held-carts-modal::after,
 .retail-discount-modal::after,
@@ -238,7 +253,64 @@
 .sales-history-modal::after,
 .price-override-modal::after,
 .dev-toolbar::after,
-.noise-dither::after {
+.restaurant-hamburger-dropdown::after,
+.restaurant-context-menu::after,
+.settings-sidebar::after,
+.tooltip-content::after,
+.ssel-dropdown::after,
+.multi-store-stat-card::after,
+.product-card::after,
+.kiosk-product-card::after,
+.setup-preset-card::after,
+.setup-step-panel::after,
+.pos-cart-line::after,
+.pos-cart-tip-segment::after,
+.permission-denied-card::after,
+.tables-floorplan::after,
+.terminal-mgmt-toggle-thumb::after,
+.workspace-card--active::after,
+.workspace-skeleton-card::after,
+.ctx-menu::after,
+.status-indicator.online::after,
+.status-indicator.warning::after,
+.status-indicator.offline::after,
+.fastpin-card::after,
+.qris-container::after,
+.store-switcher-dropdown::after,
+.create-pin-card::after,
+.custom-context-menu::after,
+.session-lock-card::after,
+.cat-mgmt-icon-badge::after,
+.cat-mgmt-icon-btn--selected::after,
+.location-picker-dropdown::after,
+.inventory-shift-bar::after,
+.shift-status-active .status-indicator::after,
+.shift-btn-primary::after,
+.shift-btn-danger::after,
+.shift-summary-modal::after,
+.threshold-dialog::after,
+.reverse-btn::after,
+.kds-layout-popover::after,
+.kds-ticket--green::after,
+.kds-ticket-urgent-badge::after,
+.kds-settings-popover::after,
+.product-mgmt-alert-drawer::after,
+.promo-mgmt-table::after,
+.menu-eng-tooltip::after,
+.retail-menu::after,
+.pos-cart-undo-bar::after,
+.pos-cart-tip-segment[aria-pressed='true']::after,
+.modifier-modal::after,
+.pos-hold-modal::after,
+.pos-held-list-modal::after,
+.pos-close-shift-modal::after,
+.receipt-preview-paper::after,
+.refund-modal::after,
+.shortfall-modal::after,
+.settings-footer-shortcut kbd::after,
+.toggle-thumb::after,
+.topology-node::after,
+.node-selected::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -256,11 +328,13 @@
   position: relative;
 }
 
+/* High contrast mode — hide noise overlay for clarity */
 @media (prefers-contrast: high) {
   .card::after,
-  .staff-login-card::after,
   .modal-panel::after,
+  .staff-login-card::after,
   .workspace-card::after,
+  .noise-dither::after,
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
   .retail-discount-modal::after,
@@ -281,7 +355,152 @@
   .sales-history-modal::after,
   .price-override-modal::after,
   .dev-toolbar::after,
-  .noise-dither::after { display: none; }
+  .restaurant-hamburger-dropdown::after,
+  .restaurant-context-menu::after,
+  .settings-sidebar::after,
+  .tooltip-content::after,
+  .ssel-dropdown::after,
+  .multi-store-stat-card::after,
+  .product-card::after,
+  .kiosk-product-card::after,
+  .setup-preset-card::after,
+  .setup-step-panel::after,
+  .pos-cart-line::after,
+  .pos-cart-tip-segment::after,
+  .permission-denied-card::after,
+.tables-floorplan::after,
+.terminal-mgmt-toggle-thumb::after,
+.workspace-card--active::after,
+.workspace-skeleton-card::after,
+.ctx-menu::after,
+.status-indicator.online::after,
+.status-indicator.warning::after,
+.status-indicator.offline::after,
+.fastpin-card::after,
+.qris-container::after,
+.store-switcher-dropdown::after,
+.create-pin-card::after,
+.custom-context-menu::after,
+.session-lock-card::after,
+.cat-mgmt-icon-badge::after,
+.cat-mgmt-icon-btn--selected::after,
+.location-picker-dropdown::after,
+.inventory-shift-bar::after,
+.shift-status-active .status-indicator::after,
+.shift-btn-primary::after,
+.shift-btn-danger::after,
+.shift-summary-modal::after,
+.threshold-dialog::after,
+.reverse-btn::after,
+.kds-layout-popover::after,
+.kds-ticket--green::after,
+.kds-ticket-urgent-badge::after,
+.kds-settings-popover::after,
+.product-mgmt-alert-drawer::after,
+.promo-mgmt-table::after,
+.menu-eng-tooltip::after,
+.retail-menu::after,
+.pos-cart-undo-bar::after,
+.pos-cart-tip-segment[aria-pressed='true']::after,
+.modifier-modal::after,
+.pos-hold-modal::after,
+.pos-held-list-modal::after,
+.pos-close-shift-modal::after,
+.receipt-preview-paper::after,
+.refund-modal::after,
+.shortfall-modal::after,
+.settings-footer-shortcut kbd::after,
+.toggle-thumb::after,
+.topology-node::after,
+.node-selected::after { display: none; }
+}
+
+/* Reduced motion — hide noise overlay to reduce GPU compositing
+   and prevent visual stress for users sensitive to texture/pattern. */
+@media (prefers-reduced-motion: reduce) {
+  .card::after,
+  .modal-panel::after,
+  .staff-login-card::after,
+  .workspace-card::after,
+  .noise-dither::after,
+  .retail-shift-modal::after,
+  .retail-held-carts-modal::after,
+  .retail-discount-modal::after,
+  .retail-qty-modal::after,
+  .retail-shortcuts-modal::after,
+  .retail-preview-modal::after,
+  .retail-customer-modal::after,
+  .tables-detail::after,
+  .settings-popup::after,
+  .license-activation-card::after,
+  .gift-cards-modal::after,
+  .promo-mgmt-modal::after,
+  .product-mgmt-modal::after,
+  .po-form-modal::after,
+  .stock-transfers-modal::after,
+  .shift-mgmt-modal::after,
+  .payment-modal::after,
+  .sales-history-modal::after,
+  .price-override-modal::after,
+  .dev-toolbar::after,
+  .restaurant-hamburger-dropdown::after,
+  .restaurant-context-menu::after,
+  .settings-sidebar::after,
+  .tooltip-content::after,
+  .ssel-dropdown::after,
+  .multi-store-stat-card::after,
+  .product-card::after,
+  .kiosk-product-card::after,
+  .setup-preset-card::after,
+  .setup-step-panel::after,
+  .pos-cart-line::after,
+  .pos-cart-tip-segment::after,
+  .permission-denied-card::after,
+.tables-floorplan::after,
+.terminal-mgmt-toggle-thumb::after,
+.workspace-card--active::after,
+.workspace-skeleton-card::after,
+.ctx-menu::after,
+.status-indicator.online::after,
+.status-indicator.warning::after,
+.status-indicator.offline::after,
+.fastpin-card::after,
+.qris-container::after,
+.store-switcher-dropdown::after,
+.create-pin-card::after,
+.custom-context-menu::after,
+.session-lock-card::after,
+.cat-mgmt-icon-badge::after,
+.cat-mgmt-icon-btn--selected::after,
+.location-picker-dropdown::after,
+.inventory-shift-bar::after,
+.shift-status-active .status-indicator::after,
+.shift-btn-primary::after,
+.shift-btn-danger::after,
+.shift-summary-modal::after,
+.threshold-dialog::after,
+.reverse-btn::after,
+.kds-layout-popover::after,
+.kds-ticket--green::after,
+.kds-ticket-urgent-badge::after,
+.kds-settings-popover::after,
+.product-mgmt-alert-drawer::after,
+.promo-mgmt-table::after,
+.menu-eng-tooltip::after,
+.retail-menu::after,
+.pos-cart-undo-bar::after,
+.pos-cart-tip-segment[aria-pressed='true']::after,
+.modifier-modal::after,
+.pos-hold-modal::after,
+.pos-held-list-modal::after,
+.pos-close-shift-modal::after,
+.receipt-preview-paper::after,
+.refund-modal::after,
+.shortfall-modal::after,
+.settings-footer-shortcut kbd::after,
+.toggle-thumb::after,
+.topology-node::after,
+.node-selected::after { display: none; }
 }
 
 .card--padding-sm  { padding: var(--space-3); }
@@ -409,11 +628,6 @@
   border-top: 1px solid var(--color-border);
 }
 
-@keyframes modal-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -434,9 +648,6 @@
 .theme-toggle svg {
   transform-origin: center;
   transition: transform var(--duration-200) var(--ease-in-out);
-}
-.theme-toggle:hover svg {
-  /* transform-origin and transition are inherited from .theme-toggle svg above */
 }
 
 @media (prefers-reduced-motion: no-preference) {

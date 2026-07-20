@@ -10,6 +10,7 @@ use tokio::sync::oneshot;
 
 use oz_core::{Currency, Money, Settings};
 use oz_hal::drivers::receipt;
+use oz_hal::transport::usb::{UsbDeviceInfo, probe_all};
 use oz_hal::{BarcodeScanner, DisplayContent};
 
 use crate::error::AppError;
@@ -78,6 +79,22 @@ pub async fn print_receipt(
         .printer("default")
         .await
         .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
+
+    // Check printer status before printing
+    let status = printer.get_status().await?;
+    if status.has_fault() {
+        return Err(AppError::Invalid(
+            "Printer is not ready: check paper supply and cover".into(),
+        ));
+    }
+    if status.paper != oz_hal::PaperStatus::Ok {
+        // Low paper — warn but continue
+        tracing::warn!(
+            paper = ?status.paper,
+            "printer paper is low, continuing"
+        );
+    }
+
     let lines: Vec<&str> = args.body.lines().collect();
     let n = lines.len();
     printer.print_receipt(&args.body).await?;
@@ -181,6 +198,20 @@ pub async fn print_sales_receipt(
         .await
         .ok_or_else(|| AppError::Invalid("no receipt printer registered".into()))?;
 
+    // Check printer status before printing
+    let status = printer.get_status().await?;
+    if status.has_fault() {
+        return Err(AppError::Invalid(
+            "Printer is not ready: check paper supply and cover".into(),
+        ));
+    }
+    if status.paper != oz_hal::PaperStatus::Ok {
+        tracing::warn!(
+            paper = ?status.paper,
+            "printer paper is low, continuing"
+        );
+    }
+
     // Load store info + display settings from the DB.
     let conn = state.db.lock().await;
     let store_name = Settings::get_store_name(&conn)?.unwrap_or_else(|| "OZ-POS Store".into());
@@ -206,6 +237,8 @@ pub async fn print_sales_receipt(
             if f.is_empty() { None } else { Some(f) }
         },
         show_table_number: Settings::get_receipt_show_table_number(&conn)?,
+        barcode_enabled: false,
+        payment_link_template: None,
     };
     drop(conn); // release lock before printing
 
@@ -408,6 +441,24 @@ pub async fn display_show(
     display.connect().await?;
     display.show(&content).await?;
     Ok(())
+}
+
+/// Discover all connected USB hardware devices (scanners, printers, scales).
+///
+/// Calls `oz_hal::transport::usb::probe_all()` to enumerate known USB
+/// devices. Returns an empty vec (not an error) when no USB hardware is
+/// found — the front-end can fall back to manual configuration.
+#[command]
+pub async fn discover_hardware() -> Result<Vec<UsbDeviceInfo>, AppError> {
+    // probe_all is synchronous USB enumeration — no blocking issues for
+    // a one-shot discovery call. On Windows/macOS the rusb context init
+    // is fast; on Linux it depends on udev being available.
+    match probe_all() {
+        Ok(devices) => Ok(devices),
+        Err(e) => Err(AppError::Internal(format!(
+            "hardware discovery failed: {e}"
+        ))),
+    }
 }
 
 /// Clear a customer-facing pole display.

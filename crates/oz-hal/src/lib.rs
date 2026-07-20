@@ -37,5 +37,5 @@ pub use traits::barcode::BarcodeScanner;
 pub use traits::cash_drawer::CashDrawer;
 pub use traits::customer_display::CustomerDisplay;
 pub use traits::customer_display::DisplayContent;
-pub use traits::printer::ReceiptPrinter;
+pub use traits::printer::{PaperStatus, PrinterStatus, ReceiptPrinter};
 pub use types::{Barcode, BarcodeSymbology, DeviceInfo};

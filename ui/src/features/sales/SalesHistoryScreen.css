@@ -2,6 +2,37 @@
   padding: var(--space-4);
 }
 
+/* ── Pull-to-refresh indicator ────────────────────────────────── */
+
+.sales-history-pull-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  user-select: none;
+}
+
+.sales-history-refresh-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sales-history-refresh-spinner {
+    animation: sales-history-spin var(--duration-600) var(--ease-linear) infinite;
+  }
+}
+
+@keyframes sales-history-spin {
+  to { transform: rotate(360deg); }
+}
+
 .sales-history-header {
   display: flex;
   align-items: center;

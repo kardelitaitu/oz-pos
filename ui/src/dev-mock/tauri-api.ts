@@ -763,3 +763,6 @@ export function convertFileSrc(path: string): string {
 export function isTauri(): boolean {
   return false;
 }
+
+export class Resource {}
+export class Channel {}

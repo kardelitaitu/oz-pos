@@ -4,11 +4,12 @@
 // workspace switcher, user switcher (ADR #6), and theme toggle.
 // ────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Localized, useLocalization } from "@fluent/react";
 import { useGatewayStatus } from "@/hooks/useGatewayStatus";
 import { useWorkspaceNav } from "@/hooks/useWorkspaceNav";
 import { useAuth } from "@/contexts/AuthContext";
+import { getOfflineQueueStatusSummary } from "@/api/offline";
 import ThemeToggle from "./ThemeToggle";
 import Tooltip from "./Tooltip";
 import FastPINOverlay from "@/components/FastPINOverlay";
@@ -31,6 +32,21 @@ export default function StatusBar() {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session } = useAuth();
   const [showFastPIN, setShowFastPIN] = useState(false);
+
+  const [conflictCount, setConflictCount] = useState(0);
+
+  // P1-3: Poll conflict count every 30 seconds.
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const s = await getOfflineQueueStatusSummary();
+        setConflictCount(s.conflictCount);
+      } catch { /* offline */ }
+    };
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleOpenFastPIN = useCallback(() => setShowFastPIN(true), []);
   const handleCloseFastPIN = useCallback(() => setShowFastPIN(false), []);
@@ -61,10 +77,20 @@ export default function StatusBar() {
                 aria-hidden="true"
               />
               <span className="statusbar-version">
-                OZ-POS Enterprise v0.0.12
+                OZ-POS Enterprise v0.0.13
               </span>
             </div>
           </Tooltip>
+
+          {/* P1-3: Conflict count indicator */}
+          {conflictCount > 0 && (
+            <Tooltip content={l10n.getString('statusbar-conflict-count', { count: String(conflictCount) })} position="top">
+              <div className="statusbar-segment statusbar-conflict" role="status" aria-live="polite">
+                <span aria-hidden="true" style={{ color: 'var(--color-warning, #eab308)', marginRight: 4 }}>&#9888;</span>
+                <span>{conflictCount}</span>
+              </div>
+            </Tooltip>
+          )}
 
           {/* Gateway status pill */}
           {stripeStatus.configured && (

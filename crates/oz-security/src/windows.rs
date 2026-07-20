@@ -139,6 +139,9 @@ impl Keyring for WindowsCredentialManager {
         }
         Ok(true)
     }
+
+    // `rotate_key` and `key_created_at` use the default implementations
+    // from the `Keyring` trait.
 }
 
 fn encode_utf16_null(s: &str) -> Vec<u16> {

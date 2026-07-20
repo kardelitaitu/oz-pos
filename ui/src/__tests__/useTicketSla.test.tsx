@@ -12,42 +12,53 @@ function ago(secondsAgo: number): string {
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('useTicketSla', () => {
-  // ── Threshold levels ───────────────────────────────────────────
+  // ── Threshold levels (P3-1: green <5min, yellow 5-10min, red ≥10min, urgent ≥15min) ─
 
-  it('returns green for tickets received less than 10 minutes ago', () => {
+  it('returns green for tickets received less than 5 minutes ago', () => {
     const { result } = renderHook(() => useTicketSla(ago(0)));
     expect(result.current.level).toBe('green');
-    expect(result.current.elapsedSeconds).toBeLessThan(600);
+    expect(result.current.elapsedSeconds).toBeLessThan(300);
   });
 
-  it('returns yellow for tickets received 10-15 minutes ago', () => {
-    const { result } = renderHook(() => useTicketSla(ago(720)));
+  it('returns yellow for tickets received 5-10 minutes ago', () => {
+    const { result } = renderHook(() => useTicketSla(ago(360)));
     expect(result.current.level).toBe('yellow');
   });
 
-  it('returns red for tickets received more than 15 minutes ago', () => {
-    const { result } = renderHook(() => useTicketSla(ago(1200)));
+  it('returns red for tickets received more than 10 minutes ago', () => {
+    const { result } = renderHook(() => useTicketSla(ago(660)));
     expect(result.current.level).toBe('red');
   });
 
-  it('returns green at exactly 599 seconds (just under 10 min)', () => {
-    const { result } = renderHook(() => useTicketSla(ago(599)));
+  it('returns green at exactly 299 seconds (just under 5 min)', () => {
+    const { result } = renderHook(() => useTicketSla(ago(299)));
     expect(result.current.level).toBe('green');
   });
 
-  it('returns yellow at exactly 600 seconds (10 min boundary)', () => {
+  it('returns yellow at exactly 300 seconds (5 min boundary)', () => {
+    const { result } = renderHook(() => useTicketSla(ago(300)));
+    expect(result.current.level).toBe('yellow');
+  });
+
+  it('returns yellow at exactly 599 seconds (just under 10 min)', () => {
+    const { result } = renderHook(() => useTicketSla(ago(599)));
+    expect(result.current.level).toBe('yellow');
+  });
+
+  it('returns red at exactly 600 seconds (10 min boundary)', () => {
     const { result } = renderHook(() => useTicketSla(ago(600)));
-    expect(result.current.level).toBe('yellow');
+    expect(result.current.level).toBe('red');
   });
 
-  it('returns yellow at exactly 899 seconds (just under 15 min)', () => {
-    const { result } = renderHook(() => useTicketSla(ago(899)));
-    expect(result.current.level).toBe('yellow');
-  });
-
-  it('returns red at exactly 900 seconds (15 min boundary)', () => {
+  it('returns urgent=true at exactly 900 seconds (15 min)', () => {
     const { result } = renderHook(() => useTicketSla(ago(900)));
     expect(result.current.level).toBe('red');
+    expect(result.current.urgent).toBe(true);
+  });
+
+  it('returns urgent=false below 15 min', () => {
+    const { result } = renderHook(() => useTicketSla(ago(600)));
+    expect(result.current.urgent).toBe(false);
   });
 
   // ── Display formatting ─────────────────────────────────────────

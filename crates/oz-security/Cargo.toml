@@ -10,6 +10,9 @@ description = "Encryption, secrets, and PCI-DSS helpers for OZ-POS — at-rest e
 oz-core = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+rand = { workspace = true }
+hex = "0.4"
+chrono = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Security_Credentials", "Win32_Foundation"] }

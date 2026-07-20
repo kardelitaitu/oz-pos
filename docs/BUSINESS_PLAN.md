@@ -22,24 +22,43 @@ graph TD
     A --> E[Enterprise Tier: Bespoke Contract]
 ```
 
-### 2.1 Feature Comparison Matrix
+### 2.1 Master Feature & Licensing Tier Comparison Matrix
 
-| Feature / Specification | 1 Time (IDR 3.5jt One-Time) | Standard (IDR 2jt / Year) | Pro (IDR 5jt / Year) | Enterprise (Bespoke / Quote) |
+| Category / Feature | 1-Time Tier (IDR 3.5jt One-Time) | Standard Tier (IDR 2jt / Year) | Pro Tier (IDR 5jt / Year) | Enterprise Tier (Bespoke Quote) |
 | :--- | :---: | :---: | :---: | :---: |
-| **3-Month Free Trial** | ✓ (Limited: offline-only) | ✓ | ✓ | — |
-| **Offline-First SQLite Database** | ✓ | ✓ | ✓ | ✓ |
-| **Local Peripheral Integrations (HAL)** | ✓ | ✓ | ✓ | ✓ |
-| **Local Stock & Inventory Management** | ✓ | ✓ | ✓ | ✓ |
-| **Local Shift Reporting (CSV Exports)** | ✓ | ✓ | ✓ | ✓ |
-| **Free Minor Software Updates** | ✓ | ✓ | ✓ | ✓ |
-| **PostgreSQL Cloud Sync Daemon** | — | ✓ (Max 2 terminals) | ✓ (Unlimited) | ✓ (Dedicated / Private Host) |
-| **Integrated QRIS Payments (Midtrans)** | — | ✓ | ✓ | ✓ |
-| **Stripe Credit/Debit Card Payments** | — | — | ✓ | ✓ |
-| **Embedded Lua VM Rules Engine** | — | — | ✓ | ✓ |
+| **Pricing & Licensing** | **IDR 3.500.000 / terminal** | **IDR 2.000.000 / year** | **IDR 5.000.000 / year** | **Bespoke Quote** |
+| **Billing Frequency** | Perpetual (One-Time) | Annual Subscription | Annual Subscription | Annual Contract |
+| **3-Month Free Trial** | ✓ (Limited: offline-only) | ✓ (Full feature trial) | ✓ (Full feature trial) | Dedicated Sandbox |
+| **Target Audience** | Solo retail / *Warung* | Small shops & Cafes | Multi-terminal & Franchises | Large Chains & Corporates |
+| **Core Platform & Hardware** | | | | |
+| **Offline-First Edge SQLite Engine** | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) |
+| **HAL Hardware Integrations** | ✓ (Scanner, Printer, Drawer) | ✓ (Scanner, Printer, Drawer) | ✓ (+ Customer Display, KDS) | ✓ (+ Custom HAL Drivers) |
+| **Cross-Platform Support** | Windows 7/10/11, Android | Windows, Android, Linux | Windows, Android, iOS, Linux | Windows, Android, iOS, Linux |
+| **Multi-Store & Topology Builder** | | | | |
+| **Max Store Branches** | **1 Store** | **1 Store** | **Unlimited** | **Unlimited** |
+| **Max POS Workspace Terminals** | **1 Terminal** | **2 Terminals** | **Unlimited** | **Unlimited** |
+| **Max Warehouse Storage Locations** | **1 Location** | **1 Location** | **Unlimited** | **Unlimited** |
+| **Visual Node Topology Canvas** | ✓ (Single Store / 1 WS) | ✓ (Single Store / 2 WS) | ✓ (Unlimited Nodes) | ✓ (+ Regional Zone Containers) |
+| **1-Way & 2-Way Arrow Connections** | ✓ (Basic Store->WS link) | ✓ (Basic Store->WS link) | ✓ (Full Directional Arrow Wires) | ✓ (Full Arrow Wires + Zone Bounds) |
+| **Multi-Warehouse Fallback Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled (Priority 1, 2)** | **✓ Enabled (Priority 1, 2, 3+)** |
+| **Live Order Simulation Debugger** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** |
+| **Payments & Gateways** | | | | |
+| **Cash & Manual Split Billing** | ✓ | ✓ | ✓ | ✓ |
+| **Integrated Midtrans QRIS** | — | ✓ | ✓ | ✓ |
+| **Stripe Credit / Debit Cards** | — | — | ✓ | ✓ |
+| **Multi-Currency Exchange Rate Sync** | — | — | ✓ | ✓ |
+| **Rules & Business Logic** | | | | |
+| **Standard Tax & Discount Setup** | ✓ | ✓ | ✓ | ✓ |
+| **Embedded Lua VM Rules Engine** | — | — | ✓ (Buy-X-Get-Y, Custom Tax) | ✓ (Advanced Custom Rules) |
+| **Product Bundles Engine** | — | ✓ (Basic Bundles) | ✓ (Advanced Bundles) | ✓ (Advanced Bundles) |
+| **Loyalty Tiers & Points Redemption** | — | — | ✓ | ✓ |
+| **Reporting, Sync & SLA** | | | | |
+| **Local CSV Report Exports** | ✓ | ✓ | ✓ | ✓ |
+| **PostgreSQL Outbox Sync Daemon** | — | ✓ (Up to 2 terminals) | ✓ (Unlimited terminals) | ✓ (Dedicated / Private Host) |
 | **Multi-Store Centralized Dashboard** | — | — | ✓ | ✓ |
-| **Support SLA** | Forum Only | Email/Chat (24h) | Priority 24/7 SLA | Dedicated Account Manager |
-| **Custom ERP & API Adaptors** | — | — | — | ✓ (SAP, Odoo, custom APIs) |
-| **Free Major Version Upgrades** | — (Paid: IDR 1.500.000) | ✓ | ✓ | ✓ |
+| **Custom ERP Adaptors (SAP/Odoo)** | — | — | — | ✓ |
+| **Software Updates** | Free Minor (Major: 1.5jt) | ✓ Free Minor & Major | ✓ Free Minor & Major | ✓ Free Minor & Major |
+| **Support SLA** | Community Forum | Email/Chat (24h SLA) | Priority 24/7 SLA | Dedicated Account Manager |
 
 ### 2.2 Tier Details
 All tiers include a **3‑month free trial** with limited functionality: offline‑only operation, no cloud‑sync, and no integrated payment gateways. This allows merchants to evaluate the platform risk‑free before committing to a paid plan. During the free trial, merchants cannot import existing databases or user‑settings; a fresh local store is created.
@@ -121,21 +140,21 @@ gantt
 
 ---
 
-## 5. Financial Projections (5-Year Forecast)
+## 5. Financial Projections (Conservative 5-Year Forecast)
 
 Based on conservative customer acquisition projections across major Indonesian tier-1 and tier-2 cities under the expanded 4-tier model.
 
 | Metric | Year 1 | Year 2 | Year 3 | Year 4 | Year 5 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **New 1 Time Licenses (One-Time)** | 150 | 350 | 700 | 1,200 | 1,800 |
-| **Active Standard Subscribers** | 200 | 500 | 1,100 | 2,000 | 3,200 |
-| **Active Pro Subscribers** | 80 | 200 | 450 | 800 | 1,300 |
-| **Active Enterprise Contracts** | 5 | 12 | 25 | 45 | 70 |
-| **1 Time License Revenue** | IDR 525.000.000 | IDR 1.225.000.000 | IDR 2.450.000.000 | IDR 4.200.000.000 | IDR 6.300.000.000 |
-| **Standard SaaS Revenue** | IDR 400.000.000 | IDR 1.000.000.000 | IDR 2.200.000.000 | IDR 4.000.000.000 | IDR 6.400.000.000 |
-| **Pro SaaS Revenue** | IDR 400.000.000 | IDR 1.000.000.000 | IDR 2.250.000.000 | IDR 4.000.000.000 | IDR 6.500.000.000 |
-| **Enterprise Revenue (50jt avg.)** | IDR 250.000.000 | IDR 600.000.000 | IDR 1.250.000.000 | IDR 2.250.000.000 | IDR 3.500.000.000 |
-| **Total Annual Revenue** | **IDR 1.575.000.000** | **IDR 3.825.000.000** | **IDR 8.150.000.000** | **IDR 14.450.000.000** | **IDR 22.700.000.000** |
+| **New 1 Time Licenses (One-Time)** | 100 | 200 | 350 | 500 | 700 |
+| **Active Standard Subscribers** | 150 | 300 | 600 | 1,000 | 1,500 |
+| **Active Pro Subscribers** | 200 | 300 | 450 | 650 | 900 |
+| **Active Enterprise Contracts** | 0 | 5 | 10 | 15 | 25 |
+| **1 Time License Revenue** | IDR 350.000.000 | IDR 700.000.000 | IDR 1.225.000.000 | IDR 1.750.000.000 | IDR 2.450.000.000 |
+| **Standard SaaS Revenue** | IDR 300.000.000 | IDR 600.000.000 | IDR 1.200.000.000 | IDR 2.000.000.000 | IDR 3.000.000.000 |
+| **Pro SaaS Revenue** | IDR 1.000.000.000 | IDR 1.500.000.000 | IDR 2.250.000.000 | IDR 3.250.000.000 | IDR 4.500.000.000 |
+| **Enterprise Revenue (50jt avg.)** | IDR 0 | IDR 250.000.000 | IDR 500.000.000 | IDR 750.000.000 | IDR 1.250.000.000 |
+| **Total Annual Revenue** | **IDR 1.650.000.000** | **IDR 3.050.000.000** | **IDR 5.175.000.000** | **IDR 7.750.000.000** | **IDR 11.200.000.000** |
 
 ---
 
@@ -145,18 +164,18 @@ Due to the **local‑first edge database architecture** (SQLite processes >99 
 
 ### 6.1 Server Hosting & Network Load Comparison
 
-* **Traditional Cloud POS Model:** Every item scan, transaction calculation, and report query triggers a cloud API call. Hosting expenses for databases and app servers therefore scale linearly (averaging **IDR 15 000 / month / active terminal**).
-* **OZ‑POS Edge Model:** Data is persisted locally; the cloud database is only contacted during compact outbox synchronization cycles. This yields > 90 % reduction in CPU and bandwidth usage, keeping cloud hosting and telemetry costs below **IDR 1 200 / month / active terminal**.
+* **Traditional Cloud POS Model:** Every item scan, transaction calculation, and report query triggers a cloud API call. Hosting expenses for databases and app servers therefore scale linearly (averaging IDR 15 000 / month / active terminal).
+* **OZ-POS Edge Model:** Data is persisted locally; the cloud database is only contacted during compact outbox synchronization cycles. This yields > 90 % reduction in CPU and bandwidth usage, keeping cloud hosting and telemetry costs below IDR 1 200 / month / active terminal.
 
 ### 6.2 Detailed OpEx Breakdown per Terminal (5‑Year Horizon)
 
 | Cost Category | Traditional Cloud POS (IDR / yr) | OZ‑POS Edge Model (IDR / yr) |
 |---|---:|---:|
-| Cloud Hosting & DB (CPU + RAM) | 180 000 (15 000 × 12) | 14 400 (1 200 × 12) |
-| Data Transfer (Bandwidth) | 60 000 | 6 000 |
-| Sync Service & Message Queue | — | 12 000 |
-| Remote Monitoring & Logging | 30 000 | 3 000 |
-| **Total Annual OpEx per Terminal** | **270 000** | **35 400** |
+| Cloud Hosting & DB (CPU + RAM) | 180 000 (15 000 × 12) | 6 000 (500 × 12) |
+| Data Transfer (Bandwidth) | 60 000 | 2 000 |
+| Sync Service & Message Queue | — | 5 000 |
+| Remote Monitoring & Logging | 30 000 | 2 000 |
+| **Total Annual OpEx per Terminal** | **270 000** | **15 000** |
 
 *Assumptions:* 1 000 active terminals, average 12 months of operation per year, conservative bandwidth pricing based on Indonesian ISP rates.
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, Profiler } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listSales,
@@ -19,6 +19,7 @@ import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
@@ -128,6 +129,14 @@ export default function SalesHistoryScreen() {
   const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session, isManager } = useAuth();
 
+  // P2-4: Sale detail cache — avoids re-fetching the same sale on modal re-open.
+  // Invalidated when a sale is voided or refunded (status-changing events).
+  const detailCacheRef = useRef<Map<string, SaleDetail>>(new Map());
+
+  const invalidateCache = useCallback((saleId: string) => {
+    detailCacheRef.current.delete(saleId);
+  }, []);
+
   // ── Filters ────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -175,6 +184,11 @@ export default function SalesHistoryScreen() {
     }
   }, []);
 
+  // P7-3: Pull-to-refresh gesture
+  const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
+    onRefresh: load,
+  });
+
   useEffect(() => { load(); }, [load]);
 
   // ── Void state ──────────────────────────────────────────────────────
@@ -207,6 +221,7 @@ export default function SalesHistoryScreen() {
         userId: session?.user_id ?? 'unknown',
         reason: voidReason || l10n.getString('sales-history-void-default-reason'),
       });
+      invalidateCache(voidTarget.id);
       setVoidTarget(null);
       setVoidReason('');
       load();
@@ -215,7 +230,7 @@ export default function SalesHistoryScreen() {
     } finally {
       setVoiding(false);
     }
-  }, [voidTarget, voidReason, session, load, l10n]);
+  }, [voidTarget, voidReason, session, load, l10n, invalidateCache]);
 
   // ── Client-side filtering + sorting ────────────────────────────
   const filteredSales = useMemo(() => {
@@ -277,8 +292,23 @@ export default function SalesHistoryScreen() {
     return filteredSales.slice(from, from + pageSize);
   }, [filteredSales, safePage, pageSize]);
 
-  // ── Detail modal ───────────────────────────────────────────────
+  // ── Detail modal (P2-4: cached) ────────────────────────────────
   const openDetail = useCallback(async (id: string) => {
+    // Check cache first to avoid re-fetching recently viewed sales
+    const cached = detailCacheRef.current.get(id);
+    if (cached) {
+      setDetail(cached);
+      setDetailLoading(false);
+      // Still fetch refunds (they may have changed)
+      try {
+        const refundData = await listRefunds(id).catch(() => [] as RefundDto[]);
+        setRefunds(refundData);
+      } catch {
+        setRefunds([]);
+      }
+      return;
+    }
+
     setDetailLoading(true);
     setRefunds([]);
     try {
@@ -286,6 +316,10 @@ export default function SalesHistoryScreen() {
         getSale(id),
         listRefunds(id).catch(() => [] as RefundDto[]),
       ]);
+      // Cache the result for future re-opens (null-safe: getSale can return null)
+      if (sale) {
+        detailCacheRef.current.set(id, sale);
+      }
       setDetail(sale);
       setRefunds(refundData);
     } catch {
@@ -368,10 +402,11 @@ export default function SalesHistoryScreen() {
   const handleRefunded = useCallback(() => {
     closeRefund();
     if (detail) {
+      invalidateCache(detail.id);
       loadRefunds(detail.id);
     }
     load();
-  }, [closeRefund, detail, loadRefunds, load]);
+  }, [closeRefund, detail, loadRefunds, load, invalidateCache]);
 
   // ── Cashier display helper ─────────────────────────────────────
   const cashierName = useCallback((userId: string | null): string => {
@@ -400,8 +435,9 @@ export default function SalesHistoryScreen() {
       s.paymentMethod ?? '',
       cashierName(s.userId),
     ]);
+    const bom = '\uFEFF';
     const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -411,7 +447,34 @@ export default function SalesHistoryScreen() {
   }, [filteredSales, cashierName, l10n]);
 
   return (
-    <div className="sales-history">
+    <Profiler id="SalesHistoryScreen" onRender={(...args) => {
+      if (typeof args[2] === 'number' && args[2] > 1) {
+        console.debug('[Profiler] SalesHistoryScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
+      }
+    }}>
+    <div className="sales-history" {...pullRefreshProps}>
+      {/* P7-3: Pull-to-refresh indicator */}
+      {pullState !== 'idle' && (
+        <div
+          className="sales-history-pull-indicator"
+          style={{
+            transform: `translateY(${pullDistance}px)`,
+            opacity: Math.min(1, pullDistance / 60),
+          }}
+        >
+          {pullState === 'pulling' && (
+            <Localized id="sales-history-pull-to-refresh">
+              <span>Pull down to refresh</span>
+            </Localized>
+          )}
+          {pullState === 'ready' && (
+            <Localized id="sales-history-release-to-refresh">
+              <span>Release to refresh</span>
+            </Localized>
+          )}
+          {pullState === 'loading' && <span className="sales-history-refresh-spinner" />}
+        </div>
+      )}
       <div className="sales-history-header">
         <div className="sales-history-header-left">
           <Localized id="sales-history-title">
@@ -1069,5 +1132,6 @@ export default function SalesHistoryScreen() {
         </Localized>
       )}
     </div>
+    </Profiler>
   );
 }

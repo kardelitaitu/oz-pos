@@ -8,40 +8,39 @@
 # What it does:
 # 1. Installs sccache via Chocolatey if missing
 # 2. Sets a generous 20 GB local disk cache
-# 3. Confirms sccache is wired as the rustc wrapper
+# 3. Verifies sccache is active as the rustc wrapper
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "==> Checking sccache…" -ForegroundColor Cyan
+Write-Host "==> Checking sccache..." -ForegroundColor Cyan
 $sccache = Get-Command sccache -ErrorAction SilentlyContinue
 if (-not $sccache) {
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-        Write-Host "    Chocolatey is not installed. Install it first:" -ForegroundColor Red
+        Write-Host "    Chocolatey not installed. Install it first:" -ForegroundColor Red
         Write-Host "    https://chocolatey.org/install" -ForegroundColor Red
         exit 1
     }
-    Write-Host "    sccache not found. Installing via Chocolatey…" -ForegroundColor Yellow
+    Write-Host "    sccache not found. Installing via Chocolatey..." -ForegroundColor Yellow
     choco install sccache -y
 }
 
 $version = sccache --version 2>&1
 Write-Host "    $version"
 
-Write-Host "==> Setting cache size to 20 GB…" -ForegroundColor Cyan
+Write-Host "==> Setting cache size to 20 GB..." -ForegroundColor Cyan
 sccache --set-config cache.disk.size 20G
 
-Write-Host "==> Zeroing stats (fresh start)…" -ForegroundColor Cyan
+Write-Host "==> Zeroing stats (fresh start)..." -ForegroundColor Cyan
 sccache --zero-stats
 
-Write-Host "==> Enabling sccache in .cargo/config.toml …" -ForegroundColor Cyan
+Write-Host "==> Verifying sccache is enabled (uncommented) in .cargo\config.toml ..." -ForegroundColor Cyan
 $configPath = Join-Path $PSScriptRoot ".." ".cargo" "config.toml"
-if (Select-String -Path $configPath -Pattern '#?rustc-wrapper.*sccache' -Quiet) {
-    # Uncomment the line so Cargo picks it up.
-    (Get-Content $configPath) -replace '^#rustc-wrapper', 'rustc-wrapper' | Set-Content $configPath
-    Write-Host "    ✓ sccache enabled as rustc-wrapper" -ForegroundColor Green
+$line = Select-String -Path $configPath -Pattern '^rustc-wrapper.*sccache' -Quiet
+if ($line) {
+    Write-Host "    ✓ sccache enabled as rustc-wrapper (uncommented)" -ForegroundColor Green
 } else {
-    Write-Host "    ✗ .cargo/config.toml missing or not configured" -ForegroundColor Red
-    Write-Host "    The repo ships this file — make sure you're on main."
+    Write-Host "    ✗ sccache not wired or still commented in .cargo\config.toml" -ForegroundColor Red
+    Write-Host "    The repo ships this file uncommented -- make sure you have the latest version."
     exit 1
 }
 

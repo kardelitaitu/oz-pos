@@ -1,0 +1,18 @@
+{
+  "name": "timeout",
+  "driver": "stripe",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/payment_intents",
+      "status": 500,
+      "response_body": {
+        "error": {
+          "type": "api_error",
+          "message": "The server encountered an error while processing the request.",
+          "code": "processing_error"
+        }
+      }
+    }
+  ]
+}

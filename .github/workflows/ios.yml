@@ -1,0 +1,150 @@
+# ── iOS Build Pipeline ─────────────────────────────────────────────────
+#
+# Builds a signed iOS IPA for the OZ-POS tablet client using a macOS
+# runner with Xcode.
+#
+# Triggered by:
+#   - Tag v* (release build)
+#   - Manual workflow_dispatch
+#
+# Note: PR builds on main are skipped because macOS runners are
+# significantly more expensive than Linux runners.
+#
+# Secrets required:
+#   APPLE_TEAM_ID            — Apple Developer team ID
+#   APPLE_BUNDLE_ID          — Bundle identifier (e.g. com.ozpos.tablet)
+#   APPLE_PROV_PROFILE_BASE64 — base64-encoded provisioning profile
+#   APPLE_CERT_BASE64        — base64-encoded distribution certificate p12
+#   APPLE_CERT_PASSWORD      — certificate password
+#   KEYCHAIN_PASSWORD        — temporary keychain password (any value)
+
+name: iOS Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+
+jobs:
+  ios-build:
+    name: iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Rust toolchain ─────────────────────────────────────────
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,x86_64-apple-ios,aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+
+      - uses: mozilla/sccache-action@v0.0.10
+
+      # ── Node / UI dependencies ─────────────────────────────────
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+
+      - name: Build UI (tablet)
+        run: cd ui && npx vite build --config vite.tablet.config.ts
+
+      # ── Tauri CLI ──────────────────────────────────────────────
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      # ── Initialize iOS project ─────────────────────────────────
+      - name: Initialize Tauri iOS project
+        run: |
+          cd apps/tablet-client
+          cargo tauri ios init
+          # Locate the generated Xcode project (name varies by Tauri config)
+          XCODE_PROJ=$(find gen/apple -name "*.xcodeproj" -maxdepth 2 | head -1)
+          if [ -z "$XCODE_PROJ" ]; then
+            echo "::error::No Xcode project found in gen/apple/"
+            exit 1
+          fi
+          echo "Found Xcode project: $XCODE_PROJ"
+          echo "XCODE_PROJ=$XCODE_PROJ" >> $GITHUB_ENV
+
+      # ── Setup code signing ─────────────────────────────────────
+      - name: Create keychain and import certificate
+        run: |
+          # Create a temporary keychain
+          security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+
+          # Import distribution certificate
+          echo "${{ secrets.APPLE_CERT_BASE64 }}" | base64 -d > /tmp/cert.p12
+          security import /tmp/cert.p12 -k build.keychain -P "${{ secrets.APPLE_CERT_PASSWORD }}" -T /usr/bin/codesign
+
+          # Import provisioning profile
+          echo "${{ secrets.APPLE_PROV_PROFILE_BASE64 }}" | base64 -d > /tmp/profile.mobileprovision
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp /tmp/profile.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+          # Allow codesign access to the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
+
+      # ── Configure Xcode project signing ────────────────────────
+      - name: Configure Xcode signing
+        run: |
+          cd apps/tablet-client
+          # Locate the generated Xcode project (use absolute path for consistency)
+          PROJ=$(find "$(pwd)/gen/apple" -name "*.xcodeproj" -maxdepth 2 | head -1)
+          if [ -z "$PROJ" ] || [ ! -d "$PROJ" ]; then
+            echo "::error::Xcode project not found"
+            ls -la gen/apple/ 2>/dev/null || echo "gen/apple/ not found"
+            exit 1
+          fi
+          echo "Configuring signing for: $PROJ"
+          # Set development team with manual signing (the cert was imported
+          # manually above, so auto-provisioning would conflict)
+          xcodebuild -project "$PROJ" \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            PRODUCT_BUNDLE_IDENTIFIER="${{ secrets.APPLE_BUNDLE_ID }}" \
+            CODE_SIGN_STYLE="Manual" \
+            -showBuildSettings 2>&1 | head -20
+
+      # ── Build iOS IPA ──────────────────────────────────────────
+      - name: Build iOS release
+        run: |
+          cd apps/tablet-client
+          cargo tauri ios build --release
+
+      # ── Locate IPA ─────────────────────────────────────────────
+      - name: Find IPA output
+        run: |
+          find apps/tablet-client/gen/apple -name "*.ipa" 2>/dev/null | head -10
+
+      # ── Upload IPA artifact ────────────────────────────────────
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: oz-pos-tablet.ipa
+          path: |
+            apps/tablet-client/gen/apple/build/**/*.ipa
+            target/release/ipa/**/*.ipa
+          retention-days: 90
+
+      # ── sccache stats ──────────────────────────────────────────
+      - name: sccache stats
+        run: sccache --show-stats

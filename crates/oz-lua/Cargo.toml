@@ -2,13 +2,17 @@
 name = "oz-lua"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+authors.workspace = true
 license.workspace = true
-description = "Embedded Lua scripting runtime for OZ-POS — lets merchants customize business rules and promotions without recompiling the core."
+repository.workspace = true
 
 [dependencies]
 oz-core = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-rlua = { workspace = true }
+rlua = "0.20"
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

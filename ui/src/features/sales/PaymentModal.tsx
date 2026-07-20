@@ -18,8 +18,12 @@ import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useSwipe } from '@/hooks/useSwipe';
+import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { animDuration } from '@/utils/animation';
 import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
+import ReceiptPreview from '@/features/sales/ReceiptPreview';
+import type { PrintSalesReceiptArgs } from '@/api/sales';
 import './PaymentModal.css';
 
 type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
@@ -141,7 +145,18 @@ export default function PaymentModal({
 
   const [showQr, setShowQr] = useState(false);
   const [qrReference, setQrReference] = useState('');
+  // P7-1: Swipe right on payment modal → go back to cart
+  const paymentSwipe = useSwipe({
+    onSwipeRight: () => {
+      if (!processing && !done) animateLeave(onClose);
+    },
+  });
+
+  // P7-4: Keyboard avoidance – scroll inputs into view on mobile
+  const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
+
   const [shortfallResult, setShortfallResult] = useState<PartialStockResult | null>(null);
+  const [receiptArgs, setReceiptArgs] = useState<PrintSalesReceiptArgs | null>(null);
 
   const [paymentError, setPaymentError] = useState<{ message: string; retryable: boolean } | null>(null);
 
@@ -209,6 +224,7 @@ export default function PaymentModal({
       setShowQr(false);
       setQrReference('');
       setShortfallResult(null);
+      setReceiptArgs(null);
       setSelectedCurrency(total.currency);
       notifyCustomerChange(null);
       setCustomerSearchQuery('');
@@ -406,7 +422,7 @@ export default function PaymentModal({
       try {
         const completedSale = await getSale(saleResult.saleId);
 
-        await printSalesReceipt({
+        const qrisReceiptData: PrintSalesReceiptArgs = {
           date: new Date().toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric',
           }),
@@ -442,9 +458,10 @@ export default function PaymentModal({
             },
           ],
           ...(tableNumber ? { tableNumber } : {}),
-        });
+        };
+        setReceiptArgs(qrisReceiptData);
       } catch {
-        // Printer may not be connected.
+        // Sale fetch may fail in edge cases — non-blocking.
       }
 
       try {
@@ -490,7 +507,7 @@ export default function PaymentModal({
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -723,8 +740,7 @@ export default function PaymentModal({
         console.log('[Sale] Fetching completed sale...');
         const completedSale = await getSale(saleResult.saleId);
 
-        console.log('[Sale] Printing receipt...');
-        await printSalesReceipt({
+        const receiptData: PrintSalesReceiptArgs = {
           date: new Date().toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric',
           }),
@@ -768,7 +784,9 @@ export default function PaymentModal({
                 },
               ],
           ...(tableNumber ? { tableNumber } : {}),
-        });
+        };
+        // Store receipt data for preview (user chooses to print or skip)
+        setReceiptArgs(receiptData);
       } catch (e) {
         console.warn('[Sale] Receipt/KDS step failed (non-blocking):', e);
       }
@@ -882,7 +900,7 @@ export default function PaymentModal({
   const modalStateClass = leaving ? 'payment-modal--exit' : 'payment-modal--enter';
 
   return (
-      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria', null, 'Payment')}>
+      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria', null, 'Payment')} {...paymentSwipe}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -924,9 +942,27 @@ export default function PaymentModal({
       )}
 
       {!shortfallResult && (
-      <div className={`payment-modal ${modalStateClass}`} ref={panelRef}>
-        {done ? (
-          <div className="payment-done">
+      <div className={`payment-modal ${modalStateClass}`} ref={(el) => {
+        // Combine panelRef (focus trap) with keyboardAvoidRef (scroll-into-view)
+        (panelRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+        (keyboardAvoidRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+      }}>
+        {done && receiptArgs ? (
+          <ReceiptPreview
+            receipt={receiptArgs}
+            onPrint={async () => {
+              try {
+                await printSalesReceipt(receiptArgs);
+                animateLeave(onComplete);
+              } catch {
+                // Printer error — still dismiss
+                animateLeave(onComplete);
+              }
+            }}
+            onSkip={() => animateLeave(onComplete)}
+          />
+        ) : done ? (
+          <div className="payment-done" role="status" aria-live="assertive">
             <svg className="payment-done-checkmark" viewBox="0 0 64 64" aria-hidden="true">
               <circle className="payment-done-checkmark-circle" cx="32" cy="32" r="26" />
               <path className="payment-done-checkmark-path" d="M20 32 l8 8 l16 -16" />
@@ -1374,6 +1410,7 @@ export default function PaymentModal({
                     type="button"
                     className="payment-customer-remove"
                     onClick={() => notifyCustomerChange(null)}
+                    aria-label={l10n.getString('payment-customer-remove-aria', null, 'Remove customer')}
                   >
                     &times;
                   </button>
