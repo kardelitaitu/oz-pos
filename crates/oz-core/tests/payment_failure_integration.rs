@@ -508,6 +508,139 @@ fn void_twice_returns_not_found_on_second_attempt() {
     );
 }
 
+// ── Concurrent sale-vs-reap race condition ────────────────────────────
+
+#[test]
+fn concurrent_reap_wins_over_finalize() {
+    let conn = setup();
+    let s = store(&conn);
+
+    s.create_product(
+        "RACE-ITEM",
+        "Race Product",
+        price(300),
+        None,
+        None,
+        50,
+        None,
+    )
+    .unwrap();
+
+    let sale = new_sale(
+        "sale-race",
+        vec![new_sale_line("sale-race", "RACE-ITEM", 5, 300, 1)],
+        1500,
+    );
+
+    let payment_splits = vec![PaymentSplitArg {
+        method: "cash".to_string(),
+        amount_minor: 1500,
+        gateway_reference: None,
+        gateway_status: None,
+        gateway_response: None,
+        idempotency_key: None,
+    }];
+
+    s.complete_sale_deduction(&sale, None, &payment_splits, "staff-1", None)
+        .unwrap();
+
+    assert_eq!(get_stock(&s, "RACE-ITEM"), 45, "50 - 5 = 45");
+
+    // Age the sale to make it eligible for reaping.
+    let past = chrono::Utc::now()
+        .checked_sub_signed(chrono::Duration::hours(1))
+        .unwrap()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    conn.execute(
+        "UPDATE sales SET pending_expires_at = ?1 WHERE id = 'sale-race'",
+        rusqlite::params![past],
+    )
+    .unwrap();
+
+    // Reaper runs first — voids the stale sale.
+    let reaped = s.reap_stale_pending_sales().unwrap();
+    assert_eq!(reaped, 1, "reaper should void the stale sale");
+
+    // Stock restored: 45 + 5 = 50.
+    assert_eq!(get_stock(&s, "RACE-ITEM"), 50);
+
+    // Now the cashier tries to finalize — rusqlite execute returns Ok(0)
+    // for 0 rows affected, not an error. Finalize is a silent no-op.
+    let _ = s.finalize_sale("sale-race"); // succeeds silently
+
+    // Sale remains voided.
+    let voided = s.get_sale("sale-race").unwrap().unwrap();
+    assert_eq!(
+        voided.status,
+        SaleStatus::Voided,
+        "reaper already voided it"
+    );
+
+    // Stock stays restored (reaper already did it).
+    assert_eq!(get_stock(&s, "RACE-ITEM"), 50);
+}
+
+#[test]
+fn finalize_wins_over_reap() {
+    let conn = setup();
+    let s = store(&conn);
+
+    s.create_product(
+        "RACE2-ITEM",
+        "Race Product 2",
+        price(200),
+        None,
+        None,
+        30,
+        None,
+    )
+    .unwrap();
+
+    let sale = new_sale(
+        "sale-race2",
+        vec![new_sale_line("sale-race2", "RACE2-ITEM", 3, 200, 1)],
+        600,
+    );
+
+    let payment_splits = vec![PaymentSplitArg {
+        method: "card".to_string(),
+        amount_minor: 600,
+        gateway_reference: Some("txn-race2".to_string()),
+        gateway_status: Some("captured".to_string()),
+        gateway_response: None,
+        idempotency_key: Some("idem-race2".to_string()),
+    }];
+
+    s.complete_sale_deduction(&sale, None, &payment_splits, "staff-1", None)
+        .unwrap();
+
+    assert_eq!(get_stock(&s, "RACE2-ITEM"), 27, "30 - 3 = 27");
+
+    // Age the sale.
+    let past = chrono::Utc::now()
+        .checked_sub_signed(chrono::Duration::hours(1))
+        .unwrap()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    conn.execute(
+        "UPDATE sales SET pending_expires_at = ?1 WHERE id = 'sale-race2'",
+        rusqlite::params![past],
+    )
+    .unwrap();
+
+    // Cashier finalizes first.
+    s.finalize_sale("sale-race2").unwrap();
+
+    let completed = s.get_sale("sale-race2").unwrap().unwrap();
+    assert_eq!(completed.status, SaleStatus::Completed);
+
+    // Reaper runs — should skip the completed sale (it's no longer pending).
+    let reaped = s.reap_stale_pending_sales().unwrap();
+    assert_eq!(reaped, 0, "reaper should skip completed sale");
+
+    // Stock stays deducted — sale completed.
+    assert_eq!(get_stock(&s, "RACE2-ITEM"), 27);
+}
+
 // ── Stock not restored on completed sale ──────────────────────────────
 
 #[test]

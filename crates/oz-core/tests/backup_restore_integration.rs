@@ -71,6 +71,57 @@ fn sqlite3_backup(source_path: &str, backup_path: &str) -> Result<(), String> {
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
+/// Backup a fresh (zero tables with data) DB and verify integrity.
+#[test]
+fn backup_restore_zero_tables_db() {
+    let db_path = fresh_db_path("backup-zero");
+    let backup_path = fresh_db_path("backup-zero-bak");
+
+    // Create a fresh DB with migrations but zero user data.
+    {
+        let mut conn = open_db(&db_path);
+        run_migrations(&mut conn);
+    }
+
+    // Backup.
+    fs::copy(&db_path, &backup_path).expect("backup");
+
+    // Simulate data loss.
+    fs::remove_file(&db_path).ok();
+    {
+        let mut conn = open_db(&db_path);
+        run_migrations(&mut conn);
+
+        // Verify empty.
+        let s = store(&conn);
+        let products = s.list_products().unwrap();
+        assert!(products.is_empty());
+        let sales = s.list_sales().unwrap();
+        assert!(sales.is_empty());
+    }
+
+    // Restore.
+    fs::copy(&backup_path, &db_path).expect("restore");
+
+    // Verify integrity + empty data preserved.
+    {
+        let conn = open_db(&db_path);
+        let result: String = conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(result, "ok");
+
+        let s = store(&conn);
+        let products = s.list_products().unwrap();
+        assert!(products.is_empty(), "zero-data backup should restore empty");
+        let sales = s.list_sales().unwrap();
+        assert!(sales.is_empty());
+    }
+
+    fs::remove_file(&db_path).ok();
+    fs::remove_file(&backup_path).ok();
+}
+
 #[test]
 fn backup_restore_preserves_products() {
     let db_path = fresh_db_path("backup-products");
@@ -281,6 +332,52 @@ fn backup_restore_preserves_inventory_adjustments() {
 
     fs::remove_file(&db_path).ok();
     fs::remove_file(&backup_path).ok();
+}
+
+#[test]
+fn corrupt_backup_is_detected() {
+    let db_path = fresh_db_path("backup-corrupt");
+    let backup_path = fresh_db_path("backup-corrupt-bak");
+    let corrupt_path = fresh_db_path("backup-corrupt-bad");
+
+    // Create valid DB with data.
+    {
+        let mut conn = open_db(&db_path);
+        run_migrations(&mut conn);
+        let s = store(&conn);
+        s.create_product("VALID", "Valid Product", price(100), None, None, 10, None)
+            .unwrap();
+    }
+
+    // Create a valid backup.
+    fs::copy(&db_path, &backup_path).expect("backup");
+
+    // Create a corrupt "backup" — just a text file, not a valid SQLite DB.
+    fs::write(&corrupt_path, "this is not a valid sqlite database file").expect("write corrupt");
+
+    // Attempt to open the corrupt file as a SQLite DB.
+    // SQLite opens lazily — the file handle is created, but the
+    // first query will fail because the header is not valid SQLite.
+    let conn = Connection::open(&corrupt_path).expect("open corrupt file");
+    let integrity: Result<String, _> =
+        conn.query_row("PRAGMA integrity_check", [], |row| row.get(0));
+    assert!(
+        integrity.is_err(),
+        "corrupt file should fail integrity check"
+    );
+
+    // The valid backup should still be usable.
+    {
+        let conn = Connection::open(&backup_path).expect("valid backup should open");
+        let result: String = conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(result, "ok", "valid backup should pass integrity");
+    }
+
+    fs::remove_file(&db_path).ok();
+    fs::remove_file(&backup_path).ok();
+    fs::remove_file(&corrupt_path).ok();
 }
 
 #[test]
