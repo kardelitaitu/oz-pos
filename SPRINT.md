@@ -59,6 +59,6 @@
 ## 🎨 Sprint 6: Theming & Plugin Ecosystem
 *Target: Open-source extensibility, plugin framework, and brand customization.*
 
-- [ ] Theming Engine (logo upload, primary color picker)
-- [ ] Plugin Architecture (`plugin.toml`, API)
-- [ ] Developer Documentation (`plugin-guide.md`, `quickstart.md`)
+- [x] Theming Engine (`BrandContext`, store logo upload, primary color picker, IPC branding commands)
+- [x] Plugin Architecture (`plugin.toml` manifest, sandboxed Lua VM hooks, discovery architecture)
+- [x] Developer Documentation (`docs/plugin-guide.md`, `docs/QUICKSTART.md`)
