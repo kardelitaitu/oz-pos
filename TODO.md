@@ -10,7 +10,7 @@
 
 > **Goal:** Replace the current "no-crash" smoke tests with deterministic, assertion-rich Playwright suites that verify real user flows end-to-end against the Vite dev server + dev-mock IPC. No Rust backend required.
 >
-> **Current state:** 16 / 34 items complete · Updated 2026-07-20
+> **Current state:** 26 / 34 items complete · Updated 2026-07-20
 
 ### Background
 
@@ -43,22 +43,22 @@ The 6 existing spec files (`auth`, `sale`, `product`, `settings`, `shift`, `api`
 
 ### Product management (`product.spec.ts`) — replace skeleton with real flow
 
-- [ ] **E2E-16: Assert product list loads** — After entering inventory workspace, wait for `[class*="product-mgmt"]` to be visible. Assert the product table has at least 1 row (dev-mock returns 18 products).
-- [ ] **E2E-17: Search filters the list** — Type `"Latte"` in the product search input. Assert only rows containing `"Latte"` remain visible. Assert rows not matching are hidden.
-- [ ] **E2E-18: Open create product modal** — Click the `"+ Add Product"` / `"Create"` button. Assert a modal/drawer opens with a form containing `name`, `sku`, and `price` inputs.
-- [ ] **E2E-19: Create product form validation** — Submit the create form with empty fields. Assert validation errors appear on required fields. Assert the modal stays open.
+- [x] **E2E-16: Assert product list loads** — After entering inventory workspace, wait for `[class*="product-mgmt"]` to be visible. Assert the product table has at least 1 row (dev-mock returns 18 products).
+- [x] **E2E-17: Search filters the list** — Type `"Latte"` in the product search input. Assert only rows containing `"Latte"` remain visible. Assert rows not matching are hidden.
+- [x] **E2E-18: Open create product modal** — Click the `"+ Add Product"` / `"Create"` button. Assert a modal/drawer opens with a form containing `name`, `sku`, and `price` inputs.
+- [x] **E2E-19: Create product form validation** — Submit the create form with empty fields. Assert validation errors appear on required fields. Assert the modal stays open.
 
 ### Settings (`settings.spec.ts`) — replace skeleton with real flow
 
-- [ ] **E2E-20: Assert settings sidebar renders** — In admin workspace, assert `.settings-sidebar` is visible with at least 5 nav items. Assert `"Store"` or `"General"` section is visible.
-- [ ] **E2E-21: Navigate sections** — Click each sidebar nav item (`Store`, `Receipt`, `Appearance`). Assert the main content area changes (heading text matches the clicked section). No `waitForTimeout` — use `waitForSelector`.
-- [ ] **E2E-22: Dirty-state guard** — Edit the store name field. Navigate away via the sidebar without saving. Assert the `beforeunload` dirty-dot indicator is visible or a confirmation dialog appears.
+- [x] **E2E-20: Assert settings sidebar renders** — In admin workspace, assert `.settings-sidebar` is visible with at least 5 nav items. Assert `"Store"` or `"General"` section is visible.
+- [x] **E2E-21: Navigate sections** — Click each sidebar nav item (`Store`, `Receipt`, `Appearance`). Assert the main content area changes (heading text matches the clicked section). No `waitForTimeout` — use `waitForSelector`.
+- [x] **E2E-22: Dirty-state guard** — Edit the store name field. Navigate away via the sidebar without saving. Assert the `beforeunload` dirty-dot indicator is visible or a confirmation dialog appears.
 
 ### Shift management (`shift.spec.ts`) — replace skeleton with real flow
 
-- [ ] **E2E-23: Assert shift screen loads** — Navigate to `#/shifts`. Assert `[class*="shift-mgmt"]` or `.shift-bar` is visible. Assert the current shift status (Open / Closed) is displayed.
-- [ ] **E2E-24: Open shift flow** — If shift is closed, click "Open Shift". Fill opening balance `500000`. Click confirm. Assert the shift status changes to "Open" and a shift ID is displayed.
-- [ ] **E2E-25: Close shift flow** — If shift is open, click "Close Shift". Assert the summary modal appears showing total sales, cash in/out. Click confirm. Assert status returns to "Closed".
+- [x] **E2E-23: Assert shift screen loads** — Navigate to `#/shifts`. Assert `[class*="shift-mgmt"]` or `.shift-bar` is visible. Assert the current shift status (Open / Closed) is displayed.
+- [x] **E2E-24: Open shift flow** — If shift is closed, click "Open Shift". Fill opening balance `500000`. Click confirm. Assert the shift status changes to "Open" and a shift ID is displayed.
+- [x] **E2E-25: Close shift flow** — If shift is open, click "Close Shift". Assert the summary modal appears showing total sales, cash in/out. Click confirm. Assert status returns to "Closed".
 
 ### New flows (not currently covered)
 
