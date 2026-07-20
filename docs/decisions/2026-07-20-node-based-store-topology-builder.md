@@ -96,6 +96,26 @@ MultiStoreDashboardScreen (parent tab view)
 
 ---
 
+### 5. License Tier Entitlement & Access Control
+
+The Node Topology Builder dynamically enforces license limits based on the active subscription tier (`TenantSubscription`):
+
+| Node / Topology Feature | 1-Time Tier (3.5jt) | Standard Tier (2jt/yr) | Pro Tier (5jt/yr) | Enterprise Tier (Quote) |
+|---|:---:|:---:|:---:|:---:|
+| **Max Store Nodes** | **1** | **1** | **Unlimited** | **Unlimited** |
+| **Max Workspace Nodes** | **1** | **2** | **Unlimited** | **Unlimited** |
+| **Max Warehouse Nodes** | **1** | **1** | **Unlimited** | **Unlimited** |
+| **Multi-Warehouse Fallback Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** |
+| **2-Way Warehouse Transfer Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** |
+| **Regional Zone Containers** | 🔒 Disabled | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** |
+
+#### Enforcement Mechanism
+- **Palette Lock Badges**: Node cards in the left tool rack display a lock badge (`🔒 Pro` / `🔒 Enterprise`) when the current license tier limits are reached.
+- **Wire Restriction Toasts**: Dragging a fallback stock wire or 2-way warehouse transfer line on a lower tier displays an in-context upgrade prompt (e.g. *"Multi-warehouse stock deduction fallback requires a Pro Tier license"*).
+- **Backend Validation**: Tauri IPC `create_store_profile`, `create_workspace_instance_scoped`, and `create_inventory_location` enforce hard server-side license checks using `oz_core::subscription::TenantSubscription`.
+
+---
+
 ## Consequences
 
 ### Positive
