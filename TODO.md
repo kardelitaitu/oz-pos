@@ -1,3 +1,43 @@
+# 0.0.14 — CI/CD Hardening & Security Scanning
+
+> **Goal:** Harden CI pipelines, add SAST/container scanning, optimize caching, and add automated security gates.
+
+**Current state:** 0 / 7 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P40 — CI/CD Pipeline Hardening
+
+- [ ] **P40-1: Cargo registry caching** — Add sccache + rust-cache to all Rust CI jobs. Verify cache hit rate > 80% on second run.
+
+- [ ] **P40-2: Dependency caching audit** — Audit all CI caching: npm, cargo, Docker layers, nextest, Playwright. Add cache keys with hash pinning to prevent stale cache poisoning.
+
+- [ ] **P40-3: CI pipeline dashboard** — Create `docs/ci-pipeline.md` documenting all CI jobs, expected durations, failure modes, and remediation steps.
+
+- [ ] **P40-4: Pre-merge validation gate** — Add a required status check list for PR merge: lint, test, typecheck, build must all pass. Document in CI pipeline doc.
+
+## 🟡 P41 — Security Scanning
+
+- [ ] **P41-1: SAST (Static Analysis)** — Add `cargo clippy -- -D clippy::all` as a CI gate. Document current clippy warnings and remediation plan.
+
+- [ ] **P41-2: Trivy container scanning** — Add Trivy vulnerability scan to the Docker build CI job. Scan the cloud-server image for CVEs before pushing to registry.
+
+- [ ] **P41-3: Dependency license audit** — Run `cargo license` to generate a license report. Flag any copyleft/GPL licenses that could affect distribution.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P40 — CI/CD Hardening | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P41 — Security Scanning | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **7** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — UI Polish & Integration Testing
 
 > **Goal:** Harden UI states (loading/empty/error) and add integration tests for critical failure scenarios.
