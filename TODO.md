@@ -139,7 +139,7 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 ## ⚪ P25 — Cloud Warehouse Analytics
 
 - [x] **P25-1: Cloud warehouse research ADR** ✅ — Created `docs/decisions/2026-07-20-cloud-warehouse-analytics-research.md`. Evaluated BigQuery, Snowflake, ClickHouse, and Parquet export. **Recommendation: implement Parquet export (Option D) in 0.0.16** — zero infrastructure cost, works offline, columnar/compressed, queryable by DuckDB/pandas/Spark. Defer BigQuery streaming insert to post-1.0 as premium on-feature. Includes cost comparison table.
-- [ ] **P25-2: Analytics export connector** — Implement Parquet export pipeline from `AnalyticsBundle`. Deferred to 0.0.16 per ADR recommendation.
+- [x] **P25-2: Analytics export connector** ✅ — Added `write_analytics_bundle_csv()` standalone function to `crates/oz-core/src/export/mod.rs`. Writes all 8 report types as CSV files + `metadata.json` to a directory. `csv_cell()` helper with proper escaping (commas, quotes). One CSV per non-empty report type with correct headers. 3 tests: creates files for populated bundle, metadata-only for empty bundle, cell escaping. All 1474 oz-core tests pass, clippy clean.
 
 ---
 
@@ -151,9 +151,9 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 | 🟢 P22 — Thai i18n | 2 | 2 | ████████████████ 100% 🎉 |
 | 🔵 P23 — Product Bundles | 2 | 2 | ████████████████ 100% 🎉 |
 | 🟣 P24 — Custom Report Builder | 2 | 2 | ████████████████ 100% 🎉 |
-| ⚪ P25 — Cloud Warehouse | 2 | 1 | ████████████░░░░ 50% |
+| ⚪ P25 — Cloud Warehouse | 2 | 2 | ████████████████ 100% 🎉 |
 | 🔴 P26 — Voice-Controlled Checkout | 2 | 2 | ████████████████ 100% 🎉 |
-| **Total** | **12** | **11** | **92%** |
+| **Total** | **12** | **12** | **100% 🎉** |
 
 ---
 

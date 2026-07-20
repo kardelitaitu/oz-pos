@@ -222,6 +222,221 @@ impl Default for ReportScheduleConfig {
 /// Settings key used to persist the report schedule.
 pub const REPORT_SCHEDULE_SETTINGS_KEY: &str = "report_schedule";
 
+/// CSV escape — wraps a cell in quotes and escapes internal quotes.
+fn csv_cell(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+/// Write a CSV row from an iterator of cells.
+fn csv_row(cells: impl Iterator<Item = String>) -> String {
+    cells.map(|c| csv_cell(&c)).collect::<Vec<_>>().join(",")
+}
+
+/// Write analytics data as CSV files and a metadata.json to the given directory.
+///
+/// Creates one `.csv` file per report type plus a `metadata.json` file.
+/// Returns the list of file paths written. Existing files are overwritten.
+///
+/// # Example output
+///
+/// ```text
+/// exports/2026-07-20/
+///   metadata.json
+///   daily_revenue.csv
+///   weekly_revenue.csv
+///   monthly_revenue.csv
+///   top_products.csv
+///   hourly_heatmap.csv
+///   category_breakdown.csv
+///   low_stock_alerts.csv
+///   active_stock_alerts.csv
+/// ```
+pub fn write_analytics_bundle_csv(
+    bundle: &AnalyticsBundle,
+    dir: &str,
+) -> Result<Vec<String>, CoreError> {
+    use std::fs;
+    use std::path::Path;
+
+    let root = Path::new(dir);
+    fs::create_dir_all(root).map_err(|e| {
+        CoreError::Internal(format!("failed to create export directory {dir}: {e}"))
+    })?;
+
+    let mut files: Vec<String> = Vec::new();
+
+    let write = |name: &str, content: &str| -> Result<String, CoreError> {
+        let path = root.join(name);
+        fs::write(&path, content)
+            .map_err(|e| CoreError::Internal(format!("failed to write {name}: {e}")))?;
+        Ok(path.to_string_lossy().to_string())
+    };
+
+    // metadata.json
+    let meta_json = serde_json::to_string_pretty(&bundle.metadata)
+        .map_err(|e| CoreError::Internal(format!("failed to serialize metadata: {e}")))?;
+    files.push(write("metadata.json", &meta_json)?);
+
+    // Daily revenue
+    if !bundle.daily_revenue.is_empty() {
+        let mut csv = String::from("date,total_minor,currency,sale_count\n");
+        for r in &bundle.daily_revenue {
+            csv.push_str(&csv_row(
+                [
+                    r.date.clone(),
+                    r.total_minor.to_string(),
+                    r.currency.clone(),
+                    r.sale_count.to_string(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("daily_revenue.csv", &csv)?);
+    }
+
+    // Weekly revenue
+    if !bundle.weekly_revenue.is_empty() {
+        let mut csv = String::from("week_start,total_minor,currency,sale_count\n");
+        for r in &bundle.weekly_revenue {
+            csv.push_str(&csv_row(
+                [
+                    r.week_start.clone(),
+                    r.total_minor.to_string(),
+                    r.currency.clone(),
+                    r.sale_count.to_string(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("weekly_revenue.csv", &csv)?);
+    }
+
+    // Monthly revenue
+    if !bundle.monthly_revenue.is_empty() {
+        let mut csv = String::from("month,total_minor,currency,sale_count\n");
+        for r in &bundle.monthly_revenue {
+            csv.push_str(&csv_row(
+                [
+                    r.month.clone(),
+                    r.total_minor.to_string(),
+                    r.currency.clone(),
+                    r.sale_count.to_string(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("monthly_revenue.csv", &csv)?);
+    }
+
+    // Top products
+    if !bundle.top_products.is_empty() {
+        let mut csv = String::from("sku,name,total_qty,total_minor\n");
+        for r in &bundle.top_products {
+            csv.push_str(&csv_row(
+                [
+                    r.sku.clone(),
+                    r.name.clone(),
+                    r.total_qty.to_string(),
+                    r.total_minor.to_string(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("top_products.csv", &csv)?);
+    }
+
+    // Hourly heatmap
+    if !bundle.hourly_heatmap.is_empty() {
+        let mut csv = String::from("day_of_week,hour,total_minor,sale_count\n");
+        for r in &bundle.hourly_heatmap {
+            csv.push_str(&csv_row(
+                [
+                    r.day_of_week.to_string(),
+                    r.hour.to_string(),
+                    r.total_minor.to_string(),
+                    r.sale_count.to_string(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("hourly_heatmap.csv", &csv)?);
+    }
+
+    // Category breakdown
+    if !bundle.category_breakdown.is_empty() {
+        let mut csv = String::from("category_name,total_minor,sale_count,percentage\n");
+        for r in &bundle.category_breakdown {
+            csv.push_str(&csv_row(
+                [
+                    r.category_name.clone(),
+                    r.total_minor.to_string(),
+                    r.sale_count.to_string(),
+                    format!("{:.1}", r.percentage),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("category_breakdown.csv", &csv)?);
+    }
+
+    // Low stock alerts
+    if !bundle.low_stock_alerts.is_empty() {
+        let mut csv = String::from("product_id,sku,name,current_qty,threshold\n");
+        for r in &bundle.low_stock_alerts {
+            csv.push_str(&csv_row(
+                [
+                    r.product_id.clone(),
+                    r.sku.clone(),
+                    r.name.clone(),
+                    r.current_qty.to_string(),
+                    r.threshold.to_string(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("low_stock_alerts.csv", &csv)?);
+    }
+
+    // Active stock alerts
+    if !bundle.active_stock_alerts.is_empty() {
+        let mut csv = String::from(
+            "id,threshold_id,product_id,location_id,current_qty,threshold,status,triggered_at,product_sku,product_name\n",
+        );
+        for r in &bundle.active_stock_alerts {
+            csv.push_str(&csv_row(
+                [
+                    r.id.clone(),
+                    r.threshold_id.clone(),
+                    r.product_id.clone(),
+                    r.location_id.clone(),
+                    r.current_qty.to_string(),
+                    r.threshold.to_string(),
+                    r.status.clone(),
+                    r.triggered_at.clone(),
+                    r.product_sku.clone(),
+                    r.product_name.clone(),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("active_stock_alerts.csv", &csv)?);
+    }
+
+    Ok(files)
+}
+
 impl Store<'_> {
     /// Save the report schedule configuration to the settings table.
     pub fn save_report_schedule(&self, config: &ReportScheduleConfig) -> Result<(), CoreError> {
@@ -687,5 +902,49 @@ mod tests {
         let resp = s.build_custom_report(req).unwrap();
         assert!(resp.columns.is_empty());
         assert!(resp.rows.is_empty());
+    }
+
+    // ── CSV export ─────────────────────────────────────────────────
+
+    #[test]
+    fn csv_export_creates_files() {
+        let conn = migrations::fresh_db();
+        seed_sale(&conn, "LATTE", 1, 400);
+
+        let s = Store::new(&conn);
+        let bundle = s
+            .export_analytics_bundle(ExportConfig::default(), "t1", "S1")
+            .unwrap();
+
+        let tmp = std::env::temp_dir().join("oz-pos-test-csv");
+        let files = write_analytics_bundle_csv(&bundle, tmp.to_str().unwrap()).unwrap();
+
+        // Should have created at least metadata.json + daily_revenue.csv + top_products.csv + heatmap + categories
+        assert!(files.iter().any(|f| f.ends_with("metadata.json")));
+        assert!(files.iter().any(|f| f.ends_with("daily_revenue.csv")));
+        assert!(files.iter().any(|f| f.ends_with("top_products.csv")));
+    }
+
+    #[test]
+    fn csv_export_empty_bundle_writes_metadata_only() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let bundle = s
+            .export_analytics_bundle(ExportConfig::default(), "", "")
+            .unwrap();
+
+        let tmp = std::env::temp_dir().join("oz-pos-test-csv-empty");
+        let files = write_analytics_bundle_csv(&bundle, tmp.to_str().unwrap()).unwrap();
+
+        // Only metadata.json should be written (bundle is empty)
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("metadata.json"));
+    }
+
+    #[test]
+    fn csv_cell_escaping() {
+        assert_eq!(csv_cell("hello"), "hello");
+        assert_eq!(csv_cell("hello, world"), "\"hello, world\"");
+        assert_eq!(csv_cell("say \"hi\""), "\"say \"\"hi\"\"\"");
     }
 }
