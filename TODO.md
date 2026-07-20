@@ -29,6 +29,64 @@
 
 ---
 
+# 0.0.14 — Zero Doc Warnings, Benchmarks, Nightly & Fuzz
+
+> **Goal:** Drive doc warnings to zero, establish benchmark regression detection, add nightly CI builds, and integrate fuzz testing for critical parsing paths.
+
+**Current state:** 0 / 13 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P50 — Zero Doc Warnings
+
+- [ ] **P50-1: Fix remaining unresolved links** — Fix the ~8 remaining real unresolved links in location_resolver.rs (ExchangeRateRow, AnalyticsBundle, etc.), stock_transfers.rs (StockCount/StockCountLine/StockAdjustment), terminal_override.rs (TaxRate), and serial_display.rs (BarcodeScanner). These are the last Rust-internal links that can actually be fixed.
+
+- [ ] **P50-2: Fix private-item links** — The `rate_limiter` module links to private items `LoginRateLimiter::max_attempts` and `LoginRateLimiter::window_secs`. Either make these items `pub(crate)` or replace with backtick-only links.
+
+- [ ] **P50-3: Doc coverage audit** — Run `cargo doc --workspace --no-deps` and verify every public item has a doc comment. Flag any `#![warn(missing_docs)]` crates with gaps. Target: 0 missing-doc warnings.
+
+- [ ] **P50-4: Final count verification** — Re-run `cargo doc --workspace --no-deps` and verify the warning count. Target: ≤ 5 real warnings (summary lines don't count). Document remaining unresolvable warnings with rationale.
+
+## 🟡 P51 — Benchmark Reports & Regression Detection
+
+- [ ] **P51-1: Run all criterion benchmarks** — Execute `cargo bench -p oz-core` for all 4 benchmark suites (barcode_lookup, cart_bench, money_bench, transaction_commit). Generate the HTML report via `open target/criterion/report/index.html`. Document baseline numbers in `docs/benchmarks/baseline-2026-07-20.md`.
+
+- [ ] **P51-2: CI benchmark regression gate** — Add a `benchmarks` job to `.github/workflows/ci.yml` that runs `cargo bench` and compares against the stored baseline. Use `critcmp` (cargo install critcmp) to detect regressions > 10%. Fail the job if any benchmark regresses. Store baselines as GitHub Actions artifacts (90-day retention).
+
+- [ ] **P51-3: Benchmark dashboard** — Create `docs/benchmarks/regression-tracking.md` with a table tracking all benchmarks over time: name, baseline (ns), last run (ns), delta %, trend (↑↓→). Include instructions for updating baselines after intentional perf improvements.
+
+## 🔵 P52 — CI Nightly Full-Matrix Builds
+
+- [ ] **P52-1: Nightly workflow** — Create `.github/workflows/nightly.yml` with `schedule: cron(0 3 * * *)` (3 AM UTC daily). Run the full CI matrix: fmt, clippy, rust-test (all 5 shards), ui-test (all 4 shards), doctests, e2e (all 3 shards), Docker build, Trivy scan, cargo-audit, docs build, benchmarks, and release builds for desktop (Windows + Linux + macOS) and tablet (Android + iOS).
+
+- [ ] **P52-2: Nightly status badge** — Add a `nightly` badge to `README.md` that shows the latest nightly build status (passing/failing). Use shields.io dynamic JSON endpoint or GitHub Actions badge.
+
+- [ ] **P52-3: Nightly report artifact** — Upload a `nightly-report.json` artifact containing: timestamp, test counts (Rust + UI + E2E), benchmark deltas, clippy warning count, Docker image size, bundle size. Retention: 30 days. Add a summary comment to any open PRs if the nightly fails.
+
+## 🟣 P53 — Fuzz Testing Infrastructure
+
+- [ ] **P53-1: Add cargo-fuzz to workspace** — Install `cargo-fuzz` (`cargo install cargo-fuzz`). Create a `fuzz/` directory at workspace root with `Cargo.toml` and a `fuzz_targets/` directory. Add fuzz targets for: SKU/barcode parsing (`foundation/src/sku.rs`, `foundation/src/barcode.rs`), JSON deserialization of Cart/Sale/PaymentRequest types, and SQL parameter binding (no SQL injection — verify parameterized queries).
+
+- [ ] **P53-2: Fuzz target for money parsing** — Create a fuzz target that feeds arbitrary byte sequences to `Currency::from_str()` and `Money` arithmetic operations. Verify no panics, no overflows, no invalid states.
+
+- [ ] **P53-3: CI fuzz job** — Add a `fuzz` job to `.github/workflows/ci.yml` (non-blocking, `continue-on-error: true`). Runs each fuzz target for 60 seconds. Caches the fuzz corpus between runs via `actions/cache@v4`. Uploads crash artifacts if any target finds an issue.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P50 — Zero Doc Warnings | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P51 — Benchmark Reports | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🔵 P52 — CI Nightly Builds | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟣 P53 — Fuzz Testing | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **13** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — Final Cleanup & Verification
 
 > **Goal:** Fix remaining doc warnings, run full pipeline check, and do a final code quality pass.
