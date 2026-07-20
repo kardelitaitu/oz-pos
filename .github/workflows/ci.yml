@@ -49,7 +49,7 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
-      - uses: mozilla/sccache-action@v0
+      - uses: mozilla/sccache-action@v0.0.10
       - name: Clippy (workspace, all features, exclude Tauri binaries)
         run: cargo clippy --workspace --all-targets --all-features --exclude oz-pos-app --exclude oz-pos-tablet -- -D warnings
       - name: sccache stats
@@ -77,7 +77,7 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
-      - uses: mozilla/sccache-action@v0
+      - uses: mozilla/sccache-action@v0.0.10
       - name: Run workspace tests (all features, exclude Tauri binaries)
         run: cargo test --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet
       - name: sccache stats
@@ -231,7 +231,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-always: true
-      - uses: mozilla/sccache-action@v0
+      - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies
         run: cd ui && npm ci --no-audit --no-fund
       - name: Install Playwright browsers

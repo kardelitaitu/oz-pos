@@ -50,7 +50,7 @@ jobs:
         with:
           save-always: true
 
-      - uses: mozilla/sccache-action@v0
+      - uses: mozilla/sccache-action@v0.0.10
 
       # ── Node / UI dependencies ─────────────────────────────────
       - name: Setup Node
