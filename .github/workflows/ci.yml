@@ -201,3 +201,92 @@ jobs:
         run: bash .agents/skills/skill-drift-guard/scripts/detect.sh
       - name: Bats test suite
         run: bash .agents/skills/skill-drift-guard/scripts/run-tests.sh
+
+  # ── E2E Tests (Playwright) ───────────────────────────────────────
+  #
+  # Runs the 5 critical user flows against the Vite dev server with
+  # Tauri IPC mock + Docker Compose backend for API tests.
+  #
+  # Uses Docker BuildKit cache for faster cloud-server image rebuilds.
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+      - uses: mozilla/sccache-action@v0
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+      - name: Install Playwright browsers
+        run: cd ui && npx playwright install chromium --with-deps
+      - name: Start Docker E2E backend
+        env:
+          OZ_API_SECRET: ci-test-secret
+        run: |
+          docker compose -f docker-compose.e2e.yml up -d
+          # Wait for cloud server to become healthy (up to 90s on cold build)
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:3099/api/v1/health > /dev/null 2>&1; then
+              echo "Cloud server ready (attempt $i)"
+              break
+            fi
+            if [ "$i" -eq 45 ]; then
+              echo "::error::Cloud server failed to start within timeout"
+              docker compose -f docker-compose.e2e.yml logs e2e-cloud-server --tail=50
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Start Vite dev server
+        run: |
+          cd ui && npm run dev &
+          VITE_PID=$!
+          echo "VITE_PID=$VITE_PID" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:1420 > /dev/null 2>&1; then
+              echo "Vite dev server ready (attempt $i)"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::Vite dev server failed to start"
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Run E2E tests
+        run: |
+          cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop 2>&1 | tee e2e-output.log
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: ui/e2e-results/
+          retention-days: 7
+      - name: Upload Playwright trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: ui/test-results/
+          retention-days: 7
+      - name: Stop Docker E2E backend
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
