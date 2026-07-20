@@ -2,7 +2,7 @@
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
-**Current state:** 16 / 19 items complete (84% ⏳) · Updated 2026-07-20
+**Current state:** 19 / 19 items complete (100% 🎉) · Updated 2026-07-20
 
 > **⚡ Nextest is now the default in CI** — All `cargo test` calls replaced with `cargo nextest run --profile ci`. `scripts/test-changed.sh` and `scripts/test-tdd.sh` now default to nextest.
 
