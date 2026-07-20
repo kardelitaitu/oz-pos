@@ -1,4 +1,4 @@
-# 0.0.16 — Test Optimization Sprint
+# 0.0.14 — Test Optimization Sprint
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
@@ -110,7 +110,7 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 
 ---
 
-# 0.0.15 — ROADMAP Alignment & Final Features
+# 0.0.14 — ROADMAP Alignment & Final Features
 
 > **Goal:** Sync the ROADMAP with reality (many Phase 5/6 items done but unchecked), complete Thai i18n, implement product bundles, and build a custom report builder.
 
