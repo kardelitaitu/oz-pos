@@ -4,6 +4,38 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.13] — 2026-07-20
+
+### Added
+
+#### 🟢 Sprint 1: Mobile Parity & Android Build
+- **Android APK Build**: Fixed struct initialization divergence (`barcode_enabled`, `payment_link_template` in `hardware.rs`, `idempotency_key` in `pos.rs`) in `apps/tablet-client`. Removed desktop-only `tauri_plugin_window_state` plugin from `lib.rs`. Generated release `app-universal-release-unsigned.apk` and `app-universal-release.aab`.
+
+#### 📈 Financial Projections & Business Plan
+- **Conservative Forecast Update**: Updated `docs/BUSINESS_PLAN.md` 5-Year Forecast to target 200 Pro subscriptions in Year 1 (IDR 1.000.000.000 Pro SaaS revenue) and 0 Enterprise contracts in Year 1. Updated section 6.1 Edge Cloud Hosting model text to `> 90 % reduction in CPU and bandwidth usage, keeping cloud hosting and telemetry costs below IDR 1 200 / month / active terminal`.
+
+#### 📋 Sprint Roadmap & Task Checklist
+- **Root SPRINT.md**: Created `SPRINT.md` at workspace root providing an interactive checklist across Sprints 1–6.
+
+#### 🌐 Sprint 2: Localization & Accessibility
+- **i18n & A11y Verification**: Audited 100 React feature files in `ui/src/features`. Verified 100% translation bundle parity (`0 missing keys` across `en-US.ftl` and `id.ftl`) and 0 duplicate keys (`dedupe-ftl.py`).
+- **Hook & Lint Fixes**: Resolved React rules-of-hooks `useMemo` ordering issue in `SalesReportScreen.tsx` and added defensive guards for `scrollBy` and `ResizeObserver` in custom hooks.
+
+#### 📊 Sprint 3: Reporting & Diagnostics
+- **Live Reporting & Print**: Verified live SQLite IPC widget rendering (`export_daily_summary`, `get_daily_revenue`) and ESC/POS printer report integration (`printSalesReceipt`).
+- **Profiling & Benchmarks**: Added cross-platform `cargo flamegraph` helpers (`scripts/flamegraph.ps1`, `scripts/flamegraph.sh`) and validated Criterion benchmarks (`barcode_lookup`, `transaction_commit`).
+
+#### 🛒 Sprint 4: Advanced Retail & F&B Features
+- **Loyalty & Promotions Engine**: Verified Loyalty Program DB schemas, IPC endpoints, and `LoyaltyManagementScreen.tsx`. Added reference Buy-X-Get-Y Lua promotion script (`scripts/examples/buy_x_get_y.lua`). Verified `PromotionManagementScreen.tsx` and Product Bundles IPC commands.
+
+#### 🍽️ Sprint 5: Specialized UIs
+- **KDS, Kiosk & Table Management**: Verified `KdsScreen.tsx` (Kanban, Focus, Metro layouts + audio SLA alerts), `KioskScreen.tsx` (locked-down self-checkout), and `TableManagementScreen.tsx` (interactive floor plan). Passed all 56 Vitest UI component tests.
+
+#### 🎨 Sprint 6: Theming & Plugin Ecosystem
+- **Branding & Plugin Specs**: Verified `BrandContext` color picker, logo upload, and IPC branding commands. Confirmed `plugin.toml` manifest spec, sandboxed Lua VM hook architecture, and developer docs (`docs/plugin-guide.md`, `docs/QUICKSTART.md`).
+
+---
+
 ## [0.0.12] — 2026-07-19
 
 ### Added
