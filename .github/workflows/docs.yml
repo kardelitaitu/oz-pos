@@ -1,0 +1,86 @@
+# ── Documentation Pipeline ────────────────────────────────────────────
+#
+# Generates cargo doc for the entire workspace and deploys to GitHub
+# Pages. Runs on every push to main + manual trigger.
+#
+# Excludes Tauri app crates (oz-pos-app, oz-pos-tablet) to avoid
+# requiring the heavy webkit2gtk dependency stack in CI. Core library
+# documentation for oz-core, oz-hal, oz-payment, platform-* etc. is
+# generated with `--document-private-items` for internal developer use.
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'foundation/**'
+      - 'platform/**'
+      - 'modules/**'
+      - 'Cargo.toml'
+      - 'docs/**'
+      - 'scripts/build-docs.*'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between
+# the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+
+      - uses: mozilla/sccache-action@v0.0.10
+
+      - name: Generate cargo doc
+        run: |
+          cargo doc \
+            --workspace \
+            --no-deps \
+            --document-private-items \
+            --exclude oz-pos-app \
+            --exclude oz-pos-tablet
+
+          # Copy the existing doc hub assets alongside cargo doc output.
+          # The cargo doc workspace index (target/doc/index.html) is
+          # preserved — it lists all crates with inter-crate navigation.
+          mkdir -p target/doc/html
+          cp -r docs/html/* target/doc/html/ 2>/dev/null || true
+
+      - name: sccache stats
+        run: sccache --show-stats
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
