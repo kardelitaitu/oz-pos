@@ -1,3 +1,41 @@
+# 0.0.14 — Code Quality & Documentation
+
+> **Goal:** Eliminate dead code, fill doc gaps, and create user-facing documentation.
+
+**Current state:** 0 / 6 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P36 — Code Quality
+
+- [ ] **P36-1: Dead code elimination** — Run `cargo deadlinks` and `cargo udeps` to find unused dependencies and dead code. Remove or `#[allow(dead_code)]` with rationale comments.
+
+- [ ] **P36-2: `cargo doc` coverage** — Run `cargo doc --workspace --no-deps` and audit for missing doc comments on public items. Target: 100% public API documented.
+
+- [ ] **P36-3: TODO/FIXME audit** — Find all TODO/FIXME/HACK comments across the codebase. File GitHub issues for each that's not trivially fixable. Resolve simple ones inline.
+
+## 🟡 P37 — Documentation
+
+- [ ] **P37-1: Admin guide** — Create `docs/admin-guide.md` covering: installation, workspace setup, user management, shift management, reporting, backup/restore.
+
+- [ ] **P37-2: User guide** — Create `docs/user-guide.md` covering: login, POS basics (add items, payment, receipts), product lookup, KDS usage.
+
+- [ ] **P37-3: API reference** — Create `docs/api-reference.md` documenting all Tauri commands by domain (auth, pos, products, inventory, reporting, settings, etc.) with parameter tables.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P36 — Code Quality | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P37 — Documentation | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **6** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — Backup, Restore & Release
 
 > **Goal:** Automate database backup/restore, verify disaster recovery, and harden the release pipeline.
