@@ -6,6 +6,77 @@
 
 ---
 
+## 🎭 E2E Test Coverage Improvement Plan
+
+> **Goal:** Replace the current "no-crash" smoke tests with deterministic, assertion-rich Playwright suites that verify real user flows end-to-end against the Vite dev server + dev-mock IPC. No Rust backend required.
+>
+> **Current state:** 0 / 22 items complete · Added 2026-07-20
+
+### Background
+
+The 6 existing spec files (`auth`, `sale`, `product`, `settings`, `shift`, `api`) were written as resilient skeletons — every assertion is guarded by `if (count > 0)` so no test ever fails, and half the "assertions" just check `hasError === false`. Real regressions in core flows (login, sale, payment) would silently pass. The plan below replaces or augments each file with deterministic tests that make hard assertions against known CSS class names and dev-mock behaviour.
+
+### Infrastructure first (unblock everything else)
+
+- [ ] **E2E-0: `webServer` auto-start** — Add `webServer: { command: 'npm run dev', url: 'http://localhost:1420', reuseExistingServer: !process.env.CI }` to `playwright.config.ts` so `npm run test:e2e` starts the Vite dev server automatically. No more manual second terminal.
+- [ ] **E2E-1: `webServer` in CI** — Ensure the `test:e2e` CI job sets `BASE_URL` and waits for the server before running tests. Update `.github/workflows/ci.yml` with a dedicated `e2e` job that runs after the `ui` job.
+- [ ] **E2E-2: Global auth fixture** — Extract a `loggedInPage` Playwright fixture in `e2e/fixtures.ts` that performs the full login once per worker using `storageState`. All specs that start post-login use this fixture instead of calling `loginAs()` in every `beforeEach` — eliminates repeated login time (~3s per test).
+- [ ] **E2E-3: Strict CSS contract** — Add a `data-testid` attribute to the 10 most-tested shell elements (`workspace-home`, `workspace-card`, `staff-login-screen`, `pos-cart`, `pay-btn`, `payment-modal`, `product-card`, `shift-bar`, `settings-sidebar`, `audit-log-table`) and update helpers to use `getByTestId` — removes selector drift risk.
+
+### Auth (`auth.spec.ts`) — strengthen existing tests
+
+- [ ] **E2E-4: Hard-assert login happy path** — Remove `waitForTimeout`. Replace with `waitForSelector`. After PIN entry assert: `workspace-home` is visible, `.ws-header-greeting` contains exact text `"Welcome, Owner"`, URL hash is `#/`.
+- [ ] **E2E-5: Assert error text for wrong PIN** — After entering `0000`, assert `.staff-login-error` contains text `"Invalid credentials"` (matches dev-mock error string). Currently only checks `isVisible`.
+- [ ] **E2E-6: Assert error text for unknown username** — After entering `nonexistent`, assert a toast or inline error contains `"User not found"`. Currently only checks login screen is still visible.
+- [ ] **E2E-7: Rate-limit lockout UI** — Enter wrong PIN 5 times. Assert the lockout message and countdown timer appear (`.staff-login-lockout` or similar). Verify the PIN pad is disabled during lockout.
+- [ ] **E2E-8: Session persistence across reload** — After successful login, reload the page (`page.reload()`). Assert the app goes to `staff-login-screen` (session is not persisted in localStorage — correct behaviour).
+
+### Sale (`sale.spec.ts`) — replace skeleton with real flow
+
+- [ ] **E2E-9: Assert product grid renders** — After entering store-pos, assert at least 3 `.product-card` elements are visible within 5s. Hard-fail if count is 0. No `if` guard.
+- [ ] **E2E-10: Add product to cart** — Click the first `.product-card`. Assert `.pos-cart-line` count increases to 1. Assert the cart total (`[class*="cart-total"]`) shows a non-zero amount.
+- [ ] **E2E-11: Quantity increment** — Add same product twice. Assert `.pos-cart-line` qty cell shows `2`. Assert total is double the unit price shown on the product card.
+- [ ] **E2E-12: Open payment modal** — With item in cart, click `.pos-cart-pay-btn`. Assert `.payment-modal` is visible. Assert it contains the correct total matching the cart.
+- [ ] **E2E-13: Cash payment — exact tender** — In payment modal, click the "Cash" tender button. Enter exact amount. Click confirm. Assert `receipt-preview-paper` or success state is visible. Assert cart is empty after closing modal.
+- [ ] **E2E-14: Cash payment — over-tender shows change** — Enter amount greater than total. Assert a "Change" row appears showing the correct difference.
+- [ ] **E2E-15: Remove item from cart** — Add a product, then click the remove/delete button on the cart line. Assert `.pos-cart-line` count returns to 0. Assert pay button is disabled.
+
+### Product management (`product.spec.ts`) — replace skeleton with real flow
+
+- [ ] **E2E-16: Assert product list loads** — After entering inventory workspace, wait for `[class*="product-mgmt"]` to be visible. Assert the product table has at least 1 row (dev-mock returns 18 products).
+- [ ] **E2E-17: Search filters the list** — Type `"Latte"` in the product search input. Assert only rows containing `"Latte"` remain visible. Assert rows not matching are hidden.
+- [ ] **E2E-18: Open create product modal** — Click the `"+ Add Product"` / `"Create"` button. Assert a modal/drawer opens with a form containing `name`, `sku`, and `price` inputs.
+- [ ] **E2E-19: Create product form validation** — Submit the create form with empty fields. Assert validation errors appear on required fields. Assert the modal stays open.
+
+### Settings (`settings.spec.ts`) — replace skeleton with real flow
+
+- [ ] **E2E-20: Assert settings sidebar renders** — In admin workspace, assert `.settings-sidebar` is visible with at least 5 nav items. Assert `"Store"` or `"General"` section is visible.
+- [ ] **E2E-21: Navigate sections** — Click each sidebar nav item (`Store`, `Receipt`, `Appearance`). Assert the main content area changes (heading text matches the clicked section). No `waitForTimeout` — use `waitForSelector`.
+- [ ] **E2E-22: Dirty-state guard** — Edit the store name field. Navigate away via the sidebar without saving. Assert the `beforeunload` dirty-dot indicator is visible or a confirmation dialog appears.
+
+### Shift management (`shift.spec.ts`) — replace skeleton with real flow
+
+- [ ] **E2E-23: Assert shift screen loads** — Navigate to `#/shifts`. Assert `[class*="shift-mgmt"]` or `.shift-bar` is visible. Assert the current shift status (Open / Closed) is displayed.
+- [ ] **E2E-24: Open shift flow** — If shift is closed, click "Open Shift". Fill opening balance `500000`. Click confirm. Assert the shift status changes to "Open" and a shift ID is displayed.
+- [ ] **E2E-25: Close shift flow** — If shift is open, click "Close Shift". Assert the summary modal appears showing total sales, cash in/out. Click confirm. Assert status returns to "Closed".
+
+### New flows (not currently covered)
+
+- [ ] **E2E-26: Workspace picker** — After login, assert all available workspace cards (Store POS, Restaurant POS, KDS, Inventory, Admin) are visible. Click `"Inventory"`. Assert the inventory workspace loads within 5s.
+- [ ] **E2E-27: Session lock / unlock** — Simulate idle timeout by calling `window.__triggerIdle?.()` (expose via dev-mock). Assert `session-lock-card` appears. Enter correct PIN. Assert workspace resumes.
+- [ ] **E2E-28: KDS ticket board** — Enter KDS workspace. Assert at least 1 `.kds-ticket` card is visible (dev-mock should return orders). Assert ticket has a table number and item list.
+- [ ] **E2E-29: Audit log screen** — In admin workspace, navigate to `#/audit`. Assert the `.audit-log-table` renders. Assert at least 1 row with an `outcome` badge. Assert the `Refresh` button triggers a re-load.
+- [ ] **E2E-30: Tablet viewport smoke** — Run `auth` + `sale` happy-path tests against the `tablet` project (1024×1366). Assert no layout overflow (`document.body.scrollWidth <= 1024`). Assert all touch targets are ≥ 44px tall.
+
+### Maintenance & quality
+
+- [ ] **E2E-31: Remove all `waitForTimeout`** — Replace every `page.waitForTimeout(N)` with `page.waitForSelector(selector)` or `expect(locator).toBeVisible()`. Magic sleeps are the #1 cause of flaky E2E tests.
+- [ ] **E2E-32: Add `test.step()` annotations** — Wrap each logical action in `await test.step('description', ...)` for readable HTML report traces when a test fails.
+- [ ] **E2E-33: Parallel-safe state** — Audit all tests for shared mutable state. Dev-mock resets on page load, so each test's `page.goto('/')` is already isolated. Document this in `e2e/README.md`.
+- [ ] **E2E-34: `npm run test:e2e` in `check.ps1`** — After `npm run test` (vitest), add an optional E2E gate: if Playwright is installed and port 1420 is free, run `npm run test:e2e`. Skip gracefully if the port is already in use.
+
+---
+
 ## Progress Summary
 
 | Area | Total | Done | Progress |
