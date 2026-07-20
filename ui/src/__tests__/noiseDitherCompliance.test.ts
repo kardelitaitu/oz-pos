@@ -174,7 +174,7 @@ function parseSelectorList(text: string): string[] {
   const cleaned = text.replace(/\/\*[\s\S]*?\*\//g, ' ');
   const selectors: string[] = [];
   for (const part of cleaned.split(',')) {
-    let sel = part
+    const sel = part
       .replace(/::after/g, '')
       .trim();
     if (sel && !sel.startsWith('/*')) {

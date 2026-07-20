@@ -234,6 +234,16 @@ export default function SalesReportScreen() {
     });
   };
 
+  // P9-3: Calculate deltas
+  const prevTotalRevenue = useMemo(
+    () => prevRevenueData.reduce((s: number, r) => s + r.total_minor, 0),
+    [prevRevenueData],
+  );
+  const prevTotalOrders = useMemo(
+    () => prevRevenueData.reduce((s: number, r) => r.sale_count + s, 0),
+    [prevRevenueData],
+  );
+
   if (loading) {
     return (
       <div className="sales-report-loading-skeleton" aria-hidden="true">
@@ -301,15 +311,6 @@ export default function SalesReportScreen() {
     0,
   );
 
-  // P9-3: Calculate deltas
-  const prevTotalRevenue = useMemo(
-    () => prevRevenueData.reduce((s: number, r) => s + r.total_minor, 0),
-    [prevRevenueData],
-  );
-  const prevTotalOrders = useMemo(
-    () => prevRevenueData.reduce((s: number, r) => r.sale_count + s, 0),
-    [prevRevenueData],
-  );
   const revenueDelta = comparePeriod && prevTotalRevenue > 0
     ? ((totalRevenue - prevTotalRevenue) / prevTotalRevenue) * 100
     : null;

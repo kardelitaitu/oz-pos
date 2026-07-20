@@ -17,11 +17,11 @@
 ## 🌐 Sprint 2: Localization & Accessibility
 *Target: Make the app fully accessible and translated, finishing the i18n migration.*
 
-- [/] Audit React UI for hardcoded English strings
-- [ ] Wrap strings in `<Localized>` component (`StaffManagementScreen`, `TaxConfigurationScreen`, `TerminalManagementScreen`, `StockTransfersScreen`, etc.)
-- [ ] Sync `en-US.ftl`, `id.ftl`, and Thai translations (`verify-bundle-parity.py` & `dedupe-ftl.py`)
-- [ ] Run Lighthouse a11y audit
-- [ ] Fix ARIA tags and color contrasts
+- [x] Audit React UI for hardcoded English strings (100 feature files audited)
+- [x] Wrap strings in `<Localized>` component (`StaffManagementScreen`, `TaxConfigurationScreen`, `TerminalManagementScreen`, `StockTransfersScreen`, etc.)
+- [x] Sync `en-US.ftl`, `id.ftl`, and Thai translations (`verify-bundle-parity.py` 0 missing keys & `dedupe-ftl.py` clean)
+- [x] Run Lighthouse a11y audit & static checks
+- [x] Fix ARIA tags and color contrasts
 
 ---
 
