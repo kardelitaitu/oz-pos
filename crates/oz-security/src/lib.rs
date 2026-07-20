@@ -106,7 +106,7 @@ pub trait Keyring {
             .try_fill_bytes(&mut key_bytes)
             .map_err(|e| SecurityError::KeyGenerationFailed(format!("rng error: {e}")))?;
 
-        let hex_key = hex::encode(&key_bytes);
+        let hex_key = hex::encode(key_bytes);
         let now = chrono::Utc::now().to_rfc3339();
 
         // Archive existing key as prev
@@ -205,7 +205,7 @@ impl Keyring for InMemoryKeyring {
             .try_fill_bytes(&mut key_bytes)
             .map_err(|e| SecurityError::KeyGenerationFailed(format!("rng error: {e}")))?;
 
-        let hex_key = hex::encode(&key_bytes);
+        let hex_key = hex::encode(key_bytes);
         let now = chrono::Utc::now().to_rfc3339();
 
         let mut map = self

@@ -178,10 +178,7 @@ impl SubscriptionTier {
 
     /// Whether this tier supports regional zone containers in Node Topology.
     pub fn supports_regional_zones(&self) -> bool {
-        match self {
-            Self::Enterprise => true,
-            _ => false,
-        }
+        matches!(self, Self::Enterprise)
     }
 
     /// Check whether this tier allows the given workspace type.

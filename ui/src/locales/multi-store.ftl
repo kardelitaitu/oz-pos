@@ -19,3 +19,5 @@ multi-store-label-timezone = Timezone
 multi-store-label-terminals = Terminals
 multi-store-section-stores-overview = Stores overview
 multi-store-section-terminal-status = Terminal status
+topology-builder-title = Visual Store & Workspace Topology Builder
+
