@@ -119,4 +119,63 @@ test.describe('Admin Management Screens', () => {
     // Table must be visible (may be empty).
     await expect(page.locator('.promo-mgmt-table')).toBeVisible({ timeout: 5_000 });
   });
+
+  // ── Exchange Rates ────────────────────────────────────────
+
+  test('Exchange Rates section renders with table', async ({ page }) => {
+    await clickSidebarNav(page, 'Exchange Rates');
+
+    await expect(page.locator('.exchange-rate-config')).toBeVisible({ timeout: SCREEN_TIMEOUT });
+    await expect(page.locator('.exchange-rate-title')).toContainText('Exchange');
+
+    // Table must be visible (mock returns empty).
+    await expect(page.locator('.exchange-rate-table')).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ── License ───────────────────────────────────────────────
+
+  test('License section renders after loading', async ({ page }) => {
+    await clickSidebarNav(page, 'License');
+
+    // License section heading must be visible (post-load, not skeleton).
+    const licenseHeading = page.locator('.settings-section-title').filter({ hasText: 'License' });
+    await expect(licenseHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
+
+    // License status/type should render (mock returns valid Pro license).
+    await expect(page.locator('.settings-section-title').first()).toBeVisible();
+  });
+
+  // ── Features ──────────────────────────────────────────────
+
+  test('Features section renders toggle screen', async ({ page }) => {
+    await clickSidebarNav(page, 'Features');
+
+    await expect(page.locator('.feature-toggle')).toBeVisible({ timeout: SCREEN_TIMEOUT });
+    await expect(page.locator('.feature-toggle-title')).toContainText('Feature');
+
+    // Subtitle should show enabled count.
+    await expect(page.locator('.feature-toggle-subtitle')).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ── Data Management ───────────────────────────────────────
+
+  test('Data Management section renders with tabs', async ({ page }) => {
+    await clickSidebarNav(page, 'Data');
+
+    await expect(page.locator('.data-mgmt')).toBeVisible({ timeout: SCREEN_TIMEOUT });
+    await expect(page.locator('.data-mgmt-title')).toContainText('Data');
+
+    // Tab navigation must be present (Backup, Export, Import).
+    await expect(page.locator('.data-mgmt-tabs')).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ── About ─────────────────────────────────────────────────
+
+  test('About section renders version info', async ({ page }) => {
+    await clickSidebarNav(page, 'About');
+
+    // About section heading must be visible.
+    const aboutHeading = page.locator('.settings-section-title').filter({ hasText: 'About' });
+    await expect(aboutHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
+  });
 });
