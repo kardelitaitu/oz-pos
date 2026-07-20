@@ -31,7 +31,7 @@ fn bench_cart_calculate_total(c: &mut Criterion) {
     let mut cart = Cart::new(usd());
     for i in 0..20 {
         cart.add_line(CartLine::new(
-            Sku::new(&format!("SKU-{:03}", i)),
+            Sku::new(format!("SKU-{:03}", i)),
             1,
             m(500 + i as i64 * 100),
         ))
@@ -40,7 +40,7 @@ fn bench_cart_calculate_total(c: &mut Criterion) {
 
     c.bench_function("cart_total_20_items", |bencher| {
         bencher.iter(|| {
-            let total = black_box(black_box(&cart).total());
+            let total = black_box(black_box(cart.clone()).total());
             black_box(total)
         });
     });
