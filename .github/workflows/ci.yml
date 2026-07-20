@@ -69,16 +69,10 @@ jobs:
       matrix:
         shard:
           - crate: oz-core
-            path: crates/oz-core
           - crate: crates
-            path: crates/
-            exclude: oz-core
           - crate: platform
-            path: platform/
           - crate: modules
-            path: modules/
           - crate: apps
-            path: apps/
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -101,11 +95,11 @@ jobs:
               ;;
             crates)
               for crate in crates/oz-api crates/oz-cli crates/oz-hal crates/oz-logging crates/oz-lua crates/oz-payment crates/oz-plugin crates/oz-reporting crates/oz-security; do
-                cargo test -p "$(basename "$crate")" --no-fail-fast || exit 1
+                cargo test -p "$(basename "$crate")" || exit 1
               done
               ;;
             platform)
-              for crate in platform/core platform/kernel platform/startup platform/sync; do
+              for crate in foundation platform/core platform/kernel platform/startup platform/sync; do
                 cargo test -p "$(basename "$crate")" || exit 1
               done
               ;;
@@ -127,7 +121,7 @@ jobs:
   rust-test-full:
     name: Rust Test Full (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
