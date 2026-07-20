@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/**
  * E2E fixtures providing pre-authenticated page objects via Playwright
  * `storageState`. The auth fixture performs a full login once per worker
  * and serializes localStorage to disk, so every subsequent test that uses

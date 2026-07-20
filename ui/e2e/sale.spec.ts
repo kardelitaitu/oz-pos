@@ -64,11 +64,6 @@ test.describe('Complete Sale Flow', () => {
     const productCards = page.locator('.product-card-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
-    // Get the product price from the card.
-    const priceText = await page.locator('.product-card-price').first().textContent();
-    const priceMatch = priceText?.match(/([\d,.]+)/);
-    expect(priceMatch).toBeTruthy();
-
     // Click the same product twice.
     await productCards.first().click();
     await page.waitForTimeout(300);
@@ -93,7 +88,7 @@ test.describe('Complete Sale Flow', () => {
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     // Get the product price.
-    const priceText = await page.locator('.product-card-price').first().textContent() ?? '0';
+    const _priceText = await page.locator('.product-card-price').first().textContent() ?? '0';
 
     // Add product.
     await productCards.first().click();

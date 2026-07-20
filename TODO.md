@@ -1,3 +1,64 @@
+# 0.0.14 — Ecosystem & Polish
+
+> **Goal:** Close remaining Phase 5 gaps (analytics, i18n, Lighthouse), kick off Phase 6 (loyalty, plugin marketplace, theming, developer docs).
+
+**Current state:** 0 / 20 items complete · Updated 2026-07-20
+
+---
+
+## 🟡 P15 — Phase 5 Completion (Analytics & i18n)
+
+- [ ] **P15-1: Lighthouse a11y ≥ 90** — Run Lighthouse CI against all 5 SPA routes and fix any violations below 90.
+- [ ] **P15-2: Full i18n migration** — Audit all pages for hardcoded English strings outside `<Localized>` and migrate to Fluent keys.
+- [ ] **P15-3: Print Report button** — Add print-to-receipt-printer button on Sales Report, Inventory Report, and EOD Report screens.
+- [ ] **P15-4: Analytics export** — Add BigQuery/Snowflake export pipeline behind feature flag.
+- [ ] **P15-5: Scheduled report delivery** — Email PDF reports on configurable schedule.
+
+## 🟣 P16 — Phase 6: Loyalty & Promotions
+
+- [ ] **P16-1: Loyalty program engine** — Points accrual on purchase, tier thresholds, redemption at checkout.
+- [ ] **P16-2: Loyalty UI** — Customer points balance on checkout, redeem button, tier badge, management screen enhancements.
+- [ ] **P16-3: Promotions engine** — Buy-X-get-Y, % off, fixed discount, time-limited promotions with validation.
+
+## 🔵 P17 — Phase 6: Plugin Marketplace & DX
+
+- [ ] **P17-1: Stable plugin API** — Versioned API surface for third-party HAL drivers and Lua scripts.
+- [ ] **P17-2: Plugin discovery & hot-reload** — Watch `plugins/` directory, auto-load new `.lua` files without restart.
+- [ ] **P17-3: Developer docs** — `CONTRIBUTING.md`, `docs/quickstart.md`, example custom HAL driver in `oz-hal/examples/`.
+- [ ] **P17-4: `cargo doc` generation** — Build and host docs on GitHub Pages.
+
+## 🟢 P18 — Phase 6: Theming & White-Label
+
+- [ ] **P18-1: Brand colour picker** — Merchant selects primary brand colour → applies to buttons, accents, active states across the whole UI.
+- [ ] **P18-2: Logo upload** — Upload merchant logo, shown in header, on receipts, on kiosk attract screen.
+- [ ] **P18-3: Theme preview** — Live preview in Settings before applying brand changes.
+
+## ⚪ P19 — Mobile Builds (Physical)
+
+- [ ] **P19-1: Android APK build** — Produce signed APK from tablet-client via CI pipeline (requires Android SDK).
+- [ ] **P19-2: iOS IPA build** — Produce signed IPA for TestFlight distribution (requires macOS + Xcode).
+
+## 🔴 P20 — Research & Future
+
+- [ ] **P20-1: AI demand forecasting** — Research feasibility of on-device ML for product recommendations.
+- [ ] **P20-2: CRDT sync research** — Evaluate CRDT-based conflict-free replication as upgrade path from LWW.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🟡 P15 — Phase 5 Completion | 5 | 0 | ░░░░░░░░░░░░░░ 0% |
+| 🟣 P16 — Loyalty & Promotions | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
+| 🔵 P17 — Plugin Marketplace & DX | 4 | 0 | ░░░░░░░░░░░░░░ 0% |
+| 🟢 P18 — Theming & White-Label | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
+| ⚪ P19 — Mobile Builds | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
+| 🔴 P20 — Research & Future | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
+| **Total** | **20** | **0** | **0%** |
+
+---
+
 # 0.0.13 — Plugin Hardening + Sync Reliability + Performance
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.

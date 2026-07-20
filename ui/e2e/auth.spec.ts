@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { loginAs } from './helpers';
 
 /**
@@ -30,7 +30,7 @@ const VALID_PIN = '1234';
 const WRONG_PIN = '0000';
 const UNKNOWN_USER = 'nonexistent';
 
-async function enterPin(page: import('@playwright/test').Page, pin: string) {
+async function enterPin(page: Page, pin: string) {
   for (const digit of pin) {
     const key = page.locator('.staff-login-pad-key').filter({ hasText: digit });
     await key.click();

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 /**
@@ -22,14 +22,14 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 const SIDEBAR_TIMEOUT = 10_000;
 const SCREEN_TIMEOUT = 8_000;
 
-async function navigateToSettings(page: import('@playwright/test').Page) {
+async function navigateToSettings(page: Page) {
   await page.evaluate(() => {
     window.location.hash = '#/settings';
   });
   await page.waitForSelector('[data-testid="settings-sidebar"]', { timeout: SIDEBAR_TIMEOUT });
 }
 
-async function clickSidebarNav(page: import('@playwright/test').Page, sectionName: string) {
+async function clickSidebarNav(page: Page, sectionName: string) {
   const nav = page.locator('.settings-nav-item').filter({ hasText: sectionName });
   await expect(nav).toBeVisible({ timeout: 3_000 });
   await nav.click();
