@@ -1,3 +1,52 @@
+# 0.0.15 — ROADMAP Alignment & Final Features
+
+> **Goal:** Sync the ROADMAP with reality (many Phase 5/6 items done but unchecked), complete Thai i18n, implement product bundles, and build a custom report builder.
+
+**Current state:** 5 / 12 items complete · Updated 2026-07-20
+
+---
+
+## 🟡 P21 — ROADMAP Cleanup
+
+- [x] **P21-1: Check off completed Phase 5 items** ✅ — Updated ROADMAP.md: checked off Dashboard loads with real data, Lighthouse a11y ≥ 90, EN+ID i18n, barcode benchmark <1ms, report screens empty states, Print Report button, Full i18n migration. Left unchecked: cloud warehouse analytics, email PDF delivery, Thai i18n, custom report builder.
+- [x] **P21-2: Check off completed Phase 6 items** ✅ — Updated ROADMAP.md: checked off all 27 Phase 6 items (loyalty engine + UI, promotions engine + UI, product bundles + UI, KDS + UI, kiosk + UI, table management + UI, plugin API/manifest/sandbox/hot-reload, developer docs, cargo doc, theming brand/logo/preview, dark/light theme). Left unchecked: voice-controlled checkout.
+
+## 🟢 P22 — Thai i18n
+
+- [ ] **P22-1: Create Thai FTL bundles** — Create `th.ftl` files for all 48 Fluent domains with proper Thai translations
+- [ ] **P22-2: Register Thai locale** — Add `th` to locale switcher, `Intl.NumberFormat` config, and RTL considerations (Thai is LTR)
+
+## 🔵 P23 — Product Bundles
+
+- [x] **P23-1: Bundle domain type** ✅ — Already fully implemented. `crates/oz-core/src/product_bundle.rs`: ProductBundle/BundleItem/BundleWithItems domain types. `crates/oz-core/src/db/product_bundles.rs`: CRUD operations. `crates/oz-core/migrations/030_product_bundles.sql`: DB schema. Tauri commands for list/get/create/update/delete/lookup in both desktop and tablet clients. `BundleManagementScreen` with App.tsx route registration.
+- [x] **P23-2: Bundle UI** ✅ — Already implemented. `BundleManagementScreen.tsx` with full CRUD UI.
+
+## 🟣 P24 — Custom Report Builder
+
+- [ ] **P24-1: Report builder engine** — Drag-and-drop column selection, saved report configs, dynamic SQL query builder
+- [ ] **P24-2: Report builder UI** — Column picker, preview table, save/load configs, export to CSV
+
+## ⚪ P25 — Cloud Warehouse Analytics
+
+- [ ] **P25-1: Cloud warehouse research ADR** — Evaluate BigQuery/Snowflake/ClickHouse for analytics export, cost estimation, schema design
+- [ ] **P25-2: Analytics export connector** — Implement export pipeline from `AnalyticsBundle` to cloud warehouse (if ADR recommends)
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🟡 P21 — ROADMAP Cleanup | 2 | 2 | ████████████████ 100% 🎉 |
+| 🟢 P22 — Thai i18n | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
+| 🔵 P23 — Product Bundles | 2 | 2 | ████████████████ 100% 🎉 |
+| 🟣 P24 — Custom Report Builder | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
+| ⚪ P25 — Cloud Warehouse | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
+| 🔴 P26 — Voice-Controlled Checkout | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
+| **Total** | **12** | **4** | **33%** |
+
+---
+
 # 0.0.14 — Ecosystem & Polish
 
 > **Goal:** Close remaining Phase 5 gaps (analytics, i18n, Lighthouse), kick off Phase 6 (loyalty, plugin marketplace, theming, developer docs).
