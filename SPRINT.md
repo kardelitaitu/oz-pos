@@ -40,10 +40,10 @@
 ## 🛒 Sprint 4: Advanced Retail & F&B Features
 *Target: Build loyalty, promotions engine, and product bundle capabilities.*
 
-- [ ] Loyalty Program (DB schema, API, UI)
-- [ ] Promotions Engine (Lua rules for buy-X-get-Y, % off)
-- [ ] Promotions Management UI
-- [ ] Product Bundles schema & UI
+- [x] Loyalty Program (DB schema, IPC API, `LoyaltyManagementScreen` UI)
+- [x] Promotions Engine (Lua rules engine in `oz-lua`, Buy-X-Get-Y script `scripts/examples/buy_x_get_y.lua`)
+- [x] Promotions Management UI (`PromotionManagementScreen` UI)
+- [x] Product Bundles schema & UI (`bundles` IPC commands & product bundling capabilities)
 
 ---
 
