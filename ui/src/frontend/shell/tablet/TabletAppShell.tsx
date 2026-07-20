@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useOrientation } from '@/hooks/useOrientation';
 import TabletAppLayout from './TabletAppLayout';
 import SetupWizard from '@/features/setup/SetupWizard';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
@@ -23,6 +24,12 @@ import KdsScreen from '@/features/kds/KdsScreen';
  * workspace picker when no instance is selected.
  */
 export default function TabletAppShell() {
+  // P14-3: Lock to landscape-primary on tablet devices. Only need the
+  // side effect (locking the screen + listening for orientation changes).
+  // Consume `orientation.isLandscape` from the hook return if a screen
+  // needs to reflow its layout on rotation.
+  useOrientation('landscape-primary');
+
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [currentRoute, setCurrentRoute] = useState('pos');
