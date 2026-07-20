@@ -2,7 +2,7 @@
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
-**Current state:** 0 / 18 items complete (0% ⏳) · Updated 2026-07-20
+**Current state:** 2 / 18 items complete (11% ⏳) · Updated 2026-07-20
 
 ---
 

@@ -162,6 +162,13 @@ opt-level = 3
 opt-level = 3
 
 # Windows: skip DWARF debug info splitting to speed up linking after tests
+# Optimized test profile — inherits dev but reduces binary size and link time
+[profile.test]
+inherits = "dev"
+strip = "symbols"
+debug = 1
+codegen-units = 16
+
 # TDD profile: fastest possible compile for tight test loops
 [profile.tdd]
 inherits = "dev"

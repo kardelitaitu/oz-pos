@@ -1,0 +1,36 @@
+# cargo-nextest configuration for OZ-POS
+# Docs: https://nexte.st/book/configuration.html
+#
+# Usage:
+#   cargo nextest run                    # all tests
+#   cargo nextest run -p oz-core         # single crate
+#   cargo nextest run --changed          # only changed files (git diff)
+#   cargo nextest run --partition 1/4    # shard 1 of 4 (CI)
+
+[profile.default]
+# Fail-fast: stop after first failure in CI, keep going locally
+fail-fast = { status-level = "known" }
+
+# Retry flaky tests up to 2 times with exponential backoff
+retries = { backoff = "exponential", count = 2, delay = "1s" }
+
+# Per-test timeout: 2 minutes (prevents hung tests blocking CI)
+slow-timeout = { period = "120s", terminate-after = 3 }
+
+# JUnit XML output for CI reporting
+[profile.default.junit]
+path = "target/nextest/ci/junit.xml"
+report-name = "oz-pos-test"
+
+# CI profile: stricter settings
+[profile.ci]
+inherits = "default"
+fail-fast = true
+slow-timeout = { period = "90s", terminate-after = 2 }
+retries = { backoff = "exponential", count = 1, delay = "2s" }
+
+# Speed profile: single thread, no retries, fast local iteration
+[profile.quick]
+retries = 0
+test-threads = 4
+slow-timeout = { period = "30s", terminate-after = 1 }
