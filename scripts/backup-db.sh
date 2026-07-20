@@ -36,6 +36,15 @@ BACKUP_FILE="$BACKUP_DIR/oz-pos-${TIMESTAMP}.db.gz"
 
 echo "backup-db: backing up $DB_FILE → $BACKUP_FILE"
 
+# ── Integrity check (fail-fast on corruption) ────────────────────
+echo "backup-db: running integrity check..."
+INTEGRITY=$(sqlite3 "$DB_FILE" "PRAGMA integrity_check;" 2>&1)
+if [ "$INTEGRITY" != "ok" ]; then
+  echo "backup-db: ERROR — integrity check FAILED: $INTEGRITY"
+  exit 1
+fi
+echo "backup-db: integrity check PASSED"
+
 # Use sqlite3 .backup for a consistent snapshot
 sqlite3 "$DB_FILE" ".backup '${BACKUP_FILE%.gz}'"
 
@@ -44,6 +53,11 @@ gzip -f "${BACKUP_FILE%.gz}"
 
 SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 echo "backup-db: done — $BACKUP_FILE ($SIZE)"
+
+# ── Vacuum source DB (reclaim space, rebuild indexes) ────────────
+echo "backup-db: vacuuming source database..."
+sqlite3 "$DB_FILE" "VACUUM;"
+echo "backup-db: vacuum complete"
 
 # Prune old backups
 echo "backup-db: pruning backups older than $RETENTION_DAYS days..."
