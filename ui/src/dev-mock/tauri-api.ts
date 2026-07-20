@@ -105,10 +105,28 @@ const MOCK_INVENTORY_LOCATIONS = [
 ];
 
 const MOCK_WORKSPACES = [
-  { instance_id: 'ws-1', type_key: 'retail-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Retail POS', description: 'Point of Sale', icon: 'shopping-cart', layout_mode: 'default', colour: '#10b981', is_default: true },
-  { instance_id: 'ws-2', type_key: 'kitchen-display', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Kitchen Display', description: 'Order display', icon: 'utensils', layout_mode: 'kds', colour: '#f59e0b', is_default: false },
-  { instance_id: 'ws-3', type_key: 'inventory', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Inventory', description: 'Stock management', icon: 'package', layout_mode: 'default', colour: '#3b82f6', is_default: false },
+  { instance_id: 'ws-1', type_key: 'store-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart', layout_mode: 'default', colour: '#10b981', is_default: true },
+  { instance_id: 'ws-2', type_key: 'restaurant-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: '#ef4444', is_default: false },
+  { instance_id: 'ws-3', type_key: 'kds', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Kitchen Display', description: 'Order display', icon: 'utensils', layout_mode: 'kds', colour: '#f59e0b', is_default: false },
+  { instance_id: 'ws-4', type_key: 'inventory', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Inventory Management', description: 'Stock management', icon: 'package', layout_mode: 'default', colour: '#3b82f6', is_default: false },
+  { instance_id: 'ws-5', type_key: 'admin', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Admin', description: 'Settings & management', icon: 'settings', layout_mode: 'default', colour: '#8b5cf6', is_default: false },
 ];
+
+// ── Lockout state (for E2E rate-limit tests) ──────────────────
+const loginAttempts: Record<string, number> = {};
+const LOCKOUT_THRESHOLD = 5;
+// LOCKOUT_DURATION_MS = 30_000 is defined for documentation;
+// the mock uses a simple attempt-count lockout that resets on
+// successful login to keep the dev loop fast.
+
+// ── Cart state (for realistic E2E totals) ───────────────────────
+interface CartLine {
+  sku: string;
+  name: string;
+  price: { minor_units: number; currency: string };
+  qty: number;
+}
+let cartState: { lines: CartLine[] } = { lines: [] };
 
 // ── Invoke handler ─────────────────────────────────────────────
 const handlers: Record<string, (args: unknown) => unknown> = {
@@ -125,10 +143,22 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'staff_login': (args) => {
     const { username, pin } = args as { username: string; pin: string };
-    const staff = MOCK_STAFF[username.toLowerCase()];
+    const key = username.toLowerCase();
+    const staff = MOCK_STAFF[key];
+
+    // Check lockout.
+    const attempts = loginAttempts[key] ?? 0;
+    if (attempts >= LOCKOUT_THRESHOLD) {
+      throw new Error('Account locked. Too many failed attempts.');
+    }
+
     if (!staff || pin !== staff.pin_hash) {
+      loginAttempts[key] = attempts + 1;
       throw new Error('Invalid credentials');
     }
+
+    // Reset on success.
+    delete loginAttempts[key];
     return {
       session: {
         user_id: staff.user_id,
@@ -369,15 +399,56 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // SALES / CART
   // ═══════════════════════════════════════════════════════════════
 
-  'start_sale': () => ({ cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }),
-  'start_sale_scoped': () => ({ cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }),
+  'start_sale': () => { cartState = { lines: [] }; return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
+  'start_sale_scoped': () => { cartState = { lines: [] }; return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
 
-  'add_line': () => ({ lineId: `mock-line-${Date.now()}`, lineTotal: null }),
-  'add_line_scoped': () => ({ lineId: `mock-line-${Date.now()}`, lineTotal: null }),
+  'add_line': (args) => {
+    const { productSku, qty } = (args as { productSku?: string; qty?: number }) ?? {};
+    const product = MOCK_PRODUCTS.find(p => p.sku === productSku);
+    if (product) {
+      const existing = cartState.lines.find(l => l.sku === productSku);
+      if (existing) {
+        existing.qty += qty ?? 1;
+      } else {
+        cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty: qty ?? 1 });
+      }
+    }
+    const lineTotal = product ? product.price.minor_units * (qty ?? 1) : 0;
+    return { lineId: `mock-line-${Date.now()}`, lineTotal };
+  },
+  'add_line_scoped': (args) => {
+    const { productSku, qty } = (args as { productSku?: string; qty?: number }) ?? {};
+    const product = MOCK_PRODUCTS.find(p => p.sku === productSku);
+    if (product) {
+      const existing = cartState.lines.find(l => l.sku === productSku);
+      if (existing) {
+        existing.qty += qty ?? 1;
+      } else {
+        cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty: qty ?? 1 });
+      }
+    }
+    const lineTotal = product ? product.price.minor_units * (qty ?? 1) : 0;
+    return { lineId: `mock-line-${Date.now()}`, lineTotal };
+  },
 
-  'complete_sale': () => ({ saleId: `mock-sale-${Date.now()}`, total: { minor_units: 0, currency: 'IDR' }, lineCount: 0 }),
-  'complete_sale_scoped': () => ({ saleId: `mock-sale-${Date.now()}`, total: { minor_units: 0, currency: 'IDR' }, lineCount: 0 }),
-  'complete_sale_with_resolved_shortfalls_scoped': () => ({ saleId: `mock-sale-${Date.now()}`, total: { minor_units: 0, currency: 'IDR' }, lineCount: 0 }),
+  'complete_sale': () => {
+    const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
+    const lineCount = cartState.lines.length;
+    cartState = { lines: [] };
+    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+  },
+  'complete_sale_scoped': () => {
+    const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
+    const lineCount = cartState.lines.length;
+    cartState = { lines: [] };
+    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+  },
+  'complete_sale_with_resolved_shortfalls_scoped': () => {
+    const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
+    const lineCount = cartState.lines.length;
+    cartState = { lines: [] };
+    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+  },
 
   'get_sale': () => null,
   'get_sale_scoped': () => null,

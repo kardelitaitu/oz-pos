@@ -2002,6 +2002,7 @@ export default function SettingsPage() {
         {/* ── Sidebar ────────────────────────────────── */}
         <aside
           className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}${mobileSidebarOpen ? ' mobile-open' : ''}`}
+          data-testid="settings-sidebar"
           aria-label={l10n.getString('settings-sidebar-nav-aria')}
         >
           <div className="settings-sidebar-header">

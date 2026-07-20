@@ -457,7 +457,7 @@ export default function WorkspaceHome() {
 
   if (showSkeleton) {
     return (
-      <div className="workspace-home">
+      <div className="workspace-home" data-testid="workspace-home">
         {/* Layer 1: Background */}
         <LayerBackground />
 
@@ -562,7 +562,7 @@ export default function WorkspaceHome() {
   // ── Main render ─────────────────────────────────────────────
 
   return (
-    <div className="workspace-home">
+    <div className="workspace-home" data-testid="workspace-home">
       {/* Layer 1: Background */}
       <LayerBackground />
 

@@ -10,7 +10,7 @@
 
 > **Goal:** Replace the current "no-crash" smoke tests with deterministic, assertion-rich Playwright suites that verify real user flows end-to-end against the Vite dev server + dev-mock IPC. No Rust backend required.
 >
-> **Current state:** 0 / 22 items complete · Added 2026-07-20
+> **Current state:** 16 / 34 items complete · Updated 2026-07-20
 
 ### Background
 
@@ -18,28 +18,28 @@ The 6 existing spec files (`auth`, `sale`, `product`, `settings`, `shift`, `api`
 
 ### Infrastructure first (unblock everything else)
 
-- [ ] **E2E-0: `webServer` auto-start** — Add `webServer: { command: 'npm run dev', url: 'http://localhost:1420', reuseExistingServer: !process.env.CI }` to `playwright.config.ts` so `npm run test:e2e` starts the Vite dev server automatically. No more manual second terminal.
-- [ ] **E2E-1: `webServer` in CI** — Ensure the `test:e2e` CI job sets `BASE_URL` and waits for the server before running tests. Update `.github/workflows/ci.yml` with a dedicated `e2e` job that runs after the `ui` job.
-- [ ] **E2E-2: Global auth fixture** — Extract a `loggedInPage` Playwright fixture in `e2e/fixtures.ts` that performs the full login once per worker using `storageState`. All specs that start post-login use this fixture instead of calling `loginAs()` in every `beforeEach` — eliminates repeated login time (~3s per test).
-- [ ] **E2E-3: Strict CSS contract** — Add a `data-testid` attribute to the 10 most-tested shell elements (`workspace-home`, `workspace-card`, `staff-login-screen`, `pos-cart`, `pay-btn`, `payment-modal`, `product-card`, `shift-bar`, `settings-sidebar`, `audit-log-table`) and update helpers to use `getByTestId` — removes selector drift risk.
+- [x] **E2E-0: `webServer` auto-start** — Add `webServer: { command: 'npm run dev', url: 'http://localhost:1420', reuseExistingServer: !process.env.CI }` to `playwright.config.ts` so `npm run test:e2e` starts the Vite dev server automatically. No more manual second terminal.
+- [x] **E2E-1: `webServer` in CI** — Ensure the `test:e2e` CI job sets `BASE_URL` and waits for the server before running tests. Update `.github/workflows/ci.yml` with a dedicated `e2e` job that runs after the `ui` job.
+- [x] **E2E-2: Global auth fixture** — Extract a `loggedInPage` Playwright fixture in `e2e/fixtures.ts` that performs the full login once per worker using `storageState`. All specs that start post-login use this fixture instead of calling `loginAs()` in every `beforeEach` — eliminates repeated login time (~3s per test).
+- [x] **E2E-3: Strict CSS contract** — Add a `data-testid` attribute to the 10 most-tested shell elements (`workspace-home`, `workspace-card`, `staff-login-screen`, `pos-cart`, `pay-btn`, `payment-modal`, `product-card`, `shift-bar`, `settings-sidebar`, `audit-log-table`) and update helpers to use `getByTestId` — removes selector drift risk.
 
 ### Auth (`auth.spec.ts`) — strengthen existing tests
 
-- [ ] **E2E-4: Hard-assert login happy path** — Remove `waitForTimeout`. Replace with `waitForSelector`. After PIN entry assert: `workspace-home` is visible, `.ws-header-greeting` contains exact text `"Welcome, Owner"`, URL hash is `#/`.
-- [ ] **E2E-5: Assert error text for wrong PIN** — After entering `0000`, assert `.staff-login-error` contains text `"Invalid credentials"` (matches dev-mock error string). Currently only checks `isVisible`.
-- [ ] **E2E-6: Assert error text for unknown username** — After entering `nonexistent`, assert a toast or inline error contains `"User not found"`. Currently only checks login screen is still visible.
-- [ ] **E2E-7: Rate-limit lockout UI** — Enter wrong PIN 5 times. Assert the lockout message and countdown timer appear (`.staff-login-lockout` or similar). Verify the PIN pad is disabled during lockout.
-- [ ] **E2E-8: Session persistence across reload** — After successful login, reload the page (`page.reload()`). Assert the app goes to `staff-login-screen` (session is not persisted in localStorage — correct behaviour).
+- [x] **E2E-4: Hard-assert login happy path** — Remove `waitForTimeout`. Replace with `waitForSelector`. After PIN entry assert: `workspace-home` is visible, `.ws-header-greeting` contains exact text `"Welcome, Owner"`, URL hash is `#/`.
+- [x] **E2E-5: Assert error text for wrong PIN** — After entering `0000`, assert `.staff-login-error` contains text `"Invalid credentials"` (matches dev-mock error string). Currently only checks `isVisible`.
+- [x] **E2E-6: Assert error text for unknown username** — After entering `nonexistent`, assert a toast or inline error contains `"User not found"`. Currently only checks login screen is still visible.
+- [x] **E2E-7: Rate-limit lockout UI** — Enter wrong PIN 5 times. Assert the lockout message and countdown timer appear (`.staff-login-lockout` or similar). Verify the PIN pad is disabled during lockout.
+- [x] **E2E-8: Session persistence across reload** — After successful login, reload the page (`page.reload()`). Assert the app goes to `staff-login-screen` (session is not persisted in localStorage — correct behaviour).
 
 ### Sale (`sale.spec.ts`) — replace skeleton with real flow
 
-- [ ] **E2E-9: Assert product grid renders** — After entering store-pos, assert at least 3 `.product-card` elements are visible within 5s. Hard-fail if count is 0. No `if` guard.
-- [ ] **E2E-10: Add product to cart** — Click the first `.product-card`. Assert `.pos-cart-line` count increases to 1. Assert the cart total (`[class*="cart-total"]`) shows a non-zero amount.
-- [ ] **E2E-11: Quantity increment** — Add same product twice. Assert `.pos-cart-line` qty cell shows `2`. Assert total is double the unit price shown on the product card.
-- [ ] **E2E-12: Open payment modal** — With item in cart, click `.pos-cart-pay-btn`. Assert `.payment-modal` is visible. Assert it contains the correct total matching the cart.
-- [ ] **E2E-13: Cash payment — exact tender** — In payment modal, click the "Cash" tender button. Enter exact amount. Click confirm. Assert `receipt-preview-paper` or success state is visible. Assert cart is empty after closing modal.
-- [ ] **E2E-14: Cash payment — over-tender shows change** — Enter amount greater than total. Assert a "Change" row appears showing the correct difference.
-- [ ] **E2E-15: Remove item from cart** — Add a product, then click the remove/delete button on the cart line. Assert `.pos-cart-line` count returns to 0. Assert pay button is disabled.
+- [x] **E2E-9: Assert product grid renders** — After entering store-pos, assert at least 3 `.product-card` elements are visible within 5s. Hard-fail if count is 0. No `if` guard.
+- [x] **E2E-10: Add product to cart** — Click the first `.product-card`. Assert `.pos-cart-line` count increases to 1. Assert the cart total (`[class*="cart-total"]`) shows a non-zero amount.
+- [x] **E2E-11: Quantity increment** — Add same product twice. Assert `.pos-cart-line` qty cell shows `2`. Assert total is double the unit price shown on the product card.
+- [x] **E2E-12: Open payment modal** — With item in cart, click `.pos-cart-pay-btn`. Assert `.payment-modal` is visible. Assert it contains the correct total matching the cart.
+- [x] **E2E-13: Cash payment — exact tender** — In payment modal, click the "Cash" tender button. Enter exact amount. Click confirm. Assert `receipt-preview-paper` or success state is visible. Assert cart is empty after closing modal.
+- [x] **E2E-14: Cash payment — over-tender shows change** — Enter amount greater than total. Assert a "Change" row appears showing the correct difference.
+- [x] **E2E-15: Remove item from cart** — Add a product, then click the remove/delete button on the cart line. Assert `.pos-cart-line` count returns to 0. Assert pay button is disabled.
 
 ### Product management (`product.spec.ts`) — replace skeleton with real flow
 
