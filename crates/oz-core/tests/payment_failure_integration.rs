@@ -72,15 +72,6 @@ fn new_sale(id: &str, lines: Vec<SaleLine>, total_minor: i64) -> Sale {
     }
 }
 
-fn adjust_stock(s: &Store<'_>, conn: &Connection, sku: &str, delta: i64) {
-    let tx = conn.unchecked_transaction().unwrap();
-    let loc =
-        oz_core::inventory::LocationId::from(oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID);
-    s.adjust_stock_at_location_with_reason(&tx, sku, delta, &loc, Some("test"), None, None, None)
-        .unwrap();
-    tx.commit().unwrap();
-}
-
 fn get_stock(s: &Store<'_>, sku: &str) -> i64 {
     let id = s.product_id_by_sku(sku).unwrap().unwrap();
     s.get_stock(&id).unwrap()
@@ -94,7 +85,7 @@ fn complete_sale_then_void_restores_stock() {
     let s = store(&conn);
 
     // Seed product with stock.
-    let p = s
+    let _p = s
         .create_product("COFFEE", "Espresso", price(350), None, None, 100, None)
         .unwrap();
     assert_eq!(get_stock(&s, "COFFEE"), 100);

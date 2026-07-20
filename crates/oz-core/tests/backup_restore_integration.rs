@@ -38,13 +38,6 @@ fn price(minor: i64) -> Money {
     }
 }
 
-/// Seed a product with initial stock.
-fn seed_product(conn: &Connection, sku: &str, name: &str, initial_stock: i64) {
-    store(conn)
-        .create_product(sku, name, price(1000), None, None, initial_stock, None)
-        .unwrap();
-}
-
 /// Run migrations on a connection.
 fn run_migrations(conn: &mut Connection) {
     // migrations::fresh_db() creates an in-memory DB with migrations.
