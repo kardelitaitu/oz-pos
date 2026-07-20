@@ -77,7 +77,7 @@ export function useCanvasChart(
 
     const canvas = canvasRef.current;
     const parent = canvas?.parentElement;
-    if (!parent) return;
+    if (typeof ResizeObserver === 'undefined') return;
 
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(scheduleDraw);

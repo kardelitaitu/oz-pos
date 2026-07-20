@@ -43,7 +43,9 @@ export function useKeyboardAvoidance({
     const visibleBottom = Math.min(containerRect.bottom, keyboardTop);
     if (elRect.bottom > visibleBottom - scrollPadding) {
       const scrollNeeded = elRect.bottom - visibleBottom + scrollPadding;
-      container.scrollBy({ top: scrollNeeded, behavior: 'smooth' });
+      if (typeof container.scrollBy === 'function') {
+        container.scrollBy({ top: scrollNeeded, behavior: 'smooth' });
+      }
     }
   }, [scrollPadding]);
 
