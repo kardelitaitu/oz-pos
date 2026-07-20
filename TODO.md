@@ -40,7 +40,49 @@
 
 ---
 
-# 0.0.14 — Test Optimization Sprint
+# 0.0.14 — Error Handling & Observability
+
+> **Goal:** Harden error handling across the stack, add structured logging/metrics, implement backup/restore, and add failure-injection E2E tests.
+
+**Current state:** 0 / 8 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P32 — Error Handling Hardening
+
+- [ ] **P32-1: Audit error propagation** — Audit all `unwrap()`/`expect()` calls in production code paths. Replace with proper `?` propagation or `.unwrap_or_else()` with logging. Target: zero panics in Tauri commands, cloud server handlers, and sync engine.
+
+- [ ] **P32-2: User-facing error messages** — Audit all error responses returned to the UI. Ensure they are i18n-friendly (error codes, not raw Rust strings). Add `ErrorCode` enum and map DB/platform errors to user-readable codes + Fluent keys.
+
+- [ ] **P32-3: Retry with backoff hardening** — Verify all network calls (sync push/pull, payment gateway, license check) have exponential backoff retry. Add jitter to prevent thundering herd. Set max retries (3) and total timeout (30s).
+
+- [ ] **P32-4: Graceful degradation** — When cloud-server is unreachable, the POS should keep working offline. Verify: cart operations, product lookup, shift open/close, receipt printing all work without server. Add offline indicator UX.
+
+## 🟡 P33 — Logging & Observability
+
+- [ ] **P33-1: Structured logging** — Switch from `eprintln!`/`console.log` to structured JSON logging via `tracing` crate. Add request ID propagation (correlation IDs) across Tauri commands → backend → DB queries. Log to file with rotation (10 MB × 5 files).
+
+- [ ] **P33-2: Health dashboard** — Add a `/health` page in the admin workspace showing: DB connectivity, sync queue depth, last sync timestamp, disk usage, CPU/memory. Poll every 30s with visual green/yellow/red status.
+
+- [ ] **P33-3: Prometheus metrics** — Add metrics endpoints to cloud-server: request count, latency histogram, error rate, active connections, sync queue depth. Expose via `/metrics` for Prometheus scraping.
+
+- [ ] **P33-4: Alert thresholds** — Define alert thresholds: sync queue > 100 items, error rate > 5%, disk > 80%, DB connection failures. Document in operations runbook. Wire into health dashboard UI.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P32 — Error Handling Hardening | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P33 — Logging & Observability | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **8** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
+# 0.0.14 — Production Hardening
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
