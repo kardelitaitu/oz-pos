@@ -1,3 +1,43 @@
+# 0.0.14 — Database Optimization & Developer Experience
+
+> **Goal:** Audit and optimize database performance (WAL mode, indexes, vacuum), and polish developer tooling (pre-commit hooks, devcontainer, scripts).
+
+**Current state:** 0 / 7 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P42 — Database Optimization
+
+- [ ] **P42-1: WAL mode audit** — Verify SQLite is configured with WAL journal mode. Audit pragma settings (synchronous, cache_size, mmap_size). Add PRAGMA enforcement in migrations.
+
+- [ ] **P42-2: Index audit** — Run `EXPLAIN QUERY PLAN` on top 10 most frequent queries. Identify missing indexes. Add covering indexes for product lookup, sale listing, and inventory queries.
+
+- [ ] **P42-3: Vacuum & integrity** — Add periodic VACUUM + integrity_check to backup script. Document in runbook.
+
+- [ ] **P42-4: Connection pool audit** — Verify SQLite connection pooling is correctly configured. Check for connection leaks in cloud-server.
+
+## 🟡 P43 — Developer Experience
+
+- [ ] **P43-1: Pre-commit hook hardening** — Audit `.githooks/pre-commit`. Add `cargo clippy -- -D warnings` check for staged Rust files. Ensure hook runs in < 3s.
+
+- [ ] **P43-2: Dev environment setup script** — Audit `scripts/setup-dev.ps1` and `scripts/setup-cache.ps1`. Ensure they work on a clean checkout.
+
+- [ ] **P43-3: Scripts audit** — Run all scripts in `scripts/` directory. Flag broken scripts, missing chmod, platform incompatibilities.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P42 — Database Optimization | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P43 — Developer Experience | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **7** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — CI/CD Hardening & Security Scanning
 
 > **Goal:** Harden CI pipelines, add SAST/container scanning, optimize caching, and add automated security gates.
