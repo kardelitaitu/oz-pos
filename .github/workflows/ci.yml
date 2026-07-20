@@ -297,7 +297,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push E2E cloud-server image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.server
@@ -315,6 +315,8 @@ jobs:
     name: E2E Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    permissions:
+      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -344,20 +346,21 @@ jobs:
         run: cd ui && npm ci --no-audit --no-fund
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
-      # P28-1: Docker layer caching — pull pre-built GHCR image
-      # as cache source to reuse layers
+      # P28-1: Docker layer caching — pull pre-built GHCR image then
+      # build with BuildKit inline cache to reuse layers from the pulled image
       - name: Docker layer cache (GHCR)
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
           docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
+          export DOCKER_BUILDKIT=1
+          docker compose -f docker-compose.e2e.yml build --build-arg BUILDKIT_INLINE_CACHE=1 2>&1 | tail -3
       # P28-2: Parallel server startup — Docker + Vite concurrently
       - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
           OZ_API_SECRET: ci-test-secret
         run: |
-          # Start Docker Compose in background
-          docker compose -f docker-compose.e2e.yml up -d &
-          DOCKER_PID=$!
+          # Start Docker Compose
+          docker compose -f docker-compose.e2e.yml up -d
           # Start Vite dev server in background
           cd ui && npm run dev &
           VITE_PID=$!
