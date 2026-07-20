@@ -266,6 +266,33 @@ jobs:
           fi
           echo "Binary size check passed"
 
+  # ── Coverage gate (non-blocking, informational) ─────────────────
+  coverage:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Run coverage (workspace)
+        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: lcov.info
+          retention-days: 7
+
   # ── Skill drift tests ────────────────────────────────────────────
   skill-drift-tests:
     name: Skill drift tests
