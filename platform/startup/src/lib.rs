@@ -5,7 +5,7 @@
 
 //! Shared application startup for OZ-POS desktop and tablet clients.
 //!
-//! Both [`apps/desktop-client`] and [`apps/tablet-client`] call this crate
+//! Both `apps/desktop-client` and `apps/tablet-client` call this crate
 //! to avoid duplicating module registration and event handler wiring.
 //!
 //! The background sync daemon remains in each client because it depends on
