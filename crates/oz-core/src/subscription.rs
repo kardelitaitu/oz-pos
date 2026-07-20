@@ -533,47 +533,48 @@ mod tests {
     #[test]
     fn tier_max_stores() {
         assert_eq!(SubscriptionTier::Free.max_stores(), Some(1));
-        assert_eq!(SubscriptionTier::Pro.max_stores(), Some(2));
-        assert_eq!(SubscriptionTier::Premium.max_stores(), Some(5));
+        assert_eq!(SubscriptionTier::OneTime.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Standard.max_stores(), Some(1));
+        assert_eq!(SubscriptionTier::Pro.max_stores(), None);
+        assert_eq!(SubscriptionTier::Premium.max_stores(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_stores(), None);
     }
 
     #[test]
     fn tier_max_pos_instances() {
         assert_eq!(SubscriptionTier::Free.max_pos_instances(), Some(1));
-        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), Some(3));
-        assert_eq!(SubscriptionTier::Premium.max_pos_instances(), Some(10));
+        assert_eq!(SubscriptionTier::OneTime.max_pos_instances(), Some(1));
+        assert_eq!(SubscriptionTier::Standard.max_pos_instances(), Some(2));
+        assert_eq!(SubscriptionTier::Pro.max_pos_instances(), None);
+        assert_eq!(SubscriptionTier::Premium.max_pos_instances(), None);
         assert_eq!(SubscriptionTier::Enterprise.max_pos_instances(), None);
     }
 
     #[test]
     fn tier_allows_workspace_type() {
-        // Free tier
+        // Free tier & OneTime
         assert!(SubscriptionTier::Free.allows_workspace_type("store-pos"));
         assert!(SubscriptionTier::Free.allows_workspace_type("admin"));
         assert!(!SubscriptionTier::Free.allows_workspace_type("kds"));
-        // ADR-18 §13 finding 37 (migration 091): post-rename, Free tier
-        // excludes 'warehouse' the same way it excluded 'inventory' pre-§.
         assert!(!SubscriptionTier::Free.allows_workspace_type("warehouse"));
 
-        // Pro tier
+        // Standard tier
+        assert!(SubscriptionTier::Standard.allows_workspace_type("warehouse"));
+        assert!(SubscriptionTier::Standard.allows_workspace_type("kds"));
+
+        // Pro & Enterprise tier allow all
+        assert!(SubscriptionTier::Pro.allows_workspace_type("kds"));
+        assert!(SubscriptionTier::Pro.allows_workspace_type("analytics-pro"));
         assert!(SubscriptionTier::Pro.allows_workspace_type("warehouse"));
-        assert!(!SubscriptionTier::Pro.allows_workspace_type("kds"));
-
-        // Premium tier
-        assert!(SubscriptionTier::Premium.allows_workspace_type("kds"));
-        assert!(SubscriptionTier::Premium.allows_workspace_type("analytics-pro"));
-        assert!(SubscriptionTier::Premium.allows_workspace_type("warehouse"));
-
-        // Enterprise
         assert!(SubscriptionTier::Enterprise.allows_workspace_type("anything"));
     }
 
     #[test]
     fn tier_name() {
-        assert_eq!(SubscriptionTier::Free.name(), "Free");
+        assert_eq!(SubscriptionTier::Free.name(), "Free Trial");
+        assert_eq!(SubscriptionTier::OneTime.name(), "1-Time Perpetual");
+        assert_eq!(SubscriptionTier::Standard.name(), "Standard");
         assert_eq!(SubscriptionTier::Pro.name(), "Pro");
-        assert_eq!(SubscriptionTier::Premium.name(), "Premium");
         assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
     }
 
