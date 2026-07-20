@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 
 // ── Mocks ─────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ describe('ShiftBar', () => {
   // ── Empty / Start Form State ──────────────────────────────────
 
   it('shows start form when no active shift exists', async () => {
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByText('Start Inventory Shift')).toBeInTheDocument();
     });
@@ -89,7 +89,7 @@ describe('ShiftBar', () => {
   });
 
   it('loads locations into the dropdown', async () => {
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
     await waitFor(() => {
       const select = screen.getByRole('combobox', { name: /location/i });
       expect(select).toBeInTheDocument();
@@ -101,7 +101,7 @@ describe('ShiftBar', () => {
 
   it('calls startInventoryShift on form submit', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Start Shift')).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe('ShiftBar', () => {
 
   it('shows active shift info with timer and end button', async () => {
     mockGetActiveShift.mockResolvedValue(activeShift);
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
 
     await waitFor(() => {
       // Fluent interpolates as "Test Cashier — Main Warehouse — Started 01:00:00"
@@ -142,7 +142,7 @@ describe('ShiftBar', () => {
   it('calls onShiftChange callback when shift is loaded', async () => {
     const onShiftChange = vi.fn();
     mockGetActiveShift.mockResolvedValue(activeShift);
-    renderWithFluentSync(<ShiftBar onShiftChange={onShiftChange} />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar onShiftChange={onShiftChange} />, inventoryFtl);
 
     await waitFor(() => {
       expect(onShiftChange).toHaveBeenCalledWith(activeShift);
@@ -155,7 +155,7 @@ describe('ShiftBar', () => {
     const user = userEvent.setup();
     mockGetActiveShift.mockResolvedValue(activeShift);
     mockListTransactions.mockResolvedValue(transactions);
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
 
     // Wait for active shift to load
     await waitFor(() => {
@@ -181,7 +181,7 @@ describe('ShiftBar', () => {
     const user = userEvent.setup();
     mockGetActiveShift.mockResolvedValue(activeShift);
     mockListTransactions.mockResolvedValue([]);
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('End Shift')).toBeInTheDocument();
@@ -197,7 +197,7 @@ describe('ShiftBar', () => {
   it('closes summary modal when Close button is clicked', async () => {
     const user = userEvent.setup();
     mockGetActiveShift.mockResolvedValue(activeShift);
-    renderWithFluentSync(<ShiftBar />, inventoryFtl);
+    renderWithProvidersSync(<ShiftBar />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('End Shift')).toBeInTheDocument();
