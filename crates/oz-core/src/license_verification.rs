@@ -5,8 +5,8 @@
 //! - HTTP client calls to the PocketBase license server for activation,
 //!   renewal, and status checks.
 //!
-//! The public key is embedded at build time via [`LICENSE_PUBLIC_KEY_PEM`].
-//! The server URL is [`LICENSE_SERVER_URL`] with env var override.
+//! The public key is embedded at build time via `LICENSE_PUBLIC_KEY_PEM`.
+//! The server URL is `LICENSE_SERVER_URL` with env var override.
 
 use base64::Engine;
 use rsa::RsaPublicKey;

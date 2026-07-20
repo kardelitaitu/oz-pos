@@ -1,6 +1,6 @@
 //! Void sale command — void a completed sale and restore stock.
 //!
-//! Delegates to [`Store::void_sale`] which handles the status transition,
+//! Delegates to `Store::void_sale` which handles the status transition,
 //! stock restoration, and audit logging inside a single transaction.
 
 use serde::Deserialize;

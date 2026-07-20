@@ -1,6 +1,6 @@
 //! Authorization helpers for Tauri commands.
 //!
-//! Provides [`require_permission`] and [`require_permission_for_user`]
+//! Provides `require_permission` and `require_permission_for_user`
 //! to verify that the caller has the required permission.
 
 use oz_core::db::Store;

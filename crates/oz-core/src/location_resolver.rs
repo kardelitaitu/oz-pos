@@ -451,8 +451,8 @@ pub fn resolve_all_locations(
 ///
 /// **This function never executes deductions.** It is a read-only computation
 /// for the cashier UI to show alternative locations with live stock counts.
-/// The caller (typically [`crate::db::Store::complete_sale`]) uses the
-/// returned vec to populate [`crate::sale_deduction::Shortfall::alternatives`].
+/// The caller (typically `crate::db::Store::complete_sale`) uses the
+/// returned vec to populate `crate::sale_deduction::Shortfall::alternatives`.
 ///
 /// Returns all bound locations (in priority order) that have stock > 0 for
 /// the given SKU, along with the available quantity at each. The cashier UI

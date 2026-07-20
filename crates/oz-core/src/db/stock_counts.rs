@@ -1,7 +1,7 @@
 //! Physical inventory / stock counting database operations.
 //!
-//! Provides CRUD for [`StockCount`], [`StockCountLine`], and
-//! [`StockAdjustment`] records, plus the `complete_stock_count`
+//! Provides CRUD for `StockCount`, `StockCountLine`, and
+//! `StockAdjustment` records, plus the `complete_stock_count`
 //! workflow that finalises a count, creates adjustment records,
 //! and updates inventory quantities.
 

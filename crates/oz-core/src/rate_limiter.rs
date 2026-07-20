@@ -1,7 +1,7 @@
 //! Sliding-window rate limiter for login PIN attempts.
 //!
-//! Tracks failed PIN attempts per username. After [`LoginRateLimiter::max_attempts`]
-//! failures within [`LoginRateLimiter::window_secs`], the username is locked out
+//! Tracks failed PIN attempts per username. After `LoginRateLimiter::max_attempts`
+//! failures within `LoginRateLimiter::window_secs`, the username is locked out
 //! until the oldest attempt falls outside the window.
 
 use std::collections::HashMap;
