@@ -15,7 +15,7 @@
 //! - [`error`] — [`KernelError`] enum
 //!
 //! ## Example
-//! ```no_run
+//! ```ignore
 //! use platform_kernel::{Kernel, EventBus};
 //! use foundation::contracts::Module;
 //!

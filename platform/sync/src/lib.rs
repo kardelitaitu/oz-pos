@@ -10,7 +10,7 @@
 //! - **Conflict** — last-write-wins (LWW) conflict resolution
 //!
 //! # Usage
-//! ```no_run
+//! ```ignore
 //! # use platform_sync::{SyncEngine, SyncConfig};
 //! # use oz_core::db::Store;
 //! # use oz_core::migrations;

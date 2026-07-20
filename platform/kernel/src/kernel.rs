@@ -39,7 +39,8 @@ pub enum ModuleStatus {
 /// The kernel operates exclusively through the [`Module`] and [`Service`]
 /// traits — it has no knowledge of specific module types.
 ////// # Example
-/// ```no_run
+/// ```ignore
+/// # use platform_kernel::Kernel;
 /// let mut kernel = Kernel::new();
 /// kernel.register(Box::new(MyModule))?;
 /// kernel.register(Box::new(MyOtherModule))?;

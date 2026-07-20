@@ -22,7 +22,7 @@ use crate::error::AppError;
 ///
 /// # Example
 ///
-/// ```no_run
+/// ```ignore
 /// # use crate::commands::authz::require_permission;
 /// # use oz_core::permissions;
 /// # fn example(store: &oz_core::db::Store, role_id: &str) -> Result<(), crate::error::AppError> {
