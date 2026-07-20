@@ -21,6 +21,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **Promotions Engine**: Added `PromotionType` engine (BuyXGetY, PercentageOff, FixedAmount) with campaign scheduling and a management UI.
 
 #### 🔌 Ecosystem & DX
+- **Test Infrastructure**: Migrated workspace testing to `cargo-nextest`, speeding up TDD loops by **4.5×** (from ~1m48s to ~24s execution time). Added dedicated `[profile.test]` with optimized debug/strip settings.
 - **Stable Plugin API**: Formalized v1.0 API backward compatibility guarantees and documented the 5 HAL driver traits (`BarcodeScanner`, `ReceiptPrinter`, etc.).
 - **Hot-Reloading**: Added background file watcher for `plugins/` that seamlessly reloads the Lua runtime without restart when scripts change.
 - **Developer Docs**: Overhauled `CONTRIBUTING.md`, `QUICKSTART.md`, and added a custom driver example.
