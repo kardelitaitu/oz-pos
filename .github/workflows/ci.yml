@@ -293,6 +293,26 @@ jobs:
           path: lcov.info
           retention-days: 7
 
+  # ── Dependency audit (non-blocking, informational) ───────────────
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Run cargo audit
+        run: cargo audit || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run npm audit
+        run: cd ui && npm audit --audit-level=high || true
+
   # ── Skill drift tests ────────────────────────────────────────────
   skill-drift-tests:
     name: Skill drift tests

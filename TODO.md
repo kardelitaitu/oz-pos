@@ -2,13 +2,13 @@
 
 > **Goal:** Lock down production readiness — security audit, performance profiling, error handling, and observability.
 
-**Current state:** 0 / 8 items complete (0% ⏳) · Updated 2026-07-20
+**Current state:** 1 / 8 items complete (13% ⏳) · Updated 2026-07-20
 
 ---
 
 ## 🔴 P30 — Security Hardening
 
-- [ ] **P30-1: Dependency audit** — Run `cargo audit` and `npm audit` to find known vulnerabilities. Fix or suppress with documented rationale. Add to CI as non-blocking informational job.
+- [x] **P30-1: Dependency audit** ✅ — `cargo audit`: 4 findings (unic-* unmaintained, glib unsound, spin yanked), all transitive deps, documented with rationale in `docs/security/audit-2026-07-20.md`. `npm audit`: 0 vulnerabilities across 542 deps. Added CI `audit` job (non-blocking, `continue-on-error: true`).
 
 - [ ] **P30-2: Secrets scan** — Run `trufflehog` or `gitleaks` on the repo to detect any accidentally committed secrets, API keys, or tokens. Add pre-commit hook + CI job.
 
@@ -32,9 +32,9 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 P30 — Security Hardening | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🔴 P30 — Security Hardening | 4 | 1 | ████░░░░░░░░░░░░ 25% ⏳ |
 | 🟡 P31 — Performance Profiling | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
-| **Total** | **8** | **0** | **0% ⏳** |
+| **Total** | **8** | **1** | **13% ⏳** |
 
 <br>
 
