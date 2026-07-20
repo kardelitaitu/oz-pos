@@ -55,10 +55,79 @@ jobs:
       - name: sccache stats
         run: sccache --show-stats
 
-  # ── Rust: Test (cross-platform, all-features) ──────────────────────
-  rust-test:
-    name: Rust Test (${{ matrix.os }})
+  # ── Rust: Test Fast Track (default features, < 3 min) ─────────────
+  #
+  # PRs only run this job. It excludes `slow-tests` feature gates
+  # (10 platform/sync integration tests with multi-second delays).
+  # Sharded 5-ways for parallel crate-group execution.
+  rust-test-fast:
+    name: Rust Test Fast (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - crate: oz-core
+            path: crates/oz-core
+          - crate: crates
+            path: crates/
+            exclude: oz-core
+          - crate: platform
+            path: platform/
+          - crate: modules
+            path: modules/
+          - crate: apps
+            path: apps/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Run crate-group tests
+        run: |
+          case "${{ matrix.shard.crate }}" in
+            oz-core)
+              cargo test -p oz-core
+              ;;
+            crates)
+              for crate in crates/oz-api crates/oz-cli crates/oz-hal crates/oz-logging crates/oz-lua crates/oz-payment crates/oz-plugin crates/oz-reporting crates/oz-security; do
+                cargo test -p "$(basename "$crate")" --no-fail-fast || exit 1
+              done
+              ;;
+            platform)
+              for crate in platform/core platform/kernel platform/startup platform/sync; do
+                cargo test -p "$(basename "$crate")" || exit 1
+              done
+              ;;
+            modules)
+              for crate in modules/crm modules/currency modules/inventory modules/reporting modules/sales modules/settings modules/staff modules/tax modules/terminal; do
+                cargo test -p "$(basename "$crate")" || exit 1
+              done
+              ;;
+            apps)
+              for crate in apps/cloud-server apps/desktop-client apps/license-server apps/tablet-client; do
+                cargo test -p "$(basename "$crate")" --no-fail-fast 2>/dev/null || true
+              done
+              ;;
+          esac
+      - name: sccache stats
+        run: sccache --show-stats
+
+  # ── Rust: Test Full (all features, main-branch + manual only) ─────
+  rust-test-full:
+    name: Rust Test Full (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

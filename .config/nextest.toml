@@ -9,7 +9,7 @@
 
 [profile.default]
 # Fail-fast: stop after first failure in CI, keep going locally
-fail-fast = { status-level = "known" }
+fail-fast = { max-fail = 1 }
 
 # Retry flaky tests up to 2 times with exponential backoff
 retries = { backoff = "exponential", count = 2, delay = "1s" }
