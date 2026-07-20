@@ -2,7 +2,7 @@
 
 > **Goal:** Close remaining Phase 5 gaps (analytics, i18n, Lighthouse), kick off Phase 6 (loyalty, plugin marketplace, theming, developer docs).
 
-**Current state:** 15 / 20 items complete · Updated 2026-07-20
+**Current state:** 18 / 20 items complete · Updated 2026-07-20
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## 🔵 P17 — Phase 6: Plugin Marketplace & DX
 
-- [ ] **P17-1: Stable plugin API** — Versioned API surface for third-party HAL drivers and Lua scripts.
+- [x] **P17-1: Stable plugin API** ✅ — `docs/plugin-guide.md` enhanced with API versioning section: semantic versioning independent of app version (current: v1.0), backward compatibility guarantees, deprecation policy (1 minor version notice before removal), runtime feature detection via `oz.api_version()`. Added HAL driver API surface documentation: 5 driver traits (BarcodeScanner, ReceiptPrinter, CashDrawer, CustomerDisplay, NfcReader) with registration via plugin.toml. API Changelog documents all v1.0 functions. Custom driver example at `crates/oz-hal/examples/custom_barcode_scanner.rs`.
 - [x] **P17-2: Plugin discovery & hot-reload** ✅ — Already implemented. `apps/desktop-client/src/state.rs`: background file watcher (`notify` crate) monitors `plugins/` directory, detects `.lua` file changes, calls `runtime.reload_all()`. Logs success/failure with tracing. Robust error handling — keeps old runtime on reload failure.
 - [x] **P17-3: Developer docs** ✅ — `CONTRIBUTING.md` (branch naming, commit conventions, PR checklist, review guide, skills docs), `docs/QUICKSTART.md` (prerequisites, build, test, lint, troubleshooting), `crates/oz-hal/examples/custom_barcode_scanner.rs` (BarcodeScanner trait implementation with 6 tests).
 - [x] **P17-4: `cargo doc` generation** ✅ — Created `.github/workflows/docs.yml`: generates `cargo doc --workspace --no-deps --document-private-items` (excluding Tauri apps to avoid webkit2gtk in CI), deploys to GitHub Pages via `actions/deploy-pages@v4`. Preserves the cargo doc workspace index for inter-crate navigation. Copies `docs/html/` hub assets alongside. Uses sccache + rust-cache for speed. Triggers on push to main (Rust/doc files only) + manual `workflow_dispatch`. Concurrency group prevents overlapping deployments.
@@ -40,8 +40,8 @@
 
 ## 🔴 P20 — Research & Future
 
-- [ ] **P20-1: AI demand forecasting** — Research feasibility of on-device ML for product recommendations.
-- [ ] **P20-2: CRDT sync research** — Evaluate CRDT-based conflict-free replication as upgrade path from LWW.
+- [x] **P20-1: AI demand forecasting** ✅ — Research ADR at `docs/decisions/2026-07-20-ai-demand-forecasting-research.md`. Evaluated: data availability (sufficient — 7 structured report types), 3 ML runtimes (ONNX Runtime, burn-rs, TFLite — recommended ONNX), model training pipeline (offline Python → ONNX → on-device inference), performance (<50ms for 500 products), privacy (all data stays local). **Recommendation: Defer to post-1.0** — infrastructure is ready (P15-4 analytics export), but implementation effort (2–3 weeks) better spent on core reliability.
+- [x] **P20-2: CRDT sync research** ✅ — Research ADR at `docs/decisions/2026-07-20-crdt-sync-research.md`. Evaluated 3 CRDT libraries (Automerge, Yrs, crdts) against the current LWW hybrid approach. **Recommendation: Stay with current approach** — the delta ledger already implements a practical CRDT for inventory, SQL queryability is critical for POS reporting, and incremental improvements (LWW-Register for reference data, Lamport clocks) deliver most of the benefit with a fraction of the migration effort.
 
 ---
 
@@ -51,11 +51,11 @@
 |------|-------|------|----------|
 | 🟡 P15 — Phase 5 Completion | 5 | 5 | ████████████████ 100% 🎉 |
 | 🟣 P16 — Loyalty & Promotions | 3 | 3 | ████████████████ 100% 🎉 |
-| 🔵 P17 — Plugin Marketplace & DX | 4 | 3 | ██████████████ 75% |
+| 🔵 P17 — Plugin Marketplace & DX | 4 | 4 | ████████████████ 100% 🎉 |
 | 🟢 P18 — Theming & White-Label | 3 | 3 | ████████████████ 100% 🎉 |
 | ⚪ P19 — Mobile Builds | 2 | 2 | ████████████████ 100% 🎉 |
-| 🔴 P20 — Research & Future | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
-| **Total** | **20** | **15** | **75%** |
+| 🔴 P20 — Research & Future | 2 | 2 | ████████████████ 100% 🎉 |
+| **Total** | **20** | **18** | **90%** |
 
 ---
 

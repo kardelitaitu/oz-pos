@@ -54,7 +54,82 @@ Plugins are loaded from the `plugins/` directory at startup:
 3. Lua scripts are loaded into a sandboxed VM
 4. Scripts can register hooks by calling `oz.register_hook(name, function)`
 
-## Available Lua API
+## API Versioning
+
+The OZ-POS Plugin API follows **semantic versioning** independent of the
+main application version. The current stable API version is **v1.0**.
+
+### Version Guarantees
+
+| Guarantee | Description |
+|-----------|-------------|
+| **Backward compatibility** | Plugins written for API v1.0 will work on all future v1.x releases |
+| **Deprecation notice** | Deprecated APIs are marked with `@deprecated` for at least one minor version before removal |
+| **Migration path** | Breaking changes go through a major version bump (v2.0) with documented migration guides |
+| **Feature detection** | Plugins can check `oz.api_version` at runtime to conditionally use newer APIs |
+
+### Checking API Version at Runtime
+
+```lua
+local api_ver = oz.api_version()
+if api_ver.major >= 2 then
+  oz.log("info", "Using v2+ API features")
+end
+```
+
+### Deprecation Policy
+
+1. APIs marked for deprecation log a warning on first use
+2. Deprecated APIs remain functional for at least one minor version
+3. Removal happens only in a major version bump
+4. Migration guides are published with each major version
+
+## HAL Driver API Surface
+
+Third-party hardware drivers implement the traits defined in `crates/oz-hal/`.
+Each trait is versioned independently and follows the same backward compatibility
+guarantees as the Lua API.
+
+### Available Driver Traits (v1.0)
+
+| Trait | Crate | Description |
+|-------|-------|-------------|
+| `BarcodeScanner` | `oz-hal` | Connect, poll for scans, cancel pending reads |
+| `ReceiptPrinter` | `oz-hal` | Print receipts, barcodes, QR codes, cash drawer kick |
+| `CashDrawer` | `oz-hal` | Open drawer, detect drawer state |
+| `CustomerDisplay` | `oz-hal` | Show/hide messages, update totals |
+| `NfcReader` | `oz-hal` | Read NFC tags/cards, emulate tags |
+
+### Implementing a Custom Driver
+
+See `crates/oz-hal/examples/custom_barcode_scanner.rs` for a complete,
+tested example of implementing the `BarcodeScanner` trait for custom hardware.
+
+Key requirements:
+1. Implement the trait methods (`connect`, `poll`, `cancel`, `device_info`)
+2. Return `oz_hal::HalError` for all error paths
+3. Register the driver via `plugin.toml`:
+
+```toml
+[drivers]
+barcode_scanner = { type = "custom", path = "my_scanner.lua" }
+receipt_printer = { type = "escpos", vendor_id = "0x04b8", product_id = "0x0202" }
+```
+
+## API Changelog
+
+### v1.0 (current)
+
+- `oz.log(level, message)`
+- `oz.get_setting(key)`
+- `oz.get_product(sku)`
+- `oz.get_cart()`
+- `oz.apply_discount(line_or_cart, percent)`
+- `oz.calc_line_tax(line)`
+- `oz.get_time()`
+- `oz.register_hook(name, function)`
+- `oz.api_version()`
+- HAL traits: BarcodeScanner, ReceiptPrinter, CashDrawer, CustomerDisplay, NfcReader
 
 ### `oz` Global Table
 
