@@ -140,10 +140,48 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-always: true
+      - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies + Playwright
         run: |
           cd ui && npm ci --no-audit --no-fund
           npx playwright install chromium --with-deps
+      - name: Docker layer cache (GHCR, non-fatal)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
+          docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
+          export DOCKER_BUILDKIT=1
+          docker compose -f docker-compose.e2e.yml build --build-arg BUILDKIT_INLINE_CACHE=1 2>&1 | tail -3
+      - name: Start Docker E2E backend + Vite dev server (parallel)
+        env:
+          OZ_API_SECRET: ci-e2e-secret
+        run: |
+          docker compose -f docker-compose.e2e.yml up -d
+          cd ui && npm run dev &
+          VITE_PID=$!
+          echo "VITE_PID=$VITE_PID" >> $GITHUB_ENV
+          # Wait for both servers to become healthy
+          DOCKER_READY=false
+          VITE_READY=false
+          for i in $(seq 1 45); do
+            if [ "$DOCKER_READY" != "true" ] && curl -sf http://localhost:3099/api/v1/health > /dev/null 2>&1; then
+              echo "Docker backend ready (attempt $i)"
+              DOCKER_READY=true
+            fi
+            if [ "$VITE_READY" != "true" ] && curl -sf http://localhost:1420 > /dev/null 2>&1; then
+              echo "Vite dev server ready (attempt $i)"
+              VITE_READY=true
+            fi
+            if [ "$DOCKER_READY" = "true" ] && [ "$VITE_READY" = "true" ]; then
+              echo "Both servers ready (attempt $i)"
+              break
+            fi
+            if [ "$i" -eq 45 ]; then
+              echo "::error::Server startup timed out (Docker: $DOCKER_READY, Vite: $VITE_READY)"
+              docker compose -f docker-compose.e2e.yml logs e2e-cloud-server --tail=50 2>/dev/null || true
+              exit 1
+            fi
+            sleep 2
+          done
       - name: Run E2E tests
         run: cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop --shard=${{ matrix.shard }}/3 2>&1 | tee e2e-output.log
       - name: Upload E2E results
@@ -153,6 +191,9 @@ jobs:
           name: e2e-nightly-shard-${{ matrix.shard }}
           path: ui/e2e-results/
           retention-days: 7
+      - name: Stop Docker E2E backend
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
 
   # ── Benchmarks ────────────────────────────────────────────────────
   benchmarks:

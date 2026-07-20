@@ -329,6 +329,36 @@ jobs:
       - name: Run npm audit
         run: cd ui && npm audit --audit-level=high || true
 
+  # ── Fuzz tests (non-blocking, informational) ─────────────────────
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 10
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+      - name: Fuzz targets (60s each)
+        run: |
+          for target in sku_parse money_parse cart_deser; do
+            echo "::group::Fuzzing $target"
+            timeout 65 cargo fuzz run "$target" -- -max_total_time=60 || true
+            echo "::endgroup::"
+          done
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-ci
+          path: fuzz/artifacts/
+          retention-days: 30
+
   # ── Skill drift tests ────────────────────────────────────────────
   skill-drift-tests:
     name: Skill drift tests
