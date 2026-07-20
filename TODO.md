@@ -1,96 +1,30 @@
-# 0.0.14 — Test Optimization Sprint
+# 0.0.14 — Production Hardening
 
-> **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
+> **Goal:** Lock down production readiness — security audit, performance profiling, error handling, and observability.
 
-**Current state:** 19 / 19 items complete (100% 🎉) · Updated 2026-07-20
-
-> **⚡ Nextest is now the default in CI** — All `cargo test` calls replaced with `cargo nextest run --profile ci`. `scripts/test-changed.sh` and `scripts/test-tdd.sh` now default to nextest.
+**Current state:** 0 / 8 items complete (0% ⏳) · Updated 2026-07-20
 
 ---
 
-## 🔴 P26 — Rust Test Compilation & Execution Speed
+## 🔴 P30 — Security Hardening
 
-**Goal:** Cut Rust test CI time from serial crate compilation to a parallel, cached, nextest-powered pipeline.
+- [ ] **P30-1: Dependency audit** — Run `cargo audit` and `npm audit` to find known vulnerabilities. Fix or suppress with documented rationale. Add to CI as non-blocking informational job.
 
-### Background
+- [ ] **P30-2: Secrets scan** — Run `trufflehog` or `gitleaks` on the repo to detect any accidentally committed secrets, API keys, or tokens. Add pre-commit hook + CI job.
 
-Currently `cargo test --workspace --all-features` compiles every crate from scratch under `profile.dev` (opt-level=0, debug=true, codegen-units=256, no strip). No `[profile.test]` section exists. Tests run serially inside each crate binary via the default test harness. The workspace has 28 members, so a full compilation + test pass can take 5–10+ minutes depending on cache state.
+- [ ] **P30-3: Input validation hardening** — Audit all Tauri command inputs for missing validation: SQL injection vectors, path traversal, oversized payloads. Add length limits + allowlist checks where missing.
 
-### Checklist
+- [ ] **P30-4: Rate limiting hardening** — Verify cloud-server rate limit buckets cover all endpoints. Add integration tests for 429 responses with Retry-After headers.
 
-- [x] **P26-1: Add `[profile.test]`** ✅ — Already implemented. Inherits from `dev` with `strip = "symbols"`, `debug = 1`, `codegen-units = 16`. Baseline: 2m 09s compile, 4,661 tests in ~1m 48s execution.
+## 🟡 P31 — Performance Profiling
 
-- [x] **P26-2: cargo-nextest** ✅ — v0.9.133 installed. Config at `.config/nextest.toml` with fail-fast, retries (2× exp backoff), 120s slow-timeout, JUnit XML, `ci`/`quick` profiles. Runs with `--all-features` to match CI. Re-run execution: **25.3s** for 3,801 tests vs **~1m 48s** (`cargo test`) — **4.5× faster**. Doctests run separately via `cargo test --doc` (~12s). Updated `scripts/check.sh` and `scripts/check.ps1` to prefer nextest + doctests, with cargo test fallback.
+- [ ] **P31-1: Run criterion benchmarks** — Execute `cargo bench` on money_bench, cart_bench, barcode_lookup, and transaction_commit. Record baseline numbers in `docs/benchmarks/`.
 
-- [x] **P26-3: Default-features fast track in CI** ✅ — Split `rust-test` into `rust-test-fast` (PR-only, 5-way sharded, default features, excludes `slow-tests`) and `rust-test-full` (push-to-main + workflow_dispatch only, all features, cross-platform linux+windows). PRs skip the full suite entirely — only fast track runs. Estimated PR CI time: **< 3 min** (5 parallel shards × ~2 min each).
+- [ ] **P31-2: Profile hottest code paths** — Use `cargo flamegraph` on the top 3 Tauri commands (get_products, create_sale, list_sales). Identify N+1 queries or allocation hotspots.
 
-- [x] **P26-4: Crate-level test sharding in CI** ✅ — 5-way GitHub Actions matrix shard: `oz-core` (largest, alone), `crates/` (9 oz-* crates), `platform/` (4 crates), `modules/` (9 crates), `apps/` (4 crates). Each shard is a parallel `rust-test-fast` job with independent sccache. Apps shard uses `|| true` for crates that may not compile in CI (Tauri).
+- [ ] **P31-3: CI pipeline timing** — Time each CI job across a cold-cache run. Identify the slowest step in each job. Set concrete SLOs (e.g., rust-test-fast < 3 min, ui-test < 2 min).
 
-- [x] **P26-5: `--changed` / `--affected` detection** ✅ — Created `scripts/test-changed.sh`: uses `git diff --name-only origin/main` to detect changed `.rs`/`Cargo.toml` files, extracts crate paths via regex, deduplicates, and runs `cargo test` per-crate. Workspace `Cargo.toml` changes trigger full suite. Options: `--all`, `--check` (list-only), `--nextest`. Gracefully handles missing base branch with auto-fetch.
-
-- [x] **P26-6: Activate `tdd` profile** ✅ — Created `scripts/test-tdd.sh`: sets `CARGO_PROFILE=tdd` (debug=false, incremental=true), auto-detects crate from cwd by walking up to find `[package]` in Cargo.toml. Options: `-p <crate>`, `--nextest`, `--watch` (cargo-watch for auto re-run). Fastest possible edit-compile-test cycle for local TDD.
-
----
-
-## 🟠 P27 — UI Test Performance
-
-**Goal:** Reduce Vitest runtime, split monolithic test files, and improve developer DX with faster watch-mode feedback.
-
-### Background
-
-UI tests are ~46,000 lines across 12 files in `ui/src/__tests__/` — averaging **~3,800 lines per file**. Large files slow down Vitest's file-watching, module resolution, and per-file re-run in watch mode. The current `vitest run` is a single monolithic pass with no sharding.
-
-### Checklist
-
-- [x] **P27-1: Split large test files** ✅ — Already addressed. Test files grew from 12 monolithic files (~3,800 lines avg) to 158 focused files (max 984 lines, most under 500). The single-screen/single-hook pattern is well-established in `ui/src/__tests__/`. No further splitting needed.
-
-- [x] **P27-2: Vitest sharding in CI** ✅ — 4-way GitHub Actions matrix shard (`--shard=1/4` through `4/4`). Each shard runs a subset of the 158 test files in parallel. i18n quality gate only runs on shard 1 to avoid duplicate checks. Estimated impact: **3–4× faster UI test CI**.
-
-- [x] **P27-3: `--changed` / `--affected` for UI** ✅ — Created `scripts/test-ui-changed.sh`: uses `vitest --changed=$BASE_BRANCH` to run only tests affected by changed `.ts`/`.tsx`/`.ftl`/`.css` files. Options: `--all`, `--check` (list affected files only), `--pool=forks`. Default pool: threads for local speed.
-
-- [x] **P27-4: `--pool=forks` isolation** ✅ — CI ui-test job now uses `--pool=forks` for module-level side-effect detection. Local watch mode stays with default `pool: 'threads'` for speed. The `--pool` flag in CI overrides the config file default.
-
-- [x] **P27-5: Vitest cache warm-up** ✅ — Added `actions/cache@v4` step to persist `node_modules/.cache/vitest/` across CI runs. Cache keyed on `package-lock.json` hash with OS-level restore key fallback. Eliminates redundant module transformation on cache hit.
-
----
-
-## 🟡 P28 — E2E Infrastructure & Speed
-
-**Goal:** Reduce the E2E CI pipeline from ~20 min to under 8 min by parallelizing server startup, sharding test files, and optimizing Docker image caching.
-
-### Background
-
-The E2E job currently starts Docker Compose (up to 90s health check) + Vite dev server (up to 60s health check) — ~2.5 min of infrastructure before any test runs. All 15 spec files run serially against one Playwright project. Timeout is 20 min.
-
-### Checklist
-
-- [x] **P28-1: Docker layer caching** ✅ — Added GHCR pull step to reuse pre-built image layers as cache source. `e2e-docker-image` job builds with `cache-from: type=gha, cache-to: type=gha,mode=max` on main push. Cuts Docker build from ~3 min to ~30s on cache hit.
-
-- [x] **P28-2: Parallel server startup** ✅ — Docker Compose and Vite dev server now start concurrently in single step with background `&`. Both health checks run in the same loop, checking each server independently and tracking readiness via boolean flags. Cuts startup from ~2.5 min to ~1.5 min.
-
-- [x] **P28-3: Playwright sharding** ✅ — 3-way GitHub Actions matrix shard (`--shard=1/3`, `2/3`, `3/3`). Each shard runs a subset of E2E spec files in parallel. Artifact names include shard index to avoid conflicts. Estimated impact: **3× faster E2E pipeline**.
-
-- [x] **P28-4: Pre-built E2E Docker image** ✅ — Added `e2e-docker-image` job (push-to-main only) that builds `Dockerfile.server` via `docker/build-push-action@v6` with GHCR push. Uses GHA cache for layer reuse. E2E job pulls pre-built image as cache source on PRs.
-
----
-
-## 🟢 P29 — Test Coverage & Benchmarking
-
-**Goal:** Close coverage gaps in under-tested crates, add baseline benchmarks, and enforce quality gates.
-
-### Background
-
-The workspace has 28 members but only a handful have meaningful test suites. `criterion` is already a workspace dependency but is unused. Several crates (`oz-api`, `oz-lua`, `oz-plugin`, `oz-security`, `oz-reporting`, `oz-cli`) have unknown or minimal test coverage.
-
-### Checklist
-
-- [x] **P29-1: Coverage audit** ✅ — Created `docs/coverage/README.md` with per-crate coverage targets (oz-core ≥ 70%, workspace ≥ 50%, UI lines ≥ 50%). Documents llvm-cov and vitest --coverage commands. Baseline: 1,474 oz-core tests, 230 oz-hal tests.
-
-- [x] **P29-2: Minimum coverage gate** ✅ — Added non-blocking `coverage` CI job using `cargo llvm-cov --workspace --all-features --lcov`. `continue-on-error: true` so it never blocks PRs. Uploads `lcov.info` artifact with 7-day retention. Uses `taiki-e/install-action@v2` for cargo-llvm-cov.
-
-- [x] **P29-3: Criterion benchmarks** ✅ — Added `money_bench.rs` (5 benchmarks: checked_add, checked_sub, checked_mul, checked_div, serde roundtrip) and `cart_bench.rs` (3 benchmarks: add_line, total with 20 items, product lookup by SKU). Both use correct foundation APIs (checked_* methods, CartLine::new, Cart::add_line). Existing barcode_lookup and transaction_commit benchmarks preserved.
-
-- [x] **P29-4: Flaky test retry policy** ✅ — Created `scripts/report-flaky.sh`: runs tests N times (default 3), parses nextest JSON output to detect intermittent failures, reports flaky candidates with failure counts. Nextest retry config already in `.config/nextest.toml` (retries = 2, exponential backoff). Quarantine process documented in script output.
+- [ ] **P31-4: Bundle size audit** — Measure the desktop app binary size and UI JS bundle size. Identify largest dependencies. Set max budget (e.g., desktop < 50 MB, UI < 2 MB gzipped).
 
 ---
 
@@ -98,13 +32,21 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 P26 — Rust Test Compilation & Execution | 6 | 6 | ████████████████ 100% 🎉 |
-| 🟠 P27 — UI Test Performance | 5 | 5 | ████████████████ 100% 🎉 |
-| 🟡 P28 — E2E Infrastructure & Speed | 4 | 4 | ████████████████ 100% 🎉 |
-| 🟢 P29 — Test Coverage & Benchmarking | 4 | 4 | ████████████████ 100% 🎉 |
-| **Total** | **19** | **19** | **100% 🎉** |
+| 🔴 P30 — Security Hardening | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P31 — Performance Profiling | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **8** | **0** | **0% ⏳** |
 
 <br>
+
+---
+
+# 0.0.14 — Test Optimization Sprint
+
+> **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
+
+**Current state:** 19 / 19 items complete (100% 🎉) · Updated 2026-07-20
+
+> **⚡ Nextest is now the default in CI** — All `cargo test` calls replaced with `cargo nextest run --profile ci`.
 
 ---
 
