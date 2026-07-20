@@ -195,7 +195,7 @@ pub fn validate_ascii_alphanumeric(
 
 /// Validate that a trimmed string matches a regular expression pattern.
 ///
-/// The pattern is applied via [`Regex::is_match`], which searches for a
+/// The pattern is applied via `Regex::is_match`, which searches for a
 /// match anywhere in the string. To validate the **entire** string, use
 /// `^` and `$` anchors in your pattern.
 ///

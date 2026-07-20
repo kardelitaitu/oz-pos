@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Localized } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
 import './TransitAuditScreen.css';
 
@@ -13,6 +14,7 @@ const TRANSIT_EXPIRY_HOURS = 24;
 export default function TransitAuditScreen() {
   const [transfers, setTransfers] = useState<TransferWithLines[]>([]);
   const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
 
   const loadTransfers = async () => {
     setLoading(true);
@@ -43,8 +45,9 @@ export default function TransitAuditScreen() {
     try {
       await cancelStockTransfer(id);
       await loadTransfers();
+      addToast({ message: 'Stock transfer reversed successfully', type: 'success' });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reverse transfer');
+      addToast({ message: err instanceof Error ? err.message : 'Failed to reverse transfer', type: 'error' });
     }
   };
 

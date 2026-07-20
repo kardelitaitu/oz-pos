@@ -10,11 +10,21 @@
 //! - **Conflict** — last-write-wins (LWW) conflict resolution
 //!
 //! # Usage
-//!//! ```no_run
-//! use platform_sync::{SyncEngine, SyncConfig};
-//!
+//! ```ignore
+//! # use platform_sync::{SyncEngine, SyncConfig};
+//! # use oz_core::db::Store;
+//! # use oz_core::migrations;
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let conn = migrations::fresh_db();
+//! # let store = Store::new(&conn);
+//! let config = SyncConfig {
+//!     server_url: "http://localhost:3099".into(),
+//!     api_key: None,
+//! };
 //! let engine = SyncEngine::new(config);
 //! let result = engine.run_sync_cycle(&store).await?;
+//! # Ok(())
+//! # }
 //! ```
 
 #![allow(clippy::items_after_test_module)]

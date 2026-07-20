@@ -18,7 +18,7 @@ export const WORKSPACES = {
  *
  * Uses the dev-mock Tauri IPC which accepts:
  *   - owner / 1234  (role: owner)
- *   - admin / admin123  (role: manager)
+ *   - admin / 9999     (role: manager)
  *   - kasir / 1234  (role: cashier)
  */
 export async function loginAs(
@@ -28,8 +28,8 @@ export async function loginAs(
 ): Promise<void> {
   await page.goto('/');
 
-  // Wait for the login screen using its CSS class.
-  await page.waitForSelector('.staff-login-screen', { timeout: 15_000 });
+  // Wait for the login screen using data-testid.
+  await page.getByTestId('staff-login-screen').waitFor({ timeout: 15_000 });
 
   // Enter username into the input with class `staff-login-input`.
   const usernameInput = page.locator('.staff-login-input').first();
@@ -60,15 +60,15 @@ export async function loginAs(
 /**
  * Select a workspace from the workspace picker (WorkspaceHome).
  *
- * WorkspaceHome renders workspace cards (`.workspace-card`) with
- * an `<h2 class="workspace-card-name">` containing the workspace name.
+ * Uses `data-testid="workspace-card"` for selector robustness.
+ * Matches by the workspace display name via `.filter({ hasText })`.
  */
 export async function selectWorkspace(
   page: Page,
   typeKey: string,
 ): Promise<void> {
-  // Wait for the workspace picker title.
-  await page.waitForSelector('.workspace-home', { timeout: 10_000 });
+  // Wait for the workspace picker.
+  await page.getByTestId('workspace-home').waitFor({ timeout: 10_000 });
 
   // Map type_key to the display name used in FALLBACK_WORKSPACES.
   const workspaceNames: Record<string, string> = {
@@ -82,8 +82,8 @@ export async function selectWorkspace(
   const name = workspaceNames[typeKey];
   if (!name) throw new Error(`Unknown workspace type_key: ${typeKey}`);
 
-  // Find the workspace card with matching name.
-  const card = page.locator('.workspace-card').filter({ hasText: name });
+  // Find the workspace card with matching name (prefer testid).
+  const card = page.getByTestId('workspace-card').filter({ hasText: name });
   await expect(card).toBeVisible({ timeout: 5_000 });
 
   // The card is a <button> — click it to activate the workspace.
@@ -91,6 +91,20 @@ export async function selectWorkspace(
 
   // Wait for navigation to complete.
   await page.waitForTimeout(2_000);
+}
+
+/**
+ * Navigate to a hash route.
+ *
+ * Pass just the route name (e.g. "dashboard", "settings") — the "#/"
+ * prefix is prepended automatically. The page.evaluate sets
+ * window.location.hash, and each test's toBeVisible() provides
+ * its own auto-wait for DOM + visibility.
+ */
+export async function navigateTo(page: Page, route: string): Promise<void> {
+  await page.evaluate((hash) => {
+    window.location.hash = hash;
+  }, `#/${route}`);
 }
 
 /**

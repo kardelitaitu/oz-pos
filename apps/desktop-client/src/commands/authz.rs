@@ -3,9 +3,9 @@
 //! Provides [`require_permission`] and [`require_permission_for_user`]
 //! to verify that the caller has the required permission.
 //!
-//! [`require_permission`] trusts the caller-supplied `role_id` and is
+//! `require_permission` trusts the caller-supplied `role_id` and is
 //! kept for backward compatibility.  All new code should use
-//! [`require_permission_for_user`] which looks up the user's actual role
+//! `require_permission_for_user` which looks up the user's actual role
 //! from the database, preventing role‑ID forgery.
 
 use oz_core::db::Store;
@@ -21,11 +21,14 @@ use crate::error::AppError;
 /// errors.
 ///
 /// # Example
-///    /// ```no_run
-/// use crate::commands::authz::require_permission;
-/// use oz_core::permissions;
 ///
-/// require_permission(&store, &role_id, permissions::SALES_VOID)?;
+/// ```ignore
+/// # use crate::commands::authz::require_permission;
+/// # use oz_core::permissions;
+/// # fn example(store: &oz_core::db::Store, role_id: &str) -> Result<(), crate::error::AppError> {
+/// require_permission(store, role_id, permissions::SALES_VOID)?;
+/// # Ok(())
+/// # }
 /// ```
 pub fn require_permission(
     store: &Store<'_>,

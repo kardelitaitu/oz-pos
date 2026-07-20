@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
@@ -21,6 +22,7 @@ interface ShiftBarProps {
 export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
+  const { addToast } = useToast();
 
   const [activeShift, setActiveShift] = useState<InventoryShift | null>(null);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -95,7 +97,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setNotes('');
       if (onShiftChange) onShiftChange(shift);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to start shift');
+      addToast({ message: err instanceof Error ? err.message : 'Failed to start shift', type: 'error' });
     }
   };
 
@@ -125,7 +127,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setActiveShift(null);
       if (onShiftChange) onShiftChange(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to end shift');
+      addToast({ message: err instanceof Error ? err.message : 'Failed to end shift', type: 'error' });
     }
   };
 
@@ -133,7 +135,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
 
   return (
     <>
-      <div className="inventory-shift-bar" role="region" aria-label="Shift Info">
+      <div className="inventory-shift-bar" data-testid="shift-bar" role="region" aria-label="Shift Info">
         {activeShift ? (
           <div className="shift-status-active" aria-live="polite">
             <div className="status-indicator" />

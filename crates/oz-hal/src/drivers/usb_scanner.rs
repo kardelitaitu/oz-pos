@@ -1,6 +1,6 @@
 //! USB HID barcode scanner driver.
 //!
-//! Implements [`BarcodeScanner`] using raw USB interrupt transfers via
+//! Implements `BarcodeScanner` using raw USB interrupt transfers via
 //! `rusb`. Supports barcode scanners that present as generic HID keyboard
 //! devices (HID usage ID 0x06, Keyboard), which covers most retail
 //! scanners in their factory-default configuration.

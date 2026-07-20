@@ -29,7 +29,7 @@ use crate::types::{Barcode, DeviceInfo};
 /// Default baud rate for Bluetooth SPP barcode scanners.
 ///
 /// Most BT scanners default to 9600 baud in SPP mode. Some high-speed
-/// models support 115200; configure via [`Self::new()`].
+/// models support 115200; configure via `Self::new()`.
 pub const DEFAULT_BAUD: u32 = 9600;
 
 /// A barcode scanner driven through a Bluetooth serial (SPP) connection.

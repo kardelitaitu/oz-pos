@@ -1,0 +1,41 @@
+.custom-report { padding: var(--space-4); max-width: 1200px; margin: 0 auto; }
+.custom-report-header { margin-bottom: var(--space-4); }
+.custom-report-title { font-size: var(--font-size-xl); font-weight: 700; color: var(--color-fg-primary); }
+.custom-report-config-card { margin-bottom: var(--space-4); }
+.custom-report-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; margin-bottom: var(--space-3); }
+.custom-report-field { display: flex; flex-direction: column; gap: var(--space-1); }
+.custom-report-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-fg-secondary); }
+.custom-report-select,
+.custom-report-input {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg-primary);
+  font-size: var(--font-size-sm);
+  min-height: 36px;
+}
+.custom-report-columns-section { margin-bottom: var(--space-3); }
+.custom-report-columns-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
+.custom-report-col-checkbox {
+  display: flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-hover);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  min-height: 36px;
+  user-select: none;
+}
+.custom-report-col-checkbox:hover { border-color: var(--color-accent); }
+.custom-report-error { color: var(--color-danger); padding: var(--space-3) 0; }
+.custom-report-result-card { margin-top: var(--space-4); }
+.custom-report-result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
+.custom-report-section-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-fg-primary); }
+.custom-report-table-wrap { overflow-x: auto; }
+.custom-report-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.custom-report-table th,
+.custom-report-table td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--color-border); }
+.custom-report-table th { font-weight: 600; color: var(--color-fg-secondary); background: var(--color-bg-hover); position: sticky; top: 0; }
+.custom-report-table tbody tr:hover { background: var(--color-bg-hover); }

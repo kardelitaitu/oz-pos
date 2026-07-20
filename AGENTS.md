@@ -22,6 +22,33 @@ Without this `core.hooksPath` set, all four gates are silently bypassed at commi
 
 For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), see [`scripts/check.sh`](./scripts/check.sh). For the full first-time setup walkthrough (4 gates explained, chmod, verify hint), see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](./.agents/skills/onboarding-guide/SKILL.md#first-time-setup).
 
+## Codebase Knowledge Graph (graphify)
+
+The project has a pre-built knowledge graph at `graphify-out/graph.json`
+(13,719 nodes, 34,187 edges) covering the entire codebase — Rust crates,
+React/TypeScript UI, documentation, i18n, and CI configs. Use it to navigate
+unfamiliar code without reading every file.
+
+| Command | What it does | Best for |
+|---------|-------------|----------|
+| `graphify query "<question>"` | BFS traversal — finds relevant nodes and edges | Understanding architecture, finding dependencies |
+| `graphify query "<question>" --dfs` | Depth-first traversal — follows a chain | Tracing a specific call path or dependency chain |
+| `graphify path "A" "B"` | Shortest path between two concepts | Checking if two modules are connected |
+| `graphify explain "<node>"` | Everything connected to a node | Learning what a type/trait/hook touches |
+
+### Agent workflow
+
+- **At session start:** run `graphify --watch .` in the background to auto-rebuild
+the graph on file saves (AST-only, no LLM cost, deterministic).
+- **When stuck on unfamiliar code:** use `graphify query`/`path`/`explain` to
+navigate the graph instead of reading every file manually.
+- **On commit:** the post-commit hook (already installed) auto-rebuilds the graph
+so it stays in sync across sessions.
+
+The graph is persisted in `graphify-out/` (gitignored). Doc changes (`.md`, `.ftl`)
+require a manual `graphify --update .` to re-extract, but are not needed for
+day-to-day coding.
+
 ## Running UI CLI Tools on Windows (tsc / eslint)
 
 `tsc` and `eslint` are **project-local** — they live in `ui/node_modules/.bin/` and are

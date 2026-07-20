@@ -13,21 +13,18 @@
 //! ```
 //!
 //! # Example (Rust)
-//!    //! ```no_run
+//!
+//! ```no_run
+//! # use oz_lua::bridge::LuaEventBridge;
+//! # use oz_lua::LuaRuntime;
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let bridge = LuaEventBridge::new();
 //! let lua = LuaRuntime::new()?;
-//!
 //! // Register callbacks from Lua
-//! lua.inner().context(|ctx| {
-//!     let globals = ctx.globals();
-//!     let oz: rlua::Table = globals.get("oz")?;
-//!     let on_fn = oz.get::<_, rlua::Function>("on")?;
-//!     on_fn.call::<_, ()>(("sale.completed", ctx.create_function(|_, ()| Ok(()))?))?;
-//!     Ok::<_, rlua::Error>(())
-//! })?;
-//!
 //! // Fire from Rust
 //! bridge.fire(lua.inner(), "sale.completed", rlua::Value::Nil)?;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::collections::HashMap;

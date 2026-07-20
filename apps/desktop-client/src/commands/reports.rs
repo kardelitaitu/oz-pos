@@ -10,6 +10,7 @@ use oz_core::db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
 };
+use oz_core::export::{CustomReportRequest, CustomReportResponse};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -125,4 +126,21 @@ pub async fn get_category_breakdown(
     let rows = store.category_breakdown(&start_date, &end_date)?;
     drop(db);
     Ok(rows)
+}
+
+/// Build a custom report from user-selected columns and filters.
+///
+/// The backend validates column names against a per-dataset whitelist
+/// to prevent SQL injection — only recognised columns are included.
+/// Supported datasets: "sales" (5 columns, date filter), "inventory" (5 columns).
+#[command]
+pub async fn build_custom_report(
+    state: State<'_, AppState>,
+    request: CustomReportRequest,
+) -> Result<CustomReportResponse, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let result = store.build_custom_report(request)?;
+    drop(db);
+    Ok(result)
 }

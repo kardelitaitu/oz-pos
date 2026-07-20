@@ -47,6 +47,8 @@ pub mod error;
 pub mod events;
 /// Currency exchange-rate store and conversion.
 pub mod exchange_rate;
+/// Unified analytics export — JSON bundle of all report types.
+pub mod export;
 /// Feature-gate registry and runtime guards.
 pub mod features;
 /// Gift cards — issue, redeem, top-up, freeze, balance checks.

@@ -95,6 +95,7 @@ language-selector-select-aria =
     .aria-label = Pilih bahasa
 locale-en = English
 locale-id = Bahasa Indonesia
+locale-th = ไทย
 
 # Permission denied
 permission-denied-title = Akses Ditolak
@@ -148,6 +149,7 @@ nav-section-dev = Pengembang
 nav-pos-terminal = Terminal POS
 nav-kds = KDS
 nav-stock-adjust = Penyesuaian Stok
+nav-custom-report = Laporan Kustom
 nav-sales-history = Riwayat Penjualan
 nav-eod-report = Laporan Akhir Hari
 nav-tax-rates = Tarif Pajak

@@ -269,7 +269,7 @@ impl Store<'_> {
 
     /// Products whose current stock is at or below `threshold`.
     ///
-    /// **Deprecated in favour of [`low_stock_alerts_at_location`]
+    /// **Deprecated in favour of `low_stock_alerts_at_location`
     /// (Self::low_stock_alerts_at_location)**, which respects the
     /// per-location stock from `stock_summary`.
     #[deprecated(note = "use low_stock_alerts_at_location instead")]

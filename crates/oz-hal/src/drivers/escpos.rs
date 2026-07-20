@@ -1,8 +1,8 @@
 //! ESC/POS command constants and receipt formatting helpers.
 //!
-//! Shared across all printer drivers ([`UsbReceiptPrinter`],
-//! [`BtReceiptPrinter`], [`TcpReceiptPrinter`]) and the receipt
-//! formatter ([`super::receipt`]).
+//! Shared across all printer drivers (`UsbReceiptPrinter`,
+//! `BtReceiptPrinter`, `TcpReceiptPrinter`) and the receipt
+//! formatter (`super::receipt`).
 
 /// Initialize printer.
 pub const ESC_INIT: &[u8] = &[0x1B, 0x40];

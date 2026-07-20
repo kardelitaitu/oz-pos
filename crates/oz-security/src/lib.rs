@@ -64,13 +64,16 @@ pub struct RotationInfo {
 /// Windows Credential Manager, Linux Secret Service, or macOS Keychain.
 ///
 /// # Example
-///    /// ```no_run
-/// use oz_security::Keyring;
 ///
+/// ```no_run
+/// # use oz_security::Keyring;
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let keyring = oz_security::default_keyring()?;
 /// keyring.set_secret("api-key", "sk_live_abc123")?;
 /// let secret = keyring.get_secret("api-key")?;
 /// keyring.delete_secret("api-key")?;
+/// # Ok(())
+/// # }
 /// ```
 pub trait Keyring {
     /// Retrieve a secret by name. Returns `None` if the secret doesn't
@@ -97,7 +100,7 @@ pub trait Keyring {
     /// Generate a new random 256-bit key, store it under `name`, and
     /// archive the previous key (if any) as `{name}-prev`.
     ///
-    /// Uses [`get_secret`] and [`set_secret`] for key storage, so
+    /// Uses `get_secret` and `set_secret` for key storage, so
     /// implementors do NOT need to override this unless they need
     /// atomic lock-and-rotate (e.g. [`InMemoryKeyring`]).
     fn rotate_key(&self, name: &str) -> Result<RotationInfo, SecurityError> {

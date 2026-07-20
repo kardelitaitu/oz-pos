@@ -18,7 +18,7 @@ next: None | perf: HTTP calls are async/tokio; mock is in-memory with AtomicUsiz
 //!
 //! # Lifecycle
 //!
-//! 1. Build a [`PaymentRequest`](types::PaymentRequest)
+//! 1. Build a [`PaymentRequest`]
 //! 2. Call [`authorize`](PaymentProcessor::authorize) to hold funds
 //! 3. Call [`capture`](PaymentProcessor::capture) to complete
 //! 4. Optionally [`refund`](PaymentProcessor::refund) or [`void`](PaymentProcessor::void)

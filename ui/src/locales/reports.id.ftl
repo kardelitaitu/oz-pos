@@ -57,3 +57,13 @@ menu-eng-dog = Anjing
 
 # Period comparison
 sales-report-compare = Bandingkan
+
+# Custom Report Builder
+custom-report-title = Laporan Kustom
+custom-report-dataset = Dataset
+custom-report-start = Mulai
+custom-report-end = Akhir
+custom-report-columns = Kolom
+custom-report-run = Jalankan
+custom-report-results = Hasil
+custom-report-export-csv = Ekspor CSV

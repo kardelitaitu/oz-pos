@@ -1,0 +1,42 @@
+# Gitleaks configuration for OZ-POS
+# Scans for accidentally committed secrets, API keys, and tokens.
+#
+# Usage:
+#   gitleaks detect --config .gitleaks.toml
+#   gitleaks protect --config .gitleaks.toml  # pre-commit mode
+
+title = "OZ-POS Gitleaks Config"
+
+[allowlist]
+description = "Allowed patterns — false positives from test fixtures and config files"
+
+paths = [
+  '''docs/security/audit-2026-07-20.md''',
+  '''apps/license-server/.*_test\.go$''',
+  '''\.github/workflows/.*\.yml$''',
+]
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API key / token pattern"
+regex = '''(?i)(api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token|bearer)['''\"]?\s*[:=]\s*['''\"]?[A-Za-z0-9_\-\.]{20,}'''
+tags = ["api-key", "secret"]
+[rules.allowlist]
+paths = [
+  '''scripts/generate-.*\.ps1$''',
+  '''scripts/generate-.*\.sh$''',
+  '''\.env\.example$''',
+  '''docker-compose.*\.yml$''',
+]
+
+[[rules]]
+id = "private-key"
+description = "SSH / RSA / EC private key"
+regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+tags = ["key", "private-key"]
+
+[[rules]]
+id = "jwt-token"
+description = "Hardcoded JWT tokens"
+regex = '''eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+tags = ["jwt", "token"]

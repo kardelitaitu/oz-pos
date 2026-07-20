@@ -26,11 +26,12 @@ import purchasingEn from '@/locales/purchasing.ftl?raw';
 import purchasingId from '@/locales/purchasing.id.ftl?raw';
 
 describe('i18n bundle loader', () => {
-  it('exposes both en and id locales via getAvailableLocales()', () => {
+  it('exposes en, id, and th locales via getAvailableLocales()', () => {
     const locales = getAvailableLocales();
     expect(locales).toContain('en');
     expect(locales).toContain('id');
-    expect(locales.length).toBe(2);
+    expect(locales).toContain('th');
+    expect(locales.length).toBe(3);
   });
 
   it('returns distinct FluentBundle instances per locale (no cross-leak)', () => {

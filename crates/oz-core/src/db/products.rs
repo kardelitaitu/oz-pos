@@ -686,7 +686,7 @@ impl Store<'_> {
     ///
     /// This is the low-level insert used by the sync layer to apply
     /// incoming remote deltas without triggering inventory or stock_summary
-    /// updates (those are reconciled later via [`rebuild_stock_summary`]).
+    /// updates (those are reconciled later via `rebuild_stock_summary`).
     ///
     /// The `store_id` identifies which store the delta originated from
     /// for cross-store routing (ADR #6).

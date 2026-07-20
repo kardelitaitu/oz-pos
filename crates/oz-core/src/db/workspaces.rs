@@ -329,7 +329,7 @@ impl Store<'_> {
     /// List workspace instances with subscription tier entitlement
     /// filtering (ADR #5).
     ///
-    /// Same resolution as [`list_workspaces`] but additionally filters
+    /// Same resolution as `list_workspaces` but additionally filters
     /// out instances whose `type_key` is not allowed by the given tier.
     pub fn list_workspaces_with_entitlement(
         &self,

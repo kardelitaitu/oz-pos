@@ -100,9 +100,16 @@ inv-threshold-col-sku = SKU
 inv-threshold-col-product = Product Name
 inv-threshold-col-location = Location
 inv-threshold-col-threshold = Threshold
+inv-threshold-col-status = Status
+inv-threshold-col-actions = Actions
 inv-threshold-add-btn = + Add Threshold
 inv-threshold-dialog-title = Configure Threshold
 inv-threshold-global-opt = Global (All Locations)
+inv-threshold-filter-all = All Locations
+inv-threshold-filter-global = Global Fallback Only
+inv-threshold-status-enabled = Enabled
+inv-threshold-status-disabled = Disabled
+inv-threshold-unknown-product = Unknown Product
 
 # Stock Alert Panel
 inv-alert-title = Stock Alert Panel

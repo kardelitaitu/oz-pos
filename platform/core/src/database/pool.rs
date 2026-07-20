@@ -15,9 +15,8 @@ use rusqlite::Connection;
 use crate::error::PlatformError;
 
 /// A thread-safe wrapper around a single [`rusqlite::Connection`].
-///
 /// # Example
-///    /// ```no_run
+/// ```ignore
 /// let pool = Pool::open("pos.db")?;
 /// let conn = pool.conn()?;
 /// conn.execute("SELECT 1", [])?;

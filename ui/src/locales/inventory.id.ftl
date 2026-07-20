@@ -122,9 +122,16 @@ inv-threshold-col-sku = SKU
 inv-threshold-col-product = Nama Produk
 inv-threshold-col-location = Lokasi
 inv-threshold-col-threshold = Batas
+inv-threshold-col-status = Status
+inv-threshold-col-actions = Tindakan
 inv-threshold-add-btn = + Tambah Batas
 inv-threshold-dialog-title = Atur Batas
 inv-threshold-global-opt = Global (Semua Lokasi)
+inv-threshold-filter-all = Semua Lokasi
+inv-threshold-filter-global = Hanya Global Fallback
+inv-threshold-status-enabled = Aktif
+inv-threshold-status-disabled = Nonaktif
+inv-threshold-unknown-product = Produk Tidak Dikenal
 
 # Stock Alert Panel
 inv-alert-title = Panel Peringatan Stok

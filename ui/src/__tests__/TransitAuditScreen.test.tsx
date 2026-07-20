@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 
 // ── Mocks ─────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ describe('TransitAuditScreen', () => {
   // ── Rendering ─────────────────────────────────────────────────
 
   it('renders the title', async () => {
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByText('Transit Stock Audit')).toBeInTheDocument();
     });
@@ -83,7 +83,7 @@ describe('TransitAuditScreen', () => {
 
   it('shows loading state initially', () => {
     mockListTransfers.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
     // inv-loading = "Loading products…" in inventory.ftl
     expect(screen.getByText(/Loading products/)).toBeInTheDocument();
   });
@@ -91,7 +91,7 @@ describe('TransitAuditScreen', () => {
   // ── Transfer cards ────────────────────────────────────────────
 
   it('renders transfer cards with meta info', async () => {
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByText('TXN-001')).toBeInTheDocument();
     });
@@ -101,7 +101,7 @@ describe('TransitAuditScreen', () => {
   });
 
   it('renders line items in the table', async () => {
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
     await waitFor(() => {
       // SKU-001 appears in both transfer cards
       expect(screen.getAllByText('SKU-001').length).toBeGreaterThanOrEqual(2);
@@ -116,7 +116,7 @@ describe('TransitAuditScreen', () => {
   // ── Overdue detection ─────────────────────────────────────────
 
   it('marks overdue transfers with overdue class (48h+)', async () => {
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
     await waitFor(() => {
       expect(screen.getByText('TXN-001')).toBeInTheDocument();
     });
@@ -139,7 +139,7 @@ describe('TransitAuditScreen', () => {
   it('calls cancelStockTransfer when Reverse Transfer is clicked', async () => {
     const user = userEvent.setup();
     window.confirm = vi.fn(() => true);
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('TXN-001')).toBeInTheDocument();
@@ -157,7 +157,7 @@ describe('TransitAuditScreen', () => {
   it('does not cancel when confirm is dismissed', async () => {
     const user = userEvent.setup();
     window.confirm = vi.fn(() => false);
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('TXN-001')).toBeInTheDocument();
@@ -173,7 +173,7 @@ describe('TransitAuditScreen', () => {
 
   it('shows empty state when no transfers in transit', async () => {
     mockListTransfers.mockResolvedValue([]);
-    renderWithFluentSync(<TransitAuditScreen />, inventoryFtl);
+    renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
 
     await waitFor(() => {
       // inv-transit-no-overdue = "No overdue transit items." in inventory.ftl

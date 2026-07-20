@@ -2,7 +2,7 @@
 //!
 //! Uses `rusb` (libusb wrapper) to probe for HID-class and printer-class
 //! devices by known VID/PID pairs. The discovery functions in this module
-//! are called by [`DriverRegistry::discover()`] at startup.
+//! are called by `DriverRegistry::discover()` at startup.
 
 use rusb::{Context, UsbContext};
 

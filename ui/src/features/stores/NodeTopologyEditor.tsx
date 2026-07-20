@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Localized } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
 import './NodeTopologyEditor.css';
 
@@ -68,6 +69,7 @@ export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
 }: NodeTopologyEditorProps) {
+  const { addToast } = useToast();
   const [nodes, setNodes] = useState<TopologyNodeData[]>(PRESET_RETAIL.nodes);
   const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
 
@@ -164,7 +166,7 @@ export default function NodeTopologyEditor({
   // Add Node from Tool Rack
   const handleAddNode = (type: NodeType) => {
     if (type === 'warehouse' && !isProAllowed && nodes.filter((n) => n.type === 'warehouse').length >= 1) {
-      alert('Multi-Warehouse storage locations require a Pro Tier license.');
+      addToast({ message: 'Multi-Warehouse storage locations require a Pro Tier license.', type: 'warning' });
       return;
     }
 
@@ -206,7 +208,7 @@ export default function NodeTopologyEditor({
         });
 
         if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
-          alert('Multi-warehouse stock deduction fallback wires require a Pro Tier license.');
+          addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
           setConnectingFromNodeId(null);
           return;
         }

@@ -132,7 +132,7 @@ pub struct Sale {
 impl Sale {
     /// Create a new sale from a [`Cart`].
     ///
-    /// Converts every [`CartLine`] into a [`SaleLine`], computes the
+    /// Converts every `CartLine` into a [`SaleLine`], computes the
     /// grand total, and sets `status = Pending`. Timestamps are set to
     /// the current UTC time.
     ///

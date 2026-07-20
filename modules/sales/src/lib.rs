@@ -36,8 +36,9 @@ next: Migrate cart/sales logic into this module | perf: N/A.
 //!
 //! This module re-exports key sales domain types from `oz-core` so that
 //! consumers can access all sales-related types through a single crate:
-//!//! ```
-//! use modules_sales::{SalesModule, Sale, Cart, SaleStatus};
+//!
+//! ```
+//! # use modules_sales::{SalesModule, Sale, Cart, SaleStatus};
 //! ```
 
 // Re-export key sales domain types from oz-core so consumers can

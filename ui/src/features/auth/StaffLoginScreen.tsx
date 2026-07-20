@@ -459,6 +459,7 @@ export default function StaffLoginScreen() {
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- focus convenience, keyboard covered below */
     <div
       className="staff-login-screen"
+      data-testid="staff-login-screen"
       onClick={handleScreenClick}
       onKeyDown={handleScreenKeyDown}
       tabIndex={-1}
@@ -591,7 +592,7 @@ export default function StaffLoginScreen() {
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.13</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.14</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

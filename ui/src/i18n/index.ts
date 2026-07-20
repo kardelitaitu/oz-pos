@@ -52,8 +52,34 @@ import giftCardsId from '../locales/gift-cards.id.ftl?raw';
 import purchasingId from '../locales/purchasing.id.ftl?raw';
 import stockCountingId from '../locales/stock-counting.id.ftl?raw';
 
+// Thai domain files (scaffolding — professional translation pending)
+import sharedTh from '../locales/shared.th.ftl?raw';
+import salesTh from '../locales/sales.th.ftl?raw';
+import productsTh from '../locales/products.th.ftl?raw';
+import settingsTh from '../locales/settings.th.ftl?raw';
+import staffTh from '../locales/staff.th.ftl?raw';
+import customersTh from '../locales/customers.th.ftl?raw';
+import taxTh from '../locales/tax.th.ftl?raw';
+import currencyTh from '../locales/currency.th.ftl?raw';
+import inventoryTh from '../locales/inventory.th.ftl?raw';
+import tablesTh from '../locales/tables.th.ftl?raw';
+import terminalsTh from '../locales/terminals.th.ftl?raw';
+import offlineTh from '../locales/offline.th.ftl?raw';
+import bundlesTh from '../locales/bundles.th.ftl?raw';
+import promotionsTh from '../locales/promotions.th.ftl?raw';
+import kdsTh from '../locales/kds.th.ftl?raw';
+import kioskTh from '../locales/kiosk.th.ftl?raw';
+import loyaltyTh from '../locales/loyalty.th.ftl?raw';
+import shiftsTh from '../locales/shifts.th.ftl?raw';
+import reportsTh from '../locales/reports.th.ftl?raw';
+import multiStoreTh from '../locales/multi-store.th.ftl?raw';
+import stockTransfersTh from '../locales/stock-transfers.th.ftl?raw';
+import giftCardsTh from '../locales/gift-cards.th.ftl?raw';
+import purchasingTh from '../locales/purchasing.th.ftl?raw';
+import stockCountingTh from '../locales/stock-counting.th.ftl?raw';
+
 /** Supported application locale codes. */
-export type LocaleCode = 'en' | 'id';
+export type LocaleCode = 'en' | 'id' | 'th';
 
 const enFTL = [
   sharedEn, salesEn, productsEn, settingsEn, staffEn,
@@ -71,9 +97,18 @@ const idFTL = [
   stockTransfersId, giftCardsId, purchasingId, stockCountingId,
 ].join('\n');
 
+const thFTL = [
+  sharedTh, salesTh, productsTh, settingsTh, staffTh,
+  customersTh, taxTh, currencyTh, inventoryTh, tablesTh,
+  terminalsTh, offlineTh, bundlesTh, promotionsTh, kdsTh,
+  kioskTh, loyaltyTh, shiftsTh, reportsTh, multiStoreTh,
+  stockTransfersTh, giftCardsTh, purchasingTh, stockCountingTh,
+].join('\n');
+
 const RESOURCES: Record<LocaleCode, string> = {
   en: enFTL,
   id: idFTL,
+  th: thFTL,
 };
 
 const bundles = new Map<LocaleCode, FluentBundle>();
@@ -95,11 +130,11 @@ export function getBundle(locale: LocaleCode): FluentBundle {
 
 /** Return the list of locale codes the application supports. */
 export function getAvailableLocales(): LocaleCode[] {
-  return ['en', 'id'];
+  return ['en', 'id', 'th'];
 }
 
 /** Return the Fluent i18n key for a locale's display label. */
 export function getLocaleLabel(locale: LocaleCode): string {
-  const labels: Record<LocaleCode, string> = { en: 'locale-en', id: 'locale-id' };
+  const labels: Record<LocaleCode, string> = { en: 'locale-en', id: 'locale-id', th: 'locale-th' };
   return labels[locale];
 }

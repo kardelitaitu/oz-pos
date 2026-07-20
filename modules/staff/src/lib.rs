@@ -36,8 +36,9 @@ next: Migrate auth/staff commands into this module | perf: N/A.
 //!
 //! This module re-exports key staff domain types from `oz-core` so that
 //! consumers can access all staff-related types through a single crate:
-//!//! ```
-//! use modules_staff::{StaffModule, User, Role, builtin_roles};
+//!
+//! ```
+//! # use modules_staff::{StaffModule, User, Role, builtin_roles};
 //! ```
 
 // Re-export key staff domain types from oz-core so consumers can

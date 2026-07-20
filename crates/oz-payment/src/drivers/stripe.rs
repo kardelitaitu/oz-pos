@@ -10,7 +10,7 @@
 //!
 //! # Testing
 //!
-//! Use [`new_with_endpoint`](Self::new_with_endpoint) to direct requests
+//! Use `new_with_endpoint` to direct requests
 //! to a local mock server (e.g. `wiremock`) during integration tests.
 
 use async_trait::async_trait;
@@ -35,12 +35,16 @@ const STRIPE_API_BASE: &str = "https://api.stripe.com/v1";
 /// - **Card-present** payments (when constructed with `card_present: true`)
 ///
 /// # Example
-///    /// ```no_run
-/// use oz_payment::drivers::stripe::StripePaymentProcessor;
-/// use oz_payment::PaymentProcessor;
 ///
+/// ```no_run
+/// # use oz_payment::drivers::stripe::StripePaymentProcessor;
+/// # use oz_payment::PaymentProcessor;
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # let request = unimplemented!();
 /// let proc = StripePaymentProcessor::from_env()?;
 /// proc.sale(&request).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct StripePaymentProcessor {
     client: Arc<reqwest::Client>,

@@ -55,7 +55,7 @@ pub trait ReceiptPrinter: Send + Sync {
     /// Print raw bytes directly to the device (e.g. pre-formatted
     /// ESC/POS commands from the receipt builder). The default
     /// implementation converts bytes lossily to a string and delegates
-    /// to [`print_receipt`] — real drivers override this to send the
+    /// to `print_receipt` — real drivers override this to send the
     /// exact byte sequence.
     async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
         let body = String::from_utf8_lossy(data);

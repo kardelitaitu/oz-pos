@@ -54,7 +54,7 @@ struct SubscriberEntry {
 ///
 /// Handlers can be registered with an optional `module_id` via
 /// [`subscribe_for_module`](EventBus::subscribe_for_module). When a
-/// module is stopped, [`unsubscribe_module`](EventBus::unsubscribe_module)
+/// module is stopped, `unsubscribe_module`
 /// atomically removes all handlers owned by that module.
 ///
 /// # Example
@@ -123,7 +123,7 @@ impl EventBus {
 
     /// Register a handler owned by a specific module.
     ///
-    /// When the module is stopped, call [`unsubscribe_module`]
+    /// When the module is stopped, call `unsubscribe_module`
     /// to atomically remove all handlers registered under that
     /// `module_id` across all topics.
     ///

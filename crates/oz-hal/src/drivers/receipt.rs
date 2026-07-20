@@ -1,8 +1,8 @@
 //! Receipt data types and ESC/POS formatting.
 //!
-//! Defines structured receipt models ([`SalesReceipt`]) and the
-//! [`format_sales_receipt`] function that produces a ready-to-print
-//! byte buffer. Display options are controlled through [`ReceiptConfig`].
+//! Defines structured receipt models (`SalesReceipt`) and the
+//! `format_sales_receipt` function that produces a ready-to-print
+//! byte buffer. Display options are controlled through `ReceiptConfig`.
 //!
 //! # Layout (80 mm / 48 characters)
 //!
@@ -379,7 +379,7 @@ impl TableCols {
 /// separator, paper width, tax visibility, footer text).
 ///
 /// The returned buffer can be sent directly to any printer via
-/// [`ReceiptPrinter::print_raw`] — it includes the initialisation
+/// `ReceiptPrinter::print_raw` — it includes the initialisation
 /// sequence, all text and formatting commands, a 3-line paper feed,
 /// and a full paper cut.
 pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8> {

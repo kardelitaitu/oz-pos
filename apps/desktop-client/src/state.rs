@@ -259,14 +259,14 @@ fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 impl AppState {
-    /// Create a [`Store`] with the shared cache layer and terminal
+    /// Create a `Store` with the shared cache layer and terminal
     /// identity for pub/sub message tagging.
     ///
     /// Command handlers should use this instead of `Store::new(&conn)`
     /// to benefit from Redis caching (when configured) and to ensure
     /// inventory-change pub/sub messages are correctly tagged with the
     /// terminal's identity.
-    /// Create a [`Store`] with the shared cache layer and a pre-acquired
+    /// Create a `Store` with the shared cache layer and a pre-acquired
     /// terminal identity for pub/sub message tagging.
     ///
     /// Callers should acquire the terminal_id via

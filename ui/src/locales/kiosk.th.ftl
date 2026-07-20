@@ -1,0 +1,20 @@
+# ui/src/locales/kiosk.ftl — Kiosk mode
+
+kiosk-tap-to-start = [TH] Tap to start [/TH]
+kiosk-all = [TH] All [/TH]
+kiosk-checkout = [TH] Checkout [/TH]
+kiosk-checkout-title = [TH] Checkout [/TH]
+kiosk-total = [TH] Total [/TH]
+kiosk-pay = [TH] Pay [/TH]
+kiosk-return = [TH] Return to Menu [/TH]
+kiosk-decrease = [TH] Decrease [/TH]
+kiosk-increase = [TH] Increase [/TH]
+kiosk-stock-left = [TH] { $count } left [/TH]
+kiosk-product-label = [TH] { $name }, { $price } [/TH]
+kiosk-attract-label = [TH] Kiosk attract screen [/TH]
+kiosk-section-checkout = [TH] Checkout [/TH]
+kiosk-section-kiosk = [TH] Self-service kiosk [/TH]
+kiosk-section-categories = [TH] Categories [/TH]
+kiosk-section-products = [TH] Products [/TH]
+kiosk-section-cart = [TH] Cart [/TH]
+

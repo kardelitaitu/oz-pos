@@ -173,7 +173,7 @@ export default function AuditLogScreen() {
   // ── Render ────────────────────────────────────────────────────────
 
   return (
-    <div className="audit-log">
+    <div className="audit-log" data-testid="audit-log-table">
       <div className="audit-log-header">
         <div className="audit-log-header-left">
           <Localized id="audit-log-title">

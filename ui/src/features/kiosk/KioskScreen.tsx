@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { listProducts, listCategories } from '@/api/products';
 import type { ProductDto, CategoryDto } from '@/api/products';
 import './KioskScreen.css';
@@ -21,6 +22,7 @@ interface CartItem {
 /** Self-service kiosk screen — customer-facing product browsing, cart management, and checkout with idle timeout reset. */
 export default function KioskScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -116,7 +118,7 @@ export default function KioskScreen() {
           <span>${(totalMinor / 100).toFixed(2)}</span>
         </div>
         <button type="button" className="kiosk-checkout-pay" onClick={() => {
-          alert('Payment processed! (simulated)');
+          addToast({ message: 'Payment processed! (simulated)', type: 'success' });
           setCart([]);
           setCheckout(false);
         }} aria-label={l10n.getString('kiosk-pay')}>

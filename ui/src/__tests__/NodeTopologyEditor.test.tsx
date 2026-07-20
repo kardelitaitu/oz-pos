@@ -1,20 +1,15 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor from '../features/stores/NodeTopologyEditor';
 
-// Mock fluent localization
-vi.mock('@fluent/react', () => ({
-  Localized: ({ children }: { children: React.ReactNode }) => children,
-  useLocalization: () => ({
-    l10n: {
-      getString: (id: string) => id,
-    },
-  }),
-}));
+// NodeTopologyEditor uses useToast — wrap in providers.
+// No @fluent/react mock needed — renderWithProvidersSync handles Fluent + ToastProvider.
+const renderEditor = () => renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" />);
 
 describe('NodeTopologyEditor Component', () => {
   it('renders title and default retail preset nodes', () => {
-    render(<NodeTopologyEditor currentTier="standard" />);
+    renderEditor();
 
     expect(screen.getByText('Visual Store & Workspace Topology Builder')).toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
@@ -23,7 +18,7 @@ describe('NodeTopologyEditor Component', () => {
   });
 
   it('renders tool rack sidebar and preset buttons', () => {
-    render(<NodeTopologyEditor currentTier="standard" />);
+    renderEditor();
 
     expect(screen.getByText('+ Store Node')).toBeInTheDocument();
     expect(screen.getByText('+ Workspace Node')).toBeInTheDocument();
@@ -33,7 +28,7 @@ describe('NodeTopologyEditor Component', () => {
   });
 
   it('switches to restaurant & KDS preset when clicked', () => {
-    render(<NodeTopologyEditor currentTier="standard" />);
+    renderEditor();
 
     const restoBtn = screen.getByText('🍽️ Resto & KDS Preset');
     fireEvent.click(restoBtn);
@@ -44,7 +39,7 @@ describe('NodeTopologyEditor Component', () => {
   });
 
   it('toggles simulation mode on button click', () => {
-    render(<NodeTopologyEditor currentTier="standard" />);
+    renderEditor();
 
     const simBtn = screen.getByText('🧪 Test Order Simulation');
     fireEvent.click(simBtn);
