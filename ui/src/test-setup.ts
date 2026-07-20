@@ -115,3 +115,16 @@ console.warn = (...args: unknown[]) => {
   }
   originalWarn(...args);
 };
+
+// ── Canvas mock ───────────────────────────────────────────────
+// jsdom does not implement HTMLCanvasElement.prototype.getContext.
+// Stub it so components that use canvas charts (CanvasPieChart,
+// CanvasHeatmap, CanvasLineChart, NodeTopologyEditor) don't throw.
+if (typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext = (() => {
+    // Return a minimal mock that chart/canvas code can call without
+    // crashing. Individual tests that need real canvas behaviour
+    // should override this mock.
+    return null;
+  }) as typeof HTMLCanvasElement.prototype.getContext;
+}

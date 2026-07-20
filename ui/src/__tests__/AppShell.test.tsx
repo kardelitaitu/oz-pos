@@ -238,37 +238,7 @@ describe('AppShell — KDS workspace navigation', () => {
       idleCallback = null;
     });
 
-    it('returns to workspace picker on idle timeout when in an active workspace', async () => {
-      const mockSetActive = vi.fn();
-      mockWorkspace.mockReturnValue({
-        activeWorkspace: 'store-pos',
-        setActiveWorkspace: mockSetActive,
-        availableWorkspaces: [],
-        workspaceScreens: [],
-        loading: false,
-      });
-
-      await renderWithProviders(<AppShell />);
-
-      // Flush pending microtask state updates from async useEffects
-      // (e.g. getSetupStatus, getStoreSettings) that resolve after the
-      // act() block of renderInAct has already returned.
-      await act(async () => {});
-
-      await waitFor(() => {
-        expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
-      });
-
-      // Invoke the idle callback to simulate timeout inside act
-      await act(() => {
-        idleCallback?.();
-      });
-
-      expect(mockSetActive).toHaveBeenCalledWith(null);
-    });
-
-    it('calls logout when idle timeout fires on the workspace picker (no activeWorkspace)', async () => {
-      const mockLogout = vi.fn();
+    it('locks screen when idle timeout fires with an active session', async () => {
       mockAuthSession.mockReturnValue({
         session: {
           user_id: 'user-1',
@@ -281,7 +251,46 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
         error: null,
         login: vi.fn(),
-        logout: mockLogout,
+        logout: vi.fn(),
+        clearError: vi.fn(),
+        isManager: false,
+        isOwner: false,
+      });
+
+      mockWorkspace.mockReturnValue({
+        activeWorkspace: 'store-pos',
+        setActiveWorkspace: vi.fn(),
+        availableWorkspaces: [],
+        workspaceScreens: [],
+        loading: false,
+      });
+
+      await renderWithProviders(<AppShell />);
+
+      await act(async () => {});
+
+      await waitFor(() => {
+        expect(screen.getByTestId('retail-pos-screen')).toBeInTheDocument();
+      });
+
+      // Invoke the idle callback to simulate timeout
+      await act(() => {
+        idleCallback?.();
+      });
+
+      // Screen should now be locked
+      await waitFor(() => {
+        expect(screen.getByText(/session locked/i)).toBeInTheDocument();
+      });
+    });
+
+    it('stays on login screen when idle fires with no session', async () => {
+      mockAuthSession.mockReturnValue({
+        session: null,
+        loading: false,
+        error: null,
+        login: vi.fn(),
+        logout: vi.fn(),
         clearError: vi.fn(),
         isManager: false,
         isOwner: false,
@@ -297,68 +306,20 @@ describe('AppShell — KDS workspace navigation', () => {
 
       await renderWithProviders(<AppShell />);
 
-      // Flush pending microtask state updates from async useEffects
       await act(async () => {});
 
+      // When no session, AppShell shows the login screen
       await waitFor(() => {
-        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
+        expect(document.querySelector('.staff-login-screen')).toBeInTheDocument();
       });
 
-      // Invoke the idle callback to simulate timeout on the picker inside act
+      // Invoke the idle callback
       await act(() => {
         idleCallback?.();
       });
 
-      expect(mockLogout).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not call setActiveWorkspace when idle fires and there is no activeWorkspace', async () => {
-      const mockSetActive = vi.fn();
-      const mockLogout = vi.fn();
-      mockAuthSession.mockReturnValue({
-        session: {
-          user_id: 'user-1',
-          username: 'testuser',
-          role_name: 'cashier',
-          token: 'mock-token',
-          role_id: 'role-1',
-          display_name: 'Test User',
-        },
-        loading: false,
-        error: null,
-        login: vi.fn(),
-        logout: mockLogout,
-        clearError: vi.fn(),
-        isManager: false,
-        isOwner: false,
-      });
-
-      mockWorkspace.mockReturnValue({
-        activeWorkspace: null,
-        setActiveWorkspace: mockSetActive,
-        availableWorkspaces: [],
-        workspaceScreens: [],
-        loading: false,
-      });
-
-      await renderWithProviders(<AppShell />);
-
-      // Flush pending microtask state updates from async useEffects
-      await act(async () => {});
-
-      await waitFor(() => {
-        expect(screen.getByText('No workspaces available')).toBeInTheDocument();
-      });
-
-      // Invoke the idle callback inside act
-      await act(() => {
-        idleCallback?.();
-      });
-
-      // Should NOT call setActiveWorkspace when already on picker
-      expect(mockSetActive).not.toHaveBeenCalled();
-      // Should call logout instead
-      expect(mockLogout).toHaveBeenCalledTimes(1);
+      // Should still be on the login screen (no change)
+      expect(document.querySelector('.staff-login-screen')).toBeInTheDocument();
     });
   });
 

@@ -59,6 +59,10 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     css: false,
 
+    // Exclude Playwright e2e tests (run via `npm run test:e2e`) and
+    // node_modules package tests picked up by the broad glob.
+    exclude: ['e2e/**', 'node_modules/**'],
+
     // Per-test timeout (ms). Default 5000 is fine for most tests;
     // DataManagementScreen (55 tests, ~225ms each) is the heaviest
     // file and stays well within this budget. Bumped to 10s for CI
