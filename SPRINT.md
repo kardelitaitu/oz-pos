@@ -50,9 +50,9 @@
 ## 🍽️ Sprint 5: Specialized UIs
 *Target: Deliver restaurant & kiosk dedicated user interfaces.*
 
-- [ ] KDS (Kitchen Display System) route
-- [ ] Self-Service Kiosk route (locked down UI)
-- [ ] Table Management UI (floor plan)
+- [x] KDS (Kitchen Display System) route (`KdsScreen`, switchable layouts: Kanban, Focus, Metro, sound SLA alerts)
+- [x] Self-Service Kiosk route (`KioskScreen`, locked down UI, full-screen cart & checkout)
+- [x] Table Management UI (`TableManagementScreen`, interactive floor plan & sections)
 
 ---
 
