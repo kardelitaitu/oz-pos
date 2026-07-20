@@ -55,9 +55,16 @@ SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 echo "backup-db: done — $BACKUP_FILE ($SIZE)"
 
 # ── Vacuum source DB (reclaim space, rebuild indexes) ────────────
+# Non-fatal: backup already succeeded. VACUUM can fail on disk-full
+# or lock contention without risking data loss.
 echo "backup-db: vacuuming source database..."
-sqlite3 "$DB_FILE" "VACUUM;"
-echo "backup-db: vacuum complete"
+if sqlite3 "$DB_FILE" "VACUUM;" 2>&1; then
+  echo "backup-db: vacuum complete"
+  # Update query planner statistics for fresh index selectivity.
+  sqlite3 "$DB_FILE" "PRAGMA optimize;" 2>/dev/null || true
+else
+  echo "backup-db: WARNING — vacuum failed (backup already saved)"
+fi
 
 # Prune old backups
 echo "backup-db: pruning backups older than $RETENTION_DAYS days..."
