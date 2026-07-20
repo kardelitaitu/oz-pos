@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithFluent, renderWithProviders } from '@/__tests__/test-utils/render';
+import { renderWithProviders } from '@/__tests__/test-utils/render';
 import kioskFtl from '@/locales/kiosk.ftl?raw';
 
 vi.mock('@/api/products', () => ({
