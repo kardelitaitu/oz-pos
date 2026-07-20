@@ -32,9 +32,11 @@ use wiremock::{
 };
 
 /// Default test secret key for Stripe processor.
+#[allow(dead_code)]
 pub const TEST_SECRET_KEY: &str = "sk_test_shared_fixture";
 
 /// Creates a StripePaymentProcessor pointing at the given endpoint.
+#[allow(dead_code)]
 pub fn stripe_processor(uri: &str, card_present: bool) -> StripePaymentProcessor {
     StripePaymentProcessor::new_with_endpoint(TEST_SECRET_KEY, uri, card_present)
 }

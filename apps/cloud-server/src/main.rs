@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(json["status"], "ok");
         assert!(json["version"].is_string());
         assert_eq!(json["db"], "sqlite");
-        assert!(json["uptime_seconds"].as_u64().unwrap() >= 0);
+        assert!(json["uptime_seconds"].as_u64().is_some());
         assert_eq!(json["db_connected"], true);
         assert!(json["db_latency_us"].as_u64().unwrap() > 0);
         assert_eq!(json["sync_queue_depth"], 0);
