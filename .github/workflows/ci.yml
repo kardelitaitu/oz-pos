@@ -247,9 +247,9 @@ jobs:
       - name: Run Lighthouse CI
         run: npx -p @lhci/cli@0.14.x -- lhci autorun
 
-  # ── Docker build smoke test ──────────────────────────────────────
+  # ── Docker build + Trivy vulnerability scan ────────────────────
   docker:
-    name: Docker (cloud-server build)
+    name: Docker (cloud-server build + scan)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -265,6 +265,22 @@ jobs:
             exit 1
           fi
           echo "Binary size check passed"
+      - name: Trivy vulnerability scan (non-blocking)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: oz-pos-cloud:ci
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+          output: trivy-results.txt
+      - name: Upload Trivy results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan
+          path: trivy-results.txt
+          retention-days: 7
 
   # ── Coverage gate (non-blocking, informational) ─────────────────
   coverage:
