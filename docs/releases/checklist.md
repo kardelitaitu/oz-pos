@@ -8,7 +8,7 @@
 - [ ] `cargo nextest run --workspace --all-features --profile ci` passes locally
 - [ ] `cd ui && npm run typecheck && npm run lint && npm run test` passes locally
 - [ ] `bash scripts/lint-i18n.sh` clean (no duplicate FTL keys, no verbatim ID bundles)
-- [ ] `CHANGELOG.md` updated with all changes since last release
+- [ ] Changelog generated at `docs/releases/CHANGELOG-{version}.md` with all changes since last release
 - [ ] Version bumped in: `Cargo.toml` (workspace), `ui/package.json`, `tauri.conf.json` files
 - [ ] Breaking changes documented with migration guide if needed
 

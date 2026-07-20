@@ -75,16 +75,19 @@ echo "  Last tag: $LAST_TAG"
 if [ "$DRY_RUN" = "true" ]; then
   echo "  DRY RUN: would bump version in Cargo.toml, package.json, tauri.conf.json"
 else
-  # Cargo workspace version
-  sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
-  # UI package.json
-  sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" ui/package.json
-  # Tauri configs
-  for conf in apps/desktop-client/tauri.conf.json apps/tablet-client/tauri.conf.json; do
-    if [ -f "$conf" ]; then
-      sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$conf"
-    fi
-  done
+  # Use cargo-set-version if available, fall back to sed
+  if command -v cargo-set-version &>/dev/null; then
+    cargo set-version "$NEW_VERSION"
+  else
+    # Cross-platform sed: use .bak extension then remove
+    sed -i.bak "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml && rm -f Cargo.toml.bak
+    sed -i.bak "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" ui/package.json && rm -f ui/package.json.bak
+    for conf in apps/desktop-client/tauri.conf.json apps/tablet-client/tauri.conf.json; do
+      if [ -f "$conf" ]; then
+        sed -i.bak "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$conf" && rm -f "${conf}.bak"
+      fi
+    done
+  fi
   echo "  Version bumped in Cargo.toml, package.json, tauri.conf.json"
 fi
 
@@ -93,7 +96,10 @@ echo ""
 echo "[3/5] Generating changelog..."
 
 if [ "$LAST_TAG" != "none" ]; then
-  CHANGELOG=$(git log "$LAST_TAG..HEAD" --pretty=format:"- %s" --no-merges)
+  CHANGELOG=$(git log "$LAST_TAG..HEAD" --pretty=format:"- %s" --no-merges | head -100)
+  if [ "$(git log "$LAST_TAG..HEAD" --pretty=format:"- %s" --no-merges | wc -l)" -gt 100 ]; then
+    echo "  Warning: more than 100 commits, changelog truncated. Review manually."
+  fi
 else
   CHANGELOG=$(git log --pretty=format:"- %s" --no-merges)
 fi

@@ -31,17 +31,27 @@ fi
 
 # Decompress if needed
 RESTORE_DB="$BACKUP_FILE"
+CLEANUP_DB=""
 if [[ "$BACKUP_FILE" == *.gz ]]; then
   echo "restore-db: decompressing $BACKUP_FILE..."
-  gunzip -kf "$BACKUP_FILE"
   RESTORE_DB="${BACKUP_FILE%.gz}"
+  gunzip -c "$BACKUP_FILE" > "$RESTORE_DB"
+  CLEANUP_DB="$RESTORE_DB"
+else
+  RESTORE_DB="$BACKUP_FILE"
 fi
 
 # Integrity check
+cleanup_on_exit() {
+  if [ -n "$CLEANUP_DB" ] && [ -f "$CLEANUP_DB" ] && [ "$CLEANUP_DB" != "$TARGET_DB" ]; then
+    rm -f "$CLEANUP_DB"
+  fi
+}
+trap cleanup_on_exit EXIT
+
 echo "restore-db: verifying backup integrity..."
 if ! sqlite3 "$RESTORE_DB" "PRAGMA integrity_check;" 2>&1 | grep -q "ok"; then
   echo "restore-db: ERROR — backup integrity check FAILED"
-  rm -f "${RESTORE_DB}"  # clean up decompressed file if we created it
   exit 1
 fi
 echo "restore-db: integrity check PASSED"
