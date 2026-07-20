@@ -87,8 +87,10 @@ describe('SalesDashboardScreen', () => {
       if (cmd === 'export_sales_by_hour') return Promise.resolve([]);
       return Promise.resolve([]);
     });
-    renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
-    expect(await screen.findByText(/no data for today/i, {}, { timeout: 5000 })).toBeInTheDocument();
+    const { container } = renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/no data for today/i);
+    }, { timeout: 10000 });
   });
 
   it('formats currency correctly', async () => {

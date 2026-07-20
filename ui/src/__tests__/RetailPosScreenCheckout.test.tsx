@@ -284,7 +284,9 @@ describe('RetailPosScreen — checkout & navigation', () => {
     await userEvent.click(exactBtn);
     expect(screen.getByText(/Change/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^Complete$/i }));
-    await waitFor(() => expect(screen.getByText(/Sale Complete/i)).toBeInTheDocument(), { timeout: 5000 });
+    // ReceiptPreview shows after sale completes — verify it rendered
+    await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument(), { timeout: 5000 });
+    await userEvent.click(screen.getByText('Print Receipt'));
     expect(salesApi.completeSale).toHaveBeenCalledWith(
       expect.objectContaining({ paymentMethod: 'CASH', tenderedMinor: 3500 }),
     );
@@ -389,6 +391,8 @@ describe('RetailPosScreen — checkout & navigation', () => {
     // Change should be displayed
     expect(screen.getByText(/Change/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /^Complete$/i }));
-    await waitFor(() => expect(screen.getByText(/Sale Complete/i)).toBeInTheDocument(), { timeout: 5000 });
+    // ReceiptPreview shows after sale completes — verify it rendered
+    await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument(), { timeout: 5000 });
+    await userEvent.click(screen.getByText('Print Receipt'));
   });
 });

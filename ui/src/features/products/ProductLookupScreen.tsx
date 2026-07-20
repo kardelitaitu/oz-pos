@@ -90,18 +90,23 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [addedSku, setAddedSku] = useState<string | null>(null);
   const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const gridContainerRef = useRef<HTMLDivElement | null>(null);
   const [gridWidth, setGridWidth] = useState(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  // Measure the grid container width for responsive column count
-  useEffect(() => {
-    const el = gridContainerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      if (entry) setGridWidth(entry.contentRect.width);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+  // Measure the grid container width for responsive column count.
+  // Using a callback ref handles conditional rendering and mounting/unmounting correctly.
+  const gridContainerRef = useCallback((el: HTMLDivElement | null) => {
+    if (resizeObserverRef.current) {
+      resizeObserverRef.current.disconnect();
+      resizeObserverRef.current = null;
+    }
+    if (el) {
+      const ro = new ResizeObserver(([entry]) => {
+        if (entry) setGridWidth(entry.contentRect.width);
+      });
+      ro.observe(el);
+      resizeObserverRef.current = ro;
+    }
   }, []);
 
   // Calculate column count and cell width from measured container width

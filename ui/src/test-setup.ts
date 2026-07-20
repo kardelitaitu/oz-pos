@@ -28,6 +28,42 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
   });
 }
 
+// ResizeObserver is not implemented/simulated in jsdom; stub it so virtualised grids render.
+if (typeof window !== 'undefined') {
+  window.ResizeObserver = class MockResizeObserver {
+    callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+    observe(element: HTMLElement) {
+      this.callback(
+        [
+          {
+            target: element,
+            contentRect: {
+              width: 1024,
+              height: 768,
+              top: 0,
+              left: 0,
+              bottom: 768,
+              right: 1024,
+              x: 0,
+              y: 0,
+              toJSON: () => {},
+            },
+            borderBoxSize: [],
+            contentBoxSize: [],
+            devicePixelContentBoxSize: [],
+          },
+        ],
+        this
+      );
+    }
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // ── Suppress @fluent/react missing-key console errors ────────────
 //
 // Components may render <Localized id="…"> with dynamic action keys
@@ -79,6 +115,3 @@ console.warn = (...args: unknown[]) => {
   }
   originalWarn(...args);
 };
-
-
-

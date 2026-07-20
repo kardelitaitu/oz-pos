@@ -91,6 +91,9 @@ describe('PaymentModal — sale flow', () => {
     await userEvent.type(input, '10');
     await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
+    const printBtn = await screen.findByRole('button', { name: /Print Receipt/i });
+    await userEvent.click(printBtn);
+
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
     });
@@ -113,8 +116,8 @@ describe('PaymentModal — sale flow', () => {
     await userEvent.type(input, '10');
     await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
-    await screen.findByText(/sale complete/i);
-    await screen.findByText(/change due/i);
+    const printBtn = await screen.findByRole('button', { name: /Print Receipt/i });
+    await userEvent.click(printBtn);
 
     await waitFor(() => {
       expect(onComplete).toHaveBeenCalled();
@@ -137,8 +140,8 @@ describe('PaymentModal — sale flow', () => {
     await userEvent.type(input, '10');
     await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
-    expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
-    expect(await screen.findByText(/change due/i)).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: /Receipt Preview/i })).toBeInTheDocument();
+    expect(await screen.findByText(/CHANGE:/i)).toBeInTheDocument();
     expect(await screen.findByText('$ 3,00')).toBeInTheDocument();
   });
 
@@ -158,7 +161,9 @@ describe('PaymentModal — sale flow', () => {
     expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: /^complete$/i }));
 
-    expect(await screen.findByText(/sale complete/i)).toBeInTheDocument();
+    const printBtn = await screen.findByRole('button', { name: /Print Receipt/i });
+    await userEvent.click(printBtn);
+
     expect(invokeMock).toHaveBeenCalledWith('print_sales_receipt', expect.any(Object));
   });
 });

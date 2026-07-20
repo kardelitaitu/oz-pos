@@ -482,10 +482,10 @@ describe('SalesReportScreen', () => {
     resolveDefaultData();
 
     const endInput = screen.getByLabelText('End date') as HTMLInputElement;
-    fireEvent.change(endInput, { target: { value: '2026-07-20' } });
+    fireEvent.change(endInput, { target: { value: '2026-07-25' } });
 
     await waitFor(() => {
-      expect(mockGetDailyRevenue).toHaveBeenCalledWith(expect.any(String), '2026-07-20');
+      expect(mockGetDailyRevenue).toHaveBeenCalledWith(expect.any(String), '2026-07-25');
     });
   });
 
