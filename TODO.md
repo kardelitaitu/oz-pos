@@ -2,7 +2,7 @@
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
-**Current state:** 2 / 18 items complete (11% ⏳) · Updated 2026-07-20
+**Current state:** 4 / 18 items complete (22% ⏳) · Updated 2026-07-20
 
 ---
 
@@ -16,9 +16,9 @@ Currently `cargo test --workspace --all-features` compiles every crate from scra
 
 ### Checklist
 
-- [ ] **P26-1: Add `[profile.test]`** — Introduce a dedicated test profile that inherits from `dev` but sets `strip = "symbols"`, `debug = 1`, and `codegen-units = 16` (down from 256). This reduces the test binary size by ~60% and speeds up `rustc` link time without losing useful backtrace info. Estimated impact: **30–50% faster compile**.
+- [x] **P26-1: Add `[profile.test]`** ✅ — Introduce a dedicated test profile that inherits from `dev` but sets `strip = "symbols"`, `debug = 1`, and `codegen-units = 16` (down from 256). This reduces the test binary size by ~60% and speeds up `rustc` link time without losing useful backtrace info. Estimated impact: **30–50% faster compile**.
 
-- [ ] **P26-2: cargo-nextest** — Replace `cargo test` with `cargo nextest run` in CI and `check.sh`. Nextest runs each test in its own process (no shared state corruption), supports per-test timeouts, retries flaky tests, and outputs JUnit XML. On a workspace with hundreds of tests, nextest is typically **2–3x faster** than the default harness because it can run tests from different binaries concurrently.
+- [x] **P26-2: cargo-nextest** ✅ — Replace `cargo test` with `cargo nextest run` in CI and `check.sh`. Nextest runs each test in its own process (no shared state corruption), supports per-test timeouts, retries flaky tests, and outputs JUnit XML. On a workspace with hundreds of tests, nextest is typically **2–3x faster** than the default harness because it can run tests from different binaries concurrently.
 
 - [ ] **P26-3: Default-features fast track in CI** — Split `rust-test` CI job into two: `rust-test-fast` (default features, exclude `slow-tests` feature gate) and `rust-test-full` (all features, can be a separate job or manual trigger). The fast track should complete in **< 3 min** for most PRs. The full track runs nightly or on merge to main.
 
@@ -96,11 +96,11 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 P26 — Rust Test Compilation & Execution | 6 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🔴 P26 — Rust Test Compilation & Execution | 6 | 4 | ██████████░░░░░░ 67% ⏳ |
 | 🟠 P27 — UI Test Performance | 5 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
 | 🟡 P28 — E2E Infrastructure & Speed | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
 | 🟢 P29 — Test Coverage & Benchmarking | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
-| **Total** | **19** | **0** | **0% ⏳** |
+| **Total** | **19** | **4** | **21% ⏳** |
 
 <br>
 
