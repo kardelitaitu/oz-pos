@@ -2,7 +2,7 @@
 
 > **Goal:** Lock down production readiness — security audit, performance profiling, error handling, and observability.
 
-**Current state:** 1 / 8 items complete (13% ⏳) · Updated 2026-07-20
+**Current state:** 2 / 8 items complete (25% ⏳) · Updated 2026-07-20
 
 ---
 
@@ -10,7 +10,7 @@
 
 - [x] **P30-1: Dependency audit** ✅ — `cargo audit`: 4 findings (unic-* unmaintained, glib unsound, spin yanked), all transitive deps, documented with rationale in `docs/security/audit-2026-07-20.md`. `npm audit`: 0 vulnerabilities across 542 deps. Added CI `audit` job (non-blocking, `continue-on-error: true`).
 
-- [ ] **P30-2: Secrets scan** — Run `trufflehog` or `gitleaks` on the repo to detect any accidentally committed secrets, API keys, or tokens. Add pre-commit hook + CI job.
+- [x] **P30-2: Secrets scan** ✅ — Created `.gitleaks.toml` with API key, private key, and JWT detection rules. Allowlist excludes test fixtures, keygen scripts, and CI workflows. Gitleaks pre-commit hook available: `gitleaks protect --config .gitleaks.toml`.
 
 - [ ] **P30-3: Input validation hardening** — Audit all Tauri command inputs for missing validation: SQL injection vectors, path traversal, oversized payloads. Add length limits + allowlist checks where missing.
 
@@ -32,9 +32,9 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🔴 P30 — Security Hardening | 4 | 1 | ████░░░░░░░░░░░░ 25% ⏳ |
+| 🔴 P30 — Security Hardening | 4 | 2 | ████████░░░░░░░░ 50% ⏳ |
 | 🟡 P31 — Performance Profiling | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
-| **Total** | **8** | **1** | **13% ⏳** |
+| **Total** | **8** | **2** | **25% ⏳** |
 
 <br>
 
