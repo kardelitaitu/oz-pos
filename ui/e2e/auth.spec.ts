@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAs } from './helpers';
 
 /**
  * E2E: Staff Login with PIN — Hard Assertions
@@ -200,5 +201,19 @@ test.describe('Staff Login', () => {
     if (dotCount > 1) {
       await expect(stepDots.nth(1)).toHaveClass(/staff-login-step-dot--active/);
     }
+  });
+
+  // ── Bonus: Admin login shows correct greeting ───────────────
+
+  test('admin login shows manager greeting', async ({ page }) => {
+    await loginAs(page, 'admin', '9999');
+    await expect(page.locator('.ws-header-greeting')).toContainText('Manager');
+  });
+
+  // ── Bonus: Cashier login shows cashier greeting ──────────────
+
+  test('cashier login shows cashier greeting', async ({ page }) => {
+    await loginAs(page, 'kasir', '1234');
+    await expect(page.locator('.ws-header-greeting')).toContainText('Cashier');
   });
 });

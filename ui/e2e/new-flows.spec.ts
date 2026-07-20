@@ -50,6 +50,26 @@ test.describe('Workspace Picker', () => {
     const home = page.locator('.workspace-home');
     await expect(home).not.toBeVisible({ timeout: 5_000 });
   });
+
+  test('workspace card active-dot indicator is visible', async ({ page }) => {
+    await loginAs(page, 'owner', '1234');
+
+    // Click Store POS to activate it.
+    const storeCard = page.locator('.workspace-card').filter({ hasText: 'Store POS' });
+    await storeCard.click();
+    await page.waitForTimeout(2_000);
+
+    // Navigate back to workspace picker (Escape key).
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.workspace-home', { timeout: 10_000 });
+
+    // The last-used workspace card should have an active dot.
+    const activeCard = page.locator('.workspace-card--active');
+    await expect(activeCard).toBeVisible({ timeout: 5_000 });
+
+    const activeDot = activeCard.locator('.workspace-card-active-dot');
+    await expect(activeDot).toBeVisible();
+  });
 });
 
 // ── E2E-27: Session lock / unlock ─────────────────────────────
@@ -124,7 +144,7 @@ test.describe('KDS Ticket Board', () => {
 
 test.describe('Audit Log', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'admin', 'admin123');
+    await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.ADMIN);
   });
 

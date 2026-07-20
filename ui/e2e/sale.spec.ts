@@ -224,6 +224,17 @@ test.describe('Complete Sale Flow', () => {
     }
   });
 
+  // ── Bonus: Pay button disabled when cart is empty ────────────
+
+  test('pay button is disabled when cart is empty', async ({ page }) => {
+    const productCards = page.locator('.product-card-btn');
+    await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
+
+    // With no items in cart, pay button must be disabled.
+    const payBtn = page.locator('.retail-cart-action-btn--pay');
+    await expect(payBtn).toBeDisabled({ timeout: 3_000 });
+  });
+
   // ── E2E-15: Remove item from cart ───────────────────────────
 
   test('removing item empties cart and disables pay button', async ({ page }) => {

@@ -459,6 +459,7 @@ export default function StaffLoginScreen() {
     /* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- focus convenience, keyboard covered below */
     <div
       className="staff-login-screen"
+      data-testid="staff-login-screen"
       onClick={handleScreenClick}
       onKeyDown={handleScreenKeyDown}
       tabIndex={-1}

@@ -1320,6 +1320,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                 <button
                   type="button"
                   className="retail-cart-action-btn retail-cart-action-btn--pay"
+                  data-testid="pay-btn"
                   onClick={handlePay}
                   disabled={lines.length === 0 || !activeShift}
                   aria-label={l10n.getString('sale-pay-button')}

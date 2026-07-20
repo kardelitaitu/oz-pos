@@ -25,7 +25,7 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 test.describe('Product Management', () => {
   test.beforeEach(async ({ page }) => {
-    await loginAs(page, 'admin', 'admin123');
+    await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.INVENTORY);
   });
 

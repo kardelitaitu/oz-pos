@@ -22,7 +22,7 @@ const MOCK_STAFF: Record<string, {
   is_active: boolean;
 }> = {
   'owner': { user_id: 'owner-1', pin_hash: '1234', role: 'owner', is_active: true },
-  'admin': { user_id: 'admin-1', pin_hash: 'admin123', role: 'manager', is_active: true },
+  'admin': { user_id: 'admin-1', pin_hash: '9999', role: 'manager', is_active: true },
   'kasir': { user_id: 'kasir-1', pin_hash: '1234', role: 'cashier', is_active: true },
 };
 
@@ -128,7 +128,14 @@ interface CartLine {
 }
 let cartState: { lines: CartLine[] } = { lines: [] };
 
-// ── Invoke handler ─────────────────────────────────────────────
+// ── Active shift state (for pay-btn-enabled E2E test) ──────────
+let mockActiveShift: Record<string, unknown> | null = {
+  id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
+  openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
+  totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
+  totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
+  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+};
 const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // AUTH / STAFF
@@ -535,36 +542,48 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // SHIFTS
   // ═══════════════════════════════════════════════════════════════
 
-  'get_active_shift': () => null,
-  'get_active_shift_scoped': () => null,
-  'open_shift': () => ({
-    id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
-    openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
-    totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
-    totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  }),
-  'open_shift_scoped': () => ({
-    id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
-    openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
-    totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
-    totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  }),
-  'close_shift': () => ({
-    id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
-    openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
-    totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
-    totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  }),
-  'close_shift_scoped': () => ({
-    id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
-    openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
-    totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
-    totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-  }),
+  'get_active_shift': () => mockActiveShift,
+  'get_active_shift_scoped': () => mockActiveShift,
+  'open_shift': () => {
+    mockActiveShift = {
+      id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
+      openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
+      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
+      totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    return mockActiveShift;
+  },
+  'open_shift_scoped': () => {
+    mockActiveShift = {
+      id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
+      openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
+      totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
+      totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+    return mockActiveShift;
+  },
+  'close_shift': () => {
+    mockActiveShift = null;
+    return {
+      id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
+      openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
+      totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
+      totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+  },
+  'close_shift_scoped': () => {
+    mockActiveShift = null;
+    return {
+      id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
+      openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
+      totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
+      totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    };
+  },
   'list_shifts': () => [],
   'get_shift': () => null,
   'get_shift_report': () => null,

@@ -469,6 +469,7 @@ function ProductCard({ product, onAdd, added }: ProductCardProps) {
         <button
           type="button"
           className="product-card-btn"
+          data-testid="product-card"
           onClick={handleAdd}
           disabled={!product.inStock}
           aria-label={`${product.name} — ${formatMoney(product.price)}`}

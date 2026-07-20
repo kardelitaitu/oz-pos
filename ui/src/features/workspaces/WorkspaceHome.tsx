@@ -606,6 +606,7 @@ export default function WorkspaceHome() {
                     <div
                       key={ws.type_key}
                       className={`workspace-card ${colorClass} workspace-card--disabled`}
+                      data-testid="workspace-card"
                       aria-label={l10n.getString('workspace-card-no-access-aria', { name: ws.name })}
                     >
                       <div className="workspace-card-key-hint">{idx + 1}</div>
@@ -641,6 +642,7 @@ export default function WorkspaceHome() {
                     type="button"
                     aria-current={isActive ? 'true' : undefined}
                     className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                    data-testid="workspace-card"
                     onClick={(e) => handleCardClick(ws.type_key, e)}
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
                   >
