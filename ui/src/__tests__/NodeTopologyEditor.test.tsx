@@ -1,5 +1,5 @@
 import { screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor from '../features/stores/NodeTopologyEditor';
 
