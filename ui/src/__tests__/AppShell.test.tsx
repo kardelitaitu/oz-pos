@@ -4,13 +4,14 @@
 // (chef button), and the standalone kds workspace, plus back-button
 // navigation returning to the correct landing route.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import AppShell from '@/frontend/shell/AppShell';
+import type { AuthContextValue } from '@/contexts/AuthContext';
 
 // ── Mock sub-screens ─────────────────────────────────────────────
 
@@ -111,12 +112,11 @@ vi.mock('@/hooks/useFeatures', () => ({
 
 // ── Auth context mock (dynamic per test) ────────────────────
 
-const mockAuthSession = vi.fn(() => ({
+const mockAuthSession: Mock<() => AuthContextValue> =
+  vi.fn(() => ({
   session: {
     user_id: 'user-1',
-    username: 'testuser',
     role_name: 'cashier',
-    token: 'mock-token',
     role_id: 'role-1',
     display_name: 'Test User',
   },
@@ -125,6 +125,7 @@ const mockAuthSession = vi.fn(() => ({
   login: vi.fn(),
   logout: vi.fn(),
   clearError: vi.fn(),
+  swapSession: vi.fn(),
   isManager: false,
   isOwner: false,
 }));
@@ -187,9 +188,7 @@ function mockKitchenRole() {
   mockAuthSession.mockReturnValue({
     session: {
       user_id: 'user-1',
-      username: 'kitchen-staff',
       role_name: 'Kitchen',
-      token: 'mock-token',
       role_id: 'role-kitchen',
       display_name: 'Chef',
     },
@@ -198,6 +197,7 @@ function mockKitchenRole() {
     login: vi.fn(),
     logout: vi.fn(),
     clearError: vi.fn(),
+    swapSession: vi.fn(),
     isManager: false,
     isOwner: false,
   });
@@ -212,9 +212,7 @@ describe('AppShell — KDS workspace navigation', () => {
     mockAuthSession.mockReturnValue({
       session: {
         user_id: 'user-1',
-        username: 'testuser',
         role_name: 'cashier',
-        token: 'mock-token',
         role_id: 'role-1',
         display_name: 'Test User',
       },
@@ -223,6 +221,7 @@ describe('AppShell — KDS workspace navigation', () => {
       login: vi.fn(),
       logout: vi.fn(),
       clearError: vi.fn(),
+      swapSession: vi.fn(),
       isManager: false,
       isOwner: false,
     });
@@ -242,9 +241,7 @@ describe('AppShell — KDS workspace navigation', () => {
       mockAuthSession.mockReturnValue({
         session: {
           user_id: 'user-1',
-          username: 'testuser',
           role_name: 'cashier',
-          token: 'mock-token',
           role_id: 'role-1',
           display_name: 'Test User',
         },
@@ -253,6 +250,7 @@ describe('AppShell — KDS workspace navigation', () => {
         login: vi.fn(),
         logout: vi.fn(),
         clearError: vi.fn(),
+        swapSession: vi.fn(),
         isManager: false,
         isOwner: false,
       });
@@ -292,6 +290,7 @@ describe('AppShell — KDS workspace navigation', () => {
         login: vi.fn(),
         logout: vi.fn(),
         clearError: vi.fn(),
+        swapSession: vi.fn(),
         isManager: false,
         isOwner: false,
       });
@@ -532,13 +531,13 @@ describe('AppShell — KDS workspace navigation', () => {
     it('skips license check and renders login screen in dev mode', async () => {
       // Override auth to no session → login screen
       mockAuthSession.mockReturnValue({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        session: null as any,
+        session: null,
         loading: false,
         error: null,
         login: vi.fn(),
         logout: vi.fn(),
         clearError: vi.fn(),
+        swapSession: vi.fn(),
         isManager: false,
         isOwner: false,
       });
