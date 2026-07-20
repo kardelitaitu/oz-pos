@@ -129,13 +129,13 @@ Based on conservative customer acquisition projections across major Indonesian t
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **New 1 Time Licenses (One-Time)** | 100 | 200 | 350 | 500 | 700 |
 | **Active Standard Subscribers** | 150 | 300 | 600 | 1,000 | 1,500 |
-| **Active Pro Subscribers** | 100 | 150 | 200 | 300 | 450 |
+| **Active Pro Subscribers** | 200 | 300 | 450 | 650 | 900 |
 | **Active Enterprise Contracts** | 0 | 5 | 10 | 15 | 25 |
 | **1 Time License Revenue** | IDR 350.000.000 | IDR 700.000.000 | IDR 1.225.000.000 | IDR 1.750.000.000 | IDR 2.450.000.000 |
 | **Standard SaaS Revenue** | IDR 300.000.000 | IDR 600.000.000 | IDR 1.200.000.000 | IDR 2.000.000.000 | IDR 3.000.000.000 |
-| **Pro SaaS Revenue** | IDR 500.000.000 | IDR 750.000.000 | IDR 1.000.000.000 | IDR 1.500.000.000 | IDR 2.250.000.000 |
+| **Pro SaaS Revenue** | IDR 1.000.000.000 | IDR 1.500.000.000 | IDR 2.250.000.000 | IDR 3.250.000.000 | IDR 4.500.000.000 |
 | **Enterprise Revenue (50jt avg.)** | IDR 0 | IDR 250.000.000 | IDR 500.000.000 | IDR 750.000.000 | IDR 1.250.000.000 |
-| **Total Annual Revenue** | **IDR 1.150.000.000** | **IDR 2.300.000.000** | **IDR 3.925.000.000** | **IDR 6.000.000.000** | **IDR 8.950.000.000** |
+| **Total Annual Revenue** | **IDR 1.650.000.000** | **IDR 3.050.000.000** | **IDR 5.175.000.000** | **IDR 7.750.000.000** | **IDR 11.200.000.000** |
 
 ---
 
@@ -145,8 +145,8 @@ Due to the **local‑first edge database architecture** (SQLite processes >99 
 
 ### 6.1 Server Hosting & Network Load Comparison
 
-* **Traditional Cloud POS Model:** Every item scan, transaction calculation, and report query triggers a cloud API call. Hosting expenses for databases and app servers therefore scale linearly (averaging **IDR 15 000 / month / active terminal**).
-* **OZ‑POS Edge Model:** Data is persisted locally; our solid sync mechanism uses an intelligent, priority-aware offline outbox queue with built-in deduplication. Identical actions (e.g., cross-terminal syncs or network retries) are deduped locally before ever hitting the network, and payloads are processed asynchronously. This yields a **> 96 % reduction** in CPU and bandwidth usage, driving cloud hosting and DB compute costs down to just **IDR 500 / month / active terminal**.
+* **Traditional Cloud POS Model:** Every item scan, transaction calculation, and report query triggers a cloud API call. Hosting expenses for databases and app servers therefore scale linearly (averaging IDR 15 000 / month / active terminal).
+* **OZ-POS Edge Model:** Data is persisted locally; the cloud database is only contacted during compact outbox synchronization cycles. This yields > 90 % reduction in CPU and bandwidth usage, keeping cloud hosting and telemetry costs below IDR 1 200 / month / active terminal.
 
 ### 6.2 Detailed OpEx Breakdown per Terminal (5‑Year Horizon)
 
