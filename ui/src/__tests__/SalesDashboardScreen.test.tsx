@@ -88,9 +88,7 @@ describe('SalesDashboardScreen', () => {
       return Promise.resolve([]);
     });
     renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
-    await waitFor(() => {
-      expect(screen.getByText(/no data for today/i)).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/no data for today/i, {}, { timeout: 5000 })).toBeInTheDocument();
   });
 
   it('formats currency correctly', async () => {

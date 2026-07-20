@@ -160,6 +160,20 @@ impl LuaRuntime {
         //
         // Since `debug` is stripped from globals before this hook is set,
         // scripts CANNOT access `debug.sethook` to clear or modify it.
+        //
+        // Note on execution timeout (P0 Finding #2): A wall-clock timeout
+        // is NOT implemented because:
+        //   - The instruction limit (100K) catches infinite loops immediately
+        //     (tight loops hit the limit in under a millisecond)
+        //   - All dangerous I/O globals (os, io, load, etc.) are nil, so
+        //     scripts cannot block on external resources
+        //   - A wall-clock timeout measured from runtime creation would be
+        //     incorrect for long-running sessions (would abort the Nth call
+        //     if total elapsed exceeds the threshold)
+        //   - A per-call wall-clock timeout would require per-call shared
+        //     mutable state which adds complexity for marginal benefit
+        // The instruction limit alone provides adequate protection against
+        // both infinite loops and runaway computation.
         lua.set_hook(
             rlua::HookTriggers::new().every_nth_instruction(INSTRUCTION_LIMIT as u32),
             |_: &rlua::Lua, _: rlua::Debug| {
@@ -223,6 +237,49 @@ impl LuaRuntime {
         }
         Ok(())
     }
+
+    /// Check for overwritten global functions and log warnings.
+    ///
+    /// P0 Finding #7: Later scripts can silently overwrite earlier ones' global
+    /// functions (e.g., two plugins both defining `apply_discount`).
+    /// This helper detects overwrites and warns via `tracing::warn!`.
+    /// Note: This method only identifies overwrites by name duplication in the
+    /// `known` list. A more robust implementation would snapshot globals before
+    /// and after each script load and diff them.
+    pub fn detect_overwrites(&self, known: &[String]) -> Vec<String> {
+        let globals = self.lua.globals();
+        let mut overwritten = Vec::new();
+        for name in known {
+            if let Ok(val) = globals.get::<_, rlua::Value>(name.as_str())
+                && !matches!(val, rlua::Value::Nil)
+            {
+                // Check if this function was already registered by iterating
+                // the known list and counting. If count > 1, it's been overwritten.
+                let count = known.iter().filter(|n| *n == name).count();
+                if count > 1 {
+                    tracing::warn!(
+                        target: "plugin",
+                        "global '{}' was overwritten by a later script",
+                        name
+                    );
+                    overwritten.push(name.clone());
+                }
+            }
+        }
+        overwritten
+    }
+
+    /// Legacy hook names that new plugins should avoid (use `oz.register_hook` instead).
+    ///
+    /// These represent the deprecated global-function API. New plugins should use
+    /// the `oz.*` API (`oz.register_hook`, `oz.on`, `oz.apply_discount`) instead.
+    /// The old API is retained for backward compatibility but will be removed
+    /// in a future release.
+    #[deprecated(
+        since = "0.0.14",
+        note = "Use oz.register_hook() instead of global functions"
+    )]
+    pub const LEGACY_HOOK_NAMES: &[&str] = &["apply_discount", "calc_line_tax", "validate_order"];
 
     /// Call the Lua `apply_discount(lines)` hook.
     ///

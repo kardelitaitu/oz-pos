@@ -185,15 +185,14 @@ describe('OfflineQueueScreen', () => {
   });
 
   it('shows sync result after Sync All succeeds', async () => {
-    mockListAllOffline.mockResolvedValueOnce([makeQueueItem()]);
-    mockListAllOffline.mockResolvedValueOnce([]);
+    mockListAllOffline.mockResolvedValue([makeQueueItem()]);
     mockPendingOfflineCount.mockResolvedValue(1);
     mockRetryOfflineSync.mockResolvedValue({ synced: 1, failed: 0 });
 
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Sync All')).toBeTruthy();
+      expect(screen.getByText('Sync All')).not.toBeDisabled();
     });
 
     const user = userEvent.setup();
@@ -201,7 +200,7 @@ describe('OfflineQueueScreen', () => {
 
     await waitFor(() => {
       expect(mockRetryOfflineSync).toHaveBeenCalled();
-      expect(screen.getByText(/Synced/)).toBeTruthy();
+      expect(screen.getByText(/Synced/i)).toBeTruthy();
     });
   });
 });

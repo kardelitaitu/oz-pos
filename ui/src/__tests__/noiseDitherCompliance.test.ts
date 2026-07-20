@@ -69,6 +69,17 @@ const KNOWN_NOISE_SELECTORS = [
   '.pos-cart-line',
   '.pos-cart-tip-segment',
   '.permission-denied-card',
+  '.tables-floorplan',
+  '.terminal-mgmt-toggle-thumb',
+  '.workspace-card--active',
+  '.workspace-skeleton-card',
+  '.ctx-menu',
+  '.status-indicator.online',
+  '.status-indicator.warning',
+  '.status-indicator.offline',
+  '.fastpin-card',
+  '.qris-container',
+  '.store-switcher-dropdown',
 ];
 
 /** CSS selectors that are exempt from noise-dither even though they use --shadow-* */

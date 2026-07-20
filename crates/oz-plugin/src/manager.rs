@@ -136,6 +136,14 @@ impl PluginManager {
             let pd = pending_discounts.clone();
             let apply_discount_fn = lua
                 .create_function(move |_, (target, percent): (String, i64)| {
+                    // P0 Finding #5: Validate discount percentage is in 0-100 range.
+                    // A malicious or buggy plugin could otherwise give 1000% discounts
+                    // or negative prices.
+                    if !(0..=100).contains(&percent) {
+                        return Err(rlua::Error::RuntimeError(format!(
+                            "oz.apply_discount: percent must be between 0 and 100, got {percent}"
+                        )));
+                    }
                     if let Ok(mut guard) = pd.lock() {
                         guard.push(PendingDiscount { target, percent });
                     }

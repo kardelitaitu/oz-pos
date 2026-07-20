@@ -265,7 +265,18 @@
 .setup-step-panel::after,
 .pos-cart-line::after,
 .pos-cart-tip-segment::after,
-.permission-denied-card::after {
+.permission-denied-card::after,
+.tables-floorplan::after,
+.terminal-mgmt-toggle-thumb::after,
+.workspace-card--active::after,
+.workspace-skeleton-card::after,
+.ctx-menu::after,
+.status-indicator.online::after,
+.status-indicator.warning::after,
+.status-indicator.offline::after,
+.fastpin-card::after,
+.qris-container::after,
+.store-switcher-dropdown::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -322,7 +333,18 @@
   .setup-step-panel::after,
   .pos-cart-line::after,
   .pos-cart-tip-segment::after,
-  .permission-denied-card::after { display: none; }
+  .permission-denied-card::after,
+.tables-floorplan::after,
+.terminal-mgmt-toggle-thumb::after,
+.workspace-card--active::after,
+.workspace-skeleton-card::after,
+.ctx-menu::after,
+.status-indicator.online::after,
+.status-indicator.warning::after,
+.status-indicator.offline::after,
+.fastpin-card::after,
+.qris-container::after,
+.store-switcher-dropdown::after { display: none; }
 }
 
 /* Reduced motion — hide noise overlay to reduce GPU compositing
@@ -365,7 +387,18 @@
   .setup-step-panel::after,
   .pos-cart-line::after,
   .pos-cart-tip-segment::after,
-  .permission-denied-card::after { display: none; }
+  .permission-denied-card::after,
+.tables-floorplan::after,
+.terminal-mgmt-toggle-thumb::after,
+.workspace-card--active::after,
+.workspace-skeleton-card::after,
+.ctx-menu::after,
+.status-indicator.online::after,
+.status-indicator.warning::after,
+.status-indicator.offline::after,
+.fastpin-card::after,
+.qris-container::after,
+.store-switcher-dropdown::after { display: none; }
 }
 
 .card--padding-sm  { padding: var(--space-3); }

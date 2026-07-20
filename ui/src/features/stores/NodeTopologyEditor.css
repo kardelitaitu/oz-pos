@@ -256,7 +256,12 @@
 
 .node-connecting-source {
   border-color: var(--color-warning) !important;
-  animation: pulse-source 1.5s infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .node-connecting-source {
+    animation: pulse-source 1.5s infinite;
+  }
 }
 
 @keyframes pulse-source {
