@@ -1,3 +1,41 @@
+# 0.0.14 — Backup, Restore & Release
+
+> **Goal:** Automate database backup/restore, verify disaster recovery, and harden the release pipeline.
+
+**Current state:** 0 / 6 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P34 — Backup & Recovery
+
+- [ ] **P34-1: Automated backup script** — Create `scripts/backup-db.sh` that copies the SQLite DB with `.backup` command, timestamps the filename, and compresses with gzip. Support configurable backup directory and retention (keep last 30 days).
+
+- [ ] **P34-2: Restore procedure** — Create `scripts/restore-db.sh` that takes a backup file path, verifies integrity (SQLite `.integrity_check`), replaces the active DB, and validates with a smoke query.
+
+- [ ] **P34-3: Backup verification test** — Create integration test: seed DB with known data → backup → restore → verify all tables match. Run as part of CI.
+
+## 🟡 P35 — Release Pipeline
+
+- [ ] **P35-1: Release checklist** — Create `docs/releases/checklist.md` with pre-release verification steps: all tests pass, changelog updated, version bumped, Docker image built, binary size check, smoke test.
+
+- [ ] **P35-2: Release script** — Create `scripts/release.sh` that automates: cargo fmt + clippy + test, bump version, generate changelog from git log, create git tag.
+
+- [ ] **P35-3: CI release job** — Add `release` CI workflow that triggers on tag push: build all targets (desktop, tablet, Docker), run full test suite, publish artifacts to GitHub Releases.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P34 — Backup & Recovery | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P35 — Release Pipeline | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **6** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — Production Hardening
 
 > **Goal:** Lock down production readiness — security audit, performance profiling, error handling, and observability.
