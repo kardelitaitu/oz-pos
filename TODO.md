@@ -1,3 +1,39 @@
+# 0.0.14 — Build Verification & Coverage
+
+> **Goal:** Verify the full CI pipeline passes locally, check release builds compile, and identify test coverage gaps.
+
+**Current state:** 0 / 5 items complete (0% ⏳) · Updated 2026-07-20
+
+---
+
+## 🔴 P46 — Build Verification
+
+- [ ] **P46-1: Run check.ps1 locally** — Execute `scripts/check.ps1` (fmt + clippy + test + lint + typecheck + i18n). Fix any failures found.
+
+- [ ] **P46-2: Release build smoke test** — Run `cargo build --release -p oz-pos-app`. Verify it compiles and binary size is under 50 MB.
+
+- [ ] **P46-3: UI production build** — Run `cd ui && npm run build`. Verify no build errors, bundle size under 5 MB.
+
+## 🟡 P47 — Test Coverage
+
+- [ ] **P47-1: Test count audit** — Count total tests across Rust (nextest) and UI (vitest). Document coverage by crate/feature.
+
+- [ ] **P47-2: Untested error paths** — Identify `CoreError` variants without dedicated tests. Add at least 3 new tests for uncovered error paths.
+
+---
+
+## Progress Summary
+
+| Area | Total | Done | Progress |
+|------|-------|------|----------|
+| 🔴 P46 — Build Verification | 3 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟡 P47 — Test Coverage | 2 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| **Total** | **5** | **0** | **0% ⏳** |
+
+<br>
+
+---
+
 # 0.0.14 — Migration Hardening & Code Cleanup
 
 > **Goal:** Implement the concrete recommendations from previous audits: add WAL mode to migrations, add missing DB indexes, fix cargo doc warnings.
