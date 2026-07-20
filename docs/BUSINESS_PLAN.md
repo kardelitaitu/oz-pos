@@ -22,26 +22,43 @@ graph TD
     A --> E[Enterprise Tier: Bespoke Contract]
 ```
 
-### 2.1 Feature Comparison Matrix
+### 2.1 Master Feature & Licensing Tier Comparison Matrix
 
-| Feature / Specification | 1 Time (IDR 3.5jt One-Time) | Standard (IDR 2jt / Year) | Pro (IDR 5jt / Year) | Enterprise (Bespoke / Quote) |
+| Category / Feature | 1-Time Tier (IDR 3.5jt One-Time) | Standard Tier (IDR 2jt / Year) | Pro Tier (IDR 5jt / Year) | Enterprise Tier (Bespoke Quote) |
 | :--- | :---: | :---: | :---: | :---: |
-| **3-Month Free Trial** | ✓ (Limited: offline-only) | ✓ | ✓ | — |
-| **Offline-First SQLite Database** | ✓ | ✓ | ✓ | ✓ |
-| **Local Peripheral Integrations (HAL)** | ✓ | ✓ | ✓ | ✓ |
-| **Local Stock & Inventory Management** | ✓ | ✓ | ✓ | ✓ |
-| **Local Shift Reporting (CSV Exports)** | ✓ | ✓ | ✓ | ✓ |
-| **Free Minor Software Updates** | ✓ | ✓ | ✓ | ✓ |
-| **PostgreSQL Cloud Sync Daemon** | — | ✓ (Max 2 terminals) | ✓ (Unlimited) | ✓ (Dedicated / Private Host) |
-| **Integrated QRIS Payments (Midtrans)** | — | ✓ | ✓ | ✓ |
-| **Stripe Credit/Debit Card Payments** | — | — | ✓ | ✓ |
-| **Embedded Lua VM Rules Engine** | — | — | ✓ | ✓ |
-| **Visual Node Topology Builder** | ✓ (Single Store / 1 WS) | ✓ (Single Store / 2 WS) | ✓ (Unlimited Stores/Workspaces) | ✓ (With Regional Zone Containers) |
-| **Multi-Warehouse Stock Fallback Wires** | — | — | ✓ | ✓ |
+| **Pricing & Licensing** | **IDR 3.500.000 / terminal** | **IDR 2.000.000 / year** | **IDR 5.000.000 / year** | **Bespoke Quote** |
+| **Billing Frequency** | Perpetual (One-Time) | Annual Subscription | Annual Subscription | Annual Contract |
+| **3-Month Free Trial** | ✓ (Limited: offline-only) | ✓ (Full feature trial) | ✓ (Full feature trial) | Dedicated Sandbox |
+| **Target Audience** | Solo retail / *Warung* | Small shops & Cafes | Multi-terminal & Franchises | Large Chains & Corporates |
+| **Core Platform & Hardware** | | | | |
+| **Offline-First Edge SQLite Engine** | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) | ✓ (Sub-ms latency) |
+| **HAL Hardware Integrations** | ✓ (Scanner, Printer, Drawer) | ✓ (Scanner, Printer, Drawer) | ✓ (+ Customer Display, KDS) | ✓ (+ Custom HAL Drivers) |
+| **Cross-Platform Support** | Windows 7/10/11, Android | Windows, Android, Linux | Windows, Android, iOS, Linux | Windows, Android, iOS, Linux |
+| **Multi-Store & Topology Builder** | | | | |
+| **Max Store Branches** | **1 Store** | **1 Store** | **Unlimited** | **Unlimited** |
+| **Max POS Workspace Terminals** | **1 Terminal** | **2 Terminals** | **Unlimited** | **Unlimited** |
+| **Max Warehouse Storage Locations** | **1 Location** | **1 Location** | **Unlimited** | **Unlimited** |
+| **Visual Node Topology Canvas** | ✓ (Single Store / 1 WS) | ✓ (Single Store / 2 WS) | ✓ (Unlimited Nodes) | ✓ (+ Regional Zone Containers) |
+| **1-Way & 2-Way Arrow Connections** | ✓ (Basic Store->WS link) | ✓ (Basic Store->WS link) | ✓ (Full Directional Arrow Wires) | ✓ (Full Arrow Wires + Zone Bounds) |
+| **Multi-Warehouse Fallback Wires** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled (Priority 1, 2)** | **✓ Enabled (Priority 1, 2, 3+)** |
+| **Live Order Simulation Debugger** | 🔒 Disabled | 🔒 Disabled | **✓ Enabled** | **✓ Enabled** |
+| **Payments & Gateways** | | | | |
+| **Cash & Manual Split Billing** | ✓ | ✓ | ✓ | ✓ |
+| **Integrated Midtrans QRIS** | — | ✓ | ✓ | ✓ |
+| **Stripe Credit / Debit Cards** | — | — | ✓ | ✓ |
+| **Multi-Currency Exchange Rate Sync** | — | — | ✓ | ✓ |
+| **Rules & Business Logic** | | | | |
+| **Standard Tax & Discount Setup** | ✓ | ✓ | ✓ | ✓ |
+| **Embedded Lua VM Rules Engine** | — | — | ✓ (Buy-X-Get-Y, Custom Tax) | ✓ (Advanced Custom Rules) |
+| **Product Bundles Engine** | — | ✓ (Basic Bundles) | ✓ (Advanced Bundles) | ✓ (Advanced Bundles) |
+| **Loyalty Tiers & Points Redemption** | — | — | ✓ | ✓ |
+| **Reporting, Sync & SLA** | | | | |
+| **Local CSV Report Exports** | ✓ | ✓ | ✓ | ✓ |
+| **PostgreSQL Outbox Sync Daemon** | — | ✓ (Up to 2 terminals) | ✓ (Unlimited terminals) | ✓ (Dedicated / Private Host) |
 | **Multi-Store Centralized Dashboard** | — | — | ✓ | ✓ |
-| **Support SLA** | Forum Only | Email/Chat (24h) | Priority 24/7 SLA | Dedicated Account Manager |
-| **Custom ERP & API Adaptors** | — | — | — | ✓ (SAP, Odoo, custom APIs) |
-| **Free Major Version Upgrades** | — (Paid: IDR 1.500.000) | ✓ | ✓ | ✓ |
+| **Custom ERP Adaptors (SAP/Odoo)** | — | — | — | ✓ |
+| **Software Updates** | Free Minor (Major: 1.5jt) | ✓ Free Minor & Major | ✓ Free Minor & Major | ✓ Free Minor & Major |
+| **Support SLA** | Community Forum | Email/Chat (24h SLA) | Priority 24/7 SLA | Dedicated Account Manager |
 
 ### 2.2 Tier Details
 All tiers include a **3‑month free trial** with limited functionality: offline‑only operation, no cloud‑sync, and no integrated payment gateways. This allows merchants to evaluate the platform risk‑free before committing to a paid plan. During the free trial, merchants cannot import existing databases or user‑settings; a fresh local store is created.
