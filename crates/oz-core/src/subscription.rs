@@ -64,25 +64,31 @@ impl InstanceStatus {
 
 // ── Subscription Tier ────────────────────────────────────────────────
 
-/// Subscription tiers with their quotas and allowed workspace types.
+/// Subscription tiers with their quotas, capabilities, and feature entitlements.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionTier {
-    /// 1 store, 1 POS register, basic types only.
+    /// 90-day Free Trial — 1 store, 1 register, 1 warehouse, offline-only.
     Free,
-    /// Up to 2 stores, 3 registers/store, inventory support.
+    /// 1-Time Perpetual License — 1 store, 1 register, 1 warehouse, offline-first.
+    OneTime,
+    /// Standard SaaS — 1 store, 2 registers, 1 warehouse, QRIS, basic cloud sync.
+    Standard,
+    /// Pro SaaS — Unlimited stores, unlimited registers, unlimited warehouses, Lua engine, Stripe + QRIS.
     Pro,
-    /// Up to 5 stores, 10 registers/store, KDS + analytics.
+    /// Legacy alias for Pro tier.
     Premium,
-    /// Unlimited stores, unlimited registers, all types + plugins.
+    /// Enterprise — Unlimited stores/registers/warehouses, regional zones, custom ERP adaptors.
     Enterprise,
 }
 
 impl SubscriptionTier {
     /// Parse from the database TEXT column.
     pub fn from_db(s: &str) -> Self {
-        match s {
-            "free" => Self::Free,
+        match s.to_lowercase().as_str() {
+            "free" | "trial" => Self::Free,
+            "one_time" | "perpetual" | "one-time" | "onetime" => Self::OneTime,
+            "standard" => Self::Standard,
             "pro" => Self::Pro,
             "premium" => Self::Premium,
             "enterprise" => Self::Enterprise,
@@ -93,53 +99,102 @@ impl SubscriptionTier {
     /// Human-readable tier name.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Free => "Free",
+            Self::Free => "Free Trial",
+            Self::OneTime => "1-Time Perpetual",
+            Self::Standard => "Standard",
             Self::Pro => "Pro",
-            Self::Premium => "Premium",
+            Self::Premium => "Premium (Pro)",
             Self::Enterprise => "Enterprise",
         }
     }
 
     /// Maximum number of stores allowed for this tier.
-    /// Returns `None` for unlimited (Enterprise).
+    /// Returns `None` for unlimited (Pro / Enterprise).
     pub fn max_stores(&self) -> Option<i64> {
         match self {
-            Self::Free => Some(1),
-            Self::Pro => Some(2),
-            Self::Premium => Some(5),
-            Self::Enterprise => None,
+            Self::Free | Self::OneTime | Self::Standard => Some(1),
+            Self::Pro | Self::Premium | Self::Enterprise => None,
         }
     }
 
     /// Maximum POS register instances per store for this tier.
-    /// Returns `None` for unlimited (Enterprise).
+    /// Returns `None` for unlimited (Pro / Enterprise).
     pub fn max_pos_instances(&self) -> Option<i64> {
         match self {
-            Self::Free => Some(1),
-            Self::Pro => Some(3),
-            Self::Premium => Some(10),
-            Self::Enterprise => None,
+            Self::Free | Self::OneTime => Some(1),
+            Self::Standard => Some(2),
+            Self::Pro | Self::Premium | Self::Enterprise => None,
+        }
+    }
+
+    /// Maximum inventory warehouse storage locations allowed for this tier.
+    /// Returns `None` for unlimited (Pro / Enterprise).
+    pub fn max_warehouses(&self) -> Option<i64> {
+        match self {
+            Self::Free | Self::OneTime | Self::Standard => Some(1),
+            Self::Pro | Self::Premium | Self::Enterprise => None,
+        }
+    }
+
+    /// Whether this tier supports PostgreSQL background cloud database sync.
+    pub fn supports_cloud_sync(&self) -> bool {
+        match self {
+            Self::Free | Self::OneTime => false,
+            Self::Standard | Self::Pro | Self::Premium | Self::Enterprise => true,
+        }
+    }
+
+    /// Whether this tier supports dynamic QRIS payment processing (Midtrans).
+    pub fn supports_qris(&self) -> bool {
+        match self {
+            Self::Free | Self::OneTime => false,
+            Self::Standard | Self::Pro | Self::Premium | Self::Enterprise => true,
+        }
+    }
+
+    /// Whether this tier supports Stripe credit/debit card processing.
+    pub fn supports_stripe(&self) -> bool {
+        match self {
+            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Pro | Self::Premium | Self::Enterprise => true,
+        }
+    }
+
+    /// Whether this tier supports embedded Lua VM rule engine for custom promos.
+    pub fn supports_lua_engine(&self) -> bool {
+        match self {
+            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Pro | Self::Premium | Self::Enterprise => true,
+        }
+    }
+
+    /// Whether this tier supports multi-warehouse stock deduction fallback wires in Node Topology.
+    pub fn supports_multi_warehouse_fallback(&self) -> bool {
+        match self {
+            Self::Free | Self::OneTime | Self::Standard => false,
+            Self::Pro | Self::Premium | Self::Enterprise => true,
+        }
+    }
+
+    /// Whether this tier supports regional zone containers in Node Topology.
+    pub fn supports_regional_zones(&self) -> bool {
+        match self {
+            Self::Enterprise => true,
+            _ => false,
         }
     }
 
     /// Check whether this tier allows the given workspace type.
     pub fn allows_workspace_type(&self, type_key: &str) -> bool {
         match self {
-            Self::Free => matches!(type_key, "store-pos" | "restaurant-pos" | "admin"),
-            // ADR-18 §13 finding 37 (migration 091): the user-facing
-            // stock-keeping workspace type was renamed from 'inventory'
-            // → 'warehouse' across all FK references. The Pro + Premium
-            // tier match arms must track the rename or cashier POS would
-            // silently lose its 'warehouse' workspace entitlement.
-            Self::Pro => matches!(
+            Self::Free | Self::OneTime => {
+                matches!(type_key, "store-pos" | "restaurant-pos" | "admin")
+            }
+            Self::Standard => matches!(
                 type_key,
-                "restaurant-pos" | "store-pos" | "warehouse" | "admin"
+                "restaurant-pos" | "store-pos" | "warehouse" | "admin" | "kds"
             ),
-            Self::Premium => matches!(
-                type_key,
-                "restaurant-pos" | "store-pos" | "warehouse" | "admin" | "kds" | "analytics-pro"
-            ),
-            Self::Enterprise => true, // All types + custom plugins
+            Self::Pro | Self::Premium | Self::Enterprise => true, // All workspace types + custom plugins
         }
     }
 }
