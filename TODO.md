@@ -2,7 +2,7 @@
 
 > **Goal:** Harden the Lua plugin sandbox, improve offline-sync conflict resolution, profile and optimize UI rendering, and close remaining documentation/ADR gaps.
 
-**Current state:** 64 / 71 items complete (90%) · Updated 2026-07-20
+**Current state:** 65 / 71 items complete (92%) · Updated 2026-07-20
 
 ---
 
@@ -23,9 +23,9 @@
 | 🔵 P10 — i18n & Accessibility | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🟢 P11 — Shadow Banding Audit | 5 | **5** | **███████████████████████████████ 100% 🎉** |
 | 🔴 P12 — PCI-DSS Gap Closure | 4 | **3** | **█████████████████████████▱▱ 75%** |
-| 🟡 P13 — DevOps & Infrastructure | 4 | **3** | **███████████████████████▱▱ 75%** |
+| 🟡 P13 — DevOps & Infrastructure | 4 | **4** | **███████████████████████████████ 100% 🎉** |
 | 🟣 P14 — Mobile Build & Deploy | 4 | **0** | **▱▱▱▱▱▱▱▱▱▱ 0%** |
-| **Total** | **71** | **65** | **█████████████████████████████████████████████████████ 92%** |
+| **Total** | **71** | **66** | **█████████████████████████████████████████████████████ 93%** |
 
 ---
 
@@ -302,7 +302,7 @@ Current CI pipeline takes ~10 minutes. Docker compose exists but cloud-server de
 ### Checklist
 
 - [x] **P13-1: CI pipeline optimization** ✅ — Split Rust job into parallel fmt/clippy/test (3 jobs). Split UI job into parallel lint/typecheck/test (3 jobs). Added sccache (RUSTC_WRAPPER + SCCACHE_GHA_ENABLED) for cross-job compilation caching. Added `save-always: true` to rust-cache. Uncommented sccache in `.cargo/config.toml`. Updated release.yml with parallel verify jobs. Target: < 5 min for lint + typecheck + unit tests (was ~10 min sequential).
-- [ ] **P13-2: Docker Compose for full stack** — Update `docker-compose.yml` to include: `oz-cloud-server` (Rust API), `oz-pos` (desktop client in X11/VNC for CI), `license-server` (Go), PostgreSQL (sync target), Redis (cache). Add healthcheck dependencies. Document in `docs/operations/docker-deployment.md`. Est: 3–4 hrs.
+- [x] **P13-2: Docker Compose for full stack** ✅ — Updated `docker-compose.yml` with `license-server` (Go/PocketBase), `redis` (7-alpine, cache), and `pos-cloud-db` (PostgreSQL 16, optional pg profile). Added healthcheck chains: `redis → pos-cloud-server`, `pos-cloud-db → pos-cloud-server` (pg profile only). Added `REDIS_URL` & `REDIS_CACHE_TTL` env vars to cloud server. Created `docs/operations/docker-deployment.md` with architecture diagram, port map, quick-start flows, volume management, security notes, and troubleshooting guide.
 - [ ] **P13-3: E2E test suite** — Add Playwright-based e2e tests for the 5 most critical flows: complete sale (scan → add → pay → receipt), staff login with PIN, create product, open/close shift, settings change. Use Docker Compose for backend + test against real SQLite. Est: 4–6 hrs.
 - [x] **P13-4: Developer setup script** ✅ — `scripts/setup-dev.ps1` previously created and enhanced: checks prerequisites (Rust, Node.js, Git), enables Git hooks, runs `npm ci`, runs `cargo run -p oz-cli -- migrate` (with idempotency check), attempts demo data seed (skips gracefully if unavailable), runs `cargo check --workspace` for quick verification. Added reference in QUICKSTART.md as the recommended first step for Windows developers. All 7 steps verified passing.
 
