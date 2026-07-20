@@ -6,7 +6,7 @@
 //! packages them together with export metadata into a serializable
 //! [`AnalyticsBundle`].
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::db::Store;
 use crate::db::reports::{
@@ -132,6 +132,69 @@ impl Store<'_> {
             low_stock_alerts,
             active_stock_alerts,
         })
+    }
+}
+
+/// Scheduled report delivery configuration.
+///
+/// Persisted in the `settings` table under key `report_schedule` as JSON.
+/// When email/SMTP infrastructure is wired in, a background task reads
+/// this config and sends analytics bundles on the configured cadence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportScheduleConfig {
+    /// Whether scheduled delivery is enabled.
+    pub enabled: bool,
+    /// Cron-style cadence: "daily", "weekly", "monthly", or a cron expression.
+    pub cadence: String,
+    /// Report types to include in the delivery.
+    pub report_types: Vec<String>,
+    /// Recipient email addresses.
+    pub recipients: Vec<String>,
+    /// ISO-8601 time of day to send (e.g. "08:00" for 8 AM).
+    pub send_at_time: String,
+    /// Timezone for scheduling (e.g. "Asia/Jakarta").
+    pub timezone: String,
+    /// Date range window in days (e.g. 7 for last week's data).
+    pub lookback_days: u32,
+}
+
+impl Default for ReportScheduleConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cadence: "daily".to_string(),
+            report_types: vec!["daily_revenue".to_string(), "top_products".to_string()],
+            recipients: Vec::new(),
+            send_at_time: "08:00".to_string(),
+            timezone: "UTC".to_string(),
+            lookback_days: 1,
+        }
+    }
+}
+
+/// Settings key used to persist the report schedule.
+pub const REPORT_SCHEDULE_SETTINGS_KEY: &str = "report_schedule";
+
+impl Store<'_> {
+    /// Save the report schedule configuration to the settings table.
+    pub fn save_report_schedule(&self, config: &ReportScheduleConfig) -> Result<(), CoreError> {
+        let json = serde_json::to_string(config).map_err(|e| {
+            CoreError::Internal(format!("failed to serialize report schedule: {e}"))
+        })?;
+        self.set_setting(REPORT_SCHEDULE_SETTINGS_KEY, &json)
+    }
+
+    /// Load the report schedule configuration from the settings table.
+    /// Returns `None` if no schedule has been saved yet.
+    pub fn get_report_schedule(&self) -> Result<Option<ReportScheduleConfig>, CoreError> {
+        let raw = match self.get_setting(REPORT_SCHEDULE_SETTINGS_KEY)? {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        let config: ReportScheduleConfig = serde_json::from_str(&raw).map_err(|e| {
+            CoreError::Internal(format!("failed to deserialize report schedule: {e}"))
+        })?;
+        Ok(Some(config))
     }
 }
 
@@ -284,5 +347,73 @@ mod tests {
         assert_eq!(cfg.end_date, "2099-12-31");
         assert_eq!(cfg.top_product_limit, 25);
         assert_eq!(cfg.low_stock_threshold, 10);
+    }
+
+    // ── Report schedule ────────────────────────────────────────────
+
+    #[test]
+    fn schedule_config_defaults() {
+        let cfg = ReportScheduleConfig::default();
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.cadence, "daily");
+        assert_eq!(cfg.report_types.len(), 2);
+        assert!(cfg.recipients.is_empty());
+        assert_eq!(cfg.send_at_time, "08:00");
+        assert_eq!(cfg.timezone, "UTC");
+        assert_eq!(cfg.lookback_days, 1);
+    }
+
+    #[test]
+    fn schedule_save_and_load() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+
+        // Initially no schedule
+        let loaded = s.get_report_schedule().unwrap();
+        assert!(loaded.is_none());
+
+        // Save a schedule
+        let cfg = ReportScheduleConfig {
+            enabled: true,
+            cadence: "weekly".to_string(),
+            report_types: vec![
+                "daily_revenue".to_string(),
+                "top_products".to_string(),
+                "hourly_heatmap".to_string(),
+            ],
+            recipients: vec!["owner@store.com".to_string()],
+            send_at_time: "06:00".to_string(),
+            timezone: "Asia/Jakarta".to_string(),
+            lookback_days: 7,
+        };
+        s.save_report_schedule(&cfg).unwrap();
+
+        // Load and verify
+        let loaded = s.get_report_schedule().unwrap().unwrap();
+        assert!(loaded.enabled);
+        assert_eq!(loaded.cadence, "weekly");
+        assert_eq!(loaded.report_types.len(), 3);
+        assert_eq!(loaded.recipients, vec!["owner@store.com"]);
+        assert_eq!(loaded.send_at_time, "06:00");
+        assert_eq!(loaded.timezone, "Asia/Jakarta");
+        assert_eq!(loaded.lookback_days, 7);
+    }
+
+    #[test]
+    fn schedule_serde_roundtrip() {
+        let cfg = ReportScheduleConfig {
+            enabled: true,
+            cadence: "monthly".to_string(),
+            report_types: vec!["daily_revenue".to_string()],
+            recipients: vec!["a@b.com".to_string(), "c@d.com".to_string()],
+            send_at_time: "09:00".to_string(),
+            timezone: "America/New_York".to_string(),
+            lookback_days: 30,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let back: ReportScheduleConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.cadence, cfg.cadence);
+        assert_eq!(back.recipients, cfg.recipients);
+        assert_eq!(back.lookback_days, cfg.lookback_days);
     }
 }
