@@ -75,6 +75,7 @@ pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_security::Keyring;
 
     #[test]
     fn key_name_is_constant() {
