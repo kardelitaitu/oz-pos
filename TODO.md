@@ -2,7 +2,7 @@
 
 > **Goal:** Close remaining Phase 5 gaps (analytics, i18n, Lighthouse), kick off Phase 6 (loyalty, plugin marketplace, theming, developer docs).
 
-**Current state:** 2 / 20 items complete · Updated 2026-07-20
+**Current state:** 3 / 20 items complete · Updated 2026-07-20
 
 ---
 
@@ -24,7 +24,7 @@
 
 - [ ] **P17-1: Stable plugin API** — Versioned API surface for third-party HAL drivers and Lua scripts.
 - [ ] **P17-2: Plugin discovery & hot-reload** — Watch `plugins/` directory, auto-load new `.lua` files without restart.
-- [ ] **P17-3: Developer docs** — `CONTRIBUTING.md`, `docs/quickstart.md`, example custom HAL driver in `oz-hal/examples/`.
+- [x] **P17-3: Developer docs** ✅ — `CONTRIBUTING.md` (branch naming, commit conventions, PR checklist, review guide, skills docs), `docs/QUICKSTART.md` (prerequisites, build, test, lint, troubleshooting), `crates/oz-hal/examples/custom_barcode_scanner.rs` (BarcodeScanner trait implementation with 6 tests).
 - [ ] **P17-4: `cargo doc` generation** — Build and host docs on GitHub Pages.
 
 ## 🟢 P18 — Phase 6: Theming & White-Label
@@ -51,11 +51,11 @@
 |------|-------|------|----------|
 | 🟡 P15 — Phase 5 Completion | 5 | 2 | ██████░░░░░░░░ 40% |
 | 🟣 P16 — Loyalty & Promotions | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
-| 🔵 P17 — Plugin Marketplace & DX | 4 | 0 | ░░░░░░░░░░░░░░ 0% |
+| 🔵 P17 — Plugin Marketplace & DX | 4 | 1 | █████░░░░░░░░░ 25% |
 | 🟢 P18 — Theming & White-Label | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
 | ⚪ P19 — Mobile Builds | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
 | 🔴 P20 — Research & Future | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
-| **Total** | **20** | **2** | **10%** |
+| **Total** | **20** | **3** | **15%** |
 
 ---
 
