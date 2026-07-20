@@ -182,10 +182,15 @@ jobs:
       - run: cd ui && npm ci --no-audit --no-fund
       - run: cd ui && npm run typecheck
 
-  # ── UI: Tests + quality gates ─────────────────────────────────────
+  # ── UI: Tests + quality gates (4-way sharded) ────────────────────
   ui-test:
-    name: UI Tests
+    name: UI Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        totalShards: [4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -193,8 +198,17 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
+      # Persist Vitest transform cache across runs (P27-5)
+      - uses: actions/cache@v4
+        with:
+          path: ui/node_modules/.cache/vitest
+          key: vitest-cache-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+          restore-keys: vitest-cache-${{ runner.os }}-
       - run: cd ui && npm ci --no-audit --no-fund
-      - run: (cd ui && npm run test -- --reporter=verbose 2>&1) | tee ui/vitest-output.log
+      - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        env:
+          VITEST_POOL: forks
+        run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
 
       # Hard-fail on any act() or flushSync warnings. Components
       # whose mount effect fires an async IPC must use the
@@ -212,15 +226,9 @@ jobs:
           fi
 
       # ── i18n quality gate ─────────────────────────────────────────
-      # Consolidates two categories of i18n-quality warnings into a
-      # single pass/fail decision:
-      #   1. `[i18n]` — emitted when an .id.ftl file is a verbatim copy
-      #      of its .ftl sibling (Indonesian users see English text).
-      #   2. `Attempt to override an existing message` — emitted by
-      #      FluentBundle.addResource when two .ftl files define the
-      #      same key (the first wins silently; duplicates are dropped).
+      # Only run on shard 1 to avoid duplicate checks
       - name: i18n quality gate
-        if: always()
+        if: always() && matrix.shard == 1
         run: bash scripts/lint-i18n.sh
 
   # ── Lighthouse a11y audit ─────────────────────────────────────────

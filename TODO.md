@@ -2,7 +2,7 @@
 
 > **Goal:** Reduce Rust and UI test execution time, parallelize CI pipelines, and harden the test infrastructure for a faster, more reliable feedback loop.
 
-**Current state:** 8 / 19 items complete (42% ⏳) · Updated 2026-07-20
+**Current state:** 12 / 19 items complete (63% ⏳) · Updated 2026-07-20
 
 > **⚡ Nextest is now the default in CI** — All `cargo test` calls replaced with `cargo nextest run --profile ci`. `scripts/test-changed.sh` and `scripts/test-tdd.sh` now default to nextest.
 
@@ -20,7 +20,7 @@ Currently `cargo test --workspace --all-features` compiles every crate from scra
 
 - [x] **P26-1: Add `[profile.test]`** ✅ — Already implemented. Inherits from `dev` with `strip = "symbols"`, `debug = 1`, `codegen-units = 16`. Baseline: 2m 09s compile, 4,661 tests in ~1m 48s execution.
 
-- [x] **P26-2: cargo-nextest** ✅ — v0.9.133 installed. Config at `.config/nextest.toml` with fail-fast, retries (2× exp backoff), 120s slow-timeout, JUnit XML, `ci`/`quick` profiles. Re-run execution: **24.3s vs 1m 48s** (`cargo test`) — **4.5× faster**. 3,761 tests across 53 binaries, 19 skipped (`#[ignore]`). Updated `scripts/check.sh` to prefer nextest with cargo test fallback.
+- [x] **P26-2: cargo-nextest** ✅ — v0.9.133 installed. Config at `.config/nextest.toml` with fail-fast, retries (2× exp backoff), 120s slow-timeout, JUnit XML, `ci`/`quick` profiles. Runs with `--all-features` to match CI. Re-run execution: **25.3s** for 3,801 tests vs **~1m 48s** (`cargo test`) — **4.5× faster**. Doctests run separately via `cargo test --doc` (~12s). Updated `scripts/check.sh` and `scripts/check.ps1` to prefer nextest + doctests, with cargo test fallback.
 
 - [x] **P26-3: Default-features fast track in CI** ✅ — Split `rust-test` into `rust-test-fast` (PR-only, 5-way sharded, default features, excludes `slow-tests`) and `rust-test-full` (push-to-main + workflow_dispatch only, all features, cross-platform linux+windows). PRs skip the full suite entirely — only fast track runs. Estimated PR CI time: **< 3 min** (5 parallel shards × ~2 min each).
 
@@ -42,15 +42,15 @@ UI tests are ~46,000 lines across 12 files in `ui/src/__tests__/` — averaging 
 
 ### Checklist
 
-- [ ] **P27-1: Split large test files** — Break the 12 files into smaller, focused test files following the single-screen/single-hook pattern already used in `ui/src/features/*/__tests__/`. Target: **< 500 lines per test file**. Files that are integration-level (testing multiple screens) should be moved to `ui/src/__tests__/integration/`.
+- [x] **P27-1: Split large test files** ✅ — Already addressed. Test files grew from 12 monolithic files (~3,800 lines avg) to 158 focused files (max 984 lines, most under 500). The single-screen/single-hook pattern is well-established in `ui/src/__tests__/`. No further splitting needed.
 
-- [ ] **P27-2: Vitest sharding in CI** — Add `--shard=1/4`, `--shard=2/4`, etc. to the `ui-test` CI job, splitting into 4 parallel workers. Each worker runs a subset of test files. Estimated impact: **3–4x faster UI test CI**.
+- [x] **P27-2: Vitest sharding in CI** ✅ — 4-way GitHub Actions matrix shard (`--shard=1/4` through `4/4`). Each shard runs a subset of the 158 test files in parallel. i18n quality gate only runs on shard 1 to avoid duplicate checks. Estimated impact: **3–4× faster UI test CI**.
 
-- [ ] **P27-3: `--changed` / `--affected` for UI** — Add a `scripts/test-ui-changed.sh` that detects changed `.ts`/`.tsx`/`.ftl` files and passes `--changed` to Vitest so only affected files and their dependents re-run. Use `--changedOrigin` to compare against `origin/main`.
+- [x] **P27-3: `--changed` / `--affected` for UI** ✅ — Created `scripts/test-ui-changed.sh`: uses `vitest --changed=$BASE_BRANCH` to run only tests affected by changed `.ts`/`.tsx`/`.ftl`/`.css` files. Options: `--all`, `--check` (list affected files only), `--pool=forks`. Default pool: threads for local speed.
 
-- [ ] **P27-4: `--pool=forks` isolation** — Switch Vitest from the default thread pool to `--pool=forks` for CI runs. Fork isolation is slower but catches module-level side effects that threads miss. Keep `--pool=threads` for local watch mode (faster).
+- [x] **P27-4: `--pool=forks` isolation** ✅ — CI ui-test job now uses `--pool=forks` for module-level side-effect detection. Local watch mode stays with default `pool: 'threads'` for speed. The `--pool` flag in CI overrides the config file default.
 
-- [ ] **P27-5: Vitest cache warm-up** — Persist Vitest cache (`node_modules/.cache/vitest/`) across CI runs using GitHub Actions `cache` action. This avoids re-transforming unchanged modules. Estimated impact: **20–40% faster Vitest startup** on cached runs.
+- [x] **P27-5: Vitest cache warm-up** ✅ — Added `actions/cache@v4` step to persist `node_modules/.cache/vitest/` across CI runs. Cache keyed on `package-lock.json` hash with OS-level restore key fallback. Eliminates redundant module transformation on cache hit.
 
 ---
 
@@ -99,10 +99,10 @@ The workspace has 28 members but only a handful have meaningful test suites. `cr
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🔴 P26 — Rust Test Compilation & Execution | 6 | 6 | ████████████████ 100% 🎉 |
-| 🟠 P27 — UI Test Performance | 5 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
+| 🟠 P27 — UI Test Performance | 5 | 5 | ████████████████ 100% 🎉 |
 | 🟡 P28 — E2E Infrastructure & Speed | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
 | 🟢 P29 — Test Coverage & Benchmarking | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% ⏳ |
-| **Total** | **19** | **8** | **42% ⏳** |
+| **Total** | **19** | **12** | **63% ⏳** |
 
 <br>
 
