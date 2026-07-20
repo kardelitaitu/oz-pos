@@ -1,4 +1,4 @@
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square) [![Nightly CI](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml/badge.svg)](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml)
 
 
 # OZ-POS

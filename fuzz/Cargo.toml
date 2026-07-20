@@ -1,0 +1,38 @@
+[package]
+name = "oz-pos-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Proprietary"
+description = "Fuzz testing targets for OZ-POS critical parsing and arithmetic paths"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+foundation = { path = "../foundation" }
+oz-core = { path = "../crates/oz-core" }
+serde_json = "1"
+
+[[bin]]
+name = "sku_parse"
+path = "fuzz_targets/sku_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "money_parse"
+path = "fuzz_targets/money_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cart_deser"
+path = "fuzz_targets/cart_deser.rs"
+test = false
+doc = false
+bench = false
