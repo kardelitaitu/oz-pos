@@ -34,6 +34,29 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 #### 🎨 Sprint 6: Theming & Plugin Ecosystem
 - **Branding & Plugin Specs**: Verified `BrandContext` color picker, logo upload, and IPC branding commands. Confirmed `plugin.toml` manifest spec, sandboxed Lua VM hook architecture, and developer docs (`docs/plugin-guide.md`, `docs/QUICKSTART.md`).
 
+#### 🧪 CI Pipeline Fixes & PR #19
+
+- **Vitest test fixes (3 files)**:
+  - `AuditLogScreen.test.tsx` — Added `vi.mock('@/contexts/AuthContext')` to resolve missing mock crash.
+  - `AppShell.test.tsx` — Rewrote idle-timer tests to match actual lock-screen behaviour (lock screen with session, no-op without session). Fixed TS2322/TS2353 type errors — replaced `vi.fn<[], AuthContextValue>()` generic with `Mock<() => AuthContextValue>` annotation; removed `username`/`token` fields not present in `LoginSessionDto`; added `swapSession` to mock.
+  - `MenuEngineeringScreen.test.tsx` — Changed target date from `'2026-08-14'` (same value as `today()`, causing no-op) to `'2026-08-15'`.
+- **`npm ci` EPERM on Windows**: Added 3-phase retry (wait → force-remove → retry loop) in `scripts/check.ps1` — Windows file locks on Rollup native binaries are transient, so a 5s poll + 3 retry loop is more robust than a single `npm install` fallback.
+- **sccache-action pinning**: Updated all 6 occurrences of `sccache-action` from `v0` (floating tag) to `v0.0.10` across `.github/workflows/ci.yml`, `android.yml`, `ios.yml`, `release.yml`.
+- **Canvas mock**: Added `HTMLCanvasElement.getContext` stub in `ui/src/test-setup.ts` to prevent jsdom crash in chart-rendering components.
+- **vitest exclude**: Added `exclude: ['e2e/**', 'node_modules/**']` to `ui/vite.config.ts` so Playwright spec files aren't picked up by vitest.
+
+#### 🎭 E2E Test Coverage Improvement Plan
+
+- **Coverage plan drafted**: 35-item checklist added to `TODO.md` covering 8 areas:
+  - **Infrastructure (E2E-0..3)**: `webServer` auto-start in `playwright.config.ts`, CI job, auth fixture with `storageState`, `data-testid` contract on 10 shell elements.
+  - **Auth spec (E2E-4..8)**: Hard assertions on login happy path (exact greeting text), PIN error text, rate-limit lockout UI, session persistence on reload.
+  - **Sale spec (E2E-9..15)**: Replace current `if (count > 0)` skeleton with hard assertions on product grid count, cart line increment, quantity doubling, payment modal with amount matching, cash change calculation, remove-item flow.
+  - **Product spec (E2E-16..19)**: List loads with row count, search filter, create modal form validation.
+  - **Settings spec (E2E-20..22)**: Sidebar renders with 5+ nav items, section navigation, dirty-state guard.
+  - **Shift spec (E2E-23..25)**: Screen loads, open shift flow with opening balance, close shift flow with summary modal.
+  - **New flows (E2E-26..30)**: Workspace picker, session lock/unlock, KDS ticket board, audit log, tablet viewport smoke.
+  - **Maintenance (E2E-31..34)**: Remove all `waitForTimeout`, add `test.step()` annotations, parallel-safe audit, optional E2E gate in `check.ps1`.
+
 ---
 
 ## [0.0.12] — 2026-07-19
