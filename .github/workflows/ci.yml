@@ -206,8 +206,6 @@ jobs:
           restore-keys: vitest-cache-${{ runner.os }}-
       - run: cd ui && npm ci --no-audit --no-fund
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
-        env:
-          VITEST_POOL: forks
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
 
       # Hard-fail on any act() or flushSync warnings. Components
