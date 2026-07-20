@@ -36,6 +36,25 @@ test.describe('Shift Management', () => {
     await selectWorkspace(page, WORKSPACES.ADMIN);
   });
 
+  // ── Bonus: Shift history table is visible ───────────────────
+
+  test('shift history table renders with columns', async ({ page }) => {
+    await page.evaluate(() => {
+      window.location.hash = '#/shifts';
+    });
+    await page.waitForTimeout(2_000);
+
+    await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+
+    // The shift history section must have a title.
+    await expect(page.locator('.shift-mgmt-table-title')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.shift-mgmt-table-title')).toContainText('History');
+
+    // Table must be present (even if empty, the empty state renders).
+    const table = page.locator('.shift-mgmt-table');
+    await expect(table).toBeVisible({ timeout: 5_000 });
+  });
+
   // ── E2E-23: Assert shift screen loads ─────────────────────
 
   test('shift screen loads and shows "No active shift"', async ({ page }) => {

@@ -87,6 +87,37 @@ test.describe('Product Management', () => {
     await expect(modal).not.toBeVisible({ timeout: 5_000 });
   });
 
+  // ── Bonus: Edit product opens modal with pre-filled data ────
+
+  test('edit product opens modal with pre-filled fields', async ({ page }) => {
+    await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
+
+    // Wait for product table rows.
+    const rows = page.locator('.product-mgmt-table tbody tr');
+    await expect(rows.first()).toBeVisible({ timeout: 5_000 });
+
+    // Click "Edit" on the first product row.
+    const editBtn = page.locator('.product-mgmt-action-btn').filter({ hasText: 'Edit' }).first();
+    await editBtn.click();
+    await page.waitForTimeout(500);
+
+    // Edit modal must appear.
+    await expect(page.locator('.product-mgmt-overlay')).toBeVisible({ timeout: 5_000 });
+
+    // SKU field must be disabled (editing mode).
+    const skuInput = page.locator('#product-field-sku');
+    await expect(skuInput).toBeDisabled();
+
+    // Name field must be pre-filled.
+    const nameInput = page.locator('#product-field-name');
+    const nameValue = await nameInput.inputValue();
+    expect(nameValue.length).toBeGreaterThan(0);
+
+    // Close the modal.
+    await page.locator('button:has-text("Cancel"), button:has-text("Batal")').click();
+    await expect(page.locator('.product-mgmt-overlay')).not.toBeVisible({ timeout: 5_000 });
+  });
+
   // ── E2E-19: Create product form validation ────────────────
 
   test('create form shows disabled save when fields are empty', async ({ page }) => {

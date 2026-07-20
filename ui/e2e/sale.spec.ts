@@ -235,6 +235,22 @@ test.describe('Complete Sale Flow', () => {
     await expect(payBtn).toBeDisabled({ timeout: 3_000 });
   });
 
+  // ── Bonus: Hold cart button is visible when cart has items ───
+
+  test('hold cart button is enabled when cart has items', async ({ page }) => {
+    const productCards = page.locator('.product-card-btn');
+    await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
+
+    // Add a product.
+    await productCards.first().click();
+    await page.waitForTimeout(500);
+
+    // The hold button (F4 fn-key) should exist and be enabled.
+    const holdBtn = page.locator('.retail-fn-btn').filter({ hasText: 'F4' });
+    await expect(holdBtn).toBeVisible({ timeout: 3_000 });
+    await expect(holdBtn).toBeEnabled();
+  });
+
   // ── E2E-15: Remove item from cart ───────────────────────────
 
   test('removing item empties cart and disables pay button', async ({ page }) => {
