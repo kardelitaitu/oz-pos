@@ -137,8 +137,12 @@ export default function ThresholdConfigScreen() {
             value={selectedLocationFilter}
             onChange={e => setSelectedLocationFilter(e.target.value)}
           >
-            <option value="all">All Locations</option>
-            <option value="global">Global Fallback Only</option>
+            <Localized id="inv-threshold-filter-all">
+              <option value="all">All Locations</option>
+            </Localized>
+            <Localized id="inv-threshold-filter-global">
+              <option value="global">Global Fallback Only</option>
+            </Localized>
             {locations.map(loc => (
               <option key={loc.id} value={loc.id}>
                 {loc.name}
@@ -170,8 +174,12 @@ export default function ThresholdConfigScreen() {
               <Localized id="inv-threshold-col-threshold">
                 <th>Threshold</th>
               </Localized>
-              <th>Status</th>
-              <th>Actions</th>
+              <Localized id="inv-threshold-col-status">
+                <th>Status</th>
+              </Localized>
+              <Localized id="inv-threshold-col-actions">
+                <th>Actions</th>
+              </Localized>
             </tr>
           </thead>
           <tbody>
@@ -183,21 +191,27 @@ export default function ThresholdConfigScreen() {
               return (
                 <tr key={t.id}>
                   <td>{t.product_id}</td>
-                  <td>{prod ? prod.name : 'Unknown Product'}</td>
-                  <td>{loc ? loc.name : 'Global (All Locations)'}</td>
+                  <td>{prod ? prod.name : <Localized id="inv-threshold-unknown-product"><span>Unknown Product</span></Localized>}</td>
+                  <td>{loc ? loc.name : <Localized id="inv-threshold-global-opt"><span>Global (All Locations)</span></Localized>}</td>
                   <td>{t.threshold}</td>
                   <td>
                     <span className={`badge ${t.enabled ? 'badge-purchase-order-receive' : 'badge-void'}`}>
-                      {t.enabled ? 'Enabled' : 'Disabled'}
+                      <Localized id={t.enabled ? 'inv-threshold-status-enabled' : 'inv-threshold-status-disabled'}>
+                        <span>{t.enabled ? 'Enabled' : 'Disabled'}</span>
+                      </Localized>
                     </span>
                   </td>
                   <td className="threshold-actions">
-                    <button className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
-                      <span>Edit</span>
-                    </button>
-                    <button className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDelete(t.id)}>
-                      <span>Delete</span>
-                    </button>
+                    <Localized id="edit">
+                      <button className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
+                        <span>Edit</span>
+                      </button>
+                    </Localized>
+                    <Localized id="delete">
+                      <button className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDelete(t.id)}>
+                        <span>Delete</span>
+                      </button>
+                    </Localized>
                   </td>
                 </tr>
               );
@@ -285,9 +299,11 @@ export default function ThresholdConfigScreen() {
                   <span>Cancel</span>
                 </Localized>
               </button>
-              <button type="submit" className="shift-btn shift-btn-primary">
-                <span>Save</span>
-              </button>
+              <Localized id="save">
+                <button type="submit" className="shift-btn shift-btn-primary">
+                  <span>Save</span>
+                </button>
+              </Localized>
             </div>
           </form>
         </div>
