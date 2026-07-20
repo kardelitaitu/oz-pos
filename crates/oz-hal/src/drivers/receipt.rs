@@ -378,7 +378,8 @@ impl TableCols {
 /// `config` controls display options (currency prefix, decimal
 /// separator, paper width, tax visibility, footer text).
 ///
-/// /// [`ReceiptPrinter::print_raw`] — it includes the initialisation
+/// The returned buffer can be sent directly to any printer via
+/// `ReceiptPrinter::print_raw` — it includes the initialisation
 /// sequence, all text and formatting commands, a 3-line paper feed,
 /// and a full paper cut.
 pub fn format_sales_receipt(r: &SalesReceipt, config: &ReceiptConfig) -> Vec<u8> {

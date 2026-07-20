@@ -1,6 +1,6 @@
 //! TCP / network receipt printer driver.
 //!
-//! Implements [`ReceiptPrinter`] over raw TCP (port 9100). Many POS
+//! Implements `ReceiptPrinter` over raw TCP (port 9100). Many POS
 //! printers support this directly: Epson TM-i series, Star mC-Print3,
 //! Bixolon SRP-350plus, etc. The printer receives the data as-is and
 //! interprets it as ESC/POS commands.

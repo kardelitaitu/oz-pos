@@ -1,6 +1,6 @@
 //! Bluetooth (SPP / RFCOMM) receipt printer driver.
 //!
-//! Implements [`ReceiptPrinter`] over a Bluetooth serial (SPP) connection.
+//! Implements `ReceiptPrinter` over a Bluetooth serial (SPP) connection.
 //! Most BT receipt printers (Epson TM-m30 BT, Star SP700 BT) use the
 //! Serial Port Profile, which appears as a virtual COM port (Windows) or
 //! `/dev/rfcomm*` (Linux) after pairing.

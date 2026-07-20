@@ -1,6 +1,6 @@
 //! Serial pole display driver (CD5220 / Emax protocol).
 //!
-//! Implements [`CustomerDisplay`] over a serial (RS-232) connection using
+//! Implements `CustomerDisplay` over a serial (RS-232) connection using
 //! the de-facto CD5220 command set used by most POS pole displays:
 //! EM-220, Epson DM-D, POS-X, APG, etc.
 //!

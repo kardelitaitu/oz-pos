@@ -1,13 +1,13 @@
 //! Cash drawer drivers.
 //!
-//! Two implementations of [`CashDrawer`]:
+//! Two implementations of `CashDrawer`:
 //!
-//! * [`PrinterKickCashDrawer`] — sends an ESC/POS kick pulse through a
+//! * `PrinterKickCashDrawer` — sends an ESC/POS kick pulse through a
 //!   connected receipt printer's cash drawer port. This is the most
 //!   common setup: the printer has an RJ12 port specifically for the
 //!   cash drawer, and it fires when it receives `ESC p m t1 t2`.
 //!
-//! * [`SerialCashDrawer`] — standalone drawer connected via serial/
+//! * `SerialCashDrawer` — standalone drawer connected via serial/
 //!   USB-to-serial adapter. Sends the same pulse sequence over a
 //!   serial line.
 

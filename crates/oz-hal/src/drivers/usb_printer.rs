@@ -1,6 +1,6 @@
 //! USB receipt printer driver (stub).
 //!
-//! Implements [`ReceiptPrinter`] via USB bulk-out transfers. Supports
+//! Implements `ReceiptPrinter` via USB bulk-out transfers. Supports
 //! standard ESC/POS commands for text printing and paper cutting.
 //!
 //! **Stub status:** This driver sends plain text wrapped in minimal

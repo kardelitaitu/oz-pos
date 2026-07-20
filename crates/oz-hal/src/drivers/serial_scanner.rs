@@ -1,6 +1,6 @@
 //! Serial barcode scanner driver (stub).
 //!
-//! Implements [`BarcodeScanner`] via a serial (RS-232 / USB-serial) port.
+//! Implements `BarcodeScanner` via a serial (RS-232 / USB-serial) port.
 //! Many barcode scanners (Honeywell, Datalogic, Zebra) support serial
 //! communication as an alternative to USB HID.
 //!

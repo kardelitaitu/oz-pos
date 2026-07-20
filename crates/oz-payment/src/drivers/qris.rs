@@ -58,12 +58,16 @@ const QRIS_EXPIRY_SECS: u64 = 300; // 5 minutes
 /// A [`PaymentProcessor`] implementation backed by the Midtrans QRIS API.
 ///
 /// # Example
-///    /// ```no_run
-/// use oz_payment::drivers::qris::QrisPaymentProcessor;
-/// use oz_payment::PaymentProcessor;
 ///
+/// ```no_run
+/// # use oz_payment::drivers::qris::QrisPaymentProcessor;
+/// # use oz_payment::PaymentProcessor;
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// # let request = unimplemented!();
 /// let proc = QrisPaymentProcessor::from_env()?;
 /// proc.sale(&request).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub struct QrisPaymentProcessor {
     client: Arc<reqwest::Client>,
