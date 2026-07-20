@@ -108,7 +108,7 @@ fn extract_stripe_payment_id(object: &serde_json::Value) -> Option<String> {
 ///
 /// Stripe sends `Stripe-Signature: t=<timestamp>,v1=<signature>`.
 /// The signature is HMAC-SHA256 of `<timestamp>.<payload>`.
-/// See: https://docs.stripe.com/webhooks/signatures
+/// See: <https://docs.stripe.com/webhooks/signatures>
 fn verify_stripe_signature(payload: &[u8], signature_header: &str, secret: &str) -> bool {
     // Parse the signature header: t=...,v1=...
     let mut timestamp = None;

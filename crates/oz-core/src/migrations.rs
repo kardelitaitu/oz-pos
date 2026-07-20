@@ -500,18 +500,38 @@ pub const ALL: &[Migration] = &[
         id: "097_payment_idempotency_keys.sql",
         sql: include_str!("../migrations/097_payment_idempotency_keys.sql"),
     },
+    // 098: adds idx_customers_name for faster customer name-based lookups.
+    Migration {
+        id: "098_customers_name_index.sql",
+        sql: include_str!("../migrations/098_customers_name_index.sql"),
+    },
+    // 099: adds idx_inventory_transactions_created for faster audit-log
+    // queries ordered by created_at DESC.
+    Migration {
+        id: "099_inventory_transactions_created_at.sql",
+        sql: include_str!("../migrations/099_inventory_transactions_created_at.sql"),
+    },
 ];
 
-/// Apply every unapplied migration. Convenience wrapper around
-/// [`platform_core::database::run`].
+/// Apply every unapplied migration and configure runtime PRAGMAs.
+///
+/// After migrations, sets WAL journal mode + busy_timeout for better
+/// concurrent-read performance and multi-connection safety. These are
+/// idempotent — safe to call on every startup.
 pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
-    Ok(platform_core::database::run(conn, ALL)?)
+    platform_core::database::run(conn, ALL)?;
+    // WAL mode enables concurrent reads while a write is in progress.
+    // busy_timeout prevents "database is locked" errors when multiple
+    // connections contend for the write lock (default is 0 = immediate fail).
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "busy_timeout", "5000")?;
+    Ok(())
 }
 
 /// Create a fresh in-memory database with all migrations already applied.
 ///
 /// Uses a [`std::sync::LazyLock`]ed pre-migrated snapshot connection.
-/// The first call runs all 75 migrations once; subsequent calls clone the
+/// The first call runs all migrations once; subsequent calls clone the
 /// snapshot via SQLite's page-level [`rusqlite::backup::Backup`] API —
 /// orders of magnitude faster than re-running `execute_batch` per test.
 ///

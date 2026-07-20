@@ -21,11 +21,14 @@ use crate::error::AppError;
 /// errors.
 ///
 /// # Example
-///    /// ```no_run
-/// use crate::commands::authz::require_permission;
-/// use oz_core::permissions;
 ///
-/// require_permission(&store, &role_id, permissions::SALES_VOID)?;
+/// ```no_run
+/// # use crate::commands::authz::require_permission;
+/// # use oz_core::permissions;
+/// # fn example(store: &oz_core::db::Store, role_id: &str) -> Result<(), crate::error::AppError> {
+/// require_permission(store, role_id, permissions::SALES_VOID)?;
+/// # Ok(())
+/// # }
 /// ```
 pub fn require_permission(
     store: &Store<'_>,
