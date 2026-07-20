@@ -16,6 +16,11 @@
 #     but passed in at least 1 other (true flaky candidates)
 #
 # The flaky test quarantine process is documented in CONTRIBUTING.md.
+#
+# NOTE: JSON parsing depends on cargo-nextest's --message-format json
+# schema (cargo test events with type/event/outcome fields). If the
+# format changes in a future nextest version, the grep pipeline below
+# may need updating.
 
 set -euo pipefail
 

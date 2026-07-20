@@ -40,7 +40,7 @@ fn bench_cart_calculate_total(c: &mut Criterion) {
 
     c.bench_function("cart_total_20_items", |bencher| {
         bencher.iter(|| {
-            let total = black_box(cart.clone()).total();
+            let total = black_box(black_box(&cart).total());
             black_box(total)
         });
     });
