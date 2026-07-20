@@ -15,6 +15,53 @@ use crate::db::reports::{
 };
 use crate::error::CoreError;
 
+/// Column whitelist entries for custom report datasets.
+type ColumnWhitelist = &'static [(&'static str, &'static str)];
+
+/// Dataset definition for the custom report builder.
+struct DatasetDef {
+    table: &'static str,
+    columns: ColumnWhitelist,
+    has_date_filter: bool,
+}
+
+/// Request payload for the custom report builder.
+///
+/// The backend validates `columns` against a per-dataset whitelist to prevent
+/// SQL injection — only columns listed in the whitelist are included in the query.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CustomReportRequest {
+    /// Dataset key ("sales" or "inventory").
+    pub dataset: String,
+    /// Column names the user wants to see (whitelist-filtered).
+    pub columns: Vec<String>,
+    /// Optional ISO-8601 start date for date-filterable datasets.
+    pub start_date: Option<String>,
+    /// Optional ISO-8601 end date for date-filterable datasets.
+    pub end_date: Option<String>,
+}
+
+/// Response from the custom report builder — a generic grid suitable for
+/// table rendering and CSV export.
+#[derive(Debug, Clone, Serialize)]
+pub struct CustomReportResponse {
+    /// Column headers in display order.
+    pub columns: Vec<String>,
+    /// Row data — each inner vec matches the length of `columns`.
+    pub rows: Vec<Vec<String>>,
+}
+
+/// Convert a rusqlite Value to its string representation.
+fn value_to_string(val: rusqlite::types::Value) -> String {
+    match val {
+        rusqlite::types::Value::Null => String::new(),
+        rusqlite::types::Value::Integer(i) => i.to_string(),
+        rusqlite::types::Value::Real(f) => f.to_string(),
+        rusqlite::types::Value::Text(s) => s,
+        rusqlite::types::Value::Blob(b) => format!("<{} bytes>", b.len()),
+    }
+}
+
 /// Metadata stamped onto every analytics export.
 #[derive(Debug, Clone, Serialize)]
 pub struct ExportMetadata {
@@ -195,6 +242,133 @@ impl Store<'_> {
             CoreError::Internal(format!("failed to deserialize report schedule: {e}"))
         })?;
         Ok(Some(config))
+    }
+
+    /// Build a custom report from user-selected columns and filters.
+    ///
+    /// Column names are validated against a per-dataset whitelist — unrecognized
+    /// columns are silently dropped. This prevents SQL injection while allowing
+    /// flexible column selection from predefined options.
+    ///
+    /// # Supported datasets
+    ///
+    /// | Key | Table | Date filter |
+    /// |-----|-------|-------------|
+    /// | `sales` | `sales` | `created_at` |
+    /// | `inventory` | `products` | none |
+    pub fn build_custom_report(
+        &self,
+        req: CustomReportRequest,
+    ) -> Result<CustomReportResponse, CoreError> {
+        let dataset = Self::get_dataset_def(&req.dataset)?;
+
+        // Filter requested columns through the whitelist
+        let safe_cols: Vec<&str> = req
+            .columns
+            .iter()
+            .filter_map(|c| {
+                dataset
+                    .columns
+                    .iter()
+                    .find(|(col_name, _)| col_name == c)
+                    .map(|(col_name, _)| *col_name)
+            })
+            .collect();
+
+        if safe_cols.is_empty() {
+            return Ok(CustomReportResponse {
+                columns: Vec::new(),
+                rows: Vec::new(),
+            });
+        }
+
+        // Build safe SQL — column names come from our whitelist, table name
+        // from our dataset definitions, both hardcoded and validated above.
+        // Date values are parameterized to prevent SQL injection.
+        let cols_sql = safe_cols.join(", ");
+        let mut sql = format!("SELECT {} FROM {}", cols_sql, dataset.table);
+        let mut params: Vec<String> = Vec::new();
+
+        if dataset.has_date_filter {
+            if req.start_date.is_some() {
+                sql.push_str(" WHERE created_at >= ?1");
+                params.push(req.start_date.clone().unwrap());
+            }
+            if req.end_date.is_some() {
+                let param_idx = params.len() + 1;
+                let where_clause = if req.start_date.is_some() {
+                    " AND"
+                } else {
+                    " WHERE"
+                };
+                sql.push_str(&format!("{} created_at <= ?{}", where_clause, param_idx));
+                params.push(format!("{} 23:59:59", req.end_date.clone().unwrap()));
+            }
+        }
+
+        let mut stmt = self.conn.prepare(&sql).map_err(|e| {
+            CoreError::Internal(format!("failed to prepare custom report query: {e}"))
+        })?;
+
+        let col_count = stmt.column_count();
+
+        // Convert params to rusqlite-compatible references
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
+
+        let rows = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                let mut row_data = Vec::with_capacity(col_count);
+                for i in 0..col_count {
+                    let val: rusqlite::types::Value = row.get(i)?;
+                    row_data.push(value_to_string(val));
+                }
+                Ok(row_data)
+            })
+            .map_err(|e| CoreError::Internal(format!("failed to query custom report: {e}")))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                CoreError::Internal(format!("failed to collect custom report rows: {e}"))
+            })?;
+
+        Ok(CustomReportResponse {
+            columns: safe_cols.iter().map(|&s| s.to_string()).collect(),
+            rows,
+        })
+    }
+
+    /// Look up a dataset definition by key.
+    fn get_dataset_def(key: &str) -> Result<DatasetDef, CoreError> {
+        match key {
+            "sales" => Ok(DatasetDef {
+                table: "sales",
+                columns: &[
+                    ("id", "Sale ID"),
+                    ("total_minor", "Total (minor)"),
+                    ("created_at", "Created"),
+                    ("status", "Status"),
+                    ("customer_id", "Customer ID"),
+                ],
+                has_date_filter: true,
+            }),
+            "inventory" => Ok(DatasetDef {
+                table: "products",
+                columns: &[
+                    ("sku", "SKU"),
+                    ("name", "Name"),
+                    ("price_minor", "Price (minor)"),
+                    ("category_id", "Category ID"),
+                    ("barcode", "Barcode"),
+                ],
+                has_date_filter: false,
+            }),
+            _ => Err(CoreError::Validation {
+                field: "dataset",
+                message: format!("unknown dataset '{key}'. Supported: sales, inventory"),
+            }),
+        }
     }
 }
 
@@ -415,5 +589,103 @@ mod tests {
         assert_eq!(back.cadence, cfg.cadence);
         assert_eq!(back.recipients, cfg.recipients);
         assert_eq!(back.lookback_days, cfg.lookback_days);
+    }
+
+    // ── Custom report builder ──────────────────────────────────────
+
+    #[test]
+    fn custom_report_unknown_dataset() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "nonexistent".to_string(),
+            columns: vec!["id".to_string()],
+            start_date: None,
+            end_date: None,
+        };
+        let err = s.build_custom_report(req).unwrap_err();
+        assert!(
+            format!("{err}").contains("unknown dataset")
+                || format!("{err}").contains("validation error"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn custom_report_invalid_columns_filtered() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        // Request includes a column that's not in the whitelist — it gets silently dropped.
+        let req = CustomReportRequest {
+            dataset: "sales".to_string(),
+            columns: vec!["id".to_string(), "password_hash".to_string()],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        // Only "id" is in the whitelist
+        assert_eq!(resp.columns, vec!["id"]);
+    }
+
+    #[test]
+    fn custom_report_sales_basic() {
+        let conn = migrations::fresh_db();
+        seed_sale(&conn, "A", 1, 100);
+        seed_sale(&conn, "B", 2, 200);
+
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "sales".to_string(),
+            columns: vec![
+                "id".to_string(),
+                "total_minor".to_string(),
+                "status".to_string(),
+            ],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 3);
+        assert_eq!(resp.rows.len(), 2);
+        // Each row has 3 columns
+        assert!(resp.rows.iter().all(|r| r.len() == 3));
+    }
+
+    #[test]
+    fn custom_report_inventory_columns() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "inventory".to_string(),
+            columns: vec![
+                "sku".to_string(),
+                "name".to_string(),
+                "price_minor".to_string(),
+            ],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 3);
+        // All three columns must be present header order
+        assert_eq!(resp.columns[0], "sku");
+        assert_eq!(resp.columns[1], "name");
+        assert_eq!(resp.columns[2], "price_minor");
+    }
+
+    #[test]
+    fn custom_report_empty_columns_returns_empty() {
+        let conn = migrations::fresh_db();
+        seed_sale(&conn, "X", 1, 50);
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "sales".to_string(),
+            columns: vec![],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert!(resp.columns.is_empty());
+        assert!(resp.rows.is_empty());
     }
 }

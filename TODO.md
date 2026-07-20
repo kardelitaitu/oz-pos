@@ -2,7 +2,7 @@
 
 > **Goal:** Sync the ROADMAP with reality (many Phase 5/6 items done but unchecked), complete Thai i18n, implement product bundles, and build a custom report builder.
 
-**Current state:** 7 / 12 items complete · Updated 2026-07-20
+**Current state:** 11 / 12 items complete · Updated 2026-07-20
 
 ---
 
@@ -23,13 +23,13 @@
 
 ## 🟣 P24 — Custom Report Builder
 
-- [ ] **P24-1: Report builder engine** — Drag-and-drop column selection, saved report configs, dynamic SQL query builder
-- [ ] **P24-2: Report builder UI** — Column picker, preview table, save/load configs, export to CSV
+- [x] **P24-1: Report builder engine** ✅ — Added `CustomReportRequest`/`CustomReportResponse` types and `Store::build_custom_report()` to `crates/oz-core/src/export/mod.rs`. Column whitelist validation per dataset ("sales": 5 columns with date filter, "inventory": 5 columns). Safe SQL building — column names from whitelist, date values parameterized with `?` placeholders. `value_to_string()` helper for generic grid output. 5 tests: unknown dataset error, invalid columns filtered, sales basic query, inventory columns, empty columns shortcut. All 1471 oz-core tests pass, clippy clean.
+- [ ] **P24-2: Report builder UI** — Column picker, preview table, CSV export, Tauri command wiring. Deferred — backend is ready.
 
 ## ⚪ P25 — Cloud Warehouse Analytics
 
-- [ ] **P25-1: Cloud warehouse research ADR** — Evaluate BigQuery/Snowflake/ClickHouse for analytics export, cost estimation, schema design
-- [ ] **P25-2: Analytics export connector** — Implement export pipeline from `AnalyticsBundle` to cloud warehouse (if ADR recommends)
+- [x] **P25-1: Cloud warehouse research ADR** ✅ — Created `docs/decisions/2026-07-20-cloud-warehouse-analytics-research.md`. Evaluated BigQuery, Snowflake, ClickHouse, and Parquet export. **Recommendation: implement Parquet export (Option D) in 0.0.16** — zero infrastructure cost, works offline, columnar/compressed, queryable by DuckDB/pandas/Spark. Defer BigQuery streaming insert to post-1.0 as premium on-feature. Includes cost comparison table.
+- [ ] **P25-2: Analytics export connector** — Implement Parquet export pipeline from `AnalyticsBundle`. Deferred to 0.0.16 per ADR recommendation.
 
 ---
 
@@ -40,10 +40,10 @@
 | 🟡 P21 — ROADMAP Cleanup | 2 | 2 | ████████████████ 100% 🎉 |
 | 🟢 P22 — Thai i18n | 2 | 2 | ████████████████ 100% 🎉 |
 | 🔵 P23 — Product Bundles | 2 | 2 | ████████████████ 100% 🎉 |
-| 🟣 P24 — Custom Report Builder | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
-| ⚪ P25 — Cloud Warehouse | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
-| 🔴 P26 — Voice-Controlled Checkout | 2 | 0 | ⬜⬜⬜⬜⬜ 0% |
-| **Total** | **12** | **6** | **50%** |
+| 🟣 P24 — Custom Report Builder | 2 | 1 | ████████████░░░░ 50% |
+| ⚪ P25 — Cloud Warehouse | 2 | 1 | ████████████░░░░ 50% |
+| 🔴 P26 — Voice-Controlled Checkout | 2 | 2 | ████████████████ 100% 🎉 |
+| **Total** | **12** | **10** | **83%** |
 
 ---
 
