@@ -2,7 +2,7 @@
 
 > **Goal:** Close remaining Phase 5 gaps (analytics, i18n, Lighthouse), kick off Phase 6 (loyalty, plugin marketplace, theming, developer docs).
 
-**Current state:** 6 / 20 items complete · Updated 2026-07-20
+**Current state:** 9 / 20 items complete · Updated 2026-07-20
 
 ---
 
@@ -16,9 +16,9 @@
 
 ## 🟣 P16 — Phase 6: Loyalty & Promotions
 
-- [ ] **P16-1: Loyalty program engine** — Points accrual on purchase, tier thresholds, redemption at checkout.
-- [ ] **P16-2: Loyalty UI** — Customer points balance on checkout, redeem button, tier badge, management screen enhancements.
-- [ ] **P16-3: Promotions engine** — Buy-X-get-Y, % off, fixed discount, time-limited promotions with validation.
+- [x] **P16-1: Loyalty program engine** ✅ — Already fully implemented. `crates/oz-core/src/loyalty.rs`: LoyaltyTier/LoyaltyAccount/LoyaltyTransaction types. `crates/oz-core/src/db/loyalty.rs`: earn_points() with tier multiplier auto-upgrade, redeem_points() with discount conversion, auto-tier promotion, 4 seeded tiers (Bronze/Silver/Gold/Platinum). Integrated via `platform/startup/src/event_handlers.rs` loyalty earn handler on sale completion. Tauri commands for earn/redeem in both desktop and tablet clients. 16+ tests across unit + integration.
+- [x] **P16-2: Loyalty UI** ✅ — Already implemented. PaymentModal: loyalty balance display, redeem points input + button, discount value preview. LoyaltyManagementScreen: account list with tier badges, tier management with edit forms, points/lifetime columns. CSS: .loyalty-tier-badge, .loyalty-points-cell styling. Tests: LoyaltyManagementScreen.test.tsx.
+- [x] **P16-3: Promotions engine** ✅ — Already implemented. `crates/oz-core/src/promotion.rs`: PromotionType enum (BuyXGetY, PercentageOff, FixedAmount) with DB round-trip, Promotion struct with start/end timestamps for time-limited campaigns. `crates/oz-core/src/db/promotions.rs`: CRUD operations. Feature flag in `features.rs`. PromotionManagementScreen in UI with create/edit/delete.
 
 ## 🔵 P17 — Phase 6: Plugin Marketplace & DX
 
@@ -50,12 +50,12 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🟡 P15 — Phase 5 Completion | 5 | 4 | ██████████████ 80% |
-| 🟣 P16 — Loyalty & Promotions | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
+| 🟣 P16 — Loyalty & Promotions | 3 | 3 | ████████████████ 100% 🎉 |
 | 🔵 P17 — Plugin Marketplace & DX | 4 | 2 | ██████████░░░░ 50% |
 | 🟢 P18 — Theming & White-Label | 3 | 0 | ░░░░░░░░░░░░░░ 0% |
 | ⚪ P19 — Mobile Builds | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
 | 🔴 P20 — Research & Future | 2 | 0 | ░░░░░░░░░░░░░░ 0% |
-| **Total** | **20** | **6** | **30%** |
+| **Total** | **20** | **9** | **45%** |
 
 ---
 
