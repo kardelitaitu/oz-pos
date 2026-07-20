@@ -14,12 +14,12 @@ next: Add SAFETY comments when real FFI drivers are implemented | perf: Mock dri
 //! `oz-hal` is the seam between business logic and physical devices:
 //! barcode scanners, receipt printers, cash drawers, NFC readers, and
 //! payment terminals. Business code only ever sees the trait
-//! ([`BarcodeScanner`], [`ReceiptPrinter`], [`CashDrawer`]) — it never
+//! (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`) — it never
 //! imports a specific driver.
 //!
 //! Every trait has a programmable mock in [`drivers::mock`]. Tests use
 //! the mocks; production code uses real drivers registered through
-//! [`DriverRegistry`] at startup.
+//! [`registry::DriverRegistry`] at startup.
 
 pub mod drivers;
 pub mod error;

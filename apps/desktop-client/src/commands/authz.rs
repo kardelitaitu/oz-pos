@@ -1,11 +1,11 @@
 //! Authorization helpers for Tauri commands.
 //!
-//! Provides [`require_permission`] and [`require_permission_for_user`]
+//! Provides `require_permission` and `require_permission_for_user`
 //! to verify that the caller has the required permission.
 //!
-//! [`require_permission`] trusts the caller-supplied `role_id` and is
+//! `require_permission` trusts the caller-supplied `role_id` and is
 //! kept for backward compatibility.  All new code should use
-//! [`require_permission_for_user`] which looks up the user's actual role
+//! `require_permission_for_user` which looks up the user's actual role
 //! from the database, preventing role‑ID forgery.
 
 use oz_core::db::Store;

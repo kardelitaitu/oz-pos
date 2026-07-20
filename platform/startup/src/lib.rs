@@ -12,11 +12,17 @@
 //! the client-specific `AppState` type.
 //!
 //! # Usage
-//!//! ```no_run
-//! use platform_startup::init_module_system;
-//!
+//! ```no_run
+//! # use platform_startup::init_module_system;
+//! # use platform_kernel::Kernel;
+//! # use tokio::sync::Mutex as AsyncMutex;
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let kernel = AsyncMutex::new(Kernel::new());
+//! # let db_path = std::path::Path::new(":memory:");
 //! // In your Tauri setup closure:
-//! init_module_system(&state.kernel, &state.db_path)?;
+//! init_module_system(&kernel, db_path)?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod console;
