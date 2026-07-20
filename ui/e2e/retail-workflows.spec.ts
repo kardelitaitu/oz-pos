@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
 
 /**
  * E2E: Retail Workflows — Tables, Gift Cards, Kiosk, Customers, Categories, Loyalty
@@ -20,13 +20,6 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  */
 
 const SCREEN_TIMEOUT = 8_000;
-
-/** Navigate to a hash route and wait for the app to re-render. */
-async function navigateTo(page: import('@playwright/test').Page, route: string) {
-  await page.evaluate((hash) => {
-    window.location.hash = hash;
-  }, `#/${route}`);
-}
 
 test.describe('Retail & Management Screens', () => {
   test.beforeEach(async ({ page }) => {

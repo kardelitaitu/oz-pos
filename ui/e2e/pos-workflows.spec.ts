@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
 
 /**
  * E2E: POS Workflows — Sales History, Customer Selection, Void
@@ -28,9 +28,7 @@ test.describe('POS Workflows', () => {
   test('sales history screen loads and renders container', async ({ page }) => {
     await page.waitForSelector('.retail-cart-action-btn--pay', { timeout: 10_000 });
 
-    await page.evaluate(() => {
-      window.location.hash = '#/sales-history';
-    });
+    await navigateTo(page, 'sales-history');
 
     // Sales history container must appear.
     await expect(page.locator('.sales-history')).toBeVisible({ timeout: 8_000 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
 
 /**
  * E2E: Reporting Workflows — Dashboard, Sales Report, Inventory Report, Menu Engineering
@@ -18,12 +18,6 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  */
 
 const SCREEN_TIMEOUT = 8_000;
-
-async function navigateTo(page: import('@playwright/test').Page, route: string) {
-  await page.evaluate((hash) => {
-    window.location.hash = hash;
-  }, `#/${route}`);
-}
 
 test.describe('Reporting Screens', () => {
   test.beforeEach(async ({ page }) => {

@@ -94,6 +94,20 @@ export async function selectWorkspace(
 }
 
 /**
+ * Navigate to a hash route.
+ *
+ * Pass just the route name (e.g. "dashboard", "settings") — the "#/"
+ * prefix is prepended automatically. The page.evaluate sets
+ * window.location.hash, and each test's toBeVisible() provides
+ * its own auto-wait for DOM + visibility.
+ */
+export async function navigateTo(page: Page, route: string): Promise<void> {
+  await page.evaluate((hash) => {
+    window.location.hash = hash;
+  }, `#/${route}`);
+}
+
+/**
  * Wait for the app to be fully loaded and ready.
  */
 export async function waitForApp(page: Page): Promise<void> {
