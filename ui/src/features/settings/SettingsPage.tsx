@@ -468,10 +468,27 @@ export default function SettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Scroll content to top when navigating between sections.
+  // Scroll content to top and focus the first heading when navigating sections.
   useEffect(() => {
-    const el = document.querySelector<HTMLElement>('.settings-content');
-    if (el) el.scrollTop = 0;
+    const contentEl = document.querySelector<HTMLElement>('.settings-content');
+    if (contentEl) contentEl.scrollTop = 0;
+
+    // P60-4f: Move focus to the first heading in the newly rendered section
+    // so screen readers announce the section title and keyboard users can
+    // tab into the section content naturally.
+    const sectionEl = document.querySelector<HTMLElement>('.settings-section-content');
+    if (sectionEl) {
+      const heading = sectionEl.querySelector<HTMLElement>('h2');
+      if (heading) {
+        heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: true });
+        // Remove tabindex after blur so headings don't remain focusable via Tab
+        heading.addEventListener('blur', function onBlur() {
+          heading.removeAttribute('tabindex');
+          heading.removeEventListener('blur', onBlur);
+        }, { once: true });
+      }
+    }
   }, [activeSection]);
 
   const handleSave = async () => {
