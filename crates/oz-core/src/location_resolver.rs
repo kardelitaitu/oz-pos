@@ -454,14 +454,20 @@ pub fn resolve_all_locations(
 /// The caller (typically `crate::db::Store::complete_sale`) uses the
 /// returned vec to populate `crate::sale_deduction::Shortfall::alternatives`.
 ///
-/// Returns all bound locations (in priority order) that have stock > 0 for
-/// the given SKU, along with the available quantity at each. The cashier UI
-/// can display these as suggested fallback sources.
+/// The greedy-fill algorithm walks locations in priority order (primary first,
+/// then secondaries by sort_order) and includes each location's stock up to
+/// the requested `qty`. Once `qty` units have been covered, remaining locations
+/// are skipped. This prevents showing irrelevant locations when the primary
+/// already satisfies the demand.
+///
+/// Each returned entry carries `qty_available` = the location's full live stock
+/// (not just the portion that would be deducted), so the cashier sees the total
+/// picture when choosing fallback sources.
 pub fn resolve_location_chain_for_sku(
     conn: &rusqlite::Connection,
     workspace_instance_id: &str,
     sku: &str,
-    #[allow(unused)] qty: i64, // TODO(ADR-19): implement greedy-fill across locations using qty
+    qty: i64,
 ) -> Result<Vec<LocationStock>, CoreError> {
     let location_ids = resolve_all_locations(conn, workspace_instance_id)?;
 
@@ -481,9 +487,14 @@ pub fn resolve_location_chain_for_sku(
         })?;
 
     let mut results = Vec::with_capacity(location_ids.len());
+    let mut remaining = qty;
 
     for loc_id in &location_ids {
-        let qty: i64 = conn
+        if remaining <= 0 {
+            break;
+        }
+
+        let avail: i64 = conn
             .query_row(
                 "SELECT COALESCE(qty, 0) FROM stock_summary \
                  WHERE item_id = ?1 AND location_id = ?2",
@@ -492,7 +503,7 @@ pub fn resolve_location_chain_for_sku(
             )
             .unwrap_or(0);
 
-        if qty > 0 {
+        if avail > 0 {
             let name: String = conn
                 .query_row(
                     "SELECT name FROM inventory_locations WHERE id = ?1",
@@ -504,8 +515,10 @@ pub fn resolve_location_chain_for_sku(
             results.push(LocationStock {
                 location_id: loc_id.clone(),
                 location_name: name,
-                qty_available: qty,
+                qty_available: avail,
             });
+
+            remaining = remaining.saturating_sub(avail);
         }
     }
 
@@ -668,6 +681,88 @@ mod tests {
         let locs = resolve_all_locations(&conn, "ws-unbound").unwrap();
         assert_eq!(locs.len(), 1);
         assert_eq!(locs[0].as_str(), CANONICAL_DEFAULT_LOCATION_UUID);
+    }
+
+    #[test]
+    fn resolve_location_chain_requires_one_location_when_primary_suffices() {
+        // Greedy-fill: with qty=3 and Store having 5, only Store should be
+        // returned — WH A is skipped because the demand is already covered.
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-store', 'Store', 'store');\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-wh-a', 'WH A', 'warehouse');\
+             INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+               VALUES ('prod-gf', 'GF-001', 'Greedy', 100, 'IDR', 'retail');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('ws-gf', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'GF');\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-gf-1', 'ws-gf', 'loc-store', 1, 0);\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-gf-2', 'ws-gf', 'loc-wh-a', 0, 1);\
+             INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) VALUES ('prod-gf', 'loc-store', 5);\
+             INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) VALUES ('prod-gf', 'loc-wh-a', 500);",
+        )
+        .unwrap();
+        // Only 3 units needed — Store has 5, so WH A is not included.
+        let chain = resolve_location_chain_for_sku(&conn, "ws-gf", "GF-001", 3).unwrap();
+        assert_eq!(chain.len(), 1, "primary suffices — only Store needed");
+        assert_eq!(chain[0].location_name, "Store");
+        assert_eq!(chain[0].qty_available, 5);
+    }
+
+    #[test]
+    fn resolve_location_chain_exact_fill_stops_at_exact_match() {
+        // qty=5 exactly matches Store's stock — no need for WH A.
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-store', 'Store', 'store');\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-wh-a', 'WH A', 'warehouse');\
+             INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+               VALUES ('prod-ef', 'EF-001', 'Exact', 100, 'IDR', 'retail');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('ws-ef', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'EF');\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-ef-1', 'ws-ef', 'loc-store', 1, 0);\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-ef-2', 'ws-ef', 'loc-wh-a', 0, 1);\
+             INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) VALUES ('prod-ef', 'loc-store', 5);\
+             INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) VALUES ('prod-ef', 'loc-wh-a', 500);",
+        )
+        .unwrap();
+        let chain = resolve_location_chain_for_sku(&conn, "ws-ef", "EF-001", 5).unwrap();
+        assert_eq!(chain.len(), 1, "exact match — only Store");
+        assert_eq!(chain[0].qty_available, 5);
+    }
+
+    #[test]
+    fn resolve_location_chain_under_stock_includes_all_available() {
+        // qty=600 exceeds Store(5) + WH A(500) — both locations included.
+        let conn = migrated();
+        seed_fks(&conn);
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-store', 'Store', 'store');\
+             INSERT OR IGNORE INTO inventory_locations (id, name, type) VALUES ('loc-wh-a', 'WH A', 'warehouse');\
+             INSERT OR IGNORE INTO products (id, sku, name, price_minor, currency, product_type) \
+               VALUES ('prod-us', 'US-001', 'Under', 100, 'IDR', 'retail');\
+             INSERT OR IGNORE INTO workspace_instances (id, type_key, store_id, name) \
+               VALUES ('ws-us', (SELECT key FROM workspace_types LIMIT 1), 'store-1', 'US');\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-us-1', 'ws-us', 'loc-store', 1, 0);\
+             INSERT OR IGNORE INTO workspace_inventory_locations (id, instance_id, location_id, is_primary, sort_order) \
+               VALUES ('wsl-us-2', 'ws-us', 'loc-wh-a', 0, 1);\
+             INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) VALUES ('prod-us', 'loc-store', 5);\
+             INSERT OR IGNORE INTO stock_summary (item_id, location_id, qty) VALUES ('prod-us', 'loc-wh-a', 500);",
+        )
+        .unwrap();
+        // 600 > 5 + 500 — can't fully satisfy, but all stocked locations included.
+        let chain = resolve_location_chain_for_sku(&conn, "ws-us", "US-001", 600).unwrap();
+        assert_eq!(chain.len(), 2, "all locations with stock still included");
+        assert_eq!(chain[0].location_name, "Store");
+        assert_eq!(chain[0].qty_available, 5);
+        assert_eq!(chain[1].location_name, "WH A");
+        assert_eq!(chain[1].qty_available, 500);
     }
 
     #[test]

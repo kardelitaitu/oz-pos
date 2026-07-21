@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 14 / 16 items complete (88%) · Updated 2026-07-21
+**Current state:** 15 / 16 items complete (94%) · Updated 2026-07-21
 
 ---
 
@@ -23,7 +23,7 @@
 - [x] **P54-2: tenant_id on tax_rates/users sync** ✅ — Added `POST /api/v1/tax-rates` and `POST /api/v1/users` endpoints to `oz-api` crate. Both handlers extract `tenant_id` from JWT claims and stamp it via UPDATE (same pattern as `create_product`). Updated TODO comment in `sync_api.rs`. 6 integration tests added (201, field verification, auth enforcement). All 115 oz-api tests pass.
 - [x] **P54-3: archive_instance() wrapper (ADR #5)** ✅ — Added `Store::archive_instance()` method in `crates/oz-core/src/db/workspaces.rs` that sets status to `'archived'` (idempotent, returns NotFound for non-existent instances). Updated `count_active_instances_excludes_suspended` test to use the new method instead of inline SQL. Removed TODO comment.
 - [x] **P54-4: user_store_access check (ADR #4 Phase 2)** ✅ — `list_workspaces_inner()` now checks `user_store_access` for owner roles in multi-store mode. When user has explicit `user_store_access` rows, only assigned-store instances are returned; otherwise legacy single-store bypass applies. 2 new integration tests cover multi-store isolation and legacy mode preservation.
-- [ ] **P54-5: greedy-fill location resolver (ADR-19)** — Implement greedy-fill algorithm in `location_resolver.rs` to use the `qty` parameter for distributing stock deduction across locations.
+- [x] **P54-5: greedy-fill location resolver (ADR-19)** ✅ — `resolve_location_chain_for_sku()` now uses the `qty` parameter: walks locations in priority order, allocates from each until `qty` is fulfilled, then stops. Removed `#[allow(unused)]` and TODO. 3 new tests cover primary-suffices, exact-fill, and under-stock scenarios. All existing tests pass unchanged.
 
 ## 🟣 P55 — Developer Tooling
 
@@ -54,11 +54,11 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
-| 🔵 P54 — Code TODOs | 5 | 4 | ░░░░░░░░░░░░░░░░ 80% |
+| 🔵 P54 — Code TODOs | 5 | 5 | ███████████████████████ 100% |
 | 🟣 P55 — Dev Tooling | 2 | 2 | ███████████████████████ 100% |
 | 🔴 P56 — Device Validation | 4 | 4 | ███████████████████████ 100% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **14** | **88%** |
+| **Total** | **16** | **15** | **94%** |
 
 ---
 
