@@ -382,6 +382,18 @@ jobs:
         run: sccache --show-stats
 
   # ── Benchmarks ───────────────────────────────────────────────────
+  #
+  # Runs all oz-core Criterion.rs benchmarks and uploads the full
+  # criterion output as a versioned artifact for manual comparison.
+  #
+  # To compare two nightly runs:
+  #   1. Download two benchmark-results artifacts
+  #   2. Extract each target/criterion/ directory
+  #   3. Install critcmp:  cargo install critcmp
+  #   4. Compare:          critcmp --load ./baseline-criterion baseline
+  #                        critcmp baseline current
+  #
+  # See docs/benchmarks/regression-tracking.md for the full workflow.
   benchmarks:
     name: Benchmarks
     runs-on: ubuntu-latest
@@ -394,12 +406,22 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
       - name: Run cargo bench (oz-core)
-        run: cargo bench -p oz-core -- --output-format bencher 2>&1 | tee benchmark-output.txt
-      - name: Upload benchmark results
+        run: cargo bench -p oz-core 2>&1 | tee benchmark-output.txt
+      - name: Extract benchmark timings to job summary
+        run: |
+          echo "## Benchmark Results (${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          TIMINGS=$(grep -E 'time:\s*\[' benchmark-output.txt 2>/dev/null || true)
+          if [ -n "$TIMINGS" ]; then
+            echo "$TIMINGS" | sed 's/^/| /; s/$/ |/' >> $GITHUB_STEP_SUMMARY
+          else
+            echo '_No benchmark timings extracted._' >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Upload full criterion output for cross-run comparison
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmark-results-${{ github.sha }}
           path: |
             benchmark-output.txt
             target/criterion/
