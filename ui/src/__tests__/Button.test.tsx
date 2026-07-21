@@ -125,4 +125,64 @@ describe('Button', () => {
     expect(btn.getAttribute('disabled')).not.toBeNull();
     expect(btn.getAttribute('aria-busy')).toBe('true');
   });
+
+  describe('state prop', () => {
+    it('defaults to ready', () => {
+      render(<Button>Save</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.getAttribute('disabled')).toBeNull();
+      expect(btn.getAttribute('aria-busy')).toBeNull();
+    });
+
+    it('shows spinner and disables button when processing', () => {
+      render(<Button state="processing">Saving</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.getAttribute('disabled')).not.toBeNull();
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      const spinner = btn.querySelector('.btn__spinner');
+      expect(spinner).not.toBeNull();
+    });
+
+    it('hides icon when processing', () => {
+      render(<Button state="processing" icon={<span>⚡</span>}>Saving</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.querySelector('.btn__icon')).toBeNull();
+      expect(btn.querySelector('.btn__spinner')).not.toBeNull();
+    });
+
+    it('wraps children in sr-only span when processing', () => {
+      render(<Button state="processing">Saving</Button>);
+      const btn = screen.getByRole('button');
+      const srSpan = btn.querySelector('.sr-only');
+      expect(srSpan).not.toBeNull();
+      expect(srSpan?.textContent).toBe('Saving');
+    });
+
+    it('adds no extra CSS class when processing', () => {
+      render(<Button state="processing">Saving</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.className).not.toContain('processing');
+    });
+
+    it('spinner has aria-hidden="true"', () => {
+      render(<Button state="processing">Saving</Button>);
+      const spinner = screen.getByRole('button').querySelector('.btn__spinner');
+      expect(spinner?.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('works when both state="ready" and loading are set (loading wins)', () => {
+      render(<Button state="ready" loading>Save</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.getAttribute('disabled')).not.toBeNull();
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      expect(btn.querySelector('.btn__spinner')).not.toBeNull();
+    });
+
+    it('works with disabled and state="processing"', () => {
+      render(<Button disabled state="processing">Saving</Button>);
+      const btn = screen.getByRole('button');
+      expect(btn.getAttribute('disabled')).not.toBeNull();
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+    });
+  });
 });
