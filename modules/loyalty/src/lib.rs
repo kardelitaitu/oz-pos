@@ -48,6 +48,9 @@ next: Migrate loyalty commands and DB layer into this module | perf: N/A.
 // access them through this module without importing oz-core directly.
 pub use oz_core::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
 
+/// Loyalty repository — high-level operations wrapping oz-core Store methods.
+pub mod repository;
+
 use std::fmt::Debug;
 
 use foundation::contracts::{Module, ModuleResult};

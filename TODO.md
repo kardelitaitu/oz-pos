@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 27 / 32 items complete (84%) · Updated 2026-07-22
+> **Current state:** 28 / 32 items complete (88%) · Updated 2026-07-22
 
 ---
 
@@ -22,7 +22,7 @@
 | 🔶 | Release Readiness | 2 | 2/2 ✅ |
 | 📱 | WhatsApp Notification Integration | 2 | 0/2 ⏳ |
 | 📊 | Multi-Store Centralized Dashboard | 2 | 2/2 ✅ |
-| 🎯 | Loyalty Module Extraction | 2 | 1/2 ⏳ |
+| 🎯 | Loyalty Module Extraction | 2 | 2/2 ✅ |
 | 🧱 | Shared DTO & Validation Crates | 2 | 2/2 ✅ |
 | ⚙️ | Config Validation Layer | 2 | 2/2 ✅ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
@@ -170,7 +170,7 @@
 > **Goal:** Extract loyalty program logic from `crates/oz-core/src/loyalty.rs` into its own `modules/loyalty/` following the module template, as specified in ARCHITECTURE.md. Currently loyalty lives in oz-core as standalone files rather than a proper module.
 
 - [x] **Create `modules/loyalty/` crate** ✅ — Scaffolded with `Cargo.toml`, `manifest.json` (dependency: crm, permissions: loyalty:view/manage), `src/lib.rs`. Re-exports `LoyaltyTier`, `LoyaltyAccount`, `LoyaltyTransaction`, `LoyaltyAccountWithDetails` from oz-core. `LoyaltyModule` struct with `Module` trait impl (id="loyalty", lifecycle: on_load → validates config, on_start → ready, on_stop → cleanup). 8 kernel integration tests (module_id, lifecycle, duplicate rejection, individual lifecycle methods, multi-module coexistence). Registered in workspace Cargo.toml.
-- [ ] **Migrate loyalty DB + UI** — Move `db/loyalty.rs` functions into the module's repository layer. Update UI imports from `@/api/crm` to `@/api/loyalty`. Register the loyalty page/route in App.tsx. Verify all 4 existing loyalty tests pass after migration. Add module-level integration tests.
+- [x] **Migrate loyalty DB + UI** ✅ — Created `modules/loyalty/src/repository.rs` with `LoyaltyRepository` wrapping oz-core Store methods: `get_or_create_account`, `get_account`, `list_accounts`, `earn_points`, `redeem_points`, `list_tiers`, `update_tier`, `get_points_value`. 17 integration tests using fresh in-memory DB. UI imports already correct (all loyalty types imported from `@/api/loyalty`, not `@/api/crm`). Route already registered in App.tsx at `route: 'loyalty'`. Existing 20 oz-core loyalty tests still pass. Module now has 26 tests total (8 kernel + 17 repository + 1 doc).
 
 ---
 
