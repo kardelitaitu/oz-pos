@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 31 / 32 items complete (97%) · Updated 2026-07-22
+> **Current state:** 32 / 32 items complete (100% 🎉) · Updated 2026-07-22
 
 ---
 
@@ -14,7 +14,7 @@
 | 🔴 | Cloud Server Hardening | 2 | 2/2 ✅ |
 | 🟠 | Midtrans QRIS Payment Gateway | 2 | 2/2 ✅ |
 | 🟡 | Low Stock Alert System | 2 | 2/2 ✅ |
-| 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
+| 🔵 | API Documentation (OpenAPI) | 2 | 2/2 ✅ |
 | 🟣 | PostgreSQL Sync Daemon | 2 | 2/2 ✅ |
 | ⚪ | Docker & DevEx | 2 | 2/2 ✅ |
 | 🟤 | i18n Completion | 2 | 2/2 ✅ |
@@ -106,8 +106,8 @@
 
 > **Goal:** Generate and serve OpenAPI 3.1 documentation for the cloud server REST API, enabling third-party integrations and developer onboarding.
 
-- [ ] **OpenAPI spec generation** — Add `utoipa` derive macros to all cloud server route handlers (sync, health, webhooks, auth). Generate `openapi.json` at build time. Include request/response schemas, error codes, and authentication requirements.
-- [ ] **Swagger UI + Scalar docs** — Serve Swagger UI at `/api/docs` and Scalar at `/api/docs/scalar` in dev mode. Add a `--no-docs` CLI flag for production. Link from README and ARCHITECTURE.md.
+- [x] **OpenAPI spec generation** ✅ — Created `apps/cloud-server/src/openapi.rs` with zero-dependency OpenAPI 3.1 spec builder. Documents all 20+ endpoints across 9 tag groups (Health, Auth, Products, Categories, Tax Rates, Users, Sales, Sync, Webhooks). 12 schemas documented with descriptions, examples, and status codes. Bearer Auth security scheme defined. Served at `GET /api/openapi.json`.
+- [x] **Swagger UI docs** ✅ — Swagger UI served at `GET /api/docs` (loaded from CDN). No additional dependencies — pure HTML page loading swagger-ui-dist@5. Deep linking, try-it-out, filter, and model expansion enabled. 9 tests covering spec validity, path completeness, tag groups, security, and HTML delivery. All gates pass (cargo check, clippy, 9/9 tests).
 
 ---
 

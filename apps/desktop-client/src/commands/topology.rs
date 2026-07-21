@@ -126,11 +126,44 @@ const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
 /// `oz-pos/topology` key. Any previous topology is overwritten.
 /// The write is wrapped in a transaction to satisfy the project
 /// rule that all database writes must occur inside a transaction.
+///
+/// # Validation
+///
+/// - Wire IDs must be unique within the topology.
+/// - Wire `from_node_id` and `to_node_id` must reference existing nodes.
 pub fn save_topology_data(
     conn: &Connection,
     nodes: Vec<TopologyNodePayload>,
     wires: Vec<TopologyWirePayload>,
 ) -> Result<(), AppError> {
+    // Validate wire IDs are unique.
+    let mut seen_wire_ids = std::collections::HashSet::new();
+    for wire in &wires {
+        if !seen_wire_ids.insert(&wire.id) {
+            return Err(AppError::Internal(format!(
+                "duplicate wire id: {}",
+                wire.id
+            )));
+        }
+    }
+
+    // Validate wire endpoints reference existing nodes.
+    let node_ids: std::collections::HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
+    for wire in &wires {
+        if !node_ids.contains(wire.from_node_id.as_str()) {
+            return Err(AppError::Internal(format!(
+                "wire {} references unknown from_node_id: {}",
+                wire.id, wire.from_node_id
+            )));
+        }
+        if !node_ids.contains(wire.to_node_id.as_str()) {
+            return Err(AppError::Internal(format!(
+                "wire {} references unknown to_node_id: {}",
+                wire.id, wire.to_node_id
+            )));
+        }
+    }
+
     let data = TopologyData { nodes, wires };
     let json = serde_json::to_string(&data).map_err(|e| AppError::Internal(e.to_string()))?;
     let tx = conn.unchecked_transaction()?;
