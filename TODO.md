@@ -1,21 +1,12 @@
-# 0.0.15 — Polish, Physical Device Testing & Remaining Gaps
+# 0.0.15 — Device Validation, Reporting & Polish
 
-> **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, complete Thai i18n translations, and validate on physical devices.
+> **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 0 / 20 items complete (0%) · Updated 2026-07-20
+**Current state:** 0 / 16 items complete (0%) · Updated 2026-07-20
 
 ---
 
-## 🟢 P54 — Thai i18n Completion
-
-> The scaffolding was created in P22 (24 `.th.ftl` bundles with `[TH] … [/TH]` markers), now fill in real Thai translations.
-
-- [ ] **P54-1: Translate core bundles** — Translate `shared.th.ftl`, `auth.th.ftl`, `pos.th.ftl` (highest-visibility, ~200 keys total). Use the `[TH] … [/TH]` markers as translation slots.
-- [ ] **P54-2: Translate feature bundles** — Translate `inventory.th.ftl`, `sales.th.ftl`, `reporting.th.ftl`, `settings.th.ftl`, `staff.th.ftl` (~300 keys).
-- [ ] **P54-3: Translate remaining bundles** — Translate `kds.th.ftl`, `crm.th.ftl`, `tax.th.ftl`, `tables.th.ftl`, `terminals.th.ftl`, `stock-transfers.th.ftl`, and all other domain bundles (~200 keys).
-- [ ] **P54-4: Thai locale QA** — Run `scripts/lint-i18n.sh`, verify bundle parity, spot-check 10 screens in Thai locale. Fix truncation/overflow on short labels.
-
-## 🟡 P55 — Email Report Delivery
+## 🟢 P55 — Email Report Delivery
 
 > P15-5 created `ReportScheduleConfig` (persisted in settings table). Now wire up an SMTP backend to actually send scheduled reports.
 
@@ -24,7 +15,7 @@
 - [ ] **P55-3: Scheduled send loop** — Background task in cloud-server that polls `report_schedule` settings, checks `send_at_time`, runs `export_analytics_bundle()`, and sends via SMTP.
 - [ ] **P55-4: Send test email UI** — Add "Send Test Report" button to settings screen. Validates SMTP config and sends a sample report to the configured recipients.
 
-## 🔵 P56 — Code TODO Resolution
+## 🔵 P54 — Code TODO Resolution
 
 > Resolve the 5 remaining TODO/FIXME comments in production code.
 
@@ -34,14 +25,14 @@
 - [ ] **P56-4: user_store_access check (ADR #4 Phase 2)** — In `list_active_instances()`, add user_store_access row filtering for non-owner roles in multi-store mode.
 - [ ] **P56-5: greedy-fill location resolver (ADR-19)** — Implement greedy-fill algorithm in `location_resolver.rs` to use the `qty` parameter for distributing stock deduction across locations.
 
-## 🟣 P57 — Developer Tooling
+## 🟣 P55 — Developer Tooling
 
 > Add tokio-console integration and flamegraph helpers for performance debugging.
 
 - [ ] **P57-1: tokio-console integration** — Add `console-subscriber` to cloud-server. Document `tokio-console` launch command in `docs/benchmarks/`. Add `#[tokio::test]` console smoke test.
 - [ ] **P57-2: cargo-flamegraph helpers** — Create `scripts/profile.sh` / `scripts/profile.ps1` that wraps `cargo flamegraph` with sane defaults (PID, frequency, output path). Document in benchmark docs.
 
-## 🔴 P58 — Physical Device Validation
+## 🔴 P56 — Physical Device Validation
 
 > Verify the app actually runs on target hardware — not just CI builds.
 
@@ -50,7 +41,7 @@
 - [ ] **P58-3: Android APK install test** — Build signed APK via `android.yml`. Install on Android 10+ physical device. Verify: touch targets, barcode scan, KDS ticket board, payment flow.
 - [ ] **P58-4: iPad install test** — Build signed IPA via `ios.yml`. Install on iPadOS 16+ via TestFlight. Verify: tablet layout, split-view, swipe gestures, receipt printing.
 
-## ⚪ P59 — Visual Polish & Edge Cases
+## ⚪ P57 — Visual Polish & Edge Cases
 
 > Small UX improvements that make a big difference.
 
@@ -62,13 +53,12 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🟢 P54 — Thai i18n | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| 🟡 P55 — Email Reports | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| 🔵 P56 — Code TODOs | 5 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| 🟣 P57 — Dev Tooling | 2 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| 🔴 P58 — Device Validation | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| ⚪ P59 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **20** | **0** | **0%** |
+| 🟢 P55 — Email Reports | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| 🔵 P54 — Code TODOs | 5 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| 🟣 P55 — Dev Tooling | 2 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| 🔴 P56 — Device Validation | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| **Total** | **16** | **0** | **0%** |
 
 ---
 
