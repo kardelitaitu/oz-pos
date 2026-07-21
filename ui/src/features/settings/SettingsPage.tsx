@@ -60,6 +60,7 @@ import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
+import { checkLicenseStatus } from '@/api/license';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
@@ -274,6 +275,8 @@ export default function SettingsPage() {
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
 
+  const [licenseTier, setLicenseTier] = useState('standard');
+
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
   const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
@@ -398,8 +401,9 @@ export default function SettingsPage() {
       getUserPreferences(userId),
       getBrandSettings(),
       getVersion(),
+      checkLicenseStatus(),
     ]);
-    const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
+    const [rR, sR, cR, syncR, prefsR, brandR, verR, licR] = results;
 
     // Local variables capture the newly-loaded values for the snapshot
     // (avoid reading React state, which would add deps and cause loops).
@@ -432,6 +436,7 @@ export default function SettingsPage() {
         applyAccentPalette(palette);
       }
       if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
+      if (licR.status === 'fulfilled') setLicenseTier(licR.value.tier.toLowerCase());
 
       // Only surface a full-page error when every single API failed.
       if (results.every((r) => r.status === 'rejected')) {
@@ -1575,7 +1580,7 @@ export default function SettingsPage() {
       case 'topology':
         return (
           <div className="settings-topology-container">
-            <NodeTopologyEditor currentTier="standard" />
+            <NodeTopologyEditor currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'} />
           </div>
         );
 

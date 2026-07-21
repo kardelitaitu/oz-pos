@@ -23,6 +23,7 @@ import './NodeTopologyEditor.css';
 
 export type NodeType = 'store' | 'workspace' | 'warehouse' | 'hardware';
 export type WireDirection = 'one-way' | 'two-way';
+export type PortName = 'top' | 'right' | 'bottom' | 'left';
 
 export interface TopologyNodeData {
   id: string;
@@ -43,6 +44,10 @@ export interface TopologyWireData {
   toNodeId: string;
   direction: WireDirection;
   label?: string;
+  /** Which port on the source node the wire originates from (default: 'right'). */
+  fromPort?: PortName;
+  /** Which port on the target node the wire connects to (default: 'right'). */
+  toPort?: PortName;
 }
 
 export interface NodeTopologyEditorProps {
@@ -59,8 +64,9 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
     { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 600, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
   ],
   wires: [
-    { id: 'w-1', fromNodeId: 'store-1', toNodeId: 'ws-1', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'ws-1', toNodeId: 'wh-1', direction: 'one-way', label: 'Stock Deduct (P1)' },
+    // Natural left-to-right flow: store right → workspace left, workspace right → warehouse left
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', direction: 'one-way', label: 'Stock Deduct (P1)' },
   ],
 };
 
@@ -73,12 +79,40 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
     { id: 'hw-prn', type: 'hardware', name: 'Kitchen Thermal Printer', subtitle: 'LAN 192.168.1.100', x: 600, y: 320, telemetryBadge: 'Ready', telemetryStatus: 'online' },
   ],
   wires: [
-    { id: 'w-1', fromNodeId: 'store-1', toNodeId: 'ws-1', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'store-1', toNodeId: 'ws-kds', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-3', fromNodeId: 'ws-1', toNodeId: 'wh-kitchen', direction: 'one-way', label: 'Stock Deduct' },
-    { id: 'w-4', fromNodeId: 'ws-kds', toNodeId: 'hw-prn', direction: 'one-way', label: 'Ticket Print' },
+    // Left-to-right: store right → workspace left; then workspace right → warehouse/printer left
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-3', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', direction: 'one-way', label: 'Stock Deduct' },
+    { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', direction: 'one-way', label: 'Ticket Print' },
   ],
 };
+
+// Estimated node card dimensions for wire endpoint positioning.
+// Header ~46px + body ~64px + gaps ≈ 112px. Width ~200px for typical content.
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 112;
+
+/** Port offset from node origin (left, top) for each port name.
+ *  Offsets include the 6px port socket overhang so the wire path
+ *  connects to the center of the port circle, not the card edge. */
+const PORT_OFFSET: Record<PortName, { dx: number; dy: number }> = {
+  top:    { dx: NODE_WIDTH / 2, dy: -6 },
+  right:  { dx: NODE_WIDTH + 6, dy: NODE_HEIGHT / 2 },
+  bottom: { dx: NODE_WIDTH / 2, dy: NODE_HEIGHT + 6 },
+  left:   { dx: -6,             dy: NODE_HEIGHT / 2 },
+};
+
+/** Evaluate a cubic bezier at parameter t (0-1). */
+function cubicBezier(
+  t: number,
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+): number {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
 
 const GRID_SIZE = 24;
 const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
@@ -109,6 +143,7 @@ export default function NodeTopologyEditor({
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
+  const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -140,6 +175,7 @@ export default function NodeTopologyEditor({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setConnectingFromNodeId(null);
+        setConnectingFromPort(null);
         setSelectedNodeId(null);
         setSelectedWireId(null);
         return;
@@ -148,7 +184,14 @@ export default function NodeTopologyEditor({
         e.preventDefault();
         if (selectedNodeId) {
           const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
-          setConfirmDelete(hasWires ? selectedNodeId : '');
+          if (hasWires) {
+            setConfirmDelete(selectedNodeId);
+          } else {
+            // No connected wires — delete immediately without dialog.
+            pushHistory();
+            setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+            setSelectedNodeId(null);
+          }
         } else {
           setConfirmDelete('');
         }
@@ -213,8 +256,8 @@ export default function NodeTopologyEditor({
     if (nodes.length === 0) return;
     const minX = Math.min(...nodes.map((n) => n.x));
     const minY = Math.min(...nodes.map((n) => n.y));
-    const maxX = Math.max(...nodes.map((n) => n.x + 200));
-    const maxY = Math.max(...nodes.map((n) => n.y + 80));
+    const maxX = Math.max(...nodes.map((n) => n.x + NODE_WIDTH));
+    const maxY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT));
     const padding = 60;
     const viewW = (canvasRef.current?.clientWidth ?? 800) - padding * 2;
     const viewH = (canvasRef.current?.clientHeight ?? 600) - padding * 2;
@@ -306,29 +349,36 @@ export default function NodeTopologyEditor({
     setSelectedNodeId(id);
   };
 
-  const handlePortClick = (e: React.MouseEvent, nodeId: string) => {
+  const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName) => {
     e.stopPropagation();
 
     if (!connectingFromNodeId) {
       setConnectingFromNodeId(nodeId);
+      setConnectingFromPort(port);
       return;
     }
 
     if (connectingFromNodeId === nodeId) {
       setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
       return;
     }
 
     const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
     const toNode = nodes.find((n) => n.id === nodeId);
-    if (!fromNode || !toNode) { setConnectingFromNodeId(null); return; }
+    if (!fromNode || !toNode) { setConnectingFromNodeId(null); setConnectingFromPort(null); return; }
 
     const duplicate = wires.some(
-      (w) => w.fromNodeId === connectingFromNodeId && w.toNodeId === nodeId,
+      (w) =>
+        (w.fromNodeId === connectingFromNodeId && w.toNodeId === nodeId
+          && w.fromPort === connectingFromPort && w.toPort === port)
+        || (w.fromNodeId === nodeId && w.toNodeId === connectingFromNodeId
+          && w.fromPort === port && w.toPort === connectingFromPort),
     );
     if (duplicate) {
-      addToast({ message: 'A wire already connects these nodes.', type: 'warning' });
+      addToast({ message: 'A wire already connects these ports.', type: 'warning' });
       setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
       return;
     }
 
@@ -343,6 +393,7 @@ export default function NodeTopologyEditor({
     if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
       addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
       setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
       return;
     }
 
@@ -354,9 +405,10 @@ export default function NodeTopologyEditor({
 
     setWires((prev) => [
       ...prev,
-      { id: newWireId, fromNodeId: connectingFromNodeId, toNodeId: nodeId, direction: 'one-way', label },
+      { id: newWireId, fromNodeId: connectingFromNodeId, fromPort: connectingFromPort!, toNodeId: nodeId, toPort: port, direction: 'one-way', label },
     ]);
     setConnectingFromNodeId(null);
+    setConnectingFromPort(null);
   };
 
   const handleToggleWireDirection = (wireId: string) => {
@@ -374,18 +426,26 @@ export default function NodeTopologyEditor({
   const handleDeleteRequest = () => {
     if (selectedNodeId) {
       const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
-      setConfirmDelete(hasWires ? selectedNodeId : '');
+      if (hasWires) {
+        setConfirmDelete(selectedNodeId);
+      } else {
+        // No connected wires — delete immediately without dialog.
+        pushHistory();
+        setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+        setSelectedNodeId(null);
+      }
     } else if (selectedWireId) {
       setConfirmDelete('');
     }
   };
 
   const wirePreviewLine = useMemo(() => {
-    if (!connectingFromNodeId) return null;
+    if (!connectingFromNodeId || !connectingFromPort) return null;
     const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
     if (!fromNode) return null;
-    const x1 = fromNode.x + 100;
-    const y1 = fromNode.y + 40;
+    const portOff = PORT_OFFSET[connectingFromPort];
+    const x1 = fromNode.x + portOff.dx;
+    const y1 = fromNode.y + portOff.dy;
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
@@ -393,7 +453,7 @@ export default function NodeTopologyEditor({
     const my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
     const dx = Math.abs(mx - x1) * 0.5;
     return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
-  }, [connectingFromNodeId, nodes, zoom, pan]);
+  }, [connectingFromNodeId, connectingFromPort, nodes, zoom, pan]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
@@ -552,26 +612,26 @@ export default function NodeTopologyEditor({
               <defs>
                 <marker
                   id="arrow-end"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
+                  viewBox="0 0 6 6"
+                  refX="5"
+                  refY="3"
+                  markerWidth="4"
+                  markerHeight="4"
                   orient="auto-start-reverse"
                 >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-primary, #3b82f6)" />
+                  <path d="M 0 0 L 6 3 L 0 6 z" fill="var(--color-accent, #5a9fd4)" />
                 </marker>
 
                 <marker
                   id="arrow-start"
-                  viewBox="0 0 10 10"
-                  refX="2"
-                  refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
+                  viewBox="0 0 6 6"
+                  refX="5"
+                  refY="3"
+                  markerWidth="4"
+                  markerHeight="4"
                   orient="auto-start-reverse"
                 >
-                  <path d="M 10 0 L 0 5 L 10 10 z" fill="var(--color-primary, #3b82f6)" />
+                  <path d="M 0 0 L 6 3 L 0 6 z" fill="var(--color-accent, #5a9fd4)" />
                 </marker>
               </defs>
 
@@ -580,16 +640,23 @@ export default function NodeTopologyEditor({
                 const toNode = nodes.find((n) => n.id === wire.toNodeId);
                 if (!fromNode || !toNode) return null;
 
-                const x1 = fromNode.x + 100;
-                const y1 = fromNode.y + 40;
-                const x2 = toNode.x + 100;
-                const y2 = toNode.y + 40;
+                // Wire connects from port to port (default: right edge)
+                const fromPort = wire.fromPort ?? 'right';
+                const toPort = wire.toPort ?? 'right';
+                const fromOff = PORT_OFFSET[fromPort];
+                const toOff = PORT_OFFSET[toPort];
+                const x1 = fromNode.x + fromOff.dx;
+                const y1 = fromNode.y + fromOff.dy;
+                const x2 = toNode.x + toOff.dx;
+                const y2 = toNode.y + toOff.dy;
 
                 const dx = Math.abs(x2 - x1) * 0.5;
                 const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 
-                const pulseX = x1 + (x2 - x1) * (simPulseStep / 100);
-                const pulseY = y1 + (y2 - y1) * (simPulseStep / 100);
+                // Pulse follows the cubic bezier curve, not a straight line
+                const t = simPulseStep / 100;
+                const pulseX = cubicBezier(t, x1, x1 + dx, x2 - dx, x2);
+                const pulseY = cubicBezier(t, y1, y1, y2, y2);
 
                 const isSelected = selectedWireId === wire.id;
 
@@ -672,14 +739,20 @@ export default function NodeTopologyEditor({
                     )}
                   </div>
 
-                  <button
-                    className={`node-port-socket ${isConnectingSource ? 'port-active' : ''}`}
-                    onClick={(e) => handlePortClick(e, node.id)}
-                    title={connectingFromNodeId ? 'Click to connect wire here' : 'Click to start wiring from this node'}
-                    aria-label={`Connect ${node.name}`}
-                  >
-                    {'\u25CF'}
-                  </button>
+                  <div className="node-port-sockets-group">
+                    {(['top', 'right', 'bottom', 'left'] as PortName[]).map((port) => {
+                      const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
+                      return (
+                        <button
+                          key={port}
+                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${connectingFromNodeId && connectingFromNodeId !== node.id ? 'port-highlight' : ''}`}
+                          onClick={(e) => handlePortClick(e, node.id, port)}
+                          aria-label={`${node.name} ${port} port`}
+                        >
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
