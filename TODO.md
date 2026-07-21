@@ -1,6 +1,6 @@
 # 0.0.18 — Full-Stack Sprint: E2E, Cloud, Payments, Notifications, APIs & Polish
 
-> **Goal:** Comprehensive sprint across 16 areas: expand E2E coverage, harden cloud server, integrate Midtrans QRIS payments, build low-stock alerts + WhatsApp notifications, document APIs, verify PostgreSQL sync, improve Docker/DevEx, complete i18n, add customer display HAL, extract loyalty module, build shared DTO/validation crates, add config validation, wire topology persistence, and prepare release infrastructure.
+> **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
 > **Current state:** 2 / 32 items complete (6%) · Updated 2026-07-21
 
@@ -27,6 +27,31 @@
 | ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
 | **Total** | | **32** | **2/32 (6%)** |
+
+### ⚡ Recommended Execution Order
+
+> Items are ordered by priority within each wave. Dependencies (→) mean item A must complete before item B.
+
+**Wave 1 — GTM & Infrastructure (do first):**
+1. 🟠 Midtrans Rust client → 🟠 Midtrans UI flow *(GTM Phase 1, July–Sept 2026)*
+2. ⚪ Docker & DevEx *(unblocks local testing of everything else)*
+3. 🔴 Cloud Server Hardening *(production readiness)*
+
+**Wave 2 — Notifications & Analytics:**
+4. 🟡 Stock alert handler → 🟡 Alert notification UI
+5. 📱 WhatsApp API client → 📱 WhatsApp event handlers
+6. 📊 Cross-store queries → 📊 Dashboard UI
+7. 🟣 PostgreSQL Sync Daemon
+
+**Wave 3 — Polish & Architecture:**
+8. 🟢 E2E Test Expansion
+9. 🔵 API Documentation
+10. 🟤 i18n Completion
+11. 🔷 CustomerDisplay trait → 🔷 Customer display UI
+12. 🎯 Loyalty Module Extraction
+13. 🧱 Shared DTO & Validation Crates
+14. ⚙️ Config Validation Layer
+15. 🔶 Release Readiness
 
 ---
 
@@ -517,12 +542,6 @@
 - [x] **P82-1: useOrientation.ts console.warn → structured format** ✅ — Replaced `as any` with typed interface.
 - [x] **P82-2: Audit remaining 8 console.warn calls for consistency** ✅ — All calls use consistent `[Context] description` format: `[useFullscreen]`, `WorkspaceHome:`, `WorkspaceContext:`, `[ShortfallDialog]`, `Fluent errors for ${locale}:`. All include error objects when available.
 - [x] **P82-3: Ensure no sensitive data in console output** ✅ — None of the 8 console.warn calls log PII, secrets, or sensitive payloads. Only diagnostic metadata (locale name, fallback indication, error objects).
-
----
-
-# ✅ 0.0.18 — Completed (15/15 🎉)
-
-**Goal:** Clean up debug logging, fix edge cases, polish Analytics UIs, finalize mobile builds, and harden the application.
 
 ---
 
