@@ -342,7 +342,8 @@ export default function NodeTopologyEditor({
   }, [connectingFromNodeId]);
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+    const targetEl = e.target as HTMLElement;
+    if (targetEl === e.currentTarget || targetEl.classList.contains('node-canvas-viewport') || targetEl.tagName === 'svg') {
       setSelectedNodeId(null);
       setSelectedWireId(null);
       if (e.button === 0 || e.button === 1) {
