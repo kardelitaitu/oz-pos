@@ -326,16 +326,16 @@ impl CloudExporter {
                 .iter()
                 .map(|row| {
                     let exported_at = sql_escape(
-                        &row.get("exported_at")
+                        row.get("exported_at")
                             .and_then(|v| v.as_str())
                             .unwrap_or(""),
                     );
                     let tenant_id =
-                        sql_escape(&row.get("tenant_id").and_then(|v| v.as_str()).unwrap_or(""));
+                        sql_escape(row.get("tenant_id").and_then(|v| v.as_str()).unwrap_or(""));
                     let store_name =
-                        sql_escape(&row.get("store_name").and_then(|v| v.as_str()).unwrap_or(""));
+                        sql_escape(row.get("store_name").and_then(|v| v.as_str()).unwrap_or(""));
                     let report_type = sql_escape(
-                        &row.get("report_type")
+                        row.get("report_type")
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown"),
                     );
