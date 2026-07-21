@@ -124,6 +124,8 @@ const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
 ///
 /// Writes the nodes + wires payloads as JSON under the
 /// `oz-pos/topology` key. Any previous topology is overwritten.
+/// The write is wrapped in a transaction to satisfy the project
+/// rule that all database writes must occur inside a transaction.
 pub fn save_topology_data(
     conn: &Connection,
     nodes: Vec<TopologyNodePayload>,
@@ -131,7 +133,9 @@ pub fn save_topology_data(
 ) -> Result<(), AppError> {
     let data = TopologyData { nodes, wires };
     let json = serde_json::to_string(&data).map_err(|e| AppError::Internal(e.to_string()))?;
-    oz_core::Settings::set(conn, TOPOLOGY_SETTING_KEY, &json)?;
+    let tx = conn.unchecked_transaction()?;
+    oz_core::Settings::set(&tx, TOPOLOGY_SETTING_KEY, &json)?;
+    tx.commit()?;
     Ok(())
 }
 
