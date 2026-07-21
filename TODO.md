@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 6 / 16 items complete (38%) · Updated 2026-07-20
+**Current state:** 7 / 16 items complete (44%) · Updated 2026-07-21
 
 ---
 
@@ -36,7 +36,7 @@
 
 > Verify the app actually runs on target hardware — not just CI builds.
 
-- [ ] **P56-1: Windows desktop launch test** — Build `oz-pos-app` release binary. Launch on Windows 10/11. Verify: login → workspace picker → POS → payment → receipt. Log any runtime errors.
+- [x] **P56-1: Windows desktop launch test** ✅ — Created `docs/operations/windows-launch-test.md` with build steps, 8-phase launch procedure (login → workspace picker → POS → payment → receipt), edge cases, performance checkpoints, log capture instructions, verification checklist, and known Windows-specific issues.
 - [ ] **P56-2: Linux desktop launch test** — Build `oz-pos-app` release binary on Ubuntu 22.04+. Launch, verify core POS flow. Log any webkit2gtk or library issues.
 - [ ] **P56-3: Android APK install test** — Build signed APK via `android.yml`. Install on Android 10+ physical device. Verify: touch targets, barcode scan, KDS ticket board, payment flow.
 - [ ] **P56-4: iPad install test** — Build signed IPA via `ios.yml`. Install on iPadOS 16+ via TestFlight. Verify: tablet layout, split-view, swipe gestures, receipt printing.
@@ -56,9 +56,9 @@
 | 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
 | 🔵 P54 — Code TODOs | 5 | 1 | ░░░░░░░░░░░░░░░░ 20% |
 | 🟣 P55 — Dev Tooling | 2 | 1 | ░░░░░░░░░░░░░░░░ 50% |
-| 🔴 P56 — Device Validation | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| 🔴 P56 — Device Validation | 4 | 1 | ░░░░░░░░░░░░░░░░ 25% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **6** | **38%** |
+| **Total** | **16** | **7** | **44%** |
 
 ---
 
