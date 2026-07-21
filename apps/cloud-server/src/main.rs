@@ -62,6 +62,19 @@ pub struct CloudServerState {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() {
+    // ── tokio-console (RUSTFLAGS="--cfg tokio_unstable" + feature "console") ─
+    #[cfg(feature = "console")]
+    {
+        console_subscriber::init();
+        tracing::info!("tokio-console subscriber initialised");
+    }
+    #[cfg(not(feature = "console"))]
+    {
+        tracing::debug!(
+            "tokio-console disabled — compile with `--features console` + RUSTFLAGS=\"--cfg tokio_unstable\" to enable"
+        );
+    }
+
     // ── Logging ──────────────────────────────────────────────────────
     if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
         oz_logging::init_json();
@@ -284,9 +297,7 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
         .layer(axum::middleware::from_fn(redirect::redirect_middleware))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────
+} // ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -476,6 +487,20 @@ mod tests {
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["last_sync_at"], "2026-06-04T08:30:00Z");
+    }
+
+    // ── Console smoke test (tokio-console) ───────────────────────────
+
+    #[cfg(feature = "console")]
+    #[tokio::test]
+    async fn console_subscriber_inits_without_panic() {
+        // This test verifies that the console subscriber can be
+        // initialised without panicking. In CI it's a no-op since the
+        // `console` feature is not enabled; run locally with:
+        //   RUSTFLAGS="--cfg tokio_unstable" cargo test --features console -p oz-cloud-server
+        console_subscriber::init();
+        // If we get here, init succeeded (no double-init panic).
+        tracing::info!("tokio-console smoke test passed");
     }
 
     #[tokio::test]

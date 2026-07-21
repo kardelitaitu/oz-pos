@@ -7,6 +7,54 @@
 
 ---
 
+## Implementation Checklist
+
+### Phase 1 — Wire to Real Data
+- [ ] 1. Add `sessionToken` prop to `NodeTopologyEditor`
+- [ ] 2. Load real stores on mount → Store nodes
+- [ ] 3. Load real workspace instances → Workspace nodes
+- [ ] 4. Load real inventory locations → Warehouse nodes
+- [ ] 5. Load real terminals → Hardware nodes
+- [ ] 6. Load existing wires from inventory location bindings
+- [ ] 7. "+ Store Node" → create store via API
+- [ ] 8. "+ Workspace Node" → create workspace via API
+- [ ] 9. "+ Warehouse Node" → create inventory location via API
+- [ ] 10. "+ Hardware Node" → register terminal via API
+- [ ] 11. Wire: Store→Workspace (implicit via store_id)
+- [ ] 12. Wire: Workspace→Warehouse → `setWorkspaceInventoryLocations()`
+- [ ] 13. Wire: Workspace→Hardware → bind terminal to workspace
+- [ ] 14. "Apply Topology Changes" → batch commit
+- [ ] 15. Node Inspector drawer → real metadata
+- [ ] 16. Simulation debugger → real `getWorkspaceLocations()`
+- [ ] 17. Load/save canvas node positions (topology_layouts DB table)
+- [ ] 18. Create `topology_layouts` migration SQL
+- [ ] 19. Create `crates/oz-core/src/db/topology.rs` module
+- [ ] 20. Create `apps/desktop-client/src/commands/topology.rs` Tauri commands
+- [ ] 21. Register topology module in `lib.rs`, `db/mod.rs`, `commands/mod.rs`
+
+### Phase 2 — Move to Settings
+- [ ] 1. Add `topology` nav item to `NAV_ITEMS` in `SettingsPage.tsx`
+- [ ] 2. Add `topology` to **Management** category in `CATEGORIES`
+- [ ] 3. Add `'topology': 'settings-nav-topology'` to `NAV_L10N_KEYS`
+- [ ] 4. Add `case 'topology':` to `renderSection()` rendering `<NodeTopologyEditor>`
+- [ ] 5. Remove topology toggle from `MultiStoreDashboardScreen.tsx`
+- [ ] 6. Add Fluent l10n keys in all locale `settings.ftl` files
+- [ ] 7. Adjust CSS for settings content area
+
+### Phase 3 — Polish & Edge Cases
+- [ ] 1. Zoom-to-fit on load and after add/remove
+- [ ] 2. Real telemetry with live terminal status polling
+- [ ] 3. Node filter/search bar
+- [ ] 4. Undo/redo (Ctrl+Z / Ctrl+Y) state stack
+- [ ] 5. Export/import topology as JSON
+- [ ] 6. Toast error handling for failed backend calls
+- [ ] 7. Loading states (skeleton/spinner)
+- [ ] 8. ARIA labels and keyboard navigation
+- [ ] 9. Empty state with preset buttons
+- [ ] 10. Double-click inline node rename
+
+---
+
 ## Table of Contents
 
 1. [Overview](#1-overview)
@@ -116,6 +164,7 @@ NodeTopologyEditor
 | 14 | "Apply Topology Changes" → serializes all pending changes and commits | batch of create/set calls | `NodeTopologyEditor.tsx` |
 | 15 | Node Inspector drawer → show real metadata (store address, workspace type, warehouse stock, terminal status) | various get/status calls | `NodeTopologyEditor.tsx` |
 | 16 | Simulation debugger → use real `getWorkspaceLocations()` to trace a test sale | `getWorkspaceLocationsScoped()` | `NodeTopologyEditor.tsx` |
+| 17 | Load and save canvas node positions | `get_topology_layout` / `set_topology_layout` | `NodeTopologyEditor.tsx` |
 
 **Estimated effort:** 3–5 days
 **Risk:** Medium — many API calls to wire, but all endpoints exist.
@@ -282,7 +331,58 @@ registerTerminalScoped(sessionToken, args): TerminalDto
 
 ---
 
-## 7. Key Architectural Decisions
+## 7. Zone-Based Access Control
+
+### Role Model for the Topology Editor
+
+| Role | Topology Editor Access | Visibility | Edit Scope |
+|------|----------------------|------------|------------|
+| **Owner** (`role-owner`) | Full access | All stores, all nodes, all wires | Create/edit/delete anything |
+| **Manager** (`role-manager`) | Restricted | Only stores in `user_store_access` | Only within assigned stores (zone) |
+| **Cashier** (`role-cashier`) | None | — | — |
+| **Kitchen** (`role-kitchen`) | None | — | — |
+
+### Zone = Store Boundary
+
+A **zone** maps 1:1 to a store. A manager can be assigned to one or more zones via the `user_store_access` table:
+
+```sql
+-- Manager "Alice" can manage Downtown and Mall stores
+INSERT INTO user_store_access (user_id, store_id, access_level)
+VALUES ('user-alice', 'store-downtown', 'manager'),
+       ('user-alice', 'store-mall', 'manager');
+```
+
+In the topology editor:
+- **Owner** sees every store node on the canvas with full edit capability
+- **Manager** only sees nodes belonging to their assigned stores — other stores are invisible
+- When a manager opens the topology editor, the canvas only contains nodes within their zone(s)
+
+### Current Code Gap
+
+The `list_workspaces_inner` function in `crates/oz-core/src/db/workspaces.rs` currently treats both `role-owner` and `role-manager` as bypass roles:
+
+```rust
+// TODO(ADR #4 Phase 2): Check user_store_access before returning all instances.
+if role_id == "role-owner" || role_id == "role-manager" {
+    return self.list_store_instances(store_id, user_id);
+}
+```
+
+This needs to be updated to check `user_store_access` for managers (and owners in multi-store mode) so the topology editor only returns nodes within the user's zone. This is a **prerequisite** for Phase 1 — the topology editor must not show stores the user shouldn't see.
+
+### Resolution Order (Updated)
+
+```
+1. role-owner + empty user_store_access → all stores (single-store mode)
+2. role-owner + has user_store_access rows → ONLY those stores (multi-store mode)
+3. role-manager + has user_store_access rows → ONLY those stores (zone)
+4. Otherwise → single store fallback
+```
+
+---
+
+## 8. Key Architectural Decisions
 
 ### Decision 1: Live Edit vs Draft-and-Apply
 
@@ -364,6 +464,9 @@ const { sessionToken } = useWorkspaceContext();
 |------|--------|
 | `ui/src/features/stores/NodeTopologyEditor.tsx` | Major rewrite: replace hardcoded data with API calls, add sessionToken prop, wire every node/wire action to backend |
 | `ui/src/features/stores/NodeTopologyEditor.css` | Minor adjustments for loading states, error display, empty state |
+| `crates/oz-core/migrations/XXX_topology_layouts.sql` | New migration for position persistence |
+| `crates/oz-core/src/db/topology.rs` | New module for topology CRUD |
+| `apps/desktop-client/src/commands/topology.rs` | New Tauri commands for save/load layout |
 
 ### Phase 2 — Move to Settings
 
@@ -378,13 +481,10 @@ const { sessionToken } = useWorkspaceContext();
 
 | File | Change |
 |------|--------|
-| `crates/oz-core/migrations/XXX_topology_layouts.sql` | New migration for position persistence |
-| `crates/oz-core/src/db/topology.rs` | New module for topology CRUD |
-| `apps/desktop-client/src/commands/topology.rs` | New Tauri commands for save/load layout |
 | `ui/src/features/stores/NodeTopologyEditor.tsx` | Undo/redo, accessibility, search, export/import, zoom-to-fit |
 | `ui/src/features/stores/NodeTopologyEditor.css` | All polish styling |
 
-### Rust Backend (if topology layout table is added)
+### Phase 1 — Rust Backend Additions
 
 | File | Change |
 |------|--------|

@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 5 / 16 items complete (31%) · Updated 2026-07-20
+**Current state:** 6 / 16 items complete (38%) · Updated 2026-07-20
 
 ---
 
@@ -29,7 +29,7 @@
 
 > Add tokio-console integration and flamegraph helpers for performance debugging.
 
-- [ ] **P55-1: tokio-console integration** — Add `console-subscriber` to cloud-server. Document `tokio-console` launch command in `docs/benchmarks/`. Add `#[tokio::test]` console smoke test.
+- [x] **P55-1: tokio-console integration** ✅ — Added optional `console` feature to cloud-server with `console_subscriber::init()` before logging. Documented launch commands in `docs/benchmarks/baseline-2026-07-20.md`. Added `#[tokio::test]` console smoke test.
 - [ ] **P55-2: cargo-flamegraph helpers** — Create `scripts/profile.sh` / `scripts/profile.ps1` that wraps `cargo flamegraph` with sane defaults (PID, frequency, output path). Document in benchmark docs.
 
 ## 🔴 P56 — Physical Device Validation
@@ -55,10 +55,10 @@
 |------|-------|------|----------|
 | 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
 | 🔵 P54 — Code TODOs | 5 | 1 | ░░░░░░░░░░░░░░░░ 20% |
-| 🟣 P55 — Dev Tooling | 2 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| 🟣 P55 — Dev Tooling | 2 | 1 | ░░░░░░░░░░░░░░░░ 50% |
 | 🔴 P56 — Device Validation | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **5** | **31%** |
+| **Total** | **16** | **6** | **38%** |
 
 ---
 

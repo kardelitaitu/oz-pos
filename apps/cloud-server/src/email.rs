@@ -23,10 +23,9 @@ use lettre::{
 use oz_core::{
     Store,
     export::{
-        AnalyticsBundle, ExportConfig, ReportScheduleConfig,
-        email_report::{ReportEmail, ReportEmailBuilder, SmtpConfig},
+        ExportConfig, ReportScheduleConfig,
+        email_report::{ReportEmailBuilder, SmtpConfig},
     },
-    migrations,
 };
 use tracing::{error, info, warn};
 
@@ -154,7 +153,7 @@ pub fn generate_report_email(
         .to_string();
     let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    let store_name = crate::get_store_name(&store).unwrap_or_else(|_| "OZ-POS Store".to_string());
+    let store_name = get_store_name(&store).unwrap_or_else(|_| "OZ-POS Store".to_string());
 
     let bundle: AnalyticsBundle = store
         .export_analytics_bundle(
@@ -199,48 +198,46 @@ pub fn start_report_sender_loop(db: Arc<tokio::sync::Mutex<rusqlite::Connection>
 async fn try_send_scheduled(
     db: Arc<tokio::sync::Mutex<rusqlite::Connection>>,
 ) -> Result<(), String> {
-    let conn = db.lock().await;
-    let store = Store::new(&conn);
+    // Scope 1: Read SMTP + schedule config, drop non-Send Store/Connection
+    // before any .await to satisfy tokio::spawn Send bounds.
+    let (smtp_config, schedule, recipients) = {
+        let conn = db.lock().await;
+        let store = Store::new(&conn);
 
-    // Load SMTP config
-    let smtp_config = match store
-        .get_smtp_config()
-        .map_err(|e| format!("DB error: {e}"))?
-    {
-        Some(c) => c,
-        None => return Ok(()), // Not configured yet
+        let smtp_config = match store
+            .get_smtp_config()
+            .map_err(|e| format!("DB error: {e}"))?
+        {
+            Some(c) => c,
+            None => return Ok(()),
+        };
+
+        let schedule = match store
+            .get_report_schedule()
+            .map_err(|e| format!("DB error: {e}"))?
+        {
+            Some(s) if s.enabled => s,
+            _ => return Ok(()),
+        };
+
+        (smtp_config, schedule.clone(), schedule.recipients.clone())
     };
-
-    // Load schedule config
-    let schedule = match store
-        .get_report_schedule()
-        .map_err(|e| format!("DB error: {e}"))?
-    {
-        Some(s) if s.enabled => s,
-        _ => return Ok(()), // Not enabled
-    };
-
-    // Drop the DB lock before doing I/O (SMTP)
-    drop(store);
-    drop(conn);
 
     // Check if it's time to send
     let now = chrono::Utc::now();
     let current_time = now.format("%H:%M").to_string();
 
     if current_time != schedule.send_at_time {
-        return Ok(()); // Not the right time yet
+        return Ok(());
     }
 
-    // We match the send time — acquire a fresh connection to generate
-    // the report and send it.
-    let conn2 = db.lock().await;
-    let store2 = Store::new(&conn2);
-    let report = generate_report_email(&store2, &schedule)?;
-    drop(store2);
-    drop(conn2);
+    // Scope 2: Generate report
+    let report = {
+        let conn = db.lock().await;
+        let store = Store::new(&conn);
+        generate_report_email(&store, &schedule)?
+    };
 
-    let recipients = schedule.recipients.clone();
     send_email(&smtp_config, &report, &recipients).await?;
 
     info!(
