@@ -201,6 +201,19 @@ const NAV_ITEMS: SettingsNavItem[] = [
       </svg>
     ),
   },
+  {
+    key: 'topology',
+    label: 'Topology',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="18" cy="6" r="3" />
+        <circle cx="12" cy="18" r="3" />
+        <line x1="8.5" y1="7.5" x2="10.5" y2="16.5" />
+        <line x1="15.5" y1="7.5" x2="13.5" y2="16.5" />
+      </svg>
+    ),
+  },
 ];
 
 // ── Category groupings (accordion) ──────────────────────────────
@@ -221,7 +234,7 @@ const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
   { label: 'Operations', keys: ['receipt', 'sync', 'email'] },
   { label: 'System', keys: ['about', 'license', 'features', 'data'] },
-  { label: 'Management', keys: ['staff', 'terminals', 'stores', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
+  { label: 'Management', keys: ['staff', 'terminals', 'stores', 'topology', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
 
 const NAV_L10N_KEYS: Record<string, string> = {
@@ -243,6 +256,7 @@ const NAV_L10N_KEYS: Record<string, string> = {
   exchange: 'settings-nav-exchange',
   promotions: 'settings-nav-promotions',
   email: 'settings-nav-email',
+  topology: 'settings-nav-topology',
 };
 
 // ── Exported for SettingsPage breadcrumb ────────────────────────
@@ -468,7 +482,7 @@ export default function SettingsNavTree({
                         <Localized id={CATEGORY_I18N_KEYS[cat.label] ?? ''}>{cat.label}</Localized>
                       </span>
                       {!sidebarCollapsed && (
-                        <span className="settings-sidebar-count" title={`${cat.keys.length} items`}>
+                        <span className="settings-sidebar-count" key={cat.keys.length} title={`${cat.keys.length} items`} aria-label={`${cat.keys.length} items`}>
                           {cat.keys.length}
                         </span>
                       )}

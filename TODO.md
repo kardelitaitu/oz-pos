@@ -39,7 +39,7 @@
 - [x] **P60-3a: Smooth accordion expand/collapse animation** ✅ — Replaced `animation` (mount-only) with CSS `transition` on `max-height`, `opacity`, `transform`. Changed from conditional rendering to class-based toggle for smooth enter/exit. Added `will-change` for GPU acceleration.
 - [ ] **P60-3b: Drag-to-reorder recently used sections** ⏳ *Stretch goal* — The "recently used" section shows the last 3 visited sections at the top. Allow the user to drag-and-drop sections within this list for custom ordering. Persist order to localStorage. (Defer if sprint is tight — complex DnD state management + touch events.)
 - [ ] **P60-3f: Recently-used sections migration** — When extracting NavTree, ensure the "recently used" section state (last 3 visited sections, persisted to localStorage) either moves with the component or is passed as props. Add a note in P60-1.
-- [ ] **P60-3c: Section count badges with animation** — Each category heading shows a count badge (e.g., "9" for Management). Currently static — add a subtle scale animation (`@keyframes badge-pop`) when the count changes, and use `aria-label="Management, 9 items"` for screen readers.
+- [x] **P60-3c: Section count badges with animation** ✅ — Added `@keyframes badge-pop` (scale 0.6→1.15→1, opacity 0→1, 350ms). Uses `key={cat.keys.length}` to re-trigger animation on count change (e.g., search filtering). Added `aria-label` for screen readers. `prefers-reduced-motion` guard.
 - [ ] **P60-3d: Collapsed sidebar icons-only mode** — When sidebar is collapsed, show only icons (no labels) with a thin tooltip on hover. Improve the collapse/expand transition with a width animation (250px ↔ 56px) instead of instant snap.
 - [ ] **P60-3e: Search result highlighting** — When searching, highlight matching characters in section labels (e.g., `<mark>` tag or bold). Provide a visual count in the search input placeholder ("Search... 3 of 17").
 
@@ -98,11 +98,11 @@
 |--------|-------|--------|
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
-| 🟢 P60-3 — UX improvements | 5 | 1/5 |
+| 🟢 P60-3 — UX improvements | 5 | 2/5 |
 | 🟡 P60-4 — Accessibility | 7 | 0/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **8/23 (35%)** |
+| **Total** | **23** | **9/23 (39%)** |
 
 ---
 

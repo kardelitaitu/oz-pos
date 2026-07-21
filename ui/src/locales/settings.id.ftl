@@ -19,6 +19,7 @@ settings-nav-tax = Tarif Pajak
 settings-nav-license = Lisensi
 settings-nav-exchange = Nilai Tukar
 settings-nav-promotions = Promosi
+settings-nav-topology = Topologi
 settings-category-operations = Operasional
 settings-category-system = Sistem
 settings-category-management = Manajemen
