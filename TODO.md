@@ -48,7 +48,7 @@
 #### 🟡 P60-4 — Accessibility compliance
 
 - [x] **P60-4a: `aria-controls` + `aria-expanded` on category headers** ✅ — Added `aria-controls={panelId}` on each category button linking to its panel. Added `id={panelId}` + `role="region"` + `aria-label` on each panel for labeled landmarks. `aria-pressed` NOT added (redundant with `aria-expanded` on accordion headers).
-- [ ] **P60-4b: Focus trap on mobile sidebar overlay** — When the sidebar opens as an overlay on mobile, focus must be trapped inside (Escape to close, Tab cycles within the sidebar, first/last element wrap). Add `useFocusTrap` hook.
+- [x] **P60-4b: Focus trap on mobile sidebar overlay** ✅ — Added `sidebarRef` on `<aside>`, called `useFocusTrap(sidebarRef, mobileSidebarOpen, onMobileClose)`. Traps Tab focus within sidebar when mobile overlay is open. Escape calls onMobileClose.
 - [ ] **P60-4c: ARIA treegrid pattern** — Convert the sidebar from a flat list of accordion buttons to a proper `role="treegrid"` structure where categories are `treeitem` nodes at level 1 and sections are `treeitem` nodes at level 2. Add `aria-expanded`, `aria-selected`, `aria-level`, `aria-posinset`, `aria-setsize` attributes.
 - [ ] **P60-4d: Keyboard navigation overhaul** — Replace the current ArrowDown/ArrowUp keyboard listener with a proper `onKeyDown` handler on the treegrid that follows WAI-ARIA Treegrid pattern:
   - ArrowRight: expand category / focus first section
@@ -99,10 +99,10 @@
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 3/5 |
-| 🟡 P60-4 — Accessibility | 7 | 1/7 |
+| 🟡 P60-4 — Accessibility | 7 | 2/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **11/23 (48%)** |
+| **Total** | **23** | **12/23 (52%)** |
 
 ---
 

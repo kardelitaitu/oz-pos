@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Localized, useLocalization } from '@fluent/react';
 import Tooltip from '@/frontend/shell/Tooltip';
 
@@ -285,6 +286,10 @@ export default function SettingsNavTree({
   onMobileClose,
 }: SettingsNavTreeProps) {
   const { l10n } = useLocalization();
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  // P60-4b: Focus trap on mobile sidebar overlay
+  useFocusTrap(sidebarRef, mobileSidebarOpen, onMobileClose);
 
   // ── Debounced localStorage write (P60-2c: prevents race on rapid toggle) ─
   const debouncedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -423,6 +428,7 @@ export default function SettingsNavTree({
 
       {/* ── Sidebar ────────────────────────────────── */}
       <aside
+        ref={sidebarRef}
         className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}${mobileSidebarOpen ? ' mobile-open' : ''}`}
         data-testid="settings-sidebar"
         aria-label={l10n.getString('settings-sidebar-nav-aria')}

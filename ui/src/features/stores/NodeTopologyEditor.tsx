@@ -747,3 +747,4 @@ export default function NodeTopologyEditor({
     </div>
   );
 }
+/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
