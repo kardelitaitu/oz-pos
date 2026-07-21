@@ -9,7 +9,7 @@ module.exports = {
     'plugin:react-hooks/recommended',
     'plugin:jsx-a11y/recommended',
   ],
-  ignorePatterns: ['dist', 'node_modules', '.eslintrc.cjs', 'coverage'],
+  ignorePatterns: ['dist', 'node_modules', '.eslintrc.cjs', 'coverage', 'playwright-report'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2022,

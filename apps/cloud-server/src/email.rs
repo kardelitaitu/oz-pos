@@ -23,8 +23,8 @@ use lettre::{
 use oz_core::{
     Store,
     export::{
-        ExportConfig, ReportScheduleConfig,
-        email_report::{ReportEmailBuilder, SmtpConfig},
+        AnalyticsBundle, ExportConfig, ReportScheduleConfig,
+        email_report::{ReportEmail, ReportEmailBuilder, SmtpConfig},
     },
 };
 use tracing::{error, info, warn};

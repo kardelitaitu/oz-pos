@@ -4192,6 +4192,7 @@ dependencies = [
  "foundation",
  "hex",
  "hmac 0.12.1",
+ "lettre",
  "modules-crm",
  "modules-currency",
  "modules-inventory",

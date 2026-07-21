@@ -22,68 +22,68 @@ use crate::state::AppState;
 pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppError> {
     let db = state.db.clone();
 
-    // We re-use the cloud-server email module logic by calling
-    // the same send_test_report function. Since both the desktop
-    // and cloud-server use the same oz-core types, the logic is
-    // shared. However, the cloud-server module is not a dependency
-    // of the desktop client, so we implement a lightweight inline
-    // version here that calls oz-core directly.
+    // Scope DB operations to drop MutexGuard<Connection> before any .await
+    // (rusqlite::Connection is !Send, so the guard makes the future !Send
+    // if held across an await point).
+    let (smtp_config, recipients, report_email) = {
+        let conn = db.lock().await;
+        let store = oz_core::Store::new(&conn);
 
-    let conn = db.lock().await;
-    let store = oz_core::Store::new(&conn);
+        // Load SMTP config
+        let smtp_config = store
+            .get_smtp_config()
+            .map_err(|e| AppError::Internal(format!("Failed to load SMTP config: {e}")))?
+            .ok_or_else(|| {
+                AppError::Internal("SMTP not configured. Please save SMTP settings first.".into())
+            })?;
 
-    // Load SMTP config
-    let smtp_config = store
-        .get_smtp_config()
-        .map_err(|e| AppError::Internal(format!("Failed to load SMTP config: {e}")))?
-        .ok_or_else(|| {
-            AppError::Internal("SMTP not configured. Please save SMTP settings first.".into())
-        })?;
+        // Load schedule config (or use defaults)
+        let schedule = store
+            .get_report_schedule()
+            .map_err(|e| AppError::Internal(format!("Failed to load report schedule: {e}")))?
+            .unwrap_or_default();
 
-    // Load schedule config (or use defaults)
-    let schedule = store
-        .get_report_schedule()
-        .map_err(|e| AppError::Internal(format!("Failed to load report schedule: {e}")))?
-        .unwrap_or_default();
+        let recipients = if schedule.recipients.is_empty() {
+            vec![smtp_config.from.clone()]
+        } else {
+            schedule.recipients.clone()
+        };
 
-    let recipients = if schedule.recipients.is_empty() {
-        vec![smtp_config.from.clone()]
-    } else {
-        schedule.recipients.clone()
-    };
+        // Generate report email
+        let lookback_days = schedule.lookback_days.max(1);
+        let lookback_start = chrono::Utc::now()
+            .checked_sub_signed(chrono::Duration::days(lookback_days as i64))
+            .ok_or_else(|| AppError::Internal("Failed to compute lookback date".into()))?
+            .format("%Y-%m-%d")
+            .to_string();
+        let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    // Generate report email
-    let lookback_days = schedule.lookback_days.max(1);
-    let lookback_start = chrono::Utc::now()
-        .checked_sub_signed(chrono::Duration::days(lookback_days as i64))
-        .ok_or_else(|| AppError::Internal("Failed to compute lookback date".into()))?
-        .format("%Y-%m-%d")
-        .to_string();
-    let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let store_name = oz_core::Settings::get(store.conn, "store.name")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "OZ-POS Store".to_string());
 
-    let store_name = oz_core::Settings::get(store.conn, "store.name")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "OZ-POS Store".to_string());
+        let bundle = store
+            .export_analytics_bundle(
+                oz_core::export::ExportConfig {
+                    start_date: lookback_start.clone(),
+                    end_date: end.clone(),
+                    ..oz_core::export::ExportConfig::default()
+                },
+                "",
+                &store_name,
+            )
+            .map_err(|e| AppError::Internal(format!("Failed to export analytics: {e}")))?;
 
-    let bundle = store
-        .export_analytics_bundle(
-            oz_core::export::ExportConfig {
-                start_date: lookback_start.clone(),
-                end_date: end.clone(),
-                ..oz_core::export::ExportConfig::default()
-            },
-            "",
+        let date_label = format!("{} to {}", lookback_start, end);
+        let report_email = oz_core::export::email_report::ReportEmailBuilder::build(
+            &bundle,
             &store_name,
-        )
-        .map_err(|e| AppError::Internal(format!("Failed to export analytics: {e}")))?;
+            &date_label,
+        );
 
-    let date_label = format!("{} to {}", lookback_start, end);
-    let report_email =
-        oz_core::export::email_report::ReportEmailBuilder::build(&bundle, &store_name, &date_label);
-
-    drop(store);
-    drop(conn);
+        (smtp_config, recipients, report_email)
+    }; // conn + store dropped here — now safe to .await
 
     // Build SMTP transport and send
     let transport = build_smtp_transport(&smtp_config)
