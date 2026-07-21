@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listProducts,
   createProduct,
@@ -18,6 +19,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import VariantManagementScreen from './VariantManagementScreen';
 import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
+import { getActiveStockAlerts } from '@/api/inventory';
 import LocationPicker from '@/features/inventory/LocationPicker';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { EmptyState } from '@/frontend/shared';
@@ -65,6 +67,7 @@ function dtoToProduct(dto: ProductDto): Product {
 /** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const userId = session?.user_id ?? '';
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
@@ -85,11 +88,31 @@ export default function ProductManagementScreen() {
   const [showAlertPanel, setShowAlertPanel] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState('default');
   const [selectedLocationName, setSelectedLocationName] = useState('Location');
+  const [alertCount, setAlertCount] = useState(0);
 
   const handleLocationChange = useCallback((locationId: string, locationName: string) => {
     setSelectedLocationId(locationId);
     setSelectedLocationName(locationName);
   }, []);
+
+  // ── Poll active stock alerts for the bell badge count ──────
+  useEffect(() => {
+    const token = sessionToken ?? '';
+    if (!token) return;
+
+    const fetchAlerts = async () => {
+      try {
+        const alerts = await getActiveStockAlerts(token, selectedLocationId);
+        setAlertCount(alerts.length);
+      } catch {
+        // Silently ignore — badge just won't show count.
+      }
+    };
+
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 30_000);
+    return () => clearInterval(interval);
+  }, [sessionToken, selectedLocationId]);
 
   const { l10n } = useLocalization();
 
@@ -202,12 +225,17 @@ export default function ProductManagementScreen() {
             type="button"
             className="product-mgmt-alert-toggle"
             onClick={() => setShowAlertPanel((prev) => !prev)}
-            aria-label={showAlertPanel ? 'Close stock alerts' : 'Open stock alerts'}
+            aria-label={showAlertPanel ? 'Close stock alerts' : `Open stock alerts${alertCount > 0 ? ` (${alertCount} active)` : ''}`}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
+            {alertCount > 0 && (
+              <span className="product-mgmt-alert-badge" aria-hidden="true">
+                {alertCount}
+              </span>
+            )}
           </button>
           <Localized id="product-mgmt-add">
             <Button onClick={openCreate}>Add Product</Button>
