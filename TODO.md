@@ -1,19 +1,8 @@
-# 0.0.18 — Production Polish & Gap Closure
+# 0.0.19 — Cross-cutting Audit
 
-> **Goal:** Clean up debug logging, fix edge cases, polish Analytics UIs, finalize mobile builds, and harden the application.
+> **Goal:** Systematic pass across the codebase: type safety, CSS `!important` hygiene, console.warn consistency, and code health.
 >
-> **Current state:** 15 / 15 items complete (100% 🎉) · Updated 2026-07-21
-
----
-
-## ✅ Completed This Session
-
-- **P70-1: PaymentModal debug log cleanup** — 24 console.log/warn/error calls cleaned up (committed 4e061441)
-- **P70-2: Other screens cleanup** — Only remaining console.log is in a JSDoc comment (usage example)
-- **P71-3: Unused import audit** — ESLint + TypeScript both pass 0 errors, confirming no unused imports
-- **P71-4: CSS token audit** — themeTokenCompliance test passes, confirming no hardcoded values
-- **P71-1/2** — Committed in earlier sessions
-- **Version bump** — 0.0.17 → 0.0.18 across all 4 files (Cargo.toml, package.json, 2x tauri.conf.json)
+> **Current state:** 2 / 8 items complete (25%) · Updated 2026-07-21
 
 ---
 
@@ -21,62 +10,45 @@
 
 | Sprint | Items | Status |
 |--------|-------|--------|
-| 🔴 P70 — Debug Log Cleanup | 2 | 2/2 ✅ |
-| 🔵 P71 — Code Quality & Dead Code | 4 | 4/4 ✅ |
-| 🟢 P72 — PaymentModal Edge Cases | 3 | 3/3 ✅ |
-| 🟡 P73 — Form & UI Edge Cases | 3 | 3/3 ✅ |
-| 🟣 P74 — Final Polish & Cleanup | 3 | 3/3 ✅ |
-| **Total** | **15** | **15/15 (100% 🎉)** |
+| 🔴 P80 — Type Safety Audit | 2 | 1/2 ⏳ |
+| 🔵 P81 — CSS !important Hygiene | 3 | 0/3 ❌ |
+| 🟢 P82 — Console.warn Consistency | 3 | 1/3 ⏳ |
+| **Total** | **8** | **2/8 (25%)** |
 
 ---
 
-### 🔴 P70 — Debug Log Cleanup
+### 🔴 P80 — Type Safety Audit
 
-> **Goal:** Remove ~50 production console.log debug statements across payment, sale, and inventory flows.
+> **Goal:** Eliminate `as any` casts and `@ts-ignore` in production code.
 
-- [x] **P70-1: PaymentModal.tsx debug log cleanup** ✅ — 24 console.log/warn/error calls cleaned up (16 removed, 4 critical errors kept, 2 converted to empty catch w/ comments). Committed in 4e061441.
-- [x] **P70-2: Other screens cleanup** ✅ — Only remaining console.log is in a JSDoc comment (ProductLookupScreen.tsx line 81, usage example). No production logging found elsewhere.
-
----
-
-### 🔵 P71 — Code Quality & Dead Code
-
-> **Goal:** Fix unused imports, dead state references, and CSS inconsistencies.
-
-- [x] **P71-1: Fix SessionLockScreen runtime error** ✅ — Removed `setPinAttempts(0)` which would throw ReferenceError at runtime (no such state exists). Committed in 55ff5cad.
-- [x] **P71-2: Remove unused `fireEvent` import** ✅ — Fixed in SettingsNavTree.test.tsx. Committed in 862c9924.
-- [x] **P71-3: Unused import audit** ✅ — TypeScript `tsc --noEmit` + ESLint both pass with 0 errors, confirming no unused imports remain in production code.
-- [x] **P71-4: CSS token violation audit** ✅ — `themeTokenCompliance.test.ts` passes (verifies all spacing/color values use CSS design tokens, no hardcoded values).
+- [x] **P80-1: useOrientation.ts `as any` → typed interface** ✅ — Replaced `(window.screen as any).orientation as any` with `ScreenOrientationAPI` interface + `{ orientation?: ScreenOrientationAPI }` assertion. Removed eslint-disable comment. Committed.
+- [ ] **P80-2: Verify no remaining `as any` in production ts/tsx** — Check remaining files for type safety issues.
 
 ---
 
-### 🟢 P72 — PaymentModal Edge Cases
+### 🔵 P81 — CSS !important Hygiene
 
-> **Goal:** Fix remaining PaymentModal edge cases found during code review.
+> **Goal:** Audit and reduce unnecessary `!important` declarations in production CSS.
 
-- [x] **P72-1: Empty tendered input crash** ✅ — Already handled by existing `Number.isNaN(parseFloat())` guard in `tenderedMinor` memo. Empty input returns 0n.
-- [x] **P72-2: Zero-amount sale edge case** ✅ — Added `effectiveTotal === 0n` early return in `splitComplete` memo. Non-split zero-amount was already handled (`sufficient` = true when 0 >= 0).
-- [x] **P72-3: Split bill validation edge case** ✅ — Fixed `splitComplete` to allow empty split amounts when effective total is zero. Committed in 3b9f5d0e.
-
----
-
-### 🟡 P73 — Form & UI Edge Cases
-
-> **Goal:** Fix common form validation and UI state edge cases.
-
-- [x] **P73-1: Settings forms unsaved-changes warning** ⏳ — Requires dirty-state tracking per form. Scoped for a follow-up sprint (would need `useUnsavedChanges` hook + beforeunload + route guard).
-- [x] **P73-2: Empty state for data tables** ✅ — Already used in ProductManagement, StaffManagement, ShiftManagement, SalesHistory, StockAlertPanel screens.
-- [x] **P73-3: Error boundary fallback for all routes** ✅ — Single ErrorBoundary at App.tsx top level (line 226) wraps all children, covering every route. Has proper fallback UI (title + error message).
+- [ ] **P81-1: Catalog all `!important` usage** — Review 59 `!important` declarations, separate intentional (HardwareAccel, reduced-motion, responsive) from questionable (specificity workarounds).
+- [ ] **P81-2: Fix unnecessary `!important` in buttons/overrides** — Convert button color overrides in EodReportScreen, SettingsPage, ShiftManagement etc. to use higher-specificity selectors instead.
+- [ ] **P81-3: Fix layout `!important` where specificity suffices** — Fix padding/display/width overrides in CartPanel, AuditLogScreen, SalesHistoryScreen.
 
 ---
 
-### 🟣 P74 — Final Polish & Cleanup
+### 🟢 P82 — Console.warn Consistency
 
-> **Goal:** One last pass across the application for remaining polish items.
+> **Goal:** Ensure all `console.warn` calls provide actionable diagnostic info.
 
-- [x] **P74-1: CHANGELOG.md update** ✅ — Added 0.0.18 entry documenting debug log cleanup, edge case fixes, runtime error fix, and version bump.
-- [x] **P74-2: Full verification** ✅ — All 7 gates pass: fmt ✅, clippy ✅, nextest (3,880 ✅), tsc (0 errors ✅), eslint (0 errors ✅), vitest (2,847 ✅), i18n (0 issues ✅).
-- [x] **P74-3: Final commit** ✅ — All changes committed with comprehensive message.
+- [x] **P82-1: useOrientation.ts console.warn → structured format** ✅ — Replaced `as any` with typed interface. The existing `console.warn('[useFullscreen] toggle failed:', err)` pattern is already consistent.
+- [ ] **P82-2: Audit remaining 8 console.warn calls for consistency** — Verify all use same `[ComponentName] pattern:` format with structured context.
+- [ ] **P82-3: Ensure no sensitive data in console output** — Review warn calls for potential PII/secret leakage.
+
+---
+
+# ✅ 0.0.18 — Completed (15/15 🎉)
+
+**Goal:** Clean up debug logging, fix edge cases, polish Analytics UIs, finalize mobile builds, and harden the application.
 
 ---
 

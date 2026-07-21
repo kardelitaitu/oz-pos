@@ -33,25 +33,24 @@ export interface OrientationResult {
   unlock: () => void;
 }
 
-/**
- * Helper to access the ScreenOrientation API with proper typing.
- * The TypeScript DOM lib types don't include `lock`/`unlock` on
- * ScreenOrientation, so we access them via bracket notation.
- */
-function getScreenOrientation(): {
+/** Known shape of the ScreenOrientation API (not fully typed in TS DOM lib). */
+interface ScreenOrientationAPI {
   lock?: (type: string) => Promise<void>;
   unlock?: () => void;
   angle?: number;
-} | null {
+  type?: string;
+}
+
+/**
+ * Helper to access the ScreenOrientation API with proper typing.
+ * The TypeScript DOM lib types don't include `lock`/`unlock` on
+ * ScreenOrientation, so we use a locally-defined interface.
+ */
+function getScreenOrientation(): ScreenOrientationAPI | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orient = (window.screen as any).orientation as any;
+    const orient = (window.screen as { orientation?: ScreenOrientationAPI }).orientation;
     if (!orient) return null;
-    const result: {
-      lock?: (type: string) => Promise<void>;
-      unlock?: () => void;
-      angle?: number;
-    } = {};
+    const result: ScreenOrientationAPI = {};
     if (typeof orient.lock === 'function') {
       result.lock = orient.lock.bind(orient);
     }
