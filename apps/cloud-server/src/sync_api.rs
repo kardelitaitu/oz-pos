@@ -290,10 +290,10 @@ async fn pull_handler(
 /// from JWT claims). Responses are cached in-memory per-tenant with a
 /// 5-min TTL.
 ///
-/// TODO: When oz-api adds POST endpoints for tax_rates and users, those
-/// handlers must stamp `tenant_id` from JWT claims — same pattern as
-/// `create_product` in oz-api/src/routes/products.rs. Without it, new
-/// tax rates and users default to 'default' and leak across tenants.
+/// Both `POST /api/v1/tax-rates` and `POST /api/v1/users` now stamp
+/// `tenant_id` from JWT claims (same pattern as `create_product` in
+/// `oz-api/src/routes/products.rs`). New tax rates and users are
+/// correctly scoped per-tenant for snapshot isolation.
 async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,

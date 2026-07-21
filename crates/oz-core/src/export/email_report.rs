@@ -74,7 +74,7 @@ impl SmtpConfig {
                 message: "SMTP host must not be empty".into(),
             });
         }
-        if self.port == 0 || self.port > 65535 {
+        if self.port == 0 {
             return Err(CoreError::Validation {
                 field: "smtp_port",
                 message: "SMTP port must be between 1 and 65535".into(),
@@ -424,7 +424,7 @@ fn format_amount(minor: i64, currency: &str) -> String {
 mod tests {
     use super::*;
     use crate::db::Store;
-    use crate::export::{AnalyticsBundle, ExportConfig, ExportMetadata};
+    use crate::export::{AnalyticsBundle, ExportConfig};
     use crate::migrations;
 
     // ── SmtpConfig validation ──────────────────────────────────────
@@ -499,19 +499,6 @@ mod tests {
     }
 
     #[test]
-    fn smtp_config_too_high_port_fails() {
-        let cfg = SmtpConfig {
-            host: "smtp.example.com".into(),
-            port: 99999,
-            ..SmtpConfig::default()
-        };
-        let err = cfg.validate().unwrap_err();
-        assert!(format!("{err}").contains("port"));
-    }
-
-    // ── SmtpConfig persistence ─────────────────────────────────────
-
-    #[test]
     fn smtp_config_save_and_load() {
         let conn = migrations::fresh_db();
         let s = Store::new(&conn);
@@ -572,7 +559,7 @@ mod tests {
         s.create_product(
             "COFFEE",
             "Coffee",
-            crate::Money::from_major(3_50, "USD".parse().unwrap()),
+            crate::Money::from_major(3_50, "USD".parse().unwrap()).unwrap(),
             None,
             None,
             100,
@@ -582,7 +569,7 @@ mod tests {
         s.create_product(
             "BAGEL",
             "Bagel",
-            crate::Money::from_major(4_50, "USD".parse().unwrap()),
+            crate::Money::from_major(4_50, "USD".parse().unwrap()).unwrap(),
             None,
             None,
             50,
@@ -594,13 +581,13 @@ mod tests {
         cart.add_line(crate::CartLine::new(
             crate::Sku::new("COFFEE"),
             2,
-            crate::Money::from_major(3_50, "USD".parse().unwrap()),
+            crate::Money::from_major(3_50, "USD".parse().unwrap()).unwrap(),
         ))
         .unwrap();
         cart.add_line(crate::CartLine::new(
             crate::Sku::new("BAGEL"),
             1,
-            crate::Money::from_major(4_50, "USD".parse().unwrap()),
+            crate::Money::from_major(4_50, "USD".parse().unwrap()).unwrap(),
         ))
         .unwrap();
 
