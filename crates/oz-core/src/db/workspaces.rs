@@ -806,6 +806,28 @@ impl Store<'_> {
         Ok(updated)
     }
 
+    /// Archive a workspace instance by setting its status to `'archived'`.
+    ///
+    /// Archived instances are excluded from `list_workspaces` and do not
+    /// count toward the active instance quota. Returns
+    /// `CoreError::NotFound` if the instance does not exist.
+    pub fn archive_instance(&self, instance_id: &str) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE workspace_instances
+             SET status = 'archived',
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![instance_id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "workspace instance",
+                id: instance_id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// List all workspace instances in a store (admin use, no access control).
     pub fn list_all_instances(
         &self,
@@ -1196,16 +1218,8 @@ mod tests {
         let (store, _) = fresh();
         let initial = store.count_active_instances("default").unwrap();
         assert_eq!(initial, 5);
-        // Archive one instance.
-        // TODO(ADR #5): Add a public archive_instance() method to Store
-        // for proper encapsulation.
-        store
-            .conn
-            .execute(
-                "UPDATE workspace_instances SET status = 'archived' WHERE id = 'default-kds'",
-                [],
-            )
-            .unwrap();
+        // Archive one instance using the public wrapper.
+        store.archive_instance("default-kds").unwrap();
         let after = store.count_active_instances("default").unwrap();
         assert_eq!(after, 4);
     }
