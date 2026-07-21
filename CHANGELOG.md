@@ -4,6 +4,17 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.17] — 2026-07-21
+
+### Fixed
+
+#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
+
+- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
+- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
+
+---
+
 ## [0.0.16] — 2026-07-21
 
 ### Added

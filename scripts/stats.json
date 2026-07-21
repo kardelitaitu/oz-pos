@@ -1,35 +1,35 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "333.0k lines",
+    "message":  "336.3k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  332968,
-                  "totalFiles":  1527,
+                  "totalLines":  336316,
+                  "totalFiles":  1532,
                   "languages":  {
                                     "sql":  {
                                                 "lines":  3041,
                                                 "files":  97
                                             },
                                     "rust":  {
-                                                 "lines":  150433,
-                                                 "files":  363
+                                                 "lines":  151260,
+                                                 "files":  364
                                              },
                                     "go":  {
                                                "lines":  6745,
                                                "files":  11
                                            },
                                     "css":  {
-                                                "lines":  35307,
-                                                "files":  115
+                                                "lines":  35990,
+                                                "files":  116
                                             },
                                     "html":  {
                                                  "lines":  29491,
                                                  "files":  492
                                              },
                                     "typescript":  {
-                                                       "lines":  107951,
-                                                       "files":  449
+                                                       "lines":  109789,
+                                                       "files":  452
                                                    }
                                 }
               }

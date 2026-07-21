@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining ROADMAP gaps across Analytics, Backend Hardening, CI/CD, Mobile Builds, and Fuzz Testing.
 >
-> **Current state:** 0 / 25 items complete · Updated 2026-07-21
+> **Current state:** 1 / 25 items complete · Updated 2026-07-21
 
 ---
 
@@ -51,7 +51,7 @@
 - [ ] **P63-1: Nightly full-matrix CI** — Create `.github/workflows/nightly.yml` (Rust + Windows build, all 4 UI shards, 3 E2E shards, doc generation, release builds, benchmarks).
 - [ ] **P63-2: Coverage gate in CI** — Wire `.tarpaulin.toml` into `ci.yml` as informational job. Add `scripts/coverage.ps1` / `coverage.sh` gate script.
 - [ ] **P63-3: Skill drift CI check** — Integrate `skill-drift-guard` into CI as non-blocking check with issue-comment report on failure.
-- [ ] **P63-4: CI pipeline polish** — Add sccache stats to workflow summary, fix any windows-latest build target issues, reduce E2E test timeout from 20m to 10m.
+- [x] **P63-4: CI pipeline polish (partial)** ✅ — Fixed `save-always` deprecation in all 6 `Swatinem/rust-cache@v2` usages → `save-if: ${{ github.ref == 'refs/heads/main' }}`. Added `SCCACHE_GHA_ENABLED: "true"` to top-level env to fix 0% sccache hit rate (was using ephemeral local disk). Remaining: sccache stats to workflow summary, E2E timeout reduction.
 
 ---
 
