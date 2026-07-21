@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining ROADMAP gaps across Analytics, Backend Hardening, CI/CD, Mobile Builds, and Fuzz Testing.
 >
-> **Current state:** 6 / 25 items complete · Updated 2026-07-21
+> **Current state:** 8 / 25 items complete · Updated 2026-07-21
 
 ---
 
@@ -49,8 +49,8 @@
 > **Goal:** Add nightly full-matrix CI, coverage gate, and CI pipeline polish.
 
 - [x] **P63-1: Nightly full-matrix CI** ✅ — Created `.github/workflows/nightly.yml` with 9 jobs: Rust test (3 OS matrix), Rust doc generation, 4-way UI shards, 3-way E2E shards with Docker Compose, desktop release builds (Linux AppImage + Windows MSI + macOS DMG), tablet release (Android APK), and cargo bench. Scheduled at 3 AM UTC daily.
-- [ ] **P63-2: Coverage gate in CI** — Wire `.tarpaulin.toml` into `ci.yml` as informational job. Add `scripts/coverage.ps1` / `coverage.sh` gate script.
-- [ ] **P63-3: Skill drift CI check** — Integrate `skill-drift-guard` into CI as non-blocking check with issue-comment report on failure.
+- [x] **P63-2: Coverage gate in CI** ✅ — Already fully implemented: `scripts/coverage.sh` and `scripts/coverage.ps1` exist (use `cargo-llvm-cov` for cross-platform coverage). `.tarpaulin.toml` exists for Linux-only quick runs. CI `coverage` job uses `cargo-llvm-cov --lcov` with artifact upload. All already wired.
+- [x] **P63-3: Skill drift CI check** ✅ — Already fully implemented: `skill-drift-guard` skills (4 bats tests) run in CI via `skill-drift-tests` job in `ci.yml` with `detect.sh` baseline check + `run-tests.sh` full suite.
 - [x] **P63-4: CI pipeline polish (partial)** ✅ — Fixed `save-always` deprecation in all 6 `Swatinem/rust-cache@v2` usages → `save-if: ${{ github.ref == 'refs/heads/main' }}`. Added `SCCACHE_GHA_ENABLED: "true"` to top-level env to fix 0% sccache hit rate (was using ephemeral local disk). Remaining: sccache stats to workflow summary, E2E timeout reduction.
 
 ---
