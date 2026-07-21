@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   createPurchaseOrder,
   listSuppliers,
@@ -24,6 +25,7 @@ interface Props {
 
 /** Purchase order creation / editing form — supplier selection, line items with SKU, quantity, unit cost, and expected delivery date. */
 export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props) {
+  const { l10n } = useLocalization();
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [poNumber, setPoNumber] = useState('');
   const [supplierId, setSupplierId] = useState('');
@@ -57,10 +59,10 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   const subtotal = lines.reduce((sum, l) => sum + l.qty * l.unit_cost_minor, 0);
 
   const handleSave = useCallback(async () => {
-    if (!poNumber.trim()) { setError('PO number is required'); return; }
-    if (!supplierId) { setError('Supplier is required'); return; }
+    if (!poNumber.trim()) { setError(l10n.getString('po-form-error-po-required')); return; }
+    if (!supplierId) { setError(l10n.getString('po-form-error-supplier-required')); return; }
     if (lines.length === 0 || lines.some((l) => !l.sku.trim())) {
-      setError('Each line must have a SKU');
+      setError(l10n.getString('po-form-error-sku-required'));
       return;
     }
 
@@ -82,30 +84,40 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
       await createPurchaseOrder(args);
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create purchase order');
+      setError(err instanceof Error ? err.message : l10n.getString('po-form-error-generic'));
     } finally {
       setSaving(false);
     }
-  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved]);
+  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved, l10n]);
 
   return (
-    <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label="Purchase Order Form">
+    <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('po-form-aria-label')}>
       <div className="po-form-modal" ref={panelRef}>
         <div className="po-form-header">
-          <h2>{editingId ? 'Edit Purchase Order' : 'New Purchase Order'}</h2>
-          <button type="button" className="po-form-close" onClick={onClose} aria-label="Close">&times;</button>
+          <h2>
+            <Localized id={editingId ? 'po-form-edit-title' : 'po-form-new-title'}>
+              <span>{editingId ? 'Edit Purchase Order' : 'New Purchase Order'}</span>
+            </Localized>
+          </h2>
+          <button type="button" className="po-form-close" onClick={onClose} aria-label={l10n.getString('po-form-close-aria')}>&times;</button>
         </div>
 
         <div className="po-form-body">
           <div className="po-form-row">
             <label className="po-form-field">
-              <span className="po-form-label">PO Number *</span>
-              <input className="po-form-input" type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-001" />
+              <Localized id="po-form-po-number-label">
+                <span className="po-form-label">PO Number *</span>
+              </Localized>
+              <Localized id="po-form-po-number-placeholder" attrs={{ placeholder: true }}>
+                <input className="po-form-input" type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-001" />
+              </Localized>
             </label>
             <label className="po-form-field">
-              <span className="po-form-label">Supplier *</span>
+              <Localized id="po-form-supplier-label">
+                <span className="po-form-label">Supplier *</span>
+              </Localized>
               <select className="po-form-input po-form-select" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-                <option value="">-- Select --</option>
+                <option value="">{l10n.getString('po-form-supplier-select')}</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                 ))}
@@ -115,30 +127,40 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
 
           <div className="po-form-row">
             <label className="po-form-field">
-              <span className="po-form-label">Expected Date</span>
+              <Localized id="po-form-expected-date-label">
+                <span className="po-form-label">Expected Date</span>
+              </Localized>
               <input className="po-form-input" type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
             </label>
             <label className="po-form-field">
-              <span className="po-form-label">Notes</span>
-              <input className="po-form-input" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+              <Localized id="po-form-notes-label">
+                <span className="po-form-label">Notes</span>
+              </Localized>
+              <Localized id="po-form-notes-placeholder" attrs={{ placeholder: true }}>
+                <input className="po-form-input" type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+              </Localized>
             </label>
           </div>
 
           <div className="po-form-section">
             <div className="po-form-section-header">
-              <span className="po-form-label">Line Items</span>
-              <Button variant="secondary" size="sm" onClick={addLine}>+ Add Line</Button>
+              <Localized id="po-form-line-items">
+                <span className="po-form-label">Line Items</span>
+              </Localized>
+              <Localized id="po-form-add-line">
+                <Button variant="secondary" size="sm" onClick={addLine}>+ Add Line</Button>
+              </Localized>
             </div>
 
-            <table className="po-form-lines-table" aria-label="Line items">
+            <table className="po-form-lines-table" aria-label={l10n.getString('po-form-table-aria')}>
               <thead>
                 <tr>
-                  <th>SKU</th>
-                  <th>Product Name</th>
-                  <th>Qty</th>
-                  <th>Unit Cost</th>
-                  <th>Line Total</th>
-                  <th aria-label="Actions"> </th>
+                  <Localized id="po-form-sku"><th>SKU</th></Localized>
+                  <Localized id="po-form-product-name"><th>Product Name</th></Localized>
+                  <Localized id="po-form-qty"><th>Qty</th></Localized>
+                  <Localized id="po-form-unit-cost"><th>Unit Cost</th></Localized>
+                  <Localized id="po-form-line-total"><th>Line Total</th></Localized>
+                  <th aria-label={l10n.getString('po-form-actions-label')}> </th>
                 </tr>
               </thead>
               <tbody>
@@ -148,20 +170,20 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                       <input
                         className="po-form-input po-form-input--sm"
                         type="text"
-                        aria-label="SKU"
+                        aria-label={l10n.getString('po-form-sku')}
                         value={line.sku}
                         onChange={(e) => updateLine(idx, 'sku', e.target.value)}
-                        placeholder="SKU"
+                        placeholder={l10n.getString('po-form-sku')}
                       />
                     </td>
                     <td>
                       <input
                         className="po-form-input po-form-input--sm"
                         type="text"
-                        aria-label="Product name"
+                        aria-label={l10n.getString('po-form-product-name')}
                         value={line.product_name}
                         onChange={(e) => updateLine(idx, 'product_name', e.target.value)}
-                        placeholder="Product name"
+                        placeholder={l10n.getString('po-form-product-name')}
                       />
                     </td>
                     <td>
@@ -169,7 +191,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         className="po-form-input po-form-input--sm po-form-input--num"
                         type="number"
                         min={0}
-                        aria-label="Quantity"
+                        aria-label={l10n.getString('po-form-qty')}
                         value={line.qty}
                         onChange={(e) => updateLine(idx, 'qty', parseInt(e.target.value) || 0)}
                       />
@@ -179,10 +201,10 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                         className="po-form-input po-form-input--sm po-form-input--num"
                         type="number"
                         min={0}
-                        aria-label="Unit cost"
+                        aria-label={l10n.getString('po-form-unit-cost')}
                         value={line.unit_cost_minor}
                         onChange={(e) => updateLine(idx, 'unit_cost_minor', parseInt(e.target.value) || 0)}
-                        placeholder="in cents"
+                        placeholder={l10n.getString('po-form-unit-cost-placeholder')}
                       />
                     </td>
                     <td className="po-form-line-total">
@@ -190,7 +212,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                     </td>
                     <td>
                       {lines.length > 1 && (
-                        <button type="button" className="po-form-remove-line" onClick={() => removeLine(idx)} aria-label="Remove line">&times;</button>
+                        <button type="button" className="po-form-remove-line" onClick={() => removeLine(idx)} aria-label={l10n.getString('po-form-remove-line-aria')}>&times;</button>
                       )}
                     </td>
                   </tr>
@@ -198,7 +220,9 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={4} className="po-form-total-label">Subtotal</td>
+                  <td colSpan={4} className="po-form-total-label">
+                    <Localized id="po-form-subtotal"><span>Subtotal</span></Localized>
+                  </td>
                   <td className="po-form-total-value">{(subtotal / 100).toFixed(2)}</td>
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- role=alert with text content */}
                   <td />
@@ -211,9 +235,11 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
         </div>
 
         <div className="po-form-actions">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            <Localized id="po-form-cancel-btn"><span>Cancel</span></Localized>
+          </Button>
           <Button variant="primary" loading={saving} disabled={!poNumber.trim() || !supplierId} onClick={handleSave}>
-            Create PO
+            <Localized id="po-form-create-btn"><span>Create PO</span></Localized>
           </Button>
         </div>
       </div>

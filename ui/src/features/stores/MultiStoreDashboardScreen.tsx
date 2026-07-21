@@ -41,7 +41,7 @@ export default function MultiStoreDashboardScreen() {
       setTerminals(termData);
       setLicenseTier(licStatus.tier.toLowerCase());
     } catch {
-      setError('Failed to load data');
+      setError(l10n.getString('multi-store-error-load'));
     } finally {
       setLoading(false);
     }

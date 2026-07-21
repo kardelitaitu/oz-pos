@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import { listTerminals, type TerminalDto } from '@/api/terminals';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
@@ -6,12 +7,12 @@ import './TerminalStatusPanel.css';
 
 const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
 
-function formatLastSeen(iso: string | null): string {
-  if (!iso) return 'Never';
+function formatLastSeen(iso: string | null, l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  if (!iso) return l10n.getString('terminal-status-never');
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return 'Just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  if (diff < 60_000) return l10n.getString('terminal-status-just-now');
+  if (diff < 3_600_000) return l10n.getString('terminal-status-minutes-ago', { n: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return l10n.getString('terminal-status-hours-ago', { n: Math.floor(diff / 3_600_000) });
   return new Date(iso).toLocaleDateString();
 }
 
@@ -26,6 +27,7 @@ interface TerminalStatusPanelProps {
 
 /** Terminal status panel card — displays live online/offline status of all terminals with auto-refresh every 30 seconds. */
 export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPanelProps) {
+  const { l10n } = useLocalization();
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +39,11 @@ export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPa
       setTerminals(data);
       setError(null);
     } catch {
-      setError('Failed to load terminals');
+      setError(l10n.getString('terminal-status-error-load'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n]);
 
   useEffect(() => { load(); }, [load, refreshTrigger]);
 
@@ -59,10 +61,14 @@ export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPa
       shadow="sm"
       header={
         <div className="terminal-status-header">
-          <span className="terminal-status-title">Terminal Status</span>
+          <span className="terminal-status-title">
+            <Localized id="terminal-status-title"><span>Terminal Status</span></Localized>
+          </span>
           {!loading && (
             <span className="terminal-status-count">
-              {onlineCount} / {terminals.length} online
+              <Localized id="terminal-status-online-count" vars={{ online: onlineCount, total: terminals.length }}>
+                <span>{onlineCount} / {terminals.length} online</span>
+              </Localized>
             </span>
           )}
         </div>
@@ -88,23 +94,25 @@ export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPa
       ) : error ? (
         <p className="terminal-status-error">{error}</p>
       ) : terminals.length === 0 ? (
-        <p className="terminal-status-empty">No terminals registered.</p>
+        <p className="terminal-status-empty">
+          <Localized id="terminal-status-empty"><span>No terminals registered.</span></Localized>
+        </p>
       ) : (
-        <div className="terminal-status-list" role="list" aria-label="Terminal statuses">
+        <div className="terminal-status-list" role="list" aria-label={l10n.getString('terminal-status-list-aria')}>
           {terminals.map((terminal) => {
             const online = isOnline(terminal.lastSeenAt);
             return (
               <div key={terminal.id} className="terminal-status-item" role="listitem">
                 <span
                   className={`terminal-status-dot ${online ? 'terminal-status-dot--online' : 'terminal-status-dot--offline'}`}
-                  aria-label={online ? 'Online' : 'Offline'}
+                  aria-label={online ? l10n.getString('terminal-status-online') : l10n.getString('terminal-status-offline')}
                 />
                 <div className="terminal-status-info">
                   <span className="terminal-status-item-name">{terminal.name}</span>
                   <span className="terminal-status-item-device">{terminal.deviceId}</span>
                 </div>
                 <span className="terminal-status-item-time">
-                  {formatLastSeen(terminal.lastSeenAt)}
+                  {formatLastSeen(terminal.lastSeenAt, l10n)}
                 </span>
               </div>
             );

@@ -3415,6 +3415,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "modules-loyalty"
+version = "0.0.18"
+dependencies = [
+ "foundation",
+ "oz-core",
+ "platform-kernel",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "modules-reporting"
 version = "0.0.18"
 dependencies = [

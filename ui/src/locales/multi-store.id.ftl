@@ -18,6 +18,7 @@ multi-store-label-terminals = Terminal
 multi-store-section-stores-overview = Ikhtisar toko
 multi-store-section-terminal-status = Status terminal
 topology-builder-title = Builder Topologi Visual Toko & Workspace
+multi-store-error-load = Gagal memuat data
 
 
 # ── Offline Queue ──
