@@ -341,7 +341,7 @@ dropdowns, and text fields are easy to interact with.
 | 10.9 | Sleep timeout | Screen turns off after system timeout. Unlock returns to app. | ☐ |
 | 10.10 | Rapid orientation changes | UI does not crash or corrupt when rapidly rotating | ☐ |
 | 10.11 | Screen recording | App renders correctly under screen recording (no black box) | ☐ |
-| 10.12 | Split-screen (Android 12+) | App works in split-screen mode. May be letterboxed. | ☐ |
+| 10.12 | Split-screen (Android 7.0+) | App works in split-screen mode. May be letterboxed. | ☐ |
 
 **Pass criteria:** All edge cases handled gracefully — no crashes, data loss,
 or visual corruption.
