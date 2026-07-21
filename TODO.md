@@ -1,3 +1,69 @@
+# 0.0.18 — E2E Tests, Cloud Server, Docker, i18n & Release Readiness
+
+> **Goal:** Polish sprint across 5 areas: expand E2E test coverage, harden the cloud server for production, improve Docker/local dev experience, complete i18n coverage, and prepare release infrastructure.
+>
+> **Current state:** 0 / 10 items complete (0%) · Updated 2026-07-21
+
+---
+
+## 📋 Sprint Plan
+
+| # | Area | Items | Status |
+|---|------|-------|--------|
+| 🟢 | E2E Test Expansion | 2 | 0/2 ⏳ |
+| 🔴 | Cloud Server Hardening | 2 | 0/2 ⏳ |
+| 🟡 | Docker & DevEx | 2 | 0/2 ⏳ |
+| 🔵 | i18n Completion | 2 | 0/2 ⏳ |
+| 🟣 | Release Readiness | 2 | 0/2 ⏳ |
+| **Total** | | **10** | **0/10 (0%)** |
+
+---
+
+### 🟢 E2E Test Expansion
+
+> **Goal:** Add Playwright E2E tests for the most critical untested flows — product CRUD, inventory management, and POS workflows.
+
+- [ ] **Product CRUD E2E** — Create product, search by SKU, update price, delete product. Verify product grid renders with correct row count after each operation.
+- [ ] **Inventory & POS E2E** — Complete sale with stock deduction, verify stock count decreases, void sale restores stock. Test multi-location stock visibility.
+
+---
+
+### 🔴 Cloud Server Hardening
+
+> **Goal:** Improve production readiness of the cloud server — graceful shutdown, health endpoint enrichment, and connection management.
+
+- [ ] **Graceful shutdown + connection draining** — Add SIGTERM handler that stops accepting new requests, drains in-flight connections with a timeout, then exits cleanly.
+- [ ] **Health endpoint enrichment** — Add DB connection pool stats, uptime, version, and last successful sync timestamp to the `/api/health` response.
+
+---
+
+### 🟡 Docker & DevEx
+
+> **Goal:** Make local development frictionless with one-command setup and improved Docker Compose.
+
+- [ ] **One-click local dev** — Create `scripts/dev-up.ps1` / `scripts/dev-up.sh` that starts PostgreSQL, Redis, license-server, and cloud-server via Docker Compose with health check wait.
+- [ ] **Docker Compose polish** — Add dependency health checks, restart policies, volume mounts for dev hot-reload, and a `docker-compose.override.yml` for local dev overrides.
+
+---
+
+### 🔵 i18n Completion
+
+> **Goal:** Audit and complete Fluent localization coverage across all screens.
+
+- [ ] **Hardcoded string audit** — Scan all `.tsx` files for hardcoded English strings not wrapped in `<Localized>` or `l10n.getString()`. Generate a gap report.
+- [ ] **Fill Fluent gaps** — Add missing keys to `en.ftl` and `id.ftl` bundles. Run `lint-i18n.sh` to verify 0 missing keys across all bundles.
+
+---
+
+### 🟣 Release Readiness
+
+> **Goal:** Prepare infrastructure for confident releases — cross-platform build verification and a release checklist.
+
+- [ ] **Cross-platform build matrix** — Verify `cargo build --release` succeeds on Windows, Linux (WSL/Docker), and macOS targets. Document any platform-specific quirks.
+- [ ] **Release checklist** — Create `docs/releases/checklist.md` covering: version bump, CHANGELOG update, gate validation, git tag, GitHub Release creation, and artifact upload.
+
+---
+
 # 0.0.25 — License Server, CRM, KDS, Reporting & Security
 
 > **Goal:** Hardening sprint across 5 areas: license server Go tests, CRM integration flows, KDS edge cases, reporting analytics queries, and security/config audit.
