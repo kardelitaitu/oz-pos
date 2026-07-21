@@ -18,7 +18,30 @@ running the core POS flow end-to-end on a physical Windows machine.
 | Node.js | 20+ LTS | `node --version` |
 | npm | 10+ | `npm --version` |
 | Visual Studio Build Tools | 2022+ | `cl.exe` on PATH (from "Developer Command Prompt") |
-| WebView2 Runtime | Included with Windows 11 / Edge | `winget list Microsoft.EdgeWebView2Runtime` |
+| WebView2 Runtime | Included with Windows 11 / Edge | `winget list Microsoft.EdgeWebView2Runtime` or check `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00FB3A96A4B7}` in Registry Editor |
+
+### Test Data Seeding
+
+Before running the launch test, ensure the database has seed data so
+the login → POS → payment → receipt flow can execute:
+
+```powershell
+# Option A: Use the built-in seeder (if available, from apps/desktop-client)
+cargo run --bin seeder -- --seed-staff --seed-products --seed-workspace
+
+# Option B: Manual seeding via Settings UI
+#   1. Launch the app
+#   2. Settings → Database → Seed Sample Data
+#   3. This creates: 1 admin staff (PIN: 1234), 50 sample products,
+#      1 workspace with default tax rates
+
+# Option C: Copy a pre-seeded database from CI artifacts
+#   CI builds generate a seeded test database at:
+#   target/release/test-data/oz-pos.db
+```
+
+> If no seed data exists, the login screen will show an error:
+> "No staff accounts found. Please seed the database first."
 
 ### Installing Prerequisites
 
@@ -247,15 +270,27 @@ Or check the current directory for `oz-pos-app.log`.
 
 ### Debug Logs
 
-For verbose logging during testing, set `RUST_LOG` before launching:
+For verbose logging during testing, set `RUST_LOG` before launching.
+Note: `debug!` and `trace!` level logs are typically stripped in
+release builds. Use a **debug build** for detailed log output:
 
 ```powershell
-# Launch with debug logging from terminal
-$env:RUST_LOG = "debug"
+# Debug build (verbose logs)
+cargo tauri dev 2>&1 | tee launch-log.txt
+
+# Release build with RUST_LOG (only info/warn/error visible)
+$env:RUST_LOG = "info"
 .\oz-pos-app.exe > launch-log.txt 2>&1
 
 # Check console output for errors
 findstr /I "error panic fail" launch-log.txt
+```
+
+**To build a debug EXE for verbose logging:**
+```powershell
+# From apps/desktop-client
+cargo tauri build --debug
+# EXE at: target\debug\oz-pos-app.exe
 ```
 
 ### Crash Dumps
