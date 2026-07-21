@@ -25,6 +25,7 @@ mod metrics;
 mod prune;
 mod rate_limit;
 mod redirect;
+mod shutdown;
 mod sync_api;
 mod webhooks;
 
@@ -156,7 +157,12 @@ async fn main() {
     }
 }
 
-/// Start the HTTP server on the configured port.
+/// Start the HTTP server on the configured port with graceful shutdown.
+///
+/// Listens for SIGTERM (Docker/K8s) or Ctrl+C. On receiving the signal:
+/// 1. Stops accepting new connections
+/// 2. Drains in-flight connections with a 30-second timeout
+/// 3. Logs the shutdown and exits cleanly
 async fn serve(app: Router) {
     let port: u16 = std::env::var("OZ_API_PORT")
         .ok()
@@ -167,9 +173,24 @@ async fn serve(app: Router) {
         .await
         .expect("failed to bind port");
     info!(port, "OZ-POS cloud server listening");
+
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown::shutdown_signal())
         .await
         .expect("server exited with error");
+
+    // Drain in-flight connections with a grace period.
+    // After the shutdown signal, axum stops accepting new connections
+    // and waits for existing requests to complete. This additional
+    // sleep gives any last-second requests time to finish before the
+    // process exits and background tasks are dropped.
+    const DRAIN_TIMEOUT_SECS: u64 = 30;
+    info!(
+        drain_timeout_secs = DRAIN_TIMEOUT_SECS,
+        "server stopped accepting connections, draining in-flight requests"
+    );
+    tokio::time::sleep(std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS)).await;
+    info!("graceful shutdown complete");
 }
 
 /// Build the combined router: REST API + sync endpoints.

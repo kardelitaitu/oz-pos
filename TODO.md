@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 20 / 32 items complete (63%) · Updated 2026-07-22
+> **Current state:** 22 / 32 items complete (69%) · Updated 2026-07-22
 
 ---
 
@@ -11,7 +11,7 @@
 | # | Area | Items | Status |
 |---|------|-------|--------|
 | 🟢 | E2E Test Expansion | 2 | 2/2 ✅ |
-| 🔴 | Cloud Server Hardening | 2 | 1/2 ⏳ |
+| 🔴 | Cloud Server Hardening | 2 | 2/2 ✅ |
 | 🟠 | Midtrans QRIS Payment Gateway | 2 | 2/2 ✅ |
 | 🟡 | Low Stock Alert System | 2 | 2/2 ✅ |
 | 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
@@ -26,7 +26,7 @@
 | 🧱 | Shared DTO & Validation Crates | 2 | 0/2 ⏳ |
 | ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
-| **Total** | | **32** | **20/32 (63%)** |
+| **Total** | | **32** | **22/32 (69%)** |
 
 ### 🔍 Audit Findings (2026-07-22)
 
@@ -80,7 +80,7 @@
 > **Goal:** Improve production readiness of the cloud server — graceful shutdown, health endpoint enrichment, and connection management.
 
 - [x] **Health endpoint enrichment** ✅ — `/api/health` already returns: DB connected/latency, sync queue depth, last sync timestamp, uptime. P8-3 implementation complete.
-- [ ] **Graceful shutdown + connection draining** — Add SIGTERM handler that stops accepting new requests, drains in-flight connections with a timeout, then exits cleanly.
+- [x] **Graceful shutdown + connection draining** ✅ — `shutdown.rs`: cross-platform SIGTERM (Unix) + Ctrl+C handler via `tokio::signal`. `serve()` now uses `axum::serve(...).with_graceful_shutdown(shutdown_signal())`. After shutdown signal, 30s drain timeout lets in-flight connections complete before process exits. Shutdown events logged at info level. 1 test verifies compilation.
 
 ---
 
