@@ -787,3 +787,27 @@ settings-update-status-label = Status
 settings-update-not-checked = Not checked
 settings-update-check-error = Update check failed
 settings-update-retry = Retry
+
+# ── Email Report Settings ──
+settings-section-email = Email Reports
+settings-email-description = Configure SMTP to receive scheduled report emails.
+settings-email-host = SMTP Host
+settings-email-port = Port
+settings-email-username = Username
+settings-email-username-placeholder = Optional
+settings-email-password = Password
+settings-email-password-placeholder = Enter password
+settings-email-password-show = Show password
+settings-email-password-hide = Hide password
+settings-email-from = From Address
+settings-email-use-tls = Use STARTTLS
+settings-email-save-btn = Save SMTP Settings
+settings-email-saved-btn = Saved ✓
+settings-email-loading = Loading email settings…
+settings-email-saved = SMTP settings saved
+settings-email-save-error = Failed to save SMTP settings
+settings-email-host-required = SMTP host is required
+settings-email-from-required = A valid from-address is required
+settings-email-test-btn = Send Test Report
+settings-email-sending = Sending…
+settings-email-test-tooltip = Sends a test report to the first configured recipient

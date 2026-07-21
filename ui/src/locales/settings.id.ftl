@@ -765,3 +765,27 @@ settings-tax-id-pattern-error = Hanya huruf, angka, garis, titik, dan garis miri
 settings-tax-id-pattern-hint = Hanya huruf, angka, garis, titik, dan garis miring, maks 20 karakter
 settings-toast-saved = Pengaturan tersimpan
 settings-toast-failed-save = Gagal menyimpan pengaturan
+
+# ── Email Report Settings ──
+settings-section-email = Laporan Email
+settings-email-description = Konfigurasi SMTP untuk menerima laporan email terjadwal.
+settings-email-host = Host SMTP
+settings-email-port = Port
+settings-email-username = Nama Pengguna
+settings-email-username-placeholder = Opsional
+settings-email-password = Kata Sandi
+settings-email-password-placeholder = Masukkan kata sandi
+settings-email-password-show = Tampilkan kata sandi
+settings-email-password-hide = Sembunyikan kata sandi
+settings-email-from = Alamat Pengirim
+settings-email-use-tls = Gunakan STARTTLS
+settings-email-save-btn = Simpan Pengaturan SMTP
+settings-email-saved-btn = Tersimpan ✓
+settings-email-loading = Memuat pengaturan email…
+settings-email-saved = Pengaturan SMTP tersimpan
+settings-email-save-error = Gagal menyimpan pengaturan SMTP
+settings-email-host-required = Host SMTP harus diisi
+settings-email-from-required = Alamat pengirim yang valid diperlukan
+settings-email-test-btn = Kirim Laporan Uji Coba
+settings-email-sending = Mengirim…
+settings-email-test-tooltip = Mengirim laporan uji coba ke penerima pertama yang dikonfigurasi

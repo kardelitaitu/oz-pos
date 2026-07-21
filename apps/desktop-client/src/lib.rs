@@ -178,6 +178,7 @@ pub fn run() {
             commands::data::create_backup,
             commands::data::export_data,
             commands::data::import_preview,
+            commands::email::send_test_report,
             commands::data::import_data,
             commands::staff::list_staff,
             commands::staff::list_roles,

@@ -20,6 +20,7 @@
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
 mod db;
+mod email;
 mod metrics;
 mod prune;
 mod rate_limit;
@@ -105,6 +106,9 @@ async fn main() {
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
+
+            // P55-3: Start the scheduled report sender loop.
+            email::start_report_sender_loop(conn.clone());
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
             let rate_limiter = RateLimiterState::new();

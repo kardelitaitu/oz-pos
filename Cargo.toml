@@ -104,6 +104,7 @@ tracing-appender = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "gzip", "rustls-tls"] }
 hmac = "0.12"
 sha2 = "0.10"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 rlua = "0.20"
 notify = { version = "7", features = [] }
 

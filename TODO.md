@@ -2,18 +2,18 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 0 / 16 items complete (0%) · Updated 2026-07-20
+**Current state:** 4 / 16 items complete (25%) · Updated 2026-07-20
 
 ---
 
-## 🟢 P55 — Email Report Delivery
+## 🟢 P55 — Email Report Delivery ✅
 
-> P15-5 created `ReportScheduleConfig` (persisted in settings table). Now wire up an SMTP backend to actually send scheduled reports.
+> P15-5 created `ReportScheduleConfig` (persisted in settings table). Now wired up SMTP backend to send scheduled reports.
 
-- [ ] **P55-1: SMTP configuration** — Add `smtp_host`, `smtp_port`, `smtp_username`, `smtp_password`, `smtp_from` settings. Create `SmtpConfig` struct with validation.
-- [ ] **P55-2: Email report generator** — Create `ReportEmailBuilder` that takes an `AnalyticsBundle`, renders HTML + plain-text versions with summary tables + charts (ASCII for plain-text).
-- [ ] **P55-3: Scheduled send loop** — Background task in cloud-server that polls `report_schedule` settings, checks `send_at_time`, runs `export_analytics_bundle()`, and sends via SMTP.
-- [ ] **P55-4: Send test email UI** — Add "Send Test Report" button to settings screen. Validates SMTP config and sends a sample report to the configured recipients.
+- [x] **P55-1: SMTP configuration** ✅ — `SmtpConfig` struct in `crates/oz-core/src/export/email_report.rs` with validation + persistence via `save_smtp_config()`/`get_smtp_config()`. Stored as JSON under settings key `smtp_config`.
+- [x] **P55-2: Email report generator** ✅ — `ReportEmailBuilder::build()` consumes `AnalyticsBundle`, renders HTML tables (styled inline) + plain-text alternatives with daily revenue, top products, category breakdown, low stock alerts, and hourly activity summary.
+- [x] **P55-3: Scheduled send loop** ✅ — `email::start_report_sender_loop()` in cloud-server (60s poll, tokio::spawn). Checks schedule + SMTP config, generates report, sends via `lettre` SMTP with STARTTLS support.
+- [x] **P55-4: Send test email UI** ✅ — `EmailReportSettings` React component with SMTP host/port/username/password/from/TLS fields + "Send Test Report" button. Registered in SettingsPage under Operations category. Tauri command `send_test_report` with full SMTP integration.
 
 ## 🔵 P54 — Code TODO Resolution
 

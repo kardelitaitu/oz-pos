@@ -61,6 +61,7 @@ import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import LicenseSettings from './LicenseSettings';
+import EmailReportSettings from './EmailReportSettings';
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
 import './SettingsPage.css';
 
@@ -253,6 +254,16 @@ const NAV_ITEMS: SettingsNavItem[] = [
       </svg>
     ),
   },
+  {
+    key: 'email',
+    label: 'Email Reports',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="2" y="4" width="20" height="16" rx="2" />
+        <path d="M22 7l-10 7L2 7" />
+      </svg>
+    ),
+  },
 ];
 
 // ── Category groupings (accordion) ──────────────────────────────
@@ -271,7 +282,7 @@ const CATEGORY_I18N_KEYS: Record<string, string> = {
 
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
-  { label: 'Operations', keys: ['receipt', 'sync'] },
+  { label: 'Operations', keys: ['receipt', 'sync', 'email'] },
   { label: 'System', keys: ['about', 'license', 'features', 'data'] },
   { label: 'Management', keys: ['staff', 'terminals', 'stores', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
@@ -308,6 +319,7 @@ const NAV_L10N_KEYS: Record<string, string> = {
   license: 'settings-nav-license',
   exchange: 'settings-nav-exchange',
   promotions: 'settings-nav-promotions',
+  email: 'settings-nav-email',
 };
 
 // ── Clock helper ──────────────────────────────────────────────────
@@ -1655,6 +1667,9 @@ export default function SettingsPage() {
             </div>
           </Card>
         );
+
+      case 'email':
+        return <EmailReportSettings />;
 
       case 'about':
         return (
