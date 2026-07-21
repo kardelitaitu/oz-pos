@@ -5,7 +5,7 @@
 //! command returns `None` so the front-end falls back to the built-in
 //! retail preset.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tauri::{State, command};
 
 use crate::error::AppError;
@@ -18,6 +18,59 @@ pub struct TopologyData {
     pub wires: Vec<TopologyWirePayload>,
 }
 
+// ── Serde helpers for resilience ─────────────────────────────────
+
+/// Serialise an f64, replacing NaN/Infinity with `0.0`.
+///
+/// serde_json (default) serialises non-finite floats as JSON `null`,
+/// which cannot roundtrip back to `f64`.  This guard prevents the
+/// entire topology from being poisoned by a single bad coordinate.
+fn ser_f64_finite<S>(val: &f64, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.serialize_f64(if val.is_finite() { *val } else { 0.0 })
+}
+
+/// Deserialise an f64, mapping JSON `null` to `0.0`.
+fn de_f64_or_null<'de, D>(d: D) -> Result<f64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum F64ish {
+        Num(f64),
+        Null,
+    }
+    match F64ish::deserialize(d)? {
+        F64ish::Num(n) => Ok(n),
+        F64ish::Null => Ok(0.0),
+    }
+}
+
+/// Deserialise a `String`, mapping JSON `null` to the default direction.
+///
+/// `#[serde(default)]` only kicks in when the field is *absent*, not
+/// when it is explicitly `null`.  This helper covers the `null` case.
+fn de_direction_or_null<'de, D>(d: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Dir {
+        Some(String),
+        Null,
+    }
+    match Dir::deserialize(d)? {
+        Dir::Some(s) => Ok(s),
+        Dir::Null => Ok(default_direction()),
+    }
+}
+
+// ── Data types ───────────────────────────────────────────────────
+
 /// One node in the topology graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyNodePayload {
@@ -27,7 +80,9 @@ pub struct TopologyNodePayload {
     pub name: String,
     #[serde(default)]
     pub subtitle: Option<String>,
+    #[serde(serialize_with = "ser_f64_finite", deserialize_with = "de_f64_or_null")]
     pub x: f64,
+    #[serde(serialize_with = "ser_f64_finite", deserialize_with = "de_f64_or_null")]
     pub y: f64,
     #[serde(default)]
     pub tier_requirement: Option<String>,
@@ -46,6 +101,7 @@ pub struct TopologyWirePayload {
     pub from_node_id: String,
     pub to_node_id: String,
     #[serde(default = "default_direction")]
+    #[serde(deserialize_with = "de_direction_or_null")]
     pub direction: String,
     #[serde(default)]
     pub label: Option<String>,
@@ -1686,15 +1742,13 @@ mod tests {
         );
     }
 
-    // ── NaN / Infinity coordinate bugs ─────────────────────────────
+    // ── NaN / Infinity coordinate sanitisation ────────────────────
     //
-    // BUG: serde_json (default) serialises f64::NAN / INFINITY as JSON
-    // `null`, which then FAILS to deserialise back to f64.  Any node
-    // whose coordinates become non-finite poisons the entire topology
-    // until manually deleted from the settings table.
+    // Non-finite f64 values are now sanitised to 0.0 by custom serde
+    // serialiser/deserialiser helpers, preventing topology poisoning.
 
     #[test]
-    fn nan_x_coordinate_roundtrip_fails() {
+    fn nan_x_coordinate_sanitised_to_zero() {
         let node = TopologyNodePayload {
             id: "nan-x".into(),
             node_type: "store".into(),
@@ -1708,13 +1762,12 @@ mod tests {
             metadata: None,
         };
         let json = serde_json::to_string(&node).unwrap();
-        // NaN is serialised as JSON `null` — which f64 cannot parse.
-        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
-        assert!(result.is_err(), "NaN x should fail roundtrip");
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.x, 0.0, "NaN x must be sanitised to 0.0");
     }
 
     #[test]
-    fn nan_y_coordinate_roundtrip_fails() {
+    fn nan_y_coordinate_sanitised_to_zero() {
         let node = TopologyNodePayload {
             id: "nan-y".into(),
             node_type: "store".into(),
@@ -1728,12 +1781,12 @@ mod tests {
             metadata: None,
         };
         let json = serde_json::to_string(&node).unwrap();
-        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
-        assert!(result.is_err(), "NaN y should fail roundtrip");
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.y, 0.0, "NaN y must be sanitised to 0.0");
     }
 
     #[test]
-    fn infinity_x_coordinate_roundtrip_fails() {
+    fn infinity_x_coordinate_sanitised_to_zero() {
         let node = TopologyNodePayload {
             id: "inf-x".into(),
             node_type: "store".into(),
@@ -1747,12 +1800,12 @@ mod tests {
             metadata: None,
         };
         let json = serde_json::to_string(&node).unwrap();
-        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
-        assert!(result.is_err(), "Infinity x should fail roundtrip");
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.x, 0.0, "Infinity x must be sanitised to 0.0");
     }
 
     #[test]
-    fn neg_infinity_y_coordinate_roundtrip_fails() {
+    fn neg_infinity_y_coordinate_sanitised_to_zero() {
         let node = TopologyNodePayload {
             id: "neg-inf-y".into(),
             node_type: "store".into(),
@@ -1766,12 +1819,12 @@ mod tests {
             metadata: None,
         };
         let json = serde_json::to_string(&node).unwrap();
-        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
-        assert!(result.is_err(), "-Infinity y should fail roundtrip");
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.y, 0.0, "-Infinity y must be sanitised to 0.0");
     }
 
     #[test]
-    fn mixed_nan_poisons_entire_topology() {
+    fn mixed_nan_sanitised_does_not_poison_topology() {
         let good = TopologyNodePayload {
             id: "good".into(),
             node_type: "store".into(),
@@ -1790,7 +1843,7 @@ mod tests {
             name: "Bad".into(),
             subtitle: None,
             x: f64::NAN,
-            y: 3.0,
+            y: f64::INFINITY,
             tier_requirement: None,
             telemetry_badge: None,
             telemetry_status: None,
@@ -1801,11 +1854,13 @@ mod tests {
             wires: vec![],
         };
         let json = serde_json::to_string(&data).unwrap();
-        // Even one NaN in a multi-node topology makes the entire thing unloadable.
-        let result: Result<TopologyData, _> = serde_json::from_str(&json);
-        assert!(
-            result.is_err(),
-            "single NaN should poison entire TopologyData"
+        let roundtripped: TopologyData = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.nodes.len(), 2);
+        assert_eq!(roundtripped.nodes[0].x, 1.0);
+        assert_eq!(roundtripped.nodes[1].x, 0.0, "NaN must be sanitised to 0.0");
+        assert_eq!(
+            roundtripped.nodes[1].y, 0.0,
+            "Infinity must be sanitised to 0.0"
         );
     }
 
@@ -2509,12 +2564,10 @@ mod tests {
     // ── Empty / missing / null direction edge cases ────────────────
 
     #[test]
-    fn direction_null_fails() {
+    fn direction_null_defaults_to_one_way() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":null}"#;
-        let result: Result<TopologyWirePayload, _> = serde_json::from_str(json);
-        // serde's `#[serde(default)]` only applies to *absent* fields, not
-        // explicitly-null ones — null for a plain String is a type error.
-        assert!(result.is_err());
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.direction, "one-way");
     }
 
     #[test]
