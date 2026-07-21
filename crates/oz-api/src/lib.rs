@@ -705,6 +705,86 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
+    // ── Tax rate creation endpoint ──────────────────────────────
+
+    #[tokio::test]
+    async fn create_tax_rate_returns_201() {
+        let token = auth::create_token("test", Some(1), None);
+        let body = r#"{"name":"VAT 10%","rate_bps":1000,"is_default":true,"is_inclusive":false}"#;
+        let req = auth_post_json("/api/v1/tax-rates", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn create_tax_rate_returns_fields() {
+        let token = auth::create_token("test", Some(1), None);
+        let body = r#"{"name":"GST 5%","rate_bps":500,"is_default":false,"is_inclusive":true}"#;
+        let req = auth_post_json("/api/v1/tax-rates", &token.token, body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["name"], "GST 5%");
+        assert_eq!(json["rate_bps"], 500);
+        assert_eq!(json["is_default"], false);
+        assert_eq!(json["is_inclusive"], true);
+        assert!(json["id"].is_string());
+        assert!(json["created_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn create_tax_rate_requires_auth() {
+        let body = r#"{"name":"Tax","rate_bps":100,"is_default":false,"is_inclusive":false}"#;
+        let req = post_json("/api/v1/tax-rates", body);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ── User creation endpoint ───────────────────────────────────
+
+    /// Helper: build a router with seeded roles (required for user creation).
+    fn test_app_with_roles() -> Router {
+        let conn = fresh_conn();
+        oz_core::db::Store::new(&conn).seed_default_roles().unwrap();
+        let state = AppState {
+            db: Arc::new(Mutex::new(conn)),
+        };
+        router(state)
+    }
+
+    #[tokio::test]
+    async fn create_user_returns_201() {
+        let token = auth::create_token("test", Some(1), None);
+        let body = r#"{"username":"newstaff","pin_hash":"abc123","display_name":"New Staff","role_id":"role-cashier"}"#;
+        let req = auth_post_json("/api/v1/users", &token.token, body);
+        let resp = test_app_with_roles().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn create_user_returns_fields() {
+        let token = auth::create_token("test", Some(1), None);
+        let body = r#"{"username":"staff-user","pin_hash":"hash456","display_name":"Staff User","role_id":"role-owner"}"#;
+        let req = auth_post_json("/api/v1/users", &token.token, body);
+        let resp = test_app_with_roles().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let json = body_json(resp).await;
+        assert_eq!(json["username"], "staff-user");
+        assert_eq!(json["display_name"], "Staff User");
+        assert_eq!(json["role_id"], "role-owner");
+        assert_eq!(json["is_active"], true);
+        assert!(json["id"].is_string());
+        assert!(json["created_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn create_user_requires_auth() {
+        let body = r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-cashier"}"#;
+        let req = post_json("/api/v1/users", body);
+        let resp = test_app_with_roles().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
     // ── Category endpoints ───────────────────────────────────────
 
     #[tokio::test]

@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 10 / 16 items complete (62%) · Updated 2026-07-21
+**Current state:** 11 / 16 items complete (69%) · Updated 2026-07-21
 
 ---
 
@@ -20,7 +20,7 @@
 > Resolve the 5 remaining TODO/FIXME comments in production code.
 
 - [x] **P54-1: terminal_id binding (ADR #7)** ✅ — Created `get_device_id` Tauri command (desktop + tablet), `getDeviceId()` API wrapper, and updated WorkspaceContext.tsx to resolve terminal_id from hostname.
-- [ ] **P54-2: tenant_id on tax_rates/users sync** — In `cloud-server/src/sync_api.rs`, stamp `tenant_id` from JWT claims on POST handlers for `tax_rates` and `users` (same pattern as existing handlers).
+- [x] **P54-2: tenant_id on tax_rates/users sync** ✅ — Added `POST /api/v1/tax-rates` and `POST /api/v1/users` endpoints to `oz-api` crate. Both handlers extract `tenant_id` from JWT claims and stamp it via UPDATE (same pattern as `create_product`). Updated TODO comment in `sync_api.rs`. 6 integration tests added (201, field verification, auth enforcement). All 115 oz-api tests pass.
 - [ ] **P54-3: archive_instance() wrapper (ADR #5)** — Add a public `Store::archive_instance()` method to `crates/oz-core/src/db/workspaces.rs` for proper encapsulation (replaces inline SQL in test).
 - [ ] **P54-4: user_store_access check (ADR #4 Phase 2)** — In `list_active_instances()`, add user_store_access row filtering for non-owner roles in multi-store mode.
 - [ ] **P54-5: greedy-fill location resolver (ADR-19)** — Implement greedy-fill algorithm in `location_resolver.rs` to use the `qty` parameter for distributing stock deduction across locations.
@@ -54,11 +54,11 @@
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
 | 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
-| 🔵 P54 — Code TODOs | 5 | 1 | ░░░░░░░░░░░░░░░░ 20% |
+| 🔵 P54 — Code TODOs | 5 | 2 | ░░░░░░░░░░░░░░░░ 40% |
 | 🟣 P55 — Dev Tooling | 2 | 1 | ░░░░░░░░░░░░░░░░ 50% |
 | 🔴 P56 — Device Validation | 4 | 4 | ███████████████████████ 100% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **10** | **62%** |
+| **Total** | **16** | **11** | **69%** |
 
 ---
 
