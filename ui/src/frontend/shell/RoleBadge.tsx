@@ -16,12 +16,14 @@ export default function RoleBadge() {
 
   if (!session) return null;
 
-  // Map role_name to a display variant.
-  const roleVariant = (): 'owner' | 'manager' | 'cashier' => {
+  const roleVariant = (): 'owner' | 'manager' | 'cashier' | 'kitchen' | 'staff' | 'custom' => {
     switch (session.role_name) {
-      case 'owner': return 'owner';
-      case 'manager': return 'manager';
-      default: return 'cashier';
+      case 'owner': case 'role-owner': return 'owner';
+      case 'manager': case 'role-manager': return 'manager';
+      case 'kitchen': case 'role-kitchen': return 'kitchen';
+      case 'staff': case 'role-staff': return 'staff';
+      case 'custom': case 'role-custom': return 'custom';
+      default: return 'staff';
     }
   };
 

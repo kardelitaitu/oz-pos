@@ -26,6 +26,7 @@ serde_json = { workspace = true }
 
 [dependencies]
 foundation = { workspace = true }
+lettre = { workspace = true }
 oz-core = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }

@@ -110,6 +110,10 @@ function getRoleColor(role: string): string {
     case 'role-cashier': return 'role-badge--cashier';
     case 'kitchen':
     case 'role-kitchen': return 'role-badge--kitchen';
+    case 'staff':
+    case 'role-staff':   return 'role-badge--staff';
+    case 'custom':
+    case 'role-custom':  return 'role-badge--custom';
     default:             return 'role-badge--default';
   }
 }

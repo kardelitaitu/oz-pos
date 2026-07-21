@@ -1517,6 +1517,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 
 [[package]]
+name = "email-encoding"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9298e6504d9b9e780ed3f7dfd43a61be8cd0e09eb07f7706a945b0072b6670b6"
+dependencies = [
+ "base64 0.22.1",
+ "memchr",
+]
+
+[[package]]
+name = "email_address"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
+
+[[package]]
 name = "embed-resource"
 version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1771,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "regex",
@@ -2983,6 +2999,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "lettre"
+version = "0.11.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0da65617f6cb926332d039cb578aad56178da86e128db6a1b09f4c94fa5b3349"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "email-encoding",
+ "email_address",
+ "fastrand",
+ "futures-io",
+ "futures-util",
+ "httpdate",
+ "idna",
+ "mime",
+ "nom 8.0.0",
+ "percent-encoding",
+ "quoted_printable",
+ "rustls",
+ "socket2 0.6.4",
+ "tokio",
+ "tokio-rustls",
+ "url",
+ "webpki-roots",
+]
+
+[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3331,7 +3374,7 @@ dependencies = [
 
 [[package]]
 name = "modules-crm"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3346,7 +3389,7 @@ dependencies = [
 
 [[package]]
 name = "modules-currency"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3358,7 +3401,7 @@ dependencies = [
 
 [[package]]
 name = "modules-inventory"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3373,7 +3416,7 @@ dependencies = [
 
 [[package]]
 name = "modules-reporting"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3388,7 +3431,7 @@ dependencies = [
 
 [[package]]
 name = "modules-sales"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3400,7 +3443,7 @@ dependencies = [
 
 [[package]]
 name = "modules-settings"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3412,7 +3455,7 @@ dependencies = [
 
 [[package]]
 name = "modules-staff"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3423,7 +3466,7 @@ dependencies = [
 
 [[package]]
 name = "modules-tax"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3435,7 +3478,7 @@ dependencies = [
 
 [[package]]
 name = "modules-terminal"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3956,7 +3999,7 @@ dependencies = [
 
 [[package]]
 name = "oz-api"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -3976,7 +4019,7 @@ dependencies = [
 
 [[package]]
 name = "oz-cli"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4000,14 +4043,16 @@ dependencies = [
 
 [[package]]
 name = "oz-cloud-server"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "axum 0.8.9",
  "chrono",
+ "console-subscriber",
  "deadpool-postgres",
  "hex",
  "hmac 0.12.1",
  "http-body-util",
+ "lettre",
  "oz-api",
  "oz-core",
  "oz-logging",
@@ -4029,7 +4074,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -4058,7 +4103,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -4072,7 +4117,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "chrono",
  "filetime",
@@ -4087,7 +4132,7 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "oz-core",
  "rlua",
@@ -4100,7 +4145,7 @@ dependencies = [
 
 [[package]]
 name = "oz-payment"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4120,7 +4165,7 @@ dependencies = [
 
 [[package]]
 name = "oz-plugin"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4140,13 +4185,14 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-app"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
  "foundation",
  "hex",
  "hmac 0.12.1",
+ "lettre",
  "modules-crm",
  "modules-currency",
  "modules-inventory",
@@ -4187,7 +4233,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-tablet"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4222,7 +4268,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4235,7 +4281,7 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "chrono",
  "hex",
@@ -4468,7 +4514,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-core"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "argon2",
  "chrono",
@@ -4482,7 +4528,7 @@ dependencies = [
 
 [[package]]
 name = "platform-kernel"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "foundation",
@@ -4495,7 +4541,7 @@ dependencies = [
 
 [[package]]
 name = "platform-startup"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4524,7 +4570,7 @@ dependencies = [
 
 [[package]]
 name = "platform-sync"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4899,7 +4945,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -4936,9 +4982,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.4",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4949,6 +4995,12 @@ checksum = "dfbc457d0c7a0759a614551b11a6409e5951f6c7537be1f1b7682b9ae9230368"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "quoted_printable"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "478e0585659a122aa407eb7e3c0e1fa51b1d8a870038bd29f0cf4a8551eea972"
 
 [[package]]
 name = "r-efi"
@@ -5378,6 +5430,7 @@ version = "0.23.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b92b125634d9b795e7beca796cc790df15a7fb38323bf3196fda83292d06b1f"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",

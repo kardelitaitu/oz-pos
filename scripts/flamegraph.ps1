@@ -1,3 +1,9 @@
+# DEPRECATED — Use scripts/profile.ps1 instead.
+# This script is kept for backward compatibility but will be removed
+# in a future release. scripts/profile.ps1 supports all options plus
+# PID profiling, frequency control, timestamped output, and listing
+# available benchmarks.
+#
 # Flamegraph Profiling Helper for Windows (PowerShell)
 # Usage: powershell -File scripts/flamegraph.ps1 [-Bench <bench_name>] [-Binary <bin_name>]
 
@@ -8,7 +14,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "Checking for cargo-flamegraph installation..." -ForegroundColor Cyan
+Write-Host "WARNING: This script is deprecated. Use scripts/profile.ps1 instead." -ForegroundColor Yellow
+Write-Host "  See: powershell -File scripts/profile.ps1 -Help" -ForegroundColor Yellow
+Write-Host ""
+
 if (-not (Get-Command "cargo-flamegraph" -ErrorAction SilentlyContinue)) {
     Write-Host "Installing cargo-flamegraph..." -ForegroundColor Yellow
     cargo install cargo-flamegraph
@@ -26,3 +35,5 @@ if ($Bench -ne "") {
 }
 
 Write-Host "Flamegraph generated successfully!" -ForegroundColor Green
+Write-Host ""
+Write-Host "TIP: Use scripts/profile.ps1 for more options (PID, freq, timestamped output)." -ForegroundColor Cyan

@@ -592,7 +592,7 @@ export default function StaffLoginScreen() {
 
       {/* ── Footer: version + copyright ────────────────────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.14</span>
+        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.15</span>
         <Localized id="staff-login-copyright">
           <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
         </Localized>

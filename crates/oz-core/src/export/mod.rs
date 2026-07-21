@@ -6,6 +6,8 @@
 //! packages them together with export metadata into a serializable
 //! [`AnalyticsBundle`].
 
+pub mod email_report;
+
 use serde::{Deserialize, Serialize};
 
 use crate::db::Store;

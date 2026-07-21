@@ -428,7 +428,7 @@ export default function PaymentModal({
           }),
           receiptNumber: `SALE-${saleResult.saleId}`,
           items: lineItems.map((line, i) => {
-            const computedLine = completedSale?.lines[i];
+            const computedLine = completedSale?.lines?.[i];
             const tax = computedLine?.tax_amount
               ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
               : null;
@@ -446,7 +446,7 @@ export default function PaymentModal({
           subtotal: completedSale
             ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
             : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
-          ...(completedSale && completedSale.taxTotal.minor_units > 0
+          ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
             ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
             : {}),
           total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
@@ -746,7 +746,7 @@ export default function PaymentModal({
           }),
           receiptNumber: `SALE-${saleResult.saleId}`,
           items: lineItems.map((line, i) => {
-            const computedLine = completedSale?.lines[i];
+            const computedLine = completedSale?.lines?.[i];
             const tax = computedLine?.tax_amount
               ? { minorUnits: computedLine.tax_amount.minor_units, currency: computedLine.tax_amount.currency }
               : null;
@@ -764,7 +764,7 @@ export default function PaymentModal({
           subtotal: completedSale
             ? { minorUnits: completedSale.subtotal.minor_units, currency: total.currency }
             : { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },
-          ...(completedSale && completedSale.taxTotal.minor_units > 0
+          ...(completedSale && completedSale.taxTotal && completedSale.taxTotal.minor_units > 0
             ? { tax: { minorUnits: completedSale.taxTotal.minor_units, currency: total.currency } }
             : {}),
           total: { minorUnits: saleResult.total?.minor_units ?? total.minor_units, currency: total.currency },

@@ -1,35 +1,35 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "312.5k lines",
+    "message":  "332.9k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  312479,
-                  "totalFiles":  1446,
+                  "totalLines":  332948,
+                  "totalFiles":  1526,
                   "languages":  {
                                     "sql":  {
-                                                "lines":  3017,
-                                                "files":  94
+                                                "lines":  3041,
+                                                "files":  97
                                             },
                                     "rust":  {
-                                                 "lines":  139996,
-                                                 "files":  344
+                                                 "lines":  150424,
+                                                 "files":  362
                                              },
                                     "go":  {
-                                               "lines":  6356,
-                                               "files":  9
+                                               "lines":  6745,
+                                               "files":  11
                                            },
                                     "css":  {
-                                                "lines":  33493,
-                                                "files":  104
+                                                "lines":  35307,
+                                                "files":  115
                                             },
                                     "html":  {
-                                                 "lines":  29329,
-                                                 "files":  488
+                                                 "lines":  29491,
+                                                 "files":  492
                                              },
                                     "typescript":  {
-                                                       "lines":  100288,
-                                                       "files":  407
+                                                       "lines":  107940,
+                                                       "files":  449
                                                    }
                                 }
               }

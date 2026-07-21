@@ -75,6 +75,10 @@
   color: var(--color-fg-secondary);
 }
 
+.role-badge-role--custom {
+  color: var(--color-purple, #9333ea);
+}
+
 .role-badge-logout {
   display: flex;
   align-items: center;

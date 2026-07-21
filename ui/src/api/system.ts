@@ -25,3 +25,7 @@ export const getVersion = (): Promise<VersionInfo> =>
 /** Get the local IP address of the device. */
 export const getLocalIp = (): Promise<string> =>
   invoke<string>('get_local_ip');
+
+/** Get the stable device identifier (hostname) for terminal binding. */
+export const getDeviceId = (): Promise<string> =>
+  invoke<string>('get_device_id');

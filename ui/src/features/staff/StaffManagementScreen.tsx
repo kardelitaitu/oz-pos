@@ -22,6 +22,8 @@ import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
+import { EmptyState } from '@/frontend/shared';
+import { NoStaffIcon } from '@/components/EmptyStateIllustrations';
 import SettingsSelect from '@/features/settings/SettingsSelect';
 import './StaffManagementScreen.css';
 
@@ -298,7 +300,10 @@ export default function StaffManagementScreen() {
       case 'role-kitchen': return 'success';
       case 'cashier':
       case 'role-cashier': return 'default';
-      case 'staff':        return 'default';
+      case 'staff':
+      case 'role-staff':  return 'default';
+      case 'custom':
+      case 'role-custom': return 'default';
       default:             return 'default';
     }
   };
@@ -352,22 +357,11 @@ export default function StaffManagementScreen() {
       ) : staff.length === 0 ? (
         <Card shadow="sm">
           <div className="staff-mgmt-empty">
-            <div className="staff-mgmt-empty-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="48" height="48">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
-            <Localized id="staff-empty">
-              <p>No staff members yet.</p>
-            </Localized>
-            <Localized id="staff-empty-cta">
-              <Button variant="secondary" onClick={openCreate}>
-                Add your first staff member
-              </Button>
-            </Localized>
+            <EmptyState
+              icon={<NoStaffIcon />}
+              title={l10n.getString('staff-empty') || 'No staff members yet.'}
+              action={{ label: l10n.getString('staff-empty-cta') || 'Add your first staff member', onClick: openCreate }}
+            />
           </div>
         </Card>
       ) : (

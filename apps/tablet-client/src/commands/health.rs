@@ -6,6 +6,14 @@ use tauri::command;
 
 use crate::error::AppError;
 
+/// Get the stable device identifier (hostname) for terminal binding.
+#[command]
+pub async fn get_device_id() -> Result<String, AppError> {
+    Ok(std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown-device".to_string()))
+}
+
 /// Liveness probe. Returns `Ok("pong")` if the Tauri runtime is alive.
 #[command]
 pub async fn ping() -> Result<String, AppError> {
@@ -104,12 +112,12 @@ mod tests {
     fn version_info_field_access() {
         let v = VersionInfo {
             name: "oz-pos-tablet",
-            version: "0.0.14",
+            version: "0.0.15",
             rust_version: "1.80",
             target: "aarch64-android",
         };
         assert_eq!(v.name, "oz-pos-tablet");
-        assert_eq!(v.version, "0.0.14");
+        assert_eq!(v.version, "0.0.15");
         assert_eq!(v.rust_version, "1.80");
         assert_eq!(v.target, "aarch64-android");
     }

@@ -403,18 +403,25 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let roles = store(&conn).list_roles().unwrap();
-        assert_eq!(roles.len(), 4);
-        // Ordered by name: cashier, kitchen, manager, owner.
+        assert_eq!(roles.len(), 6);
+        // Ordered by name: cashier, custom, kitchen, manager, owner, staff.
         assert_eq!(roles[0].name, "Cashier");
         assert_eq!(roles[0].id, "role-cashier");
-        assert_eq!(roles[1].name, "Kitchen");
-        assert_eq!(roles[1].id, "role-kitchen");
-        assert!(roles[1].permissions.contains("kds:view"));
-        assert!(roles[1].permissions.contains("kds:update"));
-        assert_eq!(roles[2].name, "Manager");
-        assert_eq!(roles[2].id, "role-manager");
-        assert_eq!(roles[3].name, "Owner");
-        assert_eq!(roles[3].id, "role-owner");
+        assert_eq!(roles[1].name, "Custom");
+        assert_eq!(roles[1].id, "role-custom");
+        assert_eq!(roles[1].permissions, "[]");
+        assert_eq!(roles[2].name, "Kitchen");
+        assert_eq!(roles[2].id, "role-kitchen");
+        assert!(roles[2].permissions.contains("kds:view"));
+        assert!(roles[2].permissions.contains("kds:update"));
+        assert_eq!(roles[3].name, "Manager");
+        assert_eq!(roles[3].id, "role-manager");
+        assert_eq!(roles[4].name, "Owner");
+        assert_eq!(roles[4].id, "role-owner");
+        assert_eq!(roles[5].name, "Staff");
+        assert_eq!(roles[5].id, "role-staff");
+        assert!(!roles[5].permissions.contains("settings:read"));
+        assert!(!roles[5].permissions.contains("settings:edit"));
     }
 
     #[test]

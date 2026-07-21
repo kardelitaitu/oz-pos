@@ -80,6 +80,21 @@
   color: var(--color-fg-tertiary);
 }
 
+.role-badge-role--kitchen {
+  background: var(--color-info-bg, var(--color-bg-surface));
+  color: var(--color-info, #2563eb);
+}
+
+.role-badge-role--staff {
+  background: var(--color-bg-surface);
+  color: var(--color-fg-secondary);
+}
+
+.role-badge-role--custom {
+  background: var(--color-bg-surface);
+  color: var(--color-purple, #9333ea);
+}
+
 .role-badge-logout {
   display: flex;
   align-items: center;

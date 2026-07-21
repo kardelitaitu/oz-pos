@@ -23,6 +23,8 @@ pub mod currencies;
 pub mod customers;
 /// Data export / import commands.
 pub mod data;
+/// Email report commands.
+pub mod email;
 /// Exchange-rate commands.
 pub mod exchange_rates;
 /// Feature-flag commands.

@@ -271,6 +271,10 @@ pub mod builtin_roles {
     pub const CASHIER: &str = "role-cashier";
     /// Kitchen — can view and update KDS orders.
     pub const KITCHEN: &str = "role-kitchen";
+    /// Staff — operational role with Manager-level access minus settings.
+    pub const STAFF: &str = "role-staff";
+    /// Custom — fully flexible role with no preset permissions.
+    pub const CUSTOM: &str = "role-custom";
 }
 
 // ── Role presets ─────────────────────────────────────────────────────
@@ -419,6 +423,73 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::WORKSPACES_SWITCH,
         ],
     },
+    RolePreset {
+        id: builtin_roles::STAFF,
+        name: "Staff",
+        description: "Operational role with Manager-level access minus settings configuration.",
+        permissions: &[
+            permissions::SALES_PROCESS,
+            permissions::SALES_VOID,
+            permissions::SALES_REFUND,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::SALES_OVERRIDE_PRICE,
+            permissions::PRODUCTS_CREATE,
+            permissions::PRODUCTS_READ,
+            permissions::PRODUCTS_UPDATE,
+            permissions::PRODUCTS_DELETE,
+            permissions::PRODUCTS_IMPORT,
+            permissions::PRODUCTS_EXPORT,
+            permissions::INVENTORY_VIEW,
+            permissions::INVENTORY_ADJUST,
+            permissions::INVENTORY_TRANSFER,
+            permissions::INVENTORY_COUNT,
+            permissions::STAFF_READ,
+            permissions::STAFF_CREATE,
+            permissions::STAFF_UPDATE,
+            permissions::REPORTS_VIEW,
+            permissions::REPORTS_EXPORT,
+            permissions::REPORTS_SCHEDULE,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
+            permissions::SHIFTS_VIEW_ANY,
+            permissions::AUDIT_VIEW,
+            permissions::AUDIT_EXPORT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::PAYMENTS_REFUND,
+            permissions::PAYMENTS_SETTLE,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::CUSTOMERS_EDIT,
+            permissions::CUSTOMERS_DELETE,
+            permissions::TABLES_ASSIGN,
+            permissions::TABLES_MERGE,
+            permissions::TABLES_SPLIT,
+            permissions::TABLES_CLOSE,
+            permissions::TABLES_CREATE,
+            permissions::TABLES_EDIT,
+            permissions::TABLES_DELETE,
+            permissions::DISCOUNTS_APPLY,
+            permissions::DISCOUNTS_CREATE,
+            permissions::DISCOUNTS_MANAGE,
+            permissions::WORKSPACES_SWITCH,
+            permissions::PROMOTIONS_CREATE,
+            permissions::PROMOTIONS_EDIT,
+            permissions::PROMOTIONS_DELETE,
+            permissions::PROMOTIONS_APPLY,
+            permissions::TERMINALS_REGISTER,
+            permissions::TERMINALS_EDIT,
+            permissions::TERMINALS_DELETE,
+        ],
+    },
+    RolePreset {
+        id: builtin_roles::CUSTOM,
+        name: "Custom",
+        description: "Fully flexible role — no preset permissions. Admin selects every permission manually.",
+        permissions: &[],
+    },
 ];
 
 #[cfg(test)]
@@ -479,6 +550,51 @@ mod preset_tests {
         let role = ROLE_PRESETS[0].into_role();
         assert_eq!(role.id, builtin_roles::OWNER);
         assert_eq!(role.name, "Owner");
+    }
+
+    #[test]
+    fn staff_preset_excludes_settings() {
+        let preset = &ROLE_PRESETS[4];
+        assert_eq!(preset.id, builtin_roles::STAFF);
+        assert_eq!(preset.name, "Staff");
+        assert!(!preset.permissions.contains(&permissions::SETTINGS_READ));
+        assert!(!preset.permissions.contains(&permissions::SETTINGS_EDIT));
+        // Staff should still have Manager-level operational permissions
+        assert!(preset.permissions.contains(&permissions::SALES_VOID));
+        assert!(preset.permissions.contains(&permissions::PRODUCTS_CREATE));
+        assert!(preset.permissions.contains(&permissions::STAFF_CREATE));
+        assert!(preset.permissions.contains(&permissions::REPORTS_VIEW));
+    }
+
+    #[test]
+    fn custom_preset_has_no_permissions() {
+        let preset = &ROLE_PRESETS[5];
+        assert_eq!(preset.id, builtin_roles::CUSTOM);
+        assert_eq!(preset.name, "Custom");
+        assert!(preset.permissions.is_empty());
+        let json = preset.permissions_json();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn staff_preset_has_manager_count_minus_settings() {
+        let manager = &ROLE_PRESETS[1];
+        let staff = &ROLE_PRESETS[4];
+        // Staff should have exactly 2 fewer permissions than Manager (settings:read, settings:edit)
+        assert_eq!(
+            staff.permissions.len(),
+            manager.permissions.len() - 2,
+            "Staff should have all Manager permissions except settings:read and settings:edit"
+        );
+        // Verify every Manager permission except settings is present in Staff
+        for perm in manager.permissions {
+            if *perm != permissions::SETTINGS_READ && *perm != permissions::SETTINGS_EDIT {
+                assert!(
+                    staff.permissions.contains(perm),
+                    "Staff should inherit Manager permission: {perm}"
+                );
+            }
+        }
     }
 }
 
