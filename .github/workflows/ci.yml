@@ -21,6 +21,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  SCCACHE_GHA_ENABLED: "true"
 
 jobs:
   # ── Rust: Format (fastest — ~30s, no deps needed) ──────────────────
@@ -41,7 +42,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -78,7 +79,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -135,7 +136,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -294,7 +295,7 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -351,7 +352,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
       - name: Fuzz targets (60s each)
@@ -443,7 +444,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies
         run: cd ui && npm ci --no-audit --no-fund

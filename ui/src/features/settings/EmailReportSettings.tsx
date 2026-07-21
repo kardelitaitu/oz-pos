@@ -13,6 +13,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
+import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
 
 interface SmtpConfigDto {
   host: string;
@@ -45,6 +46,19 @@ export default function EmailReportSettings() {
   const [saved, setSaved] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // ── Schedule state ────────────────────────────────────────────────
+  const [schedule, setSchedule] = useState<ReportScheduleConfig>({
+    enabled: false,
+    cadence: 'daily',
+    report_types: ['daily_revenue', 'top_products'],
+    recipients: [],
+    send_at_time: '08:00',
+    timezone: 'UTC',
+    lookback_days: 1,
+  });
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+
   const loadConfig = useCallback(async () => {
     try {
       const raw = await invoke<string | null>('get_setting', { key: SMTP_CONFIG_KEY, user_id: '' });
@@ -59,6 +73,20 @@ export default function EmailReportSettings() {
   }, []);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
+
+  // ── Load schedule config ───────────────────────────────────────────
+  const loadSchedule = useCallback(async () => {
+    try {
+      const sched = await getReportSchedule();
+      setSchedule(sched);
+    } catch {
+      // Use defaults
+    } finally {
+      setScheduleLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadSchedule(); }, [loadSchedule]);
 
   const saveConfig = useCallback(async () => {
     setSaving(true);
@@ -90,6 +118,33 @@ export default function EmailReportSettings() {
       setSaving(false);
     }
   }, [config, l10n, addToast]);
+
+  // ── Schedule event handlers ────────────────────────────────────────
+
+  const saveSchedule = useCallback(async () => {
+    setScheduleSaving(true);
+    try {
+      await saveReportSchedule(schedule);
+      addToast({
+        message: l10n.getString('settings-email-schedule-saved'),
+        type: 'success',
+      });
+    } catch (err) {
+      addToast({
+        message: typeof err === 'string' ? err : 'Failed to save schedule',
+        type: 'error',
+      });
+    } finally {
+      setScheduleSaving(false);
+    }
+  }, [schedule, l10n, addToast]);
+
+  const updateSchedField = useCallback(
+    <K extends keyof ReportScheduleConfig>(key: K, value: ReportScheduleConfig[K]) => {
+      setSchedule((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  ) as <K extends keyof ReportScheduleConfig>(key: K, value: ReportScheduleConfig[K]) => void;
 
   const handleSendTest = useCallback(async () => {
     setSending(true);
@@ -126,6 +181,7 @@ export default function EmailReportSettings() {
   }
 
   return (
+    <>
     <Card
       shadow="sm"
       header={
@@ -334,5 +390,251 @@ export default function EmailReportSettings() {
         </div>
       </div>
     </Card>
+
+    {/* ── Report Schedule Configuration ──────────────────────────────────── */}
+    <div style={{ height: '1.5rem' }} />
+    <Card
+      shadow="sm"
+      header={
+        <h2 className="settings-section-title">
+          <Localized id="settings-section-schedule">
+            <span>Report Schedule</span>
+          </Localized>
+        </h2>
+      }
+    >
+      {scheduleLoading ? (
+        <div className="settings-loading-inline" style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af' }}>
+          <Localized id="settings-schedule-loading">
+            <span>Loading schedule…</span>
+          </Localized>
+        </div>
+      ) : (
+        <div className="settings-form">
+          <p className="settings-hint" style={{ marginBottom: '1rem' }}>
+            <Localized id="settings-schedule-description">
+              <span>Configure how often scheduled report emails are sent.</span>
+            </Localized>
+          </p>
+
+          {/* Enabled toggle */}
+          <div className="settings-field settings-field--horizontal">
+            <span className="settings-label" id="settings-schedule-enabled-label">
+              <Localized id="settings-schedule-enabled">
+                <span>Enable Scheduled Reports</span>
+              </Localized>
+            </span>
+            <span className="settings-field-input-wrap">
+              <label className="settings-toggle" htmlFor="settings-schedule-enabled">
+                <span className="sr-only">Toggle</span>
+                <span className="settings-toggle-switch">
+                  <input
+                    id="settings-schedule-enabled"
+                    type="checkbox"
+                    role="switch"
+                    checked={schedule.enabled}
+                    aria-checked={schedule.enabled}
+                    aria-labelledby="settings-schedule-enabled-label"
+                    onChange={(e) => updateSchedField('enabled', e.target.checked)}
+                  />
+                  <span className="settings-toggle-slider" />
+                </span>
+              </label>
+            </span>
+          </div>
+
+          {/* Cadence / Frequency */}
+          <div className="settings-field settings-field--horizontal">
+            <label htmlFor="settings-schedule-cadence" className="settings-label">
+              {l10n.getString('settings-schedule-cadence')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <select
+                id="settings-schedule-cadence"
+                className="settings-select"
+                value={schedule.cadence}
+                onChange={(e) => updateSchedField('cadence', e.target.value)}
+                aria-label={l10n.getString('settings-schedule-cadence')}
+                style={{ width: '100%', maxWidth: '320px' }}
+              >
+                <option value="daily">{l10n.getString('settings-schedule-cadence-daily') || 'Daily'}</option>
+                <option value="weekly">{l10n.getString('settings-schedule-cadence-weekly') || 'Weekly (Monday)'}</option>
+                <option value="monthly">{l10n.getString('settings-schedule-cadence-monthly') || 'Monthly (1st)'}</option>
+              </select>
+            </span>
+          </div>
+
+          {/* Send time */}
+          <div className="settings-field settings-field--horizontal">
+            <label htmlFor="settings-schedule-time" className="settings-label">
+              {l10n.getString('settings-schedule-time')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <input
+                id="settings-schedule-time"
+                className="settings-input"
+                type="time"
+                value={schedule.send_at_time}                    onChange={(e) => updateSchedField('send_at_time', e.target.value)}
+                aria-label={l10n.getString('settings-schedule-time')}
+                style={{ maxWidth: '160px' }}
+              />
+            </span>
+          </div>
+
+          {/* Timezone */}
+          <div className="settings-field settings-field--horizontal">
+            <label htmlFor="settings-schedule-tz" className="settings-label">
+              {l10n.getString('settings-schedule-timezone')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <input
+                id="settings-schedule-tz"
+                className="settings-input"
+                type="text"
+                value={schedule.timezone}                    onChange={(e) => updateSchedField('timezone', e.target.value)}
+                placeholder="UTC"
+                aria-label={l10n.getString('settings-schedule-timezone')}
+                style={{ maxWidth: '220px' }}
+              />
+            </span>
+          </div>
+
+          {/* Lookback days */}
+          <div className="settings-field settings-field--horizontal">
+            <label htmlFor="settings-schedule-lookback" className="settings-label">
+              {l10n.getString('settings-schedule-lookback')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <input
+                id="settings-schedule-lookback"
+                className="settings-input"
+                type="number"
+                min={1}
+                max={365}
+                value={schedule.lookback_days}                    onChange={(e) => updateSchedField('lookback_days', parseInt(e.target.value, 10) || 1)}
+                aria-label={l10n.getString('settings-schedule-lookback')}
+                style={{ maxWidth: '120px' }}
+              />
+            </span>
+          </div>
+
+          {/* Report types */}
+          <div className="settings-field settings-field--horizontal" style={{ alignItems: 'flex-start' }}>
+            <span className="settings-label">
+              <Localized id="settings-schedule-report-types">
+                <span>Report Types</span>
+              </Localized>
+            </span>
+            <span className="settings-field-input-wrap">
+              <div className="settings-checkbox-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {([
+                  ['daily_revenue', 'Daily Revenue'],
+                  ['weekly_revenue', 'Weekly Revenue'],
+                  ['monthly_revenue', 'Monthly Revenue'],
+                  ['top_products', 'Top Products'],
+                  ['hourly_heatmap', 'Hourly Heatmap'],
+                  ['category_breakdown', 'Category Breakdown'],
+                  ['low_stock_alerts', 'Low Stock Alerts'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={schedule.report_types.includes(key)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...schedule.report_types, key]
+                          : schedule.report_types.filter((r) => r !== key);
+                        updateSchedField('report_types', next);
+                      }}
+                      aria-label={label}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </span>
+          </div>
+
+          {/* Recipients */}
+          <div className="settings-field settings-field--horizontal" style={{ alignItems: 'flex-start' }}>
+            <label htmlFor="settings-schedule-recipients" className="settings-label">
+              {l10n.getString('settings-schedule-recipients')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+                {schedule.recipients.map((email, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      className="settings-input"
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        const next = [...schedule.recipients];
+                        next[i] = e.target.value;
+                        updateSchedField('recipients', next);
+                      }}
+                      aria-label={`Recipient ${i + 1}`}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="settings-remove-btn"
+                      onClick={() => {
+                        const next = schedule.recipients.filter((_, j) => j !== i);
+                        updateSchedField('recipients', next);
+                      }}
+                      aria-label={`Remove recipient ${i + 1}`}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        color: '#ef4444',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <Button
+                  variant="secondary"
+                  onClick={() => updateSchedField('recipients', [...schedule.recipients, ''])}
+                  aria-label="Add recipient"
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  <Localized id="settings-schedule-add-recipient">
+                    <span>+ Add Recipient</span>
+                  </Localized>
+                </Button>
+              </div>
+            </span>
+          </div>
+
+          {/* Save schedule button */}
+          <div className="settings-field settings-field--horizontal" style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem', marginTop: '0.5rem' }}>
+            <span />
+            <span className="settings-field-input-wrap">
+              <Button
+                variant="primary"
+                onClick={saveSchedule}
+                disabled={scheduleSaving}
+                aria-label={l10n.getString('settings-schedule-save-btn')}
+              >
+                {scheduleSaving ? (
+                  <span className="btn-spinner" aria-hidden="true" />
+                ) : (
+                  <Localized id="settings-schedule-save-btn">
+                    <span>Save Schedule</span>
+                  </Localized>
+                )}
+              </Button>
+            </span>
+          </div>
+        </div>
+      )}
+    </Card>
+    </>
   );
 }

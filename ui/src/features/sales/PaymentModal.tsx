@@ -474,14 +474,12 @@ export default function PaymentModal({
       if (sessionToken) {
         try {
           await finalizeSale(sessionToken, saleResult.saleId);
-          console.log('[Sale] QR sale finalized:', saleResult.saleId);
         } catch (finalizeErr) {
-          console.error('[Sale] QR finalize FAILED, attempting void:', finalizeErr);
+          console.error('[Sale] Finalize FAILED, voiding:', finalizeErr);
           try {
             await voidPendingSale(sessionToken, saleResult.saleId);
-            console.log('[Sale] QR pending sale voided:', saleResult.saleId);
           } catch (voidErr) {
-            console.error('[Sale] QR void ALSO failed:', voidErr);
+            console.error('[Sale] Void ALSO failed:', voidErr);
           }
           throw finalizeErr;
         }
@@ -540,11 +538,13 @@ export default function PaymentModal({
 
   const splitComplete = useMemo(() => {
     if (splitTotals.remaining !== 0n) return false;
+    // Zero-amount sale: empty splits are acceptable
+    if (effectiveTotal === 0n) return true;
     return splits.every((s) => {
       if (s.method === 'other' && !s.otherLabel.trim()) return false;
       return parseSplitMinor(s.amountMinor) > 0n;
     });
-  }, [splits, splitTotals, parseSplitMinor]);
+  }, [splits, splitTotals, parseSplitMinor, effectiveTotal]);
 
   const addSplit = useCallback(() => {
     setSplits((prev) => [
@@ -600,7 +600,6 @@ export default function PaymentModal({
 
   const complete = useCallback(async () => {
     setProcessing(true);
-    console.log('[Sale] Starting sale...');
 
     try {
       // ── Open Bill: save cart without payment ──────────────
@@ -625,19 +624,16 @@ export default function PaymentModal({
           bill_type: 'open_bill',
           customer_name: customerName.trim(),
         });
-        console.log('[Sale] Open bill saved');
         setDone(true);
         return;
       }
 
-      console.log('[Sale] Creating cart...');
+
       const { cartId } = sessionToken
         ? await startSaleScoped(sessionToken, { currency: total.currency })
         : await startSale({ currency: total.currency });
-      console.log('[Sale] Cart created:', cartId);
 
       if (discountPercent > 0) {
-        console.log('[Sale] Setting discount:', discountPercent);
         if (sessionToken) {
           const scopedArgs: SetCartDiscountScopedArgs = { cartId, percent: discountPercent };
           if (discountLabel) scopedArgs.label = discountLabel;
@@ -650,7 +646,6 @@ export default function PaymentModal({
       }
 
       for (const line of lineItems) {
-        console.log('[Sale] Adding line:', line.sku, 'qty:', line.qty);
         const lineArgs = {
           cartId,
           sku: line.sku,
@@ -684,7 +679,6 @@ export default function PaymentModal({
           ? otherLabel.trim() || 'OTHER'
           : method.toUpperCase();
 
-      console.log('[Sale] Completing sale...');
       const serialNumberArgs: SerialNumberArg[] | undefined = serialNumbers
         ? Object.entries(serialNumbers)
             .filter(([_, s]) => s.trim().length > 0)
@@ -713,7 +707,6 @@ export default function PaymentModal({
             ...(method === 'credit' && customerName.trim() ? { customerName: customerName.trim() } : {}),
             ...(serialNumberArgs && serialNumberArgs.length > 0 ? { serialNumbers: serialNumberArgs } : {}),
           });
-      console.log('[Sale] Sale completed:', saleResult.saleId);
 
       // ADR-20: Finalize the pending sale (transitions 'pending' → 'completed')
       // For cash/credit/other/split methods, capture is instantaneous — finalize immediately.
@@ -721,13 +714,11 @@ export default function PaymentModal({
       if (sessionToken) {
         try {
           await finalizeSale(sessionToken, saleResult.saleId);
-          console.log('[Sale] Sale finalized:', saleResult.saleId);
         } catch (finalizeErr) {
-          // If finalize fails, attempt to void the pending sale to restore stock
-          console.error('[Sale] Finalize FAILED, attempting void:', finalizeErr);
+          // Attempt to void the pending sale to restore stock
+          console.error('[Sale] Finalize FAILED, voiding:', finalizeErr);
           try {
             await voidPendingSale(sessionToken, saleResult.saleId);
-            console.log('[Sale] Pending sale voided:', saleResult.saleId);
           } catch (voidErr) {
             console.error('[Sale] Void ALSO failed:', voidErr);
           }
@@ -737,7 +728,6 @@ export default function PaymentModal({
       }
 
       try {
-        console.log('[Sale] Fetching completed sale...');
         const completedSale = await getSale(saleResult.saleId);
 
         const receiptData: PrintSalesReceiptArgs = {
@@ -787,8 +777,8 @@ export default function PaymentModal({
         };
         // Store receipt data for preview (user chooses to print or skip)
         setReceiptArgs(receiptData);
-      } catch (e) {
-        console.warn('[Sale] Receipt/KDS step failed (non-blocking):', e);
+      } catch {
+        // Receipt/KDS may not be configured — non-blocking
       }
 
       try {
@@ -804,17 +794,15 @@ export default function PaymentModal({
             Number(loyaltyDiscount),
             saleResult.saleId,
           );
-          console.log('[Sale] Loyalty points redeemed');
-        } catch (e) {
-          console.warn('[Sale] Loyalty redemption failed (non-blocking):', e);
+        } catch {
+          // Loyalty redemption failure is non-blocking
         }
       }
 
       if (change) setChangeDue(change);
-      console.log('[Sale] Done');
       setDone(true);
     } catch (err) {
-      console.error('[Sale] FAILED:', err);
+      console.error('[Sale] Complete FAILED:', err);
       // Try to detect PartialStockResult from the backend error
       const errMsg = err instanceof Error ? err.message : String(err);
       const parsed = tryParsePartialStockResult(errMsg);
@@ -930,7 +918,6 @@ export default function PaymentModal({
           discountLabel={discountLabel ?? null}
           onComplete={() => {
             setShortfallResult(null);
-            console.log('[Sale] Completed via shortfall resolution');
             setDone(true);
           }}
           onCancel={() => {

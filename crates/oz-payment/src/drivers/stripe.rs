@@ -126,8 +126,11 @@ impl StripePaymentProcessor {
     /// should be directed to a mock server (e.g. `wiremock`).
     pub fn new_with_endpoint(secret_key: &str, api_base: &str, card_present: bool) -> Self {
         let mut headers = HeaderMap::new();
-        let mut auth_value =
-            HeaderValue::from_str(&format!("Bearer {}", secret_key)).expect("valid header value");
+        let mut auth_value = HeaderValue::from_str(&format!("Bearer {}", secret_key))
+            .unwrap_or_else(|e| {
+                tracing::error!(?e, "invalid Stripe API key — using placeholder auth header");
+                HeaderValue::from_static("Bearer placeholder")
+            });
         auth_value.set_sensitive(true);
         headers.insert(AUTHORIZATION, auth_value);
         headers.insert(
@@ -139,7 +142,13 @@ impl StripePaymentProcessor {
             .default_headers(headers)
             .no_proxy()
             .build()
-            .expect("valid reqwest client");
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    ?e,
+                    "failed to build reqwest Client for Stripe — using default"
+                );
+                reqwest::Client::new()
+            });
 
         Self {
             client: Arc::new(client),

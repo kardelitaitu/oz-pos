@@ -186,9 +186,8 @@ pub fn spawn_daemon(
 /// deduction locations. Uses a separate WAL-mode connection so the
 /// background task doesn't block or get blocked by the main connection.
 ///
-/// # Panics
-///
-/// Panics if the database at `db_path` cannot be opened.
+/// If the database at `db_path` cannot be opened, the reaper logs an error
+/// and exits — it does not crash the application.
 pub fn init_pending_sale_reaper(db_path: &std::path::Path) {
     use oz_core::db::Store;
     use std::time::Duration;
@@ -196,7 +195,13 @@ pub fn init_pending_sale_reaper(db_path: &std::path::Path) {
     let path = db_path.to_owned();
     spawn_daemon("pending-sale-reaper", async move {
         // Create a dedicated connection for the reaper.
-        let conn = Connection::open(&path).expect("pending sale reaper: open DB");
+        let conn = match Connection::open(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(?e, "pending sale reaper: failed to open DB — skipping");
+                return;
+            }
+        };
         conn.pragma_update(None, "foreign_keys", "ON").ok();
         conn.pragma_update(None, "journal_mode", "WAL").ok();
 

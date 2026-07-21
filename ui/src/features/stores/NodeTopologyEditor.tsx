@@ -793,15 +793,6 @@ export default function NodeTopologyEditor({
                 const labelT = 0.5;
                 const lx = cubicBezier(labelT, x1, x1 + dx, x2 - dx, x2);
                 const ly = cubicBezier(labelT, y1, y1, y2, y2);
-                // Tangent at bezier midpoint
-                const tangentX = 1.5 * (x2 - x1 - dx);
-                const tangentY = 1.5 * (y2 - y1);
-                // Perpendicular vector (ty, -tx) points "upward" for rightward wires
-                const perpLen = Math.max(Math.sqrt(tangentX * tangentX + tangentY * tangentY), 12);
-                const LABEL_OFFSET = 24;
-                const labelOffX = (tangentY / perpLen) * LABEL_OFFSET;
-                const labelOffY = (-tangentX / perpLen) * LABEL_OFFSET;
-
                 // Pulse follows the cubic bezier curve, not a straight line
                 const t = simPulseStep / 100;
                 const pulseX = cubicBezier(t, x1, x1 + dx, x2 - dx, x2);
@@ -834,7 +825,7 @@ export default function NodeTopologyEditor({
                     />
 
                     <g
-                      transform={`translate(${lx + labelOffX}, ${ly + labelOffY})`}
+                      transform={`translate(${lx}, ${ly})`}
                       className="wire-label-group"
                       onClick={() => handleToggleWireDirection(wire.id)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
@@ -842,8 +833,8 @@ export default function NodeTopologyEditor({
                       tabIndex={0}
                       aria-label="Toggle wire direction"
                     >
-                      <rect x="-40" y="-12" width="80" height="22" rx="11" className="wire-label-bg" />
-                      <text x="0" y="3" textAnchor="middle" className="wire-label-text">
+                      <rect x="-55" y="-12" width="110" height="24" rx="12" className="wire-label-bg" />
+                      <text x="0" y="4" textAnchor="middle" className="wire-label-text">
                         {wire.direction === 'two-way' ? '\u2194' : '\u2192'} {wire.label || ''}
                       </text>
                     </g>
@@ -888,10 +879,12 @@ export default function NodeTopologyEditor({
                         <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
                       </svg>
                     </span>
-                    <span className="node-type-icon">
-                      {node.type === 'store' ? <StoreIcon size={16} /> : node.type === 'workspace' ? <PosIcon size={16} /> : node.type === 'warehouse' ? <WarehouseIcon size={16} /> : <PrinterIcon size={16} />}
-                    </span>
-                    <span className="node-title">{node.name}</span>
+                    <div className="node-title-wrapper">
+                      <span className="node-type-icon">
+                        {node.type === 'store' ? <StoreIcon size={16} /> : node.type === 'workspace' ? <PosIcon size={16} /> : node.type === 'warehouse' ? <WarehouseIcon size={16} /> : <PrinterIcon size={16} />}
+                      </span>
+                      <span className="node-title">{node.name}</span>
+                    </div>
                   </div>
 
                   <div className="node-body">

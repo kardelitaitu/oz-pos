@@ -147,7 +147,10 @@ impl SquarePaymentProcessor {
     pub fn new_with_endpoint(api_key: &str, location_id: &str, api_base: &str) -> Self {
         let mut headers = HeaderMap::new();
         let mut auth_value =
-            HeaderValue::from_str(&format!("Bearer {}", api_key)).expect("valid header value");
+            HeaderValue::from_str(&format!("Bearer {}", api_key)).unwrap_or_else(|e| {
+                tracing::error!(?e, "invalid Square API key — using placeholder auth header");
+                HeaderValue::from_static("Bearer placeholder")
+            });
         auth_value.set_sensitive(true);
         headers.insert(AUTHORIZATION, auth_value);
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -156,7 +159,13 @@ impl SquarePaymentProcessor {
             .default_headers(headers)
             .no_proxy()
             .build()
-            .expect("valid reqwest client");
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    ?e,
+                    "failed to build reqwest Client for Square — using default"
+                );
+                reqwest::Client::new()
+            });
 
         Self {
             api_key: api_key.to_owned(),

@@ -126,11 +126,11 @@
 }
 
 .eod-report-print-btn {
-  color: var(--color-fg-primary) !important;
+  color: var(--color-fg-primary);
 }
 
 .eod-report-print-btn:hover:not(:disabled) {
-  background: var(--color-bg-hover) !important;
+  background: var(--color-bg-hover);
 }
 
 /* ── KPI Cards ────────────────────────────── */

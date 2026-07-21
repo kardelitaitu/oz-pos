@@ -16,10 +16,10 @@ fuzz_target!(|data: &[u8]| {
                 currency,
             };
             // Zero-value arithmetic must always succeed.
-            assert!(m.checked_add(m).is_ok(), "zero+zero overflowed");
-            assert!(m.checked_sub(m).is_ok(), "zero-zero overflowed");
-            assert!(m.checked_mul(1).is_ok(), "zero*1 overflowed");
-            assert!(m.checked_div(1).is_ok(), "zero/1 overflowed");
+            assert!(m.checked_add(m).is_some(), "zero+zero overflowed");
+            assert!(m.checked_sub(m).is_some(), "zero-zero overflowed");
+            assert!(m.checked_mul(1).is_some(), "zero*1 overflowed");
+            assert!(m.checked_div(1).is_some(), "zero/1 overflowed");
         }
     }
 

@@ -305,8 +305,8 @@
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
-.audit-log-critical-indicator {
-  padding: 0 !important;
+.audit-log-table .audit-log-critical-indicator {
+  padding: 0;
   width: 4px;
 }
 

@@ -270,8 +270,8 @@
 }
 
 /* ── Sortable column headers ──────────────────────────── */
-.sales-history-th {
-  padding: 0 !important;
+.sales-history-table .sales-history-th {
+  padding: 0;
 }
 
 .sales-history-sort-btn {

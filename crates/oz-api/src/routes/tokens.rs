@@ -30,9 +30,20 @@ pub struct CreateTokenResponse {
 }
 
 /// `POST /api/v1/tokens` — create a new API token.
+///
+/// Returns 500 if JWT encoding fails (should never happen in practice).
 pub async fn create_token_handler(Json(body): Json<CreateTokenRequest>) -> impl IntoResponse {
-    let resp = create_token(&body.label, body.expiry_hours, body.tenant_id.as_deref());
-    Json(CreateTokenResponse { token: resp })
+    match create_token(&body.label, body.expiry_hours, body.tenant_id.as_deref()) {
+        Ok(resp) => Json(CreateTokenResponse { token: resp }).into_response(),
+        Err(e) => {
+            tracing::error!(?e, "JWT encoding failed");
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(serde_json::json!({"error": "token generation failed"})),
+            )
+                .into_response()
+        }
+    }
 }
 
 #[cfg(test)]

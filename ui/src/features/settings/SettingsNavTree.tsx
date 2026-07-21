@@ -322,34 +322,7 @@ export default function SettingsNavTree({
     debouncedPersist('settings-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  // ── Recently-used sections (P60-3f): last 3 visited, persisted ──
-  const [recentSections, setRecentSections] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('settings-recent-sections');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed.slice(0, 3);
-      }
-    } catch { /* ignore corrupt JSON */ }
-    return [];
-  });
 
-  // Track navigation to update recently-used list (skip initial mount)
-  const isFirstRender = useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    setRecentSections((prev) =>
-      [activeSection, ...prev.filter((k) => k !== activeSection)].slice(0, 3),
-    );
-  }, [activeSection]);
-
-  // Persist recent sections to localStorage (separate from state update for purity)
-  useEffect(() => {
-    localStorage.setItem('settings-recent-sections', JSON.stringify(recentSections));
-  }, [recentSections]);
 
   // ── Pinned sections (P60-blog-1): saved to top of sidebar ───────
   const [pinnedSections, setPinnedSections] = useState<string[]>(() => {
@@ -375,40 +348,7 @@ export default function SettingsNavTree({
     );
   }, []);
 
-  // ── Drag-to-reorder recently-used sections (P60-3b) ────────────
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const handleDragStart = useCallback((index: number) => {
-    setDragIndex(index);
-  }, []);
-
-  const handleDragOver = useCallback((index: number) => {
-    setDragOverIndex(index);
-  }, []);
-
-  const handleDrop = useCallback(() => {
-    const fromIdx = dragIndex;
-    const toIdx = dragOverIndex;
-    if (fromIdx === null || toIdx === null || fromIdx === toIdx) {
-      setDragIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-    setRecentSections((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, moved!);
-      return next;
-    });
-    setDragIndex(null);
-    setDragOverIndex(null);
-  }, [dragIndex, dragOverIndex]);
-
-  const handleDragEnd = useCallback(() => {
-    setDragIndex(null);
-    setDragOverIndex(null);
-  }, []);
 
   // ── Resizable sidebar drag state (P60-blog-4) ────────────────
   const SIDEBAR_MIN_WIDTH = 250;
@@ -506,26 +446,39 @@ export default function SettingsNavTree({
     }
   }, [activeSection]);
 
-  // ── Accordion: single expanded category (persisted) ──────────
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(() => {
-    const stored = localStorage.getItem('settings-sidebar-expanded');
-    if (stored) return stored;
-    return 'Business';
+  // ── Collapsible categories (multi-expandable, persisted) ──────────
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('settings-sidebar-expanded');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore corrupt localStorage data
+    }
+    return ['Business'];
   });
 
   useEffect(() => {
-    debouncedPersist('settings-sidebar-expanded', expandedCategory);
-  }, [expandedCategory]);
+    debouncedPersist('settings-sidebar-expanded', JSON.stringify(expandedCategories));
+  }, [expandedCategories]);
 
   // Auto-expand category when navigating to a section
   useEffect(() => {
     const cat = CATEGORIES.find((c) => c.keys.includes(activeSection));
-    if (cat?.label) setExpandedCategory(cat.label);
+    if (cat?.label) {
+      setExpandedCategories((prev) => 
+        prev.includes(cat.label) ? prev : [...prev, cat.label]
+      );
+    }
   }, [activeSection]);
 
   const toggleCategory = useCallback((label: string) => {
     userToggleRef.current = true;
-    setExpandedCategory((prev) => (prev === label ? null : label));
+    setExpandedCategories((prev) => 
+      prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
+    );
   }, []);
 
   // ── Fuse.js fuzzy search (P60-blog-2) ────────────────────────
@@ -594,26 +547,27 @@ export default function SettingsNavTree({
   }, [q, visibleCount]);
 
   // ── Screen reader: announce category expand/collapse (P60-4e) ────
-  // We track previous expandedCategory to detect user-initiated toggles
+  // We track previous expandedCategories to detect user-initiated toggles
   // (as opposed to programmatic auto-expand when navigating sections).
-  const prevCategory = useRef(expandedCategory);
+  const prevCategories = useRef(expandedCategories);
   const userToggleRef = useRef(false);
   useEffect(() => {
     // Only announce if this change was user-initiated (via toggleCategory)
     if (userToggleRef.current) {
-      // isExpanding: expandedCategory is non-null when expanding, null when collapsing
-      const isExpanding = expandedCategory !== null;
-      const label = expandedCategory ?? prevCategory.current ?? '';
+      const prev = prevCategories.current;
+      const added = expandedCategories.find((c) => !prev.includes(c));
+      const removed = prev.find((c) => !expandedCategories.includes(c));
+      const label = added || removed || '';
       if (label) {
         const count = CATEGORIES.find((c) => c.label === label)?.keys.length ?? 0;
-        setAnnouncement(isExpanding
+        setAnnouncement(added
           ? `${label} category expanded, ${count} ${count === 1 ? 'item' : 'items'}`
           : `${label} category collapsed`);
       }
       userToggleRef.current = false;
     }
-    prevCategory.current = expandedCategory;
-  }, [expandedCategory]);
+    prevCategories.current = expandedCategories;
+  }, [expandedCategories]);
 
   // ── Treegrid keyboard navigation (P60-4c/d) ──────────────
   useEffect(() => {
@@ -654,9 +608,9 @@ export default function SettingsNavTree({
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         const cat = CATEGORIES.find((c) => c.keys.includes(activeSection));
-        if (cat && expandedCategory !== cat.label) {
+        if (cat && !expandedCategories.includes(cat.label)) {
           // Category is collapsed — expand it
-          setExpandedCategory(cat.label);
+          setExpandedCategories((prev) => [...prev, cat.label]);
         }
         return;
       }
@@ -665,9 +619,9 @@ export default function SettingsNavTree({
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         const cat = CATEGORIES.find((c) => c.keys.includes(activeSection));
-        if (cat && expandedCategory === cat.label) {
+        if (cat && expandedCategories.includes(cat.label)) {
           // Current section's category is expanded — collapse it
-          setExpandedCategory(null);
+          setExpandedCategories((prev) => prev.filter((c) => c !== cat.label));
         }
         return;
       }
@@ -686,7 +640,7 @@ export default function SettingsNavTree({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection, expandedCategory, mobileSidebarOpen, filteredCategories, onMobileClose, onNavigate]);
+  }, [activeSection, expandedCategories, mobileSidebarOpen, filteredCategories, onMobileClose, onNavigate]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -711,7 +665,7 @@ export default function SettingsNavTree({
           <button
             type="button"
             className="settings-sidebar-collapse-all"
-            onClick={() => setExpandedCategory(null)}
+            onClick={() => setExpandedCategories([])}
             aria-label={l10n.getString('settings-sidebar-collapse-all-aria')}
             title={l10n.getString('settings-sidebar-collapse-all-aria')}
           >
@@ -823,50 +777,6 @@ export default function SettingsNavTree({
             </div>
           )}
 
-          {/* ── Recently-used sections (P60-3f) ──────────────── */}
-          {!q && recentSections.length > 0 && !sidebarCollapsed && (
-            <div className="settings-sidebar-recent" role="group" aria-label="Recently viewed">
-              {recentSections.map((key, idx) => {
-                const item = NAV_ITEMS.find((n) => n.key === key);
-                if (!item) return null;
-                const isDragging = dragIndex === idx;
-                const isDropTarget = dragOverIndex === idx && !isDragging;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    role="treeitem"
-                    aria-level={2}
-                    aria-selected={activeSection === key}
-                    draggable="true"
-                    className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}${isDragging ? ' settings-recent-item--dragging' : ''}${isDropTarget ? ' settings-recent-item--drop-target' : ''}`}
-                    onClick={() => onNavigate(key)}
-                    onDragStart={() => handleDragStart(idx)}
-                    onDragOver={(e) => { e.preventDefault(); handleDragOver(idx); }}
-                    onDrop={(e) => { e.preventDefault(); handleDrop(); }}
-                    onDragEnd={handleDragEnd}
-                    aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
-                  >
-                    <span className="settings-nav-icon">{item.icon}</span>
-                    <span className="settings-nav-label">
-                      <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
-                    </span>
-                    <span className="settings-recent-drag-handle" aria-hidden="true" title="Drag to reorder">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
-                        <circle cx="9" cy="6" r="1.5" />
-                        <circle cx="15" cy="6" r="1.5" />
-                        <circle cx="9" cy="12" r="1.5" />
-                        <circle cx="15" cy="12" r="1.5" />
-                        <circle cx="9" cy="18" r="1.5" />
-                        <circle cx="15" cy="18" r="1.5" />
-                      </svg>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {q && filteredCategories.length === 0 ? (
             <div className="settings-sidebar-empty-search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="1.75rem" height="1.75rem" aria-hidden="true">
@@ -887,7 +797,7 @@ export default function SettingsNavTree({
             </div>
           ) : (
             filteredCategories.map((cat, catIdx) => {
-              const isExpanded = expandedCategory === cat.label;
+              const isExpanded = expandedCategories.includes(cat.label) || !!q;
               const hasActive = cat.keys.includes(activeSection);
               const panelId = `settings-panel-${cat.label.toLowerCase()}`;
               return (

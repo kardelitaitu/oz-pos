@@ -328,7 +328,9 @@ mod tests {
 
     /// Create a test JWT token.
     fn test_token(tenant_id: Option<&str>) -> String {
-        oz_api::auth::create_token("test", Some(24), tenant_id).token
+        oz_api::auth::create_token("test", Some(24), tenant_id)
+            .unwrap()
+            .token
     }
 
     /// Add an Authorization header to a request builder.

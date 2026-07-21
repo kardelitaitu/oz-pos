@@ -70,7 +70,7 @@ function Step {
     } else {
         $elapsed = (Get-Date) - $start
         Write-Host "PASS (" -NoNewline
-        Write-Host ($elapsed.TotalSeconds.ToString('0.0') + "s)")
+        Write-Host ("{0:0.0}s)" -f $elapsed.TotalSeconds)
     }
 }
 
@@ -144,7 +144,7 @@ $gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
 }
 if ($gitBash) {
     Step -Name "skill-drift-guard" -RetryCommand "& '$gitBash' .agents/skills/skill-drift-guard/scripts/detect.sh --report" -ScriptBlock {
-        & "C:\Program Files\Git\bin\bash.exe" .agents/skills/skill-drift-guard/scripts/detect.sh --report
+        & $gitBash .agents/skills/skill-drift-guard/scripts/detect.sh --report
     }
 } else {
     Write-Host "SKIP skill-drift-guard (bash not available)"
@@ -198,7 +198,7 @@ if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/packag
                 } else {
                     $elapsed = (Get-Date) - $e2eStart
                     Write-Host "PASS (" -NoNewline
-                    Write-Host ($elapsed.TotalSeconds.ToString('0.0') + "s)")
+                    Write-Host ("{0:0.0}s)" -f $elapsed.TotalSeconds)
                 }
             } catch {
                 Write-Host "WARN (error running E2E)" -ForegroundColor Yellow
@@ -224,7 +224,7 @@ Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.p
 # --- Done -----------------------------------------------------------------
 $totalElapsed = (Get-Date) - $totalStart
 $label = if ($Fast) { "fast" } else { "all" }
-Write-Host ("$label checks passed (" + $totalElapsed.TotalSeconds.ToString('0.0') + "s)")
+Write-Host ("{0} checks passed ({1:0.0}s)" -f $label, $totalElapsed.TotalSeconds)
 
 # --- Commit suggestion ----------------------------------------------------
 Write-Host ""

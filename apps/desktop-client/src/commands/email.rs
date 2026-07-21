@@ -130,6 +130,35 @@ pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppE
     ))
 }
 
+/// Get the current report schedule configuration.
+///
+/// Returns the saved [`ReportScheduleConfig`] or a default if none
+/// has been persisted yet.
+#[tauri::command]
+pub async fn get_report_schedule(
+    state: State<'_, AppState>,
+) -> Result<oz_core::export::ReportScheduleConfig, AppError> {
+    let conn = state.db.lock().await;
+    let store = oz_core::Store::new(&conn);
+    store
+        .get_report_schedule()
+        .map_err(|e| AppError::Internal(format!("Failed to load report schedule: {e}")))
+        .map(|opt| opt.unwrap_or_default())
+}
+
+/// Save the report schedule configuration.
+#[tauri::command]
+pub async fn save_report_schedule(
+    state: State<'_, AppState>,
+    config: oz_core::export::ReportScheduleConfig,
+) -> Result<(), AppError> {
+    let conn = state.db.lock().await;
+    let store = oz_core::Store::new(&conn);
+    store
+        .save_report_schedule(&config)
+        .map_err(|e| AppError::Internal(format!("Failed to save report schedule: {e}")))
+}
+
 /// Build an async SMTP transport from the config.
 /// Logs errors internally so the caller can provide a generic message.
 fn build_smtp_transport(

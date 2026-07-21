@@ -1,0 +1,227 @@
+# iOS / iPad Build Guide
+
+> **Purpose:** Build, sign, and distribute OZ-POS tablet client for iOS/iPad.
+>
+> **Related:** [iOS Install Test](./ios-install-test.md) · [Android Keystore Guide](./android-keystore-guide.md)
+> · [Mobile Release Checklist](../releases/mobile-checklist.md)
+
+## Prerequisites
+
+### Hardware
+
+- **macOS** (Apple Silicon or Intel) with Xcode 16+
+- A physical iPad for testing (simulator works for UI, but not for
+  camera/barcode scanning or NFC)
+
+### Accounts
+
+- **Apple Developer Program** ($99/year) — required for TestFlight and
+  App Store distribution
+- **Apple Team ID** — found at [developer.apple.com](https://developer.apple.com)
+  → Account → Membership
+
+### Software
+
+| Tool | Version | Notes |
+|------|---------|-------|
+| Xcode | 16+ | From Mac App Store or Xcodes.app |
+| Rust | Stable (1.88+) | Via rustup |
+| Node.js | 24+ | Via nvm or fnm |
+| Tauri CLI | 2.x | `cargo install tauri-cli --version "^2"` |
+| cocoapods | Latest | `sudo gem install cocoapods` (if needed) |
+
+## 1. Xcode Setup
+
+### Install Xcode
+
+```bash
+# Option A: Mac App Store (recommended)
+# Search "Xcode" and install
+
+# Option B: Xcodes.app (multiple versions)
+brew install xcodesorg/made/xcodes
+xcodes install 16.2
+
+# Accept license
+sudo xcodebuild -license accept
+```
+
+### Install Xcode Command Line Tools
+
+```bash
+xcode-select --install
+# Or point to the installed Xcode
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+## 2. Tauri iOS Project Initialization
+
+```bash
+# From the repo root
+cd apps/tablet-client
+
+# Initialize the iOS project (generates gen/apple/ directory)
+cargo tauri ios init
+
+# Verify the project was created
+ls -la gen/apple/
+# Should show *.xcodeproj or *.xcworkspace
+```
+
+## 3. Code Signing
+
+### Option A: Automatic (Xcode manages profiles)
+
+1. Open the generated Xcode project:
+   ```bash
+   open apps/tablet-client/gen/apple/OZ-POS.xcodeproj
+   ```
+2. Select the target → **Signing & Capabilities**
+3. Check **Automatically manage signing**
+4. Select your **Team** from the dropdown
+5. Xcode will create provisioning profiles automatically
+
+### Option B: Manual (CI/preferred for release)
+
+Generate a distribution certificate and provisioning profile:
+
+```bash
+# From a machine with the Apple Developer account
+# These steps are manual in Xcode:
+
+# 1. Xcode → Settings → Accounts → Add Apple ID
+# 2. Create a Distribution Certificate:
+#    Xcode → Preferences → Accounts → Manage Certificates → [+]
+#    → Apple Distribution
+# 3. Create a Provisioning Profile:
+#    developer.apple.com → Certificates, Identifiers & Profiles
+#    → Profiles → [+] → App Store → Select App ID → Select Certificate
+# 4. Download and double-click to install
+```
+
+### For CI, export the certificate:
+
+```bash
+# Export the p12 from Keychain Access
+# (requires the certificate installed on a Mac)
+security find-identity -v -p basic
+# Note the SHA-1 hash of the distribution certificate
+
+# Export to p12
+security export -k login.keychain \
+  -t certs \
+  -f pkcs12 \
+  -o /tmp/dist-cert.p12 \
+  -P "temporary-password"
+
+# Base64 encode
+base64 -w0 /tmp/dist-cert.p12 > dist-cert.p12.b64
+```
+
+Then configure the GitHub secrets as documented in `.github/workflows/ios.yml`.
+
+## 4. Building for Simulator
+
+```bash
+cd apps/tablet-client
+
+# Build and run on the default iOS simulator
+cargo tauri ios build --debug
+cargo tauri ios open  # Opens Xcode with the project
+```
+
+Then select an iPad simulator and press **Run** (▶).
+
+## 5. Building for Release (IPA)
+
+### Local build
+
+```bash
+cd apps/tablet-client
+
+# Build a release IPA
+cargo tauri ios build --release
+
+# Find the IPA
+find gen/apple -name "*.ipa" 2>/dev/null
+```
+
+### CI build
+
+Push a tag to trigger the `iOS Build` workflow:
+
+```bash
+git tag v0.0.17
+git push origin v0.0.17
+```
+
+Or trigger manually:
+1. GitHub → Actions → **iOS Build** → **Run workflow**
+
+## 6. TestFlight Distribution
+
+### Prerequisites
+
+- Apple Developer Program membership
+- App record created in App Store Connect
+
+### Steps
+
+1. **Create app record**:
+   - Go to [App Store Connect](https://appstoreconnect.apple.com)
+   - → Apps → [+] → New App
+   - Platform: **iOS/iPadOS**
+   - Name: **OZ-POS Tablet**
+   - Bundle ID: Match the `APPLE_BUNDLE_ID` secret
+
+2. **Upload IPA via Transporter**:
+   - Download [Transporter](https://apps.apple.com/us/app/transporter/id1450874784)
+   from the Mac App Store
+   - Open Transporter → [+] → Select IPA → Deliver
+   - Wait for validation and delivery (~5–10 minutes)
+
+3. **Set up TestFlight**:
+   - App Store Connect → App → TestFlight → **Manage Testers**
+   - Add internal testers (Apple ID emails)
+   - Enable **TestFlight Beta Testing**
+
+4. **Invite testers**:
+   - Once the build is processed (15–30 minutes),
+     click the build number → **Start Testing**
+   - Testers receive an invitation email from Apple
+
+## 7. Troubleshooting
+
+### "No Xcode project found"
+
+After `cargo tauri ios init`, the project may be in a different location:
+
+```bash
+# Search for the generated project
+find apps/tablet-client/gen -name "*.xcodeproj" -maxdepth 3
+find apps/tablet-client/gen -name "*.xcworkspace" -maxdepth 3
+```
+
+### Code signing fails in CI
+
+```bash
+# Verify certificate was imported correctly
+security find-identity -v -p basic
+
+# Verify provisioning profile
+security cms -D -i /path/to/profile.mobileprovision
+
+# Check for expired profiles
+ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
+```
+
+### IPA not generated
+
+The IPA output path varies by Xcode version:
+
+```bash
+# Common locations
+find target -name "*.ipa" 2>/dev/null
+find apps/tablet-client/gen/apple -name "*.ipa" 2>/dev/null
+find apps/tablet-client/target -name "*.ipa" 2>/dev/null
+```

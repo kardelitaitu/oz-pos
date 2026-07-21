@@ -790,3 +790,21 @@ settings-email-from-required = Alamat pengirim yang valid diperlukan
 settings-email-test-btn = Kirim Laporan Uji Coba
 settings-email-sending = Mengirim…
 settings-email-test-tooltip = Mengirim laporan uji coba ke penerima pertama yang dikonfigurasi
+
+# ── Email Report Schedule ──
+settings-section-schedule = Jadwal Laporan
+settings-schedule-loading = Memuat jadwal…
+settings-schedule-description = Konfigurasi seberapa sering email laporan terjadwal dikirim.
+settings-schedule-enabled = Aktifkan Laporan Terjadwal
+settings-schedule-cadence = Frekuensi
+settings-schedule-cadence-daily = Harian
+settings-schedule-cadence-weekly = Mingguan (Senin)
+settings-schedule-cadence-monthly = Bulanan (Tanggal 1)
+settings-schedule-time = Waktu Kirim
+settings-schedule-timezone = Zona Waktu
+settings-schedule-lookback = Hari Mundur
+settings-schedule-report-types = Jenis Laporan
+settings-schedule-recipients = Penerima
+settings-schedule-add-recipient = + Tambah Penerima
+settings-schedule-save-btn = Simpan Jadwal
+settings-email-schedule-saved = Jadwal laporan tersimpan

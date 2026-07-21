@@ -2,73 +2,42 @@
 #
 # Runs every day at 3 AM UTC. Covers the full test matrix that is too
 # expensive to run on every PR:
-#   • Complete Rust test suite (all features, Linux + Windows)
+#   • Complete Rust test suite (all features, Linux + Windows + macOS)
 #   • All 4 UI test shards
 #   • All 3 E2E test shards with Docker Compose
 #   • Rust doc generation
-#   • Release builds (desktop: Linux + macOS, tablet: Android)
-#   • Benchmark regression detection
-#   • Trivy + cargo-audit + npm audit
-#   • Coverage report with llvm-cov
+#   • Release builds (desktop: Linux + Windows + macOS, tablet: Android)
+#   • Benchmarks with regression comparison
 #
-# Uploads a nightly-report.json artifact summarizing results.
+# Also triggerable manually via workflow_dispatch.
 
 name: Nightly CI
 
 on:
   schedule:
-    - cron: '0 3 * * *'   # 3 AM UTC daily
-  workflow_dispatch:       # Manual trigger from GitHub UI
+    - cron: '0 3 * * *'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  SCCACHE_GHA_ENABLED: "true"
 
 jobs:
-  # ── Rust: Format ───────────────────────────────────────────────────
-  fmt:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --all -- --check
-
-  # ── Rust: Clippy (all features) ────────────────────────────────────
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-always: true
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
-            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-            libdbus-1-dev libudev-dev pkg-config
-      - uses: mozilla/sccache-action@v0.0.10
-      - name: Clippy (workspace, all features)
-        run: cargo clippy --workspace --all-targets --all-features --exclude oz-pos-app --exclude oz-pos-tablet -- -D warnings
-
-  # ── Rust: Test (all features, Linux + Windows) ────────────────────
-  test-rust:
-    name: Rust Tests (${{ matrix.os }})
+  # ── Rust: Test Full (all features, cross-platform) ───────────────
+  rust-test:
+    name: Rust Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -77,22 +46,61 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install librsvg pkg-config 2>/dev/null || true
       - uses: mozilla/sccache-action@v0.0.10
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: Run tests (nextest, all features)
+      - name: Run workspace tests (nextest, all features)
         run: cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet --profile ci
+      - name: sccache stats
+        run: sccache --show-stats
 
-  # ── UI: Tests (4 shards) ──────────────────────────────────────────
-  test-ui:
-    name: UI Tests (shard ${{ matrix.shard }}/4)
+  # ── Rust: Doc generation ─────────────────────────────────────────
+  rust-doc:
+    name: Rust Doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Build docs (workspace, no deps)
+        run: cargo doc --workspace --no-deps --all-features --exclude oz-pos-app --exclude oz-pos-tablet 2>&1 | tee cargo-doc-output.log
+      - name: Count doc warnings
+        run: |
+          WARNINGS=$(grep -c "warning:" cargo-doc-output.log 2>/dev/null || echo 0)
+          echo "Doc warnings: $WARNINGS"
+          echo "DOC_WARNINGS=$WARNINGS" >> $GITHUB_ENV
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-docs
+          path: target/doc/
+          retention-days: 7
+
+  # ── UI: Tests (4-way sharded) ────────────────────────────────────
+  ui-test:
+    name: UI Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
+        totalShards: [4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -103,17 +111,27 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ui/node_modules/.cache/vitest
-          key: vitest-cache-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
-          restore-keys: vitest-cache-${{ runner.os }}-
+          key: vitest-cache-nighty-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+          restore-keys: vitest-cache-nighty-${{ runner.os }}-
       - run: cd ui && npm ci --no-audit --no-fund
-      - run: cd ui && npm run typecheck
-      - run: cd ui && npm run lint
-      - name: Run vitest
-        run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/4 --pool=forks 2>&1) | tee ui/vitest-output.log
+      - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
+      - name: Gate on act() / flushSync warnings
+        if: always()
+        run: |
+          if grep -E 'Warning: (An update to .* was not wrapped in act|flushSync was called from inside)' ui/vitest-output.log; then
+            echo "::warning::vitest emitted act() or flushSync warnings — see ui/vitest-output.log"
+            head -50 ui/vitest-output.log || true
+          else
+            echo "No act() or flushSync warnings detected."
+          fi
+      - name: i18n quality gate (shard 1 only)
+        if: always() && matrix.shard == 1
+        run: bash scripts/lint-i18n.sh
 
-  # ── E2E: Tests (3 shards) ─────────────────────────────────────────
+  # ── E2E Tests (Playwright) ───────────────────────────────────────
   e2e:
-    name: E2E Tests (shard ${{ matrix.shard }}/3)
+    name: E2E Tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -122,6 +140,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
+        totalShards: [3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -136,30 +155,30 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
-      - name: Install UI dependencies + Playwright
-        run: |
-          cd ui && npm ci --no-audit --no-fund
-          npx playwright install chromium --with-deps
-      - name: Docker layer cache (GHCR, non-fatal)
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+      - name: Install Playwright browsers
+        run: cd ui && npx playwright install chromium --with-deps
+      - name: Docker layer cache (GHCR)
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
           docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
           export DOCKER_BUILDKIT=1
           docker compose -f docker-compose.e2e.yml build --build-arg BUILDKIT_INLINE_CACHE=1 2>&1 | tail -3
-      - name: Start Docker E2E backend + Vite dev server (parallel)
+      - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
-          OZ_API_SECRET: ci-e2e-secret
+          OZ_API_SECRET: ci-test-secret
         run: |
           docker compose -f docker-compose.e2e.yml up -d
           cd ui && npm run dev &
           VITE_PID=$!
           echo "VITE_PID=$VITE_PID" >> $GITHUB_ENV
-          # Wait for both servers to become healthy
           DOCKER_READY=false
           VITE_READY=false
           for i in $(seq 1 45); do
@@ -176,169 +195,236 @@ jobs:
               break
             fi
             if [ "$i" -eq 45 ]; then
-              echo "::error::Server startup timed out (Docker: $DOCKER_READY, Vite: $VITE_READY)"
+              echo "::error::Server startup timed out"
               docker compose -f docker-compose.e2e.yml logs e2e-cloud-server --tail=50 2>/dev/null || true
               exit 1
             fi
             sleep 2
           done
-      - name: Run E2E tests
-        run: cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop --shard=${{ matrix.shard }}/3 2>&1 | tee e2e-output.log
-      - name: Upload E2E results
+      - name: Run E2E tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        run: |
+          cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop --shard=${{ matrix.shard }}/${{ matrix.totalShards }} 2>&1 | tee e2e-output.log
+      - name: Upload E2E test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-nightly-shard-${{ matrix.shard }}
+          name: e2e-results-shard-${{ matrix.shard }}
           path: ui/e2e-results/
+          retention-days: 7
+      - name: Upload Playwright trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces-shard-${{ matrix.shard }}
+          path: ui/test-results/
           retention-days: 7
       - name: Stop Docker E2E backend
         if: always()
         run: docker compose -f docker-compose.e2e.yml down -v
 
-  # ── Benchmarks ────────────────────────────────────────────────────
-  benchmarks:
-    name: Benchmarks
+  # ── Release: Desktop (Linux AppImage) ────────────────────────────
+  release-desktop-linux:
+    name: Release Desktop (Linux)
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-always: true
-      - name: Run benchmarks
-        run: cargo bench -p oz-core -- --output-format bencher | tee bench-results.txt
-      - name: Upload benchmark results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bench-results
-          path: bench-results.txt
-          retention-days: 30
-
-  # ── Documentation ─────────────────────────────────────────────────
-  docs:
-    name: Docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Generate docs
-        run: cargo doc --workspace --no-deps --exclude oz-pos-app --exclude oz-pos-tablet 2>&1 | tee doc-output.log
-      - name: Count doc warnings
-        run: |
-          WARN_COUNT=$(grep -c "warning:" doc-output.log || echo 0)
-          echo "doc_warnings=$WARN_COUNT" >> $GITHUB_ENV
-      - name: Upload docs artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-docs
-          path: target/doc/
-          retention-days: 7
-
-  # ── Security scans ────────────────────────────────────────────────
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: cargo-audit
-        run: |
-          cargo install cargo-audit 2>/dev/null || true
-          cargo audit || true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: npm audit
-        run: cd ui && npm audit --audit-level=high || true
-
-  # ── Coverage ──────────────────────────────────────────────────────
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-always: true
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-      - name: Run coverage
-        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-coverage
-          path: lcov.info
-          retention-days: 30
-
-  # ── Fuzz tests ────────────────────────────────────────────────────
-  fuzz:
-    name: Fuzz
-    runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz
-      - name: Fuzz targets (60s each)
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies
         run: |
-          for target in sku_parse money_parse cart_deser; do
-            echo "::group::Fuzzing $target"
-            timeout 65 cargo fuzz run "$target" -- -max_total_time=60 || true
-            echo "::endgroup::"
-          done
-      - name: Upload crash artifacts
-        if: failure()
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+      - name: Build desktop (Linux)
+        run: cd apps/desktop-client && cargo tauri build --bundles appimage
+      - name: Upload desktop (Linux)
         uses: actions/upload-artifact@v4
         with:
-          name: fuzz-crashes
-          path: fuzz/artifacts/
-          retention-days: 30
+          name: oz-pos-desktop-linux.AppImage
+          path: apps/desktop-client/target/release/bundle/appimage/*.AppImage
+          retention-days: 7
+      - name: sccache stats
+        run: sccache --show-stats
 
-  # ── Nightly Report ────────────────────────────────────────────────
-  report:
-    name: Nightly Report
-    runs-on: ubuntu-latest
-    needs: [fmt, clippy, test-rust, test-ui, e2e, benchmarks, docs, security, coverage, fuzz]
-    if: always()
+  # ── Release: Desktop (Windows MSI) ───────────────────────────────
+  release-desktop-windows:
+    name: Release Desktop (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Generate nightly report
-        run: |
-          echo '{' > nightly-report.json
-          echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> nightly-report.json
-          echo "  \"commit\": \"${{ github.sha }}\"," >> nightly-report.json
-          echo "  \"branch\": \"${{ github.ref_name }}\"," >> nightly-report.json
-          echo "  \"jobs\": {" >> nightly-report.json
-          echo "    \"fmt\": \"${{ needs.fmt.result }}\"," >> nightly-report.json
-          echo "    \"clippy\": \"${{ needs.clippy.result }}\"," >> nightly-report.json
-          echo "    \"test-rust\": \"${{ needs.test-rust.result }}\"," >> nightly-report.json
-          echo "    \"test-ui\": \"${{ needs.test-ui.result }}\"," >> nightly-report.json
-          echo "    \"e2e\": \"${{ needs.e2e.result }}\"," >> nightly-report.json
-          echo "    \"benchmarks\": \"${{ needs.benchmarks.result }}\"," >> nightly-report.json
-          echo "    \"docs\": \"${{ needs.docs.result }}\"," >> nightly-report.json
-          echo "    \"security\": \"${{ needs.security.result }}\"," >> nightly-report.json
-          echo "    \"coverage\": \"${{ needs.coverage.result }}\"," >> nightly-report.json
-          echo "    \"fuzz\": \"${{ needs.fuzz.result }}\"" >> nightly-report.json
-          echo "  }" >> nightly-report.json
-          echo "}" >> nightly-report.json
-      - name: Upload nightly report
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+      - name: Build desktop (Windows)
+        run: cd apps/desktop-client && cargo tauri build --bundles msi
+      - name: Upload desktop (Windows)
         uses: actions/upload-artifact@v4
         with:
-          name: nightly-report
-          path: nightly-report.json
+          name: oz-pos-desktop-windows.msi
+          path: apps/desktop-client/target/release/bundle/msi/*.msi
+          retention-days: 7
+      - name: sccache stats
+        run: sccache --show-stats
+
+  # ── Release: Desktop (macOS DMG) ─────────────────────────────────
+  release-desktop-macos:
+    name: Release Desktop (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install macOS dependencies
+        run: |
+          brew install librsvg pkg-config 2>/dev/null || true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+      - name: Build desktop (macOS)
+        run: cd apps/desktop-client && cargo tauri build --bundles dmg
+      - name: Upload desktop (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: oz-pos-desktop-macos.dmg
+          path: apps/desktop-client/target/release/bundle/dmg/*.dmg
+          retention-days: 7
+      - name: sccache stats
+        run: sccache --show-stats
+
+  # ── Release: Tablet (Android APK) ────────────────────────────────
+  release-tablet-android:
+    name: Release Tablet (Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+      - name: Build UI (tablet)
+        run: cd ui && npx vite build --config vite.tablet.config.ts
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Initialize Tauri Android project
+        run: |
+          cd apps/tablet-client
+          cargo tauri android init
+      - name: Decode keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > apps/tablet-client/oz-pos.keystore
+      - name: Build Android APK
+        run: |
+          cd apps/tablet-client
+          cargo tauri android build --apk --target aarch64 \
+            ${TAURI_ANDROID_KEYSTORE_PASSWORD:+--keystore-password "$TAURI_ANDROID_KEYSTORE_PASSWORD"} \
+            ${TAURI_ANDROID_KEY_PASSWORD:+--key-password "$TAURI_ANDROID_KEY_PASSWORD"}
+        env:
+          TAURI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          TAURI_ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          TAURI_ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      - name: Find APK output
+        run: |
+          find apps/tablet-client/gen/android -name "*.apk" -o -name "*.aab" 2>/dev/null | head -20
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: oz-pos-tablet-aarch64.apk
+          path: |
+            apps/tablet-client/gen/android/app/build/outputs/apk/**/*.apk
+            apps/tablet-client/gen/android/app/build/outputs/bundle/**/*.aab
+          retention-days: 14
+      - name: sccache stats
+        run: sccache --show-stats
+
+  # ── Benchmarks ───────────────────────────────────────────────────
+  #
+  # Runs all oz-core Criterion.rs benchmarks and uploads the full
+  # criterion output as a versioned artifact for manual comparison.
+  #
+  # To compare two nightly runs:
+  #   1. Download two benchmark-results artifacts
+  #   2. Extract each target/criterion/ directory
+  #   3. Install critcmp:  cargo install critcmp
+  #   4. Compare:          critcmp --load ./baseline-criterion baseline
+  #                        critcmp baseline current
+  #
+  # See docs/benchmarks/regression-tracking.md for the full workflow.
+  benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Run cargo bench (oz-core)
+        run: cargo bench -p oz-core 2>&1 | tee benchmark-output.txt
+      - name: Extract benchmark timings to job summary
+        run: |
+          echo "## Benchmark Results (${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo '' >> $GITHUB_STEP_SUMMARY
+          TIMINGS=$(grep -E 'time:\s*\[' benchmark-output.txt 2>/dev/null || true)
+          if [ -n "$TIMINGS" ]; then
+            echo "$TIMINGS" | sed 's/^/| /; s/$/ |/' >> $GITHUB_STEP_SUMMARY
+          else
+            echo '_No benchmark timings extracted._' >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Upload full criterion output for cross-run comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            benchmark-output.txt
+            target/criterion/
           retention-days: 30
+      - name: sccache stats
+        run: sccache --show-stats

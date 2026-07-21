@@ -164,7 +164,7 @@
 /* ── Last checked row ──────────────────────────────────── */
 
 .settings-license-row--last-checked {
-  border-bottom: none !important;
+  border-bottom: none;
   padding-top: var(--space-1);
   padding-bottom: var(--space-1);
 }

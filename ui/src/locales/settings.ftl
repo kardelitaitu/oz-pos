@@ -812,3 +812,21 @@ settings-email-from-required = A valid from-address is required
 settings-email-test-btn = Send Test Report
 settings-email-sending = Sending…
 settings-email-test-tooltip = Sends a test report to the first configured recipient
+
+# ── Email Report Schedule ──
+settings-section-schedule = Report Schedule
+settings-schedule-loading = Loading schedule…
+settings-schedule-description = Configure how often scheduled report emails are sent.
+settings-schedule-enabled = Enable Scheduled Reports
+settings-schedule-cadence = Frequency
+settings-schedule-cadence-daily = Daily
+settings-schedule-cadence-weekly = Weekly (Monday)
+settings-schedule-cadence-monthly = Monthly (1st)
+settings-schedule-time = Send Time
+settings-schedule-timezone = Timezone
+settings-schedule-lookback = Lookback Days
+settings-schedule-report-types = Report Types
+settings-schedule-recipients = Recipients
+settings-schedule-add-recipient = + Add Recipient
+settings-schedule-save-btn = Save Schedule
+settings-email-schedule-saved = Report schedule saved
