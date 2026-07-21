@@ -1,8 +1,8 @@
-# 0.0.18 — E2E Tests, Cloud Server, Docker, i18n & Release Readiness
+# 0.0.18 — E2E, Cloud Server, Payments, Notifications, Docker, i18n & Release
 
-> **Goal:** Polish sprint across 5 areas: expand E2E test coverage, harden the cloud server for production, improve Docker/local dev experience, complete i18n coverage, and prepare release infrastructure.
+> **Goal:** Comprehensive sprint across 10 areas: expand E2E coverage, harden cloud server, integrate Midtrans QRIS payments, build low-stock alert system, document APIs, verify PostgreSQL sync, improve Docker/DevEx, complete i18n, add customer display HAL, and prepare release infrastructure.
 >
-> **Current state:** 0 / 10 items complete (0%) · Updated 2026-07-21
+> **Current state:** 0 / 20 items complete (0%) · Updated 2026-07-21
 
 ---
 
@@ -12,10 +12,15 @@
 |---|------|-------|--------|
 | 🟢 | E2E Test Expansion | 2 | 0/2 ⏳ |
 | 🔴 | Cloud Server Hardening | 2 | 0/2 ⏳ |
-| 🟡 | Docker & DevEx | 2 | 0/2 ⏳ |
-| 🔵 | i18n Completion | 2 | 0/2 ⏳ |
-| 🟣 | Release Readiness | 2 | 0/2 ⏳ |
-| **Total** | | **10** | **0/10 (0%)** |
+| 🟠 | Midtrans QRIS Payment Gateway | 2 | 0/2 ⏳ |
+| 🟡 | Low Stock Alert System | 2 | 0/2 ⏳ |
+| 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
+| 🟣 | PostgreSQL Sync Daemon | 2 | 0/2 ⏳ |
+| ⚪ | Docker & DevEx | 2 | 0/2 ⏳ |
+| 🟤 | i18n Completion | 2 | 0/2 ⏳ |
+| 🔷 | Customer Display HAL Driver | 2 | 0/2 ⏳ |
+| 🔶 | Release Readiness | 2 | 0/2 ⏳ |
+| **Total** | | **20** | **0/20 (0%)** |
 
 ---
 
@@ -37,7 +42,43 @@
 
 ---
 
-### 🟡 Docker & DevEx
+### 🟠 Midtrans QRIS Payment Gateway
+
+> **Goal:** Integrate Midtrans QRIS (Quick Response Code Indonesian Standard) as the primary payment gateway for the Indonesian market. Critical for GTM Phase 1 (July–Sept 2026). Listed for Standard+ tiers in BUSINESS_PLAN.md.
+
+- [ ] **Rust Midtrans client crate** — Create `crates/oz-payment/src/midtrans.rs` with: Snap API integration (create transaction, get token), Core API (charge, capture, refund), QRIS dynamic generation via SNAP, webhook signature verification, and sandbox/live environment switching. Model after the existing Stripe integration pattern.
+- [ ] **Midtrans payment UI flow** — Add QRIS payment method to PaymentModal with auto-refreshing QR code display, polling for payment status (pending→settlement), timeout handling (15 min QRIS expiry), and receipt generation.
+
+---
+
+### 🟡 Low Stock Alert System
+
+> **Goal:** Build a notification system that alerts staff when inventory falls below reorder thresholds. Leverages existing `stock.adjusted` event bus + inventory module events.
+
+- [ ] **Stock alert event handler** — Add `StockAlertHandler` to `modules/inventory/src/handlers.rs` that subscribes to `stock.adjusted` events, compares current stock against `low_stock_threshold` and `reorder_point` fields, and publishes `stock.low` / `stock.out_of_stock` events with product details.
+- [ ] **Alert notification UI** — Build a notification bell/badge in the shell header showing unread stock alerts. Add an `AlertsPanel` slide-out with alert list (product name, current stock, threshold, timestamp), acknowledge/dismiss actions, and a settings toggle for alert thresholds.
+
+---
+
+### 🔵 API Documentation (OpenAPI)
+
+> **Goal:** Generate and serve OpenAPI 3.1 documentation for the cloud server REST API, enabling third-party integrations and developer onboarding.
+
+- [ ] **OpenAPI spec generation** — Add `utoipa` derive macros to all cloud server route handlers (sync, health, webhooks, auth). Generate `openapi.json` at build time. Include request/response schemas, error codes, and authentication requirements.
+- [ ] **Swagger UI + Scalar docs** — Serve Swagger UI at `/api/docs` and Scalar at `/api/docs/scalar` in dev mode. Add a `--no-docs` CLI flag for production. Link from README and ARCHITECTURE.md.
+
+---
+
+### 🟣 PostgreSQL Sync Daemon Verification
+
+> **Goal:** Verify and test the existing PostgreSQL outbox sync daemon (`platform/sync/src/pg_daemon.rs`) for production readiness. Listed for Standard+ tiers in BUSINESS_PLAN.md.
+
+- [ ] **PostgreSQL sync integration tests** — Write integration tests using `testcontainers` (or Docker Compose) that: spin up a real PostgreSQL, create the outbox schema, insert test events, run the daemon, and verify events are consumed and acknowledged. Test idempotency and duplicate event handling.
+- [ ] **Sync daemon edge cases** — Test: PostgreSQL connection loss → reconnect with backoff, outbox table truncation recovery, large batch processing (10K+ events), concurrent daemon instances (leader election via advisory lock), and graceful shutdown mid-batch.
+
+---
+
+### ⚪ Docker & DevEx
 
 > **Goal:** Make local development frictionless with one-command setup and improved Docker Compose.
 
@@ -46,7 +87,7 @@
 
 ---
 
-### 🔵 i18n Completion
+### 🟤 i18n Completion
 
 > **Goal:** Audit and complete Fluent localization coverage across all screens.
 
@@ -55,7 +96,16 @@
 
 ---
 
-### 🟣 Release Readiness
+### 🔷 Customer Display HAL Driver
+
+> **Goal:** Add a hardware abstraction for customer-facing displays (pole displays, secondary screens) used in retail checkout. Listed for Pro tier in BUSINESS_PLAN.md.
+
+- [ ] **CustomerDisplay trait + mock** — Add `CustomerDisplay` trait to `crates/oz-hal/src/lib.rs` with methods: `show_welcome(message)`, `show_transaction(items, total)`, `show_qr_code(data)`, `clear()`. Create mock implementation in `crates/oz-hal/src/drivers/mock.rs` for testing.
+- [ ] **Customer display UI integration** — Wire the HAL trait into POS checkout flow: show welcome message on idle, display scanned items + running total during sale, show QRIS QR code during payment, show "Thank you" on completion. Feature-gated behind `FEATURES.CUSTOMER_DISPLAY`.
+
+---
+
+### 🔶 Release Readiness
 
 > **Goal:** Prepare infrastructure for confident releases — cross-platform build verification and a release checklist.
 
