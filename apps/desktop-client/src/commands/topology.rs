@@ -5,6 +5,7 @@
 //! command returns `None` so the front-end falls back to the built-in
 //! retail preset.
 
+use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tauri::{State, command};
 
@@ -115,27 +116,51 @@ fn default_direction() -> String {
     "one-way".into()
 }
 
-// ── Commands ───────────────────────────────────────────────────────
+// ── Free functions (testable without Tauri runtime) ────────────────
 
 const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
 
-/// Save the topology graph to the settings store.
+/// Serialise and persist topology data to the settings store.
 ///
-/// Serialises the nodes + wires payloads as JSON and writes them to
-/// the `oz-pos/topology` setting key. Any previous topology is
-/// overwritten.
+/// Writes the nodes + wires payloads as JSON under the
+/// `oz-pos/topology` key. Any previous topology is overwritten.
+pub fn save_topology_data(
+    conn: &Connection,
+    nodes: Vec<TopologyNodePayload>,
+    wires: Vec<TopologyWirePayload>,
+) -> Result<(), AppError> {
+    let data = TopologyData { nodes, wires };
+    let json = serde_json::to_string(&data).map_err(|e| AppError::Internal(e.to_string()))?;
+    oz_core::Settings::set(conn, TOPOLOGY_SETTING_KEY, &json)?;
+    Ok(())
+}
+
+/// Load and deserialise persisted topology data.
+///
+/// Returns `None` when no topology has been saved yet.
+pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, AppError> {
+    let raw = oz_core::Settings::get(conn, TOPOLOGY_SETTING_KEY)?;
+    match raw {
+        Some(json) => {
+            let data: TopologyData =
+                serde_json::from_str(&json).map_err(|e| AppError::Internal(e.to_string()))?;
+            Ok(Some(data))
+        }
+        None => Ok(None),
+    }
+}
+
+// ── Commands ───────────────────────────────────────────────────────
+
+/// Save the topology graph to the settings store.
 #[command]
 pub async fn save_topology(
     nodes: Vec<TopologyNodePayload>,
     wires: Vec<TopologyWirePayload>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let data = TopologyData { nodes, wires };
-    let json = serde_json::to_string(&data).map_err(|e| AppError::Internal(e.to_string()))?;
-
     let conn = state.db.lock().await;
-    oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json)?;
-    Ok(())
+    save_topology_data(&conn, nodes, wires)
 }
 
 /// Load the persisted topology graph.
@@ -145,15 +170,7 @@ pub async fn save_topology(
 #[command]
 pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<TopologyData>, AppError> {
     let conn = state.db.lock().await;
-    let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)?;
-    match raw {
-        Some(json) => {
-            let data: TopologyData =
-                serde_json::from_str(&json).map_err(|e| AppError::Internal(e.to_string()))?;
-            Ok(Some(data))
-        }
-        None => Ok(None),
-    }
+    load_topology_data(&conn)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

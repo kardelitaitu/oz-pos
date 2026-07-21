@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 8 / 32 items complete (25%) · Updated 2026-07-22
+> **Current state:** 10 / 32 items complete (31%) · Updated 2026-07-22
 
 ---
 
@@ -13,7 +13,7 @@
 | 🟢 | E2E Test Expansion | 2 | 0/2 ⏳ |
 | 🔴 | Cloud Server Hardening | 2 | 1/2 ⏳ |
 | 🟠 | Midtrans QRIS Payment Gateway | 2 | 2/2 ✅ |
-| 🟡 | Low Stock Alert System | 2 | 0/2 ⏳ |
+| 🟡 | Low Stock Alert System | 2 | 2/2 ✅ |
 | 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
 | 🟣 | PostgreSQL Sync Daemon | 2 | 0/2 ⏳ |
 | ⚪ | Docker & DevEx | 2 | 2/2 ✅ |
@@ -26,7 +26,7 @@
 | 🧱 | Shared DTO & Validation Crates | 2 | 0/2 ⏳ |
 | ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
-| **Total** | | **32** | **8/32 (25%)** |
+| **Total** | | **32** | **10/32 (31%)** |
 
 ### ⚡ Recommended Execution Order
 
@@ -86,8 +86,8 @@
 
 > **Goal:** Build a notification system that alerts staff when inventory falls below reorder thresholds. Leverages existing `stock.adjusted` event bus + inventory module events.
 
-- [ ] **Stock alert event handler** — Add `StockAlertHandler` to `modules/inventory/src/handlers.rs` that subscribes to `stock.adjusted` events, compares current stock against `low_stock_threshold` and `reorder_point` fields, and publishes `stock.low` / `stock.out_of_stock` events with product details.
-- [ ] **Alert notification UI** — Build a notification bell/badge in the shell header showing unread stock alerts. Add an `AlertsPanel` slide-out with alert list (product name, current stock, threshold, timestamp), acknowledge/dismiss actions, and a settings toggle for alert thresholds.
+- [x] **Stock alert event handler** ✅ — `check_stock_threshold_and_alert_in_tx()` in `crates/oz-core/src/db/products.rs`: synchronous check after every `adjust_stock_at_location_with_reason`. Threshold lookup (product+location → product+global → skip), deduped INSERT into `stock_alert_events`, auto-resolve when stock recovers. 7 unit tests.
+- [x] **Alert notification UI** ✅ — `StockAlertPanel.tsx`: bell badge with count, loading/error/empty states, critical (red) vs warning (amber) severity indicators, relative time formatting, [Acknowledge] button calling `acknowledge_stock_alert_scoped`, 30s configurable polling, location-filterable. `api/inventory.ts` has `getActiveStockAlerts()`/`acknowledgeStockAlert()`. 6 UI tests.
 
 ---
 
