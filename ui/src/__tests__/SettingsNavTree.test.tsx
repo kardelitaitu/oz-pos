@@ -98,6 +98,15 @@ function getActiveNavItem() {
   return screen.getByRole('button', { current: 'page' });
 }
 
+/** Fire a keyboard event on a target element (defaults to document).
+ *  Events bubble to document, matching the component's document-level
+ *  keydown listener. */
+function fireKey(key: string, dispatchTarget: EventTarget = document) {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  dispatchTarget.dispatchEvent(event);
+  return event;
+}
+
 // ── Tests ────────────────────────────────────────────────────────
 
 describe('SettingsNavTree', () => {
@@ -306,6 +315,108 @@ describe('SettingsNavTree', () => {
     if (backdrop) await user.click(backdrop);
 
     expect(onMobileClose).toHaveBeenCalledTimes(1);
+  });
+
+  // ── Keyboard navigation (P60-5b) ───────────────────────────
+
+  describe('keyboard navigation', () => {
+    it('ArrowDown moves to the next nav item', () => {
+      const onNavigate = vi.fn();
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="general" />);
+
+      fireKey('ArrowDown');
+
+      // general → next item in Business category is appearance
+      expect(onNavigate).toHaveBeenCalledWith('appearance');
+    });
+
+    it('ArrowUp moves to the previous nav item', () => {
+      const onNavigate = vi.fn();
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="appearance" />);
+
+      fireKey('ArrowUp');
+
+      // appearance → previous item is general
+      expect(onNavigate).toHaveBeenCalledWith('general');
+    });
+
+    it('ArrowDown wraps around from last to first item', () => {
+      const onNavigate = vi.fn();
+      // Active section is promotions (last in Management category, which is last)
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="promotions" />);
+
+      fireKey('ArrowDown');
+
+      // promotions → wraps around to first item: general
+      expect(onNavigate).toHaveBeenCalledWith('general');
+    });
+
+    it('ArrowUp wraps around from first to last item', () => {
+      const onNavigate = vi.fn();
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="general" />);
+
+      fireKey('ArrowUp');
+
+      // general → wraps around to last item: promotions
+      expect(onNavigate).toHaveBeenCalledWith('promotions');
+    });
+
+    it('ArrowDown is no-op when focused on an input element', () => {
+      const onNavigate = vi.fn();
+      render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} activeSection="general" />);
+
+      // Dispatch event on an input, letting it bubble to document.
+      // The component checks event.target.tagName and skips INPUT/SELECT/TEXTAREA.
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      try {
+        fireKey('ArrowDown', input);
+      } finally {
+        document.body.removeChild(input);
+      }
+
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
+
+    it('ArrowDown is no-op when search yields no results', () => {
+      const onNavigate = vi.fn();
+      render(
+        <SettingsNavTree
+          {...defaultProps}
+          onNavigate={onNavigate}
+          activeSection="general"
+          searchQuery="xyznonexistent"
+        />,
+      );
+
+      fireKey('ArrowDown');
+
+      expect(onNavigate).not.toHaveBeenCalled();
+    });
+
+    it('Escape calls onMobileClose when mobile sidebar is open', () => {
+      const onMobileClose = vi.fn();
+      render(
+        <SettingsNavTree
+          {...defaultProps}
+          mobileSidebarOpen={true}
+          onMobileClose={onMobileClose}
+        />,
+      );
+
+      fireKey('Escape');
+
+      expect(onMobileClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('Escape does not call onMobileClose when mobile sidebar is closed', () => {
+      const onMobileClose = vi.fn();
+      render(<SettingsNavTree {...defaultProps} onMobileClose={onMobileClose} />);
+
+      fireKey('Escape');
+
+      expect(onMobileClose).not.toHaveBeenCalled();
+    });
   });
 
   // ── aria-expanded and panel linking ──────────────────────

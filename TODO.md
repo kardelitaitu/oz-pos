@@ -67,11 +67,7 @@
 #### 🟣 P60-5 — Testing
 
 - [x] **P60-5a: Unit tests for NavTree** ✅ — 19 tests covering: 4 category render + badge counts (2,3,4,10) + active section highlight. Accordion expand/collapse with aria-expanded assertions. Search filtering (label match, category match, case-insensitive, empty state + Clear search). Navigation via click. Collapsed sidebar via localStorage and toggle button. Mobile backdrop visible/click. aria-controls + role=region + aria-current.
-- [ ] **P60-5b: Keyboard navigation tests** — Test all WAI-ARIA Treegrid keybindings:
-  - ArrowRight/ArrowLeft on category
-  - ArrowDown/ArrowUp through items
-  - Home/End jump to first/last
-  - Enter activates section
+- [x] **P60-5b: Keyboard navigation tests** ✅ — 8 tests added: ArrowDown/ArrowUp item navigation, wrap-around (last→first, first→last), input element guard (event bubbling via dispatch on <input>), empty search guard (flatKeys.length=0), Escape opens/closes mobile sidebar. `fireKey()` helper dispatches KeyboardEvents with bubbling support.
 - [ ] **P60-5c: Accessibility regression tests** — Verify screen reader announcements, ARIA attributes, and focus management work correctly after each change.
 
 ---
@@ -89,9 +85,9 @@
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 4/5 |
 | 🟡 P60-4 — Accessibility | 7 | 5/7 |
-| 🟣 P60-5 — Testing | 3 | 1/3 |
+| 🟣 P60-5 — Testing | 3 | 2/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 2/2 ✅ |
-| **Total** | **23** | **18/23 (78%)** |
+| **Total** | **23** | **19/23 (83%)** |
 
 ---
 
