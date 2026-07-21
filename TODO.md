@@ -79,7 +79,7 @@
 #### ⚪ P60-6 — Polish & docs
 
 - [ ] **P60-6a: Reduced motion** — Add `@media (prefers-reduced-motion: reduce)` overrides for all new animations (accordion slide, badge pop, collapse width).
-- [ ] **P60-6b: Update CHANGELOG.md** — Document the sidebar refactoring for 0.0.16.
+- [x] **P60-6b: Update CHANGELOG.md** ✅ — Documented all 0.0.16 settings sidebar changes: P60-1 extraction, P60-2 reliability, P60-3 UX (accordion animation, badge pop, collapsed mode, search highlighting), P60-4 accessibility (5 items), P60-5 testing (19 tests), P60-6a reduced motion.
 
 ### Progress Tracking
 
@@ -90,8 +90,8 @@
 | 🟢 P60-3 — UX improvements | 5 | 4/5 |
 | 🟡 P60-4 — Accessibility | 7 | 5/7 |
 | 🟣 P60-5 — Testing | 3 | 1/3 |
-| ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **17/23 (74%)** |
+| ⚪ P60-6 — Polish & docs | 2 | 2/2 ✅ |
+| **Total** | **23** | **18/23 (78%)** |
 
 ---
 
