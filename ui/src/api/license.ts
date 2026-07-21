@@ -3,10 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 /** Possible license verification outcomes. */
 export type LicenseVerificationStatus = 'valid' | 'expired' | 'gracePeriod' | 'invalidSignature' | 'clockTampered' | 'missing';
 
-/** License verification status returned by the backend. */
+/** License verification status returned by the backend (local, no network). */
 export interface LicenseStatusDto {
   is_active: boolean;
   status: LicenseVerificationStatus;
+  /** Subscription tier — available immediately from local data. */
+  tier: string | null;
   payload: string | null;
   message: string | null;
 }

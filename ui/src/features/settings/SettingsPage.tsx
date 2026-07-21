@@ -60,7 +60,7 @@ import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
-import { checkLicenseStatus } from '@/api/license';
+import { getLicenseStatus } from '@/api/license';
 import { saveTopology, type TopologyNodePayload, type TopologyWirePayload } from '@/api/topology';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
@@ -402,7 +402,7 @@ export default function SettingsPage() {
       getUserPreferences(userId),
       getBrandSettings(),
       getVersion(),
-      checkLicenseStatus(),
+      getLicenseStatus(),
     ]);
     const [rR, sR, cR, syncR, prefsR, brandR, verR, licR] = results;
 
@@ -437,7 +437,7 @@ export default function SettingsPage() {
         applyAccentPalette(palette);
       }
       if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
-      if (licR.status === 'fulfilled') setLicenseTier(licR.value.tier.toLowerCase());
+      if (licR.status === 'fulfilled' && licR.value.tier) setLicenseTier(licR.value.tier.toLowerCase());
 
       // Only surface a full-page error when every single API failed.
       if (results.every((r) => r.status === 'rejected')) {
