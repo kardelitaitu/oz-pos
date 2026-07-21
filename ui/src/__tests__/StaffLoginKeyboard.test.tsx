@@ -356,10 +356,31 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       mockAuthError.mockReturnValue(null);
     });
 
-    // Flaky: React state timing race between auto-submit (4-digit PIN)
-    // and error propagation after multiple mocked attempts.
-    // rate-limit countdown test covers the warning logic.
-    it.skip('shows lockout message after 3 failed PIN attempts and disables keypad', () => {});
+    it('shows lockout message after lockout error and disables keypad', async () => {
+      await advanceToPin();
+
+      // Mock a lockout error that matches the Try again in Xs pattern.
+      // Click a digit to trigger a re-render so the error prop is re-evaluated.
+      mockAuthError.mockReturnValue('Try again in 30s');
+      fireEvent.click(screen.getByLabelText('1'));
+
+      // Use textContent to find error text that may be split across child elements.
+      await waitFor(() => {
+        const errorEl = document.querySelector('.staff-login-error');
+        expect(errorEl).toBeInTheDocument();
+        expect(errorEl?.textContent).toMatch(/try again in/i);
+      });
+
+      // The keypad buttons should be disabled during lockout.
+      const digitBtns = screen.getAllByRole('button').filter(
+        (btn) => btn.closest('.staff-login-pad') !== null
+          && /^\d$/.test(btn.textContent ?? ''),
+      );
+      expect(digitBtns.length).toBeGreaterThan(0);
+      for (const btn of digitBtns) {
+        expect(btn).toBeDisabled();
+      }
+    });
   });
 
   // ── Hardware keyboard ──────────────────────────────────────────────

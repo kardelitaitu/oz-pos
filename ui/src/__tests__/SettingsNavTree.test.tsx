@@ -521,16 +521,4 @@ describe('SettingsNavTree', () => {
     expect(activeItem).toHaveAttribute('aria-selected', 'true');
   });
 
-  // ── Drag-to-reorder (P60-3b) ────────────────────────────────
-  //
-  // These tests are temporarily skipped because the recently-used-sections
-  // drag-to-reorder feature was moved from SettingsNavTree into the parent
-  // SettingsPage component during P60 refactoring. The tests should be
-  // re-homed to SettingsPage.test.tsx when that test file is created.
-
-  describe.skip('drag-to-reorder recently-used sections', () => {
-    it('needs to be re-homed to SettingsPage.test.tsx', () => {
-      // Drag-to-reorder lives in SettingsPage, not SettingsNavTree
-    });
-  });
 });

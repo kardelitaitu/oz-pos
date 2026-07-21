@@ -180,10 +180,15 @@ mod tests {
     #[test]
     fn windows_overwrite_existing() {
         let k = test_keyring();
-        let name = "oz-pos-test-overwrite";
+        // Use a unique name to avoid race with parallel test runs.
+        let name = &format!("oz-pos-test-overwrite-{}", std::process::id());
         let _ = k.delete_secret(name);
 
         k.set_secret(name, "v1").unwrap();
+        // Windows Credential Manager may need a brief pause between
+        // rapid writes on the same key. A short sleep avoids a race
+        // where the second write arrives before the first is committed.
+        std::thread::sleep(std::time::Duration::from_millis(10));
         k.set_secret(name, "v2").unwrap();
         assert_eq!(k.get_secret(name).unwrap(), Some("v2".into()));
 
