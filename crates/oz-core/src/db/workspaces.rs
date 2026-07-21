@@ -352,9 +352,12 @@ impl Store<'_> {
         store_id: &str,
     ) -> Result<Vec<WorkspaceDto>, CoreError> {
         // 1. Owner bypass — all active instances in store.
-        // TODO(ADR #4 Phase 2): Check user_store_access before returning all instances.
-        // In multi-store mode, role-owner with user_store_access rows should only see
-        // instances from assigned stores (see ADR #4 Security Architecture §3).
+        //
+        // ADR #4 Phase 2: If the user has explicit `user_store_access` rows,
+        // even owner/admin roles are limited to their assigned stores.
+        // This enables multi-store mode where an owner may only manage a
+        // subset of stores. When no `user_store_access` rows exist, the
+        // legacy single-store bypass applies unchanged.
         if role_id == "role-owner"
             || role_id == "role-admin"
             || role_id == "admin"
@@ -362,6 +365,33 @@ impl Store<'_> {
             || role_id == "role-staff"
             || role_id == "manager"
         {
+            // Phase 2: check user_store_access for multi-store enforcement.
+            if let Some(uid) = user_id {
+                let has_store_access_rows: bool = self
+                    .conn
+                    .query_row(
+                        "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
+                        params![uid],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(false);
+
+                if has_store_access_rows {
+                    let store_accessible: bool = self
+                        .conn
+                        .query_row(
+                            "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
+                            params![uid, store_id],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or(false);
+
+                    if !store_accessible {
+                        return Ok(vec![]); // User has no access to this store
+                    }
+                }
+            }
+
             return self.list_store_instances(store_id, user_id);
         }
 
@@ -1222,6 +1252,59 @@ mod tests {
         store.archive_instance("default-kds").unwrap();
         let after = store.count_active_instances("default").unwrap();
         assert_eq!(after, 4);
+    }
+
+    #[test]
+    fn owner_with_user_store_access_filtered_by_assigned_stores() {
+        let (store, user_id) = fresh();
+        // Create a second store profile so we have multiple stores.
+        store
+            .conn
+            .execute(
+                "INSERT INTO store_profiles (id, name, address, currency, timezone)
+                 VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+                [],
+            )
+            .unwrap();
+        // Seed a workspace instance in store-b so we can detect cross-store leakage.
+        store
+            .create_workspace_instance(
+                "store-b-restaurant-pos",
+                "restaurant-pos",
+                "store-b",
+                "Store B POS",
+                "",
+                None,
+            )
+            .unwrap();
+
+        // Seed user_store_access — user-1 only has access to "default", not "store-b".
+        store
+            .conn
+            .execute(
+                "INSERT INTO user_store_access (user_id, store_id, access_level)
+                 VALUES (?1, 'default', 'manager')",
+                params![user_id],
+            )
+            .unwrap();
+
+        // User can see instances in "default" store.
+        let dto_default = store
+            .list_workspaces("role-owner", Some(&user_id), "default")
+            .unwrap();
+        assert!(
+            !dto_default.is_empty(),
+            "should see default store instances"
+        );
+
+        // User CANNOT see instances in "store-b" — empty result.
+        let dto_store_b = store
+            .list_workspaces("role-owner", Some(&user_id), "store-b")
+            .unwrap();
+        assert!(
+            dto_store_b.is_empty(),
+            "owner with user_store_access should not see unassigned store"
+        );
     }
 
     #[test]

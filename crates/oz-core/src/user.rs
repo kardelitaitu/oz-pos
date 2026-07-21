@@ -190,6 +190,10 @@ pub mod builtin_roles {
     pub const CASHIER: &str = "role-cashier";
     /// Kitchen — can view and update KDS orders.
     pub const KITCHEN: &str = "role-kitchen";
+    /// Staff — operational role with Manager-level access minus settings.
+    pub const STAFF: &str = "role-staff";
+    /// Custom — fully flexible role with no preset permissions.
+    pub const CUSTOM: &str = "role-custom";
 }
 
 /// Well-known seed user ids.

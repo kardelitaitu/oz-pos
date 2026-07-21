@@ -100,8 +100,16 @@ export function getNavItems(
 
 function hasNavRole(userRole: string | undefined, required: RequiredRole): boolean {
   if (!userRole) return false;
-  if (required === 'owner') return userRole === 'owner';
-  return userRole === 'manager' || userRole === 'owner';
+  const role = userRole.toLowerCase();
+  const isOwner = role === 'owner' || role === 'role-owner';
+  const isManager = isOwner ||
+    role === 'manager' ||
+    role === 'role-manager' ||
+    role === 'staff' ||
+    role === 'role-staff';
+
+  if (required === 'owner') return isOwner;
+  return isManager;
 }
 
 /**

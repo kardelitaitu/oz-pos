@@ -110,17 +110,13 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   const isManager =
     session?.role_name === "manager" ||
     session?.role_name === "owner" ||
-    session?.role_name === "admin" ||
+    session?.role_name === "staff" ||
     session?.role_name === "role-manager" ||
     session?.role_name === "role-owner" ||
-    session?.role_name === "role-admin";
+    session?.role_name === "role-staff";
   const isOwner =
     session?.role_name === "owner" ||
-    session?.role_name === "admin" ||
-    session?.role_name === "manager" ||
-    session?.role_name === "role-owner" ||
-    session?.role_name === "role-admin" ||
-    session?.role_name === "role-manager";
+    session?.role_name === "role-owner";
 
   const value = useMemo<AuthContextValue>(
     () => ({
