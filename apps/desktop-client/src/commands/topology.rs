@@ -1685,4 +1685,842 @@ mod tests {
             Some("standalone-subtitle")
         );
     }
+
+    // ── NaN / Infinity coordinate bugs ─────────────────────────────
+    //
+    // BUG: serde_json (default) serialises f64::NAN / INFINITY as JSON
+    // `null`, which then FAILS to deserialise back to f64.  Any node
+    // whose coordinates become non-finite poisons the entire topology
+    // until manually deleted from the settings table.
+
+    #[test]
+    fn nan_x_coordinate_roundtrip_fails() {
+        let node = TopologyNodePayload {
+            id: "nan-x".into(),
+            node_type: "store".into(),
+            name: "NaN X".into(),
+            subtitle: None,
+            x: f64::NAN,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        // NaN is serialised as JSON `null` — which f64 cannot parse.
+        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "NaN x should fail roundtrip");
+    }
+
+    #[test]
+    fn nan_y_coordinate_roundtrip_fails() {
+        let node = TopologyNodePayload {
+            id: "nan-y".into(),
+            node_type: "store".into(),
+            name: "NaN Y".into(),
+            subtitle: None,
+            x: 0.0,
+            y: f64::NAN,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "NaN y should fail roundtrip");
+    }
+
+    #[test]
+    fn infinity_x_coordinate_roundtrip_fails() {
+        let node = TopologyNodePayload {
+            id: "inf-x".into(),
+            node_type: "store".into(),
+            name: "Inf X".into(),
+            subtitle: None,
+            x: f64::INFINITY,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "Infinity x should fail roundtrip");
+    }
+
+    #[test]
+    fn neg_infinity_y_coordinate_roundtrip_fails() {
+        let node = TopologyNodePayload {
+            id: "neg-inf-y".into(),
+            node_type: "store".into(),
+            name: "Neg Inf Y".into(),
+            subtitle: None,
+            x: 0.0,
+            y: f64::NEG_INFINITY,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let result: Result<TopologyNodePayload, _> = serde_json::from_str(&json);
+        assert!(result.is_err(), "-Infinity y should fail roundtrip");
+    }
+
+    #[test]
+    fn mixed_nan_poisons_entire_topology() {
+        let good = TopologyNodePayload {
+            id: "good".into(),
+            node_type: "store".into(),
+            name: "Good".into(),
+            subtitle: None,
+            x: 1.0,
+            y: 2.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let bad = TopologyNodePayload {
+            id: "bad".into(),
+            node_type: "store".into(),
+            name: "Bad".into(),
+            subtitle: None,
+            x: f64::NAN,
+            y: 3.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let data = TopologyData {
+            nodes: vec![good, bad],
+            wires: vec![],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        // Even one NaN in a multi-node topology makes the entire thing unloadable.
+        let result: Result<TopologyData, _> = serde_json::from_str(&json);
+        assert!(
+            result.is_err(),
+            "single NaN should poison entire TopologyData"
+        );
+    }
+
+    // ── Graph integrity — wiring bugs ──────────────────────────────
+
+    #[test]
+    fn wire_to_nonexistent_node_persists() {
+        let conn = fresh_conn();
+        let data = TopologyData {
+            nodes: vec![],
+            wires: vec![TopologyWirePayload {
+                id: "orphan".into(),
+                from_node_id: "ghost".into(),
+                to_node_id: "nowhere".into(),
+                direction: "one-way".into(),
+                label: None,
+                from_port: None,
+                to_port: None,
+            }],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.wires.len(), 1);
+        assert_eq!(loaded.wires[0].from_node_id, "ghost");
+        // System does NOT validate node references — this is a design gap.
+        let node_ids: Vec<&str> = loaded.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(!node_ids.contains(&"ghost"));
+    }
+
+    #[test]
+    fn duplicate_node_ids_are_not_rejected() {
+        let data = TopologyData {
+            nodes: vec![
+                TopologyNodePayload {
+                    id: "dup-id".into(),
+                    node_type: "store".into(),
+                    name: "First".into(),
+                    subtitle: None,
+                    x: 0.0,
+                    y: 0.0,
+                    tier_requirement: None,
+                    telemetry_badge: None,
+                    telemetry_status: None,
+                    metadata: None,
+                },
+                TopologyNodePayload {
+                    id: "dup-id".into(),
+                    node_type: "workspace".into(),
+                    name: "Second".into(),
+                    subtitle: None,
+                    x: 100.0,
+                    y: 0.0,
+                    tier_requirement: None,
+                    telemetry_badge: None,
+                    telemetry_status: None,
+                    metadata: None,
+                },
+            ],
+            wires: vec![],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        let roundtripped: TopologyData = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.nodes.len(), 2);
+        assert_eq!(roundtripped.nodes[0].id, roundtripped.nodes[1].id);
+    }
+
+    #[test]
+    fn thousand_wires_between_two_nodes_roundtrip() {
+        let wires: Vec<TopologyWirePayload> = (0..1000)
+            .map(|i| TopologyWirePayload {
+                id: format!("w-{i}"),
+                from_node_id: "a".into(),
+                to_node_id: "b".into(),
+                direction: "one-way".into(),
+                label: None,
+                from_port: None,
+                to_port: None,
+            })
+            .collect();
+        let data = TopologyData {
+            nodes: vec![],
+            wires,
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        let roundtripped: TopologyData = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.wires.len(), 1000);
+        assert_eq!(roundtripped.wires[0].id, "w-0");
+        assert_eq!(roundtripped.wires[999].id, "w-999");
+    }
+
+    #[test]
+    fn star_topology_preserved_through_db() {
+        let conn = fresh_conn();
+        let mut nodes: Vec<TopologyNodePayload> = (0..50)
+            .map(|i| TopologyNodePayload {
+                id: format!("leaf-{i}"),
+                node_type: "workspace".into(),
+                name: format!("Leaf {i}"),
+                subtitle: None,
+                x: (i as f64) * 20.0,
+                y: 0.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            })
+            .collect();
+        nodes.push(TopologyNodePayload {
+            id: "hub".into(),
+            node_type: "store".into(),
+            name: "Hub".into(),
+            subtitle: None,
+            x: 500.0,
+            y: 500.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        });
+        let wires: Vec<TopologyWirePayload> = (0..50)
+            .map(|i| TopologyWirePayload {
+                id: format!("w-{i}"),
+                from_node_id: "hub".into(),
+                to_node_id: format!("leaf-{i}"),
+                direction: "two-way".into(),
+                label: None,
+                from_port: None,
+                to_port: None,
+            })
+            .collect();
+        let data = TopologyData { nodes, wires };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.nodes.len(), 51);
+        assert_eq!(loaded.wires.len(), 50);
+        let hub_wires: Vec<&TopologyWirePayload> = loaded
+            .wires
+            .iter()
+            .filter(|w| w.from_node_id == "hub")
+            .collect();
+        assert_eq!(hub_wires.len(), 50);
+    }
+
+    // ── Large-scale persistence stress ─────────────────────────────
+
+    #[test]
+    fn five_thousand_node_graph_db_roundtrip() {
+        let conn = fresh_conn();
+        let nodes: Vec<TopologyNodePayload> = (0..5000)
+            .map(|i| TopologyNodePayload {
+                id: format!("node-{i:05}"),
+                node_type: if i % 4 == 0 {
+                    "store"
+                } else if i % 4 == 1 {
+                    "workspace"
+                } else if i % 4 == 2 {
+                    "warehouse"
+                } else {
+                    "hardware"
+                }
+                .into(),
+                name: format!("Node {i}"),
+                subtitle: if i % 10 == 0 {
+                    Some(format!("tenth-{i}"))
+                } else {
+                    None
+                },
+                x: (i as f64) * 1.5,
+                y: (i as f64) * 0.5,
+                tier_requirement: if i % 3 == 0 {
+                    Some("premium".into())
+                } else {
+                    None
+                },
+                telemetry_badge: if i % 5 == 0 {
+                    Some("Online".into())
+                } else {
+                    None
+                },
+                telemetry_status: if i % 7 == 0 {
+                    Some("online".into())
+                } else {
+                    None
+                },
+                metadata: None,
+            })
+            .collect();
+        let data = TopologyData {
+            nodes,
+            wires: vec![],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.nodes.len(), 5000);
+        // Verify a few sample nodes for data integrity.
+        assert_eq!(loaded.nodes[0].id, "node-00000");
+        assert_eq!(loaded.nodes[999].node_type, "hardware");
+        assert_eq!(loaded.nodes[1000].name, "Node 1000");
+        // Nodes where i % 10 == 0 get a subtitle ("tenth-0", "tenth-10", …).
+        assert_eq!(loaded.nodes[0].subtitle.as_deref(), Some("tenth-0"));
+        assert_eq!(loaded.nodes[10].subtitle.as_deref(), Some("tenth-10"));
+        assert!(
+            loaded.nodes[9].subtitle.is_none(),
+            "i=9 → no subtitle (9 % 10 = 9)"
+        );
+    }
+
+    #[test]
+    fn three_thousand_wires_db_roundtrip() {
+        let conn = fresh_conn();
+        let nodes: Vec<TopologyNodePayload> = (0..100)
+            .map(|i| TopologyNodePayload {
+                id: format!("n-{i}"),
+                node_type: "store".into(),
+                name: format!("Node {i}"),
+                subtitle: None,
+                x: 0.0,
+                y: 0.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            })
+            .collect();
+        let wires: Vec<TopologyWirePayload> = (0..3000)
+            .map(|i| TopologyWirePayload {
+                id: format!("w-{i}"),
+                from_node_id: format!("n-{}", i % 100),
+                to_node_id: format!("n-{}", (i + 1) % 100),
+                direction: if i % 2 == 0 { "one-way" } else { "two-way" }.into(),
+                label: if i % 10 == 0 {
+                    Some(format!("Label {i}"))
+                } else {
+                    None
+                },
+                from_port: None,
+                to_port: None,
+            })
+            .collect();
+        let data = TopologyData { nodes, wires };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.nodes.len(), 100);
+        assert_eq!(loaded.wires.len(), 3000);
+        assert_eq!(loaded.wires[0].direction, "one-way");
+        assert_eq!(loaded.wires[1].direction, "two-way");
+        assert_eq!(loaded.wires[0].label.as_deref(), Some("Label 0"));
+        assert!(loaded.wires[1].label.is_none());
+    }
+
+    // ── Extreme string values ──────────────────────────────────────
+
+    #[test]
+    fn node_id_with_special_url_chars() {
+        let special_id = "store/1?region=west#section@host:port/path";
+        let node = TopologyNodePayload {
+            id: special_id.into(),
+            node_type: "store".into(),
+            name: "URL Chars".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.id, special_id);
+    }
+
+    #[test]
+    fn hundred_kb_node_name_roundtrip() {
+        let long_name = "X".repeat(100_000);
+        let node = TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "store".into(),
+            name: long_name.clone(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.name.len(), 100_000);
+        assert_eq!(roundtripped.name, long_name);
+    }
+
+    #[test]
+    fn hundred_kb_wire_label_roundtrip() {
+        let long_label = "Y".repeat(100_000);
+        let wire = TopologyWirePayload {
+            id: "w1".into(),
+            from_node_id: "a".into(),
+            to_node_id: "b".into(),
+            direction: "one-way".into(),
+            label: Some(long_label.clone()),
+            from_port: None,
+            to_port: None,
+        };
+        let json = serde_json::to_string(&wire).unwrap();
+        let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.label.as_deref().unwrap().len(), 100_000);
+    }
+
+    // ── Direction edge cases ───────────────────────────────────────
+
+    #[test]
+    fn empty_direction_preserved() {
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":""}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.direction, "");
+    }
+
+    #[test]
+    fn direction_with_unicode() {
+        let wire = TopologyWirePayload {
+            id: "w1".into(),
+            from_node_id: "a".into(),
+            to_node_id: "b".into(),
+            direction: "↔ bidirectional ←→".into(),
+            label: None,
+            from_port: None,
+            to_port: None,
+        };
+        let json = serde_json::to_string(&wire).unwrap();
+        let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.direction, "↔ bidirectional ←→");
+    }
+
+    #[test]
+    fn direction_preserved_through_db() {
+        let conn = fresh_conn();
+        let data = TopologyData {
+            nodes: vec![TopologyNodePayload {
+                id: "n1".into(),
+                node_type: "store".into(),
+                name: "Dir Test".into(),
+                subtitle: None,
+                x: 0.0,
+                y: 0.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            }],
+            wires: vec![TopologyWirePayload {
+                id: "w1".into(),
+                from_node_id: "n1".into(),
+                to_node_id: "n2".into(),
+                direction: "custom-hybrid".into(),
+                label: None,
+                from_port: None,
+                to_port: None,
+            }],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.wires[0].direction, "custom-hybrid");
+    }
+
+    // ── Metadata extreme values ────────────────────────────────────
+
+    #[test]
+    fn deeply_nested_metadata_roundtrip() {
+        let mut nested = serde_json::json!("deep");
+        for _ in 0..64 {
+            nested = serde_json::json!({"level": nested});
+        }
+        let node = TopologyNodePayload {
+            id: "deep-meta".into(),
+            node_type: "store".into(),
+            name: "Deep".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: Some(nested),
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        let meta = roundtripped.metadata.unwrap();
+        // Navigate 64 levels deep.
+        let mut current = &meta;
+        for _ in 0..64 {
+            current = &current["level"];
+        }
+        assert_eq!(current.as_str(), Some("deep"));
+    }
+
+    #[test]
+    fn metadata_with_large_array() {
+        let large_array: Vec<i64> = (0..10_000).collect();
+        let node = TopologyNodePayload {
+            id: "array-meta".into(),
+            node_type: "store".into(),
+            name: "Large Array".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: Some(serde_json::json!({"values": large_array})),
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        let meta = roundtripped.metadata.unwrap();
+        assert_eq!(meta["values"].as_array().unwrap().len(), 10_000);
+        assert_eq!(meta["values"][9999], 9999);
+    }
+
+    #[test]
+    fn metadata_with_hundred_kb_string() {
+        let big_string = "Z".repeat(100_000);
+        let node = TopologyNodePayload {
+            id: "big-str-meta".into(),
+            node_type: "store".into(),
+            name: "Big String".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: Some(serde_json::json!({"big_field": big_string})),
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        let meta = roundtripped.metadata.unwrap();
+        assert_eq!(meta["big_field"].as_str().unwrap().len(), 100_000);
+    }
+
+    // ── Ordering stability through DB ──────────────────────────────
+
+    #[test]
+    fn wire_order_preserved_through_db() {
+        let conn = fresh_conn();
+        let wires: Vec<TopologyWirePayload> = (0..100)
+            .map(|i| TopologyWirePayload {
+                id: format!("ordered-wire-{i:03}"),
+                from_node_id: "a".into(),
+                to_node_id: "b".into(),
+                direction: "one-way".into(),
+                label: Some(format!("label-{i}")),
+                from_port: None,
+                to_port: None,
+            })
+            .collect();
+        let data = TopologyData {
+            nodes: vec![],
+            wires,
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        for i in 0..100 {
+            assert_eq!(
+                loaded.wires[i].id,
+                format!("ordered-wire-{i:03}"),
+                "wire order broken at index {i}"
+            );
+            assert_eq!(
+                loaded.wires[i].label.as_deref(),
+                Some(format!("label-{i}").as_str()),
+            );
+        }
+    }
+
+    #[test]
+    fn node_order_preserved_through_db() {
+        let conn = fresh_conn();
+        let nodes: Vec<TopologyNodePayload> = (0..100)
+            .map(|i| TopologyNodePayload {
+                id: format!("ordered-node-{i:03}"),
+                node_type: "store".into(),
+                name: format!("Node {i}"),
+                subtitle: None,
+                x: i as f64,
+                y: 0.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            })
+            .collect();
+        let data = TopologyData {
+            nodes,
+            wires: vec![],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        for i in 0..100 {
+            assert_eq!(
+                loaded.nodes[i].id,
+                format!("ordered-node-{i:03}"),
+                "node order broken at index {i}"
+            );
+            assert_eq!(loaded.nodes[i].name, format!("Node {i}"),);
+        }
+    }
+
+    // ── Concurrent modification simulation ─────────────────────────
+
+    #[test]
+    fn sequential_save_a_then_b_then_verify_b() {
+        let conn = fresh_conn();
+        // First, save A.
+        let data_a = TopologyData {
+            nodes: vec![TopologyNodePayload {
+                id: "a".into(),
+                node_type: "store".into(),
+                name: "Data A".into(),
+                subtitle: None,
+                x: 0.0,
+                y: 0.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            }],
+            wires: vec![],
+        };
+        oz_core::Settings::set(
+            &conn,
+            TOPOLOGY_SETTING_KEY,
+            &serde_json::to_string(&data_a).unwrap(),
+        )
+        .unwrap();
+
+        // Then, save B.
+        let data_b = TopologyData {
+            nodes: vec![TopologyNodePayload {
+                id: "b".into(),
+                node_type: "workspace".into(),
+                name: "Data B".into(),
+                subtitle: None,
+                x: 100.0,
+                y: 100.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            }],
+            wires: vec![],
+        };
+        oz_core::Settings::set(
+            &conn,
+            TOPOLOGY_SETTING_KEY,
+            &serde_json::to_string(&data_b).unwrap(),
+        )
+        .unwrap();
+
+        // Verify B is loaded.
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes[0].id, "b");
+        assert_eq!(loaded.nodes[0].name, "Data B");
+    }
+
+    #[test]
+    fn hundred_save_cycles_data_integrity() {
+        let conn = fresh_conn();
+        for i in 0..100 {
+            let data = TopologyData {
+                nodes: vec![TopologyNodePayload {
+                    id: format!("cycle-{i}"),
+                    node_type: "store".into(),
+                    name: format!("Cycle {i} with some data"),
+                    subtitle: if i % 2 == 0 {
+                        Some(format!("even-{i}"))
+                    } else {
+                        None
+                    },
+                    x: i as f64,
+                    y: (i * 2) as f64,
+                    tier_requirement: if i % 3 == 0 {
+                        Some("premium".into())
+                    } else {
+                        None
+                    },
+                    telemetry_badge: if i % 5 == 0 {
+                        Some("Online".into())
+                    } else {
+                        None
+                    },
+                    telemetry_status: if i % 7 == 0 {
+                        Some("online".into())
+                    } else {
+                        None
+                    },
+                    metadata: None,
+                }],
+                wires: vec![],
+            };
+            oz_core::Settings::set(
+                &conn,
+                TOPOLOGY_SETTING_KEY,
+                &serde_json::to_string(&data).unwrap(),
+            )
+            .unwrap();
+        }
+        // Verify last cycle.
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes[0].id, "cycle-99");
+        assert_eq!(loaded.nodes[0].name, "Cycle 99 with some data");
+        assert_eq!(loaded.nodes[0].x, 99.0);
+        assert_eq!(loaded.nodes[0].y, 198.0);
+        assert!(loaded.nodes[0].subtitle.is_none()); // 99 is odd
+        assert_eq!(loaded.nodes[0].tier_requirement.as_deref(), Some("premium")); // 99 % 3 == 0
+    }
+
+    // ── Settings raw-value inspection ──────────────────────────────
+
+    #[test]
+    fn raw_stored_json_is_valid_topology() {
+        let conn = fresh_conn();
+        let data = TopologyData {
+            nodes: vec![TopologyNodePayload {
+                id: "raw-test".into(),
+                node_type: "hardware".into(),
+                name: "Raw Check".into(),
+                subtitle: Some("verify".into()),
+                x: 10.0,
+                y: 20.0,
+                tier_requirement: Some("standard".into()),
+                telemetry_badge: Some("Online".into()),
+                telemetry_status: Some("online".into()),
+                metadata: Some(serde_json::json!({"checked": true})),
+            }],
+            wires: vec![TopologyWirePayload {
+                id: "raw-wire".into(),
+                from_node_id: "raw-test".into(),
+                to_node_id: "other".into(),
+                direction: "two-way".into(),
+                label: Some("raw-label".into()),
+                from_port: Some("out".into()),
+                to_port: Some("in".into()),
+            }],
+        };
+        oz_core::Settings::set(
+            &conn,
+            TOPOLOGY_SETTING_KEY,
+            &serde_json::to_string(&data).unwrap(),
+        )
+        .unwrap();
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        // Raw JSON must parse as TopologyData.
+        let reparsed: TopologyData = serde_json::from_str(&raw).unwrap();
+        assert_eq!(reparsed.nodes.len(), 1);
+        assert_eq!(reparsed.wires.len(), 1);
+        // JSON must contain expected field markers.
+        assert!(raw.contains(r#""type":"hardware""#));
+        assert!(raw.contains(r#""direction":"two-way""#));
+        assert!(raw.contains(r#""metadata""#));
+    }
+
+    // ── Empty / missing / null direction edge cases ────────────────
+
+    #[test]
+    fn direction_null_fails() {
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":null}"#;
+        let result: Result<TopologyWirePayload, _> = serde_json::from_str(json);
+        // serde's `#[serde(default)]` only applies to *absent* fields, not
+        // explicitly-null ones — null for a plain String is a type error.
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn direction_missing_defaults_to_one_way() {
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b"}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.direction, "one-way");
+    }
 }
