@@ -15,12 +15,12 @@
 
 name: Android Build
 
+# ⚠️ Stub — disabled on push/PR until the NDK toolchain is fully
+# stabilised. Run manually via workflow_dispatch or tag push (v*)
+# when a release build is needed.
 on:
   push:
-    branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 env:
