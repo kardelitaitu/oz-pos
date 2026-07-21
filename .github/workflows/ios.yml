@@ -48,7 +48,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          save-always: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: mozilla/sccache-action@v0.0.10
 
