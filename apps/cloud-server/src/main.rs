@@ -83,6 +83,41 @@ async fn main() {
         oz_logging::init();
     }
 
+    // ── Config validation (--validate-config skips the server) ───────
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--validate-config") {
+        info!("running config validation only (--validate-config)");
+        match oz_core::config_validator::validate_config() {
+            Ok(()) => {
+                info!("all configuration checks passed");
+                std::process::exit(0);
+            }
+            Err(errors) => {
+                for err in &errors {
+                    tracing::error!(%err, "configuration error");
+                }
+                eprintln!(
+                    "Configuration validation failed with {} error(s):",
+                    errors.len()
+                );
+                for err in &errors {
+                    eprintln!("  • {err}");
+                }
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // ── Startup config validation ───────────────────────────────────
+    // Check critical env vars before the server starts. Failures are
+    // logged as warnings (non-blocking) because the server may still
+    // function with SQLite defaults if DATABASE_URL is misconfigured.
+    if let Err(errors) = oz_core::config_validator::validate_config() {
+        for err in &errors {
+            tracing::warn!(%err, "configuration warning");
+        }
+    }
+
     // ── Redirect-only mode (ADR #11) ──────────────────────────────────
     // When OZ_REDIRECT_ONLY is set, skip all infrastructure (DB, prune,
     // metrics, API) and run a minimal server that only returns the

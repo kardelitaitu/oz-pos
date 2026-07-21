@@ -35,6 +35,8 @@ pub mod cart;
 pub mod cash_payout;
 /// Product category tree.
 pub mod category;
+/// Startup configuration validator — checks env vars before the app boots.
+pub mod config_validator;
 /// Cryptographic helpers — encrypt sensitive data at rest.
 pub mod crypto;
 /// Customer profiles and contact data.
