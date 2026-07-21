@@ -184,7 +184,13 @@ impl QrisPaymentProcessor {
         let mut headers = HeaderMap::new();
         let encoded = base64_standard(&format!("{}:", server_key));
         let mut auth_value =
-            HeaderValue::from_str(&format!("Basic {}", encoded)).expect("valid header value");
+            HeaderValue::from_str(&format!("Basic {}", encoded)).unwrap_or_else(|e| {
+                tracing::error!(
+                    ?e,
+                    "invalid Midtrans server key — using placeholder auth header"
+                );
+                HeaderValue::from_static("Basic placeholder")
+            });
         auth_value.set_sensitive(true);
         headers.insert(AUTHORIZATION, auth_value);
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -193,7 +199,13 @@ impl QrisPaymentProcessor {
             .default_headers(headers)
             .no_proxy()
             .build()
-            .expect("valid reqwest client");
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    ?e,
+                    "failed to build reqwest Client for Midtrans — using default"
+                );
+                reqwest::Client::new()
+            });
 
         Self {
             client: Arc::new(client),

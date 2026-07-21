@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining ROADMAP gaps across Analytics, Backend Hardening, CI/CD, Mobile Builds, and Fuzz Testing.
 >
-> **Current state:** 2 / 25 items complete · Updated 2026-07-21
+> **Current state:** 3 / 25 items complete · Updated 2026-07-21
 
 ---
 
@@ -38,7 +38,7 @@
 
 - [x] **P62-1: cart.rs expect() audit** ✅ — All 5 `.expect()` calls are in `#[cfg(test)]` test assertions only. Production code already clean. No changes needed.
 - [x] **P62-2: stock_counts.rs + rate_limiter.rs hardening** ✅ — stock_counts.rs: all unwrap/expect calls are in `#[cfg(test)]` only (production code clean). rate_limiter.rs: replaced `.expect("rate limiter lock poisoned")` with `PoisonError::into_inner` recovery pattern.
-- [ ] **P62-3: Payment driver hardening** — Replace 6 `.expect("valid header value")` / `.expect("valid reqwest client")` in `crates/oz-payment/src/drivers/*.rs`.
+- [x] **P62-3: Payment driver hardening** ✅ — Replaced 6 `.expect()` calls (3x `HeaderValue::from_str` + 3x `Client::builder().build()`) in stripe.rs, square.rs, qris.rs with `unwrap_or_else` + `tracing::error!` + degraded fallback. Added `tracing` workspace dependency.
 - [ ] **P62-4: Startup + sync hardening** — Replace `.expect("pending sale reaper: open DB")` in `platform/startup/src/lib.rs` and pool creation `.expect()` in `platform/sync/src/pg_transport.rs`.
 - [ ] **P62-5: auth.rs JWT encoding hardening** — Replace `.expect("token encoding is infallible")` in `crates/oz-api/src/auth.rs` with proper error type.
 
