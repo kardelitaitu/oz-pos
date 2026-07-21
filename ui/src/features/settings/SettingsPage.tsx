@@ -1574,7 +1574,7 @@ export default function SettingsPage() {
 
       case 'topology':
         return (
-          <div className="settings-topology-container" style={{ height: '100%', minHeight: '500px' }}>
+          <div className="settings-topology-container">
             <NodeTopologyEditor currentTier="standard" />
           </div>
         );
@@ -1761,7 +1761,7 @@ export default function SettingsPage() {
               </header>
             )}
           </div>
-          <div className="settings-section-content" key={activeSection}>
+          <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}>
             <div key={activeSection}>
             {renderSection(activeSection)}
           </div>

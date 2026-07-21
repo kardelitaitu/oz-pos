@@ -321,6 +321,35 @@ export default function SettingsNavTree({
     debouncedPersist('settings-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  // ── Recently-used sections (P60-3f): last 3 visited, persisted ──
+  const [recentSections, setRecentSections] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('settings-recent-sections');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed.slice(0, 3);
+      }
+    } catch { /* ignore corrupt JSON */ }
+    return [];
+  });
+
+  // Track navigation to update recently-used list (skip initial mount)
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setRecentSections((prev) =>
+      [activeSection, ...prev.filter((k) => k !== activeSection)].slice(0, 3),
+    );
+  }, [activeSection]);
+
+  // Persist recent sections to localStorage (separate from state update for purity)
+  useEffect(() => {
+    localStorage.setItem('settings-recent-sections', JSON.stringify(recentSections));
+  }, [recentSections]);
+
   // ── Screen reader live announcements (P60-4e) ────────────────
   const [announcement, setAnnouncement] = useState('');
 
@@ -523,6 +552,31 @@ export default function SettingsNavTree({
         </div>
 
         <nav className="settings-sidebar-nav">
+          {/* ── Recently-used sections (P60-3f) ──────────────── */}
+          {!q && recentSections.length > 0 && !sidebarCollapsed && (
+            <div className="settings-sidebar-recent">
+              {recentSections.map((key) => {
+                const item = NAV_ITEMS.find((n) => n.key === key);
+                if (!item) return null;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
+                    onClick={() => onNavigate(key)}
+                    aria-current={activeSection === key ? 'page' : undefined}
+                    aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
+                  >
+                    <span className="settings-nav-icon">{item.icon}</span>
+                    <span className="settings-nav-label">
+                      <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {q && filteredCategories.length === 0 ? (
             <div className="settings-sidebar-empty-search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="1.75rem" height="1.75rem" aria-hidden="true">
