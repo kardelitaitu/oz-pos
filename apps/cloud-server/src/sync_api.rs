@@ -523,7 +523,9 @@ mod tests {
 
     /// Create a test JWT token scoped to the given tenant.
     fn test_token(tenant_id: Option<&str>) -> String {
-        oz_api::auth::create_token("test", Some(24), tenant_id).token
+        oz_api::auth::create_token("test", Some(24), tenant_id)
+            .unwrap()
+            .token
     }
 
     /// Helper: build an authorized request builder with a Bearer token.

@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining ROADMAP gaps across Analytics, Backend Hardening, CI/CD, Mobile Builds, and Fuzz Testing.
 >
-> **Current state:** 4 / 25 items complete · Updated 2026-07-21
+> **Current state:** 5 / 25 items complete · Updated 2026-07-21
 
 ---
 
@@ -40,7 +40,7 @@
 - [x] **P62-2: stock_counts.rs + rate_limiter.rs hardening** ✅ — stock_counts.rs: all unwrap/expect calls are in `#[cfg(test)]` only (production code clean). rate_limiter.rs: replaced `.expect("rate limiter lock poisoned")` with `PoisonError::into_inner` recovery pattern.
 - [x] **P62-3: Payment driver hardening** ✅ — Replaced 6 `.expect()` calls (3x `HeaderValue::from_str` + 3x `Client::builder().build()`) in stripe.rs, square.rs, qris.rs with `unwrap_or_else` + `tracing::error!` + degraded fallback. Added `tracing` workspace dependency.
 - [x] **P62-4: Startup + sync hardening** ✅ — `startup/src/lib.rs`: replaced `.expect("pending sale reaper: open DB")` with `match` + `tracing::error!` + early return. `pg_transport.rs` production code already clean (all `.expect()` in `#[cfg(test)]` only).
-- [ ] **P62-5: auth.rs JWT encoding hardening** — Replace `.expect("token encoding is infallible")` in `crates/oz-api/src/auth.rs` with proper error type.
+- [x] **P62-5: auth.rs JWT encoding hardening** ✅ — `create_token()` now returns `Result<TokenResponse, Error>` instead of panicking. Route handler returns 500 on encoding failure.
 
 ---
 
