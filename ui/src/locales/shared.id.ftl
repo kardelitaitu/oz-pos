@@ -250,6 +250,9 @@ workspace-home-error-title = Galat Koneksi
 workspace-home-error-desc = Tidak dapat memuat ruang kerja. Periksa koneksi Anda dan coba lagi.
 workspace-home-retry = Coba Lagi
 workspace-home-retry-btn = Muat Ulang
+workspace-card-pin-aria = Sematkan { $name } ke atas
+workspace-card-unpin-aria = Lepas sematan { $name }
+workspace-card-pinned-badge = Disematkan
 
 
 
