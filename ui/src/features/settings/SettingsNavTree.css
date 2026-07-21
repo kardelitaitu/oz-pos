@@ -261,26 +261,29 @@
   gap: 0.25rem;
   padding: var(--space-1_5) 0 0 var(--space-3);
   overflow: hidden;
-  animation: settings-section-expand 0.2s var(--ease-out) both;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-0.25rem);
+  transition:
+    max-height var(--duration-300) var(--ease-out),
+    opacity var(--duration-200) var(--ease-out),
+    transform var(--duration-200) var(--ease-out);
   transform-origin: top;
+  will-change: max-height, opacity, transform;
 }
 
-@keyframes settings-section-expand {
-  from {
-    opacity: 0;
-    max-height: 0;
-    transform: translateY(-0.25rem);
-  }
-  to {
-    opacity: 1;
-    max-height: 31.25rem;
-    transform: translateY(0);
-  }
+.settings-sidebar-section-items--expanded {
+  max-height: 31.25rem;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .settings-sidebar-section-items {
-    animation: none;
+    transition: none;
+    max-height: 31.25rem;
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

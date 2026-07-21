@@ -549,7 +549,7 @@ export default function NodeTopologyEditor({
           <div className="node-inspector-drawer">
             <div className="inspector-header">
               <h3>Node Inspector</h3>
-              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label="Close inspector" />
+              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label="Close inspector">{null}</Button>
             </div>
 
             <div className="inspector-content">

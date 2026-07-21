@@ -486,8 +486,7 @@ export default function SettingsNavTree({
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                  {(isExpanded || sidebarCollapsed) && (
-                    <div className="settings-sidebar-section-items">
+                  <div className={`settings-sidebar-section-items${isExpanded || sidebarCollapsed ? ' settings-sidebar-section-items--expanded' : ''}`}>
                       {cat.keys.map((key) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
@@ -508,7 +507,6 @@ export default function SettingsNavTree({
                         );
                       })}
                     </div>
-                  )}
                 </div>
               );
             })

@@ -12,7 +12,7 @@
 
 > **Goal:** Refactor the settings sidebar navigation tree to be reliable across all scenarios, improve UX design, and ensure full accessibility compliance.
 >
-> **Current state:** 8 / 9 items complete · Updated 2026-07-21
+> **Current state:** 11 / 12 items complete · Updated 2026-07-21
 
 ---
 
@@ -36,7 +36,7 @@
 
 #### 🟢 P60-3 — UX design improvements
 
-- [ ] **P60-3a: Smooth accordion expand/collapse animation** — Categories currently snap open/closed. Add `max-height` + `opacity` transition (CSS `transition: max-height 0.3s ease, opacity 0.2s ease`) for a smooth slide animation. Use `prefers-reduced-motion` guard.
+- [x] **P60-3a: Smooth accordion expand/collapse animation** ✅ — Replaced `animation` (mount-only) with CSS `transition` on `max-height`, `opacity`, `transform`. Changed from conditional rendering to class-based toggle for smooth enter/exit. Added `will-change` for GPU acceleration.
 - [ ] **P60-3b: Drag-to-reorder recently used sections** ⏳ *Stretch goal* — The "recently used" section shows the last 3 visited sections at the top. Allow the user to drag-and-drop sections within this list for custom ordering. Persist order to localStorage. (Defer if sprint is tight — complex DnD state management + touch events.)
 - [ ] **P60-3f: Recently-used sections migration** — When extracting NavTree, ensure the "recently used" section state (last 3 visited sections, persisted to localStorage) either moves with the component or is passed as props. Add a note in P60-1.
 - [ ] **P60-3c: Section count badges with animation** — Each category heading shows a count badge (e.g., "9" for Management). Currently static — add a subtle scale animation (`@keyframes badge-pop`) when the count changes, and use `aria-label="Management, 9 items"` for screen readers.
@@ -96,14 +96,13 @@
 
 | Sprint | Items | Status |
 |--------|-------|--------|
-| 🔴 P60-1 — Component extraction | 3 | 0/3 |
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
-| 🟢 P60-3 — UX improvements | 5 | 0/5 |
+| 🟢 P60-3 — UX improvements | 5 | 1/5 |
 | 🟡 P60-4 — Accessibility | 7 | 0/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
-| ⚪ P60-6 — Polish & docs | 2 | 0/2 |
-| **Total** | **23** | **6/23 (26%)** |
+| ⚪ P60-6 — Polish & docs | 2 | 1/2 |
+| **Total** | **23** | **8/23 (35%)** |
 
 ---
 
