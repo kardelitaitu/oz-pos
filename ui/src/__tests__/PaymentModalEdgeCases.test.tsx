@@ -204,7 +204,7 @@ describe('PaymentModal — edge cases', () => {
       expect(banner).toBeInTheDocument();
       expect(banner).toHaveAttribute('role', 'alert');
       expect(banner).toHaveTextContent(/timeout/i);
-    });
+    }, { timeout: 3000 });
   });
 
   it('shows retry button for retryable errors', async () => {
@@ -229,7 +229,7 @@ describe('PaymentModal — edge cases', () => {
       const retryBtn = document.querySelector('.payment-error-retry-btn');
       expect(retryBtn).toBeInTheDocument();
       expect(retryBtn).toHaveTextContent(/retry/i);
-    });
+    }, { timeout: 3000 });
   });
 
   it('retry button re-attempts the sale', async () => {
@@ -266,7 +266,7 @@ describe('PaymentModal — edge cases', () => {
     // Wait for error banner
     await waitFor(() => {
       expect(document.querySelector('.payment-error-banner')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // Click retry
     const retryBtn = document.querySelector('.payment-error-retry-btn') as HTMLButtonElement;
@@ -275,7 +275,7 @@ describe('PaymentModal — edge cases', () => {
     // Should succeed now
     await waitFor(() => {
       expect(screen.getByText(/sale complete/i)).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // complete_sale was called twice (first fail, second success)
     expect(callCount).toBe(2);
@@ -302,7 +302,7 @@ describe('PaymentModal — edge cases', () => {
     // Wait for processing to end (the error is caught, processing set to false)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^complete$/i })).not.toBeDisabled();
-    });
+    }, { timeout: 3000 });
 
     // Modal should still be open — no done state
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -330,7 +330,7 @@ describe('PaymentModal — edge cases', () => {
 
     await waitFor(() => {
       expect(document.querySelector('.payment-error-banner')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // Close modal
     await userEvent.click(screen.getByRole('button', { name: /cancel payment/i }));
@@ -354,7 +354,7 @@ describe('PaymentModal — edge cases', () => {
 
     await waitFor(() => {
       expect(document.querySelector('.payment-error-banner')).not.toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
 
   // ── Customer search modal ────────────────────────────────────

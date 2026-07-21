@@ -44,11 +44,6 @@
   color: var(--color-fg-secondary);
 }
 
-.staff-mgmt-empty-icon {
-  color: var(--color-fg-tertiary);
-  opacity: 0.5;
-}
-
 /* ── Table ────────────────────────────────────────────────────────── */
 
 .staff-mgmt-table-wrap {
