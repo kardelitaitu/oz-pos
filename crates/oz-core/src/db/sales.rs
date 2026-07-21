@@ -341,8 +341,10 @@ impl Store<'_> {
         .to_string();
 
         // ── Persist sale + payments ───────────────────────────────
-        let cur_str =
-            std::str::from_utf8(&sale.currency.0).expect("currency bytes are valid UTF-8");
+        let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
 
         // ADR-20 §6: pending_expires_at = NOW + 30 min for stale-reaper.
         let pending_expires_at = chrono::Utc::now()
@@ -368,8 +370,12 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0)
-                .expect("currency bytes are valid UTF-8");
+            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
+                CoreError::Validation {
+                    field: "currency",
+                    message: format!("invalid UTF-8 in currency bytes: {e}"),
+                }
+            })?;
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
                                          currency, line_position, tax_minor, tax_rate_id,
@@ -686,8 +692,10 @@ impl Store<'_> {
 
         // ── Phase 3: Persist sale + payments ──────────────────────
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let cur_str =
-            std::str::from_utf8(&sale.currency.0).expect("currency bytes are valid UTF-8");
+        let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
 
         let deduction_json = serde_json::json!({
             "version": 1,
@@ -719,8 +727,12 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0)
-                .expect("currency bytes are valid UTF-8");
+            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
+                CoreError::Validation {
+                    field: "currency",
+                    message: format!("invalid UTF-8 in currency bytes: {e}"),
+                }
+            })?;
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
                                          currency, line_position, tax_minor, tax_rate_id,
@@ -908,7 +920,11 @@ impl Store<'_> {
 impl Store<'_> {
     fn row_to_sale_line(row: &rusqlite::Row) -> rusqlite::Result<SaleLine> {
         let unit_cur_str: String = row.get("currency")?;
-        let currency: Currency = unit_cur_str.parse().expect("valid currency in DB");
+        let currency: Currency = unit_cur_str.parse::<Currency>().map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(
+                std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+            )
+        })?;
         Ok(SaleLine {
             id: row.get("id")?,
             sale_id: row.get("sale_id")?,
@@ -934,8 +950,10 @@ impl Store<'_> {
 
     /// Persist a [`Sale`] (header + all line items) inside a single transaction.
     pub fn create_sale(&self, sale: &Sale) -> Result<(), CoreError> {
-        let cur_str =
-            std::str::from_utf8(&sale.currency.0).expect("currency bytes are valid UTF-8");
+        let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
         let status_str = sale.status.as_stored_str();
 
         let tx = self.conn.unchecked_transaction()?;
@@ -956,8 +974,12 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0)
-                .expect("currency bytes are valid UTF-8");
+            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
+                CoreError::Validation {
+                    field: "currency",
+                    message: format!("invalid UTF-8 in currency bytes: {e}"),
+                }
+            })?;
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
                                         tax_minor, tax_rate_id, serial_number)
@@ -988,7 +1010,11 @@ impl Store<'_> {
         let rows = stmt.query_map([], |row| {
             let cur_str: String = row.get("currency")?;
             let status_str: String = row.get("status")?;
-            let currency: Currency = cur_str.parse().expect("valid currency in DB");
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
             let status = SaleStatus::from_stored_str(&status_str).unwrap_or(SaleStatus::Pending);
             Ok(Sale {
                 id: row.get("id")?,
@@ -1038,7 +1064,11 @@ impl Store<'_> {
         let sale_result = sale_stmt.query_row(params![id], |row| {
             let cur_str: String = row.get("currency")?;
             let status_str: String = row.get("status")?;
-            let currency: Currency = cur_str.parse().expect("valid currency in DB");
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
             let status = SaleStatus::from_stored_str(&status_str).unwrap_or(SaleStatus::Pending);
             Ok(Sale {
                 id: row.get("id")?,

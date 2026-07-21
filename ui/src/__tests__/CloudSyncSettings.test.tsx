@@ -91,6 +91,9 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (cmd === 'test_sync_connection') {
       return Promise.resolve({ ok: true, status: 'Connected (12ms)', latencyMs: 12 });
     }
+    if (cmd === 'check_license_status') {
+      return Promise.resolve({ tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 });
+    }
     if (cmd === 'pending_sync_count') {
       return Promise.resolve(0);
     }
@@ -149,14 +152,14 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 // ── Helper: navigate to Cloud Sync section ───────────────────────
 
 function navigateToSync() {
-  fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-  fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+  fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+  fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 }
 
 async function waitForSyncSection() {
   renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+    expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
   });
   navigateToSync();
 }
@@ -183,7 +186,7 @@ describe('CloudSyncSettings', () => {
   it('navigates to Cloud Sync section after clicking sidebar nav item', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
 
     navigateToSync();

@@ -133,8 +133,8 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
       case 'get_app_version':
       case 'version':
         return { name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' };
-      case 'get_license_status':
-        return { is_valid: true, license_type: 'Pro', expires_at: null };
+      case 'check_license_status':
+        return { tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 };
       case 'pending_sync_count':
         return 0;
       default:
@@ -168,12 +168,12 @@ describe('Settings Toggle Buttons Regression Suite', () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
 
     // Navigate to Receipt section where show-currency, show-tax, show-table-number live
-    await user.click(screen.getByRole('button', { name: /operations/i }));
-    await user.click(screen.getByRole('button', { name: /receipt/i }));
+    await user.click(screen.getByRole('treeitem', { name: /operations/i }));
+    await user.click(screen.getByRole('treeitem', { name: /receipt/i }));
 
     const expectedToggleIds = [
       'receipt-show-currency',
@@ -197,7 +197,7 @@ describe('Settings Toggle Buttons Regression Suite', () => {
     }
 
     // Navigate to Cloud Sync section where sync-enabled lives
-    await user.click(screen.getByRole('button', { name: /cloud sync/i }));
+    await user.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
     const syncInput = document.getElementById('sync-enabled') as HTMLInputElement;
     expect(syncInput, 'Input #sync-enabled should exist').not.toBeNull();
 

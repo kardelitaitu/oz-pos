@@ -210,6 +210,8 @@ workspace-home-error-title = Connection Error
 workspace-home-error-desc = Could not load your workspaces. Check your connection and try again.
 workspace-home-retry = Try Again
 workspace-home-retry-btn = Retry
+workspace-card-pin-aria = Pin { $name } to top
+workspace-card-unpin-aria = Unpin { $name }
 
 # Shell
 shell-loading = Loading…

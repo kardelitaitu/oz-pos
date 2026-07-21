@@ -19,6 +19,39 @@ const WS_COLORS: Record<string, string> = {
   admin: 'ws-color-admin',
 };
 
+// ── Favorites persistence (localStorage) ─────────────────────────
+
+const PINS_KEY = 'workspace-pins';
+const LAST_USED_KEY = 'workspace-last-used';
+
+function loadPins(): Set<string> {
+  try {
+    const raw = localStorage.getItem(PINS_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw));
+  } catch {
+    return new Set();
+  }
+}
+
+function savePins(pins: Set<string>) {
+  localStorage.setItem(PINS_KEY, JSON.stringify(Array.from(pins)));
+}
+
+function loadLastUsed(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(LAST_USED_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function saveLastUsed(lastUsed: Record<string, number>) {
+  localStorage.setItem(LAST_USED_KEY, JSON.stringify(lastUsed));
+}
+
 // ── Workspace sort order ──────────────────────────────────────────
 
 const WS_ORDER: Record<string, number> = {
@@ -238,14 +271,54 @@ export default function WorkspaceHome() {
 
   const roleName = (session?.role_name ?? '').toLowerCase();
 
-  // Sort workspaces for consistent order
-  const sortedWorkspaces = useMemo(
-    () =>
-      [...availableWorkspaces].sort(
-        (a, b) => (WS_ORDER[a.type_key] ?? 99) - (WS_ORDER[b.type_key] ?? 99),
-      ),
-    [availableWorkspaces],
-  );
+  // ── Favorites & last-used state ────────────────────────────────
+
+  const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(loadPins);
+  const [lastUsedMap, setLastUsedMap] = useState<Record<string, number>>(loadLastUsed);
+
+  const togglePin = useCallback((key: string) => {
+    setPinnedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      savePins(next);
+      return next;
+    });
+  }, []);
+
+  const recordLastUsed = useCallback((key: string) => {
+    const now = Date.now();
+    setLastUsedMap((prev) => {
+      const next = { ...prev, [key]: now };
+      saveLastUsed(next);
+      return next;
+    });
+  }, []);
+
+  // Sort workspaces: pinned first (by pin order), then by last-used, then by static order
+  const sortedWorkspaces = useMemo(() => {
+    const pinnedArr: typeof availableWorkspaces = [];
+    const unpinnedArr: typeof availableWorkspaces = [];
+
+    for (const ws of availableWorkspaces) {
+      if (pinnedKeys.has(ws.type_key)) {
+        pinnedArr.push(ws);
+      } else {
+        unpinnedArr.push(ws);
+      }
+    }
+
+    // Pinned sorted by pin order (earliest pin first in the set iteration)
+    // Last-used sorted by most recent first
+    unpinnedArr.sort((a, b) => {
+      const aLast = lastUsedMap[a.type_key] ?? 0;
+      const bLast = lastUsedMap[b.type_key] ?? 0;
+      if (aLast !== bLast) return bLast - aLast; // most recent first
+      return (WS_ORDER[a.type_key] ?? 99) - (WS_ORDER[b.type_key] ?? 99);
+    });
+
+    return [...pinnedArr, ...unpinnedArr];
+  }, [availableWorkspaces, pinnedKeys, lastUsedMap]);
 
   const cashierOnly = useMemo(() => new Set(['restaurant-pos', 'store-pos']), []);
   const kitchenOnly = useMemo(() => new Set(['kds']), []);
@@ -309,6 +382,7 @@ export default function WorkspaceHome() {
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
       if (!canAccess(key)) return;
       if (exitingWorkspace) return;
+      recordLastUsed(key);
       const card = e.currentTarget;
       const rect = card.getBoundingClientRect();
 
@@ -340,7 +414,7 @@ export default function WorkspaceHome() {
       setExitingWorkspace(key);
       setActiveWorkspace(key);
     },
-    [canAccess, setActiveWorkspace, exitingWorkspace],
+    [canAccess, setActiveWorkspace, exitingWorkspace, recordLastUsed],
   );
 
   // ── Keyboard navigation ──────────────────────────────────────
@@ -651,6 +725,18 @@ export default function WorkspaceHome() {
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
+                    {/* Pin button */}
+                    <button
+                      type="button"
+                      className={`workspace-card-pin-btn${pinnedKeys.has(ws.type_key) ? ' workspace-card-pin-btn--pinned' : ''}`}
+                      onClick={(e) => { e.stopPropagation(); togglePin(ws.type_key); }}
+                      aria-label={pinnedKeys.has(ws.type_key) ? l10n.getString('workspace-card-unpin-aria', { name: ws.name }) : l10n.getString('workspace-card-pin-aria', { name: ws.name })}
+                      tabIndex={-1}
+                    >
+                      <svg viewBox="0 0 24 24" fill={pinnedKeys.has(ws.type_key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                    </button>
                     {isActive && (
                       <div className="workspace-card-active-dot" aria-label="Active workspace">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">

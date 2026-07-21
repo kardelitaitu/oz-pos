@@ -25,7 +25,7 @@ const COMPONENTS_CSS = resolve(UI_SRC, 'frontend/themes/components.css');
 // When a new shadow-using component is added, its CSS class selector
 // must be added to the ::after list in components.css AND to this set.
 //
-// Current count: 33 selectors (5 core + 1 utility + 27 deprecated legacy).
+// Current count: 35 selectors (5 core + 1 utility + 29 deprecated legacy).
 // Increment when adding new selectors; decrement when cleaning up legacy.
 const KNOWN_NOISE_SELECTORS = [
   // Core pattern classes (always covered)
@@ -114,6 +114,8 @@ const KNOWN_NOISE_SELECTORS = [
   '.toggle-thumb',
   '.topology-node',
   '.node-selected',
+  '.settings-shortcuts-popover',
+  '.canvas-hud',
 ];
 
 /** CSS selectors that are exempt from noise-dither even though they use --shadow-* */
@@ -413,7 +415,7 @@ describe('Noise-dither overlay coverage (P11-5)', () => {
     ).toEqual([]);
   });
 
-  it('covered selector count matches baseline (33)', () => {
+  it('covered selector count matches baseline (35)', () => {
     const parsed = parseSelectorList(mainSelectorText);
     const actualSelectors = parsed.filter((s) => s.includes('.'));
     // Soft check — warn if mismatch but don't fail

@@ -1,7 +1,7 @@
 {
   "name": "oz-pos-ui",
   "private": true,
-  "version": "0.0.15",
+  "version": "0.0.16",
   "type": "module",
   "description": "OZ-POS front-end: React 18 + Vite + TypeScript + @fluent/react.",
   "license": "SEE LICENSE IN ../LICENSE",
@@ -28,6 +28,7 @@
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "fuse.js": "^7.5.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-window": "^2.2.7",

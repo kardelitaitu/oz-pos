@@ -27,7 +27,10 @@ impl Store<'_> {
     ///   first, stopping when the refund qty is satisfied.
     pub fn create_refund(&self, refund: &Refund) -> Result<(), CoreError> {
         let cur_str =
-            std::str::from_utf8(&refund.total.currency.0).expect("currency bytes are valid UTF-8");
+            std::str::from_utf8(&refund.total.currency.0).map_err(|e| CoreError::Validation {
+                field: "currency",
+                message: format!("invalid UTF-8 in currency bytes: {e}"),
+            })?;
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -39,8 +42,12 @@ impl Store<'_> {
         )?;
 
         for line in &refund.lines {
-            let line_cur = std::str::from_utf8(&line.unit_price.currency.0)
-                .expect("currency bytes are valid UTF-8");
+            let line_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
+                CoreError::Validation {
+                    field: "currency",
+                    message: format!("invalid UTF-8 in currency bytes: {e}"),
+                }
+            })?;
             tx.execute(
                 "INSERT INTO refund_lines (id, refund_id, sale_line_id, sku, qty, unit_minor, line_minor, currency, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -296,7 +303,12 @@ impl Store<'_> {
                     sale_id: row.get("sale_id")?,
                     total: Money {
                         minor_units: row.get("total_minor")?,
-                        currency: cur_str.parse().expect("valid currency in DB"),
+                        currency: cur_str.parse::<Currency>().map_err(|e| {
+                            rusqlite::Error::ToSqlConversionFailure(
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                                    .into(),
+                            )
+                        })?,
                     },
                     reason: row.get("reason")?,
                     note: row.get("note")?,
@@ -334,7 +346,11 @@ impl Store<'_> {
         );
         match row {
             Ok((total, cur_str)) => {
-                let currency: Currency = cur_str.parse().expect("valid currency in DB");
+                let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                    rusqlite::Error::ToSqlConversionFailure(
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                    )
+                })?;
                 Ok(Money {
                     minor_units: total,
                     currency,
@@ -350,7 +366,11 @@ impl Store<'_> {
 
     fn row_to_refund_line(row: &rusqlite::Row) -> rusqlite::Result<RefundLine> {
         let cur_str: String = row.get("currency")?;
-        let currency: Currency = cur_str.parse().expect("valid currency in DB");
+        let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(
+                std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+            )
+        })?;
         Ok(RefundLine {
             id: row.get("id")?,
             refund_id: row.get("refund_id")?,

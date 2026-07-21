@@ -16,6 +16,7 @@ use std::sync::Arc;
 use crate::Money;
 use crate::cache::Cache;
 use crate::error::CoreError;
+use crate::money::Currency;
 
 /// Audit log queries (read / write).
 pub mod audit;
@@ -173,7 +174,11 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
         name: row.get("name")?,
         price: Money {
             minor_units: row.get("price_minor")?,
-            currency: cur_str.parse().expect("valid currency in database"),
+            currency: cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?,
         },
         category_id: row.get("category_id")?,
         barcode: barcode_raw.and_then(|s| foundation::Barcode::new(&s).ok()),

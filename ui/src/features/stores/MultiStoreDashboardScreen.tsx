@@ -7,6 +7,7 @@ import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
 import TerminalStatusPanel from './TerminalStatusPanel';
 import NodeTopologyEditor from './NodeTopologyEditor';
+import { checkLicenseStatus } from '@/api/license';
 import './MultiStoreDashboardScreen.css';
 
 const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -25,17 +26,20 @@ export default function MultiStoreDashboardScreen() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'topology'>('cards');
+  const [licenseTier, setLicenseTier] = useState('standard');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [storeData, termData] = await Promise.all([
+      const [storeData, termData, licStatus] = await Promise.all([
         listStores(),
         listTerminals(),
+        checkLicenseStatus(),
       ]);
       setStores(storeData);
       setTerminals(termData);
+      setLicenseTier(licStatus.tier.toLowerCase());
     } catch {
       setError('Failed to load data');
     } finally {
@@ -103,7 +107,7 @@ export default function MultiStoreDashboardScreen() {
 
       {viewMode === 'topology' ? (
         <div className="multi-store-dashboard-topology-view" style={{ flex: 1, minHeight: '600px' }}>
-          <NodeTopologyEditor currentTier="standard" />
+          <NodeTopologyEditor currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'} />
         </div>
       ) : loading ? (
         <div className="multi-store-dashboard-loading-skeleton">

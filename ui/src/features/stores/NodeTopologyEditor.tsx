@@ -1,13 +1,29 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import {
+  StoreIcon,
+  PosIcon,
+  WarehouseIcon,
+  PrinterIcon,
+  FlaskIcon,
+  StopIcon,
+  CartIcon,
+  UtensilsIcon,
+  CheckIcon,
+  TrashIcon,
+  CloseIcon,
+  LockIcon,
+} from './NodeTopologyIcons';
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export type NodeType = 'store' | 'workspace' | 'warehouse' | 'hardware';
 export type WireDirection = 'one-way' | 'two-way';
+export type PortName = 'top' | 'right' | 'bottom' | 'left';
 
 export interface TopologyNodeData {
   id: string;
@@ -27,7 +43,11 @@ export interface TopologyWireData {
   fromNodeId: string;
   toNodeId: string;
   direction: WireDirection;
-  label?: string; // e.g. "Priority 1", "Priority 2 (Fallback)"
+  label?: string;
+  /** Which port on the source node the wire originates from (default: 'right'). */
+  fromPort?: PortName;
+  /** Which port on the target node the wire connects to (default: 'right'). */
+  toPort?: PortName;
 }
 
 export interface NodeTopologyEditorProps {
@@ -44,8 +64,9 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
     { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 600, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
   ],
   wires: [
-    { id: 'w-1', fromNodeId: 'store-1', toNodeId: 'ws-1', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'ws-1', toNodeId: 'wh-1', direction: 'one-way', label: 'Stock Deduct (P1)' },
+    // Natural left-to-right flow: store right → workspace left, workspace right → warehouse left
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', direction: 'one-way', label: 'Stock Deduct (P1)' },
   ],
 };
 
@@ -58,45 +79,132 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
     { id: 'hw-prn', type: 'hardware', name: 'Kitchen Thermal Printer', subtitle: 'LAN 192.168.1.100', x: 600, y: 320, telemetryBadge: 'Ready', telemetryStatus: 'online' },
   ],
   wires: [
-    { id: 'w-1', fromNodeId: 'store-1', toNodeId: 'ws-1', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'store-1', toNodeId: 'ws-kds', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-3', fromNodeId: 'ws-1', toNodeId: 'wh-kitchen', direction: 'one-way', label: 'Stock Deduct' },
-    { id: 'w-4', fromNodeId: 'ws-kds', toNodeId: 'hw-prn', direction: 'one-way', label: 'Ticket Print' },
+    // Left-to-right: store right → workspace left; then workspace right → warehouse/printer left
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-3', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', direction: 'one-way', label: 'Stock Deduct' },
+    { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', direction: 'one-way', label: 'Ticket Print' },
   ],
 };
+
+// Estimated node card dimensions for wire endpoint positioning.
+// Header ~46px + body ~64px + gaps ≈ 112px. Width ~200px for typical content.
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 112;
+
+/** Port offset from node origin (left, top) for each port name.
+ *  Offsets include the 6px port socket overhang so the wire path
+ *  connects to the center of the port circle, not the card edge. */
+const PORT_OFFSET: Record<PortName, { dx: number; dy: number }> = {
+  top:    { dx: NODE_WIDTH / 2, dy: -6 },
+  right:  { dx: NODE_WIDTH + 6, dy: NODE_HEIGHT / 2 },
+  bottom: { dx: NODE_WIDTH / 2, dy: NODE_HEIGHT + 6 },
+  left:   { dx: -6,             dy: NODE_HEIGHT / 2 },
+};
+
+/** Evaluate a cubic bezier at parameter t (0-1). */
+function cubicBezier(
+  t: number,
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+): number {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+}
+
+const GRID_SIZE = 24;
+const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
+type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 
 export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
 }: NodeTopologyEditorProps) {
   const { addToast } = useToast();
+  const canvasRef = useRef<HTMLDivElement>(null);
+
   const [nodes, setNodes] = useState<TopologyNodeData[]>(PRESET_RETAIL.nodes);
   const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
 
-  // Simulation mode & pulse animation state
   const [isSimulating, setIsSimulating] = useState(false);
   const [simPulseStep, setSimPulseStep] = useState(0);
 
-  // Dragging state
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Set of node ids that were just added (for scale-in animation). */
+  const [freshNodeIds, setFreshNodeIds] = useState<Set<string>>(new Set());
 
-  // Pan & Zoom
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
+  const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panCleanupRef = useRef<(() => void) | null>(null);
 
-  // New wire creation state
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
+  const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
+  /** Nearest target port while dragging a connection, for snap-to-port preview. */
+  const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName } | null>(null);
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Lock check based on active tier
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const undoInProgressRef = useRef(false);
+
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
+
+  /** Track whether user has made any edits since last preset load. */
+  const isDirtyRef = useRef(false);
+
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
 
-  // Simulation runner
+  const pushHistory = useCallback(() => {
+    if (undoInProgressRef.current) return;
+    isDirtyRef.current = true;
+    setHistory((prev) => {
+      const entry: HistoryEntry = { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) };
+      const next = [...prev, entry];
+      if (next.length > 50) next.shift();
+      return next;
+    });
+  }, [nodes, wires]);
+
+  const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
+    const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
+    pushHistory();
+    setNodes(data.nodes);
+    setWires(data.wires);
+    setFreshNodeIds(new Set());
+    isDirtyRef.current = false;
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [pushHistory]);
+
+  const popUndo = useCallback(() => {
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      undoInProgressRef.current = true;
+      const entry = prev[prev.length - 1];
+      if (entry) {
+        setNodes(entry.nodes);
+        setWires(entry.wires);
+      }
+      setTimeout(() => { undoInProgressRef.current = false; }, 0);
+      return prev.slice(0, -1);
+    });
+  }, []);
+
+  // Clean up pan listeners on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      panCleanupRef.current?.();
+    };
+  }, []);
+
   useEffect(() => {
     if (!isSimulating) return;
     const interval = setInterval(() => {
@@ -105,9 +213,101 @@ export default function NodeTopologyEditor({
     return () => clearInterval(interval);
   }, [isSimulating]);
 
-  // Handle Node Mouse Down for Dragging
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConnectingFromNodeId(null);
+        setConnectingFromPort(null);
+        setSelectedNodeId(null);
+        setSelectedWireId(null);
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeId || selectedWireId)) {
+        e.preventDefault();
+        if (selectedNodeId) {
+          const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
+          if (hasWires) {
+            setConfirmDelete(selectedNodeId);
+          } else {
+            // No connected wires — delete immediately without dialog.
+            pushHistory();
+            setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+            setSelectedNodeId(null);
+          }
+        } else {
+          setConfirmDelete('');
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        popUndo();
+        return;
+      }
+      if (selectedNodeId && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        pushHistory();
+        const step = e.shiftKey ? GRID_SIZE : 8;
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === selectedNodeId
+              ? {
+                  ...n,
+                  x: snap(n.x + (e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0)),
+                  y: snap(n.y + (e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0)),
+                }
+              : n,
+          ),
+        );
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo]);
+
+  const executePresetLoad = useCallback(() => {
+    if (confirmPreset) {
+      loadPreset(confirmPreset);
+    }
+    setConfirmPreset(null);
+  }, [confirmPreset, loadPreset]);
+
+  const executeDelete = useCallback(() => {
+    if (confirmDelete === '') {
+      if (selectedWireId) {
+        setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
+        setSelectedWireId(null);
+      }
+    } else if (confirmDelete) {
+      pushHistory();
+      setNodes((prev) => prev.filter((n) => n.id !== confirmDelete));
+      setWires((prev) => prev.filter((w) => w.fromNodeId !== confirmDelete && w.toNodeId !== confirmDelete));
+      setSelectedNodeId(null);
+    }
+    setConfirmDelete(null);
+  }, [confirmDelete, selectedWireId, pushHistory]);
+
+  const zoomToFit = useCallback(() => {
+    if (nodes.length === 0) return;
+    const minX = Math.min(...nodes.map((n) => n.x));
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const maxX = Math.max(...nodes.map((n) => n.x + NODE_WIDTH));
+    const maxY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT));
+    const padding = 60;
+    const viewW = (canvasRef.current?.clientWidth ?? 800) - padding * 2;
+    const viewH = (canvasRef.current?.clientHeight ?? 600) - padding * 2;
+    const fitZoom = Math.min(
+      Math.min(viewW / Math.max(maxX - minX, 1), viewH / Math.max(maxY - minY, 1)),
+      1.5,
+    );
+    setZoom(Math.max(0.4, Math.min(2.0, fitZoom)));
+    setPan({ x: padding - minX * fitZoom, y: padding - minY * fitZoom });
+  }, [nodes]);
+
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
+    if (e.button !== 0) return;
+    pushHistory();
     setSelectedNodeId(nodeId);
     setSelectedWireId(null);
     setDraggingNodeId(nodeId);
@@ -121,54 +321,113 @@ export default function NodeTopologyEditor({
     }
   };
 
-  // Handle Canvas Mouse Move (Dragging Node or Panning)
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    mousePosRef.current = { x: e.clientX, y: e.clientY };
+
     if (draggingNodeId) {
-      const newX = Math.max(20, Math.round(e.clientX / zoom - dragOffsetRef.current.x));
-      const newY = Math.max(20, Math.round(e.clientY / zoom - dragOffsetRef.current.y));
+      const newX = snap(Math.max(20, e.clientX / zoom - dragOffsetRef.current.x));
+      const newY = snap(Math.max(20, e.clientY / zoom - dragOffsetRef.current.y));
 
       setNodes((prev) =>
         prev.map((n) => (n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n)),
       );
-    } else if (isPanning) {
-      setPan({
-        x: e.clientX - panStartRef.current.x,
-        y: e.clientY - panStartRef.current.y,
-      });
+    } else if (connectingFromNodeId) {
+      // Find nearest target port when dragging a connection
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const mx = (e.clientX - rect.left - pan.x) / zoom;
+      const my = (e.clientY - rect.top - pan.y) / zoom;
+      const SNAP_DIST = 30;
+      let closest: { nodeId: string; port: PortName; dist: number } | null = null;
+      for (const n of nodes) {
+        if (n.id === connectingFromNodeId) continue;
+        for (const p of ['top', 'right', 'bottom', 'left'] as PortName[]) {
+          const off = PORT_OFFSET[p];
+          const px = n.x + off.dx;
+          const py = n.y + off.dy;
+          const dist = Math.sqrt((mx - px) ** 2 + (my - py) ** 2);
+          if (dist < SNAP_DIST && (!closest || dist < closest.dist)) {
+            closest = { nodeId: n.id, port: p, dist };
+          }
+        }
+      }
+      setHoveredTarget(closest ? { nodeId: closest.nodeId, port: closest.port } : null);
     }
   };
 
-  // Handle Mouse Up
   const handleCanvasMouseUp = () => {
     setDraggingNodeId(null);
-    setIsPanning(false);
   };
 
-  // Handle Canvas Pan Start
+  // Clear hoveredTarget when connection mode ends
+  useEffect(() => {
+    if (!connectingFromNodeId) {
+      setHoveredTarget(null);
+    }
+  }, [connectingFromNodeId]);
+
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
+    const targetEl = e.target as HTMLElement;
+    if (targetEl === e.currentTarget || targetEl.classList.contains('node-canvas-viewport') || targetEl.tagName === 'svg') {
       setSelectedNodeId(null);
       setSelectedWireId(null);
       if (e.button === 0 || e.button === 1) {
-        setIsPanning(true);
+        isPanningRef.current = true;
         panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+
+        const handleMouseMove = (ev: MouseEvent) => {
+          if (!isPanningRef.current) return;
+          setPan({
+            x: ev.clientX - panStartRef.current.x,
+            y: ev.clientY - panStartRef.current.y,
+          });
+        };
+
+        const handleMouseUp = () => {
+          isPanningRef.current = false;
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          panCleanupRef.current = null;
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        panCleanupRef.current = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          isPanningRef.current = false;
+          panCleanupRef.current = null;
+        };
       }
     }
   };
 
-  // Handle Zoom
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    setZoom((prev) => Math.min(2.0, Math.max(0.4, prev * zoomFactor)));
+    setZoom((prev) => {
+      const newZoom = Math.min(2.0, Math.max(0.4, prev * zoomFactor));
+      // Zoom towards cursor: adjust pan so cursor position stays fixed
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+      setPan((p) => ({
+        x: cursorX - (cursorX - p.x) * (newZoom / prev),
+        y: cursorY - (cursorY - p.y) * (newZoom / prev),
+      }));
+      return newZoom;
+    });
   };
 
-  // Add Node from Tool Rack
   const handleAddNode = (type: NodeType) => {
     if (type === 'warehouse' && !isProAllowed && nodes.filter((n) => n.type === 'warehouse').length >= 1) {
       addToast({ message: 'Multi-Warehouse storage locations require a Pro Tier license.', type: 'warning' });
       return;
     }
+    pushHistory();
 
     const id = `${type}-${Date.now()}`;
     const newNode: TopologyNodeData = {
@@ -176,97 +435,182 @@ export default function NodeTopologyEditor({
       type,
       name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       subtitle: type === 'store' ? 'Branch' : type === 'workspace' ? 'Register' : type === 'warehouse' ? 'Storage' : 'Peripheral',
-      x: 200 + Math.random() * 100,
-      y: 150 + Math.random() * 100,
+      x: snap(200 + Math.random() * 100),
+      y: snap(150 + Math.random() * 100),
       telemetryBadge: 'Ready',
       telemetryStatus: 'online',
     };
 
     setNodes((prev) => [...prev, newNode]);
+    setFreshNodeIds((prev) => new Set(prev).add(id));
+    // Remove from fresh set after animation completes
+    setTimeout(() => {
+      setFreshNodeIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    }, 400);
     setSelectedNodeId(id);
   };
 
-  // Handle Port Click to Start/Finish Connection
-  const handlePortClick = (e: React.MouseEvent, nodeId: string) => {
+  const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName) => {
     e.stopPropagation();
 
     if (!connectingFromNodeId) {
       setConnectingFromNodeId(nodeId);
-    } else if (connectingFromNodeId === nodeId) {
-      setConnectingFromNodeId(null);
-    } else {
-      // Connect connectingFromNodeId -> nodeId
-      const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
-      const toNode = nodes.find((n) => n.id === nodeId);
-
-      if (fromNode && toNode) {
-        // Multi-warehouse wire check for Pro license
-        const existingWarehouseWires = wires.filter((w) => {
-          const fn = nodes.find((n) => n.id === w.fromNodeId);
-          const tn = nodes.find((n) => n.id === w.toNodeId);
-          return fn?.type === 'workspace' && tn?.type === 'warehouse';
-        });
-
-        if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
-          addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
-          setConnectingFromNodeId(null);
-          return;
-        }
-
-        const newWireId = `wire-${Date.now()}`;
-        const isWarehouseWire = fromNode.type === 'workspace' && toNode.type === 'warehouse';
-        const label = isWarehouseWire
-          ? existingWarehouseWires.length === 0 ? 'Stock Deduct (P1)' : `Fallback (P${existingWarehouseWires.length + 1})`
-          : 'Connected';
-
-        setWires((prev) => [
-          ...prev,
-          {
-            id: newWireId,
-            fromNodeId: connectingFromNodeId,
-            toNodeId: nodeId,
-            direction: 'one-way',
-            label,
-          },
-        ]);
-      }
-      setConnectingFromNodeId(null);
+      setConnectingFromPort(port);
+      return;
     }
+
+    if (connectingFromNodeId === nodeId) {
+      setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
+      return;
+    }
+
+    const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
+    const toNode = nodes.find((n) => n.id === nodeId);
+    if (!fromNode || !toNode) { setConnectingFromNodeId(null); setConnectingFromPort(null); return; }
+
+    const duplicate = wires.some(
+      (w) =>
+        (w.fromNodeId === connectingFromNodeId && w.toNodeId === nodeId
+          && w.fromPort === connectingFromPort && w.toPort === port)
+        || (w.fromNodeId === nodeId && w.toNodeId === connectingFromNodeId
+          && w.fromPort === port && w.toPort === connectingFromPort),
+    );
+    if (duplicate) {
+      addToast({ message: 'A wire already connects these ports.', type: 'warning' });
+      setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
+      return;
+    }
+
+    pushHistory();
+
+    const existingWarehouseWires = wires.filter((w) => {
+      const fn = nodes.find((n) => n.id === w.fromNodeId);
+      const tn = nodes.find((n) => n.id === w.toNodeId);
+      return fn?.type === 'workspace' && tn?.type === 'warehouse';
+    });
+
+    if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
+      addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
+      setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
+      return;
+    }
+
+    const newWireId = `wire-${Date.now()}`;
+    const isWarehouseWire = fromNode.type === 'workspace' && toNode.type === 'warehouse';
+    const label = isWarehouseWire
+      ? existingWarehouseWires.length === 0 ? 'Stock Deduct (P1)' : `Fallback (P${existingWarehouseWires.length + 1})`
+      : 'Connected';
+
+    setWires((prev) => [
+      ...prev,
+      { id: newWireId, fromNodeId: connectingFromNodeId, fromPort: connectingFromPort!, toNodeId: nodeId, toPort: port, direction: 'one-way', label },
+    ]);
+    setConnectingFromNodeId(null);
+    setConnectingFromPort(null);
   };
 
-  // Toggle Wire Direction (1-Way <-> 2-Way)
   const handleToggleWireDirection = (wireId: string) => {
+    pushHistory();
     setWires((prev) =>
       prev.map((w) => {
         if (w.id === wireId) {
-          return {
-            ...w,
-            direction: w.direction === 'one-way' ? 'two-way' : 'one-way',
-          };
+          return { ...w, direction: w.direction === 'one-way' ? 'two-way' : 'one-way' };
         }
         return w;
       }),
     );
   };
 
-  // Delete Selected Element
-  const handleDeleteSelected = () => {
+  const handleDeleteRequest = () => {
     if (selectedNodeId) {
-      setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
-      setWires((prev) => prev.filter((w) => w.fromNodeId !== selectedNodeId && w.toNodeId !== selectedNodeId));
-      setSelectedNodeId(null);
+      const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
+      if (hasWires) {
+        setConfirmDelete(selectedNodeId);
+      } else {
+        // No connected wires — delete immediately without dialog.
+        pushHistory();
+        setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
+        setSelectedNodeId(null);
+      }
     } else if (selectedWireId) {
-      setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
-      setSelectedWireId(null);
+      setConfirmDelete('');
     }
   };
 
-  // Selected Node Details
+  const wirePreviewLine = useMemo(() => {
+    if (!connectingFromNodeId || !connectingFromPort) return null;
+    const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
+    if (!fromNode) return null;
+    const portOff = PORT_OFFSET[connectingFromPort];
+    const x1 = fromNode.x + portOff.dx;
+    const y1 = fromNode.y + portOff.dy;
+
+    // If hovering near a target port, snap the preview to it
+    let mx: number;
+    let my: number;
+    if (hoveredTarget) {
+      const targetNode = nodes.find((n) => n.id === hoveredTarget.nodeId);
+      if (targetNode) {
+        const targetOff = PORT_OFFSET[hoveredTarget.port];
+        mx = targetNode.x + targetOff.dx;
+        my = targetNode.y + targetOff.dy;
+      } else {
+        const canvas = canvasRef.current;
+        if (!canvas) return null;
+        const rect = canvas.getBoundingClientRect();
+        mx = (mousePosRef.current.x - rect.left - pan.x) / zoom;
+        my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
+      }
+    } else {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      mx = (mousePosRef.current.x - rect.left - pan.x) / zoom;
+      my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
+    }
+
+    const dx = Math.abs(mx - x1) * 0.5;
+    return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
+  }, [connectingFromNodeId, connectingFromPort, nodes, zoom, pan, hoveredTarget]);
+
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
+  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
   return (
     <div className="node-topology-editor">
-      {/* ── Top Header Bar ────────────────────────────────────────────── */}
+      {/* ── Confirm delete dialog ── */}
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          open
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={executeDelete}
+          title={confirmDelete ? 'Delete Node' : 'Delete Wire'}
+          message={
+            confirmDelete
+              ? 'This node has connected wires. Deleting it will remove all its wires too. This action cannot be undone.'
+              : 'Delete this wire connection? This action cannot be undone.'
+          }
+          variant="danger"
+          confirmLabel="Delete"
+        />
+      )}
+
+      {/* ── Confirm preset overwrite dialog ── */}
+      {confirmPreset !== null && (
+        <ConfirmDialog
+          open
+          onCancel={() => setConfirmPreset(null)}
+          onConfirm={executePresetLoad}
+          title="Load Preset"
+          message="Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading."
+          variant="warning"
+          confirmLabel="Load Preset"
+        />
+      )}
+
       <div className="node-topology-header">
         <div className="node-topology-header-title">
           <Localized id="topology-builder-title">
@@ -282,41 +626,44 @@ export default function NodeTopologyEditor({
             variant={isSimulating ? 'primary' : 'secondary'}
             onClick={() => setIsSimulating(!isSimulating)}
             className="simulation-btn"
+            icon={isSimulating ? <StopIcon size={16} /> : <FlaskIcon size={16} />}
           >
-            {isSimulating ? '⏹ Stop Simulation' : '🧪 Test Order Simulation'}
+            {isSimulating ? 'Stop Simulation' : 'Test Order Simulation'}
           </Button>
 
           <Button
             variant="secondary"
-            onClick={() => { setNodes(PRESET_RETAIL.nodes); setWires(PRESET_RETAIL.wires); }}
+            onClick={() => { isDirtyRef.current ? setConfirmPreset('retail') : loadPreset('retail'); }}
+            icon={<CartIcon size={16} />}
           >
-            🛒 Retail Preset
+            Retail Preset
           </Button>
 
           <Button
             variant="secondary"
-            onClick={() => { setNodes(PRESET_RESTAURANT.nodes); setWires(PRESET_RESTAURANT.wires); }}
+            onClick={() => { isDirtyRef.current ? setConfirmPreset('restaurant') : loadPreset('restaurant'); }}
+            icon={<UtensilsIcon size={16} />}
           >
-            🍽️ Resto & KDS Preset
+            Resto & KDS Preset
           </Button>
 
           <Button
             variant="primary"
             onClick={() => onSave?.(nodes, wires)}
+            icon={<CheckIcon size={16} />}
           >
-            ✓ Apply Topology Changes
+            Apply Topology Changes
           </Button>
         </div>
       </div>
 
       <div className="node-topology-main">
-        {/* ── Left Sidebar Tool Rack ──────────────────────────────────── */}
         <div className="node-tool-rack">
           <h3>Palette Tools</h3>
           <p className="tool-rack-desc">Drag or click to spawn topology nodes:</p>
 
           <button className="tool-card" onClick={() => handleAddNode('store')}>
-            <span className="tool-card-icon">🏢</span>
+            <span className="tool-card-icon"><StoreIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Store Node</strong>
               <span>Store Branch Profile</span>
@@ -324,7 +671,7 @@ export default function NodeTopologyEditor({
           </button>
 
           <button className="tool-card" onClick={() => handleAddNode('workspace')}>
-            <span className="tool-card-icon">🛒</span>
+            <span className="tool-card-icon"><PosIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Workspace Node</strong>
               <span>POS / Register Instance</span>
@@ -335,18 +682,18 @@ export default function NodeTopologyEditor({
             className={`tool-card ${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? 'locked' : ''}`}
             onClick={() => handleAddNode('warehouse')}
           >
-            <span className="tool-card-icon">📦</span>
+            <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Warehouse Node</strong>
               <span>Storage Location</span>
             </div>
             {!isProAllowed && nodes.some((n) => n.type === 'warehouse') && (
-              <span className="lock-badge">🔒 Pro</span>
+              <span className="lock-badge"><LockIcon size={12} /> Pro</span>
             )}
           </button>
 
           <button className="tool-card" onClick={() => handleAddNode('hardware')}>
-            <span className="tool-card-icon">🖨️</span>
+            <span className="tool-card-icon"><PrinterIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Hardware Node</strong>
               <span>Printer / KDS Peripheral</span>
@@ -356,23 +703,34 @@ export default function NodeTopologyEditor({
           <hr className="tool-rack-divider" />
 
           {selectedNodeId || selectedWireId ? (
-            <Button variant="secondary" onClick={handleDeleteSelected} className="delete-btn">
-              🗑 Delete Selected Element
+            <Button variant="secondary" onClick={handleDeleteRequest} className="delete-btn" icon={<TrashIcon size={16} />}>
+              Delete Selected Element
             </Button>
           ) : null}
 
+          {history.length > 0 && (
+            <Button variant="secondary" onClick={popUndo} style={{ fontSize: 'var(--text-xs)' }}>
+              Undo (Ctrl+Z)
+            </Button>
+          )}
+
           <div className="canvas-controls-mini">
             <span>Zoom: {Math.round(zoom * 100)}%</span>
+            <Button variant="secondary" onClick={zoomToFit}>
+              Fit All
+            </Button>
             <Button variant="secondary" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>
               Reset View
             </Button>
           </div>
         </div>
 
-        {/* ── Interactive Node Graph Canvas ────────────────────────────── */}
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- canvas container for drag-and-drop topology */}
         <div
+          ref={canvasRef}
           className="node-canvas-container"
+          tabIndex={0}
+          role="application"
+          aria-label="Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo."
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseDown={handleCanvasMouseDown}
@@ -384,32 +742,30 @@ export default function NodeTopologyEditor({
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             }}
           >
-            {/* SVG Layer for Arrow Connections & Animated Simulation Pulses */}
             <svg className="node-wires-svg">
               <defs>
-                {/* Arrow markers for 1-way and 2-way wires */}
                 <marker
                   id="arrow-end"
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
+                  viewBox="0 0 6 6"
+                  refX="5"
+                  refY="3"
+                  markerWidth="4"
+                  markerHeight="4"
                   orient="auto-start-reverse"
                 >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-primary, #3b82f6)" />
+                  <path d="M 0 0 L 6 3 L 0 6 z" fill="var(--color-accent, #5a9fd4)" />
                 </marker>
 
                 <marker
                   id="arrow-start"
-                  viewBox="0 0 10 10"
-                  refX="2"
-                  refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
+                  viewBox="0 0 6 6"
+                  refX="5"
+                  refY="3"
+                  markerWidth="4"
+                  markerHeight="4"
                   orient="auto-start-reverse"
                 >
-                  <path d="M 10 0 L 0 5 L 10 10 z" fill="var(--color-primary, #3b82f6)" />
+                  <path d="M 0 0 L 6 3 L 0 6 z" fill="var(--color-accent, #5a9fd4)" />
                 </marker>
               </defs>
 
@@ -418,25 +774,43 @@ export default function NodeTopologyEditor({
                 const toNode = nodes.find((n) => n.id === wire.toNodeId);
                 if (!fromNode || !toNode) return null;
 
-                // Center positions of nodes
-                const x1 = fromNode.x + 100;
-                const y1 = fromNode.y + 40;
-                const x2 = toNode.x + 100;
-                const y2 = toNode.y + 40;
+                // Wire connects from port to port (default: right edge)
+                const fromPort = wire.fromPort ?? 'right';
+                const toPort = wire.toPort ?? 'right';
+                const fromOff = PORT_OFFSET[fromPort];
+                const toOff = PORT_OFFSET[toPort];
+                const x1 = fromNode.x + fromOff.dx;
+                const y1 = fromNode.y + fromOff.dy;
+                const x2 = toNode.x + toOff.dx;
+                const y2 = toNode.y + toOff.dy;
 
-                // Control points for smooth bezier curve
                 const dx = Math.abs(x2 - x1) * 0.5;
                 const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 
-                // Simulation pulse interpolation
-                const pulseX = x1 + (x2 - x1) * (simPulseStep / 100);
-                const pulseY = y1 + (y2 - y1) * (simPulseStep / 100);
+                // Label position: bezier midpoint offset perpendicular to the curve
+                // so labels float above the wire arc instead of sitting on the
+                // geometric midpoint (which can overlap with node cards).
+                const labelT = 0.5;
+                const lx = cubicBezier(labelT, x1, x1 + dx, x2 - dx, x2);
+                const ly = cubicBezier(labelT, y1, y1, y2, y2);
+                // Tangent at bezier midpoint
+                const tangentX = 1.5 * (x2 - x1 - dx);
+                const tangentY = 1.5 * (y2 - y1);
+                // Perpendicular vector (ty, -tx) points "upward" for rightward wires
+                const perpLen = Math.max(Math.sqrt(tangentX * tangentX + tangentY * tangentY), 12);
+                const LABEL_OFFSET = 24;
+                const labelOffX = (tangentY / perpLen) * LABEL_OFFSET;
+                const labelOffY = (-tangentX / perpLen) * LABEL_OFFSET;
+
+                // Pulse follows the cubic bezier curve, not a straight line
+                const t = simPulseStep / 100;
+                const pulseX = cubicBezier(t, x1, x1 + dx, x2 - dx, x2);
+                const pulseY = cubicBezier(t, y1, y1, y2, y2);
 
                 const isSelected = selectedWireId === wire.id;
 
                 return (
                   <g key={wire.id} className={`wire-group ${isSelected ? 'wire-selected' : ''}`}>
-                    {/* Background hit line */}
                     <path
                       d={pathD}
                       className="wire-hitbox"
@@ -447,7 +821,11 @@ export default function NodeTopologyEditor({
                       }}
                     />
 
-                    {/* Visible Wire Connection */}
+                    {/* Explicit endpoint dot ensures the wire always starts
+                        exactly at the port socket center, regardless of SVG
+                        renderer quirks with stroke-dasharray at path boundaries. */}
+                    <circle cx={x1} cy={y1} r="1.5" className="wire-end-dot" />
+
                     <path
                       d={pathD}
                       className={`wire-path ${wire.direction}`}
@@ -455,19 +833,21 @@ export default function NodeTopologyEditor({
                       markerStart={wire.direction === 'two-way' ? 'url(#arrow-start)' : undefined}
                     />
 
-                    {/* Wire Label & Direction Toggle Button */}
                     <g
-                      transform={`translate(${(x1 + x2) / 2}, ${(y1 + y2) / 2})`}
+                      transform={`translate(${lx + labelOffX}, ${ly + labelOffY})`}
                       className="wire-label-group"
                       onClick={() => handleToggleWireDirection(wire.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Toggle wire direction"
                     >
                       <rect x="-40" y="-12" width="80" height="22" rx="11" className="wire-label-bg" />
                       <text x="0" y="3" textAnchor="middle" className="wire-label-text">
-                        {wire.direction === 'two-way' ? '↔' : '→'} {wire.label || ''}
+                        {wire.direction === 'two-way' ? '\u2194' : '\u2192'} {wire.label || ''}
                       </text>
                     </g>
 
-                    {/* Animated Energy Pulse during Simulation */}
                     {isSimulating && (
                       <circle
                         cx={pulseX}
@@ -479,9 +859,12 @@ export default function NodeTopologyEditor({
                   </g>
                 );
               })}
+
+              {wirePreviewLine && (
+                <path d={wirePreviewLine.d} className="wire-path" opacity="0.5" pointerEvents="none" />
+              )}
             </svg>
 
-            {/* Render Draggable Topology Nodes */}
             {nodes.map((node) => {
               const isSelected = selectedNodeId === node.id;
               const isConnectingSource = connectingFromNodeId === node.id;
@@ -489,7 +872,7 @@ export default function NodeTopologyEditor({
               return (
                 <div
                   key={node.id}
-                  className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}`}
+                  className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${freshNodeIds.has(node.id) ? ' node-fresh' : ''}`}
                   style={{ left: `${node.x}px`, top: `${node.y}px` }}
                   role="button"
                   tabIndex={0}
@@ -497,8 +880,16 @@ export default function NodeTopologyEditor({
                   onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
                 >
                   <div className="node-header">
+                    <span className="node-type-accent" />
+                    <span className="node-grip" aria-hidden="true" title="Drag to move">
+                      <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                        <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+                        <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+                        <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+                      </svg>
+                    </span>
                     <span className="node-type-icon">
-                      {node.type === 'store' ? '🏢' : node.type === 'workspace' ? '🛒' : node.type === 'warehouse' ? '📦' : '🖨️'}
+                      {node.type === 'store' ? <StoreIcon size={16} /> : node.type === 'workspace' ? <PosIcon size={16} /> : node.type === 'warehouse' ? <WarehouseIcon size={16} /> : <PrinterIcon size={16} />}
                     </span>
                     <span className="node-title">{node.name}</span>
                   </div>
@@ -512,26 +903,42 @@ export default function NodeTopologyEditor({
                     )}
                   </div>
 
-                  {/* Node Connection Port Sockets */}
-                  <button
-                    className={`node-port-socket ${isConnectingSource ? 'port-active' : ''}`}
-                    onClick={(e) => handlePortClick(e, node.id)}
-                    title="Click to connect wire to another node"
-                  >
-                    ●
-                  </button>
+                  <div className="node-port-sockets-group">
+                    {(['top', 'right', 'bottom', 'left'] as PortName[]).map((port) => {
+                      const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
+                      const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
+                      const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered;
+                      return (
+                        <button
+                          key={port}
+                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''}`}
+                          onClick={(e) => handlePortClick(e, node.id, port)}
+                          aria-label={`${node.name} ${port} port`}
+                        >
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          {/* ── Canvas HUD ────────────────────────────────── */}
+          <div className="canvas-hud" aria-hidden="true">
+            <span className="canvas-hud-item">{Math.round(zoom * 100)}%</span>
+            <span className="canvas-hud-divider" />
+            <span className="canvas-hud-item">{nodes.length} node{nodes.length !== 1 ? 's' : ''}</span>
+            <span className="canvas-hud-divider" />
+            <span className="canvas-hud-item">{wires.length} wire{wires.length !== 1 ? 's' : ''}</span>
+          </div>
         </div>
 
-        {/* ── Right Node Inspector Drawer ───────────────────────────── */}
         {selectedNode && (
           <div className="node-inspector-drawer">
             <div className="inspector-header">
               <h3>Node Inspector</h3>
-              <Button variant="secondary" onClick={() => setSelectedNodeId(null)}>✕</Button>
+              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label="Close inspector">{null}</Button>
             </div>
 
             <div className="inspector-content">
@@ -588,3 +995,4 @@ export default function NodeTopologyEditor({
     </div>
   );
 }
+/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */

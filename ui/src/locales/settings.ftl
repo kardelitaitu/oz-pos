@@ -199,6 +199,7 @@ settings-nav-tax = Tax Rates
 settings-nav-license = License
 settings-nav-exchange = Exchange Rates
 settings-nav-promotions = Promotions
+settings-nav-topology = Topology
 settings-category-operations = Operations
 settings-category-system = System
 settings-category-management = Management

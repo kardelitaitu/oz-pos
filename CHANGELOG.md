@@ -4,6 +4,50 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.16] — 2026-07-21
+
+### Added
+
+#### 🏗️ Settings Sidebar — Node Topology Overhaul (P60)
+
+Settings navigation tree extracted from monolithic SettingsPage.tsx into a standalone component with reliability, UX, and accessibility improvements.
+
+- **P60-1a: Component extraction** — Created `SettingsNavTree.tsx` + `SettingsNavTree.css`. All ~400 lines of sidebar JSX, state (accordion, collapse, search, keyboard nav), and CSS extracted from SettingsPage.tsx (2,000→1,860 lines). Exports `NAV_ITEMS`, `CATEGORIES`, `CATEGORY_I18N_KEYS`, `NAV_L10N_KEYS` for SettingsPage breadcrumb.
+- **P60-1b: Dedicated CSS** — All sidebar styles moved to `SettingsNavTree.css` with responsive mobile overlay (fixed positioning, backdrop, slide-in from left).
+- **P60-1c: Clean imports** — SettingsPage imports `<SettingsNavTree>` with minimal props interface.
+
+#### 🔵 P60-2 — Reliability Edge Cases
+
+- **P60-2a: `sectionKey` hydration fix** — Replaced incremental counter with `key={activeSection}` for stable, predictable re-renders. Eliminates stale closure risk.
+- **P60-2b: Arrow key empty search guard** — Early return when `flatKeys.length === 0`. Prevents modulo-by-zero crash on empty search results.
+- **P60-2c: localStorage race debounce** — 100ms debounced `debouncedPersist()` via ref timer for `sidebarCollapsed` and `expandedCategory` writes. Cleanup on unmount clears pending timeout.
+
+#### 🟢 P60-3 — UX Design Improvements
+
+- **P60-3a: Smooth accordion animation** — Replaced `@keyframes` animation (mount-only) with CSS `transition` on `max-height`, `opacity`, `transform`. Changed from conditional rendering `{(cond) && <div>}` to always-rendered with class-based toggle for smooth enter/exit. GPU acceleration via `will-change`.
+- **P60-3c: Badge-pop animation** — `@keyframes badge-pop`: scale(0.6→1.15→1), opacity(0→1), 350ms ease-out. `key={cat.keys.length}` re-triggers animation on count change. `aria-label` for screen readers. `prefers-reduced-motion` guard.
+- **P60-3d: Collapsed sidebar icons-only mode** — Widths adjusted to 15.625rem (250px) ↔ 3.5rem (56px) with smooth CSS transition. Collapsed nav items: 44px touch targets (min-height/min-width), centered icons, labels hidden via `display: none`. Compact collapsed header with reduced padding. Tooltips on nav items show labels on hover (existing `Tooltip` wrapper). `prefers-reduced-motion` override for width transition.
+- **P60-3e: Search result highlighting** — `highlightLabel()` wraps first case-insensitive match in `<mark class="settings-nav-highlight">` with accent-colored background. `role="status"` `aria-live="polite"` region announces visible results count. `visibleCount` memo tracks total visible items across filtered categories.
+
+#### 🟡 P60-4 — Accessibility Compliance
+
+- **P60-4a: `aria-controls` + `aria-expanded`** — Category header buttons link to their panels via `aria-controls={panelId}` and `id={panelId}`. Panels have `role="region"` + localized `aria-label` for properly-labeled landmarks. `aria-pressed` omitted (redundant with `aria-expanded` on accordion).
+- **P60-4b: Focus trap on mobile** — Added `sidebarRef` on `<aside>`, called `useFocusTrap(sidebarRef, mobileSidebarOpen, onMobileClose)`. Traps Tab focus within sidebar when mobile overlay is open.
+- **P60-4e: Screen reader live regions** — Centralized `announcement` state feeding `<div role="status">`. Three announcement sources: category expand/collapse via `userToggleRef` pattern, section activated on `activeSection` change, search results/empty/cleared via `prevQ` ref guard.
+- **P60-4f: Focus management on navigation** — On section change, queries `.settings-section-content` for first `<h2>`, adds `tabindex="-1"`, calls `focus({ preventScroll: true })`. Removes tabindex on blur via one-shot `{ once: true }` listener.
+- **P60-4g: Touch target audit** — All interactive elements: `min-height: 2.75rem` / `min-width: 2.75rem` (44px) per WCAG 2.2 Target Size (Minimum). Toggle button, collapse-all button, category headers, nav items. Uses `min-` constraints to preserve visual 2rem size while expanding hit area.
+
+#### 🟣 P60-5 — Testing
+
+- **P60-5a: Unit tests for NavTree** — 19 tests covering: 4 category render + badge counts (2,3,4,10), active section highlight, accordion expand/collapse with `aria-expanded` assertions, search filtering (label match, category match, case-insensitive, empty state), navigation via click, collapsed sidebar via localStorage and toggle button, mobile backdrop visibility/close, `aria-controls` + `role="region"` + `aria-current`. Mock strategy: `@fluent/react` keyMap, `useFocusTrap` no-op, `Tooltip` renders children.
+
+#### ⚪ P60-6 — Polish
+
+- **P60-6a: Reduced motion overrides** — `@media (prefers-reduced-motion: reduce)` blocks for: accordion section-item max-height/opacity transition, sidebar width transition, header padding transition, badge-pop animation. All forced to non-animated expanded state.
+- **P60-6b: Changelog** — Documented all 0.0.16 settings sidebar changes.
+
+---
+
 ## [0.0.15] — 2026-07-21
 
 ### Added

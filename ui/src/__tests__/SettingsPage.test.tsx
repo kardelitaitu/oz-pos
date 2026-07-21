@@ -363,9 +363,9 @@ describe('SettingsPage', () => {
   it('renders Display section with size and font controls', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /appearance/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /appearance/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /appearance/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /appearance/i }));
 
     expect(screen.getByRole('button', { name: /decrease card size/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /increase card size/i })).toBeInTheDocument();
@@ -376,9 +376,9 @@ describe('SettingsPage', () => {
   it('increments card size value', async () => {
     const { container } = renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /appearance/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /appearance/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /appearance/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /appearance/i }));
 
     // Use container.querySelector to target the specific .settings-size-value element
     // rather than screen.getAllByText which can match unrelated elements.
@@ -400,10 +400,10 @@ describe('SettingsPage', () => {
   it('navigates to Receipt section and populates form from API', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /receipt/i }));
 
     expect(screen.getByLabelText(/show currency symbol/i)).not.toBeChecked();
     expect(screen.getByLabelText(/show tax line/i)).toBeChecked();
@@ -412,10 +412,10 @@ describe('SettingsPage', () => {
   it('toggles show-currency and show-tax checkboxes', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /receipt/i }));
 
     fireEvent.change(screen.getByLabelText(/show currency symbol/i), { target: { checked: true } });
     expect(screen.getByLabelText(/show currency symbol/i)).toBeChecked();
@@ -425,10 +425,10 @@ describe('SettingsPage', () => {
     const user = userEvent.setup();
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /receipt/i }));
 
     const currencyInput = screen.getByLabelText(/show currency symbol/i) as HTMLInputElement;
     expect(currencyInput.checked).toBe(false);
@@ -446,10 +446,10 @@ describe('SettingsPage', () => {
   it('changes decimal separator and updates receipt footer', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /receipt/i }));
 
     const separatorTrigger = screen.getByLabelText(/decimal separator/i);
     fireEvent.click(separatorTrigger);
@@ -466,10 +466,10 @@ describe('SettingsPage', () => {
   it('renders Cloud Sync section with form fields', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
     expect(screen.getAllByRole('heading', { name: /cloud sync/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
@@ -480,10 +480,10 @@ describe('SettingsPage', () => {
   it('shows not-configured hint when sync is unconfigured', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
     expect(screen.getByText(/not configured/i)).toBeInTheDocument();
   });
@@ -493,10 +493,10 @@ describe('SettingsPage', () => {
   it('renders About section with version and license info', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /system/i }));
-    fireEvent.click(screen.getByRole('button', { name: /about/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /about/i }));
 
     expect(screen.getByRole('heading', { name: /system.*license/i })).toBeInTheDocument();
     const versionElements = screen.getAllByText(/0\.0\.\d+/);
@@ -534,9 +534,9 @@ describe('SettingsPage', () => {
   it('toggles category accordion', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    const opsBtn = screen.getByRole('button', { name: /operations/i });
+    const opsBtn = screen.getByRole('treeitem', { name: /operations/i });
     expect(opsBtn.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(opsBtn);
     expect(opsBtn.getAttribute('aria-expanded')).toBe('true');
@@ -691,7 +691,9 @@ describe('SettingsPage', () => {
 
     // After ArrowDown from 'general', it should navigate to 'appearance'.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /appearance/i })?.className).toContain('settings-nav-item--active');
+      const items = screen.getAllByRole('treeitem', { name: /appearance/i });
+      const hasActive = items.some((el) => el.className.includes('settings-nav-item--active'));
+      expect(hasActive).toBe(true);
     });
   });
 
@@ -707,8 +709,9 @@ describe('SettingsPage', () => {
     fireEvent.keyDown(document, { key: 'ArrowUp' });
 
     await waitFor(() => {
-      const appearanceBtn = screen.getByRole('button', { name: /appearance/i });
-      expect(appearanceBtn.className).toContain('settings-nav-item--active');
+      const items = screen.getAllByRole('treeitem', { name: /appearance/i });
+      const hasActive = items.some((el) => el.className.includes('settings-nav-item--active'));
+      expect(hasActive).toBe(true);
     });
   });
 
@@ -717,10 +720,10 @@ describe('SettingsPage', () => {
   it('toggles API key visibility in Cloud Sync section', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
     const apiKeyInput = screen.getByLabelText(/^api key$/i) as HTMLInputElement;
     expect(apiKeyInput.type).toBe('password');
@@ -769,28 +772,28 @@ describe('SettingsPage', () => {
   it('renders correct section after navigating through multiple sections', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /receipt/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /receipt/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/show currency symbol/i)).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /system/i }));
-    fireEvent.click(screen.getByRole('button', { name: /about/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /about/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /system.*license/i })).toBeInTheDocument();
     });
 
     // Navigate back to General via the sidebar.
-    const businessHeader = screen.getByRole('button', { name: /business/i });
+    const businessHeader = screen.getByRole('treeitem', { name: /business/i });
     fireEvent.click(businessHeader);
 
-    fireEvent.click(screen.getByRole('button', { name: /general/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /general/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('textbox', { name: 'Store name' })).toBeInTheDocument();
@@ -802,14 +805,14 @@ describe('SettingsPage', () => {
   // ══════════════════════════════════════════════════════════════
 
   function navigateToSync() {
-    fireEvent.click(screen.getByRole('button', { name: /operations/i }));
-    fireEvent.click(screen.getByRole('button', { name: /cloud sync/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
   }
 
   it('keeps API key in field after save when sync save succeeds', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
     navigateToSync();
 
@@ -837,7 +840,7 @@ describe('SettingsPage', () => {
   it('keeps API key after save when sync save fails', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
     navigateToSync();
 
@@ -863,7 +866,7 @@ describe('SettingsPage', () => {
   it('shows partial-save toast when sync save is the only failure', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /operations/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
     });
     navigateToSync();
 
@@ -956,10 +959,10 @@ describe('SettingsPage', () => {
   it('renders License section when navigating to License tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /system/i }));
-    fireEvent.click(screen.getByRole('button', { name: /license/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /license/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 2, name: /license/i })).toBeInTheDocument();
@@ -969,10 +972,10 @@ describe('SettingsPage', () => {
   it('renders Data Management section when navigating to Data tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /system/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^data$/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /^data$/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /data management/i })).toBeInTheDocument();
@@ -982,10 +985,10 @@ describe('SettingsPage', () => {
   it('renders Features section when navigating to Features tab', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /system/i })).toBeInTheDocument();
+      expect(screen.getByRole('treeitem', { name: /system/i })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /system/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^features$/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
+    fireEvent.click(screen.getByRole('treeitem', { name: /^features$/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /feature toggles/i })).toBeInTheDocument();
