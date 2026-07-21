@@ -6,5 +6,5 @@ pub mod migrations;
 pub mod pool;
 
 pub use manager::StoreDatabaseManager;
-pub use migrations::{Migration, run};
+pub use migrations::{Migration, rollback, run};
 pub use pool::Pool;
