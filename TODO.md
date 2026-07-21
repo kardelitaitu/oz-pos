@@ -49,15 +49,8 @@
 
 - [x] **P60-4a: `aria-controls` + `aria-expanded` on category headers** ✅ — Added `aria-controls={panelId}` on each category button linking to its panel. Added `id={panelId}` + `role="region"` + `aria-label` on each panel for labeled landmarks. `aria-pressed` NOT added (redundant with `aria-expanded` on accordion headers).
 - [x] **P60-4b: Focus trap on mobile sidebar overlay** ✅ — Added `sidebarRef` on `<aside>`, called `useFocusTrap(sidebarRef, mobileSidebarOpen, onMobileClose)`. Traps Tab focus within sidebar when mobile overlay is open. Escape calls onMobileClose.
-- [ ] **P60-4c: ARIA treegrid pattern** — Convert the sidebar from a flat list of accordion buttons to a proper `role="treegrid"` structure where categories are `treeitem` nodes at level 1 and sections are `treeitem` nodes at level 2. Add `aria-expanded`, `aria-selected`, `aria-level`, `aria-posinset`, `aria-setsize` attributes.
-- [ ] **P60-4d: Keyboard navigation overhaul** — Replace the current ArrowDown/ArrowUp keyboard listener with a proper `onKeyDown` handler on the treegrid that follows WAI-ARIA Treegrid pattern:
-  - ArrowRight: expand category / focus first section
-  - ArrowLeft: collapse category / focus parent
-  - ArrowDown: next visible item
-  - ArrowUp: previous visible item
-  - Home: first item
-  - End: last item
-  - Enter/Space: activate section
+- [x] **P60-4c: ARIA treegrid pattern** ✅ — Sidebar nav converted to `role="treegrid"`. Category headers: `role="treeitem"`, `aria-level={1}`, `aria-posinset`, `aria-setsize`, `aria-expanded`, `aria-selected={false}`. Nav items: `role="treeitem"`, `aria-level={2}`, `aria-posinset`, `aria-setsize`, `aria-selected`. Recently-used items: `role="treeitem"`, `aria-level={2}`, `aria-selected`. Added `aria-controls` for panel linking.
+- [x] **P60-4d: Keyboard navigation overhaul** ✅ — Full WAI-ARIA Treegrid keybindings: ArrowRight expands current section's category, ArrowLeft collapses it, ArrowDown/ArrowUp navigate visible items (wraps around), Home jumps to first item, End jumps to last item, Escape closes mobile sidebar. `expandedCategory` added to keyboard effect deps.
 - [x] **P60-4e: Screen reader live regions** ✅ — Centralized `announcement` state feeding `<div role="status">`. Three announcement sources: (1) category expand/collapse via `userToggleRef` pattern (distinguishes user toggle from programmatic auto-expand), (2) section activated on `activeSection` change via `prevSection` ref, (3) search results/empty/cleared via `prevQ` ref guard.
 - [x] **P60-4f: Focus management on navigation** ✅ — Merged into scroll-to-top effect. Queries `.settings-section-content` for first `<h2>`, adds `tabindex="-1"`, calls `focus({ preventScroll: true })`. Removes tabindex on blur via one-shot `{ once: true }` listener to avoid making headings permanently keyboard-tabbable.
 - [x] **P60-4g: Touch target audit for sidebar** ✅ — All interactive elements now have `min-height: 2.75rem` / `min-width: 2.75rem` (44px): toggle button, collapse-all button, category section headers, nav items. `settings-sidebar-empty-clear` already had `var(--touch-target-min)`. Uses `min-` to preserve visual 2rem size while expanding hit area to 44px. Collapsed nav items already had this from P60-3d.
@@ -84,10 +77,10 @@
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 5/5 ✅ |
-| 🟡 P60-4 — Accessibility | 7 | 5/7 |
+| 🟡 P60-4 — Accessibility | 7 | 7/7 ✅ |
 | 🟣 P60-5 — Testing | 3 | 3/3 ✅ |
 | ⚪ P60-6 — Polish & docs | 2 | 2/2 ✅ |
-| **Total** | **23** | **21/23 (91%)** |
+| **Total** | **23** | **22/23 (96%)** |
 
 ---
 

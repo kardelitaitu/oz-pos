@@ -81,21 +81,17 @@ const defaultProps = {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Get all nav item buttons within the sidebar. */
+/** Get all nav item treeitems within the sidebar (filters out category headers). */
 function getNavItems() {
-  return screen.getAllByRole('button').filter(
-    (btn) => btn.closest('[data-testid="settings-sidebar"]') !== null
-      && btn.getAttribute('aria-label')
-      && btn.getAttribute('aria-label') !== ''
-      && btn.getAttribute('aria-label') !== 'Collapse all categories'
-      && btn.getAttribute('aria-label') !== 'Collapse sidebar'
-      && btn.getAttribute('aria-label') !== 'Expand sidebar',
+  return screen.getAllByRole('treeitem').filter(
+    (item) => item.closest('[data-testid="settings-sidebar"]') !== null
+      && item.getAttribute('aria-level') === '2',
   );
 }
 
-/** Get the currently active nav item. */
+/** Get the currently active nav item by aria-selected. */
 function getActiveNavItem() {
-  return screen.getByRole('button', { current: 'page' });
+  return screen.getByRole('treeitem', { selected: true });
 }
 
 /** Fire a keyboard event on a target element (defaults to document).
@@ -247,8 +243,8 @@ describe('SettingsNavTree', () => {
     render(<SettingsNavTree {...defaultProps} onNavigate={onNavigate} />);
 
     // Click on Appearance (under Business, which is expanded by default)
-    const appearanceBtn = screen.getByRole('button', { name: 'Appearance' });
-    await user.click(appearanceBtn);
+    const appearanceItem = screen.getByRole('treeitem', { name: 'Appearance' });
+    await user.click(appearanceItem);
 
     expect(onNavigate).toHaveBeenCalledWith('appearance');
   });
@@ -511,10 +507,10 @@ describe('SettingsNavTree', () => {
     expect(panel).toHaveAttribute('role', 'region');
   });
 
-  it('active nav item has aria-current="page"', () => {
+  it('active nav item has aria-selected="true"', () => {
     render(<SettingsNavTree {...defaultProps} activeSection="appearance" />);
 
     const activeItem = getActiveNavItem();
-    expect(activeItem).toHaveAttribute('aria-current', 'page');
+    expect(activeItem).toHaveAttribute('aria-selected', 'true');
   });
 });

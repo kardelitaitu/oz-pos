@@ -459,7 +459,7 @@ export default function SettingsNavTree({
     prevCategory.current = expandedCategory;
   }, [expandedCategory]);
 
-  // ── Arrow key navigation for sidebar ──────────────────────
+  // ── Treegrid keyboard navigation (P60-4c/d) ──────────────
   useEffect(() => {
     const flatKeys = filteredCategories.flatMap((c) => c.keys);
 
@@ -471,17 +471,54 @@ export default function SettingsNavTree({
         return;
       }
 
-      // Arrow keys navigate sections (skip when focused on inputs)
+      // Skip when focused on inputs
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
       // P60-2b: Guard against empty search results
       if (flatKeys.length === 0) return;
 
+      const idx = flatKeys.indexOf(activeSection);
+      if (idx === -1) return;
+
+      // Home / End → first / last item
+      if (e.key === 'Home') {
+        e.preventDefault();
+        if (flatKeys[0]) onNavigate(flatKeys[0]);
+        return;
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        const lastKey = flatKeys[flatKeys.length - 1];
+        if (lastKey) onNavigate(lastKey);
+        return;
+      }
+
+      // ArrowRight → select first child item if category is collapsed
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const cat = CATEGORIES.find((c) => c.keys.includes(activeSection));
+        if (cat && expandedCategory !== cat.label) {
+          // Category is collapsed — expand it
+          setExpandedCategory(cat.label);
+        }
+        return;
+      }
+
+      // ArrowLeft → collapse parent category (if at level 2)
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const cat = CATEGORIES.find((c) => c.keys.includes(activeSection));
+        if (cat && expandedCategory === cat.label) {
+          // Current section's category is expanded — collapse it
+          setExpandedCategory(null);
+        }
+        return;
+      }
+
+      // ArrowDown / ArrowUp → navigate through visible items
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        const idx = flatKeys.indexOf(activeSection);
-        if (idx === -1) return;
         const next = e.key === 'ArrowDown'
           ? (idx + 1) % flatKeys.length
           : (idx - 1 + flatKeys.length) % flatKeys.length;
@@ -493,7 +530,7 @@ export default function SettingsNavTree({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection, mobileSidebarOpen, filteredCategories, onMobileClose, onNavigate]);
+  }, [activeSection, expandedCategory, mobileSidebarOpen, filteredCategories, onMobileClose, onNavigate]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -551,10 +588,14 @@ export default function SettingsNavTree({
           </button>
         </div>
 
-        <nav className="settings-sidebar-nav">
+        <div
+          className="settings-sidebar-nav"
+          role="treegrid"
+          aria-label="Settings"
+        >
           {/* ── Recently-used sections (P60-3f) ──────────────── */}
           {!q && recentSections.length > 0 && !sidebarCollapsed && (
-            <div className="settings-sidebar-recent">
+            <div className="settings-sidebar-recent" role="group" aria-label="Recently viewed">
               {recentSections.map((key) => {
                 const item = NAV_ITEMS.find((n) => n.key === key);
                 if (!item) return null;
@@ -562,9 +603,11 @@ export default function SettingsNavTree({
                   <button
                     key={key}
                     type="button"
+                    role="treeitem"
+                    aria-level={2}
+                    aria-selected={activeSection === key}
                     className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
                     onClick={() => onNavigate(key)}
-                    aria-current={activeSection === key ? 'page' : undefined}
                     aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                   >
                     <span className="settings-nav-icon">{item.icon}</span>
@@ -596,7 +639,7 @@ export default function SettingsNavTree({
               </button>
             </div>
           ) : (
-            filteredCategories.map((cat) => {
+            filteredCategories.map((cat, catIdx) => {
               const isExpanded = expandedCategory === cat.label;
               const hasActive = cat.keys.includes(activeSection);
               const panelId = `settings-panel-${cat.label.toLowerCase()}`;
@@ -604,10 +647,16 @@ export default function SettingsNavTree({
                 <div key={cat.label} className="settings-sidebar-section">
                   <button
                     type="button"
-                    className={`settings-sidebar-section-header${hasActive ? ' settings-sidebar-section-header--active' : ''}`}
-                    onClick={() => toggleCategory(cat.label)}
+                    role="treeitem"
+                    aria-level={1}
+                    aria-posinset={catIdx + 1}
+                    aria-setsize={filteredCategories.length}
+                    // Treeitem parent nodes are expandable, not selectable
+                    aria-selected={false}
                     aria-expanded={isExpanded}
                     aria-controls={panelId}
+                    className={`settings-sidebar-section-header${hasActive ? ' settings-sidebar-section-header--active' : ''}`}
+                    onClick={() => toggleCategory(cat.label)}
                   >
                     <span className="settings-sidebar-section-label-wrap">
                       <span className="settings-sidebar-section-label">
@@ -627,6 +676,8 @@ export default function SettingsNavTree({
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
+                      width="12"
+                      height="12"
                       aria-hidden="true"
                     >
                       <polyline points="9 18 15 12 9 6" />
@@ -637,15 +688,19 @@ export default function SettingsNavTree({
                     role="region"
                     aria-label={l10n.getString(CATEGORY_I18N_KEYS[cat.label] ?? cat.label)}
                     className={`settings-sidebar-section-items${isExpanded || sidebarCollapsed ? ' settings-sidebar-section-items--expanded' : ''}`}>
-                      {cat.keys.map((key) => {
+                      {cat.keys.map((key, itemIdx) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
                           <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
                             <button
                               type="button"
+                              role="treeitem"
+                              aria-level={2}
+                              aria-posinset={itemIdx + 1}
+                              aria-setsize={cat.keys.length}
+                              aria-selected={activeSection === key}
                               className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
                               onClick={() => onNavigate(key)}
-                              aria-current={activeSection === key ? 'page' : undefined}
                               aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                             >
                               <span className="settings-nav-icon">{item.icon}</span>
@@ -663,7 +718,7 @@ export default function SettingsNavTree({
               );
             })
           )}
-        </nav>
+        </div>
       </aside>
 
       {/* ── Live region: announcements for screen readers (P60-4e) ── */}
