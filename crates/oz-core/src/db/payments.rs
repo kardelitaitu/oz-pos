@@ -27,7 +27,10 @@ impl Store<'_> {
         let mut payments = Vec::with_capacity(splits.len());
         let tx = self.conn.unchecked_transaction()?;
 
-        let cur_str = std::str::from_utf8(&currency.0).expect("currency bytes are valid UTF-8");
+        let cur_str = std::str::from_utf8(&currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
 
         for split in splits {
             let id = uuid::Uuid::now_v7().to_string();
@@ -53,7 +56,15 @@ impl Store<'_> {
                         params![existing_id],
                         |row| {
                             let cur_str: String = row.get("currency")?;
-                            let currency: Currency = cur_str.parse().expect("valid currency in DB");
+                            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                                rusqlite::Error::ToSqlConversionFailure(
+                                    std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        e.to_string(),
+                                    )
+                                    .into(),
+                                )
+                            })?;
                             Ok(Payment {
                                 id: row.get("id")?,
                                 sale_id: row.get("sale_id")?,
@@ -121,7 +132,11 @@ impl Store<'_> {
         )?;
         let rows = stmt.query_map(params![sale_id], |row| {
             let cur_str: String = row.get("currency")?;
-            let currency: Currency = cur_str.parse().expect("valid currency in DB");
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
             Ok(Payment {
                 id: row.get("id")?,
                 sale_id: row.get("sale_id")?,

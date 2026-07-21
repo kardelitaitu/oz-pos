@@ -25,6 +25,7 @@ use std::time::Instant;
 use crate::error::CoreError;
 use crate::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
 use crate::sale_deduction::LocationStock;
+use tracing;
 
 // ── In-memory cache with 30s TTL ────────────────────────────────────
 
@@ -202,7 +203,12 @@ pub fn get_workspace_locations(
         "warehouse" => {
             if has_bound {
                 // Single-binding via bound_location_id.
-                let loc_id = bound_location_id.expect("has_bound is true");
+                let loc_id = bound_location_id.unwrap_or_else(|| {
+                    tracing::error!(
+                        "location_resolver: has_bound=true but bound_location_id is None — using default"
+                    );
+                    CANONICAL_DEFAULT_LOCATION_UUID.to_owned()
+                });
                 let (name,): (String,) = conn
                     .query_row(
                         "SELECT COALESCE(name, '') FROM inventory_locations WHERE id = ?1",
@@ -433,9 +439,13 @@ pub fn resolve_all_locations(
     }
 
     if has_single {
-        return Ok(vec![LocationId::from(
-            bound_location_id.expect("has_single is true"),
-        )]);
+        if let Some(bound) = bound_location_id {
+            return Ok(vec![LocationId::from(bound)]);
+        }
+        tracing::error!(
+            "location_resolver: has_single=true but bound_location_id is None — using default"
+        );
+        return Ok(vec![get_default_location_id()]);
     }
 
     if !multi_rows.is_empty() {

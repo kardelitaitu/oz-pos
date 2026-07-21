@@ -113,7 +113,10 @@ impl EventBus {
     where
         E: DomainEvent + 'static,
     {
-        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
+        let mut subs = self
+            .subscribers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         subs.entry(topic).or_default().push(SubscriberEntry {
             module_id: "",
             handler: wrap_handler::<E>(handler),
@@ -151,7 +154,10 @@ impl EventBus {
         E: DomainEvent + 'static,
     {
         let wrapped = wrap_handler::<E>(handler);
-        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
+        let mut subs = self
+            .subscribers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         subs.entry(topic).or_default().push(SubscriberEntry {
             module_id,
             handler: wrapped,
@@ -166,7 +172,10 @@ impl EventBus {
     ///
     /// Returns the number of handlers removed.
     pub fn unsubscribe_module(&self, module_id: &'static str) -> usize {
-        let mut subs = self.subscribers.write().expect("event bus lock poisoned");
+        let mut subs = self
+            .subscribers
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut total_removed = 0;
 
         // Retain only entries that do NOT belong to the given module,
@@ -210,7 +219,10 @@ impl EventBus {
         let topic = event.event_name();
         let any_ref: &dyn Any = event;
 
-        let subs = self.subscribers.read().expect("event bus lock poisoned");
+        let subs = self
+            .subscribers
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let entries = match subs.get(topic) {
             Some(h) => h,
             None => {
@@ -240,7 +252,7 @@ impl EventBus {
     pub fn topic_count(&self) -> usize {
         self.subscribers
             .read()
-            .expect("event bus lock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .len()
     }
 
@@ -248,7 +260,7 @@ impl EventBus {
     pub fn handler_count_for_module(&self, module_id: &str) -> usize {
         self.subscribers
             .read()
-            .expect("event bus lock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .values()
             .flat_map(|v| v.iter())
             .filter(|e| e.module_id == module_id)
@@ -259,7 +271,7 @@ impl EventBus {
     pub fn handler_count(&self) -> usize {
         self.subscribers
             .read()
-            .expect("event bus lock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .values()
             .map(|v| v.len())
             .sum()
@@ -269,7 +281,7 @@ impl EventBus {
     pub fn has_handlers(&self, topic: &str) -> bool {
         self.subscribers
             .read()
-            .expect("event bus lock poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(topic)
             .is_some_and(|v| !v.is_empty())
     }

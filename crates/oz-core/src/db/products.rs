@@ -235,7 +235,10 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cur_str = std::str::from_utf8(&price.currency.0)
-            .expect("currency bytes are valid UTF-8")
+            .map_err(|e| CoreError::Validation {
+                field: "currency",
+                message: format!("invalid UTF-8 in currency bytes: {e}"),
+            })?
             .to_owned();
 
         let tx = self.conn.unchecked_transaction()?;
@@ -352,7 +355,10 @@ impl Store<'_> {
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cur_str = std::str::from_utf8(&price.currency.0)
-            .expect("currency bytes are valid UTF-8")
+            .map_err(|e| CoreError::Validation {
+                field: "currency",
+                message: format!("invalid UTF-8 in currency bytes: {e}"),
+            })?
             .to_owned();
 
         let rows = if let Some(ver) = expected_version {
