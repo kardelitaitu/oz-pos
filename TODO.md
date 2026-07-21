@@ -1,8 +1,8 @@
-# 0.0.18 — E2E, Cloud Server, Payments, Notifications, Docker, i18n & Release
+# 0.0.18 — Full-Stack Sprint: E2E, Cloud, Payments, Notifications, APIs & Polish
 
-> **Goal:** Comprehensive sprint across 10 areas: expand E2E coverage, harden cloud server, integrate Midtrans QRIS payments, build low-stock alert system, document APIs, verify PostgreSQL sync, improve Docker/DevEx, complete i18n, add customer display HAL, and prepare release infrastructure.
+> **Goal:** Comprehensive sprint across 15 areas: expand E2E coverage, harden cloud server, integrate Midtrans QRIS payments, build low-stock alerts + WhatsApp notifications, document APIs, verify PostgreSQL sync, improve Docker/DevEx, complete i18n, add customer display HAL, extract loyalty module, build shared DTO/validation crates, add config validation, and prepare release infrastructure.
 >
-> **Current state:** 0 / 20 items complete (0%) · Updated 2026-07-21
+> **Current state:** 0 / 30 items complete (0%) · Updated 2026-07-21
 
 ---
 
@@ -20,7 +20,12 @@
 | 🟤 | i18n Completion | 2 | 0/2 ⏳ |
 | 🔷 | Customer Display HAL Driver | 2 | 0/2 ⏳ |
 | 🔶 | Release Readiness | 2 | 0/2 ⏳ |
-| **Total** | | **20** | **0/20 (0%)** |
+| 📱 | WhatsApp Notification Integration | 2 | 0/2 ⏳ |
+| 📊 | Multi-Store Centralized Dashboard | 2 | 0/2 ⏳ |
+| 🎯 | Loyalty Module Extraction | 2 | 0/2 ⏳ |
+| 🧱 | Shared DTO & Validation Crates | 2 | 0/2 ⏳ |
+| ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
+| **Total** | | **30** | **0/30 (0%)** |
 
 ---
 
@@ -105,12 +110,48 @@
 
 ---
 
-### 🔶 Release Readiness
+### 📱 WhatsApp Notification Integration
 
-> **Goal:** Prepare infrastructure for confident releases — cross-platform build verification and a release checklist.
+> **Goal:** Integrate WhatsApp Business API for customer notifications — order confirmations, payment receipts, stock alerts, and marketing broadcasts. Critical for the Indonesian market where WhatsApp is the dominant communication channel. Listed in ARCHITECTURE.md integrations layer.
 
-- [ ] **Cross-platform build matrix** — Verify `cargo build --release` succeeds on Windows, Linux (WSL/Docker), and macOS targets. Document any platform-specific quirks.
-- [ ] **Release checklist** — Create `docs/releases/checklist.md` covering: version bump, CHANGELOG update, gate validation, git tag, GitHub Release creation, and artifact upload.
+- [ ] **WhatsApp Business API client** — Create `crates/oz-notification/` with a WhatsApp Cloud API client: template message sending, media message support, webhook verification, and rate limiting. Use the official Meta Graph API v21.0+. Include a mock driver for testing.
+- [ ] **Notification event handlers** — Wire WhatsApp notifications into the event bus: `sale.completed` → send order confirmation with items + total, `stock.low` → alert store manager, `payment.receipt` → send payment receipt as image. Feature-gated behind `FEATURES.WHATSAPP_NOTIFICATIONS`.
+
+---
+
+### 📊 Multi-Store Centralized Dashboard
+
+> **Goal:** Build a cross-store analytics dashboard for franchise owners and multi-store operators. Listed for Pro tier in BUSINESS_PLAN.md. Leverages existing `store_profiles` table + PostgreSQL sync daemon.
+
+- [ ] **Cross-store analytics queries** — Add aggregated queries to `oz-reporting` that span all stores: total revenue per store (daily/weekly/monthly), top products across stores, stock level comparison, staff performance ranking. Use `store_id` scoping from existing multi-tenant migrations.
+- [ ] **Centralized dashboard UI** — Build a `MultiStoreDashboard` screen with: store selector dropdown, revenue comparison bar chart, top products leaderboard, stock alert summary per store, and KPI cards (total revenue, active terminals, low stock items). Accessible at route `#/dashboard` (Pro tier gated).
+
+---
+
+### 🎯 Loyalty Module Extraction
+
+> **Goal:** Extract loyalty program logic from `crates/oz-core/src/loyalty.rs` into its own `modules/loyalty/` following the module template, as specified in ARCHITECTURE.md. Currently loyalty lives in oz-core as standalone files rather than a proper module.
+
+- [ ] **Create `modules/loyalty/` crate** — Scaffold the module with `manifest.json`, `Cargo.toml`, `src/lib.rs`, `src/handlers.rs`. Migrate `LoyaltyTier`, `LoyaltyAccount`, `LoyaltyTransaction` types from oz-core. Implement `Module` trait for kernel registration. Wire `sale.completed` → `points.awarded` event handler.
+- [ ] **Migrate loyalty DB + UI** — Move `db/loyalty.rs` functions into the module's repository layer. Update UI imports from `@/api/crm` to `@/api/loyalty`. Register the loyalty page/route in App.tsx. Verify all 4 existing loyalty tests pass after migration. Add module-level integration tests.
+
+---
+
+### 🧱 Shared DTO & Validation Crates
+
+> **Goal:** Create `foundation/dto/` and `foundation/validation/` crates as specified in the ARCHITECTURE.md long-term vision. These provide shared types for cleaner module boundaries and consistent validation rules.
+
+- [ ] **Shared DTO crate** — Create `foundation/dto/` with: `CreateProductDto`, `UpdateProductDto`, `CreateCustomerDto`, `SaleSummaryDto`, `StockAlertDto`. All DTOs derive `Serialize + Deserialize + Clone + Debug`. Re-export from a single barrel. Update oz-api to use shared DTOs instead of inline types.
+- [ ] **Shared validation crate** — Create `foundation/validation/` with: `validate_sku()`, `validate_email()`, `validate_phone()`, `validate_money_range()`, `validate_string_length()`. Return `Result<(), ValidationError>` with structured error messages. Add `#[cfg(test)]` unit tests for each validator. Use in all create/update Tauri commands.
+
+---
+
+### ⚙️ Config Validation Layer
+
+> **Goal:** Add comprehensive runtime validation of all configuration and environment variables at application startup, with helpful error messages that guide the operator to fix misconfigurations before the app crashes.
+
+- [ ] **Config validator module** — Create `crates/oz-core/src/config_validator.rs` that validates at startup: `DATABASE_URL` format and file permissions, `OZ_API_PORT` range (1024–65535), `OZ_LICENSE_KEY` presence and format (PEM header check), `STRIPE_SECRET_KEY` prefix (`sk_`), `MIDTRANS_SERVER_KEY` format, Redis/PostgreSQL connectivity when sync is enabled, feature flag consistency (e.g., sync enabled requires cloud server URL).
+- [ ] **Startup integration + error UX** — Call the config validator at the top of `main.rs` in both desktop-client and cloud-server. On validation failure: log a structured error with the exact key/value that failed, display a user-friendly dialog (Tauri) or exit with a clear stderr message (CLI/server). Add `--validate-config` dry-run flag to the CLI for CI/pre-deploy checks.
 
 ---
 
