@@ -153,7 +153,7 @@ pub fn generate_report_email(
         .to_string();
     let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    let store_name = get_store_name(&store).unwrap_or_else(|_| "OZ-POS Store".to_string());
+    let store_name = get_store_name(store).unwrap_or_else(|_| "OZ-POS Store".to_string());
 
     let bundle: AnalyticsBundle = store
         .export_analytics_bundle(
@@ -255,6 +255,7 @@ async fn try_send_scheduled(
 /// Loads SMTP config and the report schedule config, generates a report
 /// for the lookback window, and sends it to all configured recipients.
 /// Returns a success message or an error string.
+#[allow(dead_code)]
 pub async fn send_test_report(
     db: Arc<tokio::sync::Mutex<rusqlite::Connection>>,
 ) -> Result<String, String> {

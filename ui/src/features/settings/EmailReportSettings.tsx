@@ -262,11 +262,11 @@ export default function EmailReportSettings() {
 
         {/* Use TLS toggle */}
         <div className="settings-field settings-field--horizontal">
-          <label htmlFor="settings-email-use-tls" className="settings-label">
+          <span className="settings-label" id="settings-email-use-tls-label">
             <Localized id="settings-email-use-tls">
               <span>Use STARTTLS</span>
             </Localized>
-          </label>
+          </span>
           <span className="settings-field-input-wrap">
             <label className="settings-toggle" htmlFor="settings-email-use-tls">
               <span className="sr-only">Toggle</span>
@@ -277,6 +277,7 @@ export default function EmailReportSettings() {
                   role="switch"
                   checked={config.use_tls}
                   aria-checked={config.use_tls}
+                  aria-labelledby="settings-email-use-tls-label"
                   onChange={(e) => updateField('use_tls', e.target.checked)}
                 />
                 <span className="settings-toggle-slider" />

@@ -1,26 +1,26 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "330.5k lines",
+    "message":  "332.9k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  330476,
-                  "totalFiles":  1518,
+                  "totalLines":  332948,
+                  "totalFiles":  1526,
                   "languages":  {
                                     "sql":  {
                                                 "lines":  3041,
                                                 "files":  97
                                             },
                                     "rust":  {
-                                                 "lines":  148529,
-                                                 "files":  357
+                                                 "lines":  150424,
+                                                 "files":  362
                                              },
                                     "go":  {
                                                "lines":  6745,
                                                "files":  11
                                            },
                                     "css":  {
-                                                "lines":  35313,
+                                                "lines":  35307,
                                                 "files":  115
                                             },
                                     "html":  {
@@ -28,8 +28,8 @@
                                                  "files":  492
                                              },
                                     "typescript":  {
-                                                       "lines":  107357,
-                                                       "files":  446
+                                                       "lines":  107940,
+                                                       "files":  449
                                                    }
                                 }
               }
