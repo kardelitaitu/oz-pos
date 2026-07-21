@@ -6,6 +6,7 @@
 //! packages them together with export metadata into a serializable
 //! [`AnalyticsBundle`].
 
+pub mod cloud_destination;
 pub mod email_report;
 
 use serde::{Deserialize, Serialize};
@@ -223,6 +224,9 @@ impl Default for ReportScheduleConfig {
 
 /// Settings key used to persist the report schedule.
 pub const REPORT_SCHEDULE_SETTINGS_KEY: &str = "report_schedule";
+
+/// Settings key used to persist the cloud export config.
+pub const CLOUD_EXPORT_SETTINGS_KEY: &str = "cloud_export_config";
 
 /// CSV escape — wraps a cell in quotes and escapes internal quotes.
 fn csv_cell(value: &str) -> String {
@@ -446,6 +450,33 @@ impl Store<'_> {
             CoreError::Internal(format!("failed to serialize report schedule: {e}"))
         })?;
         self.set_setting(REPORT_SCHEDULE_SETTINGS_KEY, &json)
+    }
+
+    /// Save the cloud export configuration to the settings table.
+    pub fn save_cloud_export_config(
+        &self,
+        config: &cloud_destination::CloudExportConfig,
+    ) -> Result<(), CoreError> {
+        let json = serde_json::to_string(config).map_err(|e| {
+            CoreError::Internal(format!("failed to serialize cloud export config: {e}"))
+        })?;
+        self.set_setting(CLOUD_EXPORT_SETTINGS_KEY, &json)
+    }
+
+    /// Load the cloud export configuration from the settings table.
+    /// Returns `None` if no config has been saved yet.
+    pub fn get_cloud_export_config(
+        &self,
+    ) -> Result<Option<cloud_destination::CloudExportConfig>, CoreError> {
+        let raw = match self.get_setting(CLOUD_EXPORT_SETTINGS_KEY)? {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+        let config: cloud_destination::CloudExportConfig =
+            serde_json::from_str(&raw).map_err(|e| {
+                CoreError::Internal(format!("failed to deserialize cloud export config: {e}"))
+            })?;
+        Ok(Some(config))
     }
 
     /// Load the report schedule configuration from the settings table.

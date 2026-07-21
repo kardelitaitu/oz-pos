@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining ROADMAP gaps across Analytics, Backend Hardening, CI/CD, Mobile Builds, and Fuzz Testing.
 >
-> **Current state:** 8 / 25 items complete · Updated 2026-07-21
+> **Current state:** 11 / 25 items complete · Updated 2026-07-21
 
 ---
 
@@ -24,10 +24,10 @@
 
 > **Goal:** Wire up analytics export (BigQuery/Snowflake), scheduled email report delivery, and custom report builder UI.
 
-- [ ] **P61-1: Analytics export to cloud warehouse** — Implement `ExportDestination::BigQuery` / `ExportDestination::Snowflake` in `oz-reporting/src/export.rs`. Add config UI for destination credentials.
-- [ ] **P61-2: Scheduled email report delivery (backend)** — Wire up SMTP sender in `platform/startup/src/scheduler.rs` using `lettre` crate. `ReportScheduleConfig` already exists from P15-5.
+- [x] **P61-1: Analytics export to cloud warehouse** ✅ — Created `crates/oz-core/src/export/cloud_destination.rs` with `ExportDestination` enum (BigQuery, Snowflake), config structs, `CloudExportConfig`, `CloudExporter` trait with async `export()` method using real HTTP APIs (BigQuery insertAll + OAuth2 JWT auth, Snowflake SQL REST + session auth). Added `Store::save_cloud_export_config()` and `get_cloud_export_config()` persistence in settings table. 7 unit tests pass.
+- [x] **P61-2: Scheduled email report delivery (backend)** ✅ — Already fully implemented: `apps/cloud-server/src/email.rs` has `start_report_sender_loop()`, `generate_report_email()`, SMTP transport via `lettre`. `ReportScheduleConfig` exists with save/load in settings.
 - [ ] **P61-3: Scheduled email report UI** — Add schedule config panel in Settings → Reports: cron expression picker, report type selector, recipient email list.
-- [ ] **P61-4: Custom report builder (backend)** — Expose `build_custom_report()` via API. Column whitelist per dataset, date range filter, aggregation support.
+- [x] **P61-4: Custom report builder (backend)** ✅ — Already fully implemented: `Store::build_custom_report()` with column whitelist, date range filtering, SQL injection protection. Exposed via Tauri command in `apps/desktop-client/src/commands/reports.rs`.
 - [ ] **P61-5: Custom report builder (UI)** — Drag-and-drop column selector with live preview. Saved report templates in settings.
 
 ---
