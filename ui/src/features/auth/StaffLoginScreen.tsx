@@ -43,8 +43,8 @@ function AlertIcon() {
 // ── Constants ───────────────────────────────────────────────────────
 
 const MAX_PIN_LENGTH = 4;
-const MAX_PIN_ATTEMPTS = 5;
-const RATE_LIMIT_WARN_AFTER = 3;
+const MAX_PIN_ATTEMPTS = 3;
+const RATE_LIMIT_WARN_AFTER = 2;
 
 // ── Resized Logo Helper (1:1 PNG at target size) ───────────────────
 
@@ -142,15 +142,15 @@ export default function StaffLoginScreen() {
     addToast({ type: 'error', message: error, duration: 5000 });
     setPin([]);
 
-    // Track failed PIN attempts for client-side rate limiting
-    setPinAttempts((prev) => {
-      const next = prev + 1;
-      if (next >= MAX_PIN_ATTEMPTS) {
-        // Lock out for 30 seconds
-        setLockedUntil(Date.now() + 30_000);
-      }
-      return next;
-    });
+    // Parse backend rate limit error to sync lockout timer
+      const lockoutMatch = error.match(/Try again in (\d+)s/);
+      if (lockoutMatch && lockoutMatch[1]) {
+        const seconds = parseInt(lockoutMatch[1], 10);
+      setLockedUntil(Date.now() + seconds * 1000);
+      setPinAttempts(MAX_PIN_ATTEMPTS);
+    } else {
+      setPinAttempts((prev) => prev + 1);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 

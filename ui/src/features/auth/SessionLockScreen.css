@@ -43,6 +43,16 @@
   }
 }
 
+@keyframes session-lock-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.session-lock-card--shake {
+  animation: session-lock-shake 0.35s cubic-bezier(.36,.07,.19,.97) both;
+}
+
 .session-lock-icon {
   color: var(--color-accent, #4f46e5);
   opacity: 0.8;
@@ -100,9 +110,22 @@
 /* ── Error ─────────────────────────────────── */
 
 .session-lock-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   color: var(--color-danger, #ef4444);
   font-size: var(--text-sm);
   text-align: center;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  width: 100%;
+}
+
+.session-lock-rate-limit {
+  font-weight: 600;
 }
 
 /* ── PIN pad ────────────────────────────────── */

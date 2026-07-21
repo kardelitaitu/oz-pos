@@ -276,9 +276,7 @@
 /* Topology Node Component */
 .topology-node {
   position: absolute;
-  min-width: 180px;
-  width: auto;
-  max-width: 280px;
+  width: 200px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -374,6 +372,15 @@
 
 .node-type-icon svg {
   color: var(--color-fg-secondary);
+}
+
+.node-title-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: 1;
+  margin-right: var(--space-4);
 }
 
 .node-title {
@@ -497,11 +504,18 @@
   cursor: pointer;
   pointer-events: all;
   padding: 0;
-  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .topology-node:hover .node-port-sockets-group {
   z-index: 1;
+}
+
+.topology-node:hover .node-port-socket,
+.node-connecting-source .node-port-socket,
+.node-port-socket:focus-visible {
+  opacity: 1;
 }
 
 .node-port-socket:hover,
@@ -512,12 +526,14 @@
 }
 
 .node-port-socket.port-active {
+  opacity: 1;
   transform: scale(1.6);
   background-color: var(--color-accent);
   box-shadow: 0 0 12px var(--color-accent);
 }
 
 .node-port-socket.port-highlight {
+  opacity: 1;
   animation: port-glow 1.5s infinite;
 }
 

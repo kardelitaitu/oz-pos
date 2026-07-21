@@ -6,7 +6,24 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.0.17] — 2026-07-21
 
+### Changed
+
+#### 🏗️ Settings Sidebar
+- **Accordion logic repaired**: Converted strict accordion to a multi-expandable list, resolving UX issues where categories abruptly closed.
+- **Search Auto-Expand**: Categories now automatically expand when searching, ensuring matched results are visible immediately.
+- **Removed "Recent" category**: Removed the drag-and-drop recent sections list to simplify navigation.
+- **Max-height clipping fix**: Increased CSS max-height transition limit to `60rem` to prevent long categories (e.g., Management) from clipping at the bottom.
+
+#### 🔒 Rate Limiting UX
+- **Backend Lockout Sync**: Both `StaffLoginScreen` and `SessionLockScreen` now parse the precise `retry_after` penalty timer directly from backend errors.
+- **Lockout UI Consistency**: Added physical "shake" animations, disabled keypad states, and a red `AlertIcon` countdown box (`Wait Xs.`) to the autolock screen to match the login flow.
+
 ### Fixed
+
+#### 🌐 Workspace Topology Editor
+- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
+- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
+- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
 
 #### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
 

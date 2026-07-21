@@ -4,6 +4,16 @@ import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
 
+function AlertIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  );
+}
+
 /**
  * Session lock screen — shown after idle timeout.
  * Displays current time, a "Session Locked" message, and
@@ -19,7 +29,41 @@ export default function SessionLockScreen({
   const [pin, setPin] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [time, setTime] = useState(new Date());
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const pinWrapRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const lastErrorRef = useRef<string | null>(null);
+
+  // Auto-unlock after lockout period
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const remaining = lockedUntil - Date.now();
+    if (remaining <= 0) {
+      setLockedUntil(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLockedUntil(null);
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [lockedUntil]);
+
+  const isLocked = lockedUntil !== null;
+  const lockoutRemainingSec = lockedUntil !== null
+    ? Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000))
+    : 0;
+
+  // Shake card on error
+  useEffect(() => {
+    if (!error || error === lastErrorRef.current) return;
+    lastErrorRef.current = error;
+
+    const card = cardRef.current;
+    if (card) {
+      card.classList.add('session-lock-card--shake');
+      setTimeout(() => card.classList.remove('session-lock-card--shake'), 350);
+    }
+  }, [error]);
 
   // Update clock every 30s
   useEffect(() => {
@@ -33,13 +77,15 @@ export default function SessionLockScreen({
   }, []);
 
   const handleDigit = useCallback((digit: string) => {
+    if (isLocked) return;
     setError('');
     setPin((prev) => (prev.length >= MAX_PIN_LENGTH ? prev : [...prev, digit]));
-  }, []);
+  }, [isLocked]);
 
   const handleBackspace = useCallback(() => {
+    if (isLocked) return;
     setPin((prev) => prev.slice(0, -1));
-  }, []);
+  }, [isLocked]);
 
   // Auto-submit on 4 digits — verify PIN via staffLogin
   useEffect(() => {
@@ -65,6 +111,12 @@ export default function SessionLockScreen({
           ?? 'Invalid PIN';
         setError(msg);
         setPin([]);
+
+        const lockoutMatch = msg.match(/Try again in (\d+)s/);
+        if (lockoutMatch && lockoutMatch[1]) {
+          const seconds = parseInt(lockoutMatch[1], 10);
+          setLockedUntil(Date.now() + seconds * 1000);
+        }
       }
     };
     attemptLogin();
@@ -96,7 +148,7 @@ export default function SessionLockScreen({
   return (
     <div className="session-lock-overlay">
       <div className="session-lock-backdrop" />
-      <div className="session-lock-card">
+      <div className="session-lock-card" ref={cardRef}>
         {/* Lock icon */}
         <div className="session-lock-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="32" height="32">
@@ -123,7 +175,17 @@ export default function SessionLockScreen({
         </div>
 
         {/* Error */}
-        {error && <div className="session-lock-error">{error}</div>}
+        {error && (
+          <div className="session-lock-error" role="alert" aria-live="polite">
+            <AlertIcon />
+            {error}
+            {isLocked && (
+              <span className="session-lock-rate-limit">
+                {' '}Wait {lockoutRemainingSec}s.
+              </span>
+            )}
+          </div>
+        )}
 
         {/* PIN pad */}
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
@@ -144,6 +206,7 @@ export default function SessionLockScreen({
                   className="session-lock-pad-key"
                   onClick={() => handleDigit(digit)}
                   aria-label={digit}
+                  disabled={isLocked}
                 >
                   {digit}
                 </button>
@@ -155,7 +218,7 @@ export default function SessionLockScreen({
               type="button"
               className="session-lock-pad-key session-lock-pad-key--action"
               onClick={() => setPin([])}
-              disabled={pin.length === 0}
+              disabled={pin.length === 0 || isLocked}
             >
               Clear
             </button>
@@ -164,6 +227,7 @@ export default function SessionLockScreen({
               className="session-lock-pad-key"
               onClick={() => handleDigit('0')}
               aria-label="0"
+              disabled={isLocked}
             >
               0
             </button>
@@ -171,7 +235,7 @@ export default function SessionLockScreen({
               type="button"
               className="session-lock-pad-key session-lock-pad-key--action"
               onClick={handleBackspace}
-              disabled={pin.length === 0}
+              disabled={pin.length === 0 || isLocked}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
                 <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
