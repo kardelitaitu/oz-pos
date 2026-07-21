@@ -55,6 +55,11 @@ jobs:
 
       - uses: mozilla/sccache-action@v0.0.10
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev pkg-config
+
       - name: Generate cargo doc
         run: |
           cargo doc \

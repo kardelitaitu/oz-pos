@@ -519,6 +519,8 @@ pub fn run() {
             commands::license::renew_license,
             commands::license::get_license_status,
             commands::license::check_license_status,
+            commands::topology::save_topology,
+            commands::topology::load_topology,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);
