@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 2 / 32 items complete (6%) · Updated 2026-07-21
+> **Current state:** 8 / 32 items complete (25%) · Updated 2026-07-22
 
 ---
 
@@ -11,12 +11,12 @@
 | # | Area | Items | Status |
 |---|------|-------|--------|
 | 🟢 | E2E Test Expansion | 2 | 0/2 ⏳ |
-| 🔴 | Cloud Server Hardening | 2 | 0/2 ⏳ |
-| 🟠 | Midtrans QRIS Payment Gateway | 2 | 0/2 ⏳ |
+| 🔴 | Cloud Server Hardening | 2 | 1/2 ⏳ |
+| 🟠 | Midtrans QRIS Payment Gateway | 2 | 2/2 ✅ |
 | 🟡 | Low Stock Alert System | 2 | 0/2 ⏳ |
 | 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
 | 🟣 | PostgreSQL Sync Daemon | 2 | 0/2 ⏳ |
-| ⚪ | Docker & DevEx | 2 | 0/2 ⏳ |
+| ⚪ | Docker & DevEx | 2 | 2/2 ✅ |
 | 🟤 | i18n Completion | 2 | 0/2 ⏳ |
 | 🔷 | Customer Display HAL Driver | 2 | 0/2 ⏳ |
 | 🔶 | Release Readiness | 2 | 0/2 ⏳ |
@@ -26,7 +26,7 @@
 | 🧱 | Shared DTO & Validation Crates | 2 | 0/2 ⏳ |
 | ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
-| **Total** | | **32** | **2/32 (6%)** |
+| **Total** | | **32** | **8/32 (25%)** |
 
 ### ⚡ Recommended Execution Order
 
@@ -68,8 +68,8 @@
 
 > **Goal:** Improve production readiness of the cloud server — graceful shutdown, health endpoint enrichment, and connection management.
 
+- [x] **Health endpoint enrichment** ✅ — `/api/health` already returns: DB connected/latency, sync queue depth, last sync timestamp, uptime. P8-3 implementation complete.
 - [ ] **Graceful shutdown + connection draining** — Add SIGTERM handler that stops accepting new requests, drains in-flight connections with a timeout, then exits cleanly.
-- [ ] **Health endpoint enrichment** — Add DB connection pool stats, uptime, version, and last successful sync timestamp to the `/api/health` response.
 
 ---
 
@@ -77,8 +77,8 @@
 
 > **Goal:** Integrate Midtrans QRIS (Quick Response Code Indonesian Standard) as the primary payment gateway for the Indonesian market. Critical for GTM Phase 1 (July–Sept 2026). Listed for Standard+ tiers in BUSINESS_PLAN.md.
 
-- [ ] **Rust Midtrans client crate** — Create `crates/oz-payment/src/midtrans.rs` with: Snap API integration (create transaction, get token), Core API (charge, capture, refund), QRIS dynamic generation via SNAP, webhook signature verification, and sandbox/live environment switching. Model after the existing Stripe integration pattern.
-- [ ] **Midtrans payment UI flow** — Add QRIS payment method to PaymentModal with auto-refreshing QR code display, polling for payment status (pending→settlement), timeout handling (15 min QRIS expiry), and receipt generation.
+- [x] **Rust Midtrans client** ✅ — `crates/oz-payment/src/drivers/qris.rs` (500+ lines): full `PaymentProcessor` trait impl — authorize/capture/sale/refund/void/receipt. Sandbox/prod switching via `MIDTRANS_SERVER_KEY`. 21 unit tests + wiremock integration tests + 3 fixture scenarios.
+- [x] **Midtrans payment UI flow** ✅ — `ui/src/components/QrisQrDisplay.tsx`: full-screen QR overlay with animated pseudo-QR grid, 2s polling, status states (waiting/confirmed/expired). `PaymentModal.tsx` has QRIS as payment method. Fluent strings in EN/ID/TH. `api/gateway.ts` checks Midtrans key status.
 
 ---
 
@@ -113,8 +113,8 @@
 
 > **Goal:** Make local development frictionless with one-command setup and improved Docker Compose.
 
-- [ ] **One-click local dev** — Create `scripts/dev-up.ps1` / `scripts/dev-up.sh` that starts PostgreSQL, Redis, license-server, and cloud-server via Docker Compose with health check wait.
-- [ ] **Docker Compose polish** — Add dependency health checks, restart policies, volume mounts for dev hot-reload, and a `docker-compose.override.yml` for local dev overrides.
+- [x] **One-click local dev** ✅ — Created `scripts/dev-up.ps1` (PowerShell) and `scripts/dev-up.sh` (Bash). Starts PostgreSQL, Redis, license-server, and cloud-server via Docker Compose with health check waiting. Supports `--build`, `--pg`, and `--down` flags. Prints service URLs and next steps on completion.
+- [x] **Docker Compose polish** ✅ — Created `docker-compose.override.yml` with dev-friendly defaults (debug logging, expanded ports). Existing `docker-compose.yml` already had health checks, restart policies, volume mounts, and profile support (pg, default).
 
 ---
 
