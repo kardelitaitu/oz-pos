@@ -58,11 +58,7 @@
   - Home: first item
   - End: last item
   - Enter/Space: activate section
-- [ ] **P60-4e: Screen reader live regions** — Add `role="status"` with `aria-live="polite"` announcements for:
-  - Category expanded/collapsed ("Business category expanded, 2 items")
-  - Section activated ("Opened General settings")
-  - Search results ("3 results found")
-  - Empty search ("No settings match your search")
+- [x] **P60-4e: Screen reader live regions** ✅ — Centralized `announcement` state feeding `<div role="status">`. Three announcement sources: (1) category expand/collapse via `userToggleRef` pattern (distinguishes user toggle from programmatic auto-expand), (2) section activated on `activeSection` change via `prevSection` ref, (3) search results/empty/cleared via `prevQ` ref guard.
 - [ ] **P60-4f: Focus management on navigation** — When navigating to a section, move focus to the section content area's first focusable element (heading or first input). Use a ref callback and `focus()` on the mounted element.
 - [ ] **P60-4g: Touch target audit for sidebar** — Ensure all sidebar interactive elements have `min-height: 44px` and `min-width: 44px` per WCAG 2.2 Target Size (Minimum). Verify on mobile viewport with `@media (pointer: coarse)`.
 
@@ -99,10 +95,10 @@
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 3/5 |
-| 🟡 P60-4 — Accessibility | 7 | 2/7 |
+| 🟡 P60-4 — Accessibility | 7 | 3/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **12/23 (52%)** |
+| **Total** | **23** | **13/23 (57%)** |
 
 ---
 

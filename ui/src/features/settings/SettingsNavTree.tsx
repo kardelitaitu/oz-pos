@@ -321,6 +321,21 @@ export default function SettingsNavTree({
     debouncedPersist('settings-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  // ── Screen reader live announcements (P60-4e) ────────────────
+  const [announcement, setAnnouncement] = useState('');
+
+  // Announce section activated when navigating
+  const prevSection = useRef(activeSection);
+  useEffect(() => {
+    if (prevSection.current !== activeSection) {
+      const item = NAV_ITEMS.find((n) => n.key === activeSection);
+      if (item) {
+        setAnnouncement(`Opened ${item.label} settings`);
+      }
+      prevSection.current = activeSection;
+    }
+  }, [activeSection]);
+
   // ── Accordion: single expanded category (persisted) ──────────
   const [expandedCategory, setExpandedCategory] = useState<string | null>(() => {
     const stored = localStorage.getItem('settings-sidebar-expanded');
@@ -339,6 +354,7 @@ export default function SettingsNavTree({
   }, [activeSection]);
 
   const toggleCategory = useCallback((label: string) => {
+    userToggleRef.current = true;
     setExpandedCategory((prev) => (prev === label ? null : label));
   }, []);
 
@@ -378,6 +394,40 @@ export default function SettingsNavTree({
   const visibleCount = useMemo(() =>
     filteredCategories.reduce((sum, cat) => sum + cat.keys.length, 0),
   [filteredCategories]);
+
+  // ── Screen reader: announce search results when query changes (P60-4e) ─
+  const prevQ = useRef(q);
+  useEffect(() => {
+    if (q && prevQ.current !== q) {
+      setAnnouncement(visibleCount === 0
+        ? 'No settings match your search'
+        : `${visibleCount} ${visibleCount === 1 ? 'result' : 'results'} found`);
+    } else if (!q && prevQ.current) {
+      setAnnouncement('Search cleared');
+    }
+    prevQ.current = q;
+  }, [q, visibleCount]);
+
+  // ── Screen reader: announce category expand/collapse (P60-4e) ────
+  // We track previous expandedCategory to detect user-initiated toggles
+  // (as opposed to programmatic auto-expand when navigating sections).
+  const prevCategory = useRef(expandedCategory);
+  const userToggleRef = useRef(false);
+  useEffect(() => {
+    // Only announce if this change was user-initiated (via toggleCategory)
+    if (userToggleRef.current) {
+      const isExpanding = prevCategory.current !== null;
+      const label = expandedCategory ?? prevCategory.current ?? '';
+      if (label) {
+        const count = CATEGORIES.find((c) => c.label === label)?.keys.length ?? 0;
+        setAnnouncement(isExpanding
+          ? `${label} category expanded, ${count} ${count === 1 ? 'item' : 'items'}`
+          : `${label} category collapsed`);
+      }
+      userToggleRef.current = false;
+    }
+    prevCategory.current = expandedCategory;
+  }, [expandedCategory]);
 
   // ── Arrow key navigation for sidebar ──────────────────────
   useEffect(() => {
@@ -561,14 +611,14 @@ export default function SettingsNavTree({
         </nav>
       </aside>
 
-      {/* ── Search results live region (screen readers) ── */}
+      {/* ── Live region: announcements for screen readers (P60-4e) ── */}
       <div
         role="status"
         aria-live="polite"
         aria-atomic="true"
         className="sr-only"
       >
-        {q && `${visibleCount} ${visibleCount === 1 ? 'result' : 'results'} found`}
+        {announcement}
       </div>
     </>
   );
