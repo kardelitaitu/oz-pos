@@ -21,6 +21,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { EmptyState } from '@/frontend/shared';
+import { NoSalesIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
 
@@ -675,24 +677,19 @@ export default function SalesHistoryScreen() {
         <Card shadow="sm">
           <div className="sales-history-empty">
             {sales.length === 0 ? (
-              <Localized id="sales-history-empty">
-                <p>No sales recorded yet</p>
-              </Localized>
+              <EmptyState
+                icon={<NoSalesIcon />}
+                title={l10n.getString('sales-history-empty') || 'No sales recorded yet'}
+              />
             ) : (
-              <Localized id="sales-history-empty-filtered">
-                <p>No sales match your filters</p>
-              </Localized>
-            )}
-            {sales.length > 0 && (
-              <Localized id="sales-history-clear-filters">
-                <button
-                  type="button"
-                  className="sales-history-clear-filters-btn"
-                  onClick={() => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); }}
-                >
-                  <span>Clear filters</span>
-                </button>
-              </Localized>
+              <EmptyState
+                icon={<NotFoundIcon />}
+                title={l10n.getString('sales-history-empty-filtered') || 'No sales match your filters'}
+                action={{
+                  label: l10n.getString('sales-history-clear-filters') || 'Clear filters',
+                  onClick: () => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); },
+                }}
+              />
             )}
           </div>
         </Card>

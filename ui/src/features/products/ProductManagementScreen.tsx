@@ -20,6 +20,8 @@ import VariantManagementScreen from './VariantManagementScreen';
 import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
 import LocationPicker from '@/features/inventory/LocationPicker';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { EmptyState } from '@/frontend/shared';
+import { NoProductsIcon } from '@/components/EmptyStateIllustrations';
 import './ProductManagementScreen.css';
 
 interface FormData {
@@ -252,12 +254,11 @@ export default function ProductManagementScreen() {
       ) : products.length === 0 ? (
         <Card shadow="sm">
           <div className="product-mgmt-empty">
-            <Localized id="product-mgmt-empty">
-              <p>No products yet.</p>
-            </Localized>
-            <Localized id="product-mgmt-empty-cta">
-              <Button variant="secondary" onClick={openCreate}>Add your first product</Button>
-            </Localized>
+            <EmptyState
+              icon={<NoProductsIcon />}
+              title={l10n.getString('product-mgmt-empty') || 'No products yet.'}
+              action={{ label: l10n.getString('product-mgmt-empty-cta') || 'Add your first product', onClick: openCreate }}
+            />
           </div>
         </Card>
       ) : (

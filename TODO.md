@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 15 / 16 items complete (94%) · Updated 2026-07-21
+**Current state:** 16 / 16 items complete (100% 🎉) · Updated 2026-07-21
 
 ---
 
@@ -45,7 +45,7 @@
 
 > Small UX improvements that make a big difference.
 
-- [ ] **P57-1: Empty state illustrations** — Add SVG illustrations to all empty states (no products, no sales, no staff, no shifts). Currently using text-only messages.
+- [x] **P57-1: Empty state illustrations** ✅ — Created `ui/src/components/EmptyStateIllustrations.tsx` with 6 themed SVG components (NoProductsIcon, NoSalesIcon, NoStaffIcon, NoShiftsIcon, NotFoundIcon, EmptyBoxIcon). Updated 4 screens (ProductManagement, SalesHistory, Staff, Shifts) to use `<EmptyState icon={...}>` with Fluent-localized titles via `l10n.getString()` preserving EN/ID translations. All 56 UI tests pass, typecheck clean.
 
 ---
 
@@ -57,8 +57,8 @@
 | 🔵 P54 — Code TODOs | 5 | 5 | ███████████████████████ 100% |
 | 🟣 P55 — Dev Tooling | 2 | 2 | ███████████████████████ 100% |
 | 🔴 P56 — Device Validation | 4 | 4 | ███████████████████████ 100% |
-| ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **15** | **94%** |
+| ⚪ P57 — Visual Polish | 1 | 1 | ███████████████████████ 100% |
+| **Total** | **16** | **16** | **100%** |
 
 ---
 

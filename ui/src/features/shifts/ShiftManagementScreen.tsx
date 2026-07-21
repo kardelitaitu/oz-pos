@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { EmptyState } from '@/frontend/shared';
+import { NoShiftsIcon } from '@/components/EmptyStateIllustrations';
 import { Skeleton } from '@/components/Skeleton';
 import { formatMoney } from '@/types/domain';
 import {
@@ -391,9 +393,10 @@ export default function ShiftManagementScreen() {
 
             {shifts.length === 0 ? (
               <div className="shift-mgmt-empty">
-                <Localized id="shift-empty">
-                  <p>No shifts recorded yet.</p>
-                </Localized>
+                <EmptyState
+                  icon={<NoShiftsIcon />}
+                  title={l10n.getString('shift-empty') || 'No shifts recorded yet.'}
+                />
               </div>
             ) : (
               <div className="shift-mgmt-table-wrap">
