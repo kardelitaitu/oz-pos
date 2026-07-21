@@ -22,6 +22,7 @@
 mod db;
 mod email;
 mod metrics;
+mod openapi;
 mod prune;
 mod rate_limit;
 mod redirect;
@@ -342,11 +343,20 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
     let api_router = api_router.layer(ConcurrencyLimitLayer::new(10));
     let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
+    // OpenAPI documentation routes — Swagger UI + raw OpenAPI JSON.
+    let docs_router = Router::new()
+        .route(
+            "/api/openapi.json",
+            axum::routing::get(openapi::openapi_json_handler),
+        )
+        .route("/api/docs", axum::routing::get(openapi::swagger_ui_handler));
+
     Router::new()
         .route("/health", axum::routing::get(health_handler))
         .route("/api/health", axum::routing::get(health_handler))
         .route("/metrics", axum::routing::get(metrics_handler))
         .with_state(health_state)
+        .merge(docs_router)
         .merge(api_router)
         .merge(sync_router)
         .merge(webhook_router)
