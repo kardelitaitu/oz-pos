@@ -128,7 +128,8 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('isManager').textContent).toBe('true');
-      expect(screen.getByTestId('isOwner').textContent).toBe('true');
+      // A manager is NOT an owner — only 'owner' and 'role-owner' roles satisfy isOwner.
+      expect(screen.getByTestId('isOwner').textContent).toBe('false');
     });
   });
 

@@ -374,15 +374,25 @@ describe('SettingsPage', () => {
   });
 
   it('increments card size value', async () => {
-    renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+    const { container } = renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /appearance/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('button', { name: /appearance/i }));
 
-    expect(screen.getAllByText('2')[0]).toBeInTheDocument();
+    // Use container.querySelector to target the specific .settings-size-value element
+    // rather than screen.getAllByText which can match unrelated elements.
+    await waitFor(() => {
+      const sizeValue = container.querySelector('.settings-size-value');
+      expect(sizeValue).toHaveTextContent('2');
+    });
+
     fireEvent.click(screen.getByRole('button', { name: /increase card size/i }));
-    expect(screen.getByText('3')).toBeInTheDocument();
+
+    await waitFor(() => {
+      const sizeValue = container.querySelector('.settings-size-value');
+      expect(sizeValue).toHaveTextContent('3');
+    });
   });
 
   // ── Receipt section ──────────────────────────────────────────

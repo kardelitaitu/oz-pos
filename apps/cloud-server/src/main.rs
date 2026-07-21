@@ -491,7 +491,7 @@ mod tests {
 
     // ── Console smoke test (tokio-console) ───────────────────────────
 
-    #[cfg(feature = "console")]
+    #[cfg(all(feature = "console", tokio_unstable))]
     #[tokio::test]
     async fn console_subscriber_inits_without_panic() {
         // This test verifies that the console subscriber can be
