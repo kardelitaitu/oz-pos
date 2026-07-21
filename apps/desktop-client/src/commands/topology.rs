@@ -3182,12 +3182,13 @@ mod tests {
     }
 
     #[test]
-    fn json_with_duplicate_keys_last_wins() {
-        // serde_json by default keeps the last value for duplicate keys.
+    fn json_with_duplicate_keys_rejected() {
+        // serde_json rejects duplicate keys by default (the behaviour
+        // can be toggled via serde_json::DeserializerBuilder).
         let json = r#"{"id":"n1","type":"store","name":"Dup",
             "name":"Overwritten","x":0,"y":0}"#;
-        let node: TopologyNodePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(node.name, "Overwritten");
+        let result: Result<TopologyNodePayload, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "duplicate JSON keys must be rejected");
     }
 
     #[test]
@@ -3265,9 +3266,10 @@ mod tests {
         let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
         // Both forms must be preserved byte-exact.
         assert_eq!(roundtripped.name, composed);
-        assert_eq!(roundtripped.name.len(), 4); // single codepoint
+        assert_eq!(roundtripped.name.len(), 5); // c(1) + a(1) + f(1) + é(2) = 5
         assert_eq!(roundtripped.subtitle.as_deref(), Some(decomposed.as_str()));
-        assert_eq!(roundtripped.subtitle.unwrap().len(), 6); // 5 + combining
+        // decomposed "cafe\u{0301}" = 5 + 1 combining accent = 6
+        assert_eq!(roundtripped.subtitle.unwrap().len(), 6);
     }
 
     #[test]
