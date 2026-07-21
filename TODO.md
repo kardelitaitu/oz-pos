@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 28 / 32 items complete (88%) · Updated 2026-07-22
+> **Current state:** 30 / 32 items complete (94%) · Updated 2026-07-22
 
 ---
 
@@ -17,7 +17,7 @@
 | 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
 | 🟣 | PostgreSQL Sync Daemon | 2 | 1/2 ⏳ |
 | ⚪ | Docker & DevEx | 2 | 2/2 ✅ |
-| 🟤 | i18n Completion | 2 | 1/2 ⏳ |
+| 🟤 | i18n Completion | 2 | 2/2 ✅ |
 | 🔷 | Customer Display HAL Driver | 2 | 2/2 ✅ |
 | 🔶 | Release Readiness | 2 | 2/2 ✅ |
 | 📱 | WhatsApp Notification Integration | 2 | 0/2 ⏳ |
@@ -134,7 +134,7 @@
 > **Goal:** Audit and complete Fluent localization coverage across all screens.
 
 - [x] **i18n lint tooling** ✅ — `scripts/lint-i18n.sh` exists and runs in CI: detects untranslated strings, Fluent key duplicates, and bundle parity issues (verify-bundle-parity.py).
-- [ ] **Hardcoded string audit** — Scan all `.tsx` files for hardcoded English strings not wrapped in `<Localized>` or `l10n.getString()`. Generate a gap report and fill missing keys.
+- [x] **Hardcoded string audit** ✅ — Scanned all production `.tsx` files for hardcoded English strings bypassing i18n. Fixed 3 files with full i18n passes: `PurchaseOrderForm.tsx` (29 keys — labels, placeholders, errors, ARIA), `TerminalStatusPanel.tsx` (11 keys — title, online count, empty state, timestamps), `MultiStoreDashboardScreen.tsx` (1 key — error message). Added 82 new Fluent keys across 6 `.ftl` files (EN + ID). No more hardcoded English strings in error messages, labels, or ARIA attributes across these files. Pre-commit bundle-parity check passes (0 missing keys).
 
 ---
 
