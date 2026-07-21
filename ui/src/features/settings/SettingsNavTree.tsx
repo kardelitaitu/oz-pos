@@ -416,7 +416,8 @@ export default function SettingsNavTree({
   useEffect(() => {
     // Only announce if this change was user-initiated (via toggleCategory)
     if (userToggleRef.current) {
-      const isExpanding = prevCategory.current !== null;
+      // isExpanding: expandedCategory is non-null when expanding, null when collapsing
+      const isExpanding = expandedCategory !== null;
       const label = expandedCategory ?? prevCategory.current ?? '';
       if (label) {
         const count = CATEGORIES.find((c) => c.label === label)?.keys.length ?? 0;

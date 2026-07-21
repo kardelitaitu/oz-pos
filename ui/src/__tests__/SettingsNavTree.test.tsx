@@ -419,6 +419,85 @@ describe('SettingsNavTree', () => {
     });
   });
 
+  // ── Accessibility regression tests (P60-5c) ────────────────
+
+  describe('accessibility live region', () => {
+    /** Get the role="status" live region element. */
+    function getLiveRegion() {
+      return document.querySelector('[role="status"]');
+    }
+
+    it('renders a role="status" live region for screen reader announcements', () => {
+      render(<SettingsNavTree {...defaultProps} />);
+
+      const region = getLiveRegion();
+      expect(region).toBeInTheDocument();
+      expect(region).toHaveAttribute('aria-live', 'polite');
+      expect(region).toHaveAttribute('aria-atomic', 'true');
+      expect(region).toHaveClass('sr-only');
+    });
+
+    it('announces category expanded when a collapsed category header is clicked', async () => {
+      const user = userEvent.setup();
+      render(<SettingsNavTree {...defaultProps} />);
+
+      // Click Operations (collapsed by default) to expand it
+      const operationsBtn = screen.getByText('Operations').closest('button')!;
+      await user.click(operationsBtn);
+
+      const region = getLiveRegion();
+      expect(region?.textContent).toContain('Operations category expanded');
+    });
+
+    it('announces category collapsed when the expanded category header is clicked again', async () => {
+      const user = userEvent.setup();
+      render(<SettingsNavTree {...defaultProps} />);
+
+      // Business starts expanded — click to collapse
+      const businessBtn = screen.getByText('Business').closest('button')!;
+      await user.click(businessBtn);
+
+      const region = getLiveRegion();
+      expect(region?.textContent).toContain('Business category collapsed');
+    });
+
+    it('announces section activated when activeSection prop changes', () => {
+      const { rerender } = render(<SettingsNavTree {...defaultProps} activeSection="general" />);
+
+      rerender(<SettingsNavTree {...defaultProps} activeSection="receipt" />);
+
+      const region = getLiveRegion();
+      expect(region?.textContent).toContain('Opened Receipt settings');
+    });
+
+    it('announces search results count when query changes', () => {
+      const { rerender } = render(<SettingsNavTree {...defaultProps} searchQuery="" />);
+
+      rerender(<SettingsNavTree {...defaultProps} searchQuery="general" />);
+
+      const region = getLiveRegion();
+      expect(region?.textContent).toContain('1 result found');
+    });
+
+    it('announces empty search state when no results match', () => {
+      const { rerender } = render(<SettingsNavTree {...defaultProps} searchQuery="" />);
+
+      rerender(<SettingsNavTree {...defaultProps} searchQuery="xyznonexistent" />);
+
+      const region = getLiveRegion();
+      expect(region?.textContent).toContain('No settings match your search');
+    });
+
+    it('announces search cleared when query is reset to empty', () => {
+      const { rerender } = render(<SettingsNavTree {...defaultProps} searchQuery="general" />);
+
+      rerender(<SettingsNavTree {...defaultProps} searchQuery="" />);
+
+      const region = getLiveRegion();
+      expect(region?.textContent).toContain('Search cleared');
+    });
+  });
+
   // ── aria-expanded and panel linking ──────────────────────
 
   it('category headers link to their panels via aria-controls', () => {
