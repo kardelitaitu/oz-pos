@@ -12,11 +12,16 @@
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod daily_summary;
 pub mod error;
 pub mod menu_engineering;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 
+pub use daily_summary::{
+    DailySummaryResult, DailySummaryRow, HourlySalesRow, TopProductRow, query_daily_summary,
+    query_sales_by_hour, query_top_products,
+};
 pub use error::ReportingError;
 #[cfg(feature = "metrics")]
 pub use metrics::*;
