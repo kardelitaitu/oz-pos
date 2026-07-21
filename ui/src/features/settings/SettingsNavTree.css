@@ -333,6 +333,67 @@
   }
 }
 
+/* ── Pinned sections (P60-blog-1) ───────────────────────── */
+
+.settings-sidebar-pinned {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-accent-dim);
+}
+
+/* Pin button — small icon on the right of each nav item */
+.settings-nav-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-100) var(--ease-out),
+    color var(--duration-100) var(--ease-out),
+    background-color var(--duration-100) var(--ease-out);
+}
+
+.settings-nav-item:hover .settings-nav-pin-btn,
+.settings-nav-item:focus-within .settings-nav-pin-btn,
+.settings-nav-pin-btn.pinned {
+  opacity: 1;
+}
+
+.settings-nav-pin-btn:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-dim);
+}
+
+.settings-nav-pin-btn.pinned {
+  color: var(--color-accent);
+}
+
+.settings-nav-pin-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-nav-pin-btn {
+    transition: none;
+  }
+}
+
+/* Remove pin button in collapsed sidebar */
+.settings-sidebar.collapsed .settings-nav-pin-btn {
+  display: none;
+}
+
 /* ── Recently-used sections (P60-3f) ───────────────────── */
 
 .settings-sidebar-recent {
@@ -382,6 +443,23 @@
   .settings-recent-item--drop-target {
     transition: none;
   }
+}
+
+/* ── Nav item wrapper (avoids nested interactive elements) ── */
+
+.settings-nav-item-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.settings-nav-item-wrapper > button[role="treeitem"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-sidebar.collapsed .settings-nav-item-wrapper {
+  justify-content: center;
 }
 
 /* ── Sidebar nav list ─────────────────────────────────── */

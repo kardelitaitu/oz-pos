@@ -350,6 +350,30 @@ export default function SettingsNavTree({
     localStorage.setItem('settings-recent-sections', JSON.stringify(recentSections));
   }, [recentSections]);
 
+  // ── Pinned sections (P60-blog-1): saved to top of sidebar ───────
+  const [pinnedSections, setPinnedSections] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('settings-pinned-sections');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch { /* ignore corrupt JSON */ }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('settings-pinned-sections', JSON.stringify(pinnedSections));
+  }, [pinnedSections]);
+
+  const togglePin = useCallback((key: string) => {
+    setPinnedSections((prev) =>
+      prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key],
+    );
+  }, []);
+
   // ── Drag-to-reorder recently-used sections (P60-3b) ────────────
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -628,6 +652,45 @@ export default function SettingsNavTree({
           role="treegrid"
           aria-label="Settings"
         >
+          {/* ── Pinned sections (P60-blog-1) ────────────────── */}
+          {!q && pinnedSections.length > 0 && !sidebarCollapsed && (
+            <div className="settings-sidebar-pinned" role="group" aria-label="Pinned sections">
+              {pinnedSections.map((key) => {
+                const item = NAV_ITEMS.find((n) => n.key === key);
+                if (!item) return null;
+                return (
+                  <div key={key} className="settings-nav-item-wrapper">
+                    <button
+                      type="button"
+                      role="treeitem"
+                      aria-level={2}
+                      aria-selected={activeSection === key}
+                      className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
+                      onClick={() => onNavigate(key)}
+                      aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
+                    >
+                      <span className="settings-nav-icon">{item.icon}</span>
+                      <span className="settings-nav-label">
+                        <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-nav-pin-btn pinned"
+                      onClick={() => togglePin(key)}
+                      aria-label={`Unpin ${item.label}`}
+                      title="Unpin"
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
+                        <path d="M12 2L9.5 10L2 11l6 6l-1.5 7L12 18l6.5 6L17 17l6-6l-7.5-1z" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* ── Recently-used sections (P60-3f) ──────────────── */}
           {!q && recentSections.length > 0 && !sidebarCollapsed && (
             <div className="settings-sidebar-recent" role="group" aria-label="Recently viewed">
@@ -744,24 +807,39 @@ export default function SettingsNavTree({
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
                           <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
-                            <button
-                              type="button"
-                              role="treeitem"
-                              aria-level={2}
-                              aria-posinset={itemIdx + 1}
-                              aria-setsize={cat.keys.length}
-                              aria-selected={activeSection === key}
-                              className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
-                              onClick={() => onNavigate(key)}
-                              aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
-                            >
-                              <span className="settings-nav-icon">{item.icon}</span>
-                              <span className="settings-nav-label">
-                                {q ? highlightLabel(l10n.getString(NAV_L10N_KEYS[item.key] ?? item.label)) : (
-                                  <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
-                                )}
-                              </span>
-                            </button>
+                            <div className="settings-nav-item-wrapper">
+                              <button
+                                type="button"
+                                role="treeitem"
+                                aria-level={2}
+                                aria-posinset={itemIdx + 1}
+                                aria-setsize={cat.keys.length}
+                                aria-selected={activeSection === key}
+                                className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
+                                onClick={() => onNavigate(key)}
+                                aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
+                              >
+                                <span className="settings-nav-icon">{item.icon}</span>
+                                <span className="settings-nav-label">
+                                  {q ? highlightLabel(l10n.getString(NAV_L10N_KEYS[item.key] ?? item.label)) : (
+                                    <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                                  )}
+                                </span>
+                              </button>
+                              {!sidebarCollapsed && (
+                                <button
+                                  type="button"
+                                  className={`settings-nav-pin-btn${pinnedSections.includes(key) ? ' pinned' : ''}`}
+                                  onClick={() => togglePin(key)}
+                                  aria-label={pinnedSections.includes(key) ? `Unpin ${item.label}` : `Pin ${item.label}`}
+                                  title={pinnedSections.includes(key) ? 'Unpin' : 'Pin'}
+                                >
+                                  <svg viewBox="0 0 24 24" fill={pinnedSections.includes(key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
+                                    <path d="M12 2L9.5 10L2 11l6 6l-1.5 7L12 18l6.5 6L17 17l6-6l-7.5-1z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </Tooltip>
                         );
                       })}

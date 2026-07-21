@@ -144,6 +144,8 @@ export default function NodeTopologyEditor({
 
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
   const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
+  /** Nearest target port while dragging a connection, for snap-to-port preview. */
+  const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName } | null>(null);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -301,6 +303,27 @@ export default function NodeTopologyEditor({
         x: e.clientX - panStartRef.current.x,
         y: e.clientY - panStartRef.current.y,
       });
+    } else if (connectingFromNodeId) {
+      // Find nearest target port when dragging a connection
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const mx = (e.clientX - rect.left - pan.x) / zoom;
+      const my = (e.clientY - rect.top - pan.y) / zoom;
+      const SNAP_DIST = 30;
+      let closest: { nodeId: string; port: PortName; dist: number } | null = null;
+      for (const n of nodes) {
+        if (n.id === connectingFromNodeId) continue;
+        for (const p of ['top', 'right', 'bottom', 'left'] as PortName[]) {
+          const off = PORT_OFFSET[p];
+          const px = n.x + off.dx;
+          const py = n.y + off.dy;
+          const dist = Math.sqrt((mx - px) ** 2 + (my - py) ** 2);
+          if (dist < SNAP_DIST && (!closest || dist < closest.dist)) {
+            closest = { nodeId: n.id, port: p, dist };
+          }
+        }
+      }
+      setHoveredTarget(closest ? { nodeId: closest.nodeId, port: closest.port } : null);
     }
   };
 
@@ -308,6 +331,13 @@ export default function NodeTopologyEditor({
     setDraggingNodeId(null);
     setIsPanning(false);
   };
+
+  // Clear hoveredTarget when connection mode ends
+  useEffect(() => {
+    if (!connectingFromNodeId) {
+      setHoveredTarget(null);
+    }
+  }, [connectingFromNodeId]);
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
@@ -446,14 +476,34 @@ export default function NodeTopologyEditor({
     const portOff = PORT_OFFSET[connectingFromPort];
     const x1 = fromNode.x + portOff.dx;
     const y1 = fromNode.y + portOff.dy;
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const mx = (mousePosRef.current.x - rect.left - pan.x) / zoom;
-    const my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
+
+    // If hovering near a target port, snap the preview to it
+    let mx: number;
+    let my: number;
+    if (hoveredTarget) {
+      const targetNode = nodes.find((n) => n.id === hoveredTarget.nodeId);
+      if (targetNode) {
+        const targetOff = PORT_OFFSET[hoveredTarget.port];
+        mx = targetNode.x + targetOff.dx;
+        my = targetNode.y + targetOff.dy;
+      } else {
+        const canvas = canvasRef.current;
+        if (!canvas) return null;
+        const rect = canvas.getBoundingClientRect();
+        mx = (mousePosRef.current.x - rect.left - pan.x) / zoom;
+        my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
+      }
+    } else {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      mx = (mousePosRef.current.x - rect.left - pan.x) / zoom;
+      my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
+    }
+
     const dx = Math.abs(mx - x1) * 0.5;
     return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
-  }, [connectingFromNodeId, connectingFromPort, nodes, zoom, pan]);
+  }, [connectingFromNodeId, connectingFromPort, nodes, zoom, pan, hoveredTarget]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
@@ -653,6 +703,21 @@ export default function NodeTopologyEditor({
                 const dx = Math.abs(x2 - x1) * 0.5;
                 const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 
+                // Label position: bezier midpoint offset perpendicular to the curve
+                // so labels float above the wire arc instead of sitting on the
+                // geometric midpoint (which can overlap with node cards).
+                const labelT = 0.5;
+                const lx = cubicBezier(labelT, x1, x1 + dx, x2 - dx, x2);
+                const ly = cubicBezier(labelT, y1, y1, y2, y2);
+                // Tangent at bezier midpoint
+                const tangentX = 1.5 * (x2 - x1 - dx);
+                const tangentY = 1.5 * (y2 - y1);
+                // Perpendicular vector (ty, -tx) points "upward" for rightward wires
+                const perpLen = Math.max(Math.sqrt(tangentX * tangentX + tangentY * tangentY), 12);
+                const LABEL_OFFSET = 24;
+                const labelOffX = (tangentY / perpLen) * LABEL_OFFSET;
+                const labelOffY = (-tangentX / perpLen) * LABEL_OFFSET;
+
                 // Pulse follows the cubic bezier curve, not a straight line
                 const t = simPulseStep / 100;
                 const pulseX = cubicBezier(t, x1, x1 + dx, x2 - dx, x2);
@@ -672,6 +737,11 @@ export default function NodeTopologyEditor({
                       }}
                     />
 
+                    {/* Explicit endpoint dot ensures the wire always starts
+                        exactly at the port socket center, regardless of SVG
+                        renderer quirks with stroke-dasharray at path boundaries. */}
+                    <circle cx={x1} cy={y1} r="1.5" className="wire-end-dot" />
+
                     <path
                       d={pathD}
                       className={`wire-path ${wire.direction}`}
@@ -680,7 +750,7 @@ export default function NodeTopologyEditor({
                     />
 
                     <g
-                      transform={`translate(${(x1 + x2) / 2}, ${(y1 + y2) / 2})`}
+                      transform={`translate(${lx + labelOffX}, ${ly + labelOffY})`}
                       className="wire-label-group"
                       onClick={() => handleToggleWireDirection(wire.id)}
                       role="button"
@@ -705,7 +775,7 @@ export default function NodeTopologyEditor({
               })}
 
               {wirePreviewLine && (
-                <path d={wirePreviewLine.d} className="wire-path" strokeDasharray="6 4" opacity="0.5" pointerEvents="none" />
+                <path d={wirePreviewLine.d} className="wire-path" opacity="0.5" pointerEvents="none" />
               )}
             </svg>
 
@@ -742,10 +812,12 @@ export default function NodeTopologyEditor({
                   <div className="node-port-sockets-group">
                     {(['top', 'right', 'bottom', 'left'] as PortName[]).map((port) => {
                       const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
+                      const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
+                      const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered;
                       return (
                         <button
                           key={port}
-                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${connectingFromNodeId && connectingFromNodeId !== node.id ? 'port-highlight' : ''}`}
+                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''}`}
                           onClick={(e) => handlePortClick(e, node.id, port)}
                           aria-label={`${node.name} ${port} port`}
                         >
