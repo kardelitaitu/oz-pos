@@ -158,6 +158,12 @@ Output location:
 apps/tablet-client/gen/apple/build/oz-pos-tablet.ipa
 ```
 
+> ℹ️ The exact IPA output path may vary by Tauri CLI version and project name.
+> If the file is not at the expected path, run:
+> ```bash
+> find apps/tablet-client/gen/apple -name "*.ipa" 2>/dev/null
+> ```
+
 ### Option D — Via CI (GitHub Actions)
 
 The `.github/workflows/ios.yml` workflow builds a signed IPA on tag
@@ -214,7 +220,7 @@ open ~/Library/Developer/Xcode/Archives/
 # Option B: Using Transporter (App Store Connect)
 # Open the Transporter app → Add IPA → Deliver
 
-# Option C: Using xcrun (CLI)
+# Option C: Using notarytool or altool (CLI)
 xcrun altool --upload-app \
   -f apps/tablet-client/gen/apple/build/oz-pos-tablet.ipa \
   -t ios \
@@ -358,6 +364,7 @@ gesture feel (velocity-sensitive, rubber-banding).
 |------|--------|----------------|-------|
 | 6.1 | Tap barcode scan button | Camera preview opens (fullscreen) | ☐ |
 | 6.2 | Camera permission | If first time: system dialog appears. Accept. | ☐ |
+| ▶ | _Note: Barcode scanner cannot be tested in the iOS simulator_ | _(no camera hardware)_ | _Test on physical iPad_ |
 | 6.3 | Scan a barcode | Auto-detects. Brief haptic + sound on success. | ☐ |
 | 6.4 | Product added to cart | Item appears. Scanner may close automatically. | ☐ |
 | 6.5 | Unknown barcode | "Product not found for barcode XXXXXX." | ☐ |
@@ -418,7 +425,7 @@ if a printer is available.
 
 | Step | Action | Expected Result | Check |
 |------|--------|----------------|-------|
-| 10.1 | **Split View** (drag app to left/right) | App resizes to half-width. UI reflows. No cutoff. | ☐ |
+| 10.1 | **Split View** (drag app to left/right) | App resizes to half-width. UI reflows. No cutoff. *(May require `UIApplicationSupportsMultipleScenes` in Info.plist.)* | ☐ |
 | 10.2 | **Slide Over** (swipe from right edge) | App runs in compact slide-over panel | ☐ |
 | 10.3 | **Stage Manager** (iPadOS 16+) | App window can be resized freely. UI adapts. | ☐ |
 | 10.4 | Keyboard shortcut (if hardware keyboard) | Cmd+N new sale, Cmd+F search, etc. | ☐ |
