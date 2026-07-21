@@ -60,7 +60,7 @@
   - Enter/Space: activate section
 - [x] **P60-4e: Screen reader live regions** ✅ — Centralized `announcement` state feeding `<div role="status">`. Three announcement sources: (1) category expand/collapse via `userToggleRef` pattern (distinguishes user toggle from programmatic auto-expand), (2) section activated on `activeSection` change via `prevSection` ref, (3) search results/empty/cleared via `prevQ` ref guard.
 - [ ] **P60-4f: Focus management on navigation** — When navigating to a section, move focus to the section content area's first focusable element (heading or first input). Use a ref callback and `focus()` on the mounted element.
-- [ ] **P60-4g: Touch target audit for sidebar** — Ensure all sidebar interactive elements have `min-height: 44px` and `min-width: 44px` per WCAG 2.2 Target Size (Minimum). Verify on mobile viewport with `@media (pointer: coarse)`.
+- [x] **P60-4g: Touch target audit for sidebar** ✅ — All interactive elements now have `min-height: 2.75rem` / `min-width: 2.75rem` (44px): toggle button, collapse-all button, category section headers, nav items. `settings-sidebar-empty-clear` already had `var(--touch-target-min)`. Uses `min-` to preserve visual 2rem size while expanding hit area to 44px. Collapsed nav items already had this from P60-3d.
 
 ---
 
@@ -95,10 +95,10 @@
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 4/5 |
-| 🟡 P60-4 — Accessibility | 7 | 3/7 |
+| 🟡 P60-4 — Accessibility | 7 | 4/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **14/23 (61%)** |
+| **Total** | **23** | **15/23 (65%)** |
 
 ---
 
