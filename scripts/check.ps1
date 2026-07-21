@@ -20,29 +20,46 @@ function Step {
     param(
         [string]$Name,
         [string]$RetryCommand,
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+        [int]$RetryMax = 1,
+        [string[]]$RetryKill = @()
     )
     $stepStr = "{0:D2}" -f $script:stepCounter
     Write-Host "$stepStr. checking $Name... " -NoNewline
     $script:stepCounter++
 
     $start = Get-Date
-    $failed = $false
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "SilentlyContinue"
-    $output = ""
-    try {
+
+    for ($attempt = 1; $attempt -le $RetryMax; $attempt++) {
+        $failed = $false
+        $output = ""
         $global:LASTEXITCODE = 0
-        $output = & $ScriptBlock 2>&1
-        if ($LASTEXITCODE -ne 0) {
+        try {
+            $output = & $ScriptBlock 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $failed = $true
+            }
+        } catch {
             $failed = $true
+            $output = $_
         }
-    } catch {
-        $failed = $true
-        $output = $_
-    } finally {
-        $ErrorActionPreference = $oldEAP
+
+        if (-not $failed) { break }
+
+        if ($attempt -lt $RetryMax) {
+            Write-Host ""
+            Write-Host "  [$Name] attempt $attempt/$RetryMax failed — killing processes..."
+            foreach ($proc in $RetryKill) {
+                taskkill /f /im $proc 2>$null
+            }
+            Start-Sleep -Seconds 2
+            Write-Host "  [$Name] retrying ($($attempt+1)/$RetryMax)... " -NoNewline
+        }
     }
+
+    $ErrorActionPreference = $oldEAP
 
     if ($failed) {
         Write-Host "FAIL" -ForegroundColor Red
@@ -137,57 +154,17 @@ if ($gitBash) {
 if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
     Push-Location ui
 
-    # On Windows, Vite/Rollup native .node binaries (e.g. rollup-win32-x64-msvc.node)
-    # can remain locked by Node worker-thread processes for a few seconds after
-    # the previous step finishes, causing `npm ci` to fail with EPERM -4048.
+    # On Windows, native .node binaries (rollup-win32-x64-msvc, esbuild.exe)
+    # can remain locked by Node worker-thread processes after a previous step
+    # finishes, causing `npm ci` to fail with EPERM -4048.
     #
     # Strategy:
-    #   1. Give workers up to 5 s to release the file naturally.
-    #   2. If still locked, force-remove the specific .node file so npm ci
-    #      can re-download it cleanly — this is safe because npm ci always
-    #      performs a full, deterministic reinstall from package-lock.json.
-    #   3. Retry npm ci up to 3 times with a 3 s back-off on any EPERM.
-    Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" -ScriptBlock {
-        # Step 1: short wait for worker-thread DLL release
-        $lockedNode = "node_modules\@rollup\rollup-win32-x64-msvc\rollup.win32-x64-msvc.node"
-        if (Test-Path $lockedNode) {
-            $waited = 0
-            while ($waited -lt 5) {
-                try {
-                    $fs = [System.IO.File]::Open($lockedNode,
-                        [System.IO.FileMode]::Open,
-                        [System.IO.FileAccess]::ReadWrite,
-                        [System.IO.FileShare]::None)
-                    $fs.Close()
-                    break   # file is free
-                } catch {
-                    Start-Sleep -Seconds 1
-                    $waited++
-                }
-            }
-
-            # Step 2: if still locked after 5 s, force-remove it
-            if ($waited -ge 5) {
-                Remove-Item -LiteralPath $lockedNode -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        # Step 3: npm ci with up to 3 retries on EPERM
-        $maxAttempts = 3
-        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            $global:LASTEXITCODE = 0
-            $result = npm ci --no-audit --no-fund 2>&1
-            if ($LASTEXITCODE -eq 0) { break }
-            $isEperm = $result -match 'EPERM|operation not permitted'
-            if ($isEperm -and $attempt -lt $maxAttempts) {
-                Write-Host "" # newline after the "checking..." prompt
-                Write-Host "  [npm ci] EPERM on attempt $attempt — waiting 3 s before retry..."
-                Start-Sleep -Seconds 3
-            } elseif ($attempt -eq $maxAttempts) {
-                # Final failure — let the Step wrapper report it
-                $result | Out-String | Write-Host
-            }
-        }
+    #   1. Try normally once.
+    #   2. If that fails, kill all node.exe + esbuild.exe processes (they hold
+    #      the file locks), then retry once more via RetryMax=2 + RetryKill.
+    Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" `
+         -RetryMax 2 -RetryKill @("node.exe", "esbuild.exe") -ScriptBlock {
+        npm ci --no-audit --no-fund 2>&1
     }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
     Step -Name "ui typecheck" -RetryCommand "cd ui; npm run typecheck" -ScriptBlock { npm run typecheck }
