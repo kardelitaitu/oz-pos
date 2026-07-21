@@ -4,13 +4,24 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonState = 'ready' | 'processing';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Visual variant. @default 'primary' */
   variant?: ButtonVariant;
   /** Size preset. @default 'md' */
   size?: ButtonSize;
-  /** Show a loading spinner and disable the button. */
+  /**
+   * Visual state of the button.
+   * - `ready`: idle, clickable (default)
+   * - `processing`: shows a spinner and disables the button
+   * @default 'ready'
+   */
+  state?: ButtonState;
+  /**
+   * Show a loading spinner and disable the button.
+   * @deprecated Use `state="processing"` instead.
+   */
   loading?: boolean;
   /** Optional icon placed before children. */
   icon?: ReactNode;
@@ -27,7 +38,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * ```tsx
  * <Button>Save</Button>
  * <Button variant="danger" size="lg">Delete</Button>
- * <Button variant="ghost" loading>Please wait…</Button>
+ * <Button variant="ghost" state="processing">Please wait…</Button>
  * ```
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -35,7 +46,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     {
       variant = 'primary',
       size = 'md',
-      loading = false,
+      state = 'ready',
+      loading,
       icon,
       children,
       className,
@@ -45,6 +57,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
+    const isProcessing = state === 'processing' || loading === true;
+
     const classNames = [
       'btn',
       `btn--${variant}`,
@@ -59,19 +73,19 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         type={type}
         className={classNames}
-        disabled={disabled || loading}
-        aria-disabled={disabled || loading || undefined}
-        aria-busy={loading || undefined}
+        disabled={disabled || isProcessing}
+        aria-disabled={disabled || isProcessing || undefined}
+        aria-busy={isProcessing || undefined}
         {...rest}
       >
-        {loading ? (
+        {isProcessing ? (
           <span className="btn__spinner" aria-hidden="true" />
         ) : icon ? (
           <span className="btn__icon" aria-hidden="true">
             {icon}
           </span>
         ) : null}
-        {loading ? <span className="sr-only">{children}</span> : children}
+        {isProcessing ? <span className="sr-only">{children}</span> : children}
       </button>
     );
   },
