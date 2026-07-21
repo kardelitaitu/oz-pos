@@ -410,6 +410,87 @@ export default function SettingsNavTree({
     setDragOverIndex(null);
   }, []);
 
+  // ── Resizable sidebar drag state (P60-blog-4) ────────────────
+  const SIDEBAR_MIN_WIDTH = 250;
+  const SIDEBAR_MAX_WIDTH = 400;
+
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(() => {
+    try {
+      const stored = localStorage.getItem('settings-sidebar-width');
+      if (stored) {
+        const parsed = Number(stored);
+        if (!isNaN(parsed) && parsed >= SIDEBAR_MIN_WIDTH && parsed <= SIDEBAR_MAX_WIDTH) {
+          return parsed;
+        }
+      }
+    } catch { /* ignore corrupt data */ }
+    return null;
+  });
+
+  const isResizing = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+  const currentWidthRef = useRef(sidebarWidth ?? SIDEBAR_MIN_WIDTH);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    startXRef.current = e.clientX;
+    const startWidth = sidebarWidth ?? SIDEBAR_MIN_WIDTH;
+    startWidthRef.current = startWidth;
+    currentWidthRef.current = startWidth;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = ev.clientX - startXRef.current;
+      const newWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidthRef.current + delta));
+      currentWidthRef.current = newWidth;
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        localStorage.setItem('settings-sidebar-width', String(currentWidthRef.current));
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    return () => {
+      isResizing.current = false;
+    };
+  }, []);
+
+  // ── Keyboard shortcut hints (P60-blog-3) ─────────────────
+  const KEYBOARD_SHORTCUTS = [
+    { keys: ['↑', '↓'], desc: 'Navigate items' },
+    { keys: ['→'], desc: 'Expand category' },
+    { keys: ['←'], desc: 'Collapse category' },
+    { keys: ['Home', 'End'], desc: 'First / last item' },
+    { keys: ['Esc'], desc: 'Close mobile sidebar' },
+  ];
+
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const shortcutRef = useRef<HTMLDivElement>(null);
+
+  // Close shortcuts popover on click outside
+  useEffect(() => {
+    if (!showShortcuts) return;
+    const handleClick = (e: MouseEvent) => {
+      if (shortcutRef.current && !shortcutRef.current.contains(e.target as Node)) {
+        setShowShortcuts(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showShortcuts]);
+
   // ── Screen reader live announcements (P60-4e) ────────────────
   const [announcement, setAnnouncement] = useState('');
 
@@ -624,6 +705,7 @@ export default function SettingsNavTree({
         className={`settings-sidebar${sidebarCollapsed ? ' collapsed' : ''}${mobileSidebarOpen ? ' mobile-open' : ''}`}
         data-testid="settings-sidebar"
         aria-label={l10n.getString('settings-sidebar-nav-aria')}
+        style={sidebarWidth && !sidebarCollapsed ? { width: sidebarWidth, minWidth: sidebarWidth } as React.CSSProperties : undefined}
       >
         <div className="settings-sidebar-header">
           <button
@@ -637,6 +719,40 @@ export default function SettingsNavTree({
               <polyline points="6 15 12 9 18 15" />
             </svg>
           </button>
+          {!sidebarCollapsed && (
+            <div className="settings-shortcut-btn-wrap" ref={shortcutRef}>
+              <button
+                type="button"
+                className="settings-shortcut-btn"
+                onClick={() => setShowShortcuts((p) => !p)}
+                aria-label="Keyboard shortcuts"
+                title="Keyboard shortcuts"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M6 16h.01M10 16h.01M14 16h4" />
+                </svg>
+              </button>
+              {showShortcuts && (
+                <div className="settings-shortcuts-popover" role="tooltip">
+                  <div className="settings-shortcuts-title">Keyboard shortcuts</div>
+                  {KEYBOARD_SHORTCUTS.map((shortcut) => (
+                    <div key={shortcut.keys.join('')} className="settings-shortcuts-row">
+                      <kbd className="settings-shortcuts-kbd">
+                        {shortcut.keys.map((k, i) => (
+                          <span key={k}>
+                            {i > 0 && <span className="settings-shortcuts-sep">/</span>}
+                            <span>{k}</span>
+                          </span>
+                        ))}
+                      </kbd>
+                      <span className="settings-shortcuts-desc">{shortcut.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <button
             type="button"
             className="settings-sidebar-toggle"
@@ -865,6 +981,25 @@ export default function SettingsNavTree({
             })
           )}
         </div>
+
+        {/* ── Resize handle (P60-blog-4) ─────────── */}
+        {!sidebarCollapsed && (
+          <button
+            type="button"
+            className="settings-sidebar-resize-handle"
+            onMouseDown={handleResizeStart}
+            aria-label="Resize sidebar"
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                setSidebarWidth((prev) => Math.min(SIDEBAR_MAX_WIDTH, (prev ?? SIDEBAR_MIN_WIDTH) + 10));
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setSidebarWidth((prev) => Math.max(SIDEBAR_MIN_WIDTH, (prev ?? SIDEBAR_MIN_WIDTH) - 10));
+              }
+            }}
+          />
+        )}
       </aside>
 
       {/* ── Live region: announcements for screen readers (P60-4e) ── */}
