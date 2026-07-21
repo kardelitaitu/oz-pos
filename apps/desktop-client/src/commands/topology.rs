@@ -230,18 +230,32 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let conn = fresh_conn();
-        let nodes = vec![TopologyNodePayload {
-            id: "store-1".into(),
-            node_type: "store".into(),
-            name: "Main Store".into(),
-            subtitle: Some("Primary".into()),
-            x: 100.0,
-            y: 200.0,
-            tier_requirement: None,
-            telemetry_badge: Some("Online".into()),
-            telemetry_status: Some("online".into()),
-            metadata: None,
-        }];
+        let nodes = vec![
+            TopologyNodePayload {
+                id: "store-1".into(),
+                node_type: "store".into(),
+                name: "Main Store".into(),
+                subtitle: Some("Primary".into()),
+                x: 100.0,
+                y: 200.0,
+                tier_requirement: None,
+                telemetry_badge: Some("Online".into()),
+                telemetry_status: Some("online".into()),
+                metadata: None,
+            },
+            TopologyNodePayload {
+                id: "ws-1".into(),
+                node_type: "workspace".into(),
+                name: "POS #1".into(),
+                subtitle: None,
+                x: 300.0,
+                y: 100.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            },
+        ];
         let wires = vec![TopologyWirePayload {
             id: "w-1".into(),
             from_node_id: "store-1".into(),
@@ -1131,7 +1145,10 @@ mod tests {
     }
 
     #[test]
-    fn data_with_duplicate_wire_ids_roundtrips() {
+    fn serde_allows_duplicate_wire_ids() {
+        // Serde serialization itself does not enforce uniqueness — that
+        // validation lives in save_topology_data. This test verifies the
+        // serde layer preserves duplicate IDs without error.
         let data = TopologyData {
             nodes: vec![TopologyNodePayload {
                 id: "n1".into(),
@@ -1170,6 +1187,116 @@ mod tests {
         let roundtripped: TopologyData = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtripped.wires.len(), 2);
         assert_eq!(roundtripped.wires[0].id, roundtripped.wires[1].id);
+    }
+
+    #[test]
+    fn save_topology_data_rejects_duplicate_wire_ids() {
+        let conn = fresh_conn();
+        let nodes = vec![TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "store".into(),
+            name: "Dup".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        }];
+        let wires = vec![
+            TopologyWirePayload {
+                id: "same-id".into(),
+                from_node_id: "n1".into(),
+                to_node_id: "n1".into(),
+                direction: "one-way".into(),
+                label: None,
+                from_port: None,
+                to_port: None,
+            },
+            TopologyWirePayload {
+                id: "same-id".into(),
+                from_node_id: "n1".into(),
+                to_node_id: "n1".into(),
+                direction: "two-way".into(),
+                label: None,
+                from_port: None,
+                to_port: None,
+            },
+        ];
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate wire id"),
+            "error should mention duplicate wire id, got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_topology_data_rejects_wire_to_nonexistent_node() {
+        let conn = fresh_conn();
+        let nodes = vec![TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "store".into(),
+            name: "Store".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        }];
+        let wires = vec![TopologyWirePayload {
+            id: "orphan".into(),
+            from_node_id: "ghost".into(),
+            to_node_id: "n1".into(),
+            direction: "one-way".into(),
+            label: None,
+            from_port: None,
+            to_port: None,
+        }];
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("unknown from_node_id"),
+            "error should mention unknown from_node_id, got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_topology_data_rejects_wire_to_unknown_to_node() {
+        let conn = fresh_conn();
+        let nodes = vec![TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "store".into(),
+            name: "Store".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        }];
+        let wires = vec![TopologyWirePayload {
+            id: "orphan".into(),
+            from_node_id: "n1".into(),
+            to_node_id: "nowhere".into(),
+            direction: "one-way".into(),
+            label: None,
+            from_port: None,
+            to_port: None,
+        }];
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("unknown to_node_id"),
+            "error should mention unknown to_node_id, got: {err}"
+        );
     }
 
     #[test]
@@ -1925,7 +2052,7 @@ mod tests {
     // ── Graph integrity — wiring bugs ──────────────────────────────
 
     #[test]
-    fn wire_to_nonexistent_node_persists() {
+    fn save_topology_data_rejects_orphan_wires() {
         let conn = fresh_conn();
         let data = TopologyData {
             nodes: vec![],
@@ -1947,9 +2074,15 @@ mod tests {
         let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
         assert_eq!(loaded.wires.len(), 1);
         assert_eq!(loaded.wires[0].from_node_id, "ghost");
-        // System does NOT validate node references — this is a design gap.
-        let node_ids: Vec<&str> = loaded.nodes.iter().map(|n| n.id.as_str()).collect();
-        assert!(!node_ids.contains(&"ghost"));
+
+        // save_topology_data should reject wires referencing unknown nodes.
+        let result = save_topology_data(&conn, loaded.nodes, loaded.wires);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("unknown from_node_id"),
+            "error should mention unknown from_node_id, got: {err}"
+        );
     }
 
     #[test]

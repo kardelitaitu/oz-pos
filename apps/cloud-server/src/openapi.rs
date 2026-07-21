@@ -3,6 +3,7 @@
 //! Serves:
 //! - `GET /api/openapi.json` — the OpenAPI 3.1 specification
 //! - `GET /api/docs` — Swagger UI (loaded from CDN) pointing at the spec
+//! - `GET /api/docs/scalar` — Scalar API Reference (modern, interactive docs)
 //!
 //! The spec is generated programmatically from schema builders for
 //! maintainability — no external OpenAPI crate dependency required.
@@ -109,6 +110,35 @@ pub fn swagger_ui_html() -> Html<String> {
     </script>
 </body>
 </html>"##.to_string()
+    )
+}
+
+/// Returns a Scalar API Reference HTML page that loads the spec from `/api/openapi.json`.
+///
+/// Scalar is a modern, interactive API documentation UI with a clean design.
+/// Loaded from CDN — no additional dependencies needed.
+pub fn scalar_html() -> Html<String> {
+    Html(
+        r##"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OZ-POS API Docs — Scalar</title>
+    <style>
+        body { margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <script
+        id="api-reference"
+        data-url="/api/openapi.json"
+        data-proxy-url="https://proxy.scalar.com">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>"##
+            .to_string(),
     )
 }
 
@@ -619,6 +649,11 @@ pub async fn swagger_ui_handler() -> Html<String> {
     swagger_ui_html()
 }
 
+/// Handler: `GET /api/docs/scalar` — returns the Scalar API Reference HTML page.
+pub async fn scalar_ui_handler() -> Html<String> {
+    scalar_html()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,6 +669,7 @@ mod tests {
         axum::Router::new()
             .route("/api/openapi.json", get(openapi_json_handler))
             .route("/api/docs", get(swagger_ui_handler))
+            .route("/api/docs/scalar", get(scalar_ui_handler))
     }
 
     #[tokio::test]
@@ -760,6 +796,23 @@ mod tests {
         let html = String::from_utf8_lossy(&body);
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("swagger-ui"));
+        assert!(html.contains("/api/openapi.json"));
+    }
+
+    #[tokio::test]
+    async fn scalar_ui_returns_html() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/api/docs/scalar")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&body);
+        assert!(html.contains("<!DOCTYPE html>"));
+        assert!(html.contains("api-reference"));
         assert!(html.contains("/api/openapi.json"));
     }
 

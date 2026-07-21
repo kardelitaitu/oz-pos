@@ -343,13 +343,17 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
     let api_router = api_router.layer(ConcurrencyLimitLayer::new(10));
     let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
-    // OpenAPI documentation routes — Swagger UI + raw OpenAPI JSON.
+    // OpenAPI documentation routes — Swagger UI + Scalar + raw OpenAPI JSON.
     let docs_router = Router::new()
         .route(
             "/api/openapi.json",
             axum::routing::get(openapi::openapi_json_handler),
         )
-        .route("/api/docs", axum::routing::get(openapi::swagger_ui_handler));
+        .route("/api/docs", axum::routing::get(openapi::swagger_ui_handler))
+        .route(
+            "/api/docs/scalar",
+            axum::routing::get(openapi::scalar_ui_handler),
+        );
 
     Router::new()
         .route("/health", axum::routing::get(health_handler))
