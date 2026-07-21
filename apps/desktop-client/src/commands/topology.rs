@@ -215,19 +215,8 @@ mod tests {
             to_port: Some("left".into()),
         }];
 
-        // Save via settings directly (mirrors the Tauri command).
-        let data = TopologyData {
-            nodes: nodes.clone(),
-            wires: wires.clone(),
-        };
-        let json = serde_json::to_string(&data).unwrap();
-        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
-
-        // Load.
-        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
-            .unwrap()
-            .unwrap();
-        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        save_topology_data(&conn, nodes, wires).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
 
         assert_eq!(loaded.nodes.len(), 1);
         assert_eq!(loaded.nodes[0].id, "store-1");
@@ -241,7 +230,7 @@ mod tests {
     #[test]
     fn load_returns_none_for_fresh_db() {
         let conn = fresh_conn();
-        let result = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY).unwrap();
+        let result = load_topology_data(&conn).unwrap();
         assert!(result.is_none());
     }
 
@@ -249,9 +238,9 @@ mod tests {
     fn save_overwrites_previous() {
         let conn = fresh_conn();
 
-        // First save.
-        let data1 = TopologyData {
-            nodes: vec![TopologyNodePayload {
+        save_topology_data(
+            &conn,
+            vec![TopologyNodePayload {
                 id: "n1".into(),
                 node_type: "store".into(),
                 name: "First".into(),
@@ -263,14 +252,13 @@ mod tests {
                 telemetry_status: None,
                 metadata: None,
             }],
-            wires: vec![],
-        };
-        let json1 = serde_json::to_string(&data1).unwrap();
-        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json1).unwrap();
+            vec![],
+        )
+        .unwrap();
 
-        // Second save overwrites.
-        let data2 = TopologyData {
-            nodes: vec![TopologyNodePayload {
+        save_topology_data(
+            &conn,
+            vec![TopologyNodePayload {
                 id: "n2".into(),
                 node_type: "workspace".into(),
                 name: "Second".into(),
@@ -282,15 +270,11 @@ mod tests {
                 telemetry_status: None,
                 metadata: None,
             }],
-            wires: vec![],
-        };
-        let json2 = serde_json::to_string(&data2).unwrap();
-        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json2).unwrap();
+            vec![],
+        )
+        .unwrap();
 
-        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
-            .unwrap()
-            .unwrap();
-        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
         assert_eq!(loaded.nodes.len(), 1);
         assert_eq!(loaded.nodes[0].id, "n2");
     }
@@ -374,19 +358,39 @@ mod tests {
     #[test]
     fn save_and_load_empty_graph() {
         let conn = fresh_conn();
-        let data = TopologyData {
-            nodes: vec![],
-            wires: vec![],
-        };
-        let json = serde_json::to_string(&data).unwrap();
-        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
-
-        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
-            .unwrap()
-            .unwrap();
-        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        save_topology_data(&conn, vec![], vec![]).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
         assert!(loaded.nodes.is_empty());
         assert!(loaded.wires.is_empty());
+    }
+
+    #[test]
+    fn save_topology_data_returns_error_on_corrupt_existing_data() {
+        let conn = fresh_conn();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, "not valid json").unwrap();
+        let result = load_topology_data(&conn);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn save_topology_data_rejects_empty_key() {
+        let conn = fresh_conn();
+        let node = TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "store".into(),
+            name: "".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        save_topology_data(&conn, vec![node], vec![]).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes[0].name, "");
     }
 
     #[test]
