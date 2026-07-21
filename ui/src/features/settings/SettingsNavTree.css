@@ -397,6 +397,16 @@
   white-space: nowrap;
 }
 
+/* ── Search result highlighting ────────────────────────── */
+
+.settings-nav-highlight {
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-0_5);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ── Mobile sidebar backdrop ───────────────────────────────── */
 
 .settings-sidebar-backdrop {

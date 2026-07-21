@@ -173,10 +173,20 @@
   background-size: 24px 24px;
   overflow: hidden;
   cursor: grab;
+  outline: none;
 }
 
 .node-canvas-container:active {
   cursor: grabbing;
+}
+
+.node-canvas-container:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.node-canvas-container .wire-preview {
+  pointer-events: none;
 }
 
 .node-canvas-viewport {
@@ -227,6 +237,11 @@
   pointer-events: all;
 }
 
+.wire-label-group:hover .wire-label-bg {
+  fill: var(--color-primary-subtle);
+  stroke: var(--color-primary-hover);
+}
+
 .wire-label-bg {
   fill: var(--color-bg-surface);
   stroke: var(--color-primary);
@@ -247,7 +262,9 @@
 /* Topology Node Component */
 .topology-node {
   position: absolute;
-  width: 200px;
+  min-width: 180px;
+  width: auto;
+  max-width: 280px;
   background-color: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

@@ -355,6 +355,25 @@ export default function SettingsNavTree({
       .filter((cat) => cat.keys.length > 0);
   }, [q]);
 
+  /** Highlight matching characters in a label. */
+  const highlightLabel = useCallback((label: string) => {
+    if (!q) return label;
+    const idx = label.toLowerCase().indexOf(q);
+    if (idx === -1) return label;
+    return (
+      <>
+        {label.slice(0, idx)}
+        <mark className="settings-nav-highlight">{label.slice(idx, idx + q.length)}</mark>
+        {label.slice(idx + q.length)}
+      </>
+    );
+  }, [q]);
+
+  /** Total visible items across all filtered categories. */
+  const visibleCount = useMemo(() =>
+    filteredCategories.reduce((sum, cat) => sum + cat.keys.length, 0),
+  [filteredCategories]);
+
   // ── Arrow key navigation for sidebar ──────────────────────
   useEffect(() => {
     const flatKeys = filteredCategories.flatMap((c) => c.keys);
@@ -514,7 +533,9 @@ export default function SettingsNavTree({
                             >
                               <span className="settings-nav-icon">{item.icon}</span>
                               <span className="settings-nav-label">
-                                <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                                {q ? highlightLabel(l10n.getString(NAV_L10N_KEYS[item.key] ?? item.label)) : (
+                                  <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                                )}
                               </span>
                             </button>
                           </Tooltip>
@@ -527,6 +548,16 @@ export default function SettingsNavTree({
           )}
         </nav>
       </aside>
+
+      {/* ── Search results live region (screen readers) ── */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {q && `${visibleCount} ${visibleCount === 1 ? 'result' : 'results'} found`}
+      </div>
     </>
   );
 }

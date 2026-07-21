@@ -59,6 +59,7 @@ import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
+import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
@@ -1553,6 +1554,13 @@ export default function SettingsPage() {
 
       case 'promotions':
         return <PromotionManagementScreen />;
+
+      case 'topology':
+        return (
+          <div className="settings-topology-container" style={{ height: '100%', minHeight: '500px' }}>
+            <NodeTopologyEditor currentTier="standard" />
+          </div>
+        );
 
       default:
         return null;
