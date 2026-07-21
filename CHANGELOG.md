@@ -4,6 +4,27 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.18] — 2026-07-21
+
+### Changed
+
+#### 🧹 Debug Log Cleanup (P70)
+- **PaymentModal.tsx**: Removed 16 flow-tracing `console.log` calls (Starting sale, Creating cart, Adding line, Completing sale, Done, etc.). Kept 4 `console.error` for critical failure paths (Finalize FAILED, Void ALSO failed, QR payment failed, Complete FAILED). Converted 2 `console.warn` to empty catch blocks with descriptive comments (Receipt/KDS step, Loyalty redemption).
+- **All production screens audited**: Only remaining `console.log` is in a JSDoc comment (usage example in ProductLookupScreen).
+
+#### 🐛 Edge Case Fixes (P72)
+- **Zero-amount sale split mode**: Added `effectiveTotal === 0n` early return in `splitComplete` memo so zero-amount sales complete correctly in split bill mode.
+- **Empty tendered input**: Already handled by existing `Number.isNaN(parseFloat())` guard.
+
+#### 🧪 Runtime Error Fix (P71)
+- **SessionLockScreen**: Removed `setPinAttempts(0)` call that would throw `ReferenceError` at runtime — no such state setter exists in this component (was copy-pasted from StaffLoginScreen).
+- **SettingsNavTree.test.tsx**: Removed unused `fireEvent` import.
+
+#### 🏗️ Version Bump
+- Bumped 0.0.17 → 0.0.18 across Cargo.toml, ui/package.json, desktop-client/tauri.conf.json, tablet-client/tauri.conf.json.
+
+---
+
 ## [0.0.17] — 2026-07-21
 
 ### Changed
