@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Localized, useLocalization } from '@fluent/react';
 import Tooltip from '@/frontend/shell/Tooltip';
+import Fuse from 'fuse.js';
 
 // ── Sidebar nav item type ─────────────────────────────────────────
 
@@ -446,23 +447,38 @@ export default function SettingsNavTree({
     setExpandedCategory((prev) => (prev === label ? null : label));
   }, []);
 
-  // ── Sidebar search filtering ───────────────────────────────
+  // ── Fuse.js fuzzy search (P60-blog-2) ────────────────────────
+  const searchData = useMemo(() => {
+    return CATEGORIES.flatMap((cat) =>
+      cat.keys.map((key) => {
+        const item = NAV_ITEMS.find((n) => n.key === key)!;
+        return { key: item.key, label: item.label, category: cat.label };
+      }),
+    );
+  }, []);
+
+  const fuse = useMemo(() => {
+    return new Fuse(searchData, {
+      keys: ['label', 'category'],
+      threshold: 0.4,
+      includeMatches: true,
+    });
+  }, [searchData]);
+
   const q = searchQuery.toLowerCase().trim();
   const filteredCategories = useMemo(() => {
     if (!q) return CATEGORIES;
+
+    const results = fuse.search(searchQuery.trim());
+    const matchedKeys = new Set(results.map((r) => r.item.key));
+
     return CATEGORIES
       .map((cat) => ({
         ...cat,
-        keys: cat.keys.filter((key) => {
-          const item = NAV_ITEMS.find((n) => n.key === key);
-          return item && (
-            item.label.toLowerCase().includes(q) ||
-            cat.label.toLowerCase().includes(q)
-          );
-        }),
+        keys: cat.keys.filter((key) => matchedKeys.has(key)),
       }))
       .filter((cat) => cat.keys.length > 0);
-  }, [q]);
+  }, [q, fuse, searchQuery]);
 
   /** Highlight matching characters in a label. */
   const highlightLabel = useCallback((label: string) => {
