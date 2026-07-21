@@ -40,7 +40,7 @@
 - [ ] **P60-3b: Drag-to-reorder recently used sections** ⏳ *Stretch goal* — The "recently used" section shows the last 3 visited sections at the top. Allow the user to drag-and-drop sections within this list for custom ordering. Persist order to localStorage. (Defer if sprint is tight — complex DnD state management + touch events.)
 - [ ] **P60-3f: Recently-used sections migration** — When extracting NavTree, ensure the "recently used" section state (last 3 visited sections, persisted to localStorage) either moves with the component or is passed as props. Add a note in P60-1.
 - [x] **P60-3c: Section count badges with animation** ✅ — Added `@keyframes badge-pop` (scale 0.6→1.15→1, opacity 0→1, 350ms). Uses `key={cat.keys.length}` to re-trigger animation on count change (e.g., search filtering). Added `aria-label` for screen readers. `prefers-reduced-motion` guard.
-- [ ] **P60-3d: Collapsed sidebar icons-only mode** — When sidebar is collapsed, show only icons (no labels) with a thin tooltip on hover. Improve the collapse/expand transition with a width animation (250px ↔ 56px) instead of instant snap.
+- [x] **P60-3d: Collapsed sidebar icons-only mode** ✅ — Widths adjusted to 15.625rem (250px) ↔ 3.5rem (56px) with smooth CSS transition. Collapsed nav items: 44px touch targets (min-height/min-width), centered icons, labels hidden. Compact collapsed header (reduced padding). `prefers-reduced-motion` override disables width transition. Tooltips on nav items show labels on hover (existing `Tooltip` wrapper).
 - [x] **P60-3e: Search result highlighting** ✅ — Added `highlightLabel()` that wraps matching chars in `<mark>` tags with accent-colored CSS. Added `aria-live="polite"` region announcing visible results count. `visibleCount` memo tracks total visible items across filtered categories.
 
 ---
@@ -94,11 +94,11 @@
 |--------|-------|--------|
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
-| 🟢 P60-3 — UX improvements | 5 | 3/5 |
+| 🟢 P60-3 — UX improvements | 5 | 4/5 |
 | 🟡 P60-4 — Accessibility | 7 | 3/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **13/23 (57%)** |
+| **Total** | **23** | **14/23 (61%)** |
 
 ---
 
