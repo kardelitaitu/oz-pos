@@ -141,15 +141,15 @@ fn validate_config_inner(vars: &HashMap<String, String>) -> Result<(), Vec<Confi
     }
 
     // ── STRIPE_SECRET_KEY ────────────────────────────────────────
-    if let Some(stripe_key) = get(vars, "STRIPE_SECRET_KEY") {
-        if !stripe_key.is_empty() && !stripe_key.starts_with("sk_") {
-            errors.push(ConfigValidationError {
-                key: "STRIPE_SECRET_KEY",
-                message: "should start with 'sk_' (Stripe secret keys are prefixed with 'sk_')"
-                    .into(),
-                fix: Some("check your Stripe dashboard for the correct secret key".into()),
-            });
-        }
+    if let Some(stripe_key) = get(vars, "STRIPE_SECRET_KEY")
+        && !stripe_key.is_empty()
+        && !stripe_key.starts_with("sk_")
+    {
+        errors.push(ConfigValidationError {
+            key: "STRIPE_SECRET_KEY",
+            message: "should start with 'sk_' (Stripe secret keys are prefixed with 'sk_')".into(),
+            fix: Some("check your Stripe dashboard for the correct secret key".into()),
+        });
     }
 
     // ── MIDTRANS_SERVER_KEY ──────────────────────────────────────
@@ -192,17 +192,16 @@ fn validate_config_inner(vars: &HashMap<String, String>) -> Result<(), Vec<Confi
     }
 
     // ── REDIS_URL validity check ─────────────────────────────────
-    if let Some(redis_url) = get(vars, "REDIS_URL") {
-        if !redis_url.is_empty()
-            && !redis_url.starts_with("redis://")
-            && !redis_url.starts_with("rediss://")
-        {
-            errors.push(ConfigValidationError {
-                key: "REDIS_URL",
-                message: format!("should start with 'redis://' or 'rediss://', got '{redis_url}'"),
-                fix: Some("set REDIS_URL to a valid Redis connection string".into()),
-            });
-        }
+    if let Some(redis_url) = get(vars, "REDIS_URL")
+        && !redis_url.is_empty()
+        && !redis_url.starts_with("redis://")
+        && !redis_url.starts_with("rediss://")
+    {
+        errors.push(ConfigValidationError {
+            key: "REDIS_URL",
+            message: format!("should start with 'redis://' or 'rediss://', got '{redis_url}'"),
+            fix: Some("set REDIS_URL to a valid Redis connection string".into()),
+        });
     }
 
     if errors.is_empty() {
