@@ -231,7 +231,7 @@
 }
 
 .shift-mgmt-row--open:hover {
-  background: var(--color-success-dim) !important;
+  background: var(--color-success-dim);
 }
 
 .shift-mgmt-cell-date {

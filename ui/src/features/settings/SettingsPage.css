@@ -1020,7 +1020,7 @@
 }
 
 .settings-hint--error {
-  color: var(--color-danger) !important;
+  color: var(--color-danger);
   font-size: var(--text-xs);
 }
 

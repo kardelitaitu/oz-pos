@@ -150,9 +150,9 @@
 }
 
 .delete-btn {
-  background-color: var(--color-danger-subtle) !important;
-  color: var(--color-danger) !important;
-  border-color: var(--color-danger) !important;
+  background-color: var(--color-danger-subtle);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 .canvas-controls-mini {
@@ -291,7 +291,7 @@
 }
 
 .node-selected {
-  border-color: var(--color-accent) !important;
+  border-color: var(--color-accent);
   box-shadow: var(--shadow-lg);
 }
 
@@ -358,7 +358,7 @@
 }
 
 .node-grip:hover {
-  opacity: 1 !important;
+  opacity: 1;
 }
 
 .node-type-icon {

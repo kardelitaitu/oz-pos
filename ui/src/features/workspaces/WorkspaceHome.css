@@ -516,7 +516,7 @@
 .workspace-card--active {
   --ws-icon-scale: 1.05;
   opacity: 1;
-  border-color: var(--ws-accent, var(--color-accent)) !important;
+  border-color: var(--ws-accent, var(--color-accent));
   background: var(--ws-accent-bg, var(--color-bg-elevated));
   backdrop-filter: blur(var(--blur-amount, 20px));
   box-shadow:
@@ -528,7 +528,7 @@
 }
 
 .workspace-card--active:hover {
-  border-color: var(--ws-accent, var(--color-accent)) !important;
+  border-color: var(--ws-accent, var(--color-accent));
   background: var(--ws-accent-bg, var(--color-bg-elevated));
   backdrop-filter: blur(var(--blur-amount, 20px));
   transform: perspective(800px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) translateY(-0.25rem);
@@ -1146,7 +1146,7 @@
   }
 
   .workspace-card-ripple {
-    display: none !important;
+    display: none;
   }
 
   .workspace-card--active {
