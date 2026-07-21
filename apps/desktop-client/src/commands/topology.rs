@@ -290,4 +290,263 @@ mod tests {
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
         assert_eq!(wire.direction, "one-way");
     }
+
+    #[test]
+    fn deserialise_two_way_direction() {
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":"two-way"}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.direction, "two-way");
+    }
+
+    #[test]
+    fn save_and_load_empty_graph() {
+        let conn = fresh_conn();
+        let data = TopologyData {
+            nodes: vec![],
+            wires: vec![],
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, &json).unwrap();
+
+        let loaded_raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
+        assert!(loaded.nodes.is_empty());
+        assert!(loaded.wires.is_empty());
+    }
+
+    #[test]
+    fn metadata_roundtrip() {
+        let node = TopologyNodePayload {
+            id: "store-1".into(),
+            node_type: "store".into(),
+            name: "With Metadata".into(),
+            subtitle: None,
+            x: 10.0,
+            y: 20.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: Some(serde_json::json!({
+                "address": "123 Main St",
+                "region": "west",
+                "open_since": "2024-01-15",
+            })),
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        let meta = roundtripped.metadata.unwrap();
+        assert_eq!(meta["address"], "123 Main St");
+        assert_eq!(meta["region"], "west");
+        assert_eq!(meta["open_since"], "2024-01-15");
+    }
+
+    #[test]
+    fn multiple_wires_and_nodes_roundtrip() {
+        let data = TopologyData {
+            nodes: vec![
+                TopologyNodePayload {
+                    id: "store-1".into(),
+                    node_type: "store".into(),
+                    name: "Main".into(),
+                    subtitle: None,
+                    x: 0.0,
+                    y: 0.0,
+                    tier_requirement: None,
+                    telemetry_badge: None,
+                    telemetry_status: None,
+                    metadata: None,
+                },
+                TopologyNodePayload {
+                    id: "ws-1".into(),
+                    node_type: "workspace".into(),
+                    name: "POS #1".into(),
+                    subtitle: None,
+                    x: 200.0,
+                    y: 100.0,
+                    tier_requirement: None,
+                    telemetry_badge: None,
+                    telemetry_status: None,
+                    metadata: None,
+                },
+                TopologyNodePayload {
+                    id: "wh-1".into(),
+                    node_type: "warehouse".into(),
+                    name: "Warehouse".into(),
+                    subtitle: None,
+                    x: 200.0,
+                    y: 300.0,
+                    tier_requirement: None,
+                    telemetry_badge: None,
+                    telemetry_status: None,
+                    metadata: None,
+                },
+            ],
+            wires: vec![
+                TopologyWirePayload {
+                    id: "w-1".into(),
+                    from_node_id: "store-1".into(),
+                    to_node_id: "ws-1".into(),
+                    direction: "one-way".into(),
+                    label: None,
+                    from_port: Some("right".into()),
+                    to_port: Some("left".into()),
+                },
+                TopologyWirePayload {
+                    id: "w-2".into(),
+                    from_node_id: "ws-1".into(),
+                    to_node_id: "wh-1".into(),
+                    direction: "two-way".into(),
+                    label: Some("Inventory sync".into()),
+                    from_port: None,
+                    to_port: None,
+                },
+            ],
+        };
+
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        let roundtripped: TopologyData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(roundtripped.nodes.len(), 3);
+        assert_eq!(roundtripped.wires.len(), 2);
+        assert_eq!(roundtripped.wires[1].direction, "two-way");
+        assert_eq!(
+            roundtripped.wires[1].label.as_deref(),
+            Some("Inventory sync")
+        );
+    }
+
+    #[test]
+    fn node_type_variants() {
+        let json = r#"[
+            {"id":"s1","type":"store","name":"Store","x":0,"y":0},
+            {"id":"w1","type":"workspace","name":"Workspace","x":1,"y":1},
+            {"id":"h1","type":"warehouse","name":"Warehouse","x":2,"y":2},
+            {"id":"h2","type":"hardware","name":"Printer","x":3,"y":3}
+        ]"#;
+        let nodes: Vec<TopologyNodePayload> = serde_json::from_str(json).unwrap();
+        assert_eq!(nodes[0].node_type, "store");
+        assert_eq!(nodes[1].node_type, "workspace");
+        assert_eq!(nodes[2].node_type, "warehouse");
+        assert_eq!(nodes[3].node_type, "hardware");
+    }
+
+    #[test]
+    fn load_corrupt_json_returns_error() {
+        let conn = fresh_conn();
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, "not valid json at all").unwrap();
+
+        let result = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY).unwrap();
+        assert!(result.is_some());
+
+        // Deserialisation should fail.
+        let raw = result.unwrap();
+        let parsed: Result<TopologyData, _> = serde_json::from_str(&raw);
+        assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn all_fields_filled_roundtrip() {
+        let node = TopologyNodePayload {
+            id: "full-node".into(),
+            node_type: "hardware".into(),
+            name: "Receipt Printer #3".into(),
+            subtitle: Some("Kitchen".into()),
+            x: 400.5,
+            y: 250.75,
+            tier_requirement: Some("standard".into()),
+            telemetry_badge: Some("Online".into()),
+            telemetry_status: Some("online".into()),
+            metadata: Some(serde_json::json!({"model": "Epson TM-T88"})),
+        };
+        let wire = TopologyWirePayload {
+            id: "full-wire".into(),
+            from_node_id: "full-node".into(),
+            to_node_id: "ws-1".into(),
+            direction: "two-way".into(),
+            label: Some("Print job channel".into()),
+            from_port: Some("usb".into()),
+            to_port: Some("network".into()),
+        };
+
+        let data = TopologyData {
+            nodes: vec![node],
+            wires: vec![wire],
+        };
+        let json = serde_json::to_string_pretty(&data).unwrap();
+        let roundtripped: TopologyData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(roundtripped.nodes[0].subtitle.as_deref(), Some("Kitchen"));
+        assert_eq!(
+            roundtripped.nodes[0].tier_requirement.as_deref(),
+            Some("standard")
+        );
+        assert_eq!(
+            roundtripped.nodes[0].telemetry_status.as_deref(),
+            Some("online")
+        );
+        assert_eq!(
+            roundtripped.wires[0].label.as_deref(),
+            Some("Print job channel")
+        );
+        assert_eq!(roundtripped.wires[0].from_port.as_deref(), Some("usb"));
+        assert_eq!(roundtripped.wires[0].to_port.as_deref(), Some("network"));
+    }
+
+    #[test]
+    fn serialised_type_field_rename() {
+        let node = TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "workspace".into(),
+            name: "Test".into(),
+            subtitle: None,
+            x: 1.0,
+            y: 2.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        // The JSON key must be "type" (not "node_type") due to #[serde(rename = "type")].
+        assert!(json.contains(r#""type":"workspace""#));
+        assert!(!json.contains("node_type"));
+    }
+
+    #[test]
+    fn special_characters_in_names() {
+        let node = TopologyNodePayload {
+            id: "u-1".into(),
+            node_type: "store".into(),
+            name: "Café Zürich — Hauptfiliale «1»".into(),
+            subtitle: Some("Unicode & Ö姆ojis 🎉".into()),
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&node).unwrap();
+        let roundtripped: TopologyNodePayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.name, "Café Zürich — Hauptfiliale «1»");
+        assert_eq!(
+            roundtripped.subtitle.as_deref(),
+            Some("Unicode & Ö姆ojis 🎉")
+        );
+    }
+
+    #[test]
+    fn wire_with_no_optional_fields() {
+        let json = r#"{"id":"w-min","from_node_id":"a","to_node_id":"b"}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.id, "w-min");
+        assert_eq!(wire.from_node_id, "a");
+        assert_eq!(wire.to_node_id, "b");
+        assert_eq!(wire.direction, "one-way");
+        assert!(wire.label.is_none());
+        assert!(wire.from_port.is_none());
+        assert!(wire.to_port.is_none());
+    }
 }
