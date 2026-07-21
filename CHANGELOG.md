@@ -16,7 +16,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-> _Placeholder._
+- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
 
 ---
 
