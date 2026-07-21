@@ -114,6 +114,8 @@ const KNOWN_NOISE_SELECTORS = [
   '.toggle-thumb',
   '.topology-node',
   '.node-selected',
+  '.settings-shortcuts-popover',
+  '.canvas-hud',
 ];
 
 /** CSS selectors that are exempt from noise-dither even though they use --shadow-* */

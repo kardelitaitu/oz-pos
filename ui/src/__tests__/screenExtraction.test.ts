@@ -192,6 +192,7 @@ const SCREENS: ScreenEntry[] = [
       'tax-id',
       'settings-sync-token-actions',
       'settings-sync-status-text',
+      'topology',
     ],
     externalClasses: [
       'card',

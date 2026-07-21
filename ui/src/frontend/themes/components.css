@@ -310,7 +310,9 @@
 .settings-footer-shortcut kbd::after,
 .toggle-thumb::after,
 .topology-node::after,
-.node-selected::after {
+.node-selected::after,
+.settings-shortcuts-popover::after,
+.canvas-hud::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -412,7 +414,9 @@
 .settings-footer-shortcut kbd::after,
 .toggle-thumb::after,
 .topology-node::after,
-.node-selected::after { display: none; }
+.node-selected::after,
+.settings-shortcuts-popover::after,
+.canvas-hud::after { display: none; }
 }
 
 /* Reduced motion — hide noise overlay to reduce GPU compositing
@@ -500,7 +504,9 @@
 .settings-footer-shortcut kbd::after,
 .toggle-thumb::after,
 .topology-node::after,
-.node-selected::after { display: none; }
+.node-selected::after,
+.settings-shortcuts-popover::after,
+.canvas-hud::after { display: none; }
 }
 
 .card--padding-sm  { padding: var(--space-3); }

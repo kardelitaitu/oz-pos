@@ -24,13 +24,13 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('+ Workspace Node')).toBeInTheDocument();
     expect(screen.getByText('+ Warehouse Node')).toBeInTheDocument();
     expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
-    expect(screen.getByText('🧪 Test Order Simulation')).toBeInTheDocument();
+    expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
   });
 
   it('switches to restaurant & KDS preset when clicked', () => {
     renderEditor();
 
-    const restoBtn = screen.getByText('🍽️ Resto & KDS Preset');
+    const restoBtn = screen.getByText('Resto & KDS Preset');
     fireEvent.click(restoBtn);
 
     expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
@@ -41,9 +41,9 @@ describe('NodeTopologyEditor Component', () => {
   it('toggles simulation mode on button click', () => {
     renderEditor();
 
-    const simBtn = screen.getByText('🧪 Test Order Simulation');
+    const simBtn = screen.getByText('Test Order Simulation');
     fireEvent.click(simBtn);
 
-    expect(screen.getByText('⏹ Stop Simulation')).toBeInTheDocument();
+    expect(screen.getByText('Stop Simulation')).toBeInTheDocument();
   });
 });
