@@ -4,6 +4,81 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.15] — 2026-07-21
+
+### Added
+
+#### 🏗️ P54 — Code TODO Resolution (ADR Compliance)
+
+- **P54-1: terminal_id binding (ADR #7)** — Added `terminal_id` to `WorkspaceContext` and wired it through the POS screen lifecycle. Terminals are now bound to a specific workspace instance on login, enabling per-terminal feature overrides and session tracking.
+- **P54-2: tenant_id stamping (ADR #5)** — Added `tenant_id` filtering to `tax_rates` and `users` sync endpoints in `apps/cloud-server/src/sync_api.rs`. Both endpoints now extract `tenant_id` from JWT claims and scope queries accordingly, fixing a multi-tenant data leak.
+- **P54-3: `archive_instance()` wrapper (ADR #5)** — Added public `Store::archive_instance()` method to `crates/oz-core/src/db/workspaces.rs`. Archives a workspace instance by setting status to `'archived'`, excluding it from `list_workspaces` and active instance quota.
+- **P54-4: Multi-store access check (ADR #4 Phase 2)** — In `list_active_instances()`, added row filtering for non-owner roles in multi-store mode. Staff users now only see instances they have explicit access to, enforcing workspace-level isolation.
+
+#### 📧 P55 — Email Reports & Dev Tooling
+
+- **SMTP Configuration UI** — Added `EmailReportSettings` page with host, port, username, password, from address, and TLS toggle fields. Settings persisted via `ReportScheduleConfig` (JSON in `settings` table).
+- **Scheduled Report Sender** — Background `start_report_sender_loop()` in `apps/cloud-server/src/email.rs` that periodically checks schedules and generates/emails `AnalyticsBundle` reports. Uses `lettre` SMTP transport with TLS support.
+- **Test Report Function** — `send_test_report()` Tauri command allowing users to verify SMTP configuration without waiting for the scheduled send.
+- **tokio-console Integration** — Added `console` feature flag to `cloud-server`, enabling async task inspection via `tokio-console`. The `console_subscriber` test properly gated behind `#[cfg(all(feature = "console", tokio_unstable))]`.
+- **cargo-flamegraph Helpers** — Created `scripts/profile.ps1` and `scripts/profile.sh` that wrap `cargo flamegraph` with the correct feature flags and working directory for profiling the desktop and tablet clients.
+
+#### 📱 P56 — Physical Device Validation
+
+- **Windows Launch Test Docs** (`docs/operations/windows-launch-test.md`) — 8-phase launch procedure: cold start (<5s), login flow, product lookup, cart operations, payment, printing, POS-specific (KDS/Kiosk), and shutdown. Covers 3 build options (manual, build script, portable).
+- **Linux Launch Test Docs** (`docs/operations/linux-launch-test.md`) — Ubuntu 22.04+/Debian 12+ prerequisites (system deps, WebKit2GTK, AppIndicator). Covers AppImage, cargo run, and development server builds.
+- **Android APK Install Test Docs** (`docs/operations/android-install-test.md`) — Signed APK generation, USB/ADB install, touch target validation (44px minimum), barcode scanner pass-through, KDS landscape, and payment terminal NFC flow.
+- **iPad Install Test Docs** (`docs/operations/ios-install-test.md`) — TestFlight distribution, iPad-specific tablet layout, Split View/Slide Over compatibility, swipe gesture verification, and hardware peripheral pairing (printer, scanner, terminal).
+
+#### 🎨 P57 — Visual Polish & Empty States
+
+- **Empty State Illustrations** — Added custom SVG illustration components for 4 management screens:
+  - **Product EmptyState**: Shopping bag icon with "No products yet" message and "Add your first product" CTA
+  - **Sales EmptyState**: Receipt icon with "No sales recorded" and date-range suggestion
+  - **Staff EmptyState**: User icon with "No staff members" and "Invite your team" CTA
+  - **Shift EmptyState**: Clock icon with "No shifts" and "Start a shift" button
+
+#### 📖 P58 — Doc Warning Reduction
+
+- **`cargo fix --lib` Auto-fix** — Ran `cargo fix --lib` on 14 crates, applying ~17 automatic documentation fixes (missing backticks, broken links, etc.).
+- **Empty Code Block Fixes** — Fixed `//!//!` double-comment patterns and malformed doc-code fences across `platform/kernel`, `platform/startup`, `pool.rs`, and all module lib.rs files.
+- **Unresolved Link Fixes** — Replaced broken intra-doc links with backtick-only references for HAL driver traits (10 links), authz module docs (4 links), and cross-crate references to `PartialStockResult`, `Store::void_sale`, `RedisCache`, and `require_permission`.
+- **Result**: `cargo doc` warnings reduced by ~89% (98 → ~11).
+
+#### ⚡ P59 — Benchmark & CI Infrastructure
+
+- **Baseline Benchmark Report** — Created `docs/benchmarks/baseline-2026-07-20.md` with Criterion.rs measurements for transaction commit, barcode lookup, cart operations, and stock deduction. Hardware and CI runner specs documented.
+- **Regression Tracking** — Created `docs/benchmarks/regression-tracking.md` with `critcmp` workflow for comparing baseline vs. current benchmarks on every release.
+- **Nightly CI** — Added `.github/workflows/nightly.yml` for daily full-matrix builds covering: all Rust tests (all features), 4 UI test shards, 3 E2E shards with Docker Compose, cargo doc, release builds (Linux + Windows + macOS + Android), and benchmarks with automatic regression detection.
+- **Fuzz Testing Infrastructure** — Created `fuzz/Cargo.toml` with `cargo-fuzz` targets for SKU parsing, `Money` arithmetic (overflow/underflow detection), and `Cart` JSON deserialization (malformed payloads, type mismatches). Fuzz CI job (non-blocking, informational) added to `ci.yml`.
+
+### Fixed
+
+#### 🧪 Flaky Test Stabilization
+
+- **PaymentModal TypeError** — Fixed 2 unsafe null references: `completedSale?.lines[i]` → `completedSale?.lines?.[i]` (prevented crash when `getSale` returns null). Added `completedSale.taxTotal &&` guard to prevent crash on partial API responses.
+- **PaymentModalEdgeCases timeouts** — Increased `waitFor` timeouts from 1000ms to 3000ms in 6 async assertions (error banner, retry button, processing reset, clear-on-reopen) to prevent CI race conditions.
+- **AuthContext test assertion bug** — Fixed `isManager=true for manager role` test: `isOwner` was incorrectly expected to be `'true'` for a `manager` role. The implementation correctly sets `isOwner = false` for non-owner roles. Test now expects `'false'`.
+- **SettingsPage card size test** — Replaced fragile `screen.getAllByText('2')[0]` with `container.querySelector('.settings-size-value')` for reliable targeting of the card size display element.
+- **console_subscriber test** — Added `#[cfg(tokio_unstable)]` gate alongside `#[cfg(feature = "console")]` to prevent runtime failure when `--all-features` enables the console feature without the `tokio_unstable` cfg flag.
+
+#### 🔧 Gate Fixes (Clippy / ESLint / Dead Code)
+
+- **needless_borrow** — Fixed `get_store_name(&store)` → `get_store_name(store)` in `cloud-server/src/email.rs`. The `store` parameter is already `&Store<'_>`.
+- **Unused imports (2 files)** — Removed duplicate `use axum::http::StatusCode` from `#[cfg(test)]` modules in `crates/oz-api/src/routes/tax_rates.rs` and `users.rs` (already brought in by `use super::*`).
+- **dead_code** — Added `#[allow(dead_code)]` on `send_test_report` in `cloud-server/src/email.rs`. Function is deliberately cross-crate for the desktop client but unused within the cloud-server binary.
+- **ESLint label accessibility** — Replaced outer `<label htmlFor="settings-email-use-tls">` with `<span>` + `aria-labelledby` on the checkbox input in `EmailReportSettings.tsx`, fixing `jsx-a11y/label-has-associated-control`.
+- **ESLint ignorePatterns** — Added `'playwright-report'` to `.eslintrc.cjs` to suppress 675 false-positive errors from generated test artifacts.
+- **lettre dependency** — Added `lettre = { workspace = true }` to `apps/desktop-client/Cargo.toml` (was missing despite usage in `email.rs`).
+- **MutexGuard !Send fix** — Restructured `send_test_report` in `desktop-client/src/commands/email.rs` to scope DB operations in a block, dropping `MutexGuard<Connection>` before any `.await` point.
+
+#### 🏛️ Pre-existing Test Fixes
+
+- **Missing imports** — Added `AnalyticsBundle` and `ReportEmail` to the import block in `cloud-server/src/email.rs` (types were used but not imported).
+- **Dead CSS removal** — Removed `.staff-mgmt-empty-icon` from `StaffManagementScreen.css` and `.sales-history-clear-filters-btn` from `SalesHistoryScreen.css` (both migrated to `<EmptyState>` component).
+
+---
+
 ## [0.0.14] — 2026-07-20
 
 ### Added
