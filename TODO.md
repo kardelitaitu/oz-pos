@@ -66,14 +66,7 @@
 
 #### 🟣 P60-5 — Testing
 
-- [ ] **P60-5a: Unit tests for NavTree** — Create `SettingsNavTree.test.tsx` with tests for:
-  - Renders all 4 categories with correct item counts
-  - Accordion expand/collapse toggles `aria-expanded`
-  - Search filters correctly (match label, match category, case-insensitive)
-  - Empty search shows "no results" state
-  - Collapsed sidebar shows icons only
-  - Arrow key navigation moves through visible items
-  - Mobile sidebar overlay shows/hides with backdrop click
+- [x] **P60-5a: Unit tests for NavTree** ✅ — 19 tests covering: 4 category render + badge counts (2,3,4,10) + active section highlight. Accordion expand/collapse with aria-expanded assertions. Search filtering (label match, category match, case-insensitive, empty state + Clear search). Navigation via click. Collapsed sidebar via localStorage and toggle button. Mobile backdrop visible/click. aria-controls + role=region + aria-current.
 - [ ] **P60-5b: Keyboard navigation tests** — Test all WAI-ARIA Treegrid keybindings:
   - ArrowRight/ArrowLeft on category
   - ArrowDown/ArrowUp through items
@@ -96,9 +89,9 @@
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 4/5 |
 | 🟡 P60-4 — Accessibility | 7 | 5/7 |
-| 🟣 P60-5 — Testing | 3 | 0/3 |
+| 🟣 P60-5 — Testing | 3 | 1/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 1/2 |
-| **Total** | **23** | **16/23 (70%)** |
+| **Total** | **23** | **17/23 (74%)** |
 
 ---
 
