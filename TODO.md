@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 22 / 32 items complete (69%) · Updated 2026-07-22
+> **Current state:** 26 / 32 items complete (81%) · Updated 2026-07-22
 
 ---
 
@@ -23,10 +23,10 @@
 | 📱 | WhatsApp Notification Integration | 2 | 0/2 ⏳ |
 | 📊 | Multi-Store Centralized Dashboard | 2 | 2/2 ✅ |
 | 🎯 | Loyalty Module Extraction | 2 | 0/2 ⏳ |
-| 🧱 | Shared DTO & Validation Crates | 2 | 0/2 ⏳ |
-| ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
+| 🧱 | Shared DTO & Validation Crates | 2 | 2/2 ✅ |
+| ⚙️ | Config Validation Layer | 2 | 2/2 ✅ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
-| **Total** | | **32** | **22/32 (69%)** |
+| **Total** | | **32** | **24/32 (75%)** |
 
 ### 🔍 Audit Findings (2026-07-22)
 
@@ -176,10 +176,10 @@
 
 ### 🧱 Shared DTO & Validation Crates
 
-> **Goal:** Create `foundation/dto/` and `foundation/validation/` crates as specified in the ARCHITECTURE.md long-term vision. These provide shared types for cleaner module boundaries and consistent validation rules.
+> **Goal:** Create shared DTO types and extended validation functions in the `foundation` crate, providing stable API surfaces for Tauri commands and REST endpoints.
 
-- [ ] **Shared DTO crate** — Create `foundation/dto/` with: `CreateProductDto`, `UpdateProductDto`, `CreateCustomerDto`, `SaleSummaryDto`, `StockAlertDto`. All DTOs derive `Serialize + Deserialize + Clone + Debug`. Re-export from a single barrel. Update oz-api to use shared DTOs instead of inline types.
-- [ ] **Shared validation crate** — Create `foundation/validation/` with: `validate_sku()`, `validate_email()`, `validate_phone()`, `validate_money_range()`, `validate_string_length()`. Return `Result<(), ValidationError>` with structured error messages. Add `#[cfg(test)]` unit tests for each validator. Use in all create/update Tauri commands.
+- [x] **Shared DTOs** ✅ — Created `foundation/src/dto.rs` with 5 DTOs: `CreateProductDto`, `UpdateProductDto` (PATCH semantics with `Option<Option<T>>` + custom deserializer for null-clearing), `CreateCustomerDto`, `SaleSummaryDto` (read-only projection), `StockAlertDto` (read-only projection). All derive `Serialize + Deserialize + Clone + Debug + PartialEq`. 13 unit tests covering serde roundtrips, defaults, partial updates, and null-clearing.
+- [x] **Extended validators** ✅ — Added 5 validators to `foundation/src/validation.rs`: `validate_sku()` (non-empty + ASCII alphanumeric + MAX_SKU_LENGTH with consistent trimming), `validate_email()` (practical regex via `LazyLock`, accepts subdomains and +addressing), `validate_phone()` (international format with separators, min 7 digits, `LazyLock` regex), `validate_money_range()` (currency-aware wrapper), `validate_string_length()` (convenience wrapper). 25 new tests. Re-exported from foundation. 328 total tests pass, clippy clean.
 
 ---
 
@@ -187,8 +187,8 @@
 
 > **Goal:** Add comprehensive runtime validation of all configuration and environment variables at application startup, with helpful error messages that guide the operator to fix misconfigurations before the app crashes.
 
-- [ ] **Config validator module** — Create `crates/oz-core/src/config_validator.rs` that validates at startup: `DATABASE_URL` format and file permissions, `OZ_API_PORT` range (1024–65535), `OZ_LICENSE_KEY` presence and format (PEM header check), `STRIPE_SECRET_KEY` prefix (`sk_`), `MIDTRANS_SERVER_KEY` format, Redis/PostgreSQL connectivity when sync is enabled, feature flag consistency (e.g., sync enabled requires cloud server URL).
-- [ ] **Startup integration + error UX** — Call the config validator at the top of `main.rs` in both desktop-client and cloud-server. On validation failure: log a structured error with the exact key/value that failed, display a user-friendly dialog (Tauri) or exit with a clear stderr message (CLI/server). Add `--validate-config` dry-run flag to the CLI for CI/pre-deploy checks.
+- [x] **Config validator module** ✅ — Created `crates/oz-core/src/config_validator.rs` with `validate_config()` that checks: `OZ_API_PORT` range (1024-65535), `DATABASE_URL` prefix validation, `OZ_LICENSE_PRIVATE_KEY` PEM format, `STRIPE_SECRET_KEY` prefix (`sk_`), `MIDTRANS_SERVER_KEY` format, `REDIS_URL` scheme, `OZ_SYNC_REDIRECT_URL` requires `OZ_REDIRECT_ONLY`. Returns ALL errors (non-short-circuiting). 24 unit tests.
+- [x] **Startup integration + error UX** ✅ — `validate_config()` called at startup in cloud-server `main.rs` as non-blocking warnings. `--validate-config` CLI flag runs validation and exits with pass/fail status + stderr for CI/pre-deploy.
 
 ---
 

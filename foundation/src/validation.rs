@@ -276,6 +276,169 @@ pub fn validate_non_empty_bounded(
     Ok(())
 }
 
+// ── Extended validators (TODO 0.0.18: Shared DTO & Validation Crates) ─
+
+/// Validate an SKU code: non-empty, ASCII alphanumeric-only,
+/// and within the length range [1, `MAX_SKU_LENGTH`].
+///
+/// All checks operate on the trimmed value for consistent results.
+///
+/// # Example
+///
+/// ```
+/// # use foundation::validation::validate_sku;
+/// assert!(validate_sku("sku", "COFFEE123").is_ok());
+/// assert!(validate_sku("sku", "").is_err());
+/// assert!(validate_sku("sku", "COFFEE-1").is_err());
+/// ```
+pub fn validate_sku(field: &'static str, value: &str) -> Result<(), ValidationError> {
+    let trimmed = value.trim();
+    validate_not_empty(field, trimmed)?;
+    validate_ascii_alphanumeric(field, trimmed)?;
+    // Use trimmed length for consistency with the other checks
+    let len = trimmed.len();
+    if len > crate::constants::MAX_SKU_LENGTH {
+        return Err(ValidationError {
+            field,
+            message: format!(
+                "{field} must be at most {} characters (got {len})",
+                crate::constants::MAX_SKU_LENGTH
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Validate an email address format using a simple but practical regex.
+///
+/// Accepts only the most common email formats: `user@domain.tld`.
+/// Does NOT attempt full RFC 5322 compliance — that requires a parser,
+/// not a regex. For production use, send a verification email.
+///
+/// The regex is compiled once via `LazyLock` to avoid repeated
+/// compilation overhead on every call.
+///
+/// # Example
+///
+/// ```
+/// # use foundation::validation::validate_email;
+/// assert!(validate_email("email", "alice@example.com").is_ok());
+/// assert!(validate_email("email", "not-an-email").is_err());
+/// assert!(validate_email("email", "").is_err());
+/// ```
+pub fn validate_email(field: &'static str, value: &str) -> Result<(), ValidationError> {
+    use std::sync::LazyLock;
+    static EMAIL_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(
+            r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$"
+        ).expect("email regex must compile")
+    });
+
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ValidationError {
+            field,
+            message: format!("{field} must not be empty"),
+        });
+    }
+    if !EMAIL_RE.is_match(trimmed) {
+        return Err(ValidationError {
+            field,
+            message: format!("{field} must be a valid email address (got '{trimmed}')"),
+        });
+    }
+    Ok(())
+}
+
+/// Validate a phone number format.
+///
+/// Accepts international format (`+<country><number>`), digits-only,
+/// and common separators (spaces, hyphens, dots, parentheses).
+/// Minimum 7 digits after stripping non-digit characters.
+///
+/// The regex is compiled once via `LazyLock` to avoid repeated
+/// compilation overhead on every call.
+///
+/// # Example
+///
+/// ```
+/// # use foundation::validation::validate_phone;
+/// assert!(validate_phone("phone", "+6281234567890").is_ok());
+/// assert!(validate_phone("phone", "+1-555-0100").is_ok());
+/// assert!(validate_phone("phone", "123").is_err());
+/// ```
+pub fn validate_phone(field: &'static str, value: &str) -> Result<(), ValidationError> {
+    use std::sync::LazyLock;
+    static PHONE_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"^\+?[0-9][0-9\s.\-()]{5,19}$").expect("phone regex must compile")
+    });
+
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ValidationError {
+            field,
+            message: format!("{field} must not be empty"),
+        });
+    }
+    if !PHONE_RE.is_match(trimmed) {
+        return Err(ValidationError {
+            field,
+            message: format!("{field} must be a valid phone number (got '{trimmed}')"),
+        });
+    }
+    // At least 7 actual digits
+    let digit_count = trimmed.chars().filter(|c| c.is_ascii_digit()).count();
+    if digit_count < 7 {
+        return Err(ValidationError {
+            field,
+            message: format!("{field} must contain at least 7 digits (got {digit_count})"),
+        });
+    }
+    Ok(())
+}
+
+/// Validate that a monetary value (in minor units) falls within an
+/// inclusive range. Currency-aware wrapper around [`validate_range`].
+///
+/// # Example
+///
+/// ```
+/// # use foundation::validation::validate_money_range;
+/// assert!(validate_money_range("price", 1299, 0, 1_000_000).is_ok());
+/// assert!(validate_money_range("price", -1, 0, 1_000_000).is_err());
+/// assert!(validate_money_range("price", 2_000_000, 0, 1_000_000).is_err());
+/// ```
+pub fn validate_money_range(
+    field: &'static str,
+    minor_units: i64,
+    min: i64,
+    max: i64,
+) -> Result<(), ValidationError> {
+    validate_range(field, minor_units, min, max)
+}
+
+/// Validate that a string's length falls within `[min_len, max_len]`
+/// (inclusive). Trims whitespace before checking.
+///
+/// Convenience wrapper for the common pattern of calling
+/// `validate_min_length` + `validate_max_length` together.
+///
+/// # Example
+///
+/// ```
+/// # use foundation::validation::validate_string_length;
+/// assert!(validate_string_length("name", "Coffee", 2, 50).is_ok());
+/// assert!(validate_string_length("name", "X", 2, 50).is_err());
+/// ```
+pub fn validate_string_length(
+    field: &'static str,
+    value: &str,
+    min_len: usize,
+    max_len: usize,
+) -> Result<(), ValidationError> {
+    validate_non_empty_bounded(field, value, min_len, max_len)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -649,5 +812,173 @@ mod tests {
     fn returned_error_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<ValidationError>();
+    }
+
+    // ── validate_sku ────────────────────────────────────────────
+
+    #[test]
+    fn sku_accepts_valid() {
+        assert!(validate_sku("sku", "COFFEE").is_ok());
+        assert!(validate_sku("sku", "BAGEL99").is_ok());
+        assert!(validate_sku("sku", "A").is_ok());
+    }
+
+    #[test]
+    fn sku_rejects_empty() {
+        let err = validate_sku("sku", "").unwrap_err();
+        assert!(err.message.contains("must not be empty"));
+    }
+
+    #[test]
+    fn sku_rejects_punctuation() {
+        let err = validate_sku("sku", "COFFEE-1").unwrap_err();
+        assert!(err.message.contains("ASCII alphanumeric"));
+    }
+
+    #[test]
+    fn sku_rejects_too_long() {
+        let long = "X".repeat(crate::constants::MAX_SKU_LENGTH + 1);
+        let err = validate_sku("sku", &long).unwrap_err();
+        assert!(err.message.contains("at most"));
+    }
+
+    #[test]
+    fn sku_accepts_max_length() {
+        let max = "X".repeat(crate::constants::MAX_SKU_LENGTH);
+        assert!(validate_sku("sku", &max).is_ok());
+    }
+
+    // ── validate_email ───────────────────────────────────────────
+
+    #[test]
+    fn email_accepts_simple() {
+        assert!(validate_email("email", "alice@example.com").is_ok());
+    }
+
+    #[test]
+    fn email_accepts_subdomain() {
+        assert!(validate_email("email", "bob@mail.example.co.id").is_ok());
+    }
+
+    #[test]
+    fn email_accepts_plus_addressing() {
+        assert!(validate_email("email", "user+tag@example.com").is_ok());
+    }
+
+    #[test]
+    fn email_rejects_empty() {
+        let err = validate_email("email", "").unwrap_err();
+        assert!(err.message.contains("must not be empty"));
+    }
+
+    #[test]
+    fn email_rejects_missing_at() {
+        let err = validate_email("email", "not-an-email").unwrap_err();
+        assert!(err.message.contains("valid email"));
+    }
+
+    #[test]
+    fn email_rejects_missing_domain() {
+        let err = validate_email("email", "alice@").unwrap_err();
+        assert!(err.message.contains("valid email"));
+    }
+
+    #[test]
+    fn email_trims_input() {
+        assert!(validate_email("email", "  alice@example.com  ").is_ok());
+    }
+
+    // ── validate_phone ───────────────────────────────────────────
+
+    #[test]
+    fn phone_accepts_international() {
+        assert!(validate_phone("phone", "+6281234567890").is_ok());
+    }
+
+    #[test]
+    fn phone_accepts_with_separators() {
+        assert!(validate_phone("phone", "+1-555-0100").is_ok());
+        assert!(validate_phone("phone", "+1 555 0100").is_ok());
+        assert!(validate_phone("phone", "+1.555.0100").is_ok());
+        assert!(validate_phone("phone", "+1 (555) 0100").is_ok());
+    }
+
+    #[test]
+    fn phone_accepts_digits_only() {
+        assert!(validate_phone("phone", "08123456789").is_ok());
+    }
+
+    #[test]
+    fn phone_rejects_empty() {
+        let err = validate_phone("phone", "").unwrap_err();
+        assert!(err.message.contains("must not be empty"));
+    }
+
+    #[test]
+    fn phone_rejects_too_few_digits() {
+        let err = validate_phone("phone", "123456").unwrap_err();
+        assert!(err.message.contains("at least 7 digits"));
+    }
+
+    #[test]
+    fn phone_rejects_letters() {
+        let err = validate_phone("phone", "abc1234567").unwrap_err();
+        assert!(err.message.contains("valid phone"));
+    }
+
+    #[test]
+    fn phone_trims_input() {
+        assert!(validate_phone("phone", "  +6281234567890  ").is_ok());
+    }
+
+    // ── validate_money_range ─────────────────────────────────────
+
+    #[test]
+    fn money_range_accepts_valid() {
+        assert!(validate_money_range("price", 1299, 0, 1_000_000).is_ok());
+        assert!(validate_money_range("price", 0, 0, 1_000_000).is_ok());
+        assert!(validate_money_range("price", 1_000_000, 0, 1_000_000).is_ok());
+    }
+
+    #[test]
+    fn money_range_rejects_negative() {
+        let err = validate_money_range("price", -1, 0, 1_000_000).unwrap_err();
+        assert!(err.message.contains("must be between"));
+    }
+
+    #[test]
+    fn money_range_rejects_above_max() {
+        let err = validate_money_range("price", 2_000_000, 0, 1_000_000).unwrap_err();
+        assert!(err.message.contains("must be between"));
+    }
+
+    // ── validate_string_length ───────────────────────────────────
+
+    #[test]
+    fn string_length_accepts_valid() {
+        assert!(validate_string_length("name", "Coffee", 2, 50).is_ok());
+    }
+
+    #[test]
+    fn string_length_rejects_too_short() {
+        let err = validate_string_length("name", "X", 2, 50).unwrap_err();
+        assert!(err.message.contains("at least 2"));
+    }
+
+    #[test]
+    fn string_length_rejects_too_long() {
+        let err = validate_string_length("name", &"X".repeat(51), 2, 50).unwrap_err();
+        assert!(err.message.contains("at most 50"));
+    }
+
+    #[test]
+    fn string_length_rejects_empty() {
+        let err = validate_string_length("name", "", 2, 50).unwrap_err();
+        assert!(err.message.contains("must not be empty"));
+    }
+
+    #[test]
+    fn string_length_trims_before_check() {
+        assert!(validate_string_length("name", "  Coffee  ", 2, 50).is_ok());
     }
 }
