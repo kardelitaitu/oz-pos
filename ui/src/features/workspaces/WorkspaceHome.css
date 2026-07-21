@@ -944,6 +944,8 @@
 .role-badge--manager { color: var(--color-info); }
 .role-badge--cashier { color: var(--color-success); }
 .role-badge--kitchen {  color: var(--color-link-visited, #a855f7); } /* design exception: semantic workspace accent color */
+.role-badge--staff  { color: var(--color-fg-secondary); }
+.role-badge--custom { color: var(--color-purple, #9333ea); }
 .role-badge--default { color: var(--color-fg-tertiary); }
 
 /* ═══════════════════════════════════════════════════════════════════

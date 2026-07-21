@@ -298,7 +298,10 @@ export default function StaffManagementScreen() {
       case 'role-kitchen': return 'success';
       case 'cashier':
       case 'role-cashier': return 'default';
-      case 'staff':        return 'default';
+      case 'staff':
+      case 'role-staff':  return 'default';
+      case 'custom':
+      case 'role-custom': return 'default';
       default:             return 'default';
     }
   };

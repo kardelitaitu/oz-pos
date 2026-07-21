@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
+# DEPRECATED — Use scripts/profile.sh instead.
+# This script is kept for backward compatibility but will be removed
+# in a future release. scripts/profile.sh supports all options plus
+# PID profiling, frequency control, timestamped output, listing, and
+# sudo elevation.
+#
 # Flamegraph Profiling Helper for Linux/macOS
 # Usage: ./scripts/flamegraph.sh [--bench <bench_name>] [--bin <bin_name>]
+
+echo -e "\033[1;33mWARNING: This script is deprecated. Use scripts/profile.sh instead.\033[0m"
+echo -e "\033[1;33m  See: bash scripts/profile.sh --help\033[0m"
+echo ""
 
 set -euo pipefail
 
@@ -40,3 +50,5 @@ else
 fi
 
 echo "Flamegraph generated successfully!"
+echo ""
+echo -e "TIP: Use bash scripts/profile.sh for more options (PID, freq, timestamped output)."
