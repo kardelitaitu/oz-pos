@@ -350,6 +350,41 @@ export default function SettingsNavTree({
     localStorage.setItem('settings-recent-sections', JSON.stringify(recentSections));
   }, [recentSections]);
 
+  // ── Drag-to-reorder recently-used sections (P60-3b) ────────────
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback((index: number) => {
+    setDragIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => {
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDrop = useCallback(() => {
+    const fromIdx = dragIndex;
+    const toIdx = dragOverIndex;
+    if (fromIdx === null || toIdx === null || fromIdx === toIdx) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    setRecentSections((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved!);
+      return next;
+    });
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }, [dragIndex, dragOverIndex]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }, []);
+
   // ── Screen reader live announcements (P60-4e) ────────────────
   const [announcement, setAnnouncement] = useState('');
 
@@ -596,9 +631,11 @@ export default function SettingsNavTree({
           {/* ── Recently-used sections (P60-3f) ──────────────── */}
           {!q && recentSections.length > 0 && !sidebarCollapsed && (
             <div className="settings-sidebar-recent" role="group" aria-label="Recently viewed">
-              {recentSections.map((key) => {
+              {recentSections.map((key, idx) => {
                 const item = NAV_ITEMS.find((n) => n.key === key);
                 if (!item) return null;
+                const isDragging = dragIndex === idx;
+                const isDropTarget = dragOverIndex === idx && !isDragging;
                 return (
                   <button
                     key={key}
@@ -606,13 +643,28 @@ export default function SettingsNavTree({
                     role="treeitem"
                     aria-level={2}
                     aria-selected={activeSection === key}
-                    className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}`}
+                    draggable="true"
+                    className={`settings-nav-item${activeSection === key ? ' settings-nav-item--active' : ''}${isDragging ? ' settings-recent-item--dragging' : ''}${isDropTarget ? ' settings-recent-item--drop-target' : ''}`}
                     onClick={() => onNavigate(key)}
+                    onDragStart={() => handleDragStart(idx)}
+                    onDragOver={(e) => { e.preventDefault(); handleDragOver(idx); }}
+                    onDrop={(e) => { e.preventDefault(); handleDrop(); }}
+                    onDragEnd={handleDragEnd}
                     aria-label={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')}
                   >
                     <span className="settings-nav-icon">{item.icon}</span>
                     <span className="settings-nav-label">
                       <Localized id={NAV_L10N_KEYS[item.key] ?? ''}>{item.label}</Localized>
+                    </span>
+                    <span className="settings-recent-drag-handle" aria-hidden="true" title="Drag to reorder">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
+                        <circle cx="9" cy="6" r="1.5" />
+                        <circle cx="15" cy="6" r="1.5" />
+                        <circle cx="9" cy="12" r="1.5" />
+                        <circle cx="15" cy="12" r="1.5" />
+                        <circle cx="9" cy="18" r="1.5" />
+                        <circle cx="15" cy="18" r="1.5" />
+                      </svg>
                     </span>
                   </button>
                 );

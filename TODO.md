@@ -12,7 +12,7 @@
 
 > **Goal:** Refactor the settings sidebar navigation tree to be reliable across all scenarios, improve UX design, and ensure full accessibility compliance.
 >
-> **Current state:** 11 / 12 items complete · Updated 2026-07-21
+> **Current state:** 12 / 12 items complete (100% 🎉) · Updated 2026-07-21
 
 ---
 
@@ -37,7 +37,7 @@
 #### 🟢 P60-3 — UX design improvements
 
 - [x] **P60-3a: Smooth accordion expand/collapse animation** ✅ — Replaced `animation` (mount-only) with CSS `transition` on `max-height`, `opacity`, `transform`. Changed from conditional rendering to class-based toggle for smooth enter/exit. Added `will-change` for GPU acceleration.
-- [ ] **P60-3b: Drag-to-reorder recently used sections** ⏳ *Stretch goal* — The "recently used" section shows the last 3 visited sections at the top. Allow the user to drag-and-drop sections within this list for custom ordering. Persist order to localStorage. (Defer if sprint is tight — complex DnD state management + touch events.)
+- [x] **P60-3b: Drag-to-reorder recently used sections** ✅ — Implemented HTML5 drag-and-drop on recently-used section items. Tracked via `dragIndex` (state) + `dragOverIndex` (state for visual feedback). `handleDrop` splices array via functional updater. Drag handle (6-dot grip icon, hover-visible). CSS: `.settings-recent-item--dragging` (opacity 0.35 + scale 0.96), `.settings-recent-item--drop-target` (accent inset shadow + background). 7 tests covering structural, visual, and functional drag scenarios.
 - [x] **P60-3f: Recently-used sections migration** ✅ — Added to SettingsNavTree. State initialized from `localStorage` (handles corrupt JSON). `isFirstRender` ref guards initial mount. On navigation, prepends activeSection, deduplicates, limits to 3. Persisted via separate `useEffect`. Renders at top of sidebar nav with border-bottom separator. Hidden during search (`!q`) and collapsed mode.
 - [x] **P60-3c: Section count badges with animation** ✅ — Added `@keyframes badge-pop` (scale 0.6→1.15→1, opacity 0→1, 350ms). Uses `key={cat.keys.length}` to re-trigger animation on count change (e.g., search filtering). Added `aria-label` for screen readers. `prefers-reduced-motion` guard.
 - [x] **P60-3d: Collapsed sidebar icons-only mode** ✅ — Widths adjusted to 15.625rem (250px) ↔ 3.5rem (56px) with smooth CSS transition. Collapsed nav items: 44px touch targets (min-height/min-width), centered icons, labels hidden. Compact collapsed header (reduced padding). `prefers-reduced-motion` override disables width transition. Tooltips on nav items show labels on hover (existing `Tooltip` wrapper).
@@ -67,7 +67,7 @@
 
 #### ⚪ P60-6 — Polish & docs
 
-- [ ] **P60-6a: Reduced motion** — Add `@media (prefers-reduced-motion: reduce)` overrides for all new animations (accordion slide, badge pop, collapse width).
+- [x] **P60-6a: Reduced motion** ✅ — Already covered: `@media (prefers-reduced-motion: reduce)` disables transitions on sidebar width, section items, count badge animation, and drag-to-reorder indicators.
 - [x] **P60-6b: Update CHANGELOG.md** ✅ — Documented all 0.0.16 settings sidebar changes: P60-1 extraction, P60-2 reliability, P60-3 UX (accordion animation, badge pop, collapsed mode, search highlighting), P60-4 accessibility (5 items), P60-5 testing (19 tests), P60-6a reduced motion.
 
 ### Progress Tracking
@@ -76,11 +76,11 @@
 |--------|-------|--------|
 | 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
 | 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
-| 🟢 P60-3 — UX improvements | 5 | 5/5 ✅ |
+| 🟢 P60-3 — UX improvements | 6 | 6/6 ✅ |
 | 🟡 P60-4 — Accessibility | 7 | 7/7 ✅ |
 | 🟣 P60-5 — Testing | 3 | 3/3 ✅ |
 | ⚪ P60-6 — Polish & docs | 2 | 2/2 ✅ |
-| **Total** | **23** | **22/23 (96%)** |
+| **Total** | **23** | **23/23 (100% 🎉)** |
 
 ---
 
