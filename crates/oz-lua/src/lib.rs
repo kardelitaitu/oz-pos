@@ -16,8 +16,10 @@ next: none | perf: N/A
 //!
 //! Every script executes in a restricted environment:
 //!
-//! - **Removed globals**: `os`, `io`, `loadfile`, `dofile`, `require`,
+//! - **Removed globals**: `io`, `loadfile`, `dofile`, `require`,
 //!   `package`, `debug`, `rawget`, `rawset`
+//! - **Restricted globals**: `os` — `date`, `time`, and `clock` are available
+//!   (read-only); `os.execute`, `os.remove`, `os.rename`, `os.exit` are nil
 //! - **Allowed**: safe `math`, `string`, `table`, `pairs`, `ipairs`,
 //!   `tonumber`, `tostring`, `type`, `pcall`, `xpcall`, `error`
 //! - **Instruction limit**: scripts are aborted after 100 000 Lua
@@ -123,10 +125,19 @@ impl LuaRuntime {
         let lua = rlua::Lua::new();
 
         // Sandbox: strip dangerous globals.
+        //
+        // Most dangerous globals are set to nil entirely. However, `os` is
+        // replaced with a restricted subset that allows read-only time
+        // access (`os.date`, `os.time`, `os.clock`) while removing all
+        // I/O and process-control functions (`os.execute`, `os.remove`,
+        // `os.rename`, `os.exit`, `os.tmpname`, `os.setlocale`). This
+        // enables time-aware business rules (e.g. happy-hour pricing)
+        // without exposing any execution or filesystem capabilities.
         {
             let globals = lua.globals();
+
+            // Fully remove: these globals are always dangerous.
             let remove = &[
-                "os",
                 "io",
                 "loadfile",
                 "dofile",
@@ -146,6 +157,26 @@ impl LuaRuntime {
                     .set(*name, rlua::Value::Nil)
                     .map_err(|e| LuaError::Init(e.to_string()))?;
             }
+
+            // Partially remove `os`: keep read-only time functions, strip
+            // everything that could execute, read, write, or spawn.
+            let safe_os = lua
+                .create_table()
+                .map_err(|e| LuaError::Init(e.to_string()))?;
+            // Copy os.date and os.time from the real os table, then
+            // replace with our restricted copy.
+            if let Ok(real_os) = globals.get::<_, rlua::Table>("os") {
+                for safe_key in &["date", "time", "clock"] {
+                    if let Ok(val) = real_os.get::<_, rlua::Value>(*safe_key) {
+                        safe_os
+                            .set(*safe_key, val)
+                            .map_err(|e| LuaError::Init(e.to_string()))?;
+                    }
+                }
+            }
+            globals
+                .set("os", safe_os)
+                .map_err(|e| LuaError::Init(e.to_string()))?;
         }
 
         // ── Resource limits ────────────────────────────────────────
@@ -441,8 +472,35 @@ mod tests {
     fn new_creates_sandboxed_vm() {
         let lua = runtime();
         let globals = lua.lua.globals();
-        let os: rlua::Value = globals.get("os").unwrap();
-        assert!(matches!(os, rlua::Value::Nil), "os should be removed");
+        // os is replaced with a restricted table (date/time/clock only)
+        let os_val: rlua::Value = globals.get("os").unwrap();
+        assert!(
+            matches!(os_val, rlua::Value::Table(_)),
+            "os should be a restricted table"
+        );
+        let os_tbl: rlua::Table = globals.get("os").unwrap();
+        let has_date: rlua::Value = os_tbl.get("date").unwrap();
+        assert!(
+            matches!(has_date, rlua::Value::Function(_)),
+            "os.date should exist"
+        );
+        let has_time: rlua::Value = os_tbl.get("time").unwrap();
+        assert!(
+            matches!(has_time, rlua::Value::Function(_)),
+            "os.time should exist"
+        );
+        // Dangerous os functions must be nil
+        let execute: rlua::Value = os_tbl.get("execute").unwrap();
+        assert!(
+            matches!(execute, rlua::Value::Nil),
+            "os.execute should be nil"
+        );
+        let remove: rlua::Value = os_tbl.get("remove").unwrap();
+        assert!(
+            matches!(remove, rlua::Value::Nil),
+            "os.remove should be nil"
+        );
+
         let io: rlua::Value = globals.get("io").unwrap();
         assert!(matches!(io, rlua::Value::Nil), "io should be removed");
         let loadfile: rlua::Value = globals.get("loadfile").unwrap();
@@ -613,10 +671,21 @@ end
     }
 
     #[test]
-    fn sandbox_blocks_os_execute() {
+    fn sandbox_allows_os_date_but_blocks_execute() {
         let lua = runtime();
-        let result = lua.load_str(r#"os.execute("echo hacked")"#);
-        assert!(result.is_err());
+        // os.date should work (read-only time access)
+        let date_ok = lua.load_str(r#"local d = os.date("!*t"); assert(type(d) == "table")"#);
+        assert!(
+            date_ok.is_ok(),
+            "os.date should be available: {:?}",
+            date_ok
+        );
+        // os.time should work
+        let time_ok = lua.load_str(r#"local t = os.time(); assert(type(t) == "number")"#);
+        assert!(time_ok.is_ok(), "os.time should be available");
+        // os.execute should be blocked
+        let exec_blocked = lua.load_str(r#"os.execute("echo hacked")"#);
+        assert!(exec_blocked.is_err());
     }
 
     #[test]
@@ -693,11 +762,25 @@ end
     // ── P0-4: Comprehensive sandbox tests ─────────────────────────
 
     #[test]
-    fn all_14_dangerous_globals_are_nil() {
+    fn dangerous_globals_are_nil_or_restricted() {
         let lua = runtime();
         let globals = lua.lua.globals();
-        let dangerous = [
-            "os",
+        // os is replaced with a restricted table (not nil)
+        let os_val: rlua::Value = globals.get("os").unwrap();
+        assert!(
+            matches!(os_val, rlua::Value::Table(_)),
+            "os should be restricted table"
+        );
+        // Verify os.execute is still blocked
+        let os_tbl: rlua::Table = globals.get("os").unwrap();
+        let execute: rlua::Value = os_tbl.get("execute").unwrap();
+        assert!(
+            matches!(execute, rlua::Value::Nil),
+            "os.execute should be nil"
+        );
+
+        // All other dangerous globals must be nil
+        let nil_globals = [
             "io",
             "loadfile",
             "dofile",
@@ -712,7 +795,7 @@ end
             "module",
             "load",
         ];
-        for name in &dangerous {
+        for name in &nil_globals {
             let val: rlua::Value = globals.get(*name).unwrap();
             assert!(
                 matches!(val, rlua::Value::Nil),
@@ -828,13 +911,17 @@ assert(not ok2, "pcall should catch error")
         // all should fail and the instruction limit should abort any
         // that somehow slip through.
         //
-        // Each vector is wrapped in an anonymous function so the nil-global
+        // Each vector is wrapped in an anonymous function so the nil-index
         // error is caught by pcall (rather than being evaluated as a
         // function argument outside of pcall's scope).
+        //
+        // Note: os.execute is now nil (restricted os table), so trying to
+        // call it will error on indexing os.execute rather than on calling
+        // a function — but pcall still catches it safely.
         let lua = runtime();
         let result = lua.load_str(
             r#"
--- Vector 1: os
+-- Vector 1: os.execute should fail (nil in restricted os)
 pcall(function() os.execute("rm -rf /") end)
 
 -- Vector 2: io
