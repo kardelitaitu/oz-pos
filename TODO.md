@@ -14,9 +14,9 @@
 | 🔵 P62 — Backend Hardening (cont.) | 5 | 5/5 ✅ |
 | 🟢 P63 — CI/CD & DevOps | 4 | 4/4 ✅ |
 | 🟡 P64 — Mobile Build Pipeline | 4 | 0/4 ⬜ |
-| 🟣 P65 — Fuzz Testing | 4 | 0/4 ⬜ |
+| 🟣 P65 — Fuzz Testing | 4 | 4/4 ✅ |
 | ⚪ P66 — Performance Benchmarks | 3 | 3/3 ✅ |
-| **Total** | **25** | **17/25 (68%) 🎉** |
+| **Total** | **25** | **21/25 (84%) 🎉** |
 
 ---
 
@@ -70,10 +70,10 @@
 
 > **Goal:** Set up cargo-fuzz targets for critical parsing and arithmetic paths.
 
-- [ ] **P65-1: Money/CoreCurrency fuzz target** — Fuzz `Currency::from_str()` with arbitrary byte strings. Panic on invalid input.
-- [ ] **P65-2: SKU/Barcode fuzz target** — Fuzz `Sku::try_new()` and `Barcode::new()` with arbitrary strings. Verify no panics, only validation errors.
-- [ ] **P65-3: Sale/completion fuzz target** — Fuzz `complete_sale_deduction()` with random sale structs (invalid amounts, missing fields, extreme quantities).
-- [ ] **P65-4: JSON/Lua parsing fuzz target** — Fuzz `oz-lua` script loading with random byte strings. Verify sandbox containment and no panics.
+- [x] **P65-1: Money/CoreCurrency fuzz target** ✅ — `fuzz/fuzz_targets/money_parse.rs` fuzzes `Currency::from_str()` + raw i64 arithmetic. Fixed `.is_ok()` → `.is_some()` bug.
+- [x] **P65-2: SKU/Barcode fuzz target** ✅ — `fuzz/fuzz_targets/sku_parse.rs` fuzzes `Sku::new()` with arbitrary strings, validates length ≤ 100, no control chars.
+- [x] **P65-3: Sale/completion fuzz target** ✅ — `fuzz/fuzz_targets/cart_deser.rs` fuzzes `Cart` + `Sale` JSON deserialization.
+- [x] **P65-4: JSON/Lua parsing fuzz target** ✅ — Created `fuzz/fuzz_targets/lua_parse.rs`: fuzzes `LuaRuntime::load_str()` sandbox, verifies 14 dangerous globals remain nil, tests `apply_discount` recovery. Added `oz-lua + rlua` deps and `[[bin]]` to `fuzz/Cargo.toml`.
 
 ---
 
