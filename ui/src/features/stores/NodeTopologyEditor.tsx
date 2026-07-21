@@ -139,8 +139,9 @@ export default function NodeTopologyEditor({
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
+  const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panCleanupRef = useRef<(() => void) | null>(null);
 
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
   const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
@@ -164,6 +165,13 @@ export default function NodeTopologyEditor({
       return next;
     });
   }, [nodes, wires]);
+
+  // Clean up pan listeners on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      panCleanupRef.current?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isSimulating) return;
@@ -298,11 +306,6 @@ export default function NodeTopologyEditor({
       setNodes((prev) =>
         prev.map((n) => (n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n)),
       );
-    } else if (isPanning) {
-      setPan({
-        x: e.clientX - panStartRef.current.x,
-        y: e.clientY - panStartRef.current.y,
-      });
     } else if (connectingFromNodeId) {
       // Find nearest target port when dragging a connection
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -329,7 +332,6 @@ export default function NodeTopologyEditor({
 
   const handleCanvasMouseUp = () => {
     setDraggingNodeId(null);
-    setIsPanning(false);
   };
 
   // Clear hoveredTarget when connection mode ends
@@ -344,8 +346,33 @@ export default function NodeTopologyEditor({
       setSelectedNodeId(null);
       setSelectedWireId(null);
       if (e.button === 0 || e.button === 1) {
-        setIsPanning(true);
+        isPanningRef.current = true;
         panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+
+        const handleMouseMove = (ev: MouseEvent) => {
+          if (!isPanningRef.current) return;
+          setPan({
+            x: ev.clientX - panStartRef.current.x,
+            y: ev.clientY - panStartRef.current.y,
+          });
+        };
+
+        const handleMouseUp = () => {
+          isPanningRef.current = false;
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          panCleanupRef.current = null;
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        panCleanupRef.current = () => {
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+          isPanningRef.current = false;
+          panCleanupRef.current = null;
+        };
       }
     }
   };

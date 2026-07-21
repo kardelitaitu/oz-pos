@@ -84,12 +84,20 @@
 
 ---
 
+## ✅ Backlog Items — Completed (4/4 🎉)
+
+| Item | Status |
+|------|--------|
+| 🔴 P60-blog-1 — Section pinning | ✅ — Pin button on nav items, pinned sections at top, localStorage |
+| 🔵 P60-blog-2 — Fuzzy search (fuse.js) | ✅ — Installed fuse.js, threshold 0.4, keys: label + category |
+| 🟢 P60-blog-3 — Keyboard shortcut hints | ✅ — Keyboard icon popover in sidebar header, ↑↓→← Home/End Esc |
+| 🟡 P60-blog-4 — Resizable sidebar width | ✅ — Drag handle, 250–400px range, Arrow keys, localStorage |
+
+---
+
 ## 📋 Future Ideas (backlog)
 
-- [ ] Section pinning: Pin favourite sections to top of sidebar
-- [ ] Section search with fuzzy matching (fuse.js)
-- [ ] Keyboard shortcut hints shown in tooltips
-- [ ] Sidebar width resizable via drag handle
+- [ ] ​(empty — add new ideas here)
 
 ---
 
