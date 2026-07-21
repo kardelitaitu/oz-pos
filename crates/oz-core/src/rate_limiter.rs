@@ -46,7 +46,10 @@ impl LoginRateLimiter {
     /// * `Err(retry_after_secs)` — the caller is locked out; must wait this
     ///   many seconds before trying again.
     pub fn record_failure(&self, username: &str) -> Result<usize, u64> {
-        let mut map = self.attempts.lock().expect("rate limiter lock poisoned");
+        let mut map = self
+            .attempts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = Instant::now();
         let window = Duration::from_secs(self.window_secs);
         let attempts = map.entry(username.to_string()).or_default();
