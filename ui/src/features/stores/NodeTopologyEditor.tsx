@@ -200,8 +200,16 @@ export default function NodeTopologyEditor({
         setWires(loadedWires);
         isDirtyRef.current = false;
       })
-      .catch(() => {
-        // No saved topology — keep the retail preset.
+      .catch((err) => {
+        // Only "no saved topology" (null result) is expected — that is
+        // handled in the .then() above. Any thrown error (corrupt DB,
+        // serialisation failure, etc.) should be surfaced to the user
+        // rather than silently swallowed.
+        if (cancelled) return;
+        addToast({
+          message: `Failed to load topology: ${err instanceof Error ? err.message : String(err)}`,
+          type: 'error',
+        });
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
