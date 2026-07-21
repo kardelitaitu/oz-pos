@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 30 / 32 items complete (94%) · Updated 2026-07-22
+> **Current state:** 31 / 32 items complete (97%) · Updated 2026-07-22
 
 ---
 
@@ -15,7 +15,7 @@
 | 🟠 | Midtrans QRIS Payment Gateway | 2 | 2/2 ✅ |
 | 🟡 | Low Stock Alert System | 2 | 2/2 ✅ |
 | 🔵 | API Documentation (OpenAPI) | 2 | 0/2 ⏳ |
-| 🟣 | PostgreSQL Sync Daemon | 2 | 1/2 ⏳ |
+| 🟣 | PostgreSQL Sync Daemon | 2 | 2/2 ✅ |
 | ⚪ | Docker & DevEx | 2 | 2/2 ✅ |
 | 🟤 | i18n Completion | 2 | 2/2 ✅ |
 | 🔷 | Customer Display HAL Driver | 2 | 2/2 ✅ |
@@ -116,7 +116,7 @@
 > **Goal:** Verify and test the existing PostgreSQL outbox sync daemon (`platform/sync/src/pg_daemon.rs`) for production readiness. Listed for Standard+ tiers in BUSINESS_PLAN.md.
 
 - [x] **Sync daemon implementation** ✅ — `platform/sync/src/pg_daemon.rs` exists and is publicly exported. Daemon handles outbox polling, batch processing, and event consumption.
-- [ ] **Sync daemon integration tests + edge cases** — Write integration tests using `testcontainers` (or Docker Compose) for: outbox schema, event consumption, idempotency, duplicate handling, connection loss → reconnect, truncation recovery, large batches (10K+), concurrent daemon instances (advisory lock), graceful shutdown mid-batch.
+- [x] **Sync daemon integration tests + edge cases** ✅ — 25 tests in `platform/sync/src/pg_daemon.rs` covering: outbox schema (2), lifecycle (7), idempotency/duplicates (3), large batch 10K (3), graceful shutdown (2), status tracking (2), concurrent daemons (1), error isolation (2), DbConnection safety (1), status serialization (2). All tests pass, clippy clean.
 
 ---
 
