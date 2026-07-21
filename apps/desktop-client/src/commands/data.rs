@@ -666,7 +666,7 @@ mod tests {
     fn import_preview_result_debug() {
         let result = ImportPreviewResult {
             store_name: "My Store".into(),
-            app_version: "0.0.17".into(),
+            app_version: "0.0.18".into(),
             created_at: "2025-01-01".into(),
             types: vec!["products".into()],
             product_count: 50,
