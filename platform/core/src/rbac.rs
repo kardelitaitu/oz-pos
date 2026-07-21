@@ -551,6 +551,51 @@ mod preset_tests {
         assert_eq!(role.id, builtin_roles::OWNER);
         assert_eq!(role.name, "Owner");
     }
+
+    #[test]
+    fn staff_preset_excludes_settings() {
+        let preset = &ROLE_PRESETS[4];
+        assert_eq!(preset.id, builtin_roles::STAFF);
+        assert_eq!(preset.name, "Staff");
+        assert!(!preset.permissions.contains(&permissions::SETTINGS_READ));
+        assert!(!preset.permissions.contains(&permissions::SETTINGS_EDIT));
+        // Staff should still have Manager-level operational permissions
+        assert!(preset.permissions.contains(&permissions::SALES_VOID));
+        assert!(preset.permissions.contains(&permissions::PRODUCTS_CREATE));
+        assert!(preset.permissions.contains(&permissions::STAFF_CREATE));
+        assert!(preset.permissions.contains(&permissions::REPORTS_VIEW));
+    }
+
+    #[test]
+    fn custom_preset_has_no_permissions() {
+        let preset = &ROLE_PRESETS[5];
+        assert_eq!(preset.id, builtin_roles::CUSTOM);
+        assert_eq!(preset.name, "Custom");
+        assert!(preset.permissions.is_empty());
+        let json = preset.permissions_json();
+        assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn staff_preset_has_manager_count_minus_settings() {
+        let manager = &ROLE_PRESETS[1];
+        let staff = &ROLE_PRESETS[4];
+        // Staff should have exactly 2 fewer permissions than Manager (settings:read, settings:edit)
+        assert_eq!(
+            staff.permissions.len(),
+            manager.permissions.len() - 2,
+            "Staff should have all Manager permissions except settings:read and settings:edit"
+        );
+        // Verify every Manager permission except settings is present in Staff
+        for perm in manager.permissions {
+            if *perm != permissions::SETTINGS_READ && *perm != permissions::SETTINGS_EDIT {
+                assert!(
+                    staff.permissions.contains(perm),
+                    "Staff should inherit Manager permission: {perm}"
+                );
+            }
+        }
+    }
 }
 
 // ── Permission constants ────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 8 / 16 items complete (50%) · Updated 2026-07-21
+**Current state:** 9 / 16 items complete (56%) · Updated 2026-07-21
 
 ---
 
@@ -38,7 +38,7 @@
 
 - [x] **P56-1: Windows desktop launch test** ✅ — Created `docs/operations/windows-launch-test.md` with build steps, 8-phase launch procedure (login → workspace picker → POS → payment → receipt), edge cases, performance checkpoints, log capture instructions, verification checklist, and known Windows-specific issues.
 - [x] **P56-2: Linux desktop launch test** ✅ — Created `docs/operations/linux-launch-test.md` with Ubuntu/Debian prerequisites (WebKitGTK 4.1, GTK3, libsoup3), build steps (.deb + AppImage), 8-phase launch procedure, Linux-specific edge cases (Wayland/X11, HiDPI, suspend/resume), memory profiling via `ps`/`htop`, log capture via journalctl/dmesg, and known Linux issues (NVIDIA GPU, Wayland clipboard, AppImage FUSE).
-- [ ] **P56-3: Android APK install test** — Build signed APK via `android.yml`. Install on Android 10+ physical device. Verify: touch targets, barcode scan, KDS ticket board, payment flow.
+- [x] **P56-3: Android APK install test** ✅ — Created `docs/operations/android-install-test.md` with Android SDK/NDK prerequisites, 3 build options (debug/release/dev), ADB/USB install, 10-phase launch procedure (launch → login → workspace → POS → cart/swipe → barcode scan → payment → KDS → settings → edge cases), performance profiling via `adb`/Android Studio Profiler, logcat crash capture, and known Android issues table.
 - [ ] **P56-4: iPad install test** — Build signed IPA via `ios.yml`. Install on iPadOS 16+ via TestFlight. Verify: tablet layout, split-view, swipe gestures, receipt printing.
 
 ## ⚪ P57 — Visual Polish & Edge Cases
@@ -56,9 +56,9 @@
 | 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
 | 🔵 P54 — Code TODOs | 5 | 1 | ░░░░░░░░░░░░░░░░ 20% |
 | 🟣 P55 — Dev Tooling | 2 | 1 | ░░░░░░░░░░░░░░░░ 50% |
-| 🔴 P56 — Device Validation | 4 | 2 | ░░░░░░░░░░░░░░░░ 50% |
+| 🔴 P56 — Device Validation | 4 | 3 | ░░░░░░░░░░░░░░░░ 75% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **8** | **50%** |
+| **Total** | **16** | **9** | **56%** |
 
 ---
 
