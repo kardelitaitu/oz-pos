@@ -446,9 +446,7 @@ export default function EmailReportSettings() {
           {/* Cadence / Frequency */}
           <div className="settings-field settings-field--horizontal">
             <label htmlFor="settings-schedule-cadence" className="settings-label">
-              <Localized id="settings-schedule-cadence">
-                <span>Frequency</span>
-              </Localized>
+              {l10n.getString('settings-schedule-cadence')}
             </label>
             <span className="settings-field-input-wrap">
               <select
@@ -469,9 +467,7 @@ export default function EmailReportSettings() {
           {/* Send time */}
           <div className="settings-field settings-field--horizontal">
             <label htmlFor="settings-schedule-time" className="settings-label">
-              <Localized id="settings-schedule-time">
-                <span>Send Time</span>
-              </Localized>
+              {l10n.getString('settings-schedule-time')}
             </label>
             <span className="settings-field-input-wrap">
               <input
@@ -488,9 +484,7 @@ export default function EmailReportSettings() {
           {/* Timezone */}
           <div className="settings-field settings-field--horizontal">
             <label htmlFor="settings-schedule-tz" className="settings-label">
-              <Localized id="settings-schedule-timezone">
-                <span>Timezone</span>
-              </Localized>
+              {l10n.getString('settings-schedule-timezone')}
             </label>
             <span className="settings-field-input-wrap">
               <input
@@ -508,9 +502,7 @@ export default function EmailReportSettings() {
           {/* Lookback days */}
           <div className="settings-field settings-field--horizontal">
             <label htmlFor="settings-schedule-lookback" className="settings-label">
-              <Localized id="settings-schedule-lookback">
-                <span>Lookback Days</span>
-              </Localized>
+              {l10n.getString('settings-schedule-lookback')}
             </label>
             <span className="settings-field-input-wrap">
               <input
@@ -566,9 +558,7 @@ export default function EmailReportSettings() {
           {/* Recipients */}
           <div className="settings-field settings-field--horizontal" style={{ alignItems: 'flex-start' }}>
             <label htmlFor="settings-schedule-recipients" className="settings-label">
-              <Localized id="settings-schedule-recipients">
-                <span>Recipients</span>
-              </Localized>
+              {l10n.getString('settings-schedule-recipients')}
             </label>
             <span className="settings-field-input-wrap">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
