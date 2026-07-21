@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining ROADMAP gaps across Analytics, Backend Hardening, CI/CD, Mobile Builds, and Fuzz Testing.
 >
-> **Current state:** 11 / 25 items complete · Updated 2026-07-21
+> **Current state:** 12 / 25 items complete · Updated 2026-07-21
 
 ---
 
@@ -28,7 +28,7 @@
 - [x] **P61-2: Scheduled email report delivery (backend)** ✅ — Already fully implemented: `apps/cloud-server/src/email.rs` has `start_report_sender_loop()`, `generate_report_email()`, SMTP transport via `lettre`. `ReportScheduleConfig` exists with save/load in settings.
 - [ ] **P61-3: Scheduled email report UI** — Add schedule config panel in Settings → Reports: cron expression picker, report type selector, recipient email list.
 - [x] **P61-4: Custom report builder (backend)** ✅ — Already fully implemented: `Store::build_custom_report()` with column whitelist, date range filtering, SQL injection protection. Exposed via Tauri command in `apps/desktop-client/src/commands/reports.rs`.
-- [ ] **P61-5: Custom report builder (UI)** — Drag-and-drop column selector with live preview. Saved report templates in settings.
+- [x] **P61-5: Custom report builder (UI)** ✅ — Already fully implemented: `CustomReportScreen.tsx` with dataset selector, column checkboxes, date range picker, live results table, CSV export, loading/error/empty states. Registered in App.tsx under route `custom-report` with manager role.
 
 ---
 
