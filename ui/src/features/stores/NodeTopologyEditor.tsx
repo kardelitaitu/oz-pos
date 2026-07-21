@@ -136,6 +136,8 @@ export default function NodeTopologyEditor({
 
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Set of node ids that were just added (for scale-in animation). */
+  const [freshNodeIds, setFreshNodeIds] = useState<Set<string>>(new Set());
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -153,11 +155,16 @@ export default function NodeTopologyEditor({
   const undoInProgressRef = useRef(false);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
+
+  /** Track whether user has made any edits since last preset load. */
+  const isDirtyRef = useRef(false);
 
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
 
   const pushHistory = useCallback(() => {
     if (undoInProgressRef.current) return;
+    isDirtyRef.current = true;
     setHistory((prev) => {
       const entry: HistoryEntry = { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) };
       const next = [...prev, entry];
@@ -165,6 +172,31 @@ export default function NodeTopologyEditor({
       return next;
     });
   }, [nodes, wires]);
+
+  const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
+    const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
+    pushHistory();
+    setNodes(data.nodes);
+    setWires(data.wires);
+    setFreshNodeIds(new Set());
+    isDirtyRef.current = false;
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [pushHistory]);
+
+  const popUndo = useCallback(() => {
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      undoInProgressRef.current = true;
+      const entry = prev[prev.length - 1];
+      if (entry) {
+        setNodes(entry.nodes);
+        setWires(entry.wires);
+      }
+      setTimeout(() => { undoInProgressRef.current = false; }, 0);
+      return prev.slice(0, -1);
+    });
+  }, []);
 
   // Clean up pan listeners on unmount to prevent leaks
   useEffect(() => {
@@ -231,21 +263,14 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  });
+  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo]);
 
-  const popUndo = useCallback(() => {
-    setHistory((prev) => {
-      if (prev.length === 0) return prev;
-      undoInProgressRef.current = true;
-      const entry = prev[prev.length - 1];
-      if (entry) {
-        setNodes(entry.nodes);
-        setWires(entry.wires);
-      }
-      setTimeout(() => { undoInProgressRef.current = false; }, 0);
-      return prev.slice(0, -1);
-    });
-  }, []);
+  const executePresetLoad = useCallback(() => {
+    if (confirmPreset) {
+      loadPreset(confirmPreset);
+    }
+    setConfirmPreset(null);
+  }, [confirmPreset, loadPreset]);
 
   const executeDelete = useCallback(() => {
     if (confirmDelete === '') {
@@ -380,8 +405,21 @@ export default function NodeTopologyEditor({
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    setZoom((prev) => Math.min(2.0, Math.max(0.4, prev * zoomFactor)));
+    setZoom((prev) => {
+      const newZoom = Math.min(2.0, Math.max(0.4, prev * zoomFactor));
+      // Zoom towards cursor: adjust pan so cursor position stays fixed
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+      setPan((p) => ({
+        x: cursorX - (cursorX - p.x) * (newZoom / prev),
+        y: cursorY - (cursorY - p.y) * (newZoom / prev),
+      }));
+      return newZoom;
+    });
   };
 
   const handleAddNode = (type: NodeType) => {
@@ -404,6 +442,11 @@ export default function NodeTopologyEditor({
     };
 
     setNodes((prev) => [...prev, newNode]);
+    setFreshNodeIds((prev) => new Set(prev).add(id));
+    // Remove from fresh set after animation completes
+    setTimeout(() => {
+      setFreshNodeIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    }, 400);
     setSelectedNodeId(id);
   };
 
@@ -555,6 +598,19 @@ export default function NodeTopologyEditor({
         />
       )}
 
+      {/* ── Confirm preset overwrite dialog ── */}
+      {confirmPreset !== null && (
+        <ConfirmDialog
+          open
+          onCancel={() => setConfirmPreset(null)}
+          onConfirm={executePresetLoad}
+          title="Load Preset"
+          message="Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading."
+          variant="warning"
+          confirmLabel="Load Preset"
+        />
+      )}
+
       <div className="node-topology-header">
         <div className="node-topology-header-title">
           <Localized id="topology-builder-title">
@@ -577,7 +633,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { setNodes(PRESET_RETAIL.nodes); setWires(PRESET_RETAIL.wires); }}
+            onClick={() => { isDirtyRef.current ? setConfirmPreset('retail') : loadPreset('retail'); }}
             icon={<CartIcon size={16} />}
           >
             Retail Preset
@@ -585,7 +641,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { setNodes(PRESET_RESTAURANT.nodes); setWires(PRESET_RESTAURANT.wires); }}
+            onClick={() => { isDirtyRef.current ? setConfirmPreset('restaurant') : loadPreset('restaurant'); }}
             icon={<UtensilsIcon size={16} />}
           >
             Resto & KDS Preset
@@ -781,7 +837,9 @@ export default function NodeTopologyEditor({
                       transform={`translate(${lx + labelOffX}, ${ly + labelOffY})`}
                       className="wire-label-group"
                       onClick={() => handleToggleWireDirection(wire.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
                       role="button"
+                      tabIndex={0}
                       aria-label="Toggle wire direction"
                     >
                       <rect x="-40" y="-12" width="80" height="22" rx="11" className="wire-label-bg" />
@@ -814,7 +872,7 @@ export default function NodeTopologyEditor({
               return (
                 <div
                   key={node.id}
-                  className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}`}
+                  className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${freshNodeIds.has(node.id) ? ' node-fresh' : ''}`}
                   style={{ left: `${node.x}px`, top: `${node.y}px` }}
                   role="button"
                   tabIndex={0}
@@ -822,6 +880,14 @@ export default function NodeTopologyEditor({
                   onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
                 >
                   <div className="node-header">
+                    <span className="node-type-accent" />
+                    <span className="node-grip" aria-hidden="true" title="Drag to move">
+                      <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                        <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+                        <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+                        <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+                      </svg>
+                    </span>
                     <span className="node-type-icon">
                       {node.type === 'store' ? <StoreIcon size={16} /> : node.type === 'workspace' ? <PosIcon size={16} /> : node.type === 'warehouse' ? <WarehouseIcon size={16} /> : <PrinterIcon size={16} />}
                     </span>
@@ -856,6 +922,15 @@ export default function NodeTopologyEditor({
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Canvas HUD ────────────────────────────────── */}
+          <div className="canvas-hud" aria-hidden="true">
+            <span className="canvas-hud-item">{Math.round(zoom * 100)}%</span>
+            <span className="canvas-hud-divider" />
+            <span className="canvas-hud-item">{nodes.length} node{nodes.length !== 1 ? 's' : ''}</span>
+            <span className="canvas-hud-divider" />
+            <span className="canvas-hud-item">{wires.length} wire{wires.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
 
