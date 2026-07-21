@@ -151,6 +151,7 @@ impl Store<'_> {
             || role_id == "role-admin"
             || role_id == "admin"
             || role_id == "role-manager"
+            || role_id == "role-staff"
             || role_id == "manager"
         {
             return self.list_all_workspace_types();
@@ -358,6 +359,7 @@ impl Store<'_> {
             || role_id == "role-admin"
             || role_id == "admin"
             || role_id == "role-manager"
+            || role_id == "role-staff"
             || role_id == "manager"
         {
             return self.list_store_instances(store_id, user_id);

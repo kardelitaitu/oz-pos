@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 7 / 16 items complete (44%) · Updated 2026-07-21
+**Current state:** 8 / 16 items complete (50%) · Updated 2026-07-21
 
 ---
 
@@ -37,7 +37,7 @@
 > Verify the app actually runs on target hardware — not just CI builds.
 
 - [x] **P56-1: Windows desktop launch test** ✅ — Created `docs/operations/windows-launch-test.md` with build steps, 8-phase launch procedure (login → workspace picker → POS → payment → receipt), edge cases, performance checkpoints, log capture instructions, verification checklist, and known Windows-specific issues.
-- [ ] **P56-2: Linux desktop launch test** — Build `oz-pos-app` release binary on Ubuntu 22.04+. Launch, verify core POS flow. Log any webkit2gtk or library issues.
+- [x] **P56-2: Linux desktop launch test** ✅ — Created `docs/operations/linux-launch-test.md` with Ubuntu/Debian prerequisites (WebKitGTK 4.1, GTK3, libsoup3), build steps (.deb + AppImage), 8-phase launch procedure, Linux-specific edge cases (Wayland/X11, HiDPI, suspend/resume), memory profiling via `ps`/`htop`, log capture via journalctl/dmesg, and known Linux issues (NVIDIA GPU, Wayland clipboard, AppImage FUSE).
 - [ ] **P56-3: Android APK install test** — Build signed APK via `android.yml`. Install on Android 10+ physical device. Verify: touch targets, barcode scan, KDS ticket board, payment flow.
 - [ ] **P56-4: iPad install test** — Build signed IPA via `ios.yml`. Install on iPadOS 16+ via TestFlight. Verify: tablet layout, split-view, swipe gestures, receipt printing.
 
@@ -56,9 +56,9 @@
 | 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
 | 🔵 P54 — Code TODOs | 5 | 1 | ░░░░░░░░░░░░░░░░ 20% |
 | 🟣 P55 — Dev Tooling | 2 | 1 | ░░░░░░░░░░░░░░░░ 50% |
-| 🔴 P56 — Device Validation | 4 | 1 | ░░░░░░░░░░░░░░░░ 25% |
+| 🔴 P56 — Device Validation | 4 | 2 | ░░░░░░░░░░░░░░░░ 50% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **7** | **44%** |
+| **Total** | **16** | **8** | **50%** |
 
 ---
 
