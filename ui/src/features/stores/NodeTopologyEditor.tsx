@@ -3,6 +3,7 @@ import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { loadTopology } from '@/api/topology';
 import {
   StoreIcon,
   PosIcon,
@@ -161,6 +162,50 @@ export default function NodeTopologyEditor({
   const isDirtyRef = useRef(false);
 
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
+
+  // Load persisted topology on mount, fall back to retail preset.
+  useEffect(() => {
+    let cancelled = false;
+    loadTopology()
+      .then((data) => {
+        if (cancelled || !data || !data.nodes || data.nodes.length === 0) return;
+        const loadedNodes: TopologyNodeData[] = data.nodes.map((n) => {
+          const node: TopologyNodeData = {
+            id: n.id,
+            type: n.type as NodeType,
+            name: n.name,
+            x: n.x,
+            y: n.y,
+          };
+          if (n.subtitle !== undefined) node.subtitle = n.subtitle;
+          if (n.tier_requirement !== undefined) node.tierRequirement = n.tier_requirement as 'pro' | 'enterprise';
+          if (n.telemetry_badge !== undefined) node.telemetryBadge = n.telemetry_badge;
+          if (n.telemetry_status !== undefined) node.telemetryStatus = n.telemetry_status as 'online' | 'warning' | 'offline';
+          if (n.metadata !== undefined) node.metadata = n.metadata;
+          return node;
+        });
+        const loadedWires: TopologyWireData[] = data.wires.map((w) => {
+          const wire: TopologyWireData = {
+            id: w.id,
+            fromNodeId: w.from_node_id,
+            toNodeId: w.to_node_id,
+            direction: w.direction as WireDirection,
+          };
+          if (w.label !== undefined) wire.label = w.label;
+          if (w.from_port !== undefined) wire.fromPort = w.from_port as PortName;
+          if (w.to_port !== undefined) wire.toPort = w.to_port as PortName;
+          return wire;
+        });
+        setNodes(loadedNodes);
+        setWires(loadedWires);
+        isDirtyRef.current = false;
+      })
+      .catch(() => {
+        // No saved topology — keep the retail preset.
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pushHistory = useCallback(() => {
     if (undoInProgressRef.current) return;

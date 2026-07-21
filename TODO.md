@@ -1,8 +1,8 @@
 # 0.0.18 — Full-Stack Sprint: E2E, Cloud, Payments, Notifications, APIs & Polish
 
-> **Goal:** Comprehensive sprint across 15 areas: expand E2E coverage, harden cloud server, integrate Midtrans QRIS payments, build low-stock alerts + WhatsApp notifications, document APIs, verify PostgreSQL sync, improve Docker/DevEx, complete i18n, add customer display HAL, extract loyalty module, build shared DTO/validation crates, add config validation, and prepare release infrastructure.
+> **Goal:** Comprehensive sprint across 16 areas: expand E2E coverage, harden cloud server, integrate Midtrans QRIS payments, build low-stock alerts + WhatsApp notifications, document APIs, verify PostgreSQL sync, improve Docker/DevEx, complete i18n, add customer display HAL, extract loyalty module, build shared DTO/validation crates, add config validation, wire topology persistence, and prepare release infrastructure.
 >
-> **Current state:** 0 / 30 items complete (0%) · Updated 2026-07-21
+> **Current state:** 2 / 32 items complete (6%) · Updated 2026-07-21
 
 ---
 
@@ -25,7 +25,8 @@
 | 🎯 | Loyalty Module Extraction | 2 | 0/2 ⏳ |
 | 🧱 | Shared DTO & Validation Crates | 2 | 0/2 ⏳ |
 | ⚙️ | Config Validation Layer | 2 | 0/2 ⏳ |
-| **Total** | | **30** | **0/30 (0%)** |
+| 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
+| **Total** | | **32** | **2/32 (6%)** |
 
 ---
 
@@ -152,6 +153,15 @@
 
 - [ ] **Config validator module** — Create `crates/oz-core/src/config_validator.rs` that validates at startup: `DATABASE_URL` format and file permissions, `OZ_API_PORT` range (1024–65535), `OZ_LICENSE_KEY` presence and format (PEM header check), `STRIPE_SECRET_KEY` prefix (`sk_`), `MIDTRANS_SERVER_KEY` format, Redis/PostgreSQL connectivity when sync is enabled, feature flag consistency (e.g., sync enabled requires cloud server URL).
 - [ ] **Startup integration + error UX** — Call the config validator at the top of `main.rs` in both desktop-client and cloud-server. On validation failure: log a structured error with the exact key/value that failed, display a user-friendly dialog (Tauri) or exit with a clear stderr message (CLI/server). Add `--validate-config` dry-run flag to the CLI for CI/pre-deploy checks.
+
+---
+
+### 🕸️ Topology Persistence Wiring
+
+> **Goal:** Wire the visual node topology editor into the settings system with real persistence — save/load via Tauri commands backed by the settings key-value store. Previously the "Apply Topology Changes" button did nothing and all changes were lost on refresh.
+
+- [x] **Backend save/load commands** ✅ — Created `apps/desktop-client/src/commands/topology.rs` with `save_topology()` and `load_topology()` Tauri commands. Topology data (nodes + wires) serialised as JSON and stored under `oz-pos/topology` settings key. 7 unit tests cover roundtrip, overwrite, fresh DB None, and minimal payload deserialisation.
+- [x] **UI wiring + API layer** ✅ — Created `ui/src/api/topology.ts` with `saveTopology()` and `loadTopology()` invoke wrappers. SettingsPage passes `onSave` callback that persists nodes/wires on "Apply" click with success/error toast. NodeTopologyEditor loads persisted topology on mount via `useEffect`, falling back to retail preset when no save exists.
 
 ---
 

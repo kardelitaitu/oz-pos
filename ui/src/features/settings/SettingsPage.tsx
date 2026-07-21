@@ -61,6 +61,7 @@ import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
 import { checkLicenseStatus } from '@/api/license';
+import { saveTopology, type TopologyNodePayload, type TopologyWirePayload } from '@/api/topology';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
@@ -1580,7 +1581,41 @@ export default function SettingsPage() {
       case 'topology':
         return (
           <div className="settings-topology-container">
-            <NodeTopologyEditor currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'} />
+            <NodeTopologyEditor
+              currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'}
+              onSave={(nodes, wires) => {
+                const nodePayloads: TopologyNodePayload[] = nodes.map((n) => {
+                  const p: TopologyNodePayload = {
+                    id: n.id,
+                    type: n.type,
+                    name: n.name,
+                    x: n.x,
+                    y: n.y,
+                  };
+                  if (n.subtitle !== undefined) p.subtitle = n.subtitle;
+                  if (n.tierRequirement !== undefined) p.tier_requirement = n.tierRequirement;
+                  if (n.telemetryBadge !== undefined) p.telemetry_badge = n.telemetryBadge;
+                  if (n.telemetryStatus !== undefined) p.telemetry_status = n.telemetryStatus;
+                  if (n.metadata !== undefined) p.metadata = n.metadata;
+                  return p;
+                });
+                const wirePayloads: TopologyWirePayload[] = wires.map((w) => {
+                  const p: TopologyWirePayload = {
+                    id: w.id,
+                    from_node_id: w.fromNodeId,
+                    to_node_id: w.toNodeId,
+                    direction: w.direction,
+                  };
+                  if (w.label !== undefined) p.label = w.label;
+                  if (w.fromPort !== undefined) p.from_port = w.fromPort;
+                  if (w.toPort !== undefined) p.to_port = w.toPort;
+                  return p;
+                });
+                saveTopology(nodePayloads, wirePayloads)
+                  .then(() => addToast({ message: l10n.getString('topology-saved') || 'Topology saved', type: 'success' }))
+                  .catch((err) => addToast({ message: String(err), type: 'error' }));
+              }}
+            />
           </div>
         );
 
