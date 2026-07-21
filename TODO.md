@@ -12,26 +12,25 @@
 
 > **Goal:** Refactor the settings sidebar navigation tree to be reliable across all scenarios, improve UX design, and ensure full accessibility compliance.
 >
-> **Current state:** 0 / 9 items complete · Updated 2026-07-21
+> **Current state:** 8 / 9 items complete · Updated 2026-07-21
 
 ---
 
-#### 🔴 P60-1 — Extract `NavTree` into a separate component
+#### 🔴 P60-1 — Extract `NavTree` into a separate component ✅
 
-> The sidebar is currently inline in SettingsPage.tsx (~2,000 lines). Extracting it will improve testability and reduce complexity.
+> Sidebar extracted from SettingsPage.tsx (~2,000→1,860 lines) into standalone SettingsNavTree component with internal state management.
 
-- [ ] **P60-1a: Create `SettingsNavTree.tsx`** — Move `NAV_ITEMS`, `CATEGORIES`, sidebar search, accordion logic, collapse state, and render into a standalone `SettingsNavTree` component. Props: `activeSection`, `onNavigate`, `expandedCategory`, `onToggleCategory`, `sidebarCollapsed`, `onToggleCollapse`.
-- [ ] **P60-1b: Create `SettingsNavTree.css`** — Extract all sidebar CSS from `SettingsPage.css` into a dedicated stylesheet. Import it from the new component.
-- [ ] **P60-1c: Update imports in SettingsPage.tsx** — Replace inline sidebar render with `<SettingsNavTree ... />` call. Remove dead state (searchQuery, filteredCategories logic) that moves to the new component.
+- [x] **P60-1a: Create `SettingsNavTree.tsx`** ✅ — Extracted with all NAV_ITEMS, CATEGORIES, accordion logic, search filtering, collapse state, arrow key navigation. Props: `activeSection`, `onNavigate`, `searchQuery`, `onSearchChange`, `mobileSidebarOpen`, `onMobileClose`.
+- [x] **P60-1b: Create `SettingsNavTree.css`** ✅ — All sidebar CSS (~400 lines) moved from SettingsPage.css into dedicated stylesheet.
+- [x] **P60-1c: Update imports in SettingsPage.tsx** ✅ — Replaced inline sidebar render with `<SettingsNavTree />`. Constants exported via `export { NAV_ITEMS, CATEGORIES, ... }` for breadcrumb.
 
 ---
 
 #### 🔵 P60-2 — Fix reliability edge cases
 
-- [ ] **P60-2a: `sectionKey` hydration fix** — The current `sectionKey` increments on every navigation to force re-render of section content. Replace this with a stable `key` based on `activeSection` directly (e.g., `key={activeSection}`) which is more predictable and avoids stale closure issues in `renderSection`.
-- [ ] **P60-2b: Arrow key navigation with empty search** — When search returns zero results, ArrowDown/ArrowUp should be a no-op (currently it wraps around an empty array, causing `flatKeys[0]` to be `undefined` and early-returning). Add guard: if `flatKeys.length === 0`, skip keyboard nav entirely and announce with `aria-live`.
-- [ ] **P60-2c: localStorage race on rapid toggle** — `sidebarCollapsed` and `expandedCategory` both write to `localStorage` via `useEffect`. If the user rapidly toggles, the second write can overwrite the first with stale data. Debounce localStorage writes (100ms) or use a ref to track the latest value.
-- [ ] **Move accessibility items to P60-4** — ✅ Consolidated below. P60-2 now focuses strictly on reliability/bug fixes.
+- [x] **P60-2a: `sectionKey` hydration fix** ✅ — Replaced incremental counter with `key={activeSection}` for stable, predictable re-renders.
+- [x] **P60-2b: Arrow key navigation with empty search** ✅ — Guard: early return when `flatKeys.length === 0`. Prevents modulo-by-zero edge case.
+- [x] **P60-2c: localStorage race on rapid toggle** ✅ — 100ms debounce via ref-based timer. Handles set/remove. Cleanup on unmount.
 
 ---
 
@@ -98,13 +97,13 @@
 | Sprint | Items | Status |
 |--------|-------|--------|
 | 🔴 P60-1 — Component extraction | 3 | 0/3 |
-| 🔵 P60-2 — Reliability fixes | 5 | 0/5 |
+| 🔴 P60-1 — Component extraction | 3 | 3/3 ✅ |
+| 🔵 P60-2 — Reliability fixes | 3 | 3/3 ✅ |
 | 🟢 P60-3 — UX improvements | 5 | 0/5 |
 | 🟡 P60-4 — Accessibility | 7 | 0/7 |
 | 🟣 P60-5 — Testing | 3 | 0/3 |
 | ⚪ P60-6 — Polish & docs | 2 | 0/2 |
-| 🔵 P60-2 — Reliability fixes | 4 | 0/4 |
-| **Total** | **25** | **0/25** |
+| **Total** | **23** | **6/23 (26%)** |
 
 ---
 

@@ -2,6 +2,20 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
+import {
+  StoreIcon,
+  PosIcon,
+  WarehouseIcon,
+  PrinterIcon,
+  FlaskIcon,
+  StopIcon,
+  CartIcon,
+  UtensilsIcon,
+  CheckIcon,
+  TrashIcon,
+  CloseIcon,
+  LockIcon,
+} from './NodeTopologyIcons';
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -282,29 +296,33 @@ export default function NodeTopologyEditor({
             variant={isSimulating ? 'primary' : 'secondary'}
             onClick={() => setIsSimulating(!isSimulating)}
             className="simulation-btn"
+            icon={isSimulating ? <StopIcon size={16} /> : <FlaskIcon size={16} />}
           >
-            {isSimulating ? '⏹ Stop Simulation' : '🧪 Test Order Simulation'}
+            {isSimulating ? 'Stop Simulation' : 'Test Order Simulation'}
           </Button>
 
           <Button
             variant="secondary"
             onClick={() => { setNodes(PRESET_RETAIL.nodes); setWires(PRESET_RETAIL.wires); }}
+            icon={<CartIcon size={16} />}
           >
-            🛒 Retail Preset
+            Retail Preset
           </Button>
 
           <Button
             variant="secondary"
             onClick={() => { setNodes(PRESET_RESTAURANT.nodes); setWires(PRESET_RESTAURANT.wires); }}
+            icon={<UtensilsIcon size={16} />}
           >
-            🍽️ Resto & KDS Preset
+            Resto & KDS Preset
           </Button>
 
           <Button
             variant="primary"
             onClick={() => onSave?.(nodes, wires)}
+            icon={<CheckIcon size={16} />}
           >
-            ✓ Apply Topology Changes
+            Apply Topology Changes
           </Button>
         </div>
       </div>
@@ -316,7 +334,7 @@ export default function NodeTopologyEditor({
           <p className="tool-rack-desc">Drag or click to spawn topology nodes:</p>
 
           <button className="tool-card" onClick={() => handleAddNode('store')}>
-            <span className="tool-card-icon">🏢</span>
+            <span className="tool-card-icon"><StoreIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Store Node</strong>
               <span>Store Branch Profile</span>
@@ -324,7 +342,7 @@ export default function NodeTopologyEditor({
           </button>
 
           <button className="tool-card" onClick={() => handleAddNode('workspace')}>
-            <span className="tool-card-icon">🛒</span>
+            <span className="tool-card-icon"><PosIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Workspace Node</strong>
               <span>POS / Register Instance</span>
@@ -335,18 +353,18 @@ export default function NodeTopologyEditor({
             className={`tool-card ${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? 'locked' : ''}`}
             onClick={() => handleAddNode('warehouse')}
           >
-            <span className="tool-card-icon">📦</span>
+            <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Warehouse Node</strong>
               <span>Storage Location</span>
             </div>
             {!isProAllowed && nodes.some((n) => n.type === 'warehouse') && (
-              <span className="lock-badge">🔒 Pro</span>
+              <span className="lock-badge"><LockIcon size={12} /> Pro</span>
             )}
           </button>
 
           <button className="tool-card" onClick={() => handleAddNode('hardware')}>
-            <span className="tool-card-icon">🖨️</span>
+            <span className="tool-card-icon"><PrinterIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Hardware Node</strong>
               <span>Printer / KDS Peripheral</span>
@@ -356,8 +374,8 @@ export default function NodeTopologyEditor({
           <hr className="tool-rack-divider" />
 
           {selectedNodeId || selectedWireId ? (
-            <Button variant="secondary" onClick={handleDeleteSelected} className="delete-btn">
-              🗑 Delete Selected Element
+            <Button variant="secondary" onClick={handleDeleteSelected} className="delete-btn" icon={<TrashIcon size={16} />}>
+              Delete Selected Element
             </Button>
           ) : null}
 
@@ -498,7 +516,7 @@ export default function NodeTopologyEditor({
                 >
                   <div className="node-header">
                     <span className="node-type-icon">
-                      {node.type === 'store' ? '🏢' : node.type === 'workspace' ? '🛒' : node.type === 'warehouse' ? '📦' : '🖨️'}
+                      {node.type === 'store' ? <StoreIcon size={16} /> : node.type === 'workspace' ? <PosIcon size={16} /> : node.type === 'warehouse' ? <WarehouseIcon size={16} /> : <PrinterIcon size={16} />}
                     </span>
                     <span className="node-title">{node.name}</span>
                   </div>
@@ -531,7 +549,7 @@ export default function NodeTopologyEditor({
           <div className="node-inspector-drawer">
             <div className="inspector-header">
               <h3>Node Inspector</h3>
-              <Button variant="secondary" onClick={() => setSelectedNodeId(null)}>✕</Button>
+              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label="Close inspector" />
             </div>
 
             <div className="inspector-content">

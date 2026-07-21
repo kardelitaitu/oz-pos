@@ -107,7 +107,16 @@
 }
 
 .tool-card-icon {
-  font-size: var(--text-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.tool-card-icon svg {
+  color: var(--color-primary);
 }
 
 .tool-card-info strong {
@@ -129,6 +138,9 @@
   color: var(--color-danger);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .tool-rack-divider {
@@ -280,7 +292,16 @@
 }
 
 .node-type-icon {
-  font-size: var(--text-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.node-type-icon svg {
+  color: var(--color-fg-secondary);
 }
 
 .node-title {

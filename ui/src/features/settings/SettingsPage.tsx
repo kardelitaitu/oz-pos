@@ -295,7 +295,6 @@ export default function SettingsPage() {
   // ── Navigation state ────────────────────────────────────────────
   const [activeSection, setActiveSection] = useState('general');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [sectionKey, setSectionKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Field validation state ────────────────────────────────
@@ -328,7 +327,6 @@ export default function SettingsPage() {
   const navigateToSection = useCallback((key: string) => {
     setActiveSection(key);
     setMobileSidebarOpen(false);
-    setSectionKey((k) => k + 1);
   }, []);
 
   // ── Unsaved changes tracking ────────────────────────────────
@@ -1738,7 +1736,7 @@ export default function SettingsPage() {
               </header>
             )}
           </div>
-          <div className="settings-section-content" key={sectionKey}>
+          <div className="settings-section-content" key={activeSection}>
             <div key={activeSection}>
             {renderSection(activeSection)}
           </div>

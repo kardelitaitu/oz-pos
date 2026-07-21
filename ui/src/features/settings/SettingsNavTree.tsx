@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import Tooltip from '@/frontend/shell/Tooltip';
 
@@ -272,13 +272,34 @@ export default function SettingsNavTree({
 }: SettingsNavTreeProps) {
   const { l10n } = useLocalization();
 
+  // ── Debounced localStorage write (P60-2c: prevents race on rapid toggle) ─
+  const debouncedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function debouncedPersist(key: string, value: string | null) {
+    if (debouncedRef.current) clearTimeout(debouncedRef.current);
+    debouncedRef.current = setTimeout(() => {
+      if (value === null) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, value);
+      }
+      debouncedRef.current = null;
+    }, 100);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debouncedRef.current) clearTimeout(debouncedRef.current);
+    };
+  }, []);
+
   // ── Collapsed sidebar (persisted) ──────────────────────────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
     localStorage.getItem('settings-sidebar-collapsed') === 'true',
   );
 
   useEffect(() => {
-    localStorage.setItem('settings-sidebar-collapsed', String(sidebarCollapsed));
+    debouncedPersist('settings-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
   // ── Accordion: single expanded category (persisted) ──────────
@@ -289,11 +310,7 @@ export default function SettingsNavTree({
   });
 
   useEffect(() => {
-    if (expandedCategory) {
-      localStorage.setItem('settings-sidebar-expanded', expandedCategory);
-    } else {
-      localStorage.removeItem('settings-sidebar-expanded');
-    }
+    debouncedPersist('settings-sidebar-expanded', expandedCategory);
   }, [expandedCategory]);
 
   // Auto-expand category when navigating to a section
@@ -339,6 +356,9 @@ export default function SettingsNavTree({
       // Arrow keys navigate sections (skip when focused on inputs)
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+      // P60-2b: Guard against empty search results
+      if (flatKeys.length === 0) return;
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
