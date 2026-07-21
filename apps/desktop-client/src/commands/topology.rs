@@ -3516,4 +3516,126 @@ mod tests {
             assert_eq!(w.to_node_id, format!("combo-n-{next:04}"));
         }
     }
+
+    // ── Tauri command integration tests ─────────────────────────────
+    //
+    // These tests exercise the `#[tauri::command]` functions through a
+    // mock Tauri app, covering the lock+delegate bodies that cannot be
+    // reached via the free functions alone.
+
+    use tauri::Manager as _;
+
+    fn make_node_cmd(id: &str) -> TopologyNodePayload {
+        TopologyNodePayload {
+            id: id.into(),
+            node_type: "store".into(),
+            name: format!("Store {id}"),
+            subtitle: None,
+            x: 10.0,
+            y: 20.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn tauri_save_topology_persists_and_load_returns_it() {
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        save_topology(vec![make_node_cmd("n1")], vec![], app.state())
+            .await
+            .unwrap();
+        let loaded = load_topology(app.state()).await.unwrap();
+        assert!(loaded.is_some());
+        let data = loaded.unwrap();
+        assert_eq!(data.nodes.len(), 1);
+        assert_eq!(data.nodes[0].id, "n1");
+        assert!(data.wires.is_empty());
+    }
+
+    #[tokio::test]
+    async fn tauri_save_topology_overwrites_previous() {
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        save_topology(vec![make_node_cmd("first")], vec![], app.state())
+            .await
+            .unwrap();
+        save_topology(vec![make_node_cmd("second")], vec![], app.state())
+            .await
+            .unwrap();
+
+        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes[0].id, "second");
+    }
+
+    #[tokio::test]
+    async fn tauri_load_topology_returns_none_for_fresh_app() {
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let loaded = load_topology(app.state()).await.unwrap();
+        assert!(loaded.is_none());
+    }
+
+    #[tokio::test]
+    async fn tauri_save_topology_with_wires_roundtrips_fully() {
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let nodes = vec![make_node_cmd("store-a"), make_node_cmd("ws-1")];
+        let wires = vec![TopologyWirePayload {
+            id: "cmd-w-1".into(),
+            from_node_id: "store-a".into(),
+            to_node_id: "ws-1".into(),
+            direction: "one-way".into(),
+            label: None,
+            from_port: None,
+            to_port: None,
+        }];
+
+        save_topology(nodes, wires, app.state()).await.unwrap();
+        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+
+        assert_eq!(loaded.nodes.len(), 2);
+        assert_eq!(loaded.wires.len(), 1);
+        assert_eq!(loaded.wires[0].from_node_id, "store-a");
+        assert_eq!(loaded.wires[0].to_node_id, "ws-1");
+    }
 }
