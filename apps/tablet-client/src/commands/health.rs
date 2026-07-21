@@ -6,6 +6,14 @@ use tauri::command;
 
 use crate::error::AppError;
 
+/// Get the stable device identifier (hostname) for terminal binding.
+#[command]
+pub async fn get_device_id() -> Result<String, AppError> {
+    Ok(std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown-device".to_string()))
+}
+
 /// Liveness probe. Returns `Ok("pong")` if the Tauri runtime is alive.
 #[command]
 pub async fn ping() -> Result<String, AppError> {

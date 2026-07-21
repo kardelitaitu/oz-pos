@@ -36,6 +36,18 @@ pub async fn version() -> Result<VersionInfo, AppError> {
     })
 }
 
+/// Get the stable device identifier (hostname) for terminal binding.
+///
+/// Reads `COMPUTERNAME` on Windows, `HOSTNAME` on Unix, or falls back
+/// to `"unknown-device"`. This is used by WorkspaceContext to populate
+/// the `terminal_id` field when creating session tokens (ADR #7).
+#[command]
+pub async fn get_device_id() -> Result<String, AppError> {
+    Ok(std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown-device".to_string()))
+}
+
 /// Get the local IP address of the machine.
 #[command]
 pub async fn get_local_ip() -> Result<String, AppError> {

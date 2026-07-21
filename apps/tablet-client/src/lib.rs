@@ -230,6 +230,7 @@ pub fn run() {
                 commands::gift_cards::unfreeze_gift_card,
                 commands::health::ping,
                 commands::health::version,
+                commands::health::get_device_id,
                 commands::health::get_local_ip,
                 commands::pos::start_sale,
                 commands::pos::start_sale_scoped,

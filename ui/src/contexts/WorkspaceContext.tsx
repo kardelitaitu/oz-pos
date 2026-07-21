@@ -15,6 +15,7 @@ import {
   type WorkspaceDto,
 } from "@/api/workspaces";
 import { createSession, destroySession } from "@/api/staff";
+import { getDeviceId } from "@/api/system";
 import { useAuth } from "@/contexts/AuthContext";
 
 // ── Fallback workspaces for development (ADR #4 shape) ──────────────
@@ -321,8 +322,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           store_id: instance.store_id,
           instance_id: instance.instance_id,
           type_key: instance.type_key,
-          // TODO(#ADR7): Resolve terminal_id from device binding.
-          terminal_id: "",
+          terminal_id: await getDeviceId().catch(() => ""),
         });
 
         setSessionToken(result.session_token);
@@ -419,31 +419,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setSessionToken(null);
     }
 
-    createSession({
-      user_id: session.user_id,
-      role_id: session.role_id,
-      store_id: activeInstance.store_id,
-      instance_id: activeInstance.instance_id,
-      type_key: activeInstance.type_key,
-      // TODO(#ADR7): Resolve terminal_id from device binding or system hostname.
-      // Currently hardcoded as empty; ADR #7 will add a get_device_id() Tauri command.
-      terminal_id: "",
-    })
-      .then((result) => {
-        if (!cancelled) {
-          setSessionToken(result.session_token);
-        }
+    // Resolve device ID for terminal binding (ADR #7), then create session.
+    (async () => {
+      const deviceId = await getDeviceId().catch(() => "");
+      if (cancelled) return;
+
+      createSession({
+        user_id: session.user_id,
+        role_id: session.role_id,
+        store_id: activeInstance.store_id,
+        instance_id: activeInstance.instance_id,
+        type_key: activeInstance.type_key,
+        terminal_id: deviceId,
       })
-      .catch((err) => {
-        if (!cancelled) {
-          console.warn("WorkspaceContext: failed to create session token", err);
-        }
-      });
+        .then((result) => {
+          if (!cancelled) {
+            setSessionToken(result.session_token);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            console.warn("WorkspaceContext: failed to create session token", err);
+          }
+        });
+    })();
 
     return () => {
       cancelled = true;
     };
   }, [activeInstance, session]);
+
 
   // Backward-compat: sets the type_key string directly.
   // Always updates lastWorkspace — even with null — so the active

@@ -2,7 +2,7 @@
 
 > **Goal:** Close the remaining unchecked ROADMAP items, resolve code TODOs, wire up email report delivery, and validate on physical devices.
 
-**Current state:** 4 / 16 items complete (25%) · Updated 2026-07-20
+**Current state:** 5 / 16 items complete (31%) · Updated 2026-07-20
 
 ---
 
@@ -19,33 +19,33 @@
 
 > Resolve the 5 remaining TODO/FIXME comments in production code.
 
-- [ ] **P56-1: terminal_id binding (ADR #7)** — In `WorkspaceContext.tsx`, resolve `terminal_id` from device binding via a Tauri command (`get_device_id()` returning MAC/hostname). Remove the hardcoded empty string.
-- [ ] **P56-2: tenant_id on tax_rates/users sync** — In `cloud-server/src/sync_api.rs`, stamp `tenant_id` from JWT claims on POST handlers for `tax_rates` and `users` (same pattern as existing handlers).
-- [ ] **P56-3: archive_instance() wrapper (ADR #5)** — Add a public `Store::archive_instance()` method to `crates/oz-core/src/db/workspaces.rs` for proper encapsulation (replaces inline SQL in test).
-- [ ] **P56-4: user_store_access check (ADR #4 Phase 2)** — In `list_active_instances()`, add user_store_access row filtering for non-owner roles in multi-store mode.
-- [ ] **P56-5: greedy-fill location resolver (ADR-19)** — Implement greedy-fill algorithm in `location_resolver.rs` to use the `qty` parameter for distributing stock deduction across locations.
+- [x] **P54-1: terminal_id binding (ADR #7)** ✅ — Created `get_device_id` Tauri command (desktop + tablet), `getDeviceId()` API wrapper, and updated WorkspaceContext.tsx to resolve terminal_id from hostname.
+- [ ] **P54-2: tenant_id on tax_rates/users sync** — In `cloud-server/src/sync_api.rs`, stamp `tenant_id` from JWT claims on POST handlers for `tax_rates` and `users` (same pattern as existing handlers).
+- [ ] **P54-3: archive_instance() wrapper (ADR #5)** — Add a public `Store::archive_instance()` method to `crates/oz-core/src/db/workspaces.rs` for proper encapsulation (replaces inline SQL in test).
+- [ ] **P54-4: user_store_access check (ADR #4 Phase 2)** — In `list_active_instances()`, add user_store_access row filtering for non-owner roles in multi-store mode.
+- [ ] **P54-5: greedy-fill location resolver (ADR-19)** — Implement greedy-fill algorithm in `location_resolver.rs` to use the `qty` parameter for distributing stock deduction across locations.
 
 ## 🟣 P55 — Developer Tooling
 
 > Add tokio-console integration and flamegraph helpers for performance debugging.
 
-- [ ] **P57-1: tokio-console integration** — Add `console-subscriber` to cloud-server. Document `tokio-console` launch command in `docs/benchmarks/`. Add `#[tokio::test]` console smoke test.
-- [ ] **P57-2: cargo-flamegraph helpers** — Create `scripts/profile.sh` / `scripts/profile.ps1` that wraps `cargo flamegraph` with sane defaults (PID, frequency, output path). Document in benchmark docs.
+- [ ] **P55-1: tokio-console integration** — Add `console-subscriber` to cloud-server. Document `tokio-console` launch command in `docs/benchmarks/`. Add `#[tokio::test]` console smoke test.
+- [ ] **P55-2: cargo-flamegraph helpers** — Create `scripts/profile.sh` / `scripts/profile.ps1` that wraps `cargo flamegraph` with sane defaults (PID, frequency, output path). Document in benchmark docs.
 
 ## 🔴 P56 — Physical Device Validation
 
 > Verify the app actually runs on target hardware — not just CI builds.
 
-- [ ] **P58-1: Windows desktop launch test** — Build `oz-pos-app` release binary. Launch on Windows 10/11. Verify: login → workspace picker → POS → payment → receipt. Log any runtime errors.
-- [ ] **P58-2: Linux desktop launch test** — Build `oz-pos-app` release binary on Ubuntu 22.04+. Launch, verify core POS flow. Log any webkit2gtk or library issues.
-- [ ] **P58-3: Android APK install test** — Build signed APK via `android.yml`. Install on Android 10+ physical device. Verify: touch targets, barcode scan, KDS ticket board, payment flow.
-- [ ] **P58-4: iPad install test** — Build signed IPA via `ios.yml`. Install on iPadOS 16+ via TestFlight. Verify: tablet layout, split-view, swipe gestures, receipt printing.
+- [ ] **P56-1: Windows desktop launch test** — Build `oz-pos-app` release binary. Launch on Windows 10/11. Verify: login → workspace picker → POS → payment → receipt. Log any runtime errors.
+- [ ] **P56-2: Linux desktop launch test** — Build `oz-pos-app` release binary on Ubuntu 22.04+. Launch, verify core POS flow. Log any webkit2gtk or library issues.
+- [ ] **P56-3: Android APK install test** — Build signed APK via `android.yml`. Install on Android 10+ physical device. Verify: touch targets, barcode scan, KDS ticket board, payment flow.
+- [ ] **P56-4: iPad install test** — Build signed IPA via `ios.yml`. Install on iPadOS 16+ via TestFlight. Verify: tablet layout, split-view, swipe gestures, receipt printing.
 
 ## ⚪ P57 — Visual Polish & Edge Cases
 
 > Small UX improvements that make a big difference.
 
-- [ ] **P59-1: Empty state illustrations** — Add SVG illustrations to all empty states (no products, no sales, no staff, no shifts). Currently using text-only messages.
+- [ ] **P57-1: Empty state illustrations** — Add SVG illustrations to all empty states (no products, no sales, no staff, no shifts). Currently using text-only messages.
 
 ---
 
@@ -53,12 +53,12 @@
 
 | Area | Total | Done | Progress |
 |------|-------|------|----------|
-| 🟢 P55 — Email Reports | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| 🔵 P54 — Code TODOs | 5 | 0 | ░░░░░░░░░░░░░░░░ 0% |
+| 🟢 P55 — Email Reports | 4 | 4 | ███████████████████████ 100% |
+| 🔵 P54 — Code TODOs | 5 | 1 | ░░░░░░░░░░░░░░░░ 20% |
 | 🟣 P55 — Dev Tooling | 2 | 0 | ░░░░░░░░░░░░░░░░ 0% |
 | 🔴 P56 — Device Validation | 4 | 0 | ░░░░░░░░░░░░░░░░ 0% |
 | ⚪ P57 — Visual Polish | 1 | 0 | ░░░░░░░░░░░░░░░░ 0% |
-| **Total** | **16** | **0** | **0%** |
+| **Total** | **16** | **5** | **31%** |
 
 ---
 
