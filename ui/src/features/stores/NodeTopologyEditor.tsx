@@ -1,7 +1,8 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import {
   StoreIcon,
   PosIcon,
@@ -41,7 +42,7 @@ export interface TopologyWireData {
   fromNodeId: string;
   toNodeId: string;
   direction: WireDirection;
-  label?: string; // e.g. "Priority 1", "Priority 2 (Fallback)"
+  label?: string;
 }
 
 export interface NodeTopologyEditorProps {
@@ -79,38 +80,54 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
   ],
 };
 
+const GRID_SIZE = 24;
+const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
+type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
+
 export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
 }: NodeTopologyEditorProps) {
   const { addToast } = useToast();
+  const canvasRef = useRef<HTMLDivElement>(null);
+
   const [nodes, setNodes] = useState<TopologyNodeData[]>(PRESET_RETAIL.nodes);
   const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
 
-  // Simulation mode & pulse animation state
   const [isSimulating, setIsSimulating] = useState(false);
   const [simPulseStep, setSimPulseStep] = useState(0);
 
-  // Dragging state
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Pan & Zoom
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // New wire creation state
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Lock check based on active tier
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const undoInProgressRef = useRef(false);
+
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
 
-  // Simulation runner
+  const pushHistory = useCallback(() => {
+    if (undoInProgressRef.current) return;
+    setHistory((prev) => {
+      const entry: HistoryEntry = { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) };
+      const next = [...prev, entry];
+      if (next.length > 50) next.shift();
+      return next;
+    });
+  }, [nodes, wires]);
+
   useEffect(() => {
     if (!isSimulating) return;
     const interval = setInterval(() => {
@@ -119,9 +136,100 @@ export default function NodeTopologyEditor({
     return () => clearInterval(interval);
   }, [isSimulating]);
 
-  // Handle Node Mouse Down for Dragging
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConnectingFromNodeId(null);
+        setSelectedNodeId(null);
+        setSelectedWireId(null);
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeId || selectedWireId)) {
+        e.preventDefault();
+        if (selectedNodeId) {
+          const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
+          setConfirmDelete(hasWires ? selectedNodeId : '');
+        } else {
+          setConfirmDelete('');
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        popUndo();
+        return;
+      }
+      if (selectedNodeId && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        pushHistory();
+        const step = e.shiftKey ? GRID_SIZE : 8;
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === selectedNodeId
+              ? {
+                  ...n,
+                  x: snap(n.x + (e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0)),
+                  y: snap(n.y + (e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0)),
+                }
+              : n,
+          ),
+        );
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
+  const popUndo = useCallback(() => {
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      undoInProgressRef.current = true;
+      const entry = prev[prev.length - 1];
+      if (entry) {
+        setNodes(entry.nodes);
+        setWires(entry.wires);
+      }
+      setTimeout(() => { undoInProgressRef.current = false; }, 0);
+      return prev.slice(0, -1);
+    });
+  }, []);
+
+  const executeDelete = useCallback(() => {
+    if (confirmDelete === '') {
+      if (selectedWireId) {
+        setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
+        setSelectedWireId(null);
+      }
+    } else if (confirmDelete) {
+      pushHistory();
+      setNodes((prev) => prev.filter((n) => n.id !== confirmDelete));
+      setWires((prev) => prev.filter((w) => w.fromNodeId !== confirmDelete && w.toNodeId !== confirmDelete));
+      setSelectedNodeId(null);
+    }
+    setConfirmDelete(null);
+  }, [confirmDelete, selectedWireId, pushHistory]);
+
+  const zoomToFit = useCallback(() => {
+    if (nodes.length === 0) return;
+    const minX = Math.min(...nodes.map((n) => n.x));
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const maxX = Math.max(...nodes.map((n) => n.x + 200));
+    const maxY = Math.max(...nodes.map((n) => n.y + 80));
+    const padding = 60;
+    const viewW = (canvasRef.current?.clientWidth ?? 800) - padding * 2;
+    const viewH = (canvasRef.current?.clientHeight ?? 600) - padding * 2;
+    const fitZoom = Math.min(
+      Math.min(viewW / Math.max(maxX - minX, 1), viewH / Math.max(maxY - minY, 1)),
+      1.5,
+    );
+    setZoom(Math.max(0.4, Math.min(2.0, fitZoom)));
+    setPan({ x: padding - minX * fitZoom, y: padding - minY * fitZoom });
+  }, [nodes]);
+
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
+    if (e.button !== 0) return;
+    pushHistory();
     setSelectedNodeId(nodeId);
     setSelectedWireId(null);
     setDraggingNodeId(nodeId);
@@ -135,11 +243,12 @@ export default function NodeTopologyEditor({
     }
   };
 
-  // Handle Canvas Mouse Move (Dragging Node or Panning)
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    mousePosRef.current = { x: e.clientX, y: e.clientY };
+
     if (draggingNodeId) {
-      const newX = Math.max(20, Math.round(e.clientX / zoom - dragOffsetRef.current.x));
-      const newY = Math.max(20, Math.round(e.clientY / zoom - dragOffsetRef.current.y));
+      const newX = snap(Math.max(20, e.clientX / zoom - dragOffsetRef.current.x));
+      const newY = snap(Math.max(20, e.clientY / zoom - dragOffsetRef.current.y));
 
       setNodes((prev) =>
         prev.map((n) => (n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n)),
@@ -152,13 +261,11 @@ export default function NodeTopologyEditor({
     }
   };
 
-  // Handle Mouse Up
   const handleCanvasMouseUp = () => {
     setDraggingNodeId(null);
     setIsPanning(false);
   };
 
-  // Handle Canvas Pan Start
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'svg') {
       setSelectedNodeId(null);
@@ -170,19 +277,18 @@ export default function NodeTopologyEditor({
     }
   };
 
-  // Handle Zoom
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
     setZoom((prev) => Math.min(2.0, Math.max(0.4, prev * zoomFactor)));
   };
 
-  // Add Node from Tool Rack
   const handleAddNode = (type: NodeType) => {
     if (type === 'warehouse' && !isProAllowed && nodes.filter((n) => n.type === 'warehouse').length >= 1) {
       addToast({ message: 'Multi-Warehouse storage locations require a Pro Tier license.', type: 'warning' });
       return;
     }
+    pushHistory();
 
     const id = `${type}-${Date.now()}`;
     const newNode: TopologyNodeData = {
@@ -190,8 +296,8 @@ export default function NodeTopologyEditor({
       type,
       name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       subtitle: type === 'store' ? 'Branch' : type === 'workspace' ? 'Register' : type === 'warehouse' ? 'Storage' : 'Peripheral',
-      x: 200 + Math.random() * 100,
-      y: 150 + Math.random() * 100,
+      x: snap(200 + Math.random() * 100),
+      y: snap(150 + Math.random() * 100),
       telemetryBadge: 'Ready',
       telemetryStatus: 'online',
     };
@@ -200,87 +306,117 @@ export default function NodeTopologyEditor({
     setSelectedNodeId(id);
   };
 
-  // Handle Port Click to Start/Finish Connection
   const handlePortClick = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
 
     if (!connectingFromNodeId) {
       setConnectingFromNodeId(nodeId);
-    } else if (connectingFromNodeId === nodeId) {
-      setConnectingFromNodeId(null);
-    } else {
-      // Connect connectingFromNodeId -> nodeId
-      const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
-      const toNode = nodes.find((n) => n.id === nodeId);
-
-      if (fromNode && toNode) {
-        // Multi-warehouse wire check for Pro license
-        const existingWarehouseWires = wires.filter((w) => {
-          const fn = nodes.find((n) => n.id === w.fromNodeId);
-          const tn = nodes.find((n) => n.id === w.toNodeId);
-          return fn?.type === 'workspace' && tn?.type === 'warehouse';
-        });
-
-        if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
-          addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
-          setConnectingFromNodeId(null);
-          return;
-        }
-
-        const newWireId = `wire-${Date.now()}`;
-        const isWarehouseWire = fromNode.type === 'workspace' && toNode.type === 'warehouse';
-        const label = isWarehouseWire
-          ? existingWarehouseWires.length === 0 ? 'Stock Deduct (P1)' : `Fallback (P${existingWarehouseWires.length + 1})`
-          : 'Connected';
-
-        setWires((prev) => [
-          ...prev,
-          {
-            id: newWireId,
-            fromNodeId: connectingFromNodeId,
-            toNodeId: nodeId,
-            direction: 'one-way',
-            label,
-          },
-        ]);
-      }
-      setConnectingFromNodeId(null);
+      return;
     }
+
+    if (connectingFromNodeId === nodeId) {
+      setConnectingFromNodeId(null);
+      return;
+    }
+
+    const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
+    const toNode = nodes.find((n) => n.id === nodeId);
+    if (!fromNode || !toNode) { setConnectingFromNodeId(null); return; }
+
+    const duplicate = wires.some(
+      (w) => w.fromNodeId === connectingFromNodeId && w.toNodeId === nodeId,
+    );
+    if (duplicate) {
+      addToast({ message: 'A wire already connects these nodes.', type: 'warning' });
+      setConnectingFromNodeId(null);
+      return;
+    }
+
+    pushHistory();
+
+    const existingWarehouseWires = wires.filter((w) => {
+      const fn = nodes.find((n) => n.id === w.fromNodeId);
+      const tn = nodes.find((n) => n.id === w.toNodeId);
+      return fn?.type === 'workspace' && tn?.type === 'warehouse';
+    });
+
+    if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
+      addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
+      setConnectingFromNodeId(null);
+      return;
+    }
+
+    const newWireId = `wire-${Date.now()}`;
+    const isWarehouseWire = fromNode.type === 'workspace' && toNode.type === 'warehouse';
+    const label = isWarehouseWire
+      ? existingWarehouseWires.length === 0 ? 'Stock Deduct (P1)' : `Fallback (P${existingWarehouseWires.length + 1})`
+      : 'Connected';
+
+    setWires((prev) => [
+      ...prev,
+      { id: newWireId, fromNodeId: connectingFromNodeId, toNodeId: nodeId, direction: 'one-way', label },
+    ]);
+    setConnectingFromNodeId(null);
   };
 
-  // Toggle Wire Direction (1-Way <-> 2-Way)
   const handleToggleWireDirection = (wireId: string) => {
+    pushHistory();
     setWires((prev) =>
       prev.map((w) => {
         if (w.id === wireId) {
-          return {
-            ...w,
-            direction: w.direction === 'one-way' ? 'two-way' : 'one-way',
-          };
+          return { ...w, direction: w.direction === 'one-way' ? 'two-way' : 'one-way' };
         }
         return w;
       }),
     );
   };
 
-  // Delete Selected Element
-  const handleDeleteSelected = () => {
+  const handleDeleteRequest = () => {
     if (selectedNodeId) {
-      setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
-      setWires((prev) => prev.filter((w) => w.fromNodeId !== selectedNodeId && w.toNodeId !== selectedNodeId));
-      setSelectedNodeId(null);
+      const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
+      setConfirmDelete(hasWires ? selectedNodeId : '');
     } else if (selectedWireId) {
-      setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
-      setSelectedWireId(null);
+      setConfirmDelete('');
     }
   };
 
-  // Selected Node Details
+  const wirePreviewLine = useMemo(() => {
+    if (!connectingFromNodeId) return null;
+    const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
+    if (!fromNode) return null;
+    const x1 = fromNode.x + 100;
+    const y1 = fromNode.y + 40;
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (mousePosRef.current.x - rect.left - pan.x) / zoom;
+    const my = (mousePosRef.current.y - rect.top - pan.y) / zoom;
+    const dx = Math.abs(mx - x1) * 0.5;
+    return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
+  }, [connectingFromNodeId, nodes, zoom, pan]);
+
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
+  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
   return (
     <div className="node-topology-editor">
-      {/* ── Top Header Bar ────────────────────────────────────────────── */}
+      {/* ── Confirm delete dialog ── */}
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          open
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={executeDelete}
+          title={confirmDelete ? 'Delete Node' : 'Delete Wire'}
+          message={
+            confirmDelete
+              ? 'This node has connected wires. Deleting it will remove all its wires too. This action cannot be undone.'
+              : 'Delete this wire connection? This action cannot be undone.'
+          }
+          variant="danger"
+          confirmLabel="Delete"
+        />
+      )}
+
       <div className="node-topology-header">
         <div className="node-topology-header-title">
           <Localized id="topology-builder-title">
@@ -328,7 +464,6 @@ export default function NodeTopologyEditor({
       </div>
 
       <div className="node-topology-main">
-        {/* ── Left Sidebar Tool Rack ──────────────────────────────────── */}
         <div className="node-tool-rack">
           <h3>Palette Tools</h3>
           <p className="tool-rack-desc">Drag or click to spawn topology nodes:</p>
@@ -374,23 +509,34 @@ export default function NodeTopologyEditor({
           <hr className="tool-rack-divider" />
 
           {selectedNodeId || selectedWireId ? (
-            <Button variant="secondary" onClick={handleDeleteSelected} className="delete-btn" icon={<TrashIcon size={16} />}>
+            <Button variant="secondary" onClick={handleDeleteRequest} className="delete-btn" icon={<TrashIcon size={16} />}>
               Delete Selected Element
             </Button>
           ) : null}
 
+          {history.length > 0 && (
+            <Button variant="secondary" onClick={popUndo} style={{ fontSize: 'var(--text-xs)' }}>
+              Undo (Ctrl+Z)
+            </Button>
+          )}
+
           <div className="canvas-controls-mini">
             <span>Zoom: {Math.round(zoom * 100)}%</span>
+            <Button variant="secondary" onClick={zoomToFit}>
+              Fit All
+            </Button>
             <Button variant="secondary" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>
               Reset View
             </Button>
           </div>
         </div>
 
-        {/* ── Interactive Node Graph Canvas ────────────────────────────── */}
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- canvas container for drag-and-drop topology */}
         <div
+          ref={canvasRef}
           className="node-canvas-container"
+          tabIndex={0}
+          role="application"
+          aria-label="Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo."
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseDown={handleCanvasMouseDown}
@@ -402,10 +548,8 @@ export default function NodeTopologyEditor({
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             }}
           >
-            {/* SVG Layer for Arrow Connections & Animated Simulation Pulses */}
             <svg className="node-wires-svg">
               <defs>
-                {/* Arrow markers for 1-way and 2-way wires */}
                 <marker
                   id="arrow-end"
                   viewBox="0 0 10 10"
@@ -436,17 +580,14 @@ export default function NodeTopologyEditor({
                 const toNode = nodes.find((n) => n.id === wire.toNodeId);
                 if (!fromNode || !toNode) return null;
 
-                // Center positions of nodes
                 const x1 = fromNode.x + 100;
                 const y1 = fromNode.y + 40;
                 const x2 = toNode.x + 100;
                 const y2 = toNode.y + 40;
 
-                // Control points for smooth bezier curve
                 const dx = Math.abs(x2 - x1) * 0.5;
                 const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 
-                // Simulation pulse interpolation
                 const pulseX = x1 + (x2 - x1) * (simPulseStep / 100);
                 const pulseY = y1 + (y2 - y1) * (simPulseStep / 100);
 
@@ -454,7 +595,6 @@ export default function NodeTopologyEditor({
 
                 return (
                   <g key={wire.id} className={`wire-group ${isSelected ? 'wire-selected' : ''}`}>
-                    {/* Background hit line */}
                     <path
                       d={pathD}
                       className="wire-hitbox"
@@ -465,7 +605,6 @@ export default function NodeTopologyEditor({
                       }}
                     />
 
-                    {/* Visible Wire Connection */}
                     <path
                       d={pathD}
                       className={`wire-path ${wire.direction}`}
@@ -473,19 +612,19 @@ export default function NodeTopologyEditor({
                       markerStart={wire.direction === 'two-way' ? 'url(#arrow-start)' : undefined}
                     />
 
-                    {/* Wire Label & Direction Toggle Button */}
                     <g
                       transform={`translate(${(x1 + x2) / 2}, ${(y1 + y2) / 2})`}
                       className="wire-label-group"
                       onClick={() => handleToggleWireDirection(wire.id)}
+                      role="button"
+                      aria-label="Toggle wire direction"
                     >
                       <rect x="-40" y="-12" width="80" height="22" rx="11" className="wire-label-bg" />
                       <text x="0" y="3" textAnchor="middle" className="wire-label-text">
-                        {wire.direction === 'two-way' ? '↔' : '→'} {wire.label || ''}
+                        {wire.direction === 'two-way' ? '\u2194' : '\u2192'} {wire.label || ''}
                       </text>
                     </g>
 
-                    {/* Animated Energy Pulse during Simulation */}
                     {isSimulating && (
                       <circle
                         cx={pulseX}
@@ -497,9 +636,12 @@ export default function NodeTopologyEditor({
                   </g>
                 );
               })}
+
+              {wirePreviewLine && (
+                <path d={wirePreviewLine.d} className="wire-path" strokeDasharray="6 4" opacity="0.5" pointerEvents="none" />
+              )}
             </svg>
 
-            {/* Render Draggable Topology Nodes */}
             {nodes.map((node) => {
               const isSelected = selectedNodeId === node.id;
               const isConnectingSource = connectingFromNodeId === node.id;
@@ -530,13 +672,13 @@ export default function NodeTopologyEditor({
                     )}
                   </div>
 
-                  {/* Node Connection Port Sockets */}
                   <button
                     className={`node-port-socket ${isConnectingSource ? 'port-active' : ''}`}
                     onClick={(e) => handlePortClick(e, node.id)}
-                    title="Click to connect wire to another node"
+                    title={connectingFromNodeId ? 'Click to connect wire here' : 'Click to start wiring from this node'}
+                    aria-label={`Connect ${node.name}`}
                   >
-                    ●
+                    {'\u25CF'}
                   </button>
                 </div>
               );
@@ -544,7 +686,6 @@ export default function NodeTopologyEditor({
           </div>
         </div>
 
-        {/* ── Right Node Inspector Drawer ───────────────────────────── */}
         {selectedNode && (
           <div className="node-inspector-drawer">
             <div className="inspector-header">

@@ -488,6 +488,7 @@ export default function SettingsNavTree({
             filteredCategories.map((cat) => {
               const isExpanded = expandedCategory === cat.label;
               const hasActive = cat.keys.includes(activeSection);
+              const panelId = `settings-panel-${cat.label.toLowerCase()}`;
               return (
                 <div key={cat.label} className="settings-sidebar-section">
                   <button
@@ -495,6 +496,7 @@ export default function SettingsNavTree({
                     className={`settings-sidebar-section-header${hasActive ? ' settings-sidebar-section-header--active' : ''}`}
                     onClick={() => toggleCategory(cat.label)}
                     aria-expanded={isExpanded}
+                    aria-controls={panelId}
                   >
                     <span className="settings-sidebar-section-label-wrap">
                       <span className="settings-sidebar-section-label">
@@ -519,7 +521,11 @@ export default function SettingsNavTree({
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                  <div className={`settings-sidebar-section-items${isExpanded || sidebarCollapsed ? ' settings-sidebar-section-items--expanded' : ''}`}>
+                  <div
+                    id={panelId}
+                    role="region"
+                    aria-label={l10n.getString(CATEGORY_I18N_KEYS[cat.label] ?? cat.label)}
+                    className={`settings-sidebar-section-items${isExpanded || sidebarCollapsed ? ' settings-sidebar-section-items--expanded' : ''}`}>
                       {cat.keys.map((key) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
