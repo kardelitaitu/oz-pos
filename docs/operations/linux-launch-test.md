@@ -263,19 +263,16 @@ cargo tauri dev
 | Search response (type-ahead) | < 500 ms | < 100 ms | Perceived latency |
 | Cart total recalculation | < 100 ms | < 16 ms (60 fps) | Console time |
 | Sale completion (click Pay to done) | < 2 s | < 500 ms | Stopwatch |
-| Memory usage (idle) | < 200 MB | < 120 MB | `ps -o rss,cmd -p $(pgrep oz-pos)` |
-| Memory usage (with 50-item cart) | < 350 MB | < 200 MB | `ps -o rss,cmd -p $(pgrep oz-pos)` |
+| Memory usage (idle) | < 200 MB | < 120 MB | `ps -o rss,cmd -C oz-pos-app` |
+| Memory usage (with 50-item cart) | < 350 MB | < 200 MB | `ps -o rss,cmd -C oz-pos-app` |
 
 ### Measuring Performance
 
 **Using `ps`:**
 
 ```bash
-# Memory usage
-ps -o rss,cmd -p $(pgrep -f oz-pos-app)
-
-# RSS is in KB — divide by 1024 for MB:
-ps -o rss:1 --sort=-rss -p $(pgrep -f oz-pos-app) | awk '{print $1/1024 " MB"}'
+# Memory usage (RSS in KB — divide by 1024 for MB)
+ps -o rss:1 --sort=-rss -C oz-pos-app | awk '{print $1/1024 " MB"}'
 ```
 
 **Using `htop`:**
@@ -314,18 +311,19 @@ Tauri logs output to `stderr` by default. Capture it on launch:
 grep -iE "error|panic|fail|segfault" launch-log.txt
 ```
 
-### Journalctl (Systemd)
+### Journalctl (if installed as systemd service)
 
-If launched via `.deb` package (which installs a systemd service),
-use `journalctl`:
+If the app is launched via a systemd service, use `journalctl`:
 
 ```bash
 # Recent logs from OZ-POS service
-journalctl -u oz-pos --since "5 minutes ago" --no-pager
-
-# Follow live logs
-journalctl -u oz-pos -f
+journalctl --user -u oz-pos --since "5 minutes ago" --no-pager
 ```
+
+> Note: The `.deb` package from `cargo tauri build` does **not** install a
+> systemd service automatically — it creates a `.desktop` launcher.
+> The `journalctl` approach only applies if you manually configure a
+> systemd service unit.
 
 ### Debug Build Logs
 
