@@ -16,7 +16,7 @@ export interface TopologyNodePayload {
   tier_requirement?: string;
   telemetry_badge?: string;
   telemetry_status?: string;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
 }
 
 /** A wire connecting two port sockets. */

@@ -36,7 +36,7 @@ export interface TopologyNodeData {
   tierRequirement?: 'pro' | 'enterprise';
   telemetryBadge?: string;
   telemetryStatus?: 'online' | 'warning' | 'offline';
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TopologyWireData {
