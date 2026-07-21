@@ -25,6 +25,7 @@ members = [
     "modules/reporting",
     "modules/terminal",
     "modules/currency",
+    "modules/loyalty",
     "apps/cloud-server",
     "apps/desktop-client",
     "apps/tablet-client",
@@ -64,6 +65,7 @@ modules-staff = { path = "modules/staff" }
 modules-reporting = { path = "modules/reporting" }
 modules-terminal = { path = "modules/terminal" }
 modules-currency = { path = "modules/currency" }
+modules-loyalty = { path = "modules/loyalty" }
 platform-startup = { path = "platform/startup" }
 platform-sync = { path = "platform/sync" }
 tauri = { version = "2", features = [] }

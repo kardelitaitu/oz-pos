@@ -2,7 +2,7 @@
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
 >
-> **Current state:** 26 / 32 items complete (81%) · Updated 2026-07-22
+> **Current state:** 27 / 32 items complete (84%) · Updated 2026-07-22
 
 ---
 
@@ -22,7 +22,7 @@
 | 🔶 | Release Readiness | 2 | 2/2 ✅ |
 | 📱 | WhatsApp Notification Integration | 2 | 0/2 ⏳ |
 | 📊 | Multi-Store Centralized Dashboard | 2 | 2/2 ✅ |
-| 🎯 | Loyalty Module Extraction | 2 | 0/2 ⏳ |
+| 🎯 | Loyalty Module Extraction | 2 | 1/2 ⏳ |
 | 🧱 | Shared DTO & Validation Crates | 2 | 2/2 ✅ |
 | ⚙️ | Config Validation Layer | 2 | 2/2 ✅ |
 | 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
@@ -169,7 +169,7 @@
 
 > **Goal:** Extract loyalty program logic from `crates/oz-core/src/loyalty.rs` into its own `modules/loyalty/` following the module template, as specified in ARCHITECTURE.md. Currently loyalty lives in oz-core as standalone files rather than a proper module.
 
-- [ ] **Create `modules/loyalty/` crate** — Scaffold the module with `manifest.json`, `Cargo.toml`, `src/lib.rs`, `src/handlers.rs`. Migrate `LoyaltyTier`, `LoyaltyAccount`, `LoyaltyTransaction` types from oz-core. Implement `Module` trait for kernel registration. Wire `sale.completed` → `points.awarded` event handler.
+- [x] **Create `modules/loyalty/` crate** ✅ — Scaffolded with `Cargo.toml`, `manifest.json` (dependency: crm, permissions: loyalty:view/manage), `src/lib.rs`. Re-exports `LoyaltyTier`, `LoyaltyAccount`, `LoyaltyTransaction`, `LoyaltyAccountWithDetails` from oz-core. `LoyaltyModule` struct with `Module` trait impl (id="loyalty", lifecycle: on_load → validates config, on_start → ready, on_stop → cleanup). 8 kernel integration tests (module_id, lifecycle, duplicate rejection, individual lifecycle methods, multi-module coexistence). Registered in workspace Cargo.toml.
 - [ ] **Migrate loyalty DB + UI** — Move `db/loyalty.rs` functions into the module's repository layer. Update UI imports from `@/api/crm` to `@/api/loyalty`. Register the loyalty page/route in App.tsx. Verify all 4 existing loyalty tests pass after migration. Add module-level integration tests.
 
 ---
