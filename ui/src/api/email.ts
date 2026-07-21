@@ -2,11 +2,11 @@
  * Email report API — send test reports and manage report schedules.
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** Send a test report email using the currently configured SMTP settings. */
 export async function sendTestReport(): Promise<string> {
-  return invoke<string>('send_test_report');
+  return loggedInvoke<string>('send_test_report');
 }
 
 /** Report schedule configuration persisted in settings. */
@@ -22,10 +22,10 @@ export interface ReportScheduleConfig {
 
 /** Get the current report schedule configuration. */
 export async function getReportSchedule(): Promise<ReportScheduleConfig> {
-  return invoke<ReportScheduleConfig>('get_report_schedule');
+  return loggedInvoke<ReportScheduleConfig>('get_report_schedule');
 }
 
 /** Save the report schedule configuration. */
 export async function saveReportSchedule(config: ReportScheduleConfig): Promise<void> {
-  return invoke<void>('save_report_schedule', { config });
+  return loggedInvoke<void>('save_report_schedule', { config });
 }

@@ -1,6 +1,6 @@
 // ── Terminal Management ───────────────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A registered POS terminal. */
 export interface TerminalDto {
@@ -33,51 +33,51 @@ export interface UpdateTerminalArgs {
 
 /** List all registered terminals. */
 export const listTerminals = (): Promise<TerminalDto[]> =>
-  invoke<TerminalDto[]>('list_terminals');
+  loggedInvoke<TerminalDto[]>('list_terminals');
 
 /** List terminals (scoped — ADR #7). */
 export const listTerminalsScoped = (sessionToken: string): Promise<TerminalDto[]> =>
-  invoke<TerminalDto[]>('list_terminals_scoped', { sessionToken });
+  loggedInvoke<TerminalDto[]>('list_terminals_scoped', { sessionToken });
 
 /** Get a single terminal by its identifier. */
 export const getTerminal = (id: string): Promise<TerminalDto | null> =>
-  invoke<TerminalDto | null>('get_terminal', { id });
+  loggedInvoke<TerminalDto | null>('get_terminal', { id });
 
 /** Get a terminal (scoped — ADR #7). */
 export const getTerminalScoped = (sessionToken: string, id: string): Promise<TerminalDto | null> =>
-  invoke<TerminalDto | null>('get_terminal_scoped', { sessionToken, id });
+  loggedInvoke<TerminalDto | null>('get_terminal_scoped', { sessionToken, id });
 
 /** Register a new POS terminal. */
 export const registerTerminal = (userId: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('register_terminal', { userId, args });
+  loggedInvoke<{ id: string }>('register_terminal', { userId, args });
 
 /** Register a terminal (scoped — ADR #7). */
 export const registerTerminalScoped = (sessionToken: string, args: RegisterTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('register_terminal_scoped', { sessionToken, args });
+  loggedInvoke<{ id: string }>('register_terminal_scoped', { sessionToken, args });
 
 /** Update an existing terminal's details. */
 export const updateTerminal = (userId: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('update_terminal', { userId, args });
+  loggedInvoke<{ id: string }>('update_terminal', { userId, args });
 
 /** Update a terminal (scoped — ADR #7). */
 export const updateTerminalScoped = (sessionToken: string, args: UpdateTerminalArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('update_terminal_scoped', { sessionToken, args });
+  loggedInvoke<{ id: string }>('update_terminal_scoped', { sessionToken, args });
 
 /** Ping a terminal to check it is reachable. */
 export const pingTerminal = (id: string): Promise<void> =>
-  invoke<void>('ping_terminal', { id });
+  loggedInvoke<void>('ping_terminal', { id });
 
 /** Ping a terminal (scoped — ADR #7). */
 export const pingTerminalScoped = (sessionToken: string, id: string): Promise<void> =>
-  invoke<void>('ping_terminal_scoped', { sessionToken, id });
+  loggedInvoke<void>('ping_terminal_scoped', { sessionToken, id });
 
 /** Delete a terminal registration. */
 export const deleteTerminal = (userId: string, id: string): Promise<void> =>
-  invoke('delete_terminal', { userId, id });
+  loggedInvoke('delete_terminal', { userId, id });
 
 /** Delete a terminal (scoped — ADR #7). */
 export const deleteTerminalScoped = (sessionToken: string, id: string): Promise<void> =>
-  invoke<void>('delete_terminal_scoped', { sessionToken, id });
+  loggedInvoke<void>('delete_terminal_scoped', { sessionToken, id });
 
 // ── Feature Overrides ──────────────────────────────────────────────
 
@@ -92,11 +92,11 @@ export interface TerminalFeatureOverride {
 
 /** List feature overrides for a terminal. */
 export const listTerminalOverrides = (terminalId: string): Promise<TerminalFeatureOverride[]> =>
-  invoke<TerminalFeatureOverride[]>('list_terminal_overrides', { terminalId });
+  loggedInvoke<TerminalFeatureOverride[]>('list_terminal_overrides', { terminalId });
 
 /** List terminal overrides (scoped — ADR #7). */
 export const listTerminalOverridesScoped = (sessionToken: string, terminalId: string): Promise<TerminalFeatureOverride[]> =>
-  invoke<TerminalFeatureOverride[]>('list_terminal_overrides_scoped', { sessionToken, terminalId });
+  loggedInvoke<TerminalFeatureOverride[]>('list_terminal_overrides_scoped', { sessionToken, terminalId });
 
 /** Enable or disable a feature override for a terminal. */
 export const setTerminalOverride = (
@@ -105,7 +105,7 @@ export const setTerminalOverride = (
   feature: string,
   enabled: boolean,
 ): Promise<void> =>
-  invoke<void>('set_terminal_override', { userId, terminalId, feature, enabled });
+  loggedInvoke<void>('set_terminal_override', { userId, terminalId, feature, enabled });
 
 /** Set terminal override (scoped — ADR #7). */
 export const setTerminalOverrideScoped = (
@@ -114,7 +114,7 @@ export const setTerminalOverrideScoped = (
   feature: string,
   enabled: boolean,
 ): Promise<void> =>
-  invoke<void>('set_terminal_override_scoped', { sessionToken, terminalId, feature, enabled });
+  loggedInvoke<void>('set_terminal_override_scoped', { sessionToken, terminalId, feature, enabled });
 
 /** Remove a feature override from a terminal. */
 export const deleteTerminalOverride = (
@@ -122,7 +122,7 @@ export const deleteTerminalOverride = (
   terminalId: string,
   feature: string,
 ): Promise<void> =>
-  invoke<void>('delete_terminal_override', { userId, terminalId, feature });
+  loggedInvoke<void>('delete_terminal_override', { userId, terminalId, feature });
 
 /** Delete terminal override (scoped — ADR #7). */
 export const deleteTerminalOverrideScoped = (
@@ -130,7 +130,7 @@ export const deleteTerminalOverrideScoped = (
   terminalId: string,
   feature: string,
 ): Promise<void> =>
-  invoke<void>('delete_terminal_override_scoped', { sessionToken, terminalId, feature });
+  loggedInvoke<void>('delete_terminal_override_scoped', { sessionToken, terminalId, feature });
 
 // ── Terminal Profiles ───────────────────────────────────────────────
 
@@ -146,14 +146,14 @@ export interface TerminalProfileDto {
 export const getTerminalProfile = (
   terminalId: string,
 ): Promise<TerminalProfileDto | null> =>
-  invoke<TerminalProfileDto | null>('get_terminal_profile', { terminalId });
+  loggedInvoke<TerminalProfileDto | null>('get_terminal_profile', { terminalId });
 
 /** Get terminal profile (scoped — ADR #7). */
 export const getTerminalProfileScoped = (
   sessionToken: string,
   terminalId: string,
 ): Promise<TerminalProfileDto | null> =>
-  invoke<TerminalProfileDto | null>('get_terminal_profile_scoped', { sessionToken, terminalId });
+  loggedInvoke<TerminalProfileDto | null>('get_terminal_profile_scoped', { sessionToken, terminalId });
 
 /** Set or update a terminal's profile. */
 export const setTerminalProfile = (
@@ -162,7 +162,7 @@ export const setTerminalProfile = (
   profileType: string,
   lockedScreen: string | null,
 ): Promise<void> =>
-  invoke<void>('set_terminal_profile', {
+  loggedInvoke<void>('set_terminal_profile', {
     userId,
     args: { terminalId, profileType, lockedScreen },
   });
@@ -174,32 +174,32 @@ export const setTerminalProfileScoped = (
   profileType: string,
   lockedScreen: string | null,
 ): Promise<void> =>
-  invoke<void>('set_terminal_profile_scoped', {
+  loggedInvoke<void>('set_terminal_profile_scoped', {
     sessionToken,
     args: { terminalId, profileType, lockedScreen },
   });
 
 /** List all terminal profiles. */
 export const listTerminalProfiles = (): Promise<TerminalProfileDto[]> =>
-  invoke<TerminalProfileDto[]>('list_terminal_profiles');
+  loggedInvoke<TerminalProfileDto[]>('list_terminal_profiles');
 
 /** List terminal profiles (scoped — ADR #7). */
 export const listTerminalProfilesScoped = (sessionToken: string): Promise<TerminalProfileDto[]> =>
-  invoke<TerminalProfileDto[]>('list_terminal_profiles_scoped', { sessionToken });
+  loggedInvoke<TerminalProfileDto[]>('list_terminal_profiles_scoped', { sessionToken });
 
 /** Delete a terminal's profile. */
 export const deleteTerminalProfile = (
   userId: string,
   terminalId: string,
 ): Promise<void> =>
-  invoke<void>('delete_terminal_profile', { userId, terminalId });
+  loggedInvoke<void>('delete_terminal_profile', { userId, terminalId });
 
 /** Delete terminal profile (scoped — ADR #7). */
 export const deleteTerminalProfileScoped = (
   sessionToken: string,
   terminalId: string,
 ): Promise<void> =>
-  invoke<void>('delete_terminal_profile_scoped', { sessionToken, terminalId });
+  loggedInvoke<void>('delete_terminal_profile_scoped', { sessionToken, terminalId });
 
 // ── Device Binding (ADR #4 Phase 3) ────────────────────────────────
 
@@ -213,11 +213,11 @@ export interface DeviceBindingDto {
 
 /** Get a terminal's device binding and validate its HMAC signature. */
 export const getDeviceBinding = (terminalId: string): Promise<DeviceBindingDto> =>
-  invoke<DeviceBindingDto>('get_device_binding', { terminalId });
+  loggedInvoke<DeviceBindingDto>('get_device_binding', { terminalId });
 
 /** Get device binding (scoped — ADR #7). */
 export const getDeviceBindingScoped = (sessionToken: string, terminalId: string): Promise<DeviceBindingDto> =>
-  invoke<DeviceBindingDto>('get_device_binding_scoped', { sessionToken, terminalId });
+  loggedInvoke<DeviceBindingDto>('get_device_binding_scoped', { sessionToken, terminalId });
 
 /** Set (or update) a terminal's device binding with HMAC signature. */
 export const setDeviceBinding = (
@@ -226,7 +226,7 @@ export const setDeviceBinding = (
   boundStoreId: string,
   boundInstanceId: string,
 ): Promise<void> =>
-  invoke<void>('set_device_binding', {
+  loggedInvoke<void>('set_device_binding', {
     userId,
     args: { terminalId, boundStoreId, boundInstanceId },
   });
@@ -238,7 +238,7 @@ export const setDeviceBindingScoped = (
   boundStoreId: string,
   boundInstanceId: string,
 ): Promise<void> =>
-  invoke<void>('set_device_binding_scoped', {
+  loggedInvoke<void>('set_device_binding_scoped', {
     sessionToken,
     args: { terminalId, boundStoreId, boundInstanceId },
   });
@@ -248,11 +248,11 @@ export const clearDeviceBinding = (
   userId: string,
   terminalId: string,
 ): Promise<void> =>
-  invoke<void>('clear_device_binding', { userId, terminalId });
+  loggedInvoke<void>('clear_device_binding', { userId, terminalId });
 
 /** Clear device binding (scoped — ADR #7). */
 export const clearDeviceBindingScoped = (
   sessionToken: string,
   terminalId: string,
 ): Promise<void> =>
-  invoke<void>('clear_device_binding_scoped', { sessionToken, terminalId });
+  loggedInvoke<void>('clear_device_binding_scoped', { sessionToken, terminalId });

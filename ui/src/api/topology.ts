@@ -3,7 +3,7 @@
 // serialises nodes + wires as JSON and stores them in the settings
 // table under the key `oz-pos/topology`.
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A single node in the topology graph. */
 export interface TopologyNodePayload {
@@ -40,8 +40,8 @@ export interface TopologyData {
 export const saveTopology = (
   nodes: TopologyNodePayload[],
   wires: TopologyWirePayload[],
-): Promise<void> => invoke('save_topology', { nodes, wires });
+): Promise<void> => loggedInvoke('save_topology', { nodes, wires });
 
 /** Load the persisted topology graph, or `null` if none saved yet. */
 export const loadTopology = (): Promise<TopologyData | null> =>
-  invoke<TopologyData | null>('load_topology');
+  loggedInvoke<TopologyData | null>('load_topology');

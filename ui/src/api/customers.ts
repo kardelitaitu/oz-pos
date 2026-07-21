@@ -1,6 +1,6 @@
 // ── Customers: CRUD ───────────────────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A customer record. */
 export interface CustomerDto {
@@ -34,20 +34,20 @@ export interface UpdateCustomerArgs {
 
 /** List all customers. */
 export const listCustomers = (): Promise<CustomerDto[]> =>
-  invoke<CustomerDto[]>('list_customers');
+  loggedInvoke<CustomerDto[]>('list_customers');
 
 /** Get a single customer by their identifier. */
 export const getCustomer = (id: string): Promise<CustomerDto | null> =>
-  invoke<CustomerDto | null>('get_customer', { id });
+  loggedInvoke<CustomerDto | null>('get_customer', { id });
 
 /** Create a new customer. */
 export const createCustomer = (args: CreateCustomerArgs): Promise<CustomerDto> =>
-  invoke<CustomerDto>('create_customer', { args });
+  loggedInvoke<CustomerDto>('create_customer', { args });
 
 /** Update an existing customer. */
 export const updateCustomer = (args: UpdateCustomerArgs): Promise<CustomerDto> =>
-  invoke<CustomerDto>('update_customer', { args });
+  loggedInvoke<CustomerDto>('update_customer', { args });
 
 /** Delete a customer by their identifier. */
 export const deleteCustomer = (args: { userId: string; id: string }): Promise<void> =>
-  invoke('delete_customer', { args });
+  loggedInvoke('delete_customer', { args });

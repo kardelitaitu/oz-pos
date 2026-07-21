@@ -1,6 +1,6 @@
 // ── Brand / White-label API ───────────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** Brand and white-label settings for the store. */
 export interface BrandSettings {
@@ -11,20 +11,20 @@ export interface BrandSettings {
 
 /** Get the current brand settings. */
 export const getBrandSettings = (): Promise<BrandSettings> =>
-  invoke<BrandSettings>('get_brand_settings');
+  loggedInvoke<BrandSettings>('get_brand_settings');
 
 /** Set the brand primary colour. */
 export const setBrandPrimaryColour = (colour: string): Promise<void> =>
-  invoke<void>('set_brand_primary_colour', { colour });
+  loggedInvoke<void>('set_brand_primary_colour', { colour });
 
 /** Set the brand logo file path. */
 export const setBrandLogoPath = (path: string): Promise<void> =>
-  invoke<void>('set_brand_logo_path', { path });
+  loggedInvoke<void>('set_brand_logo_path', { path });
 
 /** Set the store display name for branding. */
 export const setBrandStoreName = (name: string): Promise<void> =>
-  invoke<void>('set_brand_store_name', { name });
+  loggedInvoke<void>('set_brand_store_name', { name });
 
 /** Open a file picker dialog to select a logo image. Returns the chosen path or null. */
 export const pickLogoFile = (): Promise<string | null> =>
-  invoke<string | null>('pick_logo_file');
+  loggedInvoke<string | null>('pick_logo_file');

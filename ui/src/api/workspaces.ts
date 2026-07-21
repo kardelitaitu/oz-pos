@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 // ── Workspace Instance DTO (ADR #4 Phase 1) ────────────────────────────
 
@@ -70,7 +70,7 @@ export interface BootResolution {
 export async function resolveBootStore(
   deviceId?: string,
 ): Promise<BootResolution> {
-  return invoke<BootResolution>('resolve_boot_store', { deviceId: deviceId ?? null });
+  return loggedInvoke<BootResolution>('resolve_boot_store', { deviceId: deviceId ?? null });
 }
 
 // ── Scoped Commands (ADR #7) ───────────────────────────────────────────
@@ -79,7 +79,7 @@ export async function resolveBootStore(
 export async function listWorkspacesScoped(
   sessionToken: string,
 ): Promise<WorkspaceDto[]> {
-  return invoke<WorkspaceDto[]>('list_workspaces_scoped', { sessionToken });
+  return loggedInvoke<WorkspaceDto[]>('list_workspaces_scoped', { sessionToken });
 }
 
 /** Get a single workspace instance. `is_default` reflects the session user. ADR #7. */
@@ -87,7 +87,7 @@ export async function getWorkspaceInstanceScoped(
   sessionToken: string,
   instanceId: string,
 ): Promise<WorkspaceDto> {
-  return invoke<WorkspaceDto>('get_workspace_instance_scoped', { sessionToken, instanceId });
+  return loggedInvoke<WorkspaceDto>('get_workspace_instance_scoped', { sessionToken, instanceId });
 }
 
 /** Create a new workspace instance (admin). Permission from session. ADR #7. */
@@ -95,7 +95,7 @@ export async function createWorkspaceInstanceScoped(
   sessionToken: string,
   req: CreateInstanceRequest,
 ): Promise<WorkspaceDto> {
-  return invoke<WorkspaceDto>('create_workspace_instance_scoped', { sessionToken, req });
+  return loggedInvoke<WorkspaceDto>('create_workspace_instance_scoped', { sessionToken, req });
 }
 
 /** List screens for a workspace type from the store-scoped database. ADR #7. */
@@ -103,7 +103,7 @@ export async function listWorkspaceScreensScoped(
   sessionToken: string,
   typeKey: string,
 ): Promise<WorkspaceScreenDto[]> {
-  return invoke<WorkspaceScreenDto[]>('list_workspace_screens_scoped', { sessionToken, typeKey });
+  return loggedInvoke<WorkspaceScreenDto[]>('list_workspace_screens_scoped', { sessionToken, typeKey });
 }
 
 /** Replace all instance assignments for a user. Caller permission from session. ADR #7. */
@@ -113,7 +113,7 @@ export async function setUserWorkspaceInstancesScoped(
   instanceIds: string[],
   defaultInstanceId?: string,
 ): Promise<void> {
-  return invoke<void>('set_user_workspace_instances_scoped', {
+  return loggedInvoke<void>('set_user_workspace_instances_scoped', {
     sessionToken,
     userId,
     instanceIds,
@@ -126,7 +126,7 @@ export async function getUserWorkspaceInstancesScoped(
   sessionToken: string,
   userId: string,
 ): Promise<string[]> {
-  return invoke<string[]>('get_user_workspace_instances_scoped', { sessionToken, userId });
+  return loggedInvoke<string[]>('get_user_workspace_instances_scoped', { sessionToken, userId });
 }
 
 // ── Original Commands (deprecated for multi-store — ADR #7) ────────────
@@ -140,7 +140,7 @@ export async function listWorkspaces(
   storeId: string,
   userId?: string,
 ): Promise<WorkspaceDto[]> {
-  return invoke<WorkspaceDto[]>('list_workspaces', {
+  return loggedInvoke<WorkspaceDto[]>('list_workspaces', {
     roleId,
     storeId,
     userId: userId ?? null,
@@ -155,7 +155,7 @@ export async function getWorkspaceInstance(
   instanceId: string,
   userId?: string,
 ): Promise<WorkspaceDto> {
-  return invoke<WorkspaceDto>('get_workspace_instance', {
+  return loggedInvoke<WorkspaceDto>('get_workspace_instance', {
     instanceId,
     userId: userId ?? null,
   });
@@ -169,7 +169,7 @@ export async function createWorkspaceInstance(
   req: CreateInstanceRequest,
   callerUserId: string,
 ): Promise<WorkspaceDto> {
-  return invoke<WorkspaceDto>('create_workspace_instance', {
+  return loggedInvoke<WorkspaceDto>('create_workspace_instance', {
     req,
     callerUserId,
   });
@@ -182,7 +182,7 @@ export async function createWorkspaceInstance(
 export async function listWorkspaceScreens(
   typeKey: string,
 ): Promise<WorkspaceScreenDto[]> {
-  return invoke<WorkspaceScreenDto[]>('list_workspace_screens', {
+  return loggedInvoke<WorkspaceScreenDto[]>('list_workspace_screens', {
     typeKey,
   });
 }
@@ -199,7 +199,7 @@ export async function setUserWorkspaceInstances(
   callerUserId: string,
   defaultInstanceId?: string,
 ): Promise<void> {
-  return invoke<void>('set_user_workspace_instances', {
+  return loggedInvoke<void>('set_user_workspace_instances', {
     userId,
     instanceIds,
     defaultInstanceId: defaultInstanceId ?? null,
@@ -214,7 +214,7 @@ export async function setUserWorkspaceInstances(
 export async function getUserWorkspaceInstances(
   userId: string,
 ): Promise<string[]> {
-  return invoke<string[]>('get_user_workspace_instances', { userId });
+  return loggedInvoke<string[]>('get_user_workspace_instances', { userId });
 }
 
 // ── Legacy Commands (backward compatible, deprecated) ──────────────────
@@ -226,14 +226,14 @@ export async function getUserWorkspaceInstances(
 export async function listAllWorkspaces(
   userId: string,
 ): Promise<WorkspaceTypeDto[]> {
-  return invoke<WorkspaceTypeDto[]>('list_all_workspaces', { userId });
+  return loggedInvoke<WorkspaceTypeDto[]>('list_all_workspaces', { userId });
 }
 
 /** List all workspace types (scoped — ADR #7). */
 export async function listAllWorkspacesScoped(
   sessionToken: string,
 ): Promise<WorkspaceTypeDto[]> {
-  return invoke<WorkspaceTypeDto[]>('list_all_workspaces_scoped', { sessionToken });
+  return loggedInvoke<WorkspaceTypeDto[]>('list_all_workspaces_scoped', { sessionToken });
 }
 
 /**
@@ -245,7 +245,7 @@ export async function setUserWorkspaces(
   workspaceKeys: string[],
   callerUserId: string,
 ): Promise<void> {
-  return invoke<void>('set_user_workspaces', {
+  return loggedInvoke<void>('set_user_workspaces', {
     userId,
     workspaceKeys,
     callerUserId,
@@ -258,7 +258,7 @@ export async function setUserWorkspacesScoped(
   userId: string,
   workspaceKeys: string[],
 ): Promise<void> {
-  return invoke<void>('set_user_workspaces_scoped', { sessionToken, userId, workspaceKeys });
+  return loggedInvoke<void>('set_user_workspaces_scoped', { sessionToken, userId, workspaceKeys });
 }
 
 /**
@@ -266,7 +266,7 @@ export async function setUserWorkspacesScoped(
  * Get workspace keys assigned to a user.
  */
 export async function getUserWorkspaces(userId: string): Promise<string[]> {
-  return invoke<string[]>('get_user_workspaces', { userId });
+  return loggedInvoke<string[]>('get_user_workspaces', { userId });
 }
 
 /** Get workspace keys for a user (legacy), caller from session. ADR #7. */
@@ -274,5 +274,5 @@ export async function getUserWorkspacesScoped(
   sessionToken: string,
   userId: string,
 ): Promise<string[]> {
-  return invoke<string[]>('get_user_workspaces_scoped', { sessionToken, userId });
+  return loggedInvoke<string[]>('get_user_workspaces_scoped', { sessionToken, userId });
 }

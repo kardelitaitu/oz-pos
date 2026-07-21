@@ -1,6 +1,6 @@
 // ── Tax Rates ──────────────────────────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A tax rate definition in basis points. */
 export interface TaxRateDto {
@@ -55,31 +55,31 @@ export const computeCartTax = (
   lines: CartLineTaxInput[],
   currency: string,
 ): Promise<number> =>
-  invoke<number>('compute_cart_tax', { lines, currency });
+  loggedInvoke<number>('compute_cart_tax', { lines, currency });
 
 /** List all tax rates. */
 export const listTaxRates = (): Promise<TaxRateDto[]> =>
-  invoke<TaxRateDto[]>('list_tax_rates');
+  loggedInvoke<TaxRateDto[]>('list_tax_rates');
 
 /** Create a new tax rate. */
 export const createTaxRate = (args: CreateTaxRateArgs): Promise<TaxRateDto> =>
-  invoke<TaxRateDto>('create_tax_rate', { args });
+  loggedInvoke<TaxRateDto>('create_tax_rate', { args });
 
 /** Update an existing tax rate. */
 export const updateTaxRate = (args: UpdateTaxRateArgs): Promise<TaxRateDto> =>
-  invoke<TaxRateDto>('update_tax_rate', { args });
+  loggedInvoke<TaxRateDto>('update_tax_rate', { args });
 
 /** Delete a tax rate by its identifier. */
 export const deleteTaxRate = (id: string): Promise<void> =>
-  invoke('delete_tax_rate', { id });
+  loggedInvoke('delete_tax_rate', { id });
 
 /** List all category-to-tax-rate assignments. */
 export const listCategoryTaxRates = (): Promise<CategoryTaxRateRow[]> =>
-  invoke<CategoryTaxRateRow[]>('list_category_tax_rates');
+  loggedInvoke<CategoryTaxRateRow[]>('list_category_tax_rates');
 
 /** Set the tax rates assigned to a product category. */
 export const setCategoryTaxRates = (args: SetCategoryTaxRatesArgs): Promise<void> =>
-  invoke<void>('set_category_tax_rates', {
+  loggedInvoke<void>('set_category_tax_rates', {
     args: {
       category_id: args.categoryId,
       tax_rate_ids: args.taxRateIds,

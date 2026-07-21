@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A stock transfer between locations or terminals. */
 export interface StockTransfer {
@@ -50,7 +50,7 @@ export const createStockTransfer = (
   createdBy: string,
   lines: StockTransferLine[],
 ): Promise<StockTransfer> =>
-  invoke<StockTransfer>('create_stock_transfer', {
+  loggedInvoke<StockTransfer>('create_stock_transfer', {
     sourceLocation,
     destinationLocation,
     sourceTerminalId,
@@ -62,15 +62,15 @@ export const createStockTransfer = (
 
 /** Get a single stock transfer by its identifier. */
 export const getStockTransfer = (id: string): Promise<TransferWithLines | null> =>
-  invoke<TransferWithLines | null>('get_stock_transfer', { id });
+  loggedInvoke<TransferWithLines | null>('get_stock_transfer', { id });
 
 /** List all stock transfers. */
 export const listStockTransfers = (): Promise<StockTransfer[]> =>
-  invoke<StockTransfer[]>('list_stock_transfers');
+  loggedInvoke<StockTransfer[]>('list_stock_transfers');
 
 /** Get all line items for a stock transfer. */
 export const getStockTransferLines = (transferId: string): Promise<StockTransferLine[]> =>
-  invoke<StockTransferLine[]>('get_stock_transfer_lines', { transferId });
+  loggedInvoke<StockTransferLine[]>('get_stock_transfer_lines', { transferId });
 
 /** Add a line item to a stock transfer. */
 export const addStockTransferLine = (
@@ -79,7 +79,7 @@ export const addStockTransferLine = (
   productName: string,
   qty: number,
 ): Promise<StockTransferLine> =>
-  invoke<StockTransferLine>('add_stock_transfer_line', {
+  loggedInvoke<StockTransferLine>('add_stock_transfer_line', {
     transferId,
     sku,
     productName,
@@ -88,11 +88,11 @@ export const addStockTransferLine = (
 
 /** Remove a line item from a stock transfer. */
 export const removeStockTransferLine = (lineId: string): Promise<void> =>
-  invoke<void>('remove_stock_transfer_line', { lineId });
+  loggedInvoke<void>('remove_stock_transfer_line', { lineId });
 
 /** Mark a stock transfer as sent (dispatched from source). */
 export const sendStockTransfer = (id: string): Promise<StockTransfer> =>
-  invoke<StockTransfer>('send_stock_transfer', { id });
+  loggedInvoke<StockTransfer>('send_stock_transfer', { id });
 
 /** Mark a stock transfer as received, updating quantities for each line. */
 export const receiveStockTransfer = (
@@ -100,8 +100,8 @@ export const receiveStockTransfer = (
   receivedBy: string,
   receivedLines: ReceivedLineInput[],
 ): Promise<StockTransfer> =>
-  invoke<StockTransfer>('receive_stock_transfer', { id, receivedBy, receivedLines });
+  loggedInvoke<StockTransfer>('receive_stock_transfer', { id, receivedBy, receivedLines });
 
 /** Cancel a stock transfer. */
 export const cancelStockTransfer = (id: string): Promise<StockTransfer> =>
-  invoke<StockTransfer>('cancel_stock_transfer', { id });
+  loggedInvoke<StockTransfer>('cancel_stock_transfer', { id });

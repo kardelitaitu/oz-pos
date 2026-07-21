@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** Daily revenue aggregate for a date range. */
 export interface DailyRevenueRow {
@@ -61,31 +61,31 @@ export interface CategoryBreakdownRow {
 
 /** Get daily revenue aggregates for a date range. */
 export const getDailyRevenue = (startDate: string, endDate: string): Promise<DailyRevenueRow[]> =>
-  invoke<DailyRevenueRow[]>('get_daily_revenue', { startDate, endDate });
+  loggedInvoke<DailyRevenueRow[]>('get_daily_revenue', { startDate, endDate });
 
 /** Get weekly revenue aggregates for a date range. */
 export const getWeeklyRevenue = (startDate: string, endDate: string): Promise<WeeklyRevenueRow[]> =>
-  invoke<WeeklyRevenueRow[]>('get_weekly_revenue', { startDate, endDate });
+  loggedInvoke<WeeklyRevenueRow[]>('get_weekly_revenue', { startDate, endDate });
 
 /** Get monthly revenue aggregates for a date range. */
 export const getMonthlyRevenue = (startDate: string, endDate: string): Promise<MonthlyRevenueRow[]> =>
-  invoke<MonthlyRevenueRow[]>('get_monthly_revenue', { startDate, endDate });
+  loggedInvoke<MonthlyRevenueRow[]>('get_monthly_revenue', { startDate, endDate });
 
 /** Get top-selling products for a date range, limited to a given count. */
 export const getTopProducts = (startDate: string, endDate: string, limit: number): Promise<TopProductRow[]> =>
-  invoke<TopProductRow[]>('get_top_products', { startDate, endDate, limit });
+  loggedInvoke<TopProductRow[]>('get_top_products', { startDate, endDate, limit });
 
 /** Get hourly sales heatmap data for a date range. */
 export const getHourlyHeatmap = (startDate: string, endDate: string): Promise<HourlyHeatmapRow[]> =>
-  invoke<HourlyHeatmapRow[]>('get_hourly_heatmap', { startDate, endDate });
+  loggedInvoke<HourlyHeatmapRow[]>('get_hourly_heatmap', { startDate, endDate });
 
 /** Get products with stock levels below a given threshold. */
 export const getLowStockAlerts = (threshold: number): Promise<LowStockAlert[]> =>
-  invoke<LowStockAlert[]>('get_low_stock_alerts', { threshold });
+  loggedInvoke<LowStockAlert[]>('get_low_stock_alerts', { threshold });
 
 /** Get sales breakdown by product category for a date range. */
 export const getCategoryBreakdown = (startDate: string, endDate: string): Promise<CategoryBreakdownRow[]> =>
-  invoke<CategoryBreakdownRow[]>('get_category_breakdown', { startDate, endDate });
+  loggedInvoke<CategoryBreakdownRow[]>('get_category_breakdown', { startDate, endDate });
 
 /** A single product row in the menu engineering report. */
 export interface MenuEngineeringRow {
@@ -115,7 +115,7 @@ export const getMenuEngineering = (
   startDate: string,
   endDate: string,
 ): Promise<MenuEngineeringResult> =>
-  invoke<MenuEngineeringResult>('get_menu_engineering', {
+  loggedInvoke<MenuEngineeringResult>('get_menu_engineering', {
     startDate,
     endDate,
   });
@@ -140,4 +140,4 @@ export interface CustomReportResponse {
 export const buildCustomReport = (
   request: CustomReportRequest,
 ): Promise<CustomReportResponse> =>
-  invoke<CustomReportResponse>('build_custom_report', { request });
+  loggedInvoke<CustomReportResponse>('build_custom_report', { request });
