@@ -499,7 +499,7 @@ export default function PaymentModal({
 
       setDone(true);
     } catch (err) {
-      console.error('QR payment failed:', err instanceof Error ? err.message : err);
+      console.error('QR payment failed:', err);
       const classified = classifyError(err);
       setPaymentError(classified);
     } finally {
@@ -538,11 +538,13 @@ export default function PaymentModal({
 
   const splitComplete = useMemo(() => {
     if (splitTotals.remaining !== 0n) return false;
+    // Zero-amount sale: empty splits are acceptable
+    if (effectiveTotal === 0n) return true;
     return splits.every((s) => {
       if (s.method === 'other' && !s.otherLabel.trim()) return false;
       return parseSplitMinor(s.amountMinor) > 0n;
     });
-  }, [splits, splitTotals, parseSplitMinor]);
+  }, [splits, splitTotals, parseSplitMinor, effectiveTotal]);
 
   const addSplit = useCallback(() => {
     setSplits((prev) => [
@@ -800,7 +802,7 @@ export default function PaymentModal({
       if (change) setChangeDue(change);
       setDone(true);
     } catch (err) {
-      console.error('[Sale] Complete FAILED:', err instanceof Error ? err.message : err);
+      console.error('[Sale] Complete FAILED:', err);
       // Try to detect PartialStockResult from the backend error
       const errMsg = err instanceof Error ? err.message : String(err);
       const parsed = tryParsePartialStockResult(errMsg);
