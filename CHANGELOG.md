@@ -4,14 +4,58 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-> **Note on version numbering:** During the 0.0.18–0.0.23 rescue sprints, some
-> entries were re-cut under an already-used version number (e.g. `0.0.21` and
-> `0.0.20` each appear twice; the original `0.0.20` content is preserved under
-> `0.0.20-original`). The entries are distinct content, not duplicates — the
-> collision is a release-bookkeeping artifact, not lost history. Future releases
-> should use strictly increasing, unique version numbers.
+## [0.0.18] — 2026-07-22
 
-## [0.0.23] — 2026-07-22
+### Added
+
+> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
+
+### Fixed
+
+- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
+
+---
+
+
+
+### Fixed
+
+#### 🎯 Final Code Health Milestone — Zero Pre-existing Issues
+
+After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are now completely clean.
+
+#### P250 — Remaining Test Failure Rescue (8 tests across 2 files)
+- **PurchaseOrderForm.test.tsx** (4/4): Root cause was async supplier load not waited for before `selectOption()`. Added `await vi.waitFor()` before each of 4 supplier-dependent tests. 17/17 passing.
+- **TerminalStatusPanel.test.tsx** (4/4): Root cause was Fluent `{ $n }` variable interpolation failing in JSDOM. Fixed by mocking `@fluent/react` — `Localized` renders children directly, `useLocalization().l10n.getString()` returns fallback English text with bracket-notation variable access (`args?.['n']`). Stable `l10n` object via `vi.hoisted` prevents extra effect triggers. 16/16 passing, TypeScript clean.
+
+#### P251 — Clippy Error Resolution (4 errors)
+- **topology.rs**: Replaced 2× `3.14` with `std::f64::consts::PI` (approx_constant). Collapsed nested 3-level `if let` chain into single `if let ... && let ... && ...` using Rust let-chains (collapsible_if).
+
+#### 📊 Cumulative Impact (0.0.22 → 0.0.25)
+| Gate | 0.0.22 Start | 0.0.25 End |
+|------|-------------|------------|
+| Vitest failures | 113 | **0** ✅ |
+| ESLint errors+warnings | 4 | **0** ✅ |
+| Clippy errors | 5 | **0** ✅ |
+| TypeScript errors | 0 | **0** ✅ |
+| **Total pre-existing** | **122** | **0** 🎉 |
+
+---
+
+
+
+### Added
+
+#### 🟢 P240 — Full Gate Pipeline Verification
+- **Manual gate check**: Ran `cargo fmt --all --check` (clean), `cargo clippy --workspace --all-targets -- -D warnings` (4 pre-existing in test code), `npm run typecheck` (0 errors), `npm run lint` (0/0), `npx vitest run` (8 failed / 2,918 passed — pre-existing Fluent+JSDOM edge cases).
+- **Gate state documented**: 12 total pre-existing issues (4 clippy + 8 vitest), all in test code, 0 in production.
+
+#### 🔴 P241 — CHANGELOG Backfill
+- Added comprehensive 0.0.23 entry documenting 25 tests rescued, 1 clippy error fixed, and cumulative 113→8 vitest failures (93% reduction) across 0.0.22–0.0.23.
+
+---
+
+
 
 ### Fixed
 
@@ -32,7 +76,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.0.22] — 2026-07-22
+
 
 ### Fixed
 
@@ -54,7 +98,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.0.21] — 2026-07-22
+
 
 ### Added
 
@@ -67,15 +111,89 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.0.18] — 2026-07-22
+
+
+### Changed
+
+#### ⚡ Performance Optimization Sprint (P100-P103)
+- **P100 — Bundle low-hanging fruit**: Scanned all heavy components for large deps. Only `fuse.js` (~10KB) found. Zero dead code or empty comment blocks. ESLint confirmed zero unused imports across all `src/`.
+- **P101 — React render optimization**: Heavy components already well-memoized (10-18 `memo`/`useCallback`/`useMemo` per component). No additional wrapping needed.
+- **P102 — Unused import cleanup**: ESLint across all `src/` — zero unused imports, zero `no-console`, zero `no-debugger` violations.
+- **P103 — CSS selector audit**: No significant CSS duplication across feature files.
+
+---
+
+
 
 ### Added
 
-> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
+#### 🔴 P201 — Error Handling Polish
+- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
+- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
+- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
+- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
 
 ### Fixed
 
-- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
+#### 🟢 P200 — A11y Bug Fixes
+- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
+- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
+
+#### 🟡 P202 — Final Cleanup
+- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
+- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
+
+---
+
+
+
+### Fixed
+
+#### 🧪 Bug Bash & Flaky Test Fixes (P90-P93)
+- **P90-1: Flaky `windows_overwrite_existing` test**: Added unique test name via `process::id()` and `std::thread::sleep(10ms)` between rapid Credential Manager writes to prevent race conditions.
+- **P91-1: StaffLoginKeyboard lockout test**: Replaced `it.skip` with real test — verifies lockout message appears and digit buttons are disabled during lockout.
+- **P92-1: Drag-to-reorder test rehomed**: Moved `describe.skip` block from SettingsNavTree.test.tsx to SettingsPage.test.tsx (where the logic actually lives).
+- **P93-1: AppShell skipped tests**: Verified 2 conditionally-skipped tests (KDS kiosk, dev-mode) are intentional.
+
+---
+
+
+
+### Changed
+
+#### 🔴 P80 — Type Safety Audit
+- **P80-1: `useOrientation.ts` `as any` → typed interface**: Replaced `(window.screen as any).orientation` with `ScreenOrientationAPI` interface + proper intersection assertion.
+- **P80-2: Remaining `as any` audit**: No `as any` or `@ts-ignore` found in production ts/tsx files.
+
+#### 🔵 P81 — CSS !important Hygiene
+- **P81-1/2/3**: Cataloged 50 `!important` decls across 15 CSS files. Removed 19 unnecessary `!important` (using specificity/source-order instead). Kept 33 intentional declarations (hardware accel, autofill, reduced motion, responsive utilities).
+
+#### 🟢 P82 — Console.warn Consistency
+- **P82-1/2/3**: Audited 8 `console.warn` calls. All use consistent `[Context]` format and include error objects. No PII or secrets logged.
+
+### Changed
+
+#### 🏗️ Settings Sidebar
+- **Accordion logic repaired**: Converted strict accordion to a multi-expandable list, resolving UX issues where categories abruptly closed.
+- **Search Auto-Expand**: Categories now automatically expand when searching, ensuring matched results are visible immediately.
+- **Removed "Recent" category**: Removed the drag-and-drop recent sections list to simplify navigation.
+- **Max-height clipping fix**: Increased CSS max-height transition limit to `60rem` to prevent long categories (e.g., Management) from clipping at the bottom.
+
+#### 🔒 Rate Limiting UX
+- **Backend Lockout Sync**: Both `StaffLoginScreen` and `SessionLockScreen` now parse the precise `retry_after` penalty timer directly from backend errors.
+- **Lockout UI Consistency**: Added physical "shake" animations, disabled keypad states, and a red `AlertIcon` countdown box (`Wait Xs.`) to the autolock screen to match the login flow.
+
+### Fixed
+
+#### 🌐 Workspace Topology Editor
+- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
+- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
+- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
+
+#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
+
+- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
+- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
 
 ---
 
@@ -150,91 +268,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.0.21] — 2026-07-21
-
-### Changed
-
-#### ⚡ Performance Optimization Sprint (P100-P103)
-- **P100 — Bundle low-hanging fruit**: Scanned all heavy components for large deps. Only `fuse.js` (~10KB) found. Zero dead code or empty comment blocks. ESLint confirmed zero unused imports across all `src/`.
-- **P101 — React render optimization**: Heavy components already well-memoized (10-18 `memo`/`useCallback`/`useMemo` per component). No additional wrapping needed.
-- **P102 — Unused import cleanup**: ESLint across all `src/` — zero unused imports, zero `no-console`, zero `no-debugger` violations.
-- **P103 — CSS selector audit**: No significant CSS duplication across feature files.
-
----
-
-## [0.0.20] — 2026-07-22
-
-### Added
-
-#### 🔴 P201 — Error Handling Polish
-- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
-- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
-- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
-- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
-
-### Fixed
-
-#### 🟢 P200 — A11y Bug Fixes
-- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
-- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
-
-#### 🟡 P202 — Final Cleanup
-- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
-- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
-
----
-
-## [0.0.20-original] — 2026-07-21
-
-### Fixed
-
-#### 🧪 Bug Bash & Flaky Test Fixes (P90-P93)
-- **P90-1: Flaky `windows_overwrite_existing` test**: Added unique test name via `process::id()` and `std::thread::sleep(10ms)` between rapid Credential Manager writes to prevent race conditions.
-- **P91-1: StaffLoginKeyboard lockout test**: Replaced `it.skip` with real test — verifies lockout message appears and digit buttons are disabled during lockout.
-- **P92-1: Drag-to-reorder test rehomed**: Moved `describe.skip` block from SettingsNavTree.test.tsx to SettingsPage.test.tsx (where the logic actually lives).
-- **P93-1: AppShell skipped tests**: Verified 2 conditionally-skipped tests (KDS kiosk, dev-mode) are intentional.
-
----
-
-## [0.0.19] — 2026-07-21
-
-### Changed
-
-#### 🔴 P80 — Type Safety Audit
-- **P80-1: `useOrientation.ts` `as any` → typed interface**: Replaced `(window.screen as any).orientation` with `ScreenOrientationAPI` interface + proper intersection assertion.
-- **P80-2: Remaining `as any` audit**: No `as any` or `@ts-ignore` found in production ts/tsx files.
-
-#### 🔵 P81 — CSS !important Hygiene
-- **P81-1/2/3**: Cataloged 50 `!important` decls across 15 CSS files. Removed 19 unnecessary `!important` (using specificity/source-order instead). Kept 33 intentional declarations (hardware accel, autofill, reduced motion, responsive utilities).
-
-#### 🟢 P82 — Console.warn Consistency
-- **P82-1/2/3**: Audited 8 `console.warn` calls. All use consistent `[Context]` format and include error objects. No PII or secrets logged.
-
-### Changed
-
-#### 🏗️ Settings Sidebar
-- **Accordion logic repaired**: Converted strict accordion to a multi-expandable list, resolving UX issues where categories abruptly closed.
-- **Search Auto-Expand**: Categories now automatically expand when searching, ensuring matched results are visible immediately.
-- **Removed "Recent" category**: Removed the drag-and-drop recent sections list to simplify navigation.
-- **Max-height clipping fix**: Increased CSS max-height transition limit to `60rem` to prevent long categories (e.g., Management) from clipping at the bottom.
-
-#### 🔒 Rate Limiting UX
-- **Backend Lockout Sync**: Both `StaffLoginScreen` and `SessionLockScreen` now parse the precise `retry_after` penalty timer directly from backend errors.
-- **Lockout UI Consistency**: Added physical "shake" animations, disabled keypad states, and a red `AlertIcon` countdown box (`Wait Xs.`) to the autolock screen to match the login flow.
-
-### Fixed
-
-#### 🌐 Workspace Topology Editor
-- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
-- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
-- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
-
-#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
-
-- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
-- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
-
----
 
 ## [0.0.16] — 2026-07-21
 
@@ -279,6 +312,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **P60-6b: Changelog** — Documented all 0.0.16 settings sidebar changes.
 
 ---
+
 
 ## [0.0.15] — 2026-07-21
 
@@ -355,6 +389,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 
 ---
 
+
 ## [0.0.14] — 2026-07-20
 
 ### Added
@@ -388,6 +423,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **CRDT Sync**: Completed ADR evaluating Automerge/Yrs against the current hybrid LWW approach (decision: retain current LWW model).
 
 ---
+
 
 ## [0.0.13] — 2026-07-20
 
@@ -443,6 +479,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
   - **Maintenance (E2E-31..34)**: Remove all `waitForTimeout`, add `test.step()` annotations, parallel-safe audit, optional E2E gate in `check.ps1`.
 
 ---
+
 
 ## [0.0.12] — 2026-07-19
 
@@ -623,6 +660,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **UI test suite**: ~2,654 → ~2,785 tests (131 new, 5% growth).
 - **All modules ≥20 tests**: 25 Rust modules meet the 20+ test target.
 
+
 ## [0.0.11] — 2026-07-19
 
 ### Added
@@ -709,6 +747,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 
 - **UI Test Suite**: **31 new tests** added across 7 screens, bringing total UI tests to ~2,685+.
 - **Rust Test Suite**: **39 new tests** added across payment, stock transfer, purchase order, cash payout, audit log, and supplier modules.
+
 
 ## [0.0.9] — 2026-07-17
 
@@ -891,6 +930,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **TypeScript errors in changed files**: Fixed `Property 'args' comes from an index signature` (4 sites in CloudSyncSettings.test.tsx) and `FluentVariable` type mismatch in SettingsPage.tsx.
 
 
+
 ## [0.0.8] — 2026-07-15
 
 ### Changed
@@ -928,6 +968,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - `scripts/check.ps1` full run: ~10min → **171.9s (~2.9 min)** (3.5x faster)
 - `scripts/check.sh` full run: ~10min → **166s (~2.8 min)** on Git Bash (3.6x faster)
 - `platform-sync` dev test: 10.5s → **8.1s** (23% faster via slow-tests gating)
+
 
 ## [0.0.7] — 2026-07-15
 
@@ -973,6 +1014,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **UI lint**: Replaced Unicode checkmark with SVG icon in `DataManagementScreen`. Added missing `data-mgmt-tab-icon` CSS class.
 - **TypeScript**: Fixed `consistent-type-imports` errors across 8 files (React imports).
 - **Staff table**: Fixed action cell vertical alignment.
+
 
 ## [0.0.5] — 2026-07-11
 
@@ -1021,6 +1063,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **UI Layout Scaling**: Fixed `LicenseActivationScreen.css` breaking layout severely at high resolutions by converting hardcoded `500px` `max-width` to `31.25rem`.
 - **Desktop client command documentation**: Added missing `///` documentation to 5 desktop client command modules: `bundles.rs`, `gift_cards.rs`, `loyalty.rs`, `plugins.rs`, and `lib.rs`; verified no missing docs warnings in `cargo clippy -- -D warnings`.
 
+
 ## [0.0.4] — 2026-07-10
 
 ### Added
@@ -1065,6 +1108,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **UI lint errors**: Fixed all 17 ESLint errors (no-explicit-any, label-has-associated-control, no-noninteractive-element-interactions, click-events-have-key-events, no-autofocus) across `App.tsx`, 3 test files, `StaffLoginScreen`, `ProductManagementScreen`, `PaymentModal`, `SettingsPage`, `WorkspaceHome`.
 - **UI typecheck errors**: Removed stale `UseTerminalProfileResult` import; fixed `usePosState` scope reference in `RetailPosScreen.test.tsx`.
 
+
 ## [0.0.3] — 2026-06-30
 
 
@@ -1076,6 +1120,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 
 ### Changed
 - **Node.js 24 migration**: Migrated UI build and CI test environments (`ci.yml`, `release.yml`, and `ui/package.json` engines) to **Node.js 24**, aligning with local environments (`check.ps1`) and targeting Active LTS for the 2027 Q2 release window.
+
 
 
 
@@ -1110,6 +1155,7 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 - **Accessibility docs**: `docs/a11y.md` — WCAG 2.1 AA audit checklist, testing tools, target scores.
 - **RTL layout scaffold**: `ui/src/styles/rtl.css` for future Arabic/Hebrew locale support.
 - **Flamegraph docs**: `cargo flamegraph` guide appended to `docs/benchmarks.md`.
+
 
 ## [0.0.1] — 2026-06-28
 
