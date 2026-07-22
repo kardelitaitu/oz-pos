@@ -121,6 +121,9 @@ describe('PurchaseOrderForm', () => {
 
   it('button enables when both PO number and supplier are filled', async () => {
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-001');
     await selectOption(/supplier/i, 'sup-1');
     expect(screen.getByRole('button', { name: /create po/i })).toBeEnabled();
@@ -129,6 +132,9 @@ describe('PurchaseOrderForm', () => {
   it('validates SKU is required on each line', async () => {
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-001');
     await selectOption(/supplier/i, 'sup-1');
     // Leave the default empty SKU line.
@@ -217,6 +223,9 @@ describe('PurchaseOrderForm', () => {
 
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
 
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-001');
     await selectOption(/supplier/i, 'sup-1');
     fillField('SKU', 'SKU-001');
@@ -245,6 +254,9 @@ describe('PurchaseOrderForm', () => {
 
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-FAIL');
     await selectOption(/supplier/i, 'sup-1');
     fillField('SKU', 'SKU-X');

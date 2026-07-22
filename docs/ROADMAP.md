@@ -480,9 +480,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 
 **i18n UI**
 - [x] Language selector in Settings (dropdown in SettingsPage, 3 locales: en/id/th)
-- [x] RTL layout support scaffolded (`ui/src/styles/rtl.css` for future Arabic/Hebrew locales)
+- [ ] RTL layout support — planned (no `ui/src/styles/rtl.css` scaffolded yet); future Arabic/Hebrew locales.
 - [x] All number, date, and currency formats respect `Intl.NumberFormat` with currency style (dashboard/report screens)
-- [x] Full i18n migration: all existing pages use `Localized` instead of hardcoded strings (audited 200+ TSX files, only ThresholdConfigScreen had gaps — fixed in P15-2)
+- [ ] Full i18n migration: all existing pages use `Localized` instead of hardcoded strings. The original 200+ TSX audit (P15-2) landed, but gaps remain — e.g. `EmailReportSettings.tsx` and several labels in `SettingsPage.tsx` still render hardcoded English (not wrapped in `<Localized>`), violating the AGENTS.md i18n rule. Tracked for cleanup.
 
 ### Acceptance Criteria
 - [x] Dashboard loads and renders with real SQLite data

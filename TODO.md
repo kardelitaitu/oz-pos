@@ -1,4 +1,55 @@
-# 0.0.24 — Run Full Pipeline & Final Polish
+# 0.0.25 — Final Code Health: Zero Pre-existing Issues (COMPLETE 🎉)
+
+> **Goal:** Fix the remaining 8 test failures + 4 clippy errors to achieve 0 pre-existing issues across all gates.
+>
+> **Current state:** 3 / 3 items complete (100% 🎉) · Updated 2026-07-22
+
+---
+
+## 📋 Sprint Plan
+
+| # | Area | Items | Status |
+|---|------|-------|--------|
+| 🟢 | Fix Remaining Test Failures | 2 | 2/2 ✅ |
+| 🔴 | Fix Clippy Errors | 1 | 1/1 ✅ |
+| **Total** | | **3** | **3/3 (100% 🎉)** |
+
+---
+
+### 🟢 P250 — Fix Remaining 8 Test Failures ✅
+
+> **Goal:** Fix PurchaseOrderForm (4) + TerminalStatusPanel (4) test failures.
+
+- [x] **P250-1: PurchaseOrderForm.test.tsx** ✅ — Root cause: async supplier load not waited for before `selectOption()`. Added `await vi.waitFor(() => { expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument(); })` before each `selectOption` call in 4 tests. 17/17 pass.
+- [x] **P250-2: TerminalStatusPanel.test.tsx** ✅ — Root cause: Fluent variable interpolation failing in JSDOM (`{ $n }`, `{ $online }`). Fixed by mocking `@fluent/react`: `Localized` renders children directly, `useLocalization().l10n.getString()` returns fallback English text with bracket-notation variable access. Stable `l10n` object via `vi.hoisted` prevents extra effect triggers. 16/16 pass, TypeScript clean.
+
+---
+
+### 🔴 P251 — Fix 4 Pre-existing Clippy Errors ✅
+
+> **Goal:** Fix the remaining 4 clippy errors in oz-pos-app test code.
+
+- [x] **P251-1: Fix clippy errors** ✅ — Fixed all 4 in `apps/desktop-client/src/commands/topology.rs`:
+  - 2 `approx_constant`: `3.14` → `std::f64::consts::PI` (lines 3272, 3290)
+  - 2 `collapsible_if`: Collapsed nested 3-level if-let chain into single `if let ... && let ... && ...` using Rust let-chains (lines 3042-3048)
+
+---
+
+### 📊 Final Gate State (post-0.0.25)
+
+| Gate | Before | After |
+|------|--------|-------|
+| `cargo clippy` | 4 errors | **0 errors** ✅ |
+| `vitest` PurchaseOrderForm | 4 failed | **17/17 pass** ✅ |
+| `vitest` TerminalStatusPanel | 4 failed | **16/16 pass** ✅ |
+| `npm run typecheck` | 0 errors | **0 errors** ✅ |
+| **Total pre-existing** | **12** | **0** 🎉 |
+
+> **Cumulative: 113 → 0 pre-existing vitest failures across 0.0.22–0.0.25 (100% reduction)**
+
+---
+
+# 0.0.24 — Run Full Pipeline & Final Polish (COMPLETE 🎉)
 
 > **Goal:** Run the complete CI pipeline, verify all gates, and plan the next feature sprint.
 >
