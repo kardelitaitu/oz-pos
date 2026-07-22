@@ -222,6 +222,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_license_status': () => ({ is_valid: true, license_type: 'Pro', expires_at: null, is_active: true, status: 'valid', payload: null, message: null }),
   'check_license_status': () => ({ tenantId: 'tenant-1', status: 'active', tier: 'Pro', active: true, expiresAt: null, graceUntil: null, maxStores: 5 }),
   'get_machine_id': () => 'mock-machine-id-001',
+  'get_device_id': () => 'mock-device-id-001',
   'activate_license': () => true,
   'renew_license': () => true,
 
@@ -243,6 +244,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'list_workspaces': () => MOCK_WORKSPACES,
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
+  'list_workspace_screens': () => [],
+  'list_workspace_screens_scoped': () => [],
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
     return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
