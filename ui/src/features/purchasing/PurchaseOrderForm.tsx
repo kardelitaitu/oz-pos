@@ -104,6 +104,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
 
         <div className="po-form-body">
           <div className="po-form-row">
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- input is nested inside label */}
             <label className="po-form-field">
               <Localized id="po-form-po-number-label">
                 <span className="po-form-label">PO Number *</span>

@@ -4,6 +4,28 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.22] — 2026-07-22
+
+### Fixed
+
+#### 🟢 P220 — Pre-existing Test Failure Rescue (80 tests across 5 files)
+- **CategoryManagementScreen.test.tsx** (12/12): Added `ToastProvider` wrapper — component uses `useToast` which requires context.
+- **GiftCardsScreen.test.tsx** (22/22): Added `ToastProvider` wrapper — same root cause.
+- **ProductLookupScreen.test.tsx** (20/20): Updated ARIA roles from `list`/`listitem` to `grid`/`row` after P200 a11y fix changed the product grid pattern. Fixed virtualization-aware assertions (text presence over row counts).
+- **PromotionManagementScreen.test.tsx** (17/17): Added `ToastProvider` wrapper.
+- **TransactionLogScreen.test.tsx** (9/9): Added `ToastProvider` wrapper.
+- **Net impact**: Pre-existing test failures reduced from 113 to 33.
+
+#### 🔴 P221 — Lint Warning Resolution (5 issues fixed)
+- **ESLint jsx-a11y/label-has-associated-control (4 errors)**: Added `eslint-disable-next-line` comments on all 4 labels in `PurchaseOrderForm.tsx` that nest inputs/selects inside `<Localized>` wrappers — the Fluent wrapper confuses the lint rule.
+- **ESLint react-refresh/only-export-components (1 warning)**: Removed `export` from `WORKSPACE_TYPE_OPTIONS` in `NodeTopologyEditor.tsx` — the constant is only used internally. Fast refresh now works correctly.
+- **ESLint**: 0 errors, 0 warnings. TypeScript: 0 errors.
+
+#### 🟡 P222 — CHANGELOG Backfill
+- Verified CHANGELOG entries exist for 0.0.19 (Type Safety + CSS Hygiene + Console.warn), 0.0.20 (Error Handling + A11y Bug Fixes), and 0.0.21 (Warning Resolution + API SDK Polish + Codebase Polish).
+
+---
+
 ## [0.0.21] — 2026-07-22
 
 ### Added

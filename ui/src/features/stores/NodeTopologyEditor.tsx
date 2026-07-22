@@ -75,7 +75,7 @@ export interface NodeTopologyEditorProps {
 }
 
 /** Valid workspace type keys selectable when creating a workspace node. */
-export const WORKSPACE_TYPE_OPTIONS: { key: string; label: string }[] = [
+const WORKSPACE_TYPE_OPTIONS: { key: string; label: string }[] = [
   { key: 'store-pos', label: 'Retail POS' },
   { key: 'restaurant-pos', label: 'Restaurant POS' },
   { key: 'kds', label: 'Kitchen Display (KDS)' },
