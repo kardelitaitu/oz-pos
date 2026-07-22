@@ -112,12 +112,12 @@ mod tests {
     fn version_info_field_access() {
         let v = VersionInfo {
             name: "oz-pos-tablet",
-            version: "0.0.18",
+            version: "0.0.19",
             rust_version: "1.80",
             target: "aarch64-android",
         };
         assert_eq!(v.name, "oz-pos-tablet");
-        assert_eq!(v.version, "0.0.18");
+        assert_eq!(v.version, "0.0.19");
         assert_eq!(v.rust_version, "1.80");
         assert_eq!(v.target, "aarch64-android");
     }

@@ -146,16 +146,76 @@ impl<'a> Store<'a> {
 // ── Backup / Export ────────────────────────────────────────────────────
 
 impl Store<'_> {
+    /// Run `VACUUM INTO` to create a clean, optimized copy of the database.
+    fn vacuum_into(&self, output_path: &str) -> Result<(), rusqlite::Error> {
+        let escaped = output_path.replace('\'', "''");
+        let sql = format!("VACUUM INTO '{escaped}'");
+        self.conn.execute_batch(&sql)
+    }
+
     /// Create a snapshot of the database to a file at `output_path`.
     ///
     /// Uses SQLite's online backup API so the source connection can
     /// remain in use during the copy.
     pub fn backup(&self, output_path: &str) -> Result<(), CoreError> {
-        // VACUUM INTO creates a clean, optimized database snapshot.
-        let escaped = output_path.replace('\'', "''");
-        let sql = format!("VACUUM INTO '{escaped}'");
-        self.conn.execute_batch(&sql)?;
+        self.vacuum_into(output_path)?;
         Ok(())
+    }
+
+    /// Check database integrity using SQLite's `PRAGMA integrity_check`.
+    ///
+    /// Returns `Ok(())` if the database passes all integrity checks.
+    /// Returns `Err(CoreError)` with a detailed message if corruption
+    /// is detected (the error message includes the specific failures
+    /// reported by SQLite).
+    ///
+    /// # Performance
+    ///
+    /// `integrity_check` scans every page in the database. On large
+    /// databases (>1 GB), this may take several seconds. Call this at
+    /// startup or on a background thread, not in a hot path.
+    pub fn check_integrity(&self) -> Result<(), CoreError> {
+        let mut stmt = self.conn.prepare("PRAGMA integrity_check")?;
+
+        let mut errors = Vec::new();
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+
+        for row in rows {
+            let msg = row?;
+            if msg != "ok" {
+                errors.push(msg);
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CoreError::Internal(format!(
+                "database corruption detected: {}",
+                errors.join("; ")
+            )))
+        }
+    }
+
+    /// Attempt to repair a corrupted database by rebuilding it via `VACUUM INTO`.
+    ///
+    /// Creates a clean copy of the database at `output_path`. The original
+    /// database is not modified. **The output file is overwritten if it
+    /// already exists.** After repair, callers should:
+    /// 1. Verify the output with `check_integrity()` on the new connection
+    /// 2. Replace the original file with the repaired copy
+    /// 3. Re-open the database
+    ///
+    /// # Errors
+    ///
+    /// Returns `CoreError` if the VACUUM fails (e.g., the database is too
+    /// corrupt to read, or the output path is not writable).
+    pub fn repair_to(&self, output_path: &str) -> Result<(), CoreError> {
+        self.vacuum_into(output_path).map_err(|e| {
+            CoreError::Internal(format!(
+                "database repair failed — VACUUM INTO '{output_path}': {e}"
+            ))
+        })
     }
 }
 

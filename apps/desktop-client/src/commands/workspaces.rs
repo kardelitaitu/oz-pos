@@ -185,6 +185,67 @@ pub async fn create_workspace_instance_scoped(
     Ok(dto)
 }
 
+/// Update the editable fields of a workspace instance (admin). ADR #7.
+///
+/// Renames the instance and updates its description / accent colour.
+/// The `type_key` and `store_id` are immutable and cannot be changed.
+/// Requires `STAFF_UPDATE` permission from the session user.
+#[command]
+pub async fn update_workspace_instance_scoped(
+    session_token: String,
+    instance_id: String,
+    name: String,
+    description: Option<String>,
+    colour: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+    store.update_workspace_instance(
+        &instance_id,
+        &name,
+        description.as_deref(),
+        colour.as_deref(),
+    )?;
+    drop(db);
+    tracing::info!(instance_id = %instance_id, "workspace instance updated (scoped)");
+    Ok(())
+}
+
+/// Archive (soft-delete) a workspace instance (admin). ADR #7.
+///
+/// Sets the instance status to `archived`, preserving referential
+/// integrity with historical sales. Requires `STAFF_UPDATE` permission.
+#[command]
+pub async fn archive_workspace_instance_scoped(
+    session_token: String,
+    instance_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+    store.archive_instance(&instance_id)?;
+    drop(db);
+    tracing::info!(instance_id = %instance_id, "workspace instance archived (scoped)");
+    Ok(())
+}
+
 /// Recover `QuotaSuspended` workspace instances after a tier upgrade. ADR #5 Phase 3b.
 ///
 /// Iterates the target store's database, restores suspended instances up to

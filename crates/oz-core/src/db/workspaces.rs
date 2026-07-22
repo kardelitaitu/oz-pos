@@ -858,6 +858,43 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Update the editable fields of a workspace instance.
+    ///
+    /// Performs a partial update: `name` is always set, while `description`
+    /// and `colour` are only updated when `Some(..)` is supplied. Passing
+    /// `None` leaves the existing column value unchanged (COALESCE), so a
+    /// caller that only knows the new name will not clobber other fields.
+    /// The instance `type_key` and `store_id` are immutable and cannot be
+    /// changed here. Returns [`CoreError::NotFound`] when no instance with
+    /// the given `id` exists.
+    ///
+    /// Note: to intentionally clear a colour, callers must go through a
+    /// dedicated path — `None` here is "leave as-is", not "clear".
+    pub fn update_workspace_instance(
+        &self,
+        instance_id: &str,
+        name: &str,
+        description: Option<&str>,
+        colour: Option<&str>,
+    ) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE workspace_instances
+             SET name = ?2,
+                 description = COALESCE(?3, description),
+                 colour = COALESCE(?4, colour),
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            params![instance_id, name, description, colour],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "workspace instance",
+                id: instance_id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// List all workspace instances in a store (admin use, no access control).
     pub fn list_all_instances(
         &self,
@@ -1252,6 +1289,75 @@ mod tests {
         store.archive_instance("default-kds").unwrap();
         let after = store.count_active_instances("default").unwrap();
         assert_eq!(after, 4);
+    }
+
+    #[test]
+    fn update_workspace_instance_changes_editable_fields() {
+        let (store, _) = fresh();
+        // Seed a fresh instance to mutate.
+        store
+            .create_workspace_instance(
+                "ws-edit",
+                "store-pos",
+                "default",
+                "Old Name",
+                "Old desc",
+                Some("#111111"),
+            )
+            .unwrap();
+
+        store
+            .update_workspace_instance("ws-edit", "New Name", Some("New desc"), Some("#222222"))
+            .unwrap();
+
+        let row = store
+            .list_all_instances("default")
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "ws-edit")
+            .unwrap();
+        assert_eq!(row.name, "New Name");
+        assert_eq!(row.description, "New desc");
+        assert_eq!(row.colour.as_deref(), Some("#222222"));
+    }
+
+    #[test]
+    fn update_workspace_instance_none_preserves_existing_fields() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance(
+                "ws-preserve",
+                "store-pos",
+                "default",
+                "Name",
+                "keep me",
+                Some("#abcdef"),
+            )
+            .unwrap();
+
+        // Rename only — description and colour must be preserved (COALESCE).
+        store
+            .update_workspace_instance("ws-preserve", "Renamed", None, None)
+            .unwrap();
+
+        let row = store
+            .list_all_instances("default")
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "ws-preserve")
+            .unwrap();
+        assert_eq!(row.name, "Renamed");
+        assert_eq!(row.description, "keep me");
+        assert_eq!(row.colour.as_deref(), Some("#abcdef"));
+    }
+
+    #[test]
+    fn update_workspace_instance_missing_returns_not_found() {
+        let (store, _) = fresh();
+        let err = store
+            .update_workspace_instance("does-not-exist", "X", Some("Y"), None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
     #[test]
