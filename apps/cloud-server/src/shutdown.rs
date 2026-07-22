@@ -49,8 +49,6 @@ pub async fn shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     /// Verify the shutdown_signal module compiles and the function signature
     /// is compatible with axum::serve().with_graceful_shutdown().
     #[tokio::test]
