@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized } from '@fluent/react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listProductsScoped, type ProductDto } from '@/api/products';
@@ -32,6 +33,7 @@ export default function ThresholdConfigScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [thresholdVal, setThresholdVal] = useState('5');
   const [enabled, setEnabled] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!sessionToken) return;
@@ -97,12 +99,16 @@ export default function ThresholdConfigScreen() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteClick = (id: string) => {
     if (!sessionToken) return;
-    if (!confirm('Are you sure you want to delete this threshold alert boundary?')) return;
+    setDeleteConfirmId(id);
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!sessionToken || !deleteConfirmId) return;
     try {
-      await deleteStockThreshold(sessionToken, id);
+      await deleteStockThreshold(sessionToken, deleteConfirmId);
+      setDeleteConfirmId(null);
       await loadData();
     } catch (err) {
       addToast({ message: err instanceof Error ? err.message : 'Failed to delete threshold', type: 'error' });
@@ -209,7 +215,7 @@ export default function ThresholdConfigScreen() {
                       </button>
                     </Localized>
                     <Localized id="delete">
-                      <button type="button" className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDelete(t.id)}>
+                      <button type="button" className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDeleteClick(t.id)}>
                         <span>Delete</span>
                       </button>
                     </Localized>
@@ -220,6 +226,16 @@ export default function ThresholdConfigScreen() {
 </tbody>
         </table>
       )}
+
+      <ConfirmDialog
+        open={deleteConfirmId !== null}
+        onCancel={() => setDeleteConfirmId(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Threshold?"
+        message="Are you sure you want to delete this threshold alert boundary? This action cannot be undone."
+        variant="danger"
+        confirmLabel="Delete"
+      />
 
       {isDialogOpen && (
         <div className="threshold-dialog-overlay">
