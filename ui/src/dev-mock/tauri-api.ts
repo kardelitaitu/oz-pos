@@ -256,6 +256,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // WORKSPACES (ADR #4 / #7)
   // ═══════════════════════════════════════════════════════════════
 
+  'list_all_workspaces': () => [
+    { key: 'store-pos', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart' },
+    { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant' },
+    { key: 'kds', name: 'Kitchen Display', description: 'Order display', icon: 'utensils' },
+    { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
+    { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
+  ],
   'list_workspaces': () => MOCK_WORKSPACES,
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
   'list_workspace_screens': () => [],
