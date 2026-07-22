@@ -45,7 +45,7 @@ describe('DailyTotalWidget', () => {
     renderWithFluentSync(<DailyTotalWidget />, salesFtl);
 
     await waitFor(() => {
-      expect(screen.getByText((t) => t.includes('IDR'))).toBeTruthy();
+      expect(screen.getByText((t) => t.includes('Rp'))).toBeTruthy();
     });
 
     expect(screen.getByText('2')).toBeTruthy();

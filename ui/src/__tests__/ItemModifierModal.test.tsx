@@ -283,8 +283,8 @@ describe('ItemModifierModal', () => {
 
   it('shows price suffix for paid modifier options', () => {
     renderModal();
-    // French Fries has priceMinor = 5000 → +IDR 50,00 (always visible)
-    expect(screen.getByText(/\+IDR 50/)).toBeInTheDocument();
+    // French Fries has priceMinor = 5000 → +Rp 50,00 (always visible)
+    expect(screen.getByText(/\+Rp 50/)).toBeInTheDocument();
   });
 
   // ── Add-ons row ──

@@ -86,6 +86,8 @@ const CANONICAL_STOP_WORDS = new Set([
   'username',
   'pin',
   'all',
+  'connected',
+  'disconnected',
 ]);
 
 /**
