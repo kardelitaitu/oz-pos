@@ -353,8 +353,7 @@ export default function StockTransfersScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
                     <td><Skeleton variant="block" width="4.5rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
@@ -367,7 +366,7 @@ export default function StockTransfersScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -403,8 +402,7 @@ export default function StockTransfersScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((t) => (
+            <tbody>{filtered.map((t) => (
                 <tr key={t.id}>
                   <td className="stock-transfers-cell-number">
                     <button
@@ -449,7 +447,7 @@ export default function StockTransfersScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}
@@ -482,8 +480,7 @@ export default function StockTransfersScreen() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {Array.from({ length: 4 }, (_, r) => (
+                  <tbody>{Array.from({ length: 4 }, (_, r) => (
                       <tr key={r}>
                         <td><Skeleton width="4rem" height="0.875rem" /></td>
                         <td><Skeleton width="6rem" height="0.875rem" /></td>
@@ -491,7 +488,7 @@ export default function StockTransfersScreen() {
                         <td><Skeleton width="2rem" height="0.875rem" /></td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
                 <div className="stock-transfers-detail-actions">
                   <Skeleton variant="block" width="7rem" height="2rem" style={{ borderRadius: 'var(--radius-lg)' }} />
@@ -547,8 +544,7 @@ export default function StockTransfersScreen() {
                       <Localized id="stock-transfers-received"><th>Received</th></Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {detail.lines.map((l) => (
+                  <tbody>{detail.lines.map((l) => (
                       <tr key={l.id}>
                         <td>{l.sku}</td>
                         <td>{l.product_name}</td>
@@ -556,7 +552,7 @@ export default function StockTransfersScreen() {
                         <td>{l.received_qty}</td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
 
                 <div className="stock-transfers-detail-actions">

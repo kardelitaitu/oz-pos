@@ -272,8 +272,7 @@ export default function GiftCardsScreen() {
                             <Localized id="gift-cards-txn-date"><th>Date</th></Localized>
                           </tr>
                         </thead>
-                        <tbody>
-                          {gc.transactions.map((txn) => (
+                        <tbody>{gc.transactions.map((txn) => (
                             <tr key={txn.id}>
                               <td>
                                 <span className={`gift-card-txn-type gift-card-txn-type--${txn.txn_type}`}>
@@ -288,7 +287,7 @@ export default function GiftCardsScreen() {
                               <td className="gift-card-txn-date">{new Date(txn.created_at).toLocaleDateString()}</td>
                             </tr>
                           ))}
-                        </tbody>
+</tbody>
                       </table>
                     </div>
                   )}

@@ -170,8 +170,7 @@ export default function PromotionManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
                     <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
@@ -185,7 +184,7 @@ export default function PromotionManagementScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -211,8 +210,7 @@ export default function PromotionManagementScreen() {
                 <th aria-label={l10n.getString('promotions-table-actions')}> </th>
               </tr>
             </thead>
-            <tbody>
-              {promotions.map((p) => (
+            <tbody>{promotions.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
@@ -244,7 +242,7 @@ export default function PromotionManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

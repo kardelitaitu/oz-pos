@@ -137,8 +137,7 @@ export default function LoyaltyManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
                     <td><Skeleton variant="block" width="4rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
@@ -149,7 +148,7 @@ export default function LoyaltyManagementScreen() {
                     <td><Skeleton variant="circle" width="1.25rem" height="1.25rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -262,8 +261,7 @@ export default function LoyaltyManagementScreen() {
                     </Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {accounts.map((a) => {
+                <tbody>{accounts.map((a) => {
                     const customerName = customerMap.get(a.account.customer_id) ?? a.account.customer_id;
                     const isExpanded = selectedAccount === a.account.id;
                     return (
@@ -309,8 +307,7 @@ export default function LoyaltyManagementScreen() {
                                         <Localized id="loyalty-txn-date"><th>Date</th></Localized>
                                       </tr>
                                     </thead>
-                                    <tbody>
-                                      {a.recent_transactions.map((txn) => (
+                                    <tbody>{a.recent_transactions.map((txn) => (
                                         <tr key={txn.id}>
                                           {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set dynamically */}
                                           <td>
@@ -327,7 +324,7 @@ export default function LoyaltyManagementScreen() {
                                           <td className="loyalty-txn-date">{new Date(txn.created_at).toLocaleDateString()}</td>
                                         </tr>
                                       ))}
-                                    </tbody>
+</tbody>
                                     </table>
                                 )}
                               </div>
@@ -337,7 +334,7 @@ export default function LoyaltyManagementScreen() {
                       </Fragment>
                     );
                   })}
-                </tbody>
+</tbody>
                 </table>
               </div>
           )}

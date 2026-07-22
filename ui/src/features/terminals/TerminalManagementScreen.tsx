@@ -471,8 +471,7 @@ export default function TerminalManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
                     <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
@@ -487,7 +486,7 @@ export default function TerminalManagementScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -538,8 +537,7 @@ export default function TerminalManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {terminals.map((terminal) => (
+            <tbody>{terminals.map((terminal) => (
                 <tr key={terminal.id}>
                   <td className="terminal-mgmt-cell-name">{terminal.name}</td>
                   <td className="terminal-mgmt-cell-device-id">{terminal.deviceId}</td>
@@ -589,7 +587,7 @@ export default function TerminalManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

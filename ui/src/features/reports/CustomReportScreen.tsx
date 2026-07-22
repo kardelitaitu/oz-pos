@@ -359,15 +359,14 @@ export default function CustomReportScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {result!.rows.map((row, i) => (
+              <tbody>{result!.rows.map((row, i) => (
                   <tr key={i}>
                     {row.map((cell, j) => (
                       <td key={j}>{cell}</td>
                     ))}
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </Card>

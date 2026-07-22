@@ -202,8 +202,7 @@ export default function TransactionLogScreen() {
               <th>Action</th>
             </tr>
           </thead>
-          <tbody>
-            {filteredTxs.map(tx => {
+          <tbody>{filteredTxs.map(tx => {
               const locationName = locations.find(l => l.id === tx.location_id)?.name || tx.location_id;
               const isExpanded = expandedTxId === tx.id;
               return (
@@ -259,8 +258,7 @@ export default function TransactionLogScreen() {
                                   </Localized>
                                 </tr>
                               </thead>
-                              <tbody>
-                                {expandedLines.map(line => (
+                              <tbody>{expandedLines.map(line => (
                                   <tr key={line.id}>
                                     <td>{line.sku}</td>
                                     <td>{line.product_name}</td>
@@ -270,7 +268,7 @@ export default function TransactionLogScreen() {
                                     <td>{line.barcode_scanned || '-'}</td>
                                   </tr>
                                 ))}
-                              </tbody>
+</tbody>
                             </table>
                           )}
                         </div>
@@ -281,7 +279,7 @@ export default function TransactionLogScreen() {
                 </>
               );
             })}
-          </tbody>
+</tbody>
         </table>
         </div>
       )}

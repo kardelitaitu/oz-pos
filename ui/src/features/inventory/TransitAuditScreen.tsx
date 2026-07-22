@@ -131,15 +131,14 @@ export default function TransitAuditScreen() {
                       </Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {lines.map(line => (
+                  <tbody>{lines.map(line => (
                       <tr key={line.id}>
                         <td>{line.sku}</td>
                         <td>{line.product_name}</td>
                         <td>{line.qty}</td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
 
                 <div className="transit-actions">

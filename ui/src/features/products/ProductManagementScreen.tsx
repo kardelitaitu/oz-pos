@@ -258,8 +258,7 @@ export default function ProductManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
                     <td><Skeleton variant="text" width="8rem" height="0.875rem" /></td>
@@ -275,7 +274,7 @@ export default function ProductManagementScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -306,8 +305,7 @@ export default function ProductManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {products.map((p) => (
+            <tbody>{products.map((p) => (
                 <tr key={p.sku}>
                   <td className="product-mgmt-cell-sku">{p.sku}</td>
                   <td>{p.name}</td>
@@ -380,7 +378,7 @@ export default function ProductManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

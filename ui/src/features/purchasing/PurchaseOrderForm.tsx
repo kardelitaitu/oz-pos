@@ -167,8 +167,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                   <th aria-label={l10n.getString('po-form-actions-label')}> </th>
                 </tr>
               </thead>
-              <tbody>
-                {lines.map((line, idx) => (
+              <tbody>{lines.map((line, idx) => (
                   <tr key={idx}>
                     <td>
                       <input
@@ -221,7 +220,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
               <tfoot>
                 <tr>
                   <td colSpan={4} className="po-form-total-label">

@@ -208,8 +208,7 @@ export default function CustomerManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td>
                       <div className="customer-mgmt-cell-name">
@@ -226,7 +225,7 @@ export default function CustomerManagementScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -278,8 +277,7 @@ export default function CustomerManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {filteredCustomers.map((customer) => (
+            <tbody>{filteredCustomers.map((customer) => (
                 <tr key={customer.id}>
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                   <td>
@@ -324,7 +322,7 @@ export default function CustomerManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
               </div>
       )}

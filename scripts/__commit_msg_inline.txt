@@ -1,0 +1,15 @@
+refactor: replace Tooltip hover with inline latency status on sync/license indicators
+
+StaffLoginScreen.tsx + SessionLockScreen.tsx:
+- Removed Tooltip wrapper from both sync and license indicators
+- Removed Tooltip import from both files
+- Added .staff-login-sync-status / .session-lock-sync-status span showing
+  syncStatus.label inline (e.g. "Connected (12ms)" or "Disconnected")
+- Pattern mirrors LicenseSettings server status: dot + text always visible
+- Status text dims when connected, turns red when offline (via :has() CSS)
+
+StaffLoginScreen.css + SessionLockScreen.css:
+- Added .staff-login-sync-status / .session-lock-sync-status styles
+- Offline state colors status text with var(--color-danger)
+
+TypeScript: 0 errors | Vitest: 29/29 passed | ESLint: 0 errors

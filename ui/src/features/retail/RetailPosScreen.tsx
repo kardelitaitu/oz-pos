@@ -1204,8 +1204,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                       <th style={{ width: 24 }}></th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {lines.map((line, idx) => (
+                  <tbody>{lines.map((line, idx) => (
                       <tr key={line.id}>
                         <td className="retail-cart-line-sku">{idx + 1}</td>
                         <td>
@@ -1269,7 +1268,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
               </div>
 
@@ -1534,8 +1533,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                     <th style={{ padding: 4 }}></th>
                   </tr>
                 </thead>
-                <tbody>
-                  {creditSales.map((c) => (
+                <tbody>{creditSales.map((c) => (
                     <tr key={c.saleId} style={{ borderBottom: '1px solid #eee' }}>
                       <td style={{ padding: 4 }}>{c.customerName || '—'}</td>
                       <td style={{ textAlign: 'right', padding: 4 }}>
@@ -1558,7 +1556,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                       </td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             )}
             <div className="retail-shift-modal-actions">

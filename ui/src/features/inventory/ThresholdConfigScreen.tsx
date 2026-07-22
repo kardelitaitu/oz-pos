@@ -184,8 +184,7 @@ export default function ThresholdConfigScreen() {
               </Localized>
             </tr>
           </thead>
-          <tbody>
-            {filteredThresholds.map(t => {
+          <tbody>{filteredThresholds.map(t => {
               // The backend stored product_id is actually the product's SKU or DB ID.
               // Let's resolve the product name by matching product_id with product.sku.
               const prod = products.find(p => p.sku === t.product_id);
@@ -218,7 +217,7 @@ export default function ThresholdConfigScreen() {
                 </tr>
               );
             })}
-          </tbody>
+</tbody>
         </table>
       )}
 

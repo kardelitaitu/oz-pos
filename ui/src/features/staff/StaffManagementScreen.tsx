@@ -339,8 +339,7 @@ export default function StaffManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 4 }).map((_, r) => (
+              <tbody>{Array.from({ length: 4 }).map((_, r) => (
                   <tr key={r}>
                     <td><Skeleton variant="block" width="5rem" height="1.25rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
                     <td><Skeleton variant="text" width="6rem" /></td>
@@ -350,7 +349,7 @@ export default function StaffManagementScreen() {
                     <td><Skeleton variant="block" width="5rem" height="1.5rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -379,8 +378,7 @@ export default function StaffManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {staff.map((member) => (
+            <tbody>{staff.map((member) => (
                 <tr key={member.id} className={!member.is_active ? 'staff-mgmt-row--inactive' : ''}>
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
                   <td>
@@ -440,7 +438,7 @@ export default function StaffManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

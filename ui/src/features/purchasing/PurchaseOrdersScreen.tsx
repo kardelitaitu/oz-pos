@@ -129,8 +129,7 @@ export default function PurchaseOrdersScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
                     <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
@@ -145,7 +144,7 @@ export default function PurchaseOrdersScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -173,8 +172,7 @@ export default function PurchaseOrdersScreen() {
                 <th aria-label="Actions"> </th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((po) => (
+            <tbody>{filtered.map((po) => (
                 <tr key={po.id}>
                   <td className="po-cell-number">{po.po_number}</td>
                   <td>{po.supplier_name || po.supplier_id}</td>
@@ -229,7 +227,7 @@ export default function PurchaseOrdersScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

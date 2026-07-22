@@ -239,8 +239,7 @@ export default function ShiftManagementScreen() {
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {Array.from({ length: 4 }).map((_, i) => (
+                <tbody>{Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i}>
                       <td><Skeleton variant="block" width="3.5rem" height="1.25rem" /></td>
                       <td><Skeleton variant="text" width="7rem" /></td>
@@ -253,7 +252,7 @@ export default function ShiftManagementScreen() {
                       <td><Skeleton variant="block" width="2.5rem" height="1.25rem" /></td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             </div>
           </Card>
@@ -415,8 +414,7 @@ export default function ShiftManagementScreen() {
                       <Localized id="shift-table-actions"><th>Actions</th></Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {shifts.map((s) => {
+                  <tbody>{shifts.map((s) => {
                       const diff = s.cashDifferenceMinor;
                       const diffClass =
                         diff !== null && diff < 0
@@ -471,7 +469,7 @@ export default function ShiftManagementScreen() {
                         </tr>
                       );
                     })}
-                  </tbody>
+</tbody>
                 </table>
               </div>
             )}
