@@ -26,13 +26,13 @@ Settings management in OZ-POS is currently fragmented across **5 distinct compon
    - **In-Workspace Context**: When working inside a specific workspace (e.g. Store POS), an Owner or Manager needs quick access to *that workspace's settings* without wading through unrelated global options.
    - **Cashier / Staff Roles**: Staff working in a POS workspace should only have access to local terminal preferences (e.g. sound volume, dark mode toggle, scale zeroing), while administrative store settings must be protected.
 4. **Lack of Real-Time Reactivity**: Changing a setting (e.g. tender presets or KDS SLA timers) in one screen currently requires a full manual reload for active UI components to reflect the update.
-5. **Topology Disconnect**: The Visual Store Topology Builder (`NodeTopologyEditor.tsx` / ADR #20) renders store nodes, workspace registers, and hardware peripherals, but lacks direct visual integration with workspace setting configurations.
+5. **Clear Separation of Hardware Config**: Thermal printers, cash drawers, customer displays, and barcode scanners are peripherals tied directly to a **workspace instance**. Hardware peripheral configurations (IP address, paper width, driver, test prints) belong strictly inside workspace settings, keeping the topology builder focused on high-level enterprise node routing (Stores, Workspaces, Warehouses).
 
 ---
 
 ## Decision
 
-We propose a **Bulletproof Unified 2-Tier Workspace Settings Architecture** built around **shared workspace settings components, real-time event-bus reactivity, offline CRDT delta sync, hardware driver bindings, and visual node topology integration**.
+We propose a **Bulletproof Unified 2-Tier Workspace Settings Architecture** built around **shared workspace settings components, real-time event-bus reactivity, offline CRDT delta sync, workspace-bound hardware peripheral controls, and visual node topology integration**.
 
 ### 1. Conceptual Model — 2-Tier Dual-Access & Topology Model
 
@@ -49,11 +49,11 @@ We propose a **Bulletproof Unified 2-Tier Workspace Settings Architecture** buil
  ╠═════════════════════════╣    ╠═════════════════════════╣    ╠═════════════════════════╣
  ║ • Global Store Config   ║    ║ • Auto-scoped to active ║    ║ • Store Branch Nodes 🏢 ║
  ║ • Staff & Security      ║    ║   workspace             ║    ║ • Workspace Nodes 🛒/🍽️ ║
- ║ • License & Cloud Sync  ║    ║ • Renders Shared Card   ║    ║ • Hardware Nodes 🖨️      ║
- ║ • WORKSPACES SECTION:   ║    ║ • Quick Hardware Tweak  ║    ║ • Live Status Badges    ║
- ║   ├── Store POS Card    ║    ║ • "Admin Settings ↗"    ║    ║ • Click Node -> Opens   ║
- ║   ├── Resto POS Card    ║    ╚═════════════════════════╝    ║   Shared Settings Card  ║
- ║   ├── KDS Display Card  ║                                   ╚═════════════════════════╝
+ ║ • License & Cloud Sync  ║    ║ • Renders Shared Card   ║    ║ • Warehouse Nodes 📦    ║
+ ║ • WORKSPACES SECTION:   ║    ║ • Workspace Hardware    ║    ║ • Stock Deduct Wires    ║
+ ║   ├── Store POS Card    ║    ║   (Printers, Scanners)  ║    ║ • Click Node -> Opens   ║
+ ║   ├── Resto POS Card    ║    ║ • "Admin Settings ↗"    ║    ║   Shared Settings Card  ║
+ ║   ├── KDS Display Card  ║    ╚═════════════════════════╝    ╚═════════════════════════╝
  ║   └── Inventory Card    ║
  ╚═════════════════════════╝
 ```
@@ -63,13 +63,13 @@ We propose a **Bulletproof Unified 2-Tier Workspace Settings Architecture** buil
 ### 2. Bulletproof Architectural Pillars
 
 #### Pillar A: Shared Card Modularization
-All workspace configuration logic lives in modular, reusable card components:
+All workspace configuration logic (including printer, scanner, and scale hardware options) lives in modular, reusable card components:
 
 ```
 ui/src/features/settings/
 ├── workspace-cards/
-│   ├── WorkspaceStorePosSettings.tsx     <-- Store POS: Receipt, Scanner, Scale, Tender Presets
-│   ├── WorkspaceRestaurantPosSettings.tsx <-- Restaurant POS: Table Layout, Course Rules, Kitchen Printer
+│   ├── WorkspaceStorePosSettings.tsx     <-- Store POS: Receipt Layout, Printers, Scanners, Scale, Presets
+│   ├── WorkspaceRestaurantPosSettings.tsx <-- Restaurant POS: Kitchen Printers, Tables, Course Rules
 │   ├── WorkspaceKdsSettings.tsx           <-- KDS: Layout, SLA Timers, Ticket Colors, Audio Chimes
 │   ├── WorkspaceInventorySettings.tsx     <-- Inventory: Low Stock Thresholds, Deduction Location
 │   └── TerminalPreferencesCard.tsx        <-- Local Terminal: Theme, Sound, Scale Zeroing
@@ -91,27 +91,27 @@ export interface WorkspaceCardProps {
 }
 ```
 
-#### Pillar B: Real-Time Event Bus Reactivity (`SETTINGS_UPDATED`)
-When any setting is saved in Tier 1, Tier 2, or the Topology Inspector, the Rust backend emits a `settings_updated` event via `crates/oz-bus`.
+#### Pillar B: Workspace-Bound Hardware Peripheral Configuration
+Peripherals belong strictly to workspace cards:
+- **Receipt & Thermal Printer**: IP address, paper width (58mm/80mm), print margins, auto-cut, and ESC/POS test prints are configured directly inside `WorkspaceStorePosSettings.tsx` or `WorkspaceRestaurantPosSettings.tsx`.
+- **Barcode Scanner & Scale**: Port binding (`COM3` / `/dev/ttyUSB0`), baud rate, and scale zeroing calibration live inside the workspace card.
+- **Topology Simplification**: The topology canvas focuses exclusively on high-level enterprise routing (Store ─> Workspace ─> Warehouse), avoiding clutter from individual peripheral node wires.
+
+#### Pillar C: Real-Time Event Bus Reactivity (`SETTINGS_UPDATED`)
+When any setting (including printer IP or receipt footer) is saved in Tier 1 or Tier 2, the Rust backend emits a `settings_updated` event via `crates/oz-bus`.
 The frontend `SettingsContext` listens to this event and invalidates stale state immediately across open screens.
 
-#### Pillar C: Offline-First CRDT Delta Sync & Transaction Isolation
+#### Pillar D: Offline-First CRDT Delta Sync & Transaction Isolation
 - All database mutations run inside **rusqlite transactions** (`conn.transaction()`).
 - Settings changes write a CRDT delta ledger record (`setting_updated`) to sync seamlessly across multi-terminal offline clusters.
 
-#### Pillar D: Hardware Abstraction Layer (HAL) Peripheral Testing
-Workspace settings cards integrate directly with `crates/oz-hal` drivers:
-- **Receipt & Printer**: Embedded **"Test Print"** button sending ESC/POS test packets.
-- **Weight Scale**: Real-time **"Scale Diagnostics & Zeroing"** widget reading HAL serial data.
-- **Barcode Scanner**: Live **"Test Barcode Scan"** verification input.
-
 #### Pillar E: Visual Topology Canvas Integration (`NodeTopologyEditor.tsx`)
-- **Inspector Drawer Integration**: Selecting any Workspace, Store, Warehouse, or Hardware node on the Visual Topology Canvas (`NodeTopologyEditor.tsx`) opens the right Inspector Drawer, embedding the node's shared settings card.
-- **Live Status Badges**: Topology nodes display live settings telemetry badges on the canvas (Receipt Configured `✓`, Printer `192.168.1.100 OK`, KDS SLA `5m`, Low Stock `12`).
+- **Inspector Drawer Integration**: Selecting any Workspace, Store, or Warehouse node on the Visual Topology Canvas (`NodeTopologyEditor.tsx`) opens the right Inspector Drawer, embedding the node's shared settings card.
+- **Live Status Badges**: Topology nodes display live settings telemetry badges on the canvas (Receipt Configured `✓`, KDS SLA `5m`, Low Stock `12`).
 - **Sidebar Integration**: `SettingsNavTree.tsx` features a **Topology Map** menu item that renders the interactive node diagram directly within `SettingsPage.tsx`.
 
 #### Pillar F: Resilient Error Boundaries & Fallbacks
-Each shared card is wrapped in a dedicated `<ErrorBoundary>`:
+Each shared card is wrapped in a localized `<ErrorBoundary>`:
 - IPC network failures or schema validation errors render a localized `<ErrorState retry={refetch} />` without crashing the parent canvas or POS session.
 
 ---
@@ -121,8 +121,8 @@ Each shared card is wrapped in a dedicated `<ErrorBoundary>`:
 | Setting Scope | Target Persistence Layer | Backend IPC / Storage Key | Example Properties |
 | :--- | :--- | :--- | :--- |
 | **Global Store Settings** | SQLite DB (`store_settings`) | `set_store_settings_scoped` | Store Name, Address, Tax ID, Currency |
-| **Receipt & Print Settings** | SQLite DB (`receipt_settings`) | `set_receipt_settings_scoped` | Paper width (58mm/80mm), Footer, Margins |
-| **Topology Connections** | SQLite DB (`workspace_instances`) | `save_topology_diagram` | Wire connections, node positions, port routing |
+| **Receipt & Print Settings** | SQLite DB (`receipt_settings`) | `set_receipt_settings_scoped` | Printer IP, Paper width (58mm/80mm), Margins |
+| **Topology Connections** | SQLite DB (`workspace_instances`) | `save_topology_diagram` | Node positions, stock deduction priority wires |
 | **User Display Preferences** | SQLite DB (`user_preferences`) | `set_user_preference` | KDS layout mode (`kanban`/`focus`), Table toggles |
 | **Local Terminal Preferences** | `localStorage` / Device File | `localStorage.setItem(...)` | Sound volume, Dark/Light theme, Scale Zeroing |
 
@@ -168,8 +168,8 @@ In accordance with project standards and githooks bundle parity verification (`s
 
 | Phase | Description | Key Files Created/Modified |
 | :--- | :--- | :--- |
-| **Phase 1: Shared Cards** | Extract settings logic into `WorkspaceStorePosSettings`, `WorkspaceKdsSettings`, and `TerminalPreferencesCard` with HAL test actions. | `ui/src/features/settings/workspace-cards/*` |
-| **Phase 2: Topology Integration** | Wire shared settings cards into `NodeTopologyEditor.tsx` right Inspector Drawer. | `NodeTopologyEditor.tsx`, `TopologyScreen.tsx` |
+| **Phase 1: Shared Cards** | Extract settings logic (including printer/hardware config) into `WorkspaceStorePosSettings`, `WorkspaceRestaurantPosSettings`, `WorkspaceKdsSettings`, and `TerminalPreferencesCard`. | `ui/src/features/settings/workspace-cards/*` |
+| **Phase 2: Topology Integration** | Wire shared workspace cards into `NodeTopologyEditor.tsx` right Inspector Drawer. | `NodeTopologyEditor.tsx`, `TopologyScreen.tsx` |
 | **Phase 3: Tier 1 Integration** | Update `SettingsNavTree.tsx` & `SettingsPage.tsx` to include **Workspace Configurations** & **Topology Map**. | `SettingsNavTree.tsx`, `SettingsPage.tsx` |
 | **Phase 4: Tier 2 Modal** | Implement `WorkspaceSettingsModal.tsx` with Event Bus subscription, role checking, and `Admin Settings ↗` header shortcut. | `WorkspaceSettingsModal.tsx` |
 | **Phase 5: Workspace Wiring** | Replace `RetailOptionsScreen` in `RetailPosScreen.tsx` and `SettingsSubScreen` in `PosScreen.tsx` with `WorkspaceSettingsModal`. | `RetailPosScreen.tsx`, `PosScreen.tsx` |
