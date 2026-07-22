@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -33,6 +35,8 @@ export default function SessionLockScreen({
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
+  const { l10n } = useLocalization();
+  const syncStatus = useSyncConnection();
 
   // Auto-unlock after lockout period
   useEffect(() => {
@@ -243,6 +247,31 @@ export default function SessionLockScreen({
               </svg>
             </button>
           </div>
+        </div>
+
+        {/* ── Sync connection indicator ──────────────── */}
+        <div
+          className="session-lock-sync"
+          role="status"
+          aria-label={l10n.getString(
+            syncStatus.state === 'connected'
+              ? 'status-bar-sync-connected'
+              : syncStatus.state === 'disconnected'
+                ? 'status-bar-sync-disconnected'
+                : 'status-bar-sync-checking',
+          )}
+        >
+          <span
+            className={`session-lock-sync-dot ${
+              syncStatus.state === 'connected'
+                ? 'session-lock-sync-dot--online'
+                : syncStatus.state === 'disconnected'
+                  ? 'session-lock-sync-dot--offline'
+                  : 'session-lock-sync-dot--checking'
+            }`}
+            aria-hidden="true"
+          />
+          <span className="session-lock-sync-label">Sync</span>
         </div>
       </div>
     </div>

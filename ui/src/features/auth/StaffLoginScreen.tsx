@@ -3,6 +3,7 @@ import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
+import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
@@ -124,6 +125,7 @@ export default function StaffLoginScreen() {
   const toastShownForError = useRef<string | null>(null);
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
   const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
+  const syncStatus = useSyncConnection();
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -590,12 +592,37 @@ export default function StaffLoginScreen() {
         </div>
       </div>
 
-      {/* ── Footer: version + copyright ────────────────────── */}
+      {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.19</span>
-        <Localized id="staff-login-copyright">
-          <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
-        </Localized>
+        <div className="staff-login-footer-left">
+          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.19</span>
+          <Localized id="staff-login-copyright">
+            <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
+          </Localized>
+        </div>
+        <div
+          className="staff-login-sync"
+          role="status"
+          aria-label={l10n.getString(
+            syncStatus.state === 'connected'
+              ? 'status-bar-sync-connected'
+              : syncStatus.state === 'disconnected'
+                ? 'status-bar-sync-disconnected'
+                : 'status-bar-sync-checking',
+          )}
+        >
+          <span
+            className={`staff-login-sync-dot ${
+              syncStatus.state === 'connected'
+                ? 'staff-login-sync-dot--online'
+                : syncStatus.state === 'disconnected'
+                  ? 'staff-login-sync-dot--offline'
+                  : 'staff-login-sync-dot--checking'
+            }`}
+            aria-hidden="true"
+          />
+          <span className="staff-login-sync-label">Sync</span>
+        </div>
       </div>
     </div>
   );

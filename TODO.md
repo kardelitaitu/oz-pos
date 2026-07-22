@@ -1,134 +1,122 @@
-# 0.0.18 — Full-Stack Sprint: E2E, Cloud, Payments, Notifications, APIs & Polish
+# 0.0.19 — Manual QA: Full App Walkthrough
 
-> **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.
+> **Goal:** Open each page/screen in the running Tauri desktop app, verify it renders correctly, has no console errors, and all interactive elements work. Check off each item as you go.
 >
-> **Current state:** 32 / 32 items complete (100% 🎉) · Updated 2026-07-22
+> **Current state:** 0 / 45 pages checked · Updated 2026-07-22
 
 ---
 
-## 📋 Sprint Plan
+## 🖥️ App Shell & Global
 
-| # | Area | Items | Status |
-|---|------|-------|--------|
-| 🟢 | E2E Test Expansion | 2 | 2/2 ✅ |
-| 🔴 | Cloud Server Hardening | 2 | 2/2 ✅ |
-| 🟠 | Midtrans QRIS Payment Gateway | 2 | 2/2 ✅ |
-| 🟡 | Low Stock Alert System | 2 | 2/2 ✅ |
-| 🔵 | API Documentation (OpenAPI) | 2 | 2/2 ✅ |
-| 🟣 | PostgreSQL Sync Daemon | 2 | 2/2 ✅ |
-| ⚪ | Docker & DevEx | 2 | 2/2 ✅ |
-| 🟤 | i18n Completion | 2 | 2/2 ✅ |
-| 🔷 | Customer Display HAL Driver | 2 | 2/2 ✅ |
-| 🔶 | Release Readiness | 2 | 2/2 ✅ |
-| 📱 | WhatsApp Notification Integration | 2 | 2/2 ✅ |
-| 📊 | Multi-Store Centralized Dashboard | 2 | 2/2 ✅ |
-| 🎯 | Loyalty Module Extraction | 2 | 2/2 ✅ |
-| 🧱 | Shared DTO & Validation Crates | 2 | 2/2 ✅ |
-| ⚙️ | Config Validation Layer | 2 | 2/2 ✅ |
-| 🕸️ | Topology Persistence Wiring | 2 | 2/2 ✅ |
-| **Total** | | **32** | **32/32 (100% 🎉)** |
-
-## 📋 Additional Completed Work (merged into 0.0.18)
-
-| Sprint | Items | Status |
-|--------|-------|--------|
-| 🟢 P150 — Fuzz Testing Infrastructure | 2 | 2/2 ✅ |
-| 🔴 P151 — DB Corruption Recovery | 2 | 2/2 ✅ |
-| 🟡 P152 — Rate Limiting Integration Tests | 2 | 2/2 ✅ |
-| 🔵 P153 — Automated A11y Testing | 2 | 2/2 ✅ |
-| 🟣 P154 — TypeScript API Client SDK | 2 | 2/2 ✅ |
-| 🟢 P200 — A11y Bug Fixes | 2 | 2/2 ✅ |
-| 🔴 P201 — Error Handling Polish | 2 | 2/2 ✅ |
-| 🟡 P202 — Final Cleanup | 2 | 2/2 ✅ |
-| 🟢 P210 — Warning Resolution | 2 | 2/2 ✅ |
-| 🔴 P211 — API SDK Polish | 2 | 2/2 ✅ |
-| 🟡 P212 — Security & Docs | 2 | 2/2 ✅ |
-| 🟣 P213 — Codebase Polish | 2 | 2/2 ✅ |
-| 🟢 P220 — Test Rescue (80 tests) | 2 | 2/2 ✅ |
-| 🟢 P230 — Test Rescue (25 tests) | 4 | 4/4 ✅ |
-| 🔴 P221/P231 — Lint & Clippy Fixes | 2 | 2/2 ✅ |
-| 🟢 P240 — Gate Pipeline | 2 | 2/2 ✅ |
-| 🟢 P250 — Remaining 8 Test Fixes | 2 | 2/2 ✅ |
-| 🔴 P251 — Clippy Cleanup | 1 | 1/1 ✅ |
-| 🟢 P260 — CHANGELOG Updates | 1 | 1/1 ✅ |
-| 🟢 P262 — Scalar API Docs | 2 | 2/2 ✅ |
-| 🟢 P270 — Sync Error Classification | 1 | 1/1 ✅ |
-| 🔴 P271 — Pre-Sync Health Check | 2 | 2/2 ✅ |
-| 🟢 P140 — License Server Hardening | 2 | 2/2 ✅ |
-| 🔴 P141 — CRM Module Hardening | 2 | 2/2 ✅ |
-| 🟡 P142 — KDS Edge Cases | 2 | 2/2 ✅ |
-| 🔵 P143 — Reporting Analytics | 2 | 2/2 ✅ |
-| 🟣 P144 — Security & Config Audit | 2 | 2/2 ✅ |
-| 🟢 P130 — Performance Benchmarks | 2 | 2/2 ✅ |
-| 🔴 P131 — Mobile Build Pipeline | 2 | 2/2 ✅ |
-| 🟡 P132 — Plugin Ecosystem | 2 | 2/2 ✅ |
-| 🔵 P133 — CI/CD & DevOps | 2 | 2/2 ✅ |
-| 🟣 P134 — Bug Bash Round 2 | 2 | 2/2 ✅ |
-| 🟢 P120 — Database Migration Rollback | 2 | 2/2 ✅ |
-| 🔴 P121 — Lua Sandbox Audit | 2 | 2/2 ✅ |
-| 🟡 P122 — Offline Sync Tests | 2 | 2/2 ✅ |
-| 🔵 P123 — Payment Error Recovery | 2 | 2/2 ✅ |
-| 🟣 P124 — Bug Bash & Polish | 2 | 2/2 ✅ |
-| 🟡 P272 — Sync Status UI | 1 | 1/1 ✅ |
+- [ ] **Login flow** — StaffLoginScreen: username entry → PIN pad → successful login → redirect to default page
+- [ ] **Wrong PIN handling** — 3 failed attempts → rate-limit warning → lockout countdown
+- [ ] **Session lock** — Idle timeout → lock screen → re-enter PIN to unlock
+- [ ] **AppShell layout** — Sidebar nav renders with all sections, active page highlighted, responsive collapse on narrow viewport
+- [ ] **Header / StatusBar** — Shows current store name, version number, sync status dot (green/red/yellow), role badge with avatar
+- [ ] **Dark/Light mode** — Theme toggle works, all pages render without visual glitches in both modes
+- [ ] **Language selector** — Switch between EN and ID, all labels update, no Fluent errors in console
+- [ ] **Workspace picker** — If multi-store: workspace selector shows available instances, switching reloads context
+- [ ] **Global error boundary** — Navigate all pages, verify no unhandled crashes (check browser devtools console for errors)
 
 ---
 
-### 🟡 P272 — Sync Status UI (deferred)
+## 🏪 Operations
 
-> **Goal:** Surface sync connection status in the shell header so users can see at a glance if the cloud server is reachable.
-
-- [x] **P272-1: Sync status indicator** ✅ — Created `useSyncConnection` hook (polls `testSyncConnection` IPC every 60s, returns connected/disconnected/checking). Wired green/red/yellow dot into StatusBar left segment with pulse animation for checking state. Added 3 Fluent keys (en + id).
-- [x] **P272-2: Status indicator tests** ✅ — 6 tests for hook (initial checking, connected, disconnected ok:false, disconnected throw, polling, cleanup) + 4 tests for StatusBar (connected dot, disconnected dot, checking dot, always visible).
-
-**Files:** `ui/src/hooks/useSyncConnection.ts` (new), `ui/src/__tests__/useSyncConnection.test.ts` (new), `StatusBar.tsx` (updated), `StatusBar.css` (updated), `shared.ftl` (updated), `shared.id.ftl` (updated), `StatusBar.test.tsx` (updated).
+- [ ] **POS Terminal** (`/sales`) — Product grid renders, add item to cart, adjust quantity, remove item, subtotal updates
+- [ ] **Payment modal** — Cash (enter amount, change calculation), Card, QRIS QR code display, sale completes successfully
+- [ ] **Receipt printing** — After sale completes, receipt prints (or shows preview if no printer)
+- [ ] **KDS** (`/kds`) — Kitchen Display: incoming orders appear, status transitions (pending→preparing→ready→served), multi-layout switcher (Focus/Kanban/Metro)
+- [ ] **Kiosk** (`/kiosk`) — Self-service mode: fullscreen, large product grid, no nav, add to cart, checkout, idle timeout returns to attract screen
+- [ ] **Tables** (`/tables`) — Restaurant floor plan: table status colours (available/occupied/reserved), tap to open order, merge/split tables
 
 ---
 
-### Wave 1 — Quick Wins
+## 📦 Products & Inventory
 
-#### 🔴 1.1 Android APK Build Documentation
+- [ ] **Product Lookup** (`/products`) — Search by name/SKU, barcode scan input, category filter chips, product cards with price/stock
+- [ ] **Product Management** (`/inventory`) — Data table with all products, add/edit/delete, barcode field, stock level per product
+- [ ] **Bundles** (`/bundles`) — Create/edit product bundles, bundle pricing, items listed on receipt
+- [ ] **Categories** (`/categories`) — Colour-coded list, add/delete, colour picker
+- [ ] **Suppliers** (`/suppliers`) — Supplier list, add/edit/delete, contact info fields
+- [ ] **Purchase Orders** (`/purchase-orders`) — Create PO from supplier, add line items, receive/ship, status tracking
+- [ ] **Stock Transfers** (`/stock-transfers`) — Transfer stock between locations, partial receive, audit trail
+- [ ] **Stock Counts** (`/stock-counts`) — Create count sheet, enter quantities, reconcile differences
+- [ ] **Inventory Adjustment** (`/inventory-adjustment`) — Manual stock-in/stock-out with reason, stock alert threshold config
 
-> **Status:** CI pipeline exists at `.github/workflows/android.yml`. Ready for finalization.
+---
 
-#### 🟢 1.2 i18n Gaps — Fixed ✅
+## 💰 Sales & Orders
 
-Fixed 12 hardcoded English strings in `EmailReportSettings.tsx`:
-- **7 report type labels**: `Daily Revenue`, `Weekly Revenue`, `Monthly Revenue`, `Top Products`, `Hourly Heatmap`, `Category Breakdown`, `Low Stock Alerts` → `l10n.getString()` with Fluent keys
-- **3 aria-labels**: Recipient #{n}, Remove recipient #{n}, Add recipient → `l10n.getString('settings-schedule-recipient-*', { number })`
-- **2 error fallbacks**: `'Failed to send test email'`, `'Failed to save schedule'` → `l10n.getString()`
-- Added 12 Fluent keys to `settings.ftl` + 12 Indonesian translations to `settings.id.ftl`
+- [ ] **Sales History** (`/sales-history`) — Searchable list, date range filter, status filter chips, tap for detail view
+- [ ] **Sales Dashboard** (`/sales-dashboard`) — Today's revenue card, orders count, top product widget, low-stock alert widget
+- [ ] **EOD Report** (`/eod-report`) — End-of-Day: cash tally, payment breakdown, shift summary, print button
+- [ ] **Orders/Void** (`/orders`) — Order list with search, status filters, detail view, void with reason picker, refund flow
+- [ ] **Hold Order** — Park a sale, resume from held list in POS
+- [ ] **Split Bill** — Divide order across payment methods, even-split, remaining tracker
 
-#### ✅ 1.3 tokio-console + flamegraph — Already implemented
+---
 
-- `platform/startup/src/console.rs` has both real and no-op `init_console_subscriber()`
-- Desktop, tablet clients call it; cloud-server has its own init
-- `scripts/profile.ps1` + `scripts/profile.sh` exist with full parameter sets
+## 💵 Finance
 
-### 🟢 Wave 2 — Custom Report Builder ✅
+- [ ] **Tax Rates** (`/tax-config`) — Rate table, inclusive/exclusive toggle, category tax rates, add/edit/delete
+- [ ] **Exchange Rates** (`/exchange-rates`) — Currency selector, rate display, last-updated timestamp
+- [ ] **Promotions** (`/promotions`) — Promo list, create/edit (BuyXGetY, % off, fixed amount), schedule, enable/disable
 
-> **Status:** Fully implemented in this sprint. Drag-and-drop column picker with 6 datasets, backend query generation with SQL injection protection via column whitelist, search/filter, column reordering, CSV export, error handling.
+---
 
-| Task | Files | Scope |
-|------|-------|-------|
-| **Frontend** | `CustomReportScreen.tsx`, `CustomReportScreen.css` | Drag-and-drop column picker, 6 datasets (sales, inventory, customers, staff, tax_rates, shifts), search/filter, column reordering, results table, CSV export, error/empty states |
-| **Backend** | `crates/oz-core/src/export/mod.rs` | `build_custom_report()` with whitelist-filtered SQL, `get_dataset_def()` for 6 datasets with date filter support, SQL injection protection |
-| **Fluent i18n** | `reports.ftl`, `reports.id.ftl` | 11 keys (en + id), including column labels, dataset names, empty/error states |
-| **Tests** | `CustomReportScreen.test.tsx`, `crates/oz-core/src/export/mod.rs` | 19 vitest tests (column toggle, dataset switch, search, drag-and-drop, error handling, Run Report disabled state) + 8 Rust tests (unknown dataset, column filtering, sales basic, inventory, empty columns, CSV export) |
+## 👥 Customers
 
-### 🟡 Wave 2 — Remaining Feature Work
+- [ ] **Customers** (`/customers`) — Searchable table, add/edit (name/email/phone/notes), delete
+- [ ] **Gift Cards** (`/gift-cards`) — Card list, top-up flow, freeze/unfreeze, redeem at checkout
+- [ ] **Loyalty** (`/loyalty`) — Account list, tier badge (Bronze/Silver/Gold/Platinum), point balance, redemption log
 
-| Task | Scope | Estimated Effort |
-|------|-------|-----------------|
-| **Analytics Cloud Export** | BigQuery/Snowflake adapter, credential management, scheduled export | **Major** (2-3 days) |
+---
 
-### 📊 Final Gate State
+## ⚙️ Management
 
-| Gate | Status |
-|------|--------|
-| `cargo fmt` | ✅ Clean |
-| `cargo clippy` | ✅ 0 errors |
-| `npm run typecheck` | ✅ 0 errors |
-| `npm run lint` | ✅ 0 errors |
-| `vitest` | ✅ 2,936 passed, 0 failures |
+- [ ] **Staff** (`/staff`) — Staff table with role badges, add/edit modal with PIN hashing, deactivate/restore toggle
+- [ ] **Terminals** (`/terminals`) — Terminal list, per-terminal feature overrides, online/offline status
+- [ ] **Stores** (`/stores`) — Multi-store dashboard (if multi-store enabled): topology view, per-store revenue/orders/stock
+- [ ] **Features** (`/features`) — Feature toggle panel with grouped switches, dependency resolution, toast feedback
+- [ ] **Data Management** (`/data-management`) — Export wizard (select types, date range, password), import wizard (file upload, dry-run preview, progress)
+- [ ] **Audit Log** (`/audit-log`) — Searchable log table, date range filter, event type icons
+- [ ] **Offline Queue** (`/offline-queue`) — Pending/synced/failed items, retry button, sync status
+- [ ] **Shifts** (`/shifts`) — Open shift with opening balance, close shift with cash count, EOD summary
 
-> **Cumulative: 113 → 0 pre-existing vitest failures (100% reduction)**
+---
+
+## 📊 Reports
+
+- [ ] **Reports Dashboard** (`/dashboard`) — Revenue chart, top products panel, inventory status widget
+- [ ] **Sales Report** (`/reports`) — Bar chart (revenue), pie chart (category), heatmap (hourly), date range toggle, CSV export, print
+- [ ] **Inventory Report** (`/inventory-report`) — Stock table with low-stock highlighting (amber/red), threshold input, CSV export
+- [ ] **Menu Engineering** (`/menu-engineering`) — Volume vs margin scatter plot, quadrant classification (Star/Plowhorse/Puzzle/Dog), product breakdown table
+- [ ] **Custom Report** (`/custom-report`) — NEW: Drag-and-drop column picker, 6 datasets (sales/inventory/customers/staff/tax_rates/shifts), search columns, run report, CSV export
+
+---
+
+## ⚡ Settings
+
+- [ ] **Settings sidebar** — All categories expand/collapse, search filters sections, keyboard navigation (Arrow keys), active section highlighted
+- [ ] **General settings** — Store name, address, tax ID, receipt footer, language selector
+- [ ] **Appearance** — Dark/light toggle, brand colour picker with live preview, logo upload
+- [ ] **Email Reports** — SMTP config (host/port/user/pass/TLS), test email button, schedule config (cadence/recipients/report types)
+- [ ] **Topology Editor** — Node canvas with drag-to-move, wire connectors between nodes, zoom, pan background, simulation mode
+- [ ] **Update banner** — Check for updates, dismissible banner, install action
+
+---
+
+## 🧪 Dev Pages
+
+- [ ] **Design System** (`/design`) — Component showcase: buttons, inputs, cards, modals, badges, toasts, skeletons, spinners
+- [ ] **Tooltip Preview** (`/tooltips`) — Tooltip positioning and content examples
+
+---
+
+## 🚀 Post-QA Items
+
+- [ ] **Search all pages for console errors** — Open browser devtools console, navigate through all pages, fix any errors/warnings
+- [ ] **Verify no Fluent key errors** — Check for `[@fluent/react] Error: The id "..." did not match` messages (fix missing FTL keys)
+- [ ] **Check loading/empty/error states** — On every screen with lists: verify empty state renders, loading spinner shows during data fetch, error state shows on API failure
+- [ ] **Responsive check (narrow viewport)** — Resize window to <768px: sidebar collapses, layouts stack vertically, touch targets remain ≥44px
+- [ ] **Keyboard navigation** — Tab through interactive elements, verify focus indicators are visible, modal traps focus, Escape closes modals/dropdowns
