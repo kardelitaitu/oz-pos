@@ -335,7 +335,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           </span>
         </div>
       ) : (
-        <div ref={gridContainerRef} className="product-grid" role="list"
+        <div ref={gridContainerRef} className="product-grid"
              aria-label={l10n.getString('product-lookup-grid-aria')}
              style={{ display: 'block', overflow: 'hidden', flex: 1, minHeight: 0 }}>
           {gridWidth > 0 && (
@@ -453,7 +453,6 @@ function ProductCard({ product, onAdd, added }: ProductCardProps) {
   return (
     <div
       className={cardClass}
-      role="listitem"
     >
       {/* Clickable area wraps the entire card content */}
       <Localized

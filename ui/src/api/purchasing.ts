@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 // ── Supplier types ──────────────────────────────────────────────────
 
@@ -107,38 +107,38 @@ export interface UpdatePoStatusArgs {
 
 /** List all suppliers. */
 export const listSuppliers = (): Promise<SupplierDto[]> =>
-  invoke<SupplierDto[]>('list_suppliers');
+  loggedInvoke<SupplierDto[]>('list_suppliers');
 
 /** Get a single supplier by its identifier. */
 export const getSupplier = (id: string): Promise<SupplierDto | null> =>
-  invoke<SupplierDto | null>('get_supplier', { id });
+  loggedInvoke<SupplierDto | null>('get_supplier', { id });
 
 /** Create a new supplier. */
 export const createSupplier = (args: CreateSupplierArgs): Promise<SupplierDto> =>
-  invoke<SupplierDto>('create_supplier', { args });
+  loggedInvoke<SupplierDto>('create_supplier', { args });
 
 /** Update an existing supplier. */
 export const updateSupplier = (args: UpdateSupplierArgs): Promise<SupplierDto> =>
-  invoke<SupplierDto>('update_supplier', { args });
+  loggedInvoke<SupplierDto>('update_supplier', { args });
 
 // ── Purchase Order API ──────────────────────────────────────────────
 
 /** List all purchase orders. */
 export const listPurchaseOrders = (): Promise<PurchaseOrderDto[]> =>
-  invoke<PurchaseOrderDto[]>('list_purchase_orders');
+  loggedInvoke<PurchaseOrderDto[]>('list_purchase_orders');
 
 /** Get a single purchase order by its identifier. */
 export const getPurchaseOrder = (id: string): Promise<PurchaseOrderDto | null> =>
-  invoke<PurchaseOrderDto | null>('get_purchase_order', { id });
+  loggedInvoke<PurchaseOrderDto | null>('get_purchase_order', { id });
 
 /** Create a new purchase order. */
 export const createPurchaseOrder = (args: CreatePurchaseOrderArgs): Promise<PurchaseOrderDto> =>
-  invoke<PurchaseOrderDto>('create_purchase_order', { args });
+  loggedInvoke<PurchaseOrderDto>('create_purchase_order', { args });
 
 /** Update a purchase order's status (e.g. approved, received, cancelled). */
 export const updatePoStatus = (args: UpdatePoStatusArgs): Promise<PurchaseOrderDto> =>
-  invoke<PurchaseOrderDto>('update_po_status', { args });
+  loggedInvoke<PurchaseOrderDto>('update_po_status', { args });
 
 /** Mark a purchase order as received and update stock quantities. */
 export const receivePurchaseOrder = (id: string): Promise<PurchaseOrderDto> =>
-  invoke<PurchaseOrderDto>('receive_purchase_order', { id });
+  loggedInvoke<PurchaseOrderDto>('receive_purchase_order', { id });

@@ -10,6 +10,7 @@ import {
 } from '@/api/promotions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { useToast } from '@/frontend/shared/Toast';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -54,6 +55,7 @@ export default function PromotionManagementScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const { addToast } = useToast();
 
   const deleteExit = useExitAnimation(!!deleteTarget, () => setDeleteTarget(null));
 
@@ -113,11 +115,11 @@ export default function PromotionManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      console.error('Failed to save promotion:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to save promotion', type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [form, modalMode, load, closeModal, session?.user_id]);
+  }, [form, modalMode, load, closeModal, addToast, session?.user_id]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -127,20 +129,20 @@ export default function PromotionManagementScreen() {
       await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
-      console.error('Failed to delete promotion:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to delete promotion', type: 'error' });
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load, session?.user_id]);
+  }, [deleteTarget, load, addToast, session?.user_id]);
 
   const toggleActive = useCallback(async (p: Promotion) => {
     try {
       await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
-      console.error('Failed to toggle promotion:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to toggle promotion', type: 'error' });
     }
-  }, [load, session?.user_id]);
+  }, [load, addToast, session?.user_id]);
 
   return (
     <div className="promo-mgmt">

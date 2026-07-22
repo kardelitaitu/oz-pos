@@ -1,6 +1,6 @@
 // ── Hardware: Barcode scanner, cash drawer, printer ──────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 // ── Cash Drawer ──────────────────────────────────────────────────
@@ -17,7 +17,7 @@ export interface OpenCashDrawerResult {
 
 /** Open a cash drawer. */
 export const openCashDrawer = (args: OpenCashDrawerArgs = {}): Promise<OpenCashDrawerResult> =>
-  invoke<OpenCashDrawerResult>('open_cash_drawer', { args });
+  loggedInvoke<OpenCashDrawerResult>('open_cash_drawer', { args });
 
 // ── Receipt Printing (raw) ───────────────────────────────────────
 
@@ -33,7 +33,7 @@ export interface PrintReceiptResult {
 
 /** Print a raw text receipt on the configured printer. */
 export const printReceipt = (args: PrintReceiptArgs): Promise<PrintReceiptResult> =>
-  invoke<PrintReceiptResult>('print_receipt', { args });
+  loggedInvoke<PrintReceiptResult>('print_receipt', { args });
 
 // ── Barcode Scanner ──────────────────────────────────────────────
 
@@ -85,14 +85,14 @@ export interface BarcodeScannedPayload {
 
 /** List all connected barcode scanners. */
 export const listScanners = (): Promise<ScannerInfo[]> =>
-  invoke<ScannerInfo[]>('list_scanners');
+  loggedInvoke<ScannerInfo[]>('list_scanners');
 
 /** Start listening for barcode scans on a specific scanner. */
 export const startScanner = (scannerId: string): Promise<void> =>
-  invoke('start_scanner', { scannerId });
+  loggedInvoke('start_scanner', { scannerId });
 
 /** Stop listening for barcode scans. */
-export const stopScanner = (): Promise<void> => invoke('stop_scanner');
+export const stopScanner = (): Promise<void> => loggedInvoke('stop_scanner');
 
 /** Subscribe to barcode-scanned events. Returns an unsubscribe function. */
 export const onBarcodeScanned = (handler: (payload: BarcodeScannedPayload) => void): Promise<UnlistenFn> =>
@@ -113,15 +113,15 @@ export interface DisplayShowArgs {
 
 /** List all registered customer-facing pole displays. */
 export const listDisplays = (): Promise<string[]> =>
-  invoke<string[]>('list_displays');
+  loggedInvoke<string[]>('list_displays');
 
 /** Show content on a customer-facing pole display. */
 export const displayShow = (args: DisplayShowArgs): Promise<void> =>
-  invoke('display_show', { args });
+  loggedInvoke('display_show', { args });
 
 /** Clear a customer-facing pole display. */
 export const displayClear = (displayId: string): Promise<void> =>
-  invoke('display_clear', { displayId });
+  loggedInvoke('display_clear', { displayId });
 
 // ── Weight Scale ────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ export interface WeightReading {
 
 /** Read the current weight from the registered scale, or null if none is registered. */
 export const readScaleWeight = (): Promise<WeightReading | null> =>
-  invoke<WeightReading | null>('read_scale_weight');
+  loggedInvoke<WeightReading | null>('read_scale_weight');
 
 // ── Device Discovery ──────────────────────────────────────────────────
 
@@ -156,4 +156,4 @@ export interface UsbDeviceInfo {
 
 /** Discover all connected USB hardware devices (scanners, printers, scales). */
 export const discoverHardware = (): Promise<UsbDeviceInfo[]> =>
-  invoke<UsbDeviceInfo[]>('discover_hardware');
+  loggedInvoke<UsbDeviceInfo[]>('discover_hardware');

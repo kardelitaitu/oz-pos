@@ -1,0 +1,18 @@
+[package]
+name = "modules-loyalty"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OZ-POS Loyalty Module: customer loyalty program, tier-based earning multipliers, point redemption."
+
+[dependencies]
+foundation = { workspace = true }
+oz-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+platform-kernel = { workspace = true }
+rusqlite = { workspace = true }

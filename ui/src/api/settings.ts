@@ -1,6 +1,6 @@
 // ── Settings: Store, Receipt, Setup Wizard, Feature Flags ──────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 // ── Receipt Settings ─────────────────────────────────────────────
 
@@ -20,15 +20,15 @@ export interface ReceiptSettingsDto {
 
 /** Get the current receipt settings. */
 export const getReceiptSettings = (): Promise<ReceiptSettingsDto> =>
-  invoke<ReceiptSettingsDto>('get_receipt_settings');
+  loggedInvoke<ReceiptSettingsDto>('get_receipt_settings');
 
 /** Update the receipt settings. */
 export const setReceiptSettings = (args: ReceiptSettingsDto, userId: string): Promise<void> =>
-  invoke<void>('set_receipt_settings', { args, userId });
+  loggedInvoke<void>('set_receipt_settings', { args, userId });
 
 /** Set receipt settings (scoped — ADR #7). */
 export const setReceiptSettingsScoped = (sessionToken: string, args: ReceiptSettingsDto): Promise<void> =>
-  invoke<void>('set_receipt_settings_scoped', { sessionToken, args });
+  loggedInvoke<void>('set_receipt_settings_scoped', { sessionToken, args });
 
 // ── Store Settings ───────────────────────────────────────────────
 
@@ -44,15 +44,15 @@ export interface StoreSettingsDto {
 
 /** Get the store settings. */
 export const getStoreSettings = (): Promise<StoreSettingsDto> =>
-  invoke<StoreSettingsDto>('get_store_settings');
+  loggedInvoke<StoreSettingsDto>('get_store_settings');
 
 /** Update the store settings. */
 export const setStoreSettings = (args: StoreSettingsDto, userId: string): Promise<void> =>
-  invoke<void>('set_store_settings', { args, userId });
+  loggedInvoke<void>('set_store_settings', { args, userId });
 
 /** Set store settings (scoped — ADR #7). */
 export const setStoreSettingsScoped = (sessionToken: string, args: StoreSettingsDto): Promise<void> =>
-  invoke<void>('set_store_settings_scoped', { sessionToken, args });
+  loggedInvoke<void>('set_store_settings_scoped', { sessionToken, args });
 
 // ── Credit Settings ───────────────────────────────────────────
 
@@ -76,27 +76,27 @@ export interface CreditSaleDto {
 
 /** Get the credit / tab sale settings. */
 export const getCreditSettings = (): Promise<CreditSettingsDto> =>
-  invoke<CreditSettingsDto>('get_credit_settings');
+  loggedInvoke<CreditSettingsDto>('get_credit_settings');
 
 /** Update the credit / tab sale settings. */
 export const setCreditSettings = (args: CreditSettingsDto, userId: string): Promise<void> =>
-  invoke<void>('set_credit_settings', { args, userId });
+  loggedInvoke<void>('set_credit_settings', { args, userId });
 
 /** Set credit settings (scoped — ADR #7). */
 export const setCreditSettingsScoped = (sessionToken: string, args: CreditSettingsDto): Promise<void> =>
-  invoke<void>('set_credit_settings_scoped', { sessionToken, args });
+  loggedInvoke<void>('set_credit_settings_scoped', { sessionToken, args });
 
 /** List all credit (tab) sales awaiting settlement. */
 export const listCreditSales = (): Promise<CreditSaleDto[]> =>
-  invoke<CreditSaleDto[]>('list_credit_sales');
+  loggedInvoke<CreditSaleDto[]>('list_credit_sales');
 
 /** Settle (mark as paid) a credit sale. */
 export const settleCredit = (saleId: string, userId: string): Promise<void> =>
-  invoke<void>('settle_credit', { saleId, userId });
+  loggedInvoke<void>('settle_credit', { saleId, userId });
 
 /** Settle a credit sale (scoped — ADR #7). */
 export const settleCreditScoped = (sessionToken: string, saleId: string): Promise<void> =>
-  invoke<void>('settle_credit_scoped', { sessionToken, saleId });
+  loggedInvoke<void>('settle_credit_scoped', { sessionToken, saleId });
 
 // ── Hardware Settings (printer + scanner) ─────────────────────
 
@@ -111,15 +111,15 @@ export interface HardwareSettingsDto {
 
 /** Get the hardware settings (printer, scanner). */
 export const getHardwareSettings = (): Promise<HardwareSettingsDto> =>
-  invoke<HardwareSettingsDto>('get_hardware_settings');
+  loggedInvoke<HardwareSettingsDto>('get_hardware_settings');
 
 /** Update the hardware settings. */
 export const setHardwareSettings = (args: HardwareSettingsDto, userId: string): Promise<void> =>
-  invoke<void>('set_hardware_settings', { args, userId });
+  loggedInvoke<void>('set_hardware_settings', { args, userId });
 
 /** Set hardware settings (scoped — ADR #7). */
 export const setHardwareSettingsScoped = (sessionToken: string, args: HardwareSettingsDto): Promise<void> =>
-  invoke<void>('set_hardware_settings_scoped', { sessionToken, args });
+  loggedInvoke<void>('set_hardware_settings_scoped', { sessionToken, args });
 
 // ── Setup Wizard ─────────────────────────────────────────────────
 
@@ -138,19 +138,19 @@ export interface SetupStatus {
 
 /** Complete the initial setup wizard with a preset and enabled features. */
 export const completeSetup = (args: CompleteSetupArgs): Promise<void> =>
-  invoke<void>('complete_setup', { args });
+  loggedInvoke<void>('complete_setup', { args });
 
 /** Dismiss the setup wizard without completing it. */
 export const dismissSetupWizard = (): Promise<void> =>
-  invoke<void>('dismiss_setup_wizard');
+  loggedInvoke<void>('dismiss_setup_wizard');
 
 /** Get the current setup wizard completion status. */
 export const getSetupStatus = (): Promise<SetupStatus> =>
-  invoke<SetupStatus>('get_setup_status');
+  loggedInvoke<SetupStatus>('get_setup_status');
 
 /** Seed default roles for the store resolved from a session token. Returns the number of roles created. ADR #7. */
 export const seedDefaultRolesScoped = (sessionToken: string): Promise<number> =>
-  invoke<number>('seed_default_roles_scoped', { sessionToken });
+  loggedInvoke<number>('seed_default_roles_scoped', { sessionToken });
 
 // ── Feature Flags ────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ export interface EnabledFeaturesResult {
 
 /** Get the list of enabled feature flags. */
 export const getEnabledFeatures = (): Promise<EnabledFeaturesResult> =>
-  invoke<EnabledFeaturesResult>('get_enabled_features');
+  loggedInvoke<EnabledFeaturesResult>('get_enabled_features');
 
 // ── User Preferences ─────────────────────────────────────────
 
@@ -173,16 +173,37 @@ export interface UserPrefEntry {
 
 /** Get all preferences for a given user. */
 export const getUserPreferences = (userId: string): Promise<Record<string, string>> =>
-  invoke<Record<string, string>>('get_user_preferences', { userId });
+  loggedInvoke<Record<string, string>>('get_user_preferences', { userId });
 
 /** Get user preferences (scoped — ADR #7). Uses session.user_id for lookup. */
 export const getUserPreferencesScoped = (sessionToken: string): Promise<Record<string, string>> =>
-  invoke<Record<string, string>>('get_user_preferences_scoped', { sessionToken });
+  loggedInvoke<Record<string, string>>('get_user_preferences_scoped', { sessionToken });
 
 /** Set preferences for a given user. */
 export const setUserPreferences = (userId: string, prefs: UserPrefEntry[]): Promise<void> =>
-  invoke<void>('set_user_preferences', { userId, prefs });
+  loggedInvoke<void>('set_user_preferences', { userId, prefs });
 
 /** Set user preferences (scoped — ADR #7). Uses session.user_id for write. */
 export const setUserPreferencesScoped = (sessionToken: string, prefs: UserPrefEntry[]): Promise<void> =>
-  invoke<void>('set_user_preferences_scoped', { sessionToken, prefs });
+  loggedInvoke<void>('set_user_preferences_scoped', { sessionToken, prefs });
+
+// ── Generic key/value settings ───────────────────────────────────
+
+/**
+ * Read a single raw setting value by key. Returns `null` when the key
+ * has never been written. Callers are responsible for parsing (e.g.
+ * JSON.parse) the returned string.
+ */
+export const getSetting = (key: string): Promise<string | null> =>
+  loggedInvoke<string | null>('get_setting', { key });
+
+/**
+ * Write (or overwrite) a single raw setting value.
+ *
+ * **Deprecated backend command — prefer `set_setting_scoped` (ADR #7)** where a
+ * session token is available. This wrapper targets the legacy `set_setting`
+ * command for call sites that only have a `userId`. Pass an empty string to
+ * store an empty value.
+ */
+export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
+  loggedInvoke<void>('set_setting', { key, value, userId });

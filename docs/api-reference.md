@@ -43,7 +43,7 @@ All commands are Tauri IPC commands invoked from the React frontend via `ui/src/
 | `get_receipt_settings` | — | `ReceiptSettings` | Receipt header, footer, tax display |
 | `set_receipt_settings` | `settings: ReceiptSettings` | `()` | Update receipt configuration |
 | `get_setting` | `key: String` | `Option<String>` | Get any setting by key |
-| `set_setting` | `key: String, value: String` | `()` | Set any setting by key |
+| `set_setting` | `key: String, value: String, user_id: String` | `()` | Set any setting by key. **Deprecated** — prefer `set_setting_scoped` (ADR #7, session-token resolved). |
 
 ## Reporting
 

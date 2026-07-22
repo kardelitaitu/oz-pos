@@ -161,7 +161,6 @@ export default function SessionLockScreen({
         <div className="session-lock-time">{timeStr}</div>
         <div className="session-lock-date">{dateStr}</div>
 
-        <div className="session-lock-label">Session Locked</div>
         <div className="session-lock-sub">Enter PIN to unlock</div>
 
         {/* PIN dots */}

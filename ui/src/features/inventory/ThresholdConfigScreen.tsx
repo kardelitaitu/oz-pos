@@ -46,11 +46,11 @@ export default function ThresholdConfigScreen() {
       setLocations(locs);
       setThresholds(thresh);
     } catch (err) {
-      console.error('Failed to load threshold data:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to load threshold data', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, addToast]);
 
   useEffect(() => {
     loadData();

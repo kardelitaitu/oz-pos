@@ -497,6 +497,8 @@ pub fn run() {
             commands::workspaces::get_workspace_instance_scoped,
             commands::workspaces::get_workspace_instance,
             commands::workspaces::create_workspace_instance_scoped,
+            commands::workspaces::update_workspace_instance_scoped,
+            commands::workspaces::archive_workspace_instance_scoped,
             commands::workspaces::recover_workspace_instances_scoped,
             commands::workspaces::suspend_surplus_workspace_instances_scoped,
             commands::workspaces::create_workspace_instance,
@@ -519,6 +521,8 @@ pub fn run() {
             commands::license::renew_license,
             commands::license::get_license_status,
             commands::license::check_license_status,
+            commands::topology::save_topology,
+            commands::topology::load_topology,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

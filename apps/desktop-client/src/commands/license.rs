@@ -46,6 +46,9 @@ pub struct LicenseStatusDto {
     pub is_active: bool,
     /// Categorized verification status of the license.
     pub status: LicenseVerificationStatus,
+    /// The subscription tier (free, standard, pro, enterprise).
+    /// Available immediately from local data — no network call required.
+    pub tier: Option<String>,
     /// Raw JSON payload of the signed license, if available.
     pub payload: Option<String>,
     /// Human-readable message explaining the status or providing error details.
@@ -395,6 +398,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
         return Ok(LicenseStatusDto {
             is_active: false,
             status: LicenseVerificationStatus::ClockTampered,
+            tier: None,
             payload: None,
             message: Some(e.to_string()),
         });
@@ -408,6 +412,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             return Ok(LicenseStatusDto {
                 is_active: false,
                 status: LicenseVerificationStatus::InvalidSignature,
+                tier: None,
                 payload: None,
                 message: Some(format!("Invalid signature: {}", e)),
             });
@@ -420,6 +425,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
                 return Ok(LicenseStatusDto {
                     is_active: false,
                     status: LicenseVerificationStatus::InvalidSignature,
+                    tier: None,
                     payload: None,
                     message: Some(format!("Failed to parse payload: {}", e)),
                 });
@@ -440,6 +446,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             Ok(LicenseStatusDto {
                 is_active: true,
                 status: LicenseVerificationStatus::Valid,
+                tier: Some(payload.tier_key),
                 payload: Some(p),
                 message: None,
             })
@@ -447,6 +454,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             Ok(LicenseStatusDto {
                 is_active: true,
                 status: LicenseVerificationStatus::GracePeriod,
+                tier: Some(payload.tier_key),
                 payload: Some(p),
                 message: Some(format!(
                     "License expired on {}. You are in the grace period until {}.",
@@ -455,13 +463,13 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
                 )),
             })
         } else {
-            // ── Expired (past grace period) ───────────────────
             #[cfg(debug_assertions)]
             {
                 tracing::debug!("License expired in debug mode — returning Valid");
                 Ok(LicenseStatusDto {
                     is_active: true,
                     status: LicenseVerificationStatus::Valid,
+                    tier: Some(payload.tier_key),
                     payload: None,
                     message: None,
                 })
@@ -471,6 +479,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
                 return Ok(LicenseStatusDto {
                     is_active: false,
                     status: LicenseVerificationStatus::Expired,
+                    tier: None,
                     payload: None,
                     message: Some(format!(
                         "License expired on {}. Grace period ended on {}.",
@@ -488,6 +497,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             Ok(LicenseStatusDto {
                 is_active: true,
                 status: LicenseVerificationStatus::Valid,
+                tier: None,
                 payload: None,
                 message: None,
             })
@@ -497,6 +507,7 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
             return Ok(LicenseStatusDto {
                 is_active: false,
                 status: LicenseVerificationStatus::Missing,
+                tier: None,
                 payload: None,
                 message: Some("No license found. Please activate.".to_string()),
             });
@@ -539,6 +550,7 @@ mod tests {
         let dto = LicenseStatusDto {
             is_active: false,
             status: LicenseVerificationStatus::ClockTampered,
+            tier: None,
             payload: None,
             message: Some("Clock tampering detected: test".into()),
         };

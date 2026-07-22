@@ -53,6 +53,19 @@ async fn handle_pull(Json(_request): Json<PullRequest>) -> Json<PullResponse> {
     })
 }
 
+/// Health check handler — the sync engine calls `GET /api/health` before every
+/// cycle (P271 pre-sync health check). All test servers must include this route
+/// or `run_sync_cycle()` will abort before attempting push/pull.
+async fn handle_health() -> axum::http::StatusCode {
+    axum::http::StatusCode::OK
+}
+
+/// Return a Router with `/api/health` merged in, so that `run_sync_cycle()`'s
+/// pre-sync health check (P271) passes before push/pull.
+fn with_health_route(app: Router) -> Router {
+    app.route("/api/health", axum::routing::get(handle_health))
+}
+
 /// Start a test server on a random port and return a [`TestServer`] bundle.
 async fn spawn_test_server() -> TestServer {
     let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
@@ -61,6 +74,7 @@ async fn spawn_test_server() -> TestServer {
     let app = Router::new()
         .route("/api/sync/push", post(handle_push))
         .route("/api/sync/pull", post(handle_pull))
+        .route("/api/health", axum::routing::get(handle_health))
         .with_state(state.clone());
 
     let handle = tokio::spawn(async move {
@@ -84,7 +98,11 @@ async fn spawn_test_server() -> TestServer {
 ///
 /// This avoids per-test TcpListener binding which can trigger Windows
 /// firewall 403 errors with 127.0.0.1.
+///
+/// The `/api/health` route is automatically added so that `run_sync_cycle()`'s
+/// pre-sync health check (P271) passes before the custom push/pull handlers run.
 async fn spawn_custom_server(app: Router) -> (u16, tokio::task::JoinHandle<()>) {
+    let app = with_health_route(app);
     let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let handle = tokio::spawn(async move {
@@ -372,7 +390,7 @@ async fn api_key_is_sent_in_headers() {
 
 #[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
-async fn connection_refused_returns_error() {
+async fn connection_refused_returns_ok_with_zero_counts() {
     // Use a port that nothing is listening on.
     let port = 28999;
     let store = setup_store();
@@ -385,19 +403,18 @@ async fn connection_refused_returns_error() {
     let engine = SyncEngine::new(config);
     let result = engine.run_sync_cycle(&store).await;
 
+    // P271: The pre-sync health check returns Ok with zero counts when
+    // the server is unreachable (graceful skip, not an error).
     assert!(
-        result.is_err(),
-        "sync should fail when server is unreachable"
+        result.is_ok(),
+        "sync should gracefully return Ok when server is unreachable (P271 health check)"
     );
-    if let Err(e) = result {
-        let msg = e.to_string();
-        assert!(
-            msg.contains("transport")
-                || msg.contains("Connection refused")
-                || msg.contains("push request failed"),
-            "expected transport error, got: {msg}"
-        );
-    }
+    let rep_result = result.unwrap();
+    assert_eq!(rep_result.pushed, 0, "no items should be pushed");
+    assert_eq!(rep_result.pulled, 0, "no items should be pulled");
+    // Item should remain pending (not synced, not failed).
+    let pending = store.list_pending_offline().unwrap();
+    assert_eq!(pending.len(), 1, "item should remain pending");
 }
 
 #[cfg_attr(not(feature = "slow-tests"), ignore)]
@@ -504,11 +521,14 @@ async fn relay_handle_pull(
 }
 
 /// Spawn a relay server and return (port, state, handle).
+///
+/// Includes `/api/health` for the P271 pre-sync health check.
 async fn spawn_relay_server() -> (u16, RelayServerState, tokio::task::JoinHandle<()>) {
     let state = RelayServerState::new();
     let app = Router::new()
         .route("/api/sync/push", post(relay_handle_push))
         .route("/api/sync/pull", post(relay_handle_pull))
+        .route("/api/health", axum::routing::get(handle_health))
         .with_state(state.clone());
 
     let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();

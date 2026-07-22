@@ -29,6 +29,7 @@ pub mod cart;
 pub mod constants;
 pub mod contact;
 pub mod contracts;
+pub mod dto;
 pub mod enums;
 pub mod errors;
 pub mod money;
@@ -50,6 +51,7 @@ pub use money::{Currency, InvalidCurrencyCode, Money};
 pub use percentage::Percentage;
 pub use sku::{LineId, Sku};
 pub use validation::{
-    validate_alphanumeric, validate_ascii_alphanumeric, validate_max_length, validate_min_length,
-    validate_non_empty_bounded, validate_not_empty, validate_range, validate_regex,
+    validate_alphanumeric, validate_ascii_alphanumeric, validate_email, validate_max_length,
+    validate_min_length, validate_money_range, validate_non_empty_bounded, validate_not_empty,
+    validate_phone, validate_range, validate_regex, validate_sku, validate_string_length,
 };

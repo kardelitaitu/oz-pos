@@ -73,6 +73,16 @@ describe('AuditLogScreen', () => {
     await waitFor(() => expect(screen.getByText('Refresh')).toBeDefined());
   });
 
+  it('calls load(0) when Refresh is clicked', async () => {
+    mockListAuditLog.mockResolvedValue([makeEntry()]);
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Refresh')).toBeDefined());
+
+    mockListAuditLog.mockClear();
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(mockListAuditLog).toHaveBeenCalledWith(50, 0));
+  });
+
   it('shows loading skeleton initially', async () => {
     mockListAuditLog.mockReturnValue(new Promise(() => {}));
     await renderScreen();
@@ -94,6 +104,19 @@ describe('AuditLogScreen', () => {
     await renderScreen();
     await waitFor(() => expect(screen.getByText('DB error')).toBeDefined());
     expect(screen.getByText('Retry')).toBeDefined();
+  });
+
+  it('calls load(0) when retry button is clicked after error', async () => {
+    // First call during mount rejects — shows error state
+    mockListAuditLog.mockRejectedValueOnce(new Error('DB error'));
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('DB error')).toBeDefined());
+
+    // Clear mock so retry uses the default resolved value from beforeEach
+    mockListAuditLog.mockClear();
+    // Click retry — should call load(0) which calls listAuditLog(50, 0)
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(mockListAuditLog).toHaveBeenCalledWith(50, 0));
   });
 
   it('renders table with audit entries', async () => {

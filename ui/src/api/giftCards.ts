@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A gift card record with balance and status. */
 export interface GiftCard {
@@ -68,32 +68,32 @@ export interface RedeemGiftCardResult {
 
 /** Issue a new gift card with an initial balance. */
 export const issueGiftCard = (input: IssueGiftCardInput): Promise<GiftCardWithTransactions> =>
-  invoke<GiftCardWithTransactions>('issue_gift_card', { input });
+  loggedInvoke<GiftCardWithTransactions>('issue_gift_card', { input });
 
 /** Get a gift card by card number or ID, including transactions. */
 export const getGiftCard = (cardNumberOrId: string): Promise<GiftCardWithTransactions | null> =>
-  invoke<GiftCardWithTransactions | null>('get_gift_card', { cardNumberOrId });
+  loggedInvoke<GiftCardWithTransactions | null>('get_gift_card', { cardNumberOrId });
 
 /** List gift cards with optional filtering. */
 export const listGiftCards = (filter: GiftCardFilter): Promise<GiftCardWithTransactions[]> =>
-  invoke<GiftCardWithTransactions[]>('list_gift_cards', { filter });
+  loggedInvoke<GiftCardWithTransactions[]>('list_gift_cards', { filter });
 
 /** Check a gift card's current balance and status. */
 export const getGiftCardBalance = (cardNumberOrId: string): Promise<BalanceResult | null> =>
-  invoke<BalanceResult | null>('get_gift_card_balance', { cardNumberOrId });
+  loggedInvoke<BalanceResult | null>('get_gift_card_balance', { cardNumberOrId });
 
 /** Redeem a gift card for a given amount against a sale. */
 export const redeemGiftCard = (cardNumberOrId: string, amountMinor: number, saleId: string): Promise<RedeemGiftCardResult> =>
-  invoke<RedeemGiftCardResult>('redeem_gift_card', { cardNumberOrId, amountMinor, saleId });
+  loggedInvoke<RedeemGiftCardResult>('redeem_gift_card', { cardNumberOrId, amountMinor, saleId });
 
 /** Add funds to an existing gift card. */
 export const topUpGiftCard = (cardNumberOrId: string, amountMinor: number): Promise<GiftCardWithTransactions> =>
-  invoke<GiftCardWithTransactions>('top_up_gift_card', { cardNumberOrId, amountMinor });
+  loggedInvoke<GiftCardWithTransactions>('top_up_gift_card', { cardNumberOrId, amountMinor });
 
 /** Freeze a gift card to prevent further use. */
 export const freezeGiftCard = (cardNumberOrId: string): Promise<GiftCard> =>
-  invoke<GiftCard>('freeze_gift_card', { cardNumberOrId });
+  loggedInvoke<GiftCard>('freeze_gift_card', { cardNumberOrId });
 
 /** Unfreeze a previously frozen gift card. */
 export const unfreezeGiftCard = (cardNumberOrId: string): Promise<GiftCard> =>
-  invoke<GiftCard>('unfreeze_gift_card', { cardNumberOrId });
+  loggedInvoke<GiftCard>('unfreeze_gift_card', { cardNumberOrId });

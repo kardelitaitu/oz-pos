@@ -1,6 +1,6 @@
 // ── Security: Key Rotation & Age ──────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** Metadata about the current encryption key (no key material exposed). */
 export interface KeyRotationStatus {
@@ -24,8 +24,8 @@ export interface RotationInfo {
 
 /** Get the current key rotation status (key age, creation timestamp). */
 export const getKeyRotationInfo = (): Promise<KeyRotationStatus> =>
-  invoke<KeyRotationStatus>('get_key_rotation_info');
+  loggedInvoke<KeyRotationStatus>('get_key_rotation_info');
 
 /** Rotate (re-generate) the encryption key, archiving the previous one. */
 export const rotateEncryptionKey = (): Promise<RotationInfo> =>
-  invoke<RotationInfo>('rotate_encryption_key');
+  loggedInvoke<RotationInfo>('rotate_encryption_key');

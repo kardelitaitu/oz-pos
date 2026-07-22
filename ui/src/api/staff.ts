@@ -1,6 +1,6 @@
 // ── Staff: Login, Bootstrap, CRUD ──────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 // ── Auth ──────────────────────────────────────────────────────────
 
@@ -36,11 +36,11 @@ export interface CheckUsernameResult {
 
 /** Check if a username exists and is active before proceeding to PIN. */
 export const checkUsername = (args: CheckUsernameArgs): Promise<CheckUsernameResult> =>
-  invoke<CheckUsernameResult>('staff_check_username', { args });
+  loggedInvoke<CheckUsernameResult>('staff_check_username', { args });
 
 /** Authenticate a staff member with username and PIN. */
 export const staffLogin = (args: StaffLoginArgs): Promise<StaffLoginResult> =>
-  invoke<StaffLoginResult>('staff_login', { args });
+  loggedInvoke<StaffLoginResult>('staff_login', { args });
 
 // ── Bootstrap (first-owner, no auth required) ─────────────────────
 
@@ -64,7 +64,7 @@ export interface BootstrapOwnerResult {
  * auto-login immediately.
  */
 export const bootstrapOwner = (args: BootstrapOwnerArgs): Promise<BootstrapOwnerResult> =>
-  invoke<BootstrapOwnerResult>('bootstrap_owner', { args });
+  loggedInvoke<BootstrapOwnerResult>('bootstrap_owner', { args });
 
 // ── Staff Management ──────────────────────────────────────────────
 
@@ -108,19 +108,19 @@ export interface UpdateStaffArgs {
 
 /** List all staff members. */
 export const listStaff = (): Promise<StaffMemberDto[]> =>
-  invoke<StaffMemberDto[]>('list_staff');
+  loggedInvoke<StaffMemberDto[]>('list_staff');
 
 /** List all roles. */
 export const listRoles = (): Promise<RoleDto[]> =>
-  invoke<RoleDto[]>('list_roles');
+  loggedInvoke<RoleDto[]>('list_roles');
 
 /** Create a new staff member. */
 export const createStaff = (args: CreateStaffArgs): Promise<StaffMemberDto> =>
-  invoke<StaffMemberDto>('create_staff', { args });
+  loggedInvoke<StaffMemberDto>('create_staff', { args });
 
 /** Update an existing staff member. */
 export const updateStaff = (args: UpdateStaffArgs): Promise<StaffMemberDto> =>
-  invoke<StaffMemberDto>('update_staff', { args });
+  loggedInvoke<StaffMemberDto>('update_staff', { args });
 
 // ── Session Token (ADR #4 / ADR #7) ───────────────────────────────
 
@@ -158,7 +158,7 @@ export interface CreateSessionResult {
  * scope (store, instance, type, user, role, terminal) from this token.
  */
 export const createSession = (args: CreateSessionArgs): Promise<CreateSessionResult> =>
-  invoke<CreateSessionResult>('create_session', { args });
+  loggedInvoke<CreateSessionResult>('create_session', { args });
 
 /**
  * Destroy an active session token (logout or store switch).
@@ -167,4 +167,4 @@ export const createSession = (args: CreateSessionArgs): Promise<CreateSessionRes
  * with InvalidSession.
  */
 export const destroySession = (sessionToken: string): Promise<void> =>
-  invoke<void>('destroy_session', { sessionToken });
+  loggedInvoke<void>('destroy_session', { sessionToken });

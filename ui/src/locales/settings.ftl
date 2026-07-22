@@ -200,6 +200,7 @@ settings-nav-license = License
 settings-nav-exchange = Exchange Rates
 settings-nav-promotions = Promotions
 settings-nav-topology = Topology
+settings-nav-email = Email Reports
 settings-category-operations = Operations
 settings-category-system = System
 settings-category-management = Management
@@ -207,6 +208,7 @@ settings-sidebar-nav-aria = Settings navigation
 settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar
 settings-sidebar-collapse-all-aria = Collapse all categories
+settings-sidebar-search-aria = Search settings
 settings-sidebar-search-clear-aria =
     .aria-label = Clear search
 settings-sidebar-no-results = No matching sections
@@ -830,3 +832,21 @@ settings-schedule-recipients = Recipients
 settings-schedule-add-recipient = + Add Recipient
 settings-schedule-save-btn = Save Schedule
 settings-email-schedule-saved = Report schedule saved
+
+# ── Report type labels for schedule ──
+settings-schedule-report-type-daily-revenue = Daily Revenue
+settings-schedule-report-type-weekly-revenue = Weekly Revenue
+settings-schedule-report-type-monthly-revenue = Monthly Revenue
+settings-schedule-report-type-top-products = Top Products
+settings-schedule-report-type-hourly-heatmap = Hourly Heatmap
+settings-schedule-report-type-category-breakdown = Category Breakdown
+settings-schedule-report-type-low-stock-alerts = Low Stock Alerts
+
+# ── Schedule recipient aria labels ──
+settings-schedule-recipient-aria = Recipient { $number }
+settings-schedule-recipient-remove-aria = Remove recipient { $number }
+settings-schedule-recipient-add-aria = Add recipient
+
+# ── Email test/schedule error fallbacks ──
+settings-email-test-send-failed = Failed to send test email
+settings-email-schedule-save-failed = Failed to save schedule

@@ -76,6 +76,28 @@ pub struct SyncSnapshotResponse {
     pub users: Vec<serde_json::Value>,
 }
 
+/// Classifies a `reqwest::Error` into a human-readable transport error message
+/// that distinguishes between connection failures, timeouts, DNS errors, etc.
+///
+/// This produces actionable diagnostics instead of the raw `reqwest` error string,
+/// helping operators understand *why* a sync failed (server down vs network issue).
+fn classify_transport_error(e: &reqwest::Error, url: &str) -> String {
+    if e.is_timeout() {
+        format!("request timed out after 30s to {url}")
+    } else if e.is_connect() {
+        let msg = e.to_string().to_lowercase();
+        if msg.contains("connection refused") {
+            format!("cloud server not running at {url} (connection refused)")
+        } else {
+            format!("cannot connect to {url}: {e}")
+        }
+    } else if e.is_request() {
+        format!("request failed: {e}")
+    } else {
+        format!("transport error: {e}")
+    }
+}
+
 /// The HTTP sync transport.
 pub struct SyncTransport {
     client: reqwest::Client,
@@ -119,7 +141,7 @@ impl SyncTransport {
             .json(items)
             .send()
             .await
-            .map_err(|e| SyncError::Transport(format!("push request failed: {e}")))?;
+            .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -167,7 +189,7 @@ impl SyncTransport {
             .json(&request)
             .send()
             .await
-            .map_err(|e| SyncError::Transport(format!("pull request failed: {e}")))?;
+            .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         // P-1 retention: 410 Gone means the client's anchor has expired
         // (data older than the `since` timestamp has been pruned).
@@ -202,6 +224,40 @@ impl SyncTransport {
         Ok(pull_resp)
     }
 
+    /// Check whether the cloud server is reachable by calling `GET /api/health`.
+    ///
+    /// Returns `Ok(())` when the server responds with a 2xx status.
+    /// Returns `Err` with a classified transport error otherwise.
+    ///
+    /// Uses a short 5-second timeout (separate from the 30-second sync timeout)
+    /// so that health checks don't block the daemon when the server is down.
+    pub async fn health_check(&self) -> Result<(), SyncError> {
+        let url = format!("{}/api/health", self.base_url);
+        // Use a short-lived client with a 5-second timeout for health checks.
+        // This prevents the daemon from stalling for 30 seconds on every cycle
+        // when the server is unreachable.
+        let health_client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap_or_default();
+        let resp = health_client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
+
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(SyncError::Transport(format!(
+                "health check returned {status}: {body}"
+            )))
+        }
+    }
+
     /// Fetch the server's authoritative snapshot of reference data (P-3).
     ///
     /// Called when the client's sync anchor has expired — the server's
@@ -214,7 +270,7 @@ impl SyncTransport {
             .get(&url)
             .send()
             .await
-            .map_err(|e| SyncError::Transport(format!("snapshot request failed: {e}")))?;
+            .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -613,5 +669,140 @@ mod tests {
         let json1 = serde_json::to_string(&resp).unwrap();
         let json2 = serde_json::to_string(&cloned).unwrap();
         assert_eq!(json1, json2);
+    }
+
+    // ── classify_transport_error tests ──────────────────────────────
+
+    #[test]
+    fn classify_transport_error_timeout() {
+        // Simulate a timeout by creating a request that times out.
+        // We test the classification logic by checking the message pattern.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let err = rt.block_on(async {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(1))
+                .build()
+                .unwrap();
+            client
+                .get("http://127.0.0.1:1/timeout")
+                .send()
+                .await
+                .unwrap_err()
+        });
+        let msg = super::classify_transport_error(&err, "http://example.com");
+        assert!(
+            msg.contains("timed out") || msg.contains("timeout"),
+            "expected timeout message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn classify_transport_error_connection_refused() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let err = rt.block_on(async {
+            let client = reqwest::Client::new();
+            client
+                .get("http://127.0.0.1:1/refused")
+                .send()
+                .await
+                .unwrap_err()
+        });
+        let msg = super::classify_transport_error(&err, "http://127.0.0.1:1");
+        assert!(
+            msg.contains("cloud server not running") || msg.contains("cannot connect"),
+            "expected connection error message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn classify_transport_error_includes_url() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let err = rt.block_on(async {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(1))
+                .build()
+                .unwrap();
+            client
+                .get("http://192.0.2.1:9999/test")
+                .send()
+                .await
+                .unwrap_err()
+        });
+        let url = "http://192.0.2.1:9999";
+        let msg = super::classify_transport_error(&err, url);
+        // The error message should either contain the URL or describe the issue.
+        assert!(!msg.is_empty(), "error message should not be empty");
+        assert!(
+            msg.contains(url)
+                || msg.contains("timed out")
+                || msg.contains("cannot connect")
+                || msg.contains("cloud server not running"),
+            "expected descriptive error message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn classify_transport_error_non_empty() {
+        // All classification branches should produce non-empty messages.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let err = rt.block_on(async {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(1))
+                .build()
+                .unwrap();
+            client
+                .get("http://127.0.0.1:1/test")
+                .send()
+                .await
+                .unwrap_err()
+        });
+        let msg = super::classify_transport_error(&err, "http://test.example.com");
+        assert!(!msg.is_empty(), "classification should produce a message");
+    }
+
+    // ── health_check integration test ───────────────────────────────
+
+    #[tokio::test]
+    async fn health_check_succeeds_with_healthy_server() {
+        let server_url =
+            crate::test_helpers::spawn_redirect_server("https://migrated.example.com").await;
+        let transport = SyncTransport::new(&server_url, None);
+
+        let result = transport.health_check().await;
+        assert!(
+            result.is_ok(),
+            "health check should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn health_check_fails_when_server_returns_error() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::get};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn sick_health() -> impl IntoResponse {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"status": "error"})),
+            )
+        }
+
+        let app = Router::new().route("/api/health", get(sick_health));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let server_url = format!("http://localhost:{port}");
+        let transport = SyncTransport::new(&server_url, None);
+
+        let result = transport.health_check().await;
+        assert!(result.is_err(), "health check should fail on 500");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("500") || err.contains("Internal Server Error"),
+            "error should mention status code, got: {err}"
+        );
     }
 }

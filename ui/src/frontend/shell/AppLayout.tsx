@@ -4,6 +4,7 @@ import RoleBadge from './RoleBadge';
 import Tooltip from './Tooltip';
 import UpdateBanner from './UpdateBanner';
 import StoreSwitcher from '@/components/StoreSwitcher';
+import StockAlertBell from '@/components/StockAlertBell';
 import { useBrand } from '@/contexts/BrandContext';
 import StatusBar from './StatusBar';
 
@@ -58,6 +59,8 @@ export interface AppLayoutProps {
   enabledFeatures?: Set<string>;
   /** Current user role for role-based nav filtering. */
   userRole?: string;
+  /** Session token for scoped IPC calls (stock alert bell). */
+  sessionToken?: string | null;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -76,7 +79,7 @@ export interface AppLayoutProps {
 /** Routes that render without the top bar (hamburger + store switcher). */
 const ADMIN_ROUTES = new Set(['settings', 'features', 'data-management']);
 
-export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole }: AppLayoutProps) {
+export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole, sessionToken }: AppLayoutProps) {
   const { l10n } = useLocalization();
   const { settings: brandSettings } = useBrand();
   const navItems = getNavItems(enabledFeatures, userRole);
@@ -285,6 +288,12 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
                 </Tooltip>
               </div>
               <div className="app-topbar-right">
+                {sessionToken && (
+                  <StockAlertBell
+                    sessionToken={sessionToken}
+                    onClick={() => onNavigate('products')}
+                  />
+                )}
                 <StoreSwitcher />
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A loyalty tier defining points thresholds and earn rates. */
 export interface LoyaltyTier {
@@ -51,32 +51,32 @@ export interface RedeemResult {
 
 /** Get a loyalty account for a customer with tier and transaction details. */
 export const getLoyaltyAccount = (customerId: string): Promise<LoyaltyAccountWithDetails | null> =>
-  invoke<LoyaltyAccountWithDetails | null>('get_loyalty_account', { customerId });
+  loggedInvoke<LoyaltyAccountWithDetails | null>('get_loyalty_account', { customerId });
 
 /** List all loyalty accounts with tier and transaction details. */
 export const listLoyaltyAccounts = (): Promise<LoyaltyAccountWithDetails[]> =>
-  invoke<LoyaltyAccountWithDetails[]>('list_loyalty_accounts');
+  loggedInvoke<LoyaltyAccountWithDetails[]>('list_loyalty_accounts');
 
 /** Earn loyalty points for a customer on a completed sale. */
 export const earnLoyaltyPoints = (customerId: string, saleId: string, totalMinor: number): Promise<LoyaltyTransaction> =>
-  invoke<LoyaltyTransaction>('earn_loyalty_points', { customerId, saleId, totalMinor });
+  loggedInvoke<LoyaltyTransaction>('earn_loyalty_points', { customerId, saleId, totalMinor });
 
 /** Redeem loyalty points for a discount on a sale. */
 export const redeemLoyaltyPoints = (customerId: string, points: number, saleId: string): Promise<RedeemResult> =>
-  invoke<RedeemResult>('redeem_loyalty_points', { customerId, points, saleId });
+  loggedInvoke<RedeemResult>('redeem_loyalty_points', { customerId, points, saleId });
 
 /** List all loyalty tiers. */
 export const listLoyaltyTiers = (): Promise<LoyaltyTier[]> =>
-  invoke<LoyaltyTier[]>('list_loyalty_tiers');
+  loggedInvoke<LoyaltyTier[]>('list_loyalty_tiers');
 
 /** Update an existing loyalty tier. */
 export const updateLoyaltyTier = (tier: LoyaltyTier): Promise<LoyaltyTier> =>
-  invoke<LoyaltyTier>('update_loyalty_tier', { tier });
+  loggedInvoke<LoyaltyTier>('update_loyalty_tier', { tier });
 
 /** Get the monetary value (in minor units) for a given number of loyalty points. */
 export const getPointsValue = (points: number): Promise<number> =>
-  invoke<number>('get_points_value', { points });
+  loggedInvoke<number>('get_points_value', { points });
 
 /** Get or create a loyalty account for a customer. */
 export const getOrCreateLoyaltyAccount = (customerId: string): Promise<LoyaltyAccount> =>
-  invoke<LoyaltyAccount>('get_or_create_loyalty_account', { customerId });
+  loggedInvoke<LoyaltyAccount>('get_or_create_loyalty_account', { customerId });

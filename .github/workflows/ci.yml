@@ -230,6 +230,16 @@ jobs:
         if: always() && matrix.shard == 1
         run: bash scripts/lint-i18n.sh
 
+      # ── A11y regression tests (jest-axe) ──────────────────────────
+      # Only run on shard 1 to avoid duplicate checks. Non-blocking
+      # (continue-on-error) since known product-level a11y bugs
+      # (ProductLookupScreen aria roles, SalesHistoryScreen heading-order)
+      # are tracked but not yet fixed.
+      - name: A11y regression tests
+        if: always() && matrix.shard == 1
+        continue-on-error: true
+        run: (cd ui && npm run test:a11y 2>&1) | tee ui/a11y-output.log
+
   # ── Lighthouse a11y audit ─────────────────────────────────────────
   lighthouse:
     name: Lighthouse a11y audit

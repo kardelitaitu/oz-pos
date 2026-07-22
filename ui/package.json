@@ -1,7 +1,7 @@
 {
   "name": "oz-pos-ui",
   "private": true,
-  "version": "0.0.17",
+  "version": "0.0.19",
   "type": "module",
   "description": "OZ-POS front-end: React 18 + Vite + TypeScript + @fluent/react.",
   "license": "SEE LICENSE IN ../LICENSE",
@@ -15,6 +15,7 @@
     "dedupe:ftl": "python3 ../scripts/dedupe-ftl.py",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:a11y": "vitest run --reporter=verbose src/__tests__/a11y/",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
@@ -53,7 +54,9 @@
     "eslint-plugin-react": "^7.34.4",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.7",
+    "jest-axe": "^10.0.0",
     "jsdom": "^24.1.0",
+    "msw": "^2.15.0",
     "typescript": "^5.5.3",
     "vite": "^6.0.0",
     "vitest": "4.1.10"

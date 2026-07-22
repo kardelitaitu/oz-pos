@@ -470,3 +470,130 @@ fn restore_onto_nonempty_db_overwrites() {
     fs::remove_file(&db_path).ok();
     fs::remove_file(&backup_path).ok();
 }
+
+// ── P151: DB Corruption Detection & Repair ─────────────────────────
+
+#[test]
+fn check_integrity_passes_on_healthy_db() {
+    let db_path = fresh_db_path("integrity-healthy");
+    {
+        let mut conn = open_db(&db_path);
+        run_migrations(&mut conn);
+        let s = store(&conn);
+        s.check_integrity()
+            .expect("healthy DB should pass integrity");
+        s.create_product("HEALTHY", "H", price(100), None, None, 10, None)
+            .unwrap();
+        s.check_integrity().expect("DB with data should pass");
+    }
+    fs::remove_file(&db_path).ok();
+}
+
+#[test]
+fn check_integrity_detects_corrupt_file() {
+    let p = fresh_db_path("integrity-corrupt");
+    fs::write(&p, "not valid sqlite!!!").unwrap();
+    let conn = Connection::open(&p).unwrap();
+    let s = store(&conn);
+    assert!(s.check_integrity().is_err(), "corrupt file should fail");
+    fs::remove_file(&p).ok();
+}
+
+#[test]
+fn repair_to_creates_readable_copy() {
+    let src = fresh_db_path("repair-src");
+    let dst = fresh_db_path("repair-dst");
+    {
+        let mut c = open_db(&src);
+        run_migrations(&mut c);
+        let s = store(&c);
+        s.create_product("RP-1", "Rp", price(200), None, None, 20, None)
+            .unwrap();
+    }
+    {
+        let c = open_db(&src);
+        store(&c).repair_to(&dst).unwrap();
+    }
+    {
+        let c = Connection::open(&dst).unwrap();
+        let s = store(&c);
+        s.check_integrity().unwrap();
+        assert_eq!(s.list_products().unwrap().len(), 1);
+    }
+    fs::remove_file(&src).ok();
+    fs::remove_file(&dst).ok();
+}
+
+#[test]
+fn repair_workflow_detect_and_rebuild() {
+    let src = fresh_db_path("workflow-src");
+    let dst = fresh_db_path("workflow-dst");
+    {
+        let mut c = open_db(&src);
+        run_migrations(&mut c);
+        let s = store(&c);
+        s.create_product("W1", "W1", price(100), None, None, 10, None)
+            .unwrap();
+        s.create_product("W2", "W2", price(200), None, None, 20, None)
+            .unwrap();
+        s.create_product("W3", "W3", price(300), None, None, 30, None)
+            .unwrap();
+    }
+    {
+        let c = open_db(&src);
+        let s = store(&c);
+        assert!(s.check_integrity().is_ok());
+        s.repair_to(&dst).unwrap();
+    }
+    {
+        let c = Connection::open(&dst).unwrap();
+        let s = store(&c);
+        assert!(s.check_integrity().is_ok());
+        assert_eq!(s.list_products().unwrap().len(), 3);
+    }
+    fs::remove_file(&src).ok();
+    fs::remove_file(&dst).ok();
+}
+
+#[test]
+fn repair_overwrites_existing_file() {
+    let src = fresh_db_path("repair-ow-src");
+    let dst = fresh_db_path("repair-ow-dst");
+    {
+        let mut c = open_db(&src);
+        run_migrations(&mut c);
+        let s = store(&c);
+        s.create_product("OW1", "OW1", price(100), None, None, 10, None)
+            .unwrap();
+        s.create_product("OW2", "OW2", price(200), None, None, 20, None)
+            .unwrap();
+    }
+    // First repair.
+    {
+        let c = open_db(&src);
+        store(&c).repair_to(&dst).unwrap();
+    }
+    // Second repair (overwrite).
+    {
+        let c = open_db(&src);
+        store(&c).repair_to(&dst).unwrap();
+    }
+    {
+        let c = Connection::open(&dst).unwrap();
+        assert_eq!(store(&c).list_products().unwrap().len(), 2);
+    }
+    fs::remove_file(&src).ok();
+    fs::remove_file(&dst).ok();
+}
+
+#[test]
+fn check_integrity_on_empty_healthy_db() {
+    let p = fresh_db_path("integrity-empty");
+    {
+        let mut c = open_db(&p);
+        run_migrations(&mut c);
+        let s = store(&c);
+        s.check_integrity().unwrap();
+    }
+    fs::remove_file(&p).ok();
+}

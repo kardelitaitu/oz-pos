@@ -26,6 +26,9 @@ struct DatasetDef {
     table: &'static str,
     columns: ColumnWhitelist,
     has_date_filter: bool,
+    /// Column name to use for date filtering (e.g. "created_at", "opened_at").
+    /// Only meaningful when `has_date_filter` is true.
+    date_column: &'static str,
 }
 
 /// Request payload for the custom report builder.
@@ -504,6 +507,10 @@ impl Store<'_> {
     /// |-----|-------|-------------|
     /// | `sales` | `sales` | `created_at` |
     /// | `inventory` | `products` | none |
+    /// | `customers` | `customers` | `created_at` |
+    /// | `staff` | `users` | none |
+    /// | `tax_rates` | `tax_rates` | none |
+    /// | `shifts` | `shifts` | `opened_at` |
     pub fn build_custom_report(
         &self,
         req: CustomReportRequest,
@@ -538,8 +545,9 @@ impl Store<'_> {
         let mut params: Vec<String> = Vec::new();
 
         if dataset.has_date_filter {
+            let date_col = dataset.date_column;
             if req.start_date.is_some() {
-                sql.push_str(" WHERE created_at >= ?1");
+                sql.push_str(&format!(" WHERE {} >= ?1", date_col));
                 params.push(req.start_date.clone().unwrap());
             }
             if req.end_date.is_some() {
@@ -549,7 +557,7 @@ impl Store<'_> {
                 } else {
                     " WHERE"
                 };
-                sql.push_str(&format!("{} created_at <= ?{}", where_clause, param_idx));
+                sql.push_str(&format!("{} {} <= ?{}", where_clause, date_col, param_idx));
                 params.push(format!("{} 23:59:59", req.end_date.clone().unwrap()));
             }
         }
@@ -600,6 +608,7 @@ impl Store<'_> {
                     ("customer_id", "Customer ID"),
                 ],
                 has_date_filter: true,
+                date_column: "created_at",
             }),
             "inventory" => Ok(DatasetDef {
                 table: "products",
@@ -609,12 +618,69 @@ impl Store<'_> {
                     ("price_minor", "Price (minor)"),
                     ("category_id", "Category ID"),
                     ("barcode", "Barcode"),
+                    ("product_type", "Type"),
                 ],
                 has_date_filter: false,
+                date_column: "",
+            }),
+            "customers" => Ok(DatasetDef {
+                table: "customers",
+                columns: &[
+                    ("id", "Customer ID"),
+                    ("name", "Name"),
+                    ("email", "Email"),
+                    ("phone", "Phone"),
+                    ("loyalty_points", "Loyalty Points"),
+                    ("total_spent_minor", "Total Spent (minor)"),
+                    ("created_at", "Created"),
+                ],
+                has_date_filter: true,
+                date_column: "created_at",
+            }),
+            "staff" => Ok(DatasetDef {
+                table: "users",
+                columns: &[
+                    ("id", "User ID"),
+                    ("username", "Username"),
+                    ("display_name", "Display Name"),
+                    ("is_active", "Active"),
+                    ("created_at", "Created"),
+                ],
+                has_date_filter: false,
+                date_column: "",
+            }),
+            "tax_rates" => Ok(DatasetDef {
+                table: "tax_rates",
+                columns: &[
+                    ("id", "Rate ID"),
+                    ("name", "Name"),
+                    ("rate_bps", "Rate (bps)"),
+                    ("is_default", "Default"),
+                    ("created_at", "Created"),
+                ],
+                has_date_filter: false,
+                date_column: "",
+            }),
+            "shifts" => Ok(DatasetDef {
+                table: "shifts",
+                columns: &[
+                    ("id", "Shift ID"),
+                    ("user_id", "User ID"),
+                    ("opened_at", "Opened"),
+                    ("closed_at", "Closed"),
+                    ("status", "Status"),
+                    ("total_sales_minor", "Total Sales (minor)"),
+                    ("opening_balance_minor", "Opening Balance"),
+                    ("closing_balance_minor", "Closing Balance"),
+                ],
+                has_date_filter: true,
+                date_column: "opened_at",
             }),
             _ => Err(CoreError::Validation {
                 field: "dataset",
-                message: format!("unknown dataset '{key}'. Supported: sales, inventory"),
+                message: format!(
+                    "unknown dataset '{key}'. Supported: sales, inventory, customers, staff, tax_rates, shifts"
+                ),
             }),
         }
     }
@@ -840,6 +906,99 @@ mod tests {
     }
 
     // ── Custom report builder ──────────────────────────────────────
+
+    #[test]
+    fn custom_report_customers_dataset() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "customers".to_string(),
+            columns: vec!["id".to_string(), "name".to_string(), "email".to_string()],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 3);
+        assert_eq!(resp.columns[0], "id");
+        assert_eq!(resp.columns[1], "name");
+        assert_eq!(resp.columns[2], "email");
+    }
+
+    #[test]
+    fn custom_report_staff_dataset() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "staff".to_string(),
+            columns: vec![
+                "username".to_string(),
+                "display_name".to_string(),
+                "is_active".to_string(),
+            ],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 3);
+        assert_eq!(resp.columns[0], "username");
+        assert_eq!(resp.columns[1], "display_name");
+        assert_eq!(resp.columns[2], "is_active");
+    }
+
+    #[test]
+    fn custom_report_tax_rates_dataset() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "tax_rates".to_string(),
+            columns: vec!["name".to_string(), "rate_bps".to_string()],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 2);
+        assert_eq!(resp.columns[0], "name");
+        assert_eq!(resp.columns[1], "rate_bps");
+    }
+
+    #[test]
+    fn custom_report_shifts_dataset() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        let req = CustomReportRequest {
+            dataset: "shifts".to_string(),
+            columns: vec![
+                "id".to_string(),
+                "status".to_string(),
+                "total_sales_minor".to_string(),
+            ],
+            start_date: None,
+            end_date: None,
+        };
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 3);
+        assert_eq!(resp.columns[0], "id");
+        assert_eq!(resp.columns[1], "status");
+        assert_eq!(resp.columns[2], "total_sales_minor");
+    }
+
+    #[test]
+    fn custom_report_shifts_date_filter_uses_opened_at() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+        // Date-filtered query on shifts should use opened_at, not created_at.
+        let req = CustomReportRequest {
+            dataset: "shifts".to_string(),
+            columns: vec!["id".to_string(), "status".to_string()],
+            start_date: Some("2026-01-01".to_string()),
+            end_date: Some("2026-12-31".to_string()),
+        };
+        // Should not error — if it used created_at against shifts table, the
+        // SQL would be invalid since shifts has opened_at, not created_at.
+        let resp = s.build_custom_report(req).unwrap();
+        assert_eq!(resp.columns.len(), 2);
+        assert!(resp.rows.is_empty(), "shifts table empty at test time");
+    }
 
     #[test]
     fn custom_report_unknown_dataset() {

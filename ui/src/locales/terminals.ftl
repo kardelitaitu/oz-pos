@@ -64,3 +64,16 @@ terminal-delete-aria =
 terminal-col-actions =
     .aria-label = Actions
 terminal-table-label = Terminals
+
+# Terminal Status Panel
+terminal-status-title = Terminal Status
+terminal-status-online-count = { $online } / { $total } online
+terminal-status-empty = No terminals registered.
+terminal-status-list-aria = Terminal statuses
+terminal-status-online = Online
+terminal-status-offline = Offline
+terminal-status-never = Never
+terminal-status-just-now = Just now
+terminal-status-minutes-ago = { $n }m ago
+terminal-status-hours-ago = { $n }h ago
+terminal-status-error-load = Failed to load terminals

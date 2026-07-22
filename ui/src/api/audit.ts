@@ -1,6 +1,6 @@
 // ── Audit Log ─────────────────────────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 /** A single audit log entry recording an action performed by a user. */
 export interface AuditEntryDto {
@@ -16,6 +16,6 @@ export interface AuditEntryDto {
 
 /** List audit log entries with pagination. */
 export const listAuditLog = (limit: number = 100, offset: number = 0): Promise<AuditEntryDto[]> =>
-  invoke<AuditEntryDto[]>('list_audit_log', {
+  loggedInvoke<AuditEntryDto[]>('list_audit_log', {
     args: { limit, offset },
   });

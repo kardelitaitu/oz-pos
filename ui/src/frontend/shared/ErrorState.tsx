@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useLocalization } from '@fluent/react';
-import { Button } from './Button';
+import { Button } from '@/components/Button';
 
 export interface ErrorStateProps {
   /** Optional icon/illustration displayed above the title. */

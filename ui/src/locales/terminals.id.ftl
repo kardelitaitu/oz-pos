@@ -63,4 +63,17 @@ terminal-col-actions =
     .aria-label = Tindakan
 terminal-table-label = Terminal
 
+# Terminal Status Panel
+terminal-status-title = Status Terminal
+terminal-status-online-count = { $online } / { $total } daring
+terminal-status-empty = Belum ada terminal terdaftar.
+terminal-status-list-aria = Status terminal
+terminal-status-online = Daring
+terminal-status-offline = Luring
+terminal-status-never = Tidak Pernah
+terminal-status-just-now = Baru saja
+terminal-status-minutes-ago = { $n }m lalu
+terminal-status-hours-ago = { $n }j lalu
+terminal-status-error-load = Gagal memuat terminal
+
 # ── Promotions ──

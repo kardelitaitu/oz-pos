@@ -30,7 +30,7 @@ export default function TransitAuditScreen() {
       );
       setTransfers(enriched);
     } catch (err) {
-      console.error('Failed to load transit stock:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to load transit stock', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -38,6 +38,7 @@ export default function TransitAuditScreen() {
 
   useEffect(() => {
     loadTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only load
   }, []);
 
   const handleReverseTransfer = async (id: string) => {

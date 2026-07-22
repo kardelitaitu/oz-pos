@@ -7,6 +7,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Localized, useLocalization } from "@fluent/react";
 import { useGatewayStatus } from "@/hooks/useGatewayStatus";
+import { useSyncConnection } from "@/hooks/useSyncConnection";
 import { useWorkspaceNav } from "@/hooks/useWorkspaceNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { getOfflineQueueStatusSummary } from "@/api/offline";
@@ -29,6 +30,7 @@ import "./StatusBar.css";
 export default function StatusBar() {
   const { l10n } = useLocalization();
   const stripeStatus = useGatewayStatus();
+  const syncStatus = useSyncConnection();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session } = useAuth();
   const [showFastPIN, setShowFastPIN] = useState(false);
@@ -77,7 +79,7 @@ export default function StatusBar() {
                 aria-hidden="true"
               />
               <span className="statusbar-version">
-                OZ-POS Enterprise v0.0.17
+                OZ-POS Enterprise v0.0.19
               </span>
             </div>
           </Tooltip>
@@ -91,6 +93,32 @@ export default function StatusBar() {
               </div>
             </Tooltip>
           )}
+
+          {/* Sync connection dot */}
+          <Tooltip
+            content={l10n.getString(
+              syncStatus.state === 'connected'
+                ? 'status-bar-sync-connected'
+                : syncStatus.state === 'disconnected'
+                  ? 'status-bar-sync-disconnected'
+                  : 'status-bar-sync-checking',
+            )}
+            position="top"
+          >
+            <div className="statusbar-segment">
+              <span
+                className={`statusbar-dot ${
+                  syncStatus.state === 'connected'
+                    ? 'statusbar-dot--online'
+                    : syncStatus.state === 'disconnected'
+                      ? 'statusbar-dot--offline'
+                      : 'statusbar-dot--checking'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="statusbar-gateway-name">Sync</span>
+            </div>
+          </Tooltip>
 
           {/* Gateway status pill */}
           {stripeStatus.configured && (

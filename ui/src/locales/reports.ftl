@@ -65,3 +65,4 @@ custom-report-columns = Columns
 custom-report-run = Run Report
 custom-report-results = Results
 custom-report-export-csv = Export CSV
+custom-report-no-columns-match = No columns match your search

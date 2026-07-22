@@ -945,8 +945,34 @@ impl SyncEngine {
     /// Each batch commits independently — a failure in batch N does not roll back
     /// the results of batches 1..N-1.
     ///
+    /// A pre-sync health check verifies the server is reachable before pushing
+    /// any data. If the health check fails, the cycle is skipped with an info log
+    /// rather than an error — this prevents noisy error logs when the server is
+    /// intentionally offline.
+    ///
     /// Returns a [`ReplicationResult`] with counts of pushed/pulled items.
     pub async fn run_sync_cycle(&self, store: &Store<'_>) -> SyncResult<ReplicationResult> {
+        // Pre-sync health check — skip the full cycle if the server is unreachable.
+        match self.transport.health_check().await {
+            Ok(()) => {
+                tracing::debug!(
+                    url = %self.config.server_url,
+                    "sync health check passed"
+                );
+            }
+            Err(e) => {
+                tracing::info!(
+                    url = %self.config.server_url,
+                    error = %e,
+                    "sync health check failed — skipping sync cycle"
+                );
+                return Ok(ReplicationResult {
+                    pushed: 0,
+                    pulled: 0,
+                });
+            }
+        }
+
         let cycle_start = std::time::Instant::now();
         let queue = SyncQueue::new();
 

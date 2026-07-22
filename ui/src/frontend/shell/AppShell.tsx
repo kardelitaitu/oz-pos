@@ -58,7 +58,7 @@ export default function AppShell() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session } = useAuth();
-  const { activeWorkspace } = useWorkspace();
+  const { activeWorkspace, sessionToken } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
   const { addToast } = useToast();
@@ -392,6 +392,7 @@ export default function AppShell() {
     <AppLayout
       route={currentRoute}
       onNavigate={handleNavigate}
+      sessionToken={sessionToken}
       {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
     >
       {pageDenied ? (

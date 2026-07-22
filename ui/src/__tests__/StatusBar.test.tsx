@@ -6,12 +6,17 @@ import StatusBar from '@/frontend/shell/StatusBar';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 const mockUseGatewayStatus = vi.fn();
+const mockUseSyncConnection = vi.fn();
 const mockGoToWorkspacePicker = vi.fn();
 
 const authSession = { value: { user_id: 'user-1', username: 'test', role_name: 'cashier' } };
 
 vi.mock('@/hooks/useGatewayStatus', () => ({
   useGatewayStatus: (...args: unknown[]) => mockUseGatewayStatus(...args),
+}));
+
+vi.mock('@/hooks/useSyncConnection', () => ({
+  useSyncConnection: (...args: unknown[]) => mockUseSyncConnection(...args),
 }));
 
 vi.mock('@/hooks/useWorkspaceNav', () => ({
@@ -36,8 +41,10 @@ vi.mock('@/components/FastPINOverlay', () => ({
 
 beforeEach(() => {
   mockUseGatewayStatus.mockReset();
+  mockUseSyncConnection.mockReset();
   mockGoToWorkspacePicker.mockReset();
   mockUseGatewayStatus.mockReturnValue({ online: true, configured: true });
+  mockUseSyncConnection.mockReturnValue({ state: 'connected', latencyMs: 12, label: 'Connected (12ms)' });
   authSession.value = { user_id: 'user-1', username: 'test', role_name: 'cashier' };
 });
 
@@ -109,5 +116,37 @@ describe('StatusBar', () => {
   it('shows license text', () => {
     renderBar();
     expect(screen.getByText('Proprietary License')).toBeTruthy();
+  });
+
+  // ── Sync connection dot tests ───────────────────────────────
+
+  it('shows sync connected dot when sync is online', () => {
+    mockUseSyncConnection.mockReturnValue({ state: 'connected', latencyMs: 12, label: 'Connected (12ms)' });
+    const { container } = renderBar();
+    expect(container.querySelector('.statusbar-dot--online')).toBeTruthy();
+    expect(screen.getByText('Sync')).toBeTruthy();
+  });
+
+  it('shows sync disconnected dot when sync is offline', () => {
+    mockUseSyncConnection.mockReturnValue({ state: 'disconnected', latencyMs: null, label: 'Disconnected' });
+    const { container } = renderBar();
+    // Sync dot should have offline class (first online dot is from gateway)
+    const dots = container.querySelectorAll('.statusbar-dot--offline');
+    expect(dots.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Sync')).toBeTruthy();
+  });
+
+  it('shows sync checking dot when sync is initializing', () => {
+    mockUseSyncConnection.mockReturnValue({ state: 'checking', latencyMs: null, label: 'Checking…' });
+    const { container } = renderBar();
+    expect(container.querySelector('.statusbar-dot--checking')).toBeTruthy();
+    expect(screen.getByText('Sync')).toBeTruthy();
+  });
+
+  it('sync dot always shows even when stripe is not configured', () => {
+    mockUseGatewayStatus.mockReturnValue({ online: false, configured: false });
+    const { container } = renderBar();
+    expect(container.querySelector('.statusbar-dot--online')).toBeTruthy();
+    expect(screen.getByText('Sync')).toBeTruthy();
   });
 });

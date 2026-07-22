@@ -1147,4 +1147,196 @@ mod tests {
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
+
+    // ── P152: Rate Limiting Integration Tests ────────────────────────
+
+    /// Helper: send `count` authed POST requests and return all status codes.
+    async fn send_n_push_requests(app: &Router, tenant: Option<&str>, n: usize) -> Vec<StatusCode> {
+        let mut codes = Vec::with_capacity(n);
+        let token = test_token(tenant);
+        for _ in 0..n {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/sync/push")
+                .header("Authorization", format!("Bearer {token}"))
+                .header("Content-Type", "application/json")
+                .body(Body::from("[]"))
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            codes.push(resp.status());
+        }
+        codes
+    }
+
+    /// Helper: create a SyncState with a shared RateLimiterState for
+    /// cross-request rate limit testing.
+    fn shared_state() -> SyncState {
+        SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn rate_limit_429_when_push_limit_exceeded() {
+        let state = shared_state();
+        let app = test_router_with_state(state);
+
+        // First 100 requests should be OK (push limit = 100/min).
+        let codes = send_n_push_requests(&app, Some("tenant-rl"), 101).await;
+
+        assert_eq!(codes[0..100].iter().filter(|c| c.is_success()).count(), 100);
+        assert_eq!(codes[100], StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_429_includes_retry_after_header() {
+        let state = shared_state();
+        let app = test_router_with_state(state);
+
+        // Exhaust the push limit.
+        let _ = send_n_push_requests(&app, Some("tenant-hdr"), 100).await;
+
+        // 101st request should return 429 with Retry-After header.
+        let token = test_token(Some("tenant-hdr"));
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/sync/push")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from("[]"))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let retry_after = resp.headers().get("Retry-After");
+        assert!(retry_after.is_some(), "429 must include Retry-After header");
+        let secs: u64 = retry_after.unwrap().to_str().unwrap().parse().unwrap();
+        assert!(secs > 0, "Retry-After must be positive: {secs}");
+
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(json["error"], "rate_limit_exceeded");
+        assert!(json["retry_after_seconds"].as_u64().unwrap() > 0);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_tenant_isolation() {
+        let state = shared_state();
+        let app = test_router_with_state(state);
+
+        // Exhaust tenant A's push limit.
+        let _ = send_n_push_requests(&app, Some("tenant-a"), 100).await;
+
+        // Tenant A's 101st request should be 429.
+        let token_a = test_token(Some("tenant-a"));
+        let req_a = Request::builder()
+            .method("POST")
+            .uri("/api/sync/push")
+            .header("Authorization", format!("Bearer {token_a}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from("[]"))
+            .unwrap();
+        let resp_a = app.clone().oneshot(req_a).await.unwrap();
+        assert_eq!(resp_a.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // Tenant B should still succeed (independent bucket).
+        let token_b = test_token(Some("tenant-b"));
+        let req_b = Request::builder()
+            .method("POST")
+            .uri("/api/sync/push")
+            .header("Authorization", format!("Bearer {token_b}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from("[]"))
+            .unwrap();
+        let resp_b = app.oneshot(req_b).await.unwrap();
+        assert_eq!(
+            resp_b.status(),
+            StatusCode::OK,
+            "tenant B should not be rate-limited when tenant A is exhausted"
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limit_endpoint_isolation() {
+        let state = shared_state();
+        let app = test_router_with_state(state);
+
+        // Exhaust push endpoint for a tenant.
+        let _ = send_n_push_requests(&app, Some("tenant-ep"), 100).await;
+
+        // Push should now be 429.
+        let token = test_token(Some("tenant-ep"));
+        let req_push = Request::builder()
+            .method("POST")
+            .uri("/api/sync/push")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from("[]"))
+            .unwrap();
+        let resp_push = app.clone().oneshot(req_push).await.unwrap();
+        assert_eq!(resp_push.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // Pull should still work (separate 300/min limit).
+        let req_pull = Request::builder()
+            .method("POST")
+            .uri("/api/sync/pull")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"since":null}"#))
+            .unwrap();
+        let resp_pull = app.oneshot(req_pull).await.unwrap();
+        assert_eq!(
+            resp_pull.status(),
+            StatusCode::OK,
+            "pull should not be rate-limited when push is exhausted"
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limit_burst_allowance() {
+        let state = shared_state();
+        let app = test_router_with_state(state);
+
+        // Burst of 50 requests should all succeed (push capacity = 100).
+        let codes = send_n_push_requests(&app, Some("tenant-burst"), 50).await;
+        assert!(
+            codes.iter().all(|c| c.is_success()),
+            "first 50 requests should all succeed within burst allowance"
+        );
+
+        // Next 50 should also succeed (we're still within 100 burst).
+        let codes2 = send_n_push_requests(&app, Some("tenant-burst"), 50).await;
+        assert!(codes2.iter().all(|c| c.is_success()));
+
+        // 101st should be 429.
+        let codes3 = send_n_push_requests(&app, Some("tenant-burst"), 1).await;
+        assert_eq!(codes3[0], StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_status_endpoint_within_burst_limit() {
+        let state = shared_state();
+        let app = test_router_with_state(state);
+
+        // /api/sync/status has a 300/min limit. 50 rapid GETs should all pass.
+        // Health endpoints (/health, /api/health) are in the main router
+        // (build_router in main.rs) which does NOT apply rate_limit_middleware —
+        // they are exempt by architecture, so no 429 test is needed for them.
+        let token = test_token(Some("tenant-status"));
+        for _ in 0..50 {
+            let req = Request::builder()
+                .method("GET")
+                .uri("/api/sync/status")
+                .header("Authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap();
+            let resp = app.clone().oneshot(req).await.unwrap();
+            assert!(
+                resp.status().is_success(),
+                "status endpoint should not be rate-limited at 50 requests (300/min limit)"
+            );
+        }
+    }
 }

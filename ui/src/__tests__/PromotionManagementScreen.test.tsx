@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import promotionsFtl from '@/locales/promotions.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
@@ -49,7 +50,7 @@ function makePromo(overrides: Record<string, unknown> = {}) {
 }
 
 function renderScreen() {
-  return renderWithFluentSync(<PromotionManagementScreen />, promotionsFtl, sharedFtl);
+  return renderWithFluentSync(<ToastProvider><PromotionManagementScreen /></ToastProvider>, promotionsFtl, sharedFtl);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

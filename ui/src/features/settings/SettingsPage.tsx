@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getReceiptSettings,
@@ -8,6 +7,7 @@ import {
   setStoreSettings,
   getUserPreferences,
   setUserPreferences,
+  setSetting,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
@@ -52,15 +52,13 @@ import FeatureToggleScreen from './FeatureToggleScreen';
 import DataManagementScreen from './DataManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
-import { MultiStoreDashboardScreen } from '@/features/stores';
+import { MultiStoreDashboardScreen, TopologyScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
-import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
-import { checkLicenseStatus } from '@/api/license';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
@@ -223,6 +221,13 @@ export default function SettingsPage() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  // Stable refs so the mount loader can read the latest l10n/addToast
+  // without listing them in its deps (which would re-fire the load effect
+  // on every render). Mirrors LicenseSettings.
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
   const { refreshBrandSettings } = useBrand();
   const { theme, toggleTheme } = useTheme();
 
@@ -274,8 +279,6 @@ export default function SettingsPage() {
 
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
-
-  const [licenseTier, setLicenseTier] = useState('standard');
 
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
@@ -401,9 +404,8 @@ export default function SettingsPage() {
       getUserPreferences(userId),
       getBrandSettings(),
       getVersion(),
-      checkLicenseStatus(),
     ]);
-    const [rR, sR, cR, syncR, prefsR, brandR, verR, licR] = results;
+    const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
 
     // Local variables capture the newly-loaded values for the snapshot
     // (avoid reading React state, which would add deps and cause loops).
@@ -436,14 +438,13 @@ export default function SettingsPage() {
         applyAccentPalette(palette);
       }
       if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
-      if (licR.status === 'fulfilled') setLicenseTier(licR.value.tier.toLowerCase());
 
       // Only surface a full-page error when every single API failed.
       if (results.every((r) => r.status === 'rejected')) {
-        setLoadError(l10n.getString('settings-load-failed'));
+        setLoadError(l10nRef.current.getString('settings-load-failed'));
       } else if (results.some((r) => r.status === 'rejected')) {
         // Some APIs failed — page loads partially; warn the user.
-        addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
+        addToastRef.current({ message: l10nRef.current.getString('settings-load-partial'), type: 'error' });
       }
       // Store snapshot of initial loaded values for revert.
       // Use local variables captured from the try block above (not from
@@ -469,7 +470,7 @@ export default function SettingsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, l10n, addToast]);
+  }, [userId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -536,11 +537,8 @@ export default function SettingsPage() {
         if (syncApiKey) {
           // Mirror the token to the shared IPC channel so the
           // Retail Options screen (useCloudSync) can load it.
-          invoke('set_setting', {
-            key: 'sync.auth_token',
-            value: syncApiKey,
-            user_id: userId,
-          }).catch(() => { /* best-effort */ });
+          setSetting('sync.auth_token', syncApiKey, userId)
+            .catch(() => { /* best-effort */ });
           setSyncApiKey('');
         }
         setSync((prev) => ({
@@ -1578,11 +1576,7 @@ export default function SettingsPage() {
         return <PromotionManagementScreen />;
 
       case 'topology':
-        return (
-          <div className="settings-topology-container">
-            <NodeTopologyEditor currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'} />
-          </div>
-        );
+        return <TopologyScreen />;
 
       default:
         return null;

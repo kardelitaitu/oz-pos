@@ -7,9 +7,44 @@ const { mockListTerminals } = vi.hoisted(() => ({
   mockListTerminals: vi.fn(),
 }));
 
+// Stable l10n object — defined in hoisted scope so useLocalization mock
+// returns the same reference on every render (avoids effect re-triggers).
+const { stableL10n } = vi.hoisted(() => ({
+  stableL10n: {
+    getString: (key: string, args?: Record<string, unknown>) => {
+      const lookup: Record<string, string> = {
+        'terminal-status-never': 'Never',
+        'terminal-status-just-now': 'Just now',
+        'terminal-status-minutes-ago': `${args?.['n'] ?? '?'}m ago`,
+        'terminal-status-hours-ago': `${args?.['n'] ?? '?'}h ago`,
+        'terminal-status-error-load': 'Failed to load terminals',
+        'terminal-status-list-aria': 'Terminal statuses',
+        'terminal-status-online': 'Online',
+        'terminal-status-offline': 'Offline',
+        'terminal-status-online-count': `${args?.['online'] ?? '?'} / ${args?.['total'] ?? '?'} online`,
+        'terminal-status-title': 'Terminal Status',
+        'terminal-status-empty': 'No terminals registered.',
+      };
+      return lookup[key] ?? key;
+    },
+  },
+}));
+
 vi.mock('@/api/terminals', () => ({
   listTerminals: () => mockListTerminals(),
 }));
+
+// Mock @fluent/react to bypass Fluent variable interpolation issues in JSDOM.
+// Localized just renders children, useLocalization().l10n.getString() returns
+// the fallback text or a simple lookup for terminal-specific keys.
+vi.mock('@fluent/react', async () => {
+  const actual = await vi.importActual('@fluent/react');
+  return {
+    ...actual,
+    Localized: ({ children }: { children: React.ReactNode }) => children,
+    useLocalization: () => ({ l10n: stableL10n }),
+  };
+});
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

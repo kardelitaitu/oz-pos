@@ -124,6 +124,7 @@ function makePayload(overrides: Record<string, unknown> = {}) {
 const VALID_LICENSE_STATUS = {
   is_active: true,
   status: 'valid' as const,
+  tier: 'pro',
   payload: JSON.stringify(makePayload()),
   message: null,
 };
@@ -230,6 +231,7 @@ describe('LicenseSettings', () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
         is_active: false,
         status: 'missing',
+        tier: null,
         payload: null,
         message: null,
       });
@@ -247,6 +249,7 @@ describe('LicenseSettings', () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
         is_active: false,
         status: 'missing',
+        tier: null,
         payload: null,
         message: null,
       });
@@ -458,6 +461,7 @@ describe('LicenseSettings', () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
         is_active: true,
         status: 'valid',
+        tier: null,
         payload: '{ not valid json }',
         message: null,
       });
@@ -472,6 +476,7 @@ describe('LicenseSettings', () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
         is_active: true,
         status: 'valid',
+        tier: null,
         payload: '',
         message: null,
       });
@@ -490,6 +495,7 @@ describe('LicenseSettings', () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
         is_active: true,
         status: 'valid',
+        tier: null,
         payload: '{}',
         message: null,
       });

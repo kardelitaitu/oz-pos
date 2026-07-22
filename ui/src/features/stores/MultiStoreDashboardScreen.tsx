@@ -6,8 +6,6 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
 import TerminalStatusPanel from './TerminalStatusPanel';
-import NodeTopologyEditor from './NodeTopologyEditor';
-import { checkLicenseStatus } from '@/api/license';
 import './MultiStoreDashboardScreen.css';
 
 const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -17,7 +15,7 @@ function isOnline(lastSeenAt: string | null): boolean {
   return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
 }
 
-/** Multi-store dashboard — overview of all store profiles with terminal status, primary store designation, and node topology builder. */
+/** Multi-store dashboard — overview of all store profiles with terminal status and primary store designation. */
 export default function MultiStoreDashboardScreen() {
   const { l10n } = useLocalization();
   const [stores, setStores] = useState<StoreProfile[]>([]);
@@ -25,26 +23,23 @@ export default function MultiStoreDashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'cards' | 'topology'>('cards');
-  const [licenseTier, setLicenseTier] = useState('standard');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [storeData, termData, licStatus] = await Promise.all([
+      const [storeData, termData] = await Promise.all([
         listStores(),
         listTerminals(),
-        checkLicenseStatus(),
       ]);
       setStores(storeData);
       setTerminals(termData);
-      setLicenseTier(licStatus.tier.toLowerCase());
     } catch {
-      setError('Failed to load data');
+      setError(l10n.getString('multi-store-error-load'));
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -76,9 +71,7 @@ export default function MultiStoreDashboardScreen() {
   const onlineTerminals = terminals.filter((t) => isOnline(t.lastSeenAt)).length;
 
   const getTerminalCount = useCallback(
-    (_storeId: string) => {
-      return terminals.length;
-    },
+    (_storeId: string) => terminals.length,
     [terminals],
   );
 
@@ -88,28 +81,9 @@ export default function MultiStoreDashboardScreen() {
         <Localized id="multi-store-dashboard-title">
           <h1 className="multi-store-dashboard-title">Multi-Store Dashboard</h1>
         </Localized>
-
-        <div className="multi-store-view-toggle">
-          <Button
-            variant={viewMode === 'cards' ? 'primary' : 'secondary'}
-            onClick={() => setViewMode('cards')}
-          >
-            📋 Store Cards
-          </Button>
-          <Button
-            variant={viewMode === 'topology' ? 'primary' : 'secondary'}
-            onClick={() => setViewMode('topology')}
-          >
-            🗺️ Node Topology Builder
-          </Button>
-        </div>
       </div>
 
-      {viewMode === 'topology' ? (
-        <div className="multi-store-dashboard-topology-view" style={{ flex: 1, minHeight: '600px' }}>
-          <NodeTopologyEditor currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'} />
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="multi-store-dashboard-loading-skeleton">
           <div className="multi-store-stat-grid">
             {Array.from({ length: 4 }).map((_, i) => (

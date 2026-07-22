@@ -1,6 +1,6 @@
 // ── Offline Queue & Cloud Sync ────────────────────────────────────
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 // ── Offline Queue ────────────────────────────────────────────────
 
@@ -40,31 +40,31 @@ export interface OfflineQueueSummaryDto {
 
 /** Get a summary of the offline queue status. */
 export const getOfflineQueueStatusSummary = (): Promise<OfflineQueueSummaryDto> =>
-  invoke<OfflineQueueSummaryDto>('offline_queue_status_summary');
+  loggedInvoke<OfflineQueueSummaryDto>('offline_queue_status_summary');
 
 /** Enqueue an action to be performed when back online. */
 export const enqueueOffline = (args: EnqueueOfflineArgs): Promise<OfflineQueueItemDto> =>
-  invoke<OfflineQueueItemDto>('enqueue_offline', { args });
+  loggedInvoke<OfflineQueueItemDto>('enqueue_offline', { args });
 
 /** List pending (not yet synced) offline actions. */
 export const listPendingOffline = (): Promise<OfflineQueueItemDto[]> =>
-  invoke<OfflineQueueItemDto[]>('list_pending_offline');
+  loggedInvoke<OfflineQueueItemDto[]>('list_pending_offline');
 
 /** List all offline actions (pending and synced). */
 export const listAllOffline = (): Promise<OfflineQueueItemDto[]> =>
-  invoke<OfflineQueueItemDto[]>('list_all_offline');
+  loggedInvoke<OfflineQueueItemDto[]>('list_all_offline');
 
 /** Get the count of pending offline actions. */
 export const pendingOfflineCount = (): Promise<number> =>
-  invoke<number>('pending_offline_count');
+  loggedInvoke<number>('pending_offline_count');
 
 /** Retry syncing all pending offline actions. */
 export const retryOfflineSync = (): Promise<SyncResult> =>
-  invoke<SyncResult>('retry_offline_sync');
+  loggedInvoke<SyncResult>('retry_offline_sync');
 
 /** Delete an offline queue item by its identifier. */
 export const deleteOfflineItem = (id: string): Promise<void> =>
-  invoke('delete_offline_item', { args: { id } });
+  loggedInvoke('delete_offline_item', { args: { id } });
 
 // ── Cloud Sync Settings ──────────────────────────────────────────
 
@@ -99,23 +99,23 @@ export interface PullResult {
 
 /** Get the current cloud sync settings. */
 export const getSyncSettings = (): Promise<SyncSettingsDto> =>
-  invoke<SyncSettingsDto>('get_sync_settings');
+  loggedInvoke<SyncSettingsDto>('get_sync_settings');
 
 /** Update the cloud sync settings. */
 export const updateSyncSettings = (args: UpdateSyncSettingsArgs): Promise<void> =>
-  invoke<void>('update_sync_settings', { args });
+  loggedInvoke<void>('update_sync_settings', { args });
 
 /** Run a sync cycle — push pending local changes to the cloud server. */
 export const syncRun = (): Promise<SyncAttemptResult> =>
-  invoke<SyncAttemptResult>('sync_run');
+  loggedInvoke<SyncAttemptResult>('sync_run');
 
 /** Get the number of actions pending cloud sync. */
 export const pendingSyncCount = (): Promise<number> =>
-  invoke<number>('pending_sync_count');
+  loggedInvoke<number>('pending_sync_count');
 
 /** Pull data (products, tax rates, users) from the cloud server. */
 export const syncPull = (): Promise<PullResult> =>
-  invoke<PullResult>('sync_pull');
+  loggedInvoke<PullResult>('sync_pull');
 
 // ── Connection Test ──────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ export interface PingResult {
  *  Pass the in-progress URL from the text field so users can
  *  test before saving. Falls back to saved settings if empty. */
 export const testSyncConnection = (url?: string): Promise<PingResult> =>
-  invoke<PingResult>('test_sync_connection', { url: url || null });
+  loggedInvoke<PingResult>('test_sync_connection', { url: url || null });
 
 // ── Token Request ────────────────────────────────────────────────
 
@@ -146,4 +146,4 @@ export interface TokenResult {
  *  POST /api/v1/tokens endpoint. Pass the in-progress URL
  *  so users can request a token before saving. */
 export const requestSyncToken = (url?: string): Promise<TokenResult> =>
-  invoke<TokenResult>('request_sync_token', { url: url || null });
+  loggedInvoke<TokenResult>('request_sync_token', { url: url || null });

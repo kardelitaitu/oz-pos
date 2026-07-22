@@ -91,6 +91,8 @@ pub mod tables;
 pub mod tax;
 /// Payment-terminal commands.
 pub mod terminals;
+/// Node-topology persistence commands.
+pub mod topology;
 /// Void / cancel commands.
 pub mod void;
 /// Workspace / register layout commands.

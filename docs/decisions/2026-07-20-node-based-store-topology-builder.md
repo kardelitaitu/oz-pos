@@ -1,6 +1,6 @@
 # ADR #22: Visual Node-Based Store & Workspace Topology Builder
 
-**Status:** Proposed (2026-07-20)  
+**Status:** Implemented (2026-07-22) 
 **Date:** 2026-07-20  
 **Author:** Architecture Team & OZ-POS Contributors  
 **Tags:** store-topology, node-editor, multi-store, workspaces, inventory-routing, ux  
@@ -19,13 +19,13 @@ Historically, managing these entity relationships required navigating separate a
 
 This traditional form-based approach lacks visual clarity, making it difficult for merchants to understand their enterprise topology or configure multi-warehouse stock deduction fallbacks.
 
-To solve this, this decision introduces a **Visual Node-Based Store Topology Builder** (inspired by node graph interfaces in **Blender**, **Grasshopper**, and **Node-RED**) in **Settings → Stores**.
+To solve this, this decision introduces a **Visual Node-Based Store Topology Builder** (inspired by node graph interfaces in **Blender**, **Grasshopper**, and **Node-RED**). It ships as a dedicated **Topology** entry in the Settings sidebar (Management category), rendered by the standalone `TopologyScreen`; it is **not** embedded inside the Stores dashboard, which remains stores-only.
 
 ---
 
 ## Decision
 
-We will implement an interactive, canvas-based **Node Topology Editor** allowing store owners to visually assemble and wire up their enterprise hierarchy using node cards and directional **1-Way (`→`)** or **2-Way (`↔`)** arrow connections.
+We have implemented an interactive, canvas-based **Node Topology Editor** allowing store owners to visually assemble and wire up their enterprise hierarchy using node cards and directional **1-Way (`→`)** or **2-Way (`↔`)** arrow connections.
 
 ### 1. Node Types & Capabilities
 
@@ -135,7 +135,7 @@ The Node Topology Builder dynamically enforces license limits based on the activ
 - Vitest React component tests for node dragging, wire connections, and undo/redo state stack.
 
 ### Manual Verification
-- Open **Settings → Stores** → **Node Topology Editor**.
+- Open **Settings → Management → Topology** (standalone `TopologyScreen`; not embedded in Stores).
 - Drag preset or custom nodes onto canvas and draw 1-Way and 2-Way arrow wires.
 - Run **Test Order Simulation** and verify pulse animation travels along connected arrow paths.
 - Click **Apply Topology Changes** and confirm SQLite updates atomically.

@@ -1,6 +1,6 @@
 // ── Sales: POS cart, history, void, discounts, held carts, refunds, dashboard, printing ──
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { CartId, LineId, Money } from '@/types/domain';
 
@@ -79,11 +79,11 @@ export interface SetCartDiscountArgs {
 
 /** Start a new sale and return the new cart identifier. */
 export const startSale = (args: StartSaleArgs): Promise<StartSaleResult> =>
-  invoke<StartSaleResult>('start_sale', { args });
+  loggedInvoke<StartSaleResult>('start_sale', { args });
 
 /** ADR #7: Start a new sale in the store resolved from a session token. */
 export const startSaleScoped = (sessionToken: string, args: StartSaleArgs): Promise<StartSaleResult> =>
-  invoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
+  loggedInvoke<StartSaleResult>('start_sale_scoped', { sessionToken, args });
 
 /** ADR-19: Info about the deduction location locked on a cart. */
 export interface DeductionLocationInfo {
@@ -95,19 +95,19 @@ export interface DeductionLocationInfo {
 
 /** ADR-19 §5.1: Get the deduction location info for an active cart. */
 export const getCartDeductionLocation = (cartId: string): Promise<DeductionLocationInfo | null> =>
-  invoke<DeductionLocationInfo | null>('get_cart_deduction_location', { cartId });
+  loggedInvoke<DeductionLocationInfo | null>('get_cart_deduction_location', { cartId });
 
 /** Add a line item to a cart. */
 export const addLine = (args: AddLineArgs): Promise<AddLineResult> =>
-  invoke<AddLineResult>('add_line', { args });
+  loggedInvoke<AddLineResult>('add_line', { args });
 
 /** ADR #7: Add a line to a cart in the store resolved from a session token. */
 export const addLineScoped = (sessionToken: string, args: AddLineArgs): Promise<AddLineResult> =>
-  invoke<AddLineResult>('add_line_scoped', { sessionToken, args });
+  loggedInvoke<AddLineResult>('add_line_scoped', { sessionToken, args });
 
 /** Complete a sale with the given payment details and return the sale record. */
 export const completeSale = (args: CompleteSaleArgs): Promise<CompleteSaleResult> =>
-  invoke<CompleteSaleResult>('complete_sale', { args });
+  loggedInvoke<CompleteSaleResult>('complete_sale', { args });
 
 /** Arguments for completing a sale scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface CompleteSaleScopedArgs {
@@ -121,7 +121,7 @@ export interface CompleteSaleScopedArgs {
 }
 
 export const completeSaleScoped = (sessionToken: string, args: CompleteSaleScopedArgs): Promise<CompleteSaleResult> =>
-  invoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
+  loggedInvoke<CompleteSaleResult>('complete_sale_scoped', { sessionToken, args });
 
 // ── Shortfall Resolution — complete_sale_with_resolved_shortfalls ──
 
@@ -169,7 +169,7 @@ export const completeSaleWithResolvedShortfalls = (
   sessionToken: string,
   args: CompleteSaleWithResolvedShortfallsArgs
 ): Promise<CompleteSaleResult> =>
-  invoke<CompleteSaleResult>('complete_sale_with_resolved_shortfalls_scoped', { sessionToken, args });
+  loggedInvoke<CompleteSaleResult>('complete_sale_with_resolved_shortfalls_scoped', { sessionToken, args });
 
 // Export front-end types for the StockShortfallDialog
 // PartialStockResult, Shortfall, LocationStock are returned by the backend
@@ -208,25 +208,25 @@ export interface PendingSale {
 /** ADR-20: Finalize a pending sale after successful payment capture.
  *  Transitions status from 'pending' to 'completed'. */
 export const finalizeSale = (sessionToken: string, saleId: string): Promise<void> =>
-  invoke<void>('finalize_sale', { sessionToken, saleId });
+  loggedInvoke<void>('finalize_sale', { sessionToken, saleId });
 
 /** ADR-20: Void a pending sale and restore reserved stock back to
  *  original deduction locations. Called when payment capture fails
  *  or the transaction is abandoned. */
 export const voidPendingSale = (sessionToken: string, saleId: string): Promise<void> =>
-  invoke<void>('void_pending_sale', { sessionToken, saleId });
+  loggedInvoke<void>('void_pending_sale', { sessionToken, saleId });
 
 /** ADR-19 §17: Record a manager override of the deduction location on an active cart. */
 export const overrideCartDeductionLocation = (sessionToken: string, cartId: string): Promise<void> =>
-  invoke<void>('override_cart_deduction_location_scoped', { sessionToken, cartId });
+  loggedInvoke<void>('override_cart_deduction_location_scoped', { sessionToken, cartId });
 
 /** Check whether a product is configured for serial number tracking. */
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>
-  invoke<boolean>('get_product_track_serial', { sku });
+  loggedInvoke<boolean>('get_product_track_serial', { sku });
 
 /** Apply a percentage-based discount to a cart. */
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
-  invoke<void>('set_cart_discount', { args });
+  loggedInvoke<void>('set_cart_discount', { args });
 
 /** ADR #7: Scoped cart discount — `userId` is read from session. */
 export interface SetCartDiscountScopedArgs {
@@ -236,7 +236,7 @@ export interface SetCartDiscountScopedArgs {
 }
 
 export const setCartDiscountScoped = (sessionToken: string, args: SetCartDiscountScopedArgs): Promise<void> =>
-  invoke<void>('set_cart_discount_scoped', { sessionToken, args });
+  loggedInvoke<void>('set_cart_discount_scoped', { sessionToken, args });
 
 /** Arguments for overriding the price of a specific line in a cart. */
 export interface OverrideLinePriceArgs {
@@ -248,11 +248,11 @@ export interface OverrideLinePriceArgs {
 
 /** Override the unit price of a line item in a cart. */
 export const overrideLinePrice = (args: OverrideLinePriceArgs): Promise<void> =>
-  invoke<void>('override_line_price', { args });
+  loggedInvoke<void>('override_line_price', { args });
 
 /** ADR #7: Scoped line price override — `userId` is read from session. */
 export const overrideLinePriceScoped = (sessionToken: string, cartId: string, lineId: string, newPriceMinor: number): Promise<void> =>
-  invoke<void>('override_line_price_scoped', { sessionToken, args: { cartId, lineId, newPriceMinor } });
+  loggedInvoke<void>('override_line_price_scoped', { sessionToken, args: { cartId, lineId, newPriceMinor } });
 
 // ── Sales History ─────────────────────────────────────────────────
 
@@ -296,19 +296,19 @@ export interface SaleDetail {
 
 /** List all completed sales. */
 export const listSales = (): Promise<SaleListItem[]> =>
-  invoke<SaleListItem[]>('list_sales');
+  loggedInvoke<SaleListItem[]>('list_sales');
 
 /** ADR #7: List sales scoped to the store resolved from a session token. */
 export const listSalesScoped = (sessionToken: string): Promise<SaleListItem[]> =>
-  invoke<SaleListItem[]>('list_sales_scoped', { sessionToken });
+  loggedInvoke<SaleListItem[]>('list_sales_scoped', { sessionToken });
 
 /** Fetch a single sale by its identifier. */
 export const getSale = (id: string): Promise<SaleDetail | null> =>
-  invoke<SaleDetail | null>('get_sale', { id });
+  loggedInvoke<SaleDetail | null>('get_sale', { id });
 
 /** ADR #7: Fetch a sale by ID from the store resolved from a session token. */
 export const getSaleScoped = (sessionToken: string, id: string): Promise<SaleDetail | null> =>
-  invoke<SaleDetail | null>('get_sale_scoped', { sessionToken, id });
+  loggedInvoke<SaleDetail | null>('get_sale_scoped', { sessionToken, id });
 
 // ── Void Sale ─────────────────────────────────────────────────────
 
@@ -330,11 +330,11 @@ export interface VoidSaleResult {
 
 /** Void a completed sale with a reason. */
 export const voidSale = (args: VoidSaleArgs): Promise<VoidSaleResult> =>
-  invoke<VoidSaleResult>('void_sale', { args });
+  loggedInvoke<VoidSaleResult>('void_sale', { args });
 
 /** ADR #7: Void a sale in the store resolved from a session token. */
 export const voidSaleScoped = (sessionToken: string, saleId: string, reason: string): Promise<VoidSaleResult> =>
-  invoke<VoidSaleResult>('void_sale_scoped', { sessionToken, args: { saleId, reason } });
+  loggedInvoke<VoidSaleResult>('void_sale_scoped', { sessionToken, args: { saleId, reason } });
 
 // ── Hold Order ────────────────────────────────────────────────────
 
@@ -380,43 +380,43 @@ export interface HeldCartFull {
 
 /** Park the current cart for later retrieval. */
 export const holdCart = (args: HoldCartArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('hold_cart', { args });
+  loggedInvoke<{ id: string }>('hold_cart', { args });
 
 /** ADR #7: Hold a cart in the store resolved from a session token. */
 export const holdCartScoped = (sessionToken: string, args: HoldCartArgs): Promise<{ id: string }> =>
-  invoke<{ id: string }>('hold_cart_scoped', { sessionToken, args });
+  loggedInvoke<{ id: string }>('hold_cart_scoped', { sessionToken, args });
 
 /** List all held (parked) carts. */
 export const listHeldCarts = (): Promise<HeldCartRow[]> =>
-  invoke<HeldCartRow[]>('list_held_carts');
+  loggedInvoke<HeldCartRow[]>('list_held_carts');
 
 /** ADR #7: Scoped held carts listing. */
 export const listHeldCartsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
-  invoke<HeldCartRow[]>('list_held_carts_scoped', { sessionToken });
+  loggedInvoke<HeldCartRow[]>('list_held_carts_scoped', { sessionToken });
 
 /** List all open bills (table-based held carts). */
 export const listOpenBills = (): Promise<HeldCartRow[]> =>
-  invoke<HeldCartRow[]>('list_open_bills');
+  loggedInvoke<HeldCartRow[]>('list_open_bills');
 
 /** ADR #7: Scoped open bills listing. */
 export const listOpenBillsScoped = (sessionToken: string): Promise<HeldCartRow[]> =>
-  invoke<HeldCartRow[]>('list_open_bills_scoped', { sessionToken });
+  loggedInvoke<HeldCartRow[]>('list_open_bills_scoped', { sessionToken });
 
 /** Fetch the full detail of a held cart by its identifier. */
 export const getHeldCart = (id: string): Promise<HeldCartFull | null> =>
-  invoke<HeldCartFull | null>('get_held_cart', { id });
+  loggedInvoke<HeldCartFull | null>('get_held_cart', { id });
 
 /** ADR #7: Scoped held cart retrieval. */
 export const getHeldCartScoped = (sessionToken: string, id: string): Promise<HeldCartFull | null> =>
-  invoke<HeldCartFull | null>('get_held_cart_scoped', { sessionToken, id });
+  loggedInvoke<HeldCartFull | null>('get_held_cart_scoped', { sessionToken, id });
 
 /** Delete a held cart by its identifier. */
 export const deleteHeldCart = (id: string): Promise<void> =>
-  invoke('delete_held_cart', { id });
+  loggedInvoke('delete_held_cart', { id });
 
 /** ADR #7: Scoped held cart deletion. */
 export const deleteHeldCartScoped = (sessionToken: string, id: string): Promise<void> =>
-  invoke('delete_held_cart_scoped', { sessionToken, id });
+  loggedInvoke('delete_held_cart_scoped', { sessionToken, id });
 
 // ── Refunds ───────────────────────────────────────────────────────
 
@@ -470,15 +470,15 @@ export interface RefundLineDto {
 
 /** Look up a completed sale by its receipt barcode. */
 export const lookupSaleByReceiptBarcode = (barcode: string): Promise<SaleDetail | null> =>
-  invoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
+  loggedInvoke<SaleDetail | null>('lookup_sale_by_receipt_barcode', { barcode });
 
 /** ADR #7: Scoped receipt barcode lookup using session token. */
 export const lookupSaleByReceiptBarcodeScoped = (sessionToken: string, barcode: string): Promise<SaleDetail | null> =>
-  invoke<SaleDetail | null>('lookup_sale_by_receipt_barcode_scoped', { sessionToken, barcode });
+  loggedInvoke<SaleDetail | null>('lookup_sale_by_receipt_barcode_scoped', { sessionToken, barcode });
 
 /** Process a refund against a completed sale. */
 export const processRefund = (args: ProcessRefundArgs): Promise<ProcessRefundResult> =>
-  invoke<ProcessRefundResult>('process_refund', { args });
+  loggedInvoke<ProcessRefundResult>('process_refund', { args });
 
 /** Arguments for processing a refund scoped to the session store. `userId` is read from session, not args. ADR #7. */
 export interface ProcessRefundScopedArgs {
@@ -489,15 +489,15 @@ export interface ProcessRefundScopedArgs {
 }
 
 export const processRefundScoped = (sessionToken: string, args: ProcessRefundScopedArgs): Promise<ProcessRefundResult> =>
-  invoke<ProcessRefundResult>('process_refund_scoped', { sessionToken, args });
+  loggedInvoke<ProcessRefundResult>('process_refund_scoped', { sessionToken, args });
 
 /** List all refunds for a given sale. */
 export const listRefunds = (saleId: string): Promise<RefundDto[]> =>
-  invoke<RefundDto[]>('list_refunds', { saleId });
+  loggedInvoke<RefundDto[]>('list_refunds', { saleId });
 
 /** ADR #7: Scoped refund listing using session token. */
 export const listRefundsScoped = (sessionToken: string, saleId: string): Promise<RefundDto[]> =>
-  invoke<RefundDto[]>('list_refunds_scoped', { sessionToken, saleId });
+  loggedInvoke<RefundDto[]>('list_refunds_scoped', { sessionToken, saleId });
 
 // ── Dashboard & Reports ───────────────────────────────────────────
 
@@ -540,27 +540,27 @@ export interface EodReport {
 
 /** Export the daily sales summary. */
 export const exportDailySummary = (): Promise<DailySummaryRow[]> =>
-  invoke<DailySummaryRow[]>('export_daily_summary');
+  loggedInvoke<DailySummaryRow[]>('export_daily_summary');
 
 /** ADR #7: Scoped daily summary report for the store resolved from a session token. */
 export const exportDailySummaryScoped = (sessionToken: string): Promise<DailySummaryRow[]> =>
-  invoke<DailySummaryRow[]>('export_daily_summary_scoped', { sessionToken });
+  loggedInvoke<DailySummaryRow[]>('export_daily_summary_scoped', { sessionToken });
 
 /** Export the sales-by-hour breakdown. */
 export const exportSalesByHour = (): Promise<SalesByHourRow[]> =>
-  invoke<SalesByHourRow[]>('export_sales_by_hour');
+  loggedInvoke<SalesByHourRow[]>('export_sales_by_hour');
 
 /** ADR #7: Scoped sales-by-hour report for the store resolved from a session token. */
 export const exportSalesByHourScoped = (sessionToken: string): Promise<SalesByHourRow[]> =>
-  invoke<SalesByHourRow[]>('export_sales_by_hour_scoped', { sessionToken });
+  loggedInvoke<SalesByHourRow[]>('export_sales_by_hour_scoped', { sessionToken });
 
 /** Export the end-of-day report. */
 export const exportEodReport = (): Promise<EodReport> =>
-  invoke<EodReport>('export_eod_report');
+  loggedInvoke<EodReport>('export_eod_report');
 
 /** ADR #7: Scoped EOD report for the store resolved from a session token. */
 export const exportEodReportScoped = (sessionToken: string): Promise<EodReport> =>
-  invoke<EodReport>('export_eod_report_scoped', { sessionToken });
+  loggedInvoke<EodReport>('export_eod_report_scoped', { sessionToken });
 
 // ── Receipt Printing ──────────────────────────────────────────────
 
@@ -605,7 +605,7 @@ export interface PrintSalesReceiptResult {
 
 /** Print a formatted sales receipt. */
 export const printSalesReceipt = (args: PrintSalesReceiptArgs): Promise<PrintSalesReceiptResult> =>
-  invoke<PrintSalesReceiptResult>('print_sales_receipt', { args });
+  loggedInvoke<PrintSalesReceiptResult>('print_sales_receipt', { args });
 
 /** Subscribe to receipt-printed events from the backend. Returns an unsubscribe function. */
 export const onReceiptPrinted = (handler: (lines: number) => void): Promise<UnlistenFn> =>

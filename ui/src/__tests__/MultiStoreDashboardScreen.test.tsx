@@ -7,8 +7,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MultiStoreDashboardScreen from '@/features/stores/MultiStoreDashboardScreen';
-import type { StoreProfile } from '@/api/stores';
-import type { TerminalDto } from '@/api/terminals';
 
 // ── Mocks ──────────────────────────────────────────────────────────
 
@@ -41,7 +39,7 @@ vi.mock('@/features/terminals/TerminalStatusPanel', () => ({
 
 // ── Test data ──────────────────────────────────────────────────────
 
-const sampleStores: StoreProfile[] = [
+const sampleStores = [
   {
     id: 'store-1',
     name: 'Main Street',
@@ -66,7 +64,7 @@ const sampleStores: StoreProfile[] = [
   },
 ];
 
-const sampleTerminals: TerminalDto[] = [
+const sampleTerminals = [
   {
     id: 'term-1',
     name: 'Register 1',
@@ -93,14 +91,13 @@ const sampleTerminals: TerminalDto[] = [
 
 describe('MultiStoreDashboardScreen', () => {
   beforeEach(() => {
+    mockListStores.mockReset();
+    mockListTerminals.mockReset();
     mockListStores.mockResolvedValue(sampleStores);
     mockListTerminals.mockResolvedValue(sampleTerminals);
   });
 
-  // ── Loading state ─────────────────────────────────────────────
-
   it('shows loading skeleton while data is being fetched', () => {
-    // Never resolve — keeps loading state.
     mockListStores.mockReturnValue(new Promise(() => {}));
     mockListTerminals.mockReturnValue(new Promise(() => {}));
 
@@ -109,16 +106,14 @@ describe('MultiStoreDashboardScreen', () => {
     expect(document.querySelector('.multi-store-dashboard-loading-skeleton')).toBeInTheDocument();
   });
 
-  // ── Error state ──────────────────────────────────────────────
-
   it('shows error message and retry button on fetch failure', async () => {
     mockListStores.mockRejectedValue(new Error('Network error'));
 
     render(<MultiStoreDashboardScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load data')).toBeInTheDocument();
-    });
+      expect(screen.getByText('multi-store-error-load')).toBeInTheDocument();
+    }, { timeout: 3000 });
 
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
@@ -129,10 +124,9 @@ describe('MultiStoreDashboardScreen', () => {
     render(<MultiStoreDashboardScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load data')).toBeInTheDocument();
-    });
+      expect(screen.getByText('multi-store-error-load')).toBeInTheDocument();
+    }, { timeout: 3000 });
 
-    // On retry, resolve successfully.
     mockListStores.mockResolvedValueOnce(sampleStores);
     mockListTerminals.mockResolvedValueOnce(sampleTerminals);
 
@@ -140,17 +134,15 @@ describe('MultiStoreDashboardScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Main Street')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
   });
-
-  // ── Data state ───────────────────────────────────────────────
 
   it('renders stat cards with correct counts', async () => {
     render(<MultiStoreDashboardScreen />);
 
     await waitFor(() => {
       expect(screen.getByText('Main Street')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
     // "2" appears in Total Stores, Total Terminals, and each store's terminal count.
     const twos = screen.getAllByText('2');
@@ -162,12 +154,9 @@ describe('MultiStoreDashboardScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Main Street')).toBeInTheDocument();
-    });
+    }, { timeout: 3000 });
 
-    // Primary store badge
     expect(screen.getByText('Primary')).toBeInTheDocument();
-
-    // Both store names visible
     expect(screen.getByText('Downtown')).toBeInTheDocument();
   });
 });

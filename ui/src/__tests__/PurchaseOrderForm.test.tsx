@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
-import { renderInAct } from '@/test-utils/renderInAct';
+import { screen, fireEvent, render } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { FluentBundle, FluentResource } from '@fluent/bundle';
+import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import poFtl from '@/locales/purchasing.ftl?raw';
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 // Mock the purchasing API — use vi.fn() inline to avoid hoisting issues.
 vi.mock('@/api/purchasing', () => ({
@@ -13,6 +17,19 @@ import { createPurchaseOrder, listSuppliers } from '@/api/purchasing';
 
 const mockCreatePO = createPurchaseOrder as ReturnType<typeof vi.fn>;
 const mockListSuppliers = listSuppliers as ReturnType<typeof vi.fn>;
+
+// Fluent bundle for the PurchaseOrderForm component.
+const poBundle = new FluentBundle('en-US');
+poBundle.addResource(new FluentResource(poFtl));
+poBundle.addResource(new FluentResource(sharedFtl));
+const poL10n = new ReactLocalization([poBundle]);
+
+// Wrapper to provide Fluent + render.
+function renderForm(el: React.ReactElement): ReturnType<typeof render> {
+  return render(
+    <LocalizationProvider l10n={poL10n}>{el}</LocalizationProvider>,
+  );
+}
 
 // Sample supplier data for the dropdown.
 const sampleSuppliers = [
@@ -30,8 +47,9 @@ function clickButton(name: string | RegExp) {
   fireEvent.click(screen.getByRole('button', { name }));
 }
 
-function selectOption(_label: string | RegExp, value: string) {
-  fireEvent.change(screen.getByRole('combobox'), { target: { value } });
+async function selectOption(_label: string | RegExp, value: string) {
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox'), value);
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -42,7 +60,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('renders the form with title and fields', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     expect(screen.getByText('New Purchase Order')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('PO-001')).toBeInTheDocument();
@@ -53,7 +71,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('loads suppliers into the dropdown', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     // Suppliers are loaded async.
     expect(mockListSuppliers).toHaveBeenCalledTimes(1);
@@ -66,7 +84,7 @@ describe('PurchaseOrderForm', () => {
   it('shows empty supplier dropdown without error when listSuppliers fails', async () => {
     mockListSuppliers.mockRejectedValueOnce(new Error('Network down'));
 
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     // Should not crash; dropdown stays with just "-- Select --".
     await vi.waitFor(() => {
@@ -77,45 +95,48 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('shows Edit title when editingId is set', async () => {
-    await renderInAct(<PurchaseOrderForm editingId="po-existing" onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId="po-existing" onClose={vi.fn()} onSaved={vi.fn()} />);
     expect(screen.getByText('Edit Purchase Order')).toBeInTheDocument();
   });
 
   it('calls onClose when cancel is clicked', async () => {
     const onClose = vi.fn();
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
     clickButton(/cancel/i);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('calls onClose when X button is clicked', async () => {
     const onClose = vi.fn();
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={onClose} onSaved={vi.fn()} />);
     clickButton(/close/i);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('button is disabled when PO number or supplier is missing', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     const btn = screen.getByRole('button', { name: /create po/i });
     expect(btn).toBeDisabled();
   });
 
   it('button enables when both PO number and supplier are filled', async () => {
-    mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-001');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     expect(screen.getByRole('button', { name: /create po/i })).toBeEnabled();
   });
 
   it('validates SKU is required on each line', async () => {
-    mockListSuppliers.mockResolvedValue(sampleSuppliers);
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-001');
-    // Select first supplier.
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     // Leave the default empty SKU line.
     clickButton(/create po/i);
 
@@ -123,7 +144,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('adds a new line row when + Add Line is clicked', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     // Start with 1 SKU input.
     const initialSkuInputs = screen.getAllByPlaceholderText('SKU');
     expect(initialSkuInputs).toHaveLength(1);
@@ -135,7 +156,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('removes a line row when remove button is clicked', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     clickButton('+ Add Line');
     expect(screen.getAllByPlaceholderText('SKU')).toHaveLength(2);
 
@@ -146,15 +167,15 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('does not show remove button when only one line remains', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /remove line/i })).not.toBeInTheDocument();
   });
 
   it('updates line fields — SKU, product name, qty, unit cost', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const skuInput = screen.getByPlaceholderText('SKU');
-    const nameInput = screen.getByPlaceholderText('Product name');
+    const nameInput = screen.getByPlaceholderText('Product Name');
     const qtyInput = screen.getByDisplayValue('1');
     const costInput = screen.getByPlaceholderText('in cents');
 
@@ -170,7 +191,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('shows computed line total and subtotal', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const qtyInput = screen.getByDisplayValue('1');
     const costInput = screen.getByPlaceholderText('in cents');
@@ -185,7 +206,7 @@ describe('PurchaseOrderForm', () => {
   });
 
   it('allows entering expected date and notes', async () => {
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     const dateInput = screen.getByLabelText('Expected Date');
     fireEvent.change(dateInput, { target: { value: '2026-08-01' } });
@@ -198,15 +219,17 @@ describe('PurchaseOrderForm', () => {
 
   it('successfully submits and calls onSaved', async () => {
     mockCreatePO.mockResolvedValueOnce({ id: 'po-new' });
-    mockListSuppliers.mockResolvedValue(sampleSuppliers);
     const onSaved = vi.fn();
 
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
 
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-001');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     fillField('SKU', 'SKU-001');
-    fireEvent.change(screen.getByPlaceholderText('Product name'), { target: { value: 'Test Product' } });
+    fireEvent.change(screen.getByPlaceholderText('Product Name'), { target: { value: 'Test Product' } });
 
     clickButton(/create po/i);
 
@@ -228,12 +251,14 @@ describe('PurchaseOrderForm', () => {
 
   it('shows error when createPurchaseOrder fails', async () => {
     mockCreatePO.mockRejectedValueOnce(new Error('Network failure'));
-    mockListSuppliers.mockResolvedValue(sampleSuppliers);
 
-    await renderInAct(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
+    await vi.waitFor(() => {
+      expect(screen.getByText('Acme Corp (SUP001)')).toBeInTheDocument();
+    });
     fillField('PO-001', 'PO-FAIL');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     fillField('SKU', 'SKU-X');
 
     clickButton(/create po/i);

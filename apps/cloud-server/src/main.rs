@@ -22,9 +22,11 @@
 mod db;
 mod email;
 mod metrics;
+mod openapi;
 mod prune;
 mod rate_limit;
 mod redirect;
+mod shutdown;
 mod sync_api;
 mod webhooks;
 
@@ -80,6 +82,41 @@ async fn main() {
         oz_logging::init_json();
     } else {
         oz_logging::init();
+    }
+
+    // ── Config validation (--validate-config skips the server) ───────
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--validate-config") {
+        info!("running config validation only (--validate-config)");
+        match oz_core::config_validator::validate_config() {
+            Ok(()) => {
+                info!("all configuration checks passed");
+                std::process::exit(0);
+            }
+            Err(errors) => {
+                for err in &errors {
+                    tracing::error!(%err, "configuration error");
+                }
+                eprintln!(
+                    "Configuration validation failed with {} error(s):",
+                    errors.len()
+                );
+                for err in &errors {
+                    eprintln!("  • {err}");
+                }
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // ── Startup config validation ───────────────────────────────────
+    // Check critical env vars before the server starts. Failures are
+    // logged as warnings (non-blocking) because the server may still
+    // function with SQLite defaults if DATABASE_URL is misconfigured.
+    if let Err(errors) = oz_core::config_validator::validate_config() {
+        for err in &errors {
+            tracing::warn!(%err, "configuration warning");
+        }
     }
 
     // ── Redirect-only mode (ADR #11) ──────────────────────────────────
@@ -156,7 +193,12 @@ async fn main() {
     }
 }
 
-/// Start the HTTP server on the configured port.
+/// Start the HTTP server on the configured port with graceful shutdown.
+///
+/// Listens for SIGTERM (Docker/K8s) or Ctrl+C. On receiving the signal:
+/// 1. Stops accepting new connections
+/// 2. Drains in-flight connections with a 30-second timeout
+/// 3. Logs the shutdown and exits cleanly
 async fn serve(app: Router) {
     let port: u16 = std::env::var("OZ_API_PORT")
         .ok()
@@ -167,9 +209,24 @@ async fn serve(app: Router) {
         .await
         .expect("failed to bind port");
     info!(port, "OZ-POS cloud server listening");
+
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown::shutdown_signal())
         .await
         .expect("server exited with error");
+
+    // Drain in-flight connections with a grace period.
+    // After the shutdown signal, axum stops accepting new connections
+    // and waits for existing requests to complete. This additional
+    // sleep gives any last-second requests time to finish before the
+    // process exits and background tasks are dropped.
+    const DRAIN_TIMEOUT_SECS: u64 = 30;
+    info!(
+        drain_timeout_secs = DRAIN_TIMEOUT_SECS,
+        "server stopped accepting connections, draining in-flight requests"
+    );
+    tokio::time::sleep(std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS)).await;
+    info!("graceful shutdown complete");
 }
 
 /// Build the combined router: REST API + sync endpoints.
@@ -286,11 +343,24 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
     let api_router = api_router.layer(ConcurrencyLimitLayer::new(10));
     let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
+    // OpenAPI documentation routes — Swagger UI + Scalar + raw OpenAPI JSON.
+    let docs_router = Router::new()
+        .route(
+            "/api/openapi.json",
+            axum::routing::get(openapi::openapi_json_handler),
+        )
+        .route("/api/docs", axum::routing::get(openapi::swagger_ui_handler))
+        .route(
+            "/api/docs/scalar",
+            axum::routing::get(openapi::scalar_ui_handler),
+        );
+
     Router::new()
         .route("/health", axum::routing::get(health_handler))
         .route("/api/health", axum::routing::get(health_handler))
         .route("/metrics", axum::routing::get(metrics_handler))
         .with_state(health_state)
+        .merge(docs_router)
         .merge(api_router)
         .merge(sync_router)
         .merge(webhook_router)

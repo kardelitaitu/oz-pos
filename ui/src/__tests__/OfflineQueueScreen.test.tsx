@@ -92,6 +92,25 @@ describe('OfflineQueueScreen', () => {
     });
   });
 
+  it('calls load when retry button is clicked after error', async () => {
+    // First call during mount rejects — shows error state
+    mockListAllOffline.mockRejectedValueOnce(new Error('Failed'));
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Retry')).toBeTruthy();
+    });
+
+    // Clear mock so retry uses the default resolved value from beforeEach
+    mockListAllOffline.mockClear();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(mockListAllOffline).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('renders queue items in a table', async () => {
     mockListAllOffline.mockResolvedValue([
       makeQueueItem(),

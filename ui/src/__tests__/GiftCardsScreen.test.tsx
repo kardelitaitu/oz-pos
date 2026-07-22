@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import giftCardsFtl from '@/locales/gift-cards.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -97,14 +98,14 @@ describe('GiftCardsScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and Issue New Card button', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
     expect(screen.getByText('Gift Cards')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /issue new card/i })).toBeInTheDocument();
   });
 
   it('loads and displays gift cards in the list', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('GC-001')).toBeInTheDocument();
@@ -116,7 +117,7 @@ describe('GiftCardsScreen', () => {
 
   it('shows loading skeleton initially', async () => {
     mockListGiftCards.mockReturnValue(new Promise(() => {}));
-    const { container } = renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    const { container } = renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     const skeleton = container.querySelector('[aria-hidden="true"].gift-cards-loading-skeleton');
     expect(skeleton).toBeInTheDocument();
@@ -125,7 +126,7 @@ describe('GiftCardsScreen', () => {
 
   it('shows empty state when no cards exist', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/no gift cards found/i)).toBeInTheDocument();
     }, FAST_WAIT);
@@ -133,7 +134,7 @@ describe('GiftCardsScreen', () => {
 
   it('renders status badges for each card', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('active')).toBeInTheDocument();
@@ -144,7 +145,7 @@ describe('GiftCardsScreen', () => {
 
   it('renders the search input and status filter dropdown', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     expect(screen.getByRole('textbox')).toBeInTheDocument();
     expect(screen.getByRole('combobox')).toBeInTheDocument();
@@ -155,7 +156,7 @@ describe('GiftCardsScreen', () => {
   // ── Expand/collapse ──────────────────────────────────────────
   it('expands card details when summary is clicked', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
 
@@ -168,7 +169,7 @@ describe('GiftCardsScreen', () => {
 
   it('shows transaction table in expanded detail', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
 
@@ -180,7 +181,7 @@ describe('GiftCardsScreen', () => {
 
   it('collapses detail when summary is clicked again', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
     await waitFor(() => {
@@ -195,7 +196,7 @@ describe('GiftCardsScreen', () => {
 
   it('does not show transaction section for cards with no transactions', async () => {
     mockListGiftCards.mockResolvedValue([sampleCards[2]!]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-003');
 
@@ -207,7 +208,7 @@ describe('GiftCardsScreen', () => {
   // ── Freeze/Unfreeze ──────────────────────────────────────────
   it('shows Freeze button for active cards in expanded view', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
 
@@ -219,7 +220,7 @@ describe('GiftCardsScreen', () => {
   it('calls freezeGiftCard when Freeze is clicked', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockFreezeGiftCard.mockResolvedValue({});
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
     await waitAndClickButton(/freeze/i);
@@ -231,7 +232,7 @@ describe('GiftCardsScreen', () => {
 
   it('shows Unfreeze button for frozen cards', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-003');
 
@@ -243,7 +244,7 @@ describe('GiftCardsScreen', () => {
   it('calls unfreezeGiftCard when Unfreeze is clicked', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockUnfreezeGiftCard.mockResolvedValue({});
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-003');
     await waitAndClickButton(/unfreeze/i);
@@ -255,7 +256,7 @@ describe('GiftCardsScreen', () => {
 
   it('does not show Freeze/Unfreeze for redeemed cards', async () => {
     mockListGiftCards.mockResolvedValue([sampleCards[1]!]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-002');
 
@@ -268,7 +269,7 @@ describe('GiftCardsScreen', () => {
   // ── Top-up ───────────────────────────────────────────────────
   it('shows Top Up button for active cards', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
 
@@ -279,7 +280,7 @@ describe('GiftCardsScreen', () => {
 
   it('opens top-up form when Top Up is clicked', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
     await waitAndClickButton(/top up/i);
@@ -293,7 +294,7 @@ describe('GiftCardsScreen', () => {
   it('submits top-up and refreshes the list', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
     mockTopUpGiftCard.mockResolvedValue({});
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
     await waitAndClickButton(/top up/i);
@@ -318,7 +319,7 @@ describe('GiftCardsScreen', () => {
 
   it('shows error when top-up amount is invalid', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
     await waitAndClickButton(/top up/i);
@@ -333,7 +334,7 @@ describe('GiftCardsScreen', () => {
 
   it('closes top-up form when Cancel is clicked', async () => {
     mockListGiftCards.mockResolvedValue(sampleCards);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     await expandCard('GC-001');
     await waitAndClickButton(/top up/i);
@@ -352,7 +353,7 @@ describe('GiftCardsScreen', () => {
   // ── Issue modal ──────────────────────────────────────────────
   it('opens IssueGiftCardModal when Issue New Card is clicked', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     fireEvent.click(screen.getByRole('button', { name: /issue new card/i }));
 
@@ -363,7 +364,7 @@ describe('GiftCardsScreen', () => {
 
   it('refreshes list when issue modal reports onIssued', async () => {
     mockListGiftCards.mockResolvedValue([]);
-    renderWithFluentSync(<GiftCardsScreen />, giftCardsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><GiftCardsScreen /></ToastProvider>, giftCardsFtl, sharedFtl);
 
     fireEvent.click(screen.getByRole('button', { name: /issue new card/i }));
 

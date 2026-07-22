@@ -1,6 +1,6 @@
 // ── Products: CRUD, variants, categories, barcode, stock adjustment ──
 
-import { invoke } from '@tauri-apps/api/core';
+import { loggedInvoke } from '@/utils/logged-invoke';
 
 // ── Products ──────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ export interface UpdateProductArgs {
 
 /** List all products. */
 export const listProducts = (): Promise<ProductDto[]> =>
-  invoke<ProductDto[]>('list_products');
+  loggedInvoke<ProductDto[]>('list_products');
 
 /**
  * Fetch products scoped to the store resolved from a session token.
@@ -61,11 +61,11 @@ export const listProducts = (): Promise<ProductDto[]> =>
  * deployments.
  */
 export const listProductsScoped = (sessionToken: string): Promise<ProductDto[]> =>
-  invoke<ProductDto[]>('list_products_scoped', { sessionToken });
+  loggedInvoke<ProductDto[]>('list_products_scoped', { sessionToken });
 
 /** Create a new product. */
 export const createProduct = (args: CreateProductArgs): Promise<{ sku: string }> =>
-  invoke('create_product', { args });
+  loggedInvoke('create_product', { args });
 
 /** ADR #7: Scoped product creation — `userId` is read from session, not args. */
 export interface CreateProductScopedArgs {
@@ -81,11 +81,11 @@ export interface CreateProductScopedArgs {
 }
 
 export const createProductScoped = (sessionToken: string, args: CreateProductScopedArgs): Promise<{ sku: string }> =>
-  invoke<{ sku: string }>('create_product_scoped', { sessionToken, args });
+  loggedInvoke<{ sku: string }>('create_product_scoped', { sessionToken, args });
 
 /** Update an existing product. */
 export const updateProduct = (args: UpdateProductArgs): Promise<{ sku: string }> =>
-  invoke('update_product', { args });
+  loggedInvoke('update_product', { args });
 
 /** ADR #7: Scoped product update — `userId` is read from session, not args. */
 export interface UpdateProductScopedArgs {
@@ -100,33 +100,33 @@ export interface UpdateProductScopedArgs {
 }
 
 export const updateProductScoped = (sessionToken: string, args: UpdateProductScopedArgs): Promise<{ sku: string }> =>
-  invoke<{ sku: string }>('update_product_scoped', { sessionToken, args });
+  loggedInvoke<{ sku: string }>('update_product_scoped', { sessionToken, args });
 
 /** Delete a product by SKU. */
 export const deleteProduct = (args: { userId: string; sku: string }): Promise<void> =>
-  invoke('delete_product', { args });
+  loggedInvoke('delete_product', { args });
 
 /** ADR #7: Scoped product deletion — `userId` is read from session, not args. */
 export const deleteProductScoped = (sessionToken: string, sku: string): Promise<void> =>
-  invoke('delete_product_scoped', { sessionToken, args: { sku } });
+  loggedInvoke('delete_product_scoped', { sessionToken, args: { sku } });
 
 // ── Barcode / SKU Lookup ───────────────────────────────────────────
 
 /** Look up a product by its barcode. */
 export const lookupByBarcode = (barcode: string): Promise<ProductDto | null> =>
-  invoke<ProductDto | null>('lookup_by_barcode', { barcode });
+  loggedInvoke<ProductDto | null>('lookup_by_barcode', { barcode });
 
 /** ADR #7: Scoped barcode lookup using session token. */
 export const lookupByBarcodeScoped = (sessionToken: string, barcode: string): Promise<ProductDto | null> =>
-  invoke<ProductDto | null>('lookup_by_barcode_scoped', { sessionToken, barcode });
+  loggedInvoke<ProductDto | null>('lookup_by_barcode_scoped', { sessionToken, barcode });
 
 /** Look up a product by its SKU. */
 export const lookupProductBySku = (sku: string): Promise<ProductDto | null> =>
-  invoke<ProductDto | null>('lookup_product_by_sku', { sku });
+  loggedInvoke<ProductDto | null>('lookup_product_by_sku', { sku });
 
 /** ADR #7: Scoped SKU lookup using session token. */
 export const lookupProductBySkuScoped = (sessionToken: string, sku: string): Promise<ProductDto | null> =>
-  invoke<ProductDto | null>('lookup_product_by_sku_scoped', { sessionToken, sku });
+  loggedInvoke<ProductDto | null>('lookup_product_by_sku_scoped', { sessionToken, sku });
 
 // ── Inventory Adjustment ──────────────────────────────────────────
 
@@ -139,7 +139,7 @@ export interface AdjustStockArgs {
 
 /** Adjust a product's stock level by a delta value. Returns the new stock quantity. */
 export const adjustStock = (args: AdjustStockArgs): Promise<number> =>
-  invoke<number>('adjust_stock', { args });
+  loggedInvoke<number>('adjust_stock', { args });
 
 /**
  * Adjust stock scoped to the store resolved from a session token.
@@ -147,7 +147,7 @@ export const adjustStock = (args: AdjustStockArgs): Promise<number> =>
  * ADR #7: Prefer this over `adjustStock()` in multi-store deployments.
  */
 export const adjustStockScoped = (sessionToken: string, args: AdjustStockArgs): Promise<number> =>
-  invoke<number>('adjust_stock_scoped', { sessionToken, args });
+  loggedInvoke<number>('adjust_stock_scoped', { sessionToken, args });
 
 // ── Product Variants ──────────────────────────────────────────────
 
@@ -190,23 +190,23 @@ export interface UpdateProductVariantArgs {
 
 /** List all variants for a given parent product SKU. */
 export const listProductVariants = (parentSku: string): Promise<ProductVariantDto[]> =>
-  invoke<ProductVariantDto[]>('list_product_variants', { parentSku });
+  loggedInvoke<ProductVariantDto[]>('list_product_variants', { parentSku });
 
 /** Get a single product variant by its SKU. */
 export const getProductVariant = (sku: string): Promise<ProductVariantDto | null> =>
-  invoke<ProductVariantDto | null>('get_product_variant', { sku });
+  loggedInvoke<ProductVariantDto | null>('get_product_variant', { sku });
 
 /** Create a new product variant. */
 export const createProductVariant = (args: CreateProductVariantArgs): Promise<{ sku: string }> =>
-  invoke<{ sku: string }>('create_product_variant', { args });
+  loggedInvoke<{ sku: string }>('create_product_variant', { args });
 
 /** Update an existing product variant. */
 export const updateProductVariant = (args: UpdateProductVariantArgs): Promise<{ sku: string }> =>
-  invoke<{ sku: string }>('update_product_variant', { args });
+  loggedInvoke<{ sku: string }>('update_product_variant', { args });
 
 /** Delete a product variant by SKU. */
 export const deleteProductVariant = (sku: string): Promise<void> =>
-  invoke('delete_product_variant', { sku });
+  loggedInvoke('delete_product_variant', { sku });
 
 // ── Categories ────────────────────────────────────────────────────
 
@@ -238,16 +238,16 @@ export interface UpdateCategoryArgs {
 
 /** List all product categories. */
 export const listCategories = (): Promise<CategoryDto[]> =>
-  invoke<CategoryDto[]>('list_categories');
+  loggedInvoke<CategoryDto[]>('list_categories');
 
 /** Create a new product category. */
 export const createCategory = (args: CreateCategoryArgs): Promise<{ id: string }> =>
-  invoke('create_category', { args });
+  loggedInvoke('create_category', { args });
 
 /** Update an existing product category. */
 export const updateCategory = (args: UpdateCategoryArgs): Promise<{ id: string }> =>
-  invoke('update_category', { args });
+  loggedInvoke('update_category', { args });
 
 /** Delete a product category by its identifier. */
 export const deleteCategory = (id: string): Promise<void> =>
-  invoke('delete_category', { args: { id } });
+  loggedInvoke('delete_category', { args: { id } });
