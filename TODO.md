@@ -1,3 +1,118 @@
+# 0.0.26 — CHANGELOG, Pipeline & Feature Kickoff (COMPLETE 🎉)
+
+> **Goal:** Document the 0.0.22–0.0.25 test rescue journey, run the full pipeline, and start new feature work.
+>
+> **Current state:** 4 / 4 items complete (100% 🎉) · Updated 2026-07-22
+
+---
+
+## 📋 Sprint Plan
+
+| # | Area | Items | Status |
+|---|------|-------|--------|
+| 🟢 | CHANGELOG Updates | 1 | 1/1 ✅ |
+| 🔴 | Pipeline Verification | 1 | 1/1 ✅ |
+| 🟡 | Feature: Scalar API Docs | 1 | 1/1 ✅ (pre-existing) |
+| 🟣 | Polish & Commit | 1 | 1/1 ✅ |
+| **Total** | | **4** | **4/4 (100% 🎉)** |
+
+---
+
+### 🟢 P260 — CHANGELOG Updates ✅
+
+> **Goal:** Add comprehensive CHANGELOG entries for 0.0.24 (pipeline run) and 0.0.25 (zero pre-existing issues).
+
+- [x] **P260-1: Write CHANGELOG entries** ✅ — Added entries for 0.0.24 (full gate pipeline verification + gate state documentation) and 0.0.25 (zero pre-existing issues — 8 test fixes + 4 clippy fixes, cumulative 122→0 impact table).
+
+---
+
+### 🔴 P261 — Pipeline Verification ✅
+
+> **Goal:** Run the full gate pipeline to confirm 0.0.26 baseline is clean.
+
+- [x] **P261-1: Run full pipeline** ✅ — Results:
+  - `cargo fmt --all --check`: ✅ Clean
+  - `cargo clippy --workspace --all-targets -- -D warnings`: ✅ 0 errors
+  - `npm run typecheck`: ✅ 0 errors
+  - `npm run lint`: ✅ 0 errors, 0 warnings (fixed 1 consistent-type-imports in TerminalStatusPanel)
+  - `npx vitest run`: ✅ 2,926 passed (4 intentional error-handling tests, 0 failures)
+
+---
+
+### 🟡 P262 — Feature: Scalar API Docs ✅
+
+> **Goal:** Add Scalar API Reference UI alongside existing Swagger UI at `/api/docs/scalar`.
+
+- [x] **P262-1: Scalar HTML page** ✅ — Already implemented in prior sprint (0.0.18). `scalar_html()` in `apps/cloud-server/src/openapi.rs` serves a standalone Scalar page at `GET /api/docs/scalar` pointing at `/api/openapi.json`. Zero additional dependencies.
+- [x] **P262-2: Scalar tests** ✅ — 10/10 OpenAPI tests pass (Swagger + Scalar routes, spec validity, content types).
+
+---
+
+### 🟣 P263 — Polish & Commit ✅
+
+> **Goal:** Update TODO.md, verify all gates, and commit.
+
+- [x] **P263-1: Update TODO + commit** ✅ — Marked all items complete, ran final gate check (all clean), committed.
+
+---
+
+### 📊 Final Gate State (post-0.0.26)
+
+| Gate | Status |
+|------|--------|
+| `cargo fmt` | ✅ Clean |
+| `cargo clippy` | ✅ 0 errors |
+| `npm run typecheck` | ✅ 0 errors |
+| `npm run lint` | ✅ 0 errors, 0 warnings |
+| `vitest` | ✅ 2,926 passed, 0 failures |
+
+---
+
+# 0.0.27 — Sync Robustness Improvements
+
+> **Goal:** Address the sync failure logs (transport errors to localhost:3099) — improve error diagnostics, add connection health checks, and enhance the sync retry UX.
+>
+> **Current state:** 0 / 3 items complete (0%) · Updated 2026-07-22
+
+---
+
+## 📋 Sprint Plan
+
+| # | Area | Items | Status |
+|---|------|-------|--------|
+| 🟢 | Sync Error Diagnostics | 1 | 0/1 🔴 |
+| 🔴 | Connection Health Check | 1 | 0/1 🔴 |
+| 🟡 | Sync Status UI | 1 | 0/1 🔴 |
+| **Total** | | **3** | **0/3 (0%)** |
+
+---
+
+### 🟢 P270 — Sync Error Diagnostics
+
+> **Goal:** Improve the sync error messages to include actionable information — distinguish between "cloud server not running" vs "network error" vs "auth failure".
+
+- [ ] **P270-1: Enhanced error classification** — Add error kind detection in `platform/sync/src/transport.rs` for connection refused, DNS failure, timeout, HTTP 401/403/500. Log with distinct messages per kind. Add unit tests for each error classification.
+
+---
+
+### 🔴 P271 — Connection Health Check
+
+> **Goal:** Add a pre-sync health ping to the cloud server so the client can detect availability before attempting a full sync cycle.
+
+- [ ] **P271-1: Health check before sync** — Call `GET /api/health` before each sync cycle. Skip the full pull/push if the health check fails. Reduce unnecessary error logs when server is intentionally down.
+- [ ] **P271-2: Health check tests** — Add tests for: health check succeeds → proceed with sync, health check fails → skip sync with info log, health check timeout → graceful degradation.
+
+---
+
+### 🟡 P272 — Sync Status UI
+
+> **Goal:** Surface sync connection status in the shell header so users can see at a glance if the cloud server is reachable.
+
+- [ ] **P272-1: Sync status indicator** — Add a small dot/badge to the AppShell header showing sync connectivity (green = connected, red = disconnected, yellow = retrying). Wire it to the existing sync status polling.
+- [ ] **P272-2: Status indicator tests** — Add tests for: renders connected state, renders disconnected state, updates on status change.
+
+---
+
 # 0.0.25 — Final Code Health: Zero Pre-existing Issues (COMPLETE 🎉)
 
 > **Goal:** Fix the remaining 8 test failures + 4 clippy errors to achieve 0 pre-existing issues across all gates.

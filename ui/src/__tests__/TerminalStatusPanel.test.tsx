@@ -38,7 +38,7 @@ vi.mock('@/api/terminals', () => ({
 // Localized just renders children, useLocalization().l10n.getString() returns
 // the fallback text or a simple lookup for terminal-specific keys.
 vi.mock('@fluent/react', async () => {
-  const actual = await vi.importActual<typeof import('@fluent/react')>('@fluent/react');
+  const actual = await vi.importActual('@fluent/react');
   return {
     ...actual,
     Localized: ({ children }: { children: React.ReactNode }) => children,
