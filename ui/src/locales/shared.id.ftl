@@ -44,6 +44,10 @@ status-bar-connected = Backend terhubung
 status-bar-disconnected = Backend terputus
 status-bar-checking = Memeriksa koneksi backend
 status-bar-authenticating = Mengautentikasi…
+# Sync connection status
+status-bar-sync-connected = Sinkronisasi cloud terhubung
+status-bar-sync-disconnected = Sinkronisasi cloud terputus
+status-bar-sync-checking = Memeriksa koneksi sinkronisasi cloud…
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 

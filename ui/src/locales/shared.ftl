@@ -221,6 +221,10 @@ status-bar-connected = Backend connected
 status-bar-disconnected = Backend disconnected
 status-bar-checking = Checking backend connection
 status-bar-authenticating = Authenticating...
+# Sync connection status
+status-bar-sync-connected = Cloud sync connected
+status-bar-sync-disconnected = Cloud sync disconnected
+status-bar-sync-checking = Checking cloud sync connection…
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 
