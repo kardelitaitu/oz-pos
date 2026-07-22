@@ -205,8 +205,7 @@ export default function TaxConfigurationScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
                     <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
@@ -216,8 +215,7 @@ export default function TaxConfigurationScreen() {
                       <Skeleton variant="block" width="3.5rem" height="1.375rem" />
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                ))}</tbody>
             </table>
           </div>
         </div>
@@ -249,8 +247,7 @@ export default function TaxConfigurationScreen() {
                     </Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {rates.map((r) => (
+                <tbody>{rates.map((r) => (
                     <tr key={r.id}>
                       <td>
                         {r.name}
@@ -301,8 +298,7 @@ export default function TaxConfigurationScreen() {
                         </Localized>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  ))}</tbody>
               </table>
             </div>
           )}
@@ -335,8 +331,7 @@ export default function TaxConfigurationScreen() {
                       </Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {categories.map((cat) => {
+                  <tbody>{categories.map((cat) => {
                       const assignedIds = catTaxRates.get(cat.id) ?? [];
                       const assignedNames = assignedIds
                         .map((id) => rates.find((r) => r.id === id))
@@ -384,7 +379,7 @@ export default function TaxConfigurationScreen() {
                           </td>
                         </tr>
                       );
-                    })}                </tbody>
+                    })}</tbody>
               </table>
               </div>
             )}
