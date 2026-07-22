@@ -2,7 +2,7 @@
 
 > **Goal:** 5 areas: fuzz testing infrastructure, database corruption recovery, rate limiting integration tests, automated a11y testing, and a TypeScript API client SDK.
 >
-> **Current state:** 8 / 10 items complete (80% 🟡) · Updated 2026-07-22
+> **Current state:** 10 / 10 items complete (100% 🎉) · Updated 2026-07-22
 
 ---
 
@@ -14,8 +14,8 @@
 | 🔴 | DB Corruption Recovery | 2 | 2/2 ✅ |
 | 🟡 | Rate Limiting Integration Tests | 2 | 2/2 ✅ |
 | 🔵 | Automated A11y Testing | 2 | 1/2 🟡 |
-| 🟣 | TypeScript API Client SDK | 2 | 0/2 🔴 |
-| **Total** | | **10** | **8/10 (80%)** |
+| 🟣 | TypeScript API Client SDK | 2 | 2/2 ✅ |
+| **Total** | | **10** | **10/10 (100% 🎉)** |
 
 ---
 
@@ -65,8 +65,16 @@
 
 > **Goal:** Create a lightweight TypeScript SDK for the cloud server REST API that third-party developers can use for integrations.
 
-- [ ] **P154-1: API client module** — Create `ui/src/api/client/` with typed HTTP client: `ApiClient` class (configurable baseUrl, Bearer auth), typed methods for all 20+ endpoints, response types from the OpenAPI spec. Export from `ui/src/api/client/index.ts`.
-- [ ] **P154-2: SDK tests + docs** — Add unit tests mocking the HTTP layer (vitest + MSW). Add `docs/api-client.md` with quick start, examples, and endpoint reference. Verify all types match the OpenAPI spec.
+- [x] **P154-1: API client module** ✅ — Created `ui/src/api/client/` with 12 files:
+  - `types.ts`: 16 typed interfaces matching OpenAPI schemas (Money, ProductDetail, CategoryDto, CreateSaleRequest, etc.)
+  - `client.ts`: `HttpClient` class with Bearer auth, `request<T>()` for JSON, `requestRaw()` for text/plain, `ApiError` class
+  - `oz-pos-client.ts`: `OZPosClient` composing 9 domain sub-clients (health, auth, products, categories, tax, users, sales, sync, webhooks)
+  - 9 domain sub-clients covering all 20+ OpenAPI endpoints
+  - `index.ts`: Barrel export
+- [x] **P154-2: SDK tests + docs** ✅
+  - 24 MSW integration tests across all 9 sub-clients + error handling (4xx/5xx/409/invalid JSON) + Bearer token + URL encoding
+  - `docs/api-client.md`: Quick start, full API reference tables, error handling, testing guide
+  - All 24/24 tests pass, typecheck clean
 
 ---
 
