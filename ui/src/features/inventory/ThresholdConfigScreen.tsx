@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Button } from '@/components/Button';
 import { Localized } from '@fluent/react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
@@ -127,11 +128,11 @@ export default function ThresholdConfigScreen() {
         <Localized id="inv-threshold-title">
           <h2 className="threshold-title">Stock Threshold Configuration</h2>
         </Localized>
-        <button type="button" className="shift-btn shift-btn-primary" onClick={handleOpenAddDialog}>
+        <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" onClick={handleOpenAddDialog}>
           <Localized id="inv-threshold-add-btn">
             <span>+ Add Threshold</span>
           </Localized>
-        </button>
+        </Button>
       </div>
 
       <div className="log-filters">
@@ -210,14 +211,14 @@ export default function ThresholdConfigScreen() {
                   </td>
                   <td className="threshold-actions">
                     <Localized id="edit">
-                      <button type="button" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
+                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
                         <span>Edit</span>
-                      </button>
+                      </Button>
                     </Localized>
                     <Localized id="delete">
-                      <button type="button" className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDeleteClick(t.id)}>
+                      <Button variant="danger" size="sm" className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDeleteClick(t.id)}>
                         <span>Delete</span>
-                      </button>
+                      </Button>
                     </Localized>
                   </td>
                 </tr>
@@ -311,15 +312,15 @@ export default function ThresholdConfigScreen() {
             </label>
 
             <div className="dialog-actions">
-              <button type="button" className="shift-btn shift-btn-danger" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="danger" size="sm" className="shift-btn shift-btn-danger" onClick={() => setIsDialogOpen(false)}>
                 <Localized id="inv-cancel">
                   <span>Cancel</span>
                 </Localized>
-              </button>
+              </Button>
               <Localized id="save">
-                <button type="submit" className="shift-btn shift-btn-primary">
+                <Button type="submit" variant="primary" size="sm" className="shift-btn shift-btn-primary">
                   <span>Save</span>
-                </button>
+                </Button>
               </Localized>
             </div>
           </form>

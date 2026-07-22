@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/Button';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -221,11 +222,11 @@ export default function TransactionLogScreen() {
                     <td>{locationName}</td>
                     <td>{tx.staff_id}</td>
                     <td>
-                      <button type="button" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
+                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
                         <Localized id="inv-log-expand-btn">
                           <span>Details</span>
                         </Localized>
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                   {isExpanded && (

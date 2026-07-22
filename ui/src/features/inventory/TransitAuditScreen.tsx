@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/Button';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
@@ -142,11 +143,11 @@ export default function TransitAuditScreen() {
                 </table>
 
                 <div className="transit-actions">
-                  <button type="button" className="reverse-btn" onClick={() => handleReverseTransfer(transfer.id)}>
+                  <Button variant="danger" size="sm" className="reverse-btn" onClick={() => handleReverseTransfer(transfer.id)}>
                     <Localized id="inv-transit-reverse-btn">
                       <span>Reverse Transfer</span>
                     </Localized>
-                  </button>
+                  </Button>
                 </div>
               </div>
             );
