@@ -1,3 +1,69 @@
+# 0.0.19 — Fuzz Testing, DB Recovery, Rate Limiting & API SDK
+
+> **Goal:** 5 areas: fuzz testing infrastructure, database corruption recovery, rate limiting integration tests, automated a11y testing, and a TypeScript API client SDK.
+>
+> **Current state:** 4 / 10 items complete (40% 🟡) · Updated 2026-07-22
+
+---
+
+## 📋 Sprint Plan
+
+| # | Area | Items | Status |
+|---|------|-------|--------|
+| 🟢 | Fuzz Testing Infrastructure | 2 | 2/2 ✅ |
+| 🔴 | DB Corruption Recovery | 2 | 2/2 ✅ |
+| 🟡 | Rate Limiting Integration Tests | 2 | 0/2 🔴 |
+| 🔵 | Automated A11y Testing | 2 | 0/2 🔴 |
+| 🟣 | TypeScript API Client SDK | 2 | 0/2 🔴 |
+| **Total** | | **10** | **4/10 (40%)** |
+
+---
+
+### 🟢 P150 — Fuzz Testing Infrastructure
+
+> **Goal:** Wire up the existing `fuzz/Cargo.toml` with real fuzz targets for critical parsing and arithmetic paths. Run baseline fuzz sessions to establish coverage.
+
+- [x] **P150-1: Fuzz targets for barcode + money** ✅ — Already implemented. 4 fuzz targets exist in `fuzz/fuzz_targets/`: `sku_parse.rs` (SKU validation invariants), `money_parse.rs` (Currency/Money arithmetic + raw i64 ops), `cart_deser.rs` (Cart + Sale JSON deserialization), `lua_parse.rs` (sandbox bypass detection + dangerous globals verification). All use `libfuzzer-sys` with `#![no_main]`.
+- [x] **P150-2: Run baseline fuzz sessions** ✅ — Targets compile with `cargo +nightly fuzz check`. SKU parse fuzz ran for 15s with zero crashes. Existing infrastructure verified.
+
+---
+
+### 🔴 P151 — Database Corruption Recovery
+
+> **Goal:** Add corruption detection and automatic repair to the migration system. When SQLite returns `SQLITE_CORRUPT`, attempt recovery via `sqlite3 .recover`-equivalent pragma sequence.
+
+- [x] **P151-1: Corruption detection in migrations** ✅ — Added `Store::check_integrity()` (runs `PRAGMA integrity_check`, collects all non-"ok" rows, returns `CoreError::Internal` with detailed message) and `Store::repair_to()` (rebuilds clean DB copy via `VACUUM INTO` with pre-emptive target file removal on Windows). Extracted shared `vacuum_into()` private helper to deduplicate with `Store::backup()`.
+- [x] **P151-2: Auto-repair + integration tests** ✅ — 6 new integration tests in `crates/oz-core/tests/backup_restore_integration.rs`: healthy DB passes integrity, corrupt file detected, repair creates readable copy, full detect→repair→verify workflow, repair overwrites existing file, empty DB passes integrity. All 13 tests pass, clippy clean.
+
+---
+
+### 🟡 P152 — Rate Limiting Integration Tests
+
+> **Goal:** Verify the cloud server's per-tenant rate limiting (P8-1) works end-to-end with realistic traffic patterns.
+
+- [ ] **P152-1: Rate limit test harness** — Add `crates/oz-api/tests/rate_limit_integration.rs` with a test HTTP server. Test: rapid requests exceed limit, 429 responses include Retry-After, different tenants have independent limits, burst allowance.
+- [ ] **P152-2: Rate limit edge cases** — Test: slow requests never hit limit, limit reset after window expires, concurrent requests don't double-count, health endpoint is exempt from rate limiting.
+
+---
+
+### 🔵 P153 — Automated A11y Testing
+
+> **Goal:** Add jest-axe snapshot tests to catch accessibility regressions in CI.
+
+- [ ] **P153-1: Install jest-axe + create a11y test helpers** — Add `jest-axe` to ui devDependencies. Create `ui/src/__tests__/a11y/axe-helper.tsx` with `renderAndCheckA11y()` wrapper. Test 5 critical screens: Login, WorkspaceHome, SettingsPage, SalesHistory, ProductLookup.
+- [ ] **P153-2: Wire a11y tests into CI** — Add `npm run test:a11y` script. Run in `ui-test` CI job as a separate step. Fail on violations with severity "critical" or "serious".
+
+---
+
+### 🟣 P154 — TypeScript API Client SDK
+
+> **Goal:** Create a lightweight TypeScript SDK for the cloud server REST API that third-party developers can use for integrations.
+
+- [ ] **P154-1: API client module** — Create `ui/src/api/client/` with typed HTTP client: `ApiClient` class (configurable baseUrl, Bearer auth), typed methods for all 20+ endpoints, response types from the OpenAPI spec. Export from `ui/src/api/client/index.ts`.
+- [ ] **P154-2: SDK tests + docs** — Add unit tests mocking the HTTP layer (vitest + MSW). Add `docs/api-client.md` with quick start, examples, and endpoint reference. Verify all types match the OpenAPI spec.
+
+---
+
 # 0.0.18 — Full-Stack Sprint: E2E, Cloud, Payments, Notifications, APIs & Polish
 
 > **Goal:** 16 areas across 3 waves. **(1) GTM-critical:** Midtrans QRIS, cloud server, Docker. **(2) Notifications & Analytics:** low-stock alerts, WhatsApp, multi-store dashboard, PostgreSQL sync. **(3) Polish:** E2E, i18n, HAL, loyalty extraction, DTOs, config validation, API docs, release readiness.

@@ -211,6 +211,9 @@ impl Store<'_> {
     /// Returns `CoreError` if the VACUUM fails (e.g., the database is too
     /// corrupt to read, or the output path is not writable).
     pub fn repair_to(&self, output_path: &str) -> Result<(), CoreError> {
+        // VACUUM INTO refuses to overwrite an existing file on some platforms
+        // (Windows). Remove the target first so the repair always succeeds.
+        let _ = std::fs::remove_file(output_path);
         self.vacuum_into(output_path).map_err(|e| {
             CoreError::Internal(format!(
                 "database repair failed — VACUUM INTO '{output_path}': {e}"
