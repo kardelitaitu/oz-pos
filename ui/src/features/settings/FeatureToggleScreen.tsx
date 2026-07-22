@@ -436,24 +436,28 @@ export default function FeatureToggleScreen() {
               </span>
             </h2>
             <div className="feature-toggle-bulk-actions">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 className="feature-toggle-bulk-btn"
                 disabled={togglingBatch === group}
                 onClick={() => toggleGroup(group, true)}
                 aria-label={l10n.getString('feature-toggle-bulk-enable-aria', { group })}
               >
                 <Localized id="feature-toggle-bulk-enable"><span>Enable All</span></Localized>
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 className="feature-toggle-bulk-btn feature-toggle-bulk-btn--disable"
                 disabled={togglingBatch === group}
                 onClick={() => toggleGroup(group, false)}
                 aria-label={l10n.getString('feature-toggle-bulk-disable-aria', { group })}
               >
                 <Localized id="feature-toggle-bulk-disable"><span>Disable All</span></Localized>
-              </button>
+              </Button>
             </div>
           </div>
 

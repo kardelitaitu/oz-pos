@@ -415,8 +415,10 @@ export function AppearanceSettings({
           {!embedded && (
             <div className="appearance-reset-actions">
               <Localized id="appearance-reset-all-aria" attrs={{ 'aria-label': true }}>
-                <button
+                  <Button
                   type="button"
+                  variant="danger"
+                  size="sm"
                   className="appearance-reset-all-btn"
                   onClick={handleResetAll}
                   disabled={resetting}
@@ -427,7 +429,7 @@ export function AppearanceSettings({
                     <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
                   </svg>
                   <Localized id="appearance-reset-all">Reset all to defaults</Localized>
-                </button>
+                </Button>
               </Localized>
             </div>
           )}

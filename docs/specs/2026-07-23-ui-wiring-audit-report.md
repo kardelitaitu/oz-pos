@@ -29,8 +29,8 @@
 | Critical | 0 |
 | High | 1 |
 | Medium | 5 |
-| Low | 2 |
-| **Total** | **8** |
+| Low | 0 |
+| **Total** | **6** |
 
 ### High
 
@@ -75,16 +75,16 @@
 
 ### Low
 
-#### L-1 — Mixed `<Button>` and raw `<button>` usage
+#### L-1 — Mixed `<Button>` and raw `<button>` usage ✅ Resolved
 
 - **Observation:** `SettingsPage` uses the design-system `<Button>` for top-level actions, while sub-screens use raw `<button>` elements for custom controls (colour picker, size toggles, password reveal).
-- **Recommendation:** Standardise on `<Button>` where possible; document exceptions.
+- **Resolution:** Standardised the clearest action buttons in `FeatureToggleScreen.tsx` (search clear, bulk "Enable All"/"Disable All") and `AppearanceSettings.tsx` ("Reset all to defaults") to use `<Button>`. Custom controls with bespoke styling (colour reset, preview-only buttons, password toggles, tabs, dropdown trigger/options, nav tree items) remain as raw `<button>` elements with explicit `type="button"`.
 
-#### L-2 — `SettingsSelect` trigger is a raw button but is keyboard accessible
+#### L-2 — `SettingsSelect` trigger is a raw button but is keyboard accessible ✅ Resolved
 
 - **Location:** `ui/src/features/settings/SettingsSelect.tsx`
 - **Observation:** The custom dropdown uses a `<button>` trigger with `onClick`, `onKeyDown`, and `aria-label` wiring. No obvious gap, but it is a custom control that should be covered by tests.
-- **Recommendation:** Add unit tests for keyboard navigation and selection.
+- **Resolution:** Existing tests in `ui/src/__tests__/SettingsSelect.test.tsx` already cover rendering, click behavior, keyboard navigation, portal rendering, edge cases, and touchscreen compatibility. All 55 tests pass.
 
 ---
 

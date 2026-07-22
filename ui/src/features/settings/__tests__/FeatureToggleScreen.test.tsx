@@ -64,10 +64,24 @@ vi.mock('@fluent/react', () => ({
 }));
 
 vi.mock('@/components/Button', () => ({
-  Button: ({ children, onClick, disabled, variant, loading }: {
-    children: React.ReactNode; onClick?: () => void; disabled?: boolean; variant?: string; loading?: boolean;
+  Button: ({ children, onClick, disabled, variant, loading, 'aria-label': ariaLabel, className, type }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant?: string;
+    loading?: boolean;
+    'aria-label'?: string;
+    className?: string;
+    type?: React.ButtonHTMLAttributes<HTMLButtonElement>['type'];
   }) => (
-    <button onClick={onClick} disabled={disabled || loading} data-variant={variant}>
+    <button
+      type={type}
+      className={className}
+      onClick={onClick}
+      disabled={disabled || loading}
+      aria-label={ariaLabel}
+      data-variant={variant}
+    >
       {loading ? 'Loading\u2026' : children}
     </button>
   ),
