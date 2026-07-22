@@ -308,6 +308,17 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
   }),
   'set_receipt_settings': () => null,
+  'get_report_schedule': () => ({
+    enabled: false,
+    cadence: 'daily',
+    report_types: ['daily_revenue', 'top_products'],
+    recipients: ['admin@example.com'],
+    send_at_time: '08:00',
+    timezone: 'UTC',
+    lookback_days: 1,
+  }),
+  'save_report_schedule': () => null,
+
   'set_receipt_settings_scoped': () => null,
 
   'get_enabled_features': () => ({ features: ['sales', 'inventory', 'reporting', 'staff', 'settings'] }),
