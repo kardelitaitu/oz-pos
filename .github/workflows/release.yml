@@ -84,7 +84,6 @@ jobs:
           name: docker-cloud
           path: oz-pos-cloud.tar
           retention-days: 30
-          retention-days: 30
 
   release-publish:
     name: Publish Release
