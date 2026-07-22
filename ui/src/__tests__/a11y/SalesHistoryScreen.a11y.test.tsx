@@ -36,10 +36,7 @@ vi.mock('@/api/branding', () => ({
 describe('SalesHistoryScreen a11y', () => {
   it('has no axe violations on initial render', async () => {
     const { container } = renderWithProviders(<SalesHistoryScreen />);
-    // Disable heading-order: the empty-state h3 is correct when this
-    // component is rendered within its parent page's heading hierarchy.
-    await checkA11y(container, {
-      rules: { 'heading-order': { enabled: false } },
-    });
+    // heading-order fixed — EmptyState now supports configurable headingLevel
+    await checkA11y(container);
   });
 });

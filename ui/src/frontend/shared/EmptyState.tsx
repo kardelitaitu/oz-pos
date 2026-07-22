@@ -6,6 +6,8 @@ export interface EmptyStateProps {
   icon?: ReactNode;
   /** Heading text. */
   title: string;
+  /** Heading level — use 1/2/3 matching the page hierarchy. Default 3 for backward compat. */
+  headingLevel?: 1 | 2 | 3;
   /** Supporting description. */
   description?: string;
   /** Optional primary action button. */
@@ -20,6 +22,7 @@ export interface EmptyStateProps {
 export function EmptyState({
   icon,
   title,
+  headingLevel = 3,
   description,
   action,
   children,
@@ -31,7 +34,13 @@ export function EmptyState({
           {icon}
         </div>
       )}
-      <h3 className="empty-state__title">{title}</h3>
+      {headingLevel === 1 ? (
+        <h1 className="empty-state__title">{title}</h1>
+      ) : headingLevel === 2 ? (
+        <h2 className="empty-state__title">{title}</h2>
+      ) : (
+        <h3 className="empty-state__title">{title}</h3>
+      )}
       {description && <p className="empty-state__desc">{description}</p>}
       {action && (
         <div className="empty-state__action">

@@ -679,11 +679,13 @@ export default function SalesHistoryScreen() {
             {sales.length === 0 ? (
               <EmptyState
                 icon={<NoSalesIcon />}
+                headingLevel={2}
                 title={l10n.getString('sales-history-empty') || 'No sales recorded yet'}
               />
             ) : (
               <EmptyState
                 icon={<NotFoundIcon />}
+                headingLevel={2}
                 title={l10n.getString('sales-history-empty-filtered') || 'No sales match your filters'}
                 action={{
                   label: l10n.getString('sales-history-clear-filters') || 'Clear filters',

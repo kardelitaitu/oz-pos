@@ -38,15 +38,15 @@ describe('ProductLookupScreen a11y', () => {
     const { container } = renderWithProviders(
       <ProductLookupScreen onAddProduct={vi.fn()} />,
     );
-    // Disable button-name + aria-required-children/parent:
-    // - button-name: icon-only buttons rely on visual context (UX debt)
-    // - aria-required-children/parent: product grid uses role="list"
-    //   with role="row" children — tracked as real a11y bug to fix.
+    // Two known a11y issues tracked as product bugs:
+    // - button-name: icon buttons have aria-label via Fluent but
+    //   Localized wrapper renders empty span that confuses axe-core
+    // - aria-required-children: role="radiogroup" + Localized wrapper
+    //   interaction causes false-positive on radio children detection
     await checkA11y(container, {
       rules: {
         'button-name': { enabled: false },
         'aria-required-children': { enabled: false },
-        'aria-required-parent': { enabled: false },
       },
     });
   });

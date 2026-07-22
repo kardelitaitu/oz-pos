@@ -276,7 +276,7 @@ pub fn validate_non_empty_bounded(
     Ok(())
 }
 
-// ── Extended validators (TODO 0.0.18: Shared DTO & Validation Crates) ─
+// ── Extended validators ───────────────────────────────────────────
 
 /// Validate an SKU code: non-empty, ASCII alphanumeric-only,
 /// and within the length range [1, `MAX_SKU_LENGTH`].
