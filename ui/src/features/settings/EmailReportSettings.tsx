@@ -559,9 +559,9 @@ export default function EmailReportSettings() {
 
           {/* Recipients */}
           <div className="settings-field settings-field--horizontal" style={{ alignItems: 'flex-start' }}>
-            <label htmlFor="settings-schedule-recipients" className="settings-label">
+            <span className="settings-label">
               {l10n.getString('settings-schedule-recipients')}
-            </label>
+            </span>
             <span className="settings-field-input-wrap">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
                 {schedule.recipients.map((email, i) => (
