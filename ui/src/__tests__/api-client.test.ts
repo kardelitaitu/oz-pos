@@ -307,7 +307,7 @@ describe('CategoriesClient', () => {
     );
 
     const client = createClient();
-    const cat = await client.categories.create({ name: 'New', colour: '#f97316' });
+    const cat = await client.categories.create({ name: 'New', colour: '#f97316', created_at: '2026-07-22T00:00:00Z' });
     expect(cat.id).toBe('c-new');
   });
 

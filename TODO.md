@@ -1,3 +1,64 @@
+# 0.0.21 — Warning Resolution, API SDK Polish, Security & Codebase Polish
+
+> **Goal:** 4 areas: resolve pre-existing clippy/ESLint warnings, complete the API client SDK with full CRUD tests, security-audit error messages, and codebase polish.
+>
+> **Current state:** 8 / 8 items complete (100% 🎉) · Updated 2026-07-22
+
+---
+
+## 📋 Sprint Plan
+
+| # | Area | Items | Status |
+|---|------|-------|--------|
+| 🟢 | Warning Resolution | 2 | 2/2 ✅ |
+| 🔴 | API SDK Polish | 2 | 2/2 ✅ |
+| 🟡 | Security & Docs | 2 | 2/2 ✅ |
+| 🟣 | Codebase Polish | 2 | 2/2 ✅ |
+| **Total** | | **8** | **8/8 (100% 🎉)** |
+
+---
+
+### 🟢 P210 — Warning Resolution
+
+> **Goal:** Fix pre-existing clippy missing-doc errors and ESLint warnings.
+
+- [x] **P210-1: Fix clippy missing-doc errors** ✅ — Added doc comments to all 19 fields in `topology.rs` (TopologyData, TopologyNodePayload, TopologyWirePayload). Clippy clean on oz-pos-app.
+- [x] **P210-2: Fix ESLint warnings** ✅ — Auto-fixed 9 consistent-type-imports in api/client/*.ts. Fixed 3 react-hooks/exhaustive-deps warnings (CategoryManagementScreen, TransitAuditScreen, MultiStoreDashboardScreen).
+
+---
+
+### 🔴 P211 — API SDK Polish
+
+> **Goal:** Complete the TypeScript API client SDK with missing CRUD methods and comprehensive tests.
+
+- [x] **P211-1: Add missing CRUD endpoints** ✅ — Extended HttpMethod with PUT/DELETE. Added update/delete to ProductsClient, full CRUD to CategoriesClient/TaxClient/UsersClient, list to SalesClient. Re-exported new types from barrel.
+- [x] **P211-2: API client CRUD tests** ✅ — 14 new MSW tests: CategoriesClient create/get/update/delete, ProductsClient update/delete, TaxClient create/list/get/update/delete, UsersClient get/delete, SalesClient list. 38/38 pass.
+
+---
+
+### 🟡 P212 — Security & Docs
+
+> **Goal:** Security-audit user-facing error messages and write CHANGELOG entries for completed sprints.
+
+- [x] **P212-1: addToast error message security audit** ✅ — Audited all 14 migrated addToast calls + 92 existing. All use safe pattern (`err instanceof Error ? err.message : fallback`). No PII, stack traces, or sensitive data in user-facing toasts.
+- [x] **P212-2: CHANGELOG entries** ✅ — Added entries for 0.0.20 and 0.0.21 covering a11y fixes, error handling polish, warning resolution, and API SDK completion.
+
+---
+
+### 🟣 P213 — Codebase Polish
+
+> **Goal:** Final consistency pass — audit error message tone/format and add tests for recovery retry flows.
+
+- [x] **P213-1: addToast error message consistency audit** ✅ — Audited 108 addToast call sites. All use consistent pattern: `err instanceof Error ? err.message : 'descriptive fallback'` with `type: 'error'`. Hardcoded English strings limited to demo/design-system screens (KioskScreen, DesignSystem). No PII or sensitive data in toasts. Pattern is uniform and maintainable.
+- [x] **P213-2: Error recovery retry tests** ✅ — Added 3 new retry-click tests:
+  - AuditLogScreen: click Retry after error → calls `listAuditLog(50, 0)`
+  - AuditLogScreen: click Refresh → calls `listAuditLog(50, 0)`
+  - OfflineQueueScreen: click Retry after error → calls `listAllOffline()` (getByRole + toHaveBeenCalledTimes(1))
+  Existing: WorkspaceHome already had retry-click test. ErrorBoundary/ErrorState already had 18 tests.
+  Also fixed TypeScript error in api-client.test.ts (missing `created_at` in categories.create test). All 72/72 tests pass, typecheck clean.
+
+---
+
 # 0.0.20 — A11y Bug Fixes, Error Handling Polish & Final Cleanup
 
 > **Goal:** 3 areas: fix the 3 a11y bugs surfaced by P153, upgrade console.error calls to proper error boundaries, and final codebase cleanup.
