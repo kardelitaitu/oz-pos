@@ -186,3 +186,24 @@ export const setUserPreferences = (userId: string, prefs: UserPrefEntry[]): Prom
 /** Set user preferences (scoped — ADR #7). Uses session.user_id for write. */
 export const setUserPreferencesScoped = (sessionToken: string, prefs: UserPrefEntry[]): Promise<void> =>
   loggedInvoke<void>('set_user_preferences_scoped', { sessionToken, prefs });
+
+// ── Generic key/value settings ───────────────────────────────────
+
+/**
+ * Read a single raw setting value by key. Returns `null` when the key
+ * has never been written. Callers are responsible for parsing (e.g.
+ * JSON.parse) the returned string.
+ */
+export const getSetting = (key: string): Promise<string | null> =>
+  loggedInvoke<string | null>('get_setting', { key });
+
+/**
+ * Write (or overwrite) a single raw setting value.
+ *
+ * **Deprecated backend command — prefer `set_setting_scoped` (ADR #7)** where a
+ * session token is available. This wrapper targets the legacy `set_setting`
+ * command for call sites that only have a `userId`. Pass an empty string to
+ * store an empty value.
+ */
+export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
+  loggedInvoke<void>('set_setting', { key, value, userId });

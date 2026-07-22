@@ -7,13 +7,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
+import { getSetting, setSetting } from '@/api/settings';
 
 interface SmtpConfigDto {
   host: string;
@@ -61,7 +61,7 @@ export default function EmailReportSettings() {
 
   const loadConfig = useCallback(async () => {
     try {
-      const raw = await invoke<string | null>('get_setting', { key: SMTP_CONFIG_KEY, user_id: '' });
+      const raw = await getSetting(SMTP_CONFIG_KEY);
       if (raw) {
         setConfig({ ...DEFAULT_SMTP, ...JSON.parse(raw) });
       }
@@ -104,11 +104,7 @@ export default function EmailReportSettings() {
         return;
       }
 
-      await invoke('set_setting', {
-        key: SMTP_CONFIG_KEY,
-        value: JSON.stringify(config),
-        user_id: '',
-      });
+      await setSetting(SMTP_CONFIG_KEY, JSON.stringify(config), '');
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addToast({ message: l10n.getString('settings-email-saved'), type: 'success' });
