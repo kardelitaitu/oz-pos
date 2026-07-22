@@ -504,6 +504,10 @@ impl Store<'_> {
     /// |-----|-------|-------------|
     /// | `sales` | `sales` | `created_at` |
     /// | `inventory` | `products` | none |
+    /// | `customers` | `customers` | `created_at` |
+    /// | `staff` | `users` | none |
+    /// | `tax_rates` | `tax_rates` | none |
+    /// | `shifts` | `shifts` | `opened_at` |
     pub fn build_custom_report(
         &self,
         req: CustomReportRequest,
@@ -609,12 +613,64 @@ impl Store<'_> {
                     ("price_minor", "Price (minor)"),
                     ("category_id", "Category ID"),
                     ("barcode", "Barcode"),
+                    ("product_type", "Type"),
                 ],
                 has_date_filter: false,
             }),
+            "customers" => Ok(DatasetDef {
+                table: "customers",
+                columns: &[
+                    ("id", "Customer ID"),
+                    ("name", "Name"),
+                    ("email", "Email"),
+                    ("phone", "Phone"),
+                    ("loyalty_points", "Loyalty Points"),
+                    ("total_spent_minor", "Total Spent (minor)"),
+                    ("created_at", "Created"),
+                ],
+                has_date_filter: true,
+            }),
+            "staff" => Ok(DatasetDef {
+                table: "users",
+                columns: &[
+                    ("id", "User ID"),
+                    ("username", "Username"),
+                    ("display_name", "Display Name"),
+                    ("is_active", "Active"),
+                    ("created_at", "Created"),
+                ],
+                has_date_filter: false,
+            }),
+            "tax_rates" => Ok(DatasetDef {
+                table: "tax_rates",
+                columns: &[
+                    ("id", "Rate ID"),
+                    ("name", "Name"),
+                    ("rate_bps", "Rate (bps)"),
+                    ("is_default", "Default"),
+                    ("created_at", "Created"),
+                ],
+                has_date_filter: false,
+            }),
+            "shifts" => Ok(DatasetDef {
+                table: "shifts",
+                columns: &[
+                    ("id", "Shift ID"),
+                    ("user_id", "User ID"),
+                    ("opened_at", "Opened"),
+                    ("closed_at", "Closed"),
+                    ("status", "Status"),
+                    ("total_sales_minor", "Total Sales (minor)"),
+                    ("opening_balance_minor", "Opening Balance"),
+                    ("closing_balance_minor", "Closing Balance"),
+                ],
+                has_date_filter: true,
+            }),
             _ => Err(CoreError::Validation {
                 field: "dataset",
-                message: format!("unknown dataset '{key}'. Supported: sales, inventory"),
+                message: format!(
+                    "unknown dataset '{key}'. Supported: sales, inventory, customers, staff, tax_rates, shifts"
+                ),
             }),
         }
     }
