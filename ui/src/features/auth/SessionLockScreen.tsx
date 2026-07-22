@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { getLicenseStatus, type LicenseStatusDto } from '@/api/license';
 import { useLocalization } from '@fluent/react';
+import Tooltip from '@/frontend/shell/Tooltip';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -269,58 +270,78 @@ export default function SessionLockScreen({
         {/* ── Status indicators (license + sync) ──────── */}
         <div className="session-lock-sync-group">
           {/* License status dot */}
-          <div
-            className="session-lock-sync"
-            role="status"
-            aria-label={licenseStatus
+          <Tooltip
+            content={licenseStatus
               ? (licenseStatus.is_active
-                  ? l10n.getString('staff-login-license-active')
-                  : l10n.getString('staff-login-license-inactive'))
-              : l10n.getString('shared-loading')}
+                  ? `${licenseStatus.tier
+                      ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
+                      : 'License'} - Active`
+                  : licenseStatus.status === 'gracePeriod'
+                    ? 'License - Grace Period'
+                    : 'License - Offline')
+              : 'Checking license…'}
+            position="top"
+            showDelay={200}
           >
-            <span
-              className={`session-lock-sync-dot ${
-                licenseStatus === null
-                  ? 'session-lock-sync-dot--checking'
-                  : licenseStatus.is_active
-                    ? 'session-lock-sync-dot--online'
-                    : licenseStatus.status === 'gracePeriod'
-                      ? 'session-lock-sync-dot--checking'
-                      : 'session-lock-sync-dot--offline'
-              }`}
-              aria-hidden="true"
-            />
-            <span className="session-lock-sync-label">
-              {licenseStatus?.tier
-                ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
-                : 'License'}
-            </span>
-          </div>
+            <div
+              className="session-lock-sync"
+              role="status"
+              aria-label={licenseStatus
+                ? (licenseStatus.is_active
+                    ? l10n.getString('staff-login-license-active')
+                    : l10n.getString('staff-login-license-inactive'))
+                : l10n.getString('shared-loading')}
+            >
+              <span
+                className={`session-lock-sync-dot ${
+                  licenseStatus === null
+                    ? 'session-lock-sync-dot--checking'
+                    : licenseStatus.is_active
+                      ? 'session-lock-sync-dot--online'
+                      : licenseStatus.status === 'gracePeriod'
+                        ? 'session-lock-sync-dot--checking'
+                        : 'session-lock-sync-dot--offline'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="session-lock-sync-label">
+                {licenseStatus?.tier
+                  ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
+                  : 'License'}
+              </span>
+            </div>
+          </Tooltip>
 
           {/* Sync connection dot */}
-          <div
-            className="session-lock-sync"
-            role="status"
-            aria-label={l10n.getString(
-              syncStatus.state === 'connected'
-                ? 'status-bar-sync-connected'
-                : syncStatus.state === 'disconnected'
-                  ? 'status-bar-sync-disconnected'
-                  : 'status-bar-sync-checking',
-            )}
+          <Tooltip
+            content={syncStatus.label}
+            position="top"
+            showDelay={200}
           >
-            <span
-              className={`session-lock-sync-dot ${
+            <div
+              className="session-lock-sync"
+              role="status"
+              aria-label={l10n.getString(
                 syncStatus.state === 'connected'
-                  ? 'session-lock-sync-dot--online'
+                  ? 'status-bar-sync-connected'
                   : syncStatus.state === 'disconnected'
-                    ? 'session-lock-sync-dot--offline'
-                    : 'session-lock-sync-dot--checking'
-              }`}
-              aria-hidden="true"
-            />
-            <span className="session-lock-sync-label">Sync</span>
-          </div>
+                    ? 'status-bar-sync-disconnected'
+                    : 'status-bar-sync-checking',
+              )}
+            >
+              <span
+                className={`session-lock-sync-dot ${
+                  syncStatus.state === 'connected'
+                    ? 'session-lock-sync-dot--online'
+                    : syncStatus.state === 'disconnected'
+                      ? 'session-lock-sync-dot--offline'
+                      : 'session-lock-sync-dot--checking'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="session-lock-sync-label">Sync</span>
+            </div>
+          </Tooltip>
         </div>
       </div>
     </div>

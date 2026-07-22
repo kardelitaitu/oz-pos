@@ -9,6 +9,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import Tooltip from '@/frontend/shell/Tooltip';
 import './StaffLoginScreen.css';
 
 // ── SVG icons ───────────────────────────────────────────────────────
@@ -620,58 +621,78 @@ export default function StaffLoginScreen() {
           className="staff-login-footer-right"
         >
           {/* License status dot */}
-          <div
-            className="staff-login-sync"
-            role="status"
-            aria-label={licenseStatus
+          <Tooltip
+            content={licenseStatus
               ? (licenseStatus.is_active
-                  ? l10n.getString('staff-login-license-active')
-                  : l10n.getString('staff-login-license-inactive'))
-              : l10n.getString('shared-loading')}
+                  ? `${licenseStatus.tier
+                      ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
+                      : 'License'} - Active`
+                  : licenseStatus.status === 'gracePeriod'
+                    ? 'License - Grace Period'
+                    : 'License - Offline')
+              : 'Checking license…'}
+            position="top"
+            showDelay={200}
           >
-            <span
-              className={`staff-login-sync-dot ${
-                licenseStatus === null
-                  ? 'staff-login-sync-dot--checking'
-                  : licenseStatus.is_active
-                    ? 'staff-login-sync-dot--online'
-                    : licenseStatus.status === 'gracePeriod'
-                      ? 'staff-login-sync-dot--checking'
-                      : 'staff-login-sync-dot--offline'
-              }`}
-              aria-hidden="true"
-            />
-            <span className="staff-login-sync-label">
-              {licenseStatus?.tier
-                ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
-                : 'License'}
-            </span>
-          </div>
+            <div
+              className="staff-login-sync"
+              role="status"
+              aria-label={licenseStatus
+                ? (licenseStatus.is_active
+                    ? l10n.getString('staff-login-license-active')
+                    : l10n.getString('staff-login-license-inactive'))
+                : l10n.getString('shared-loading')}
+            >
+              <span
+                className={`staff-login-sync-dot ${
+                  licenseStatus === null
+                    ? 'staff-login-sync-dot--checking'
+                    : licenseStatus.is_active
+                      ? 'staff-login-sync-dot--online'
+                      : licenseStatus.status === 'gracePeriod'
+                        ? 'staff-login-sync-dot--checking'
+                        : 'staff-login-sync-dot--offline'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="staff-login-sync-label">
+                {licenseStatus?.tier
+                  ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
+                  : 'License'}
+              </span>
+            </div>
+          </Tooltip>
 
           {/* Sync connection dot */}
-          <div
-            className="staff-login-sync"
-            role="status"
-            aria-label={l10n.getString(
-              syncStatus.state === 'connected'
-                ? 'status-bar-sync-connected'
-                : syncStatus.state === 'disconnected'
-                  ? 'status-bar-sync-disconnected'
-                  : 'status-bar-sync-checking',
-            )}
+          <Tooltip
+            content={syncStatus.label}
+            position="top"
+            showDelay={200}
           >
-            <span
-              className={`staff-login-sync-dot ${
+            <div
+              className="staff-login-sync"
+              role="status"
+              aria-label={l10n.getString(
                 syncStatus.state === 'connected'
-                  ? 'staff-login-sync-dot--online'
+                  ? 'status-bar-sync-connected'
                   : syncStatus.state === 'disconnected'
-                    ? 'staff-login-sync-dot--offline'
-                    : 'staff-login-sync-dot--checking'
-              }`}
-              aria-hidden="true"
-            />
-            <span className="staff-login-sync-label">Sync</span>
-          </div>
+                    ? 'status-bar-sync-disconnected'
+                    : 'status-bar-sync-checking',
+              )}
+            >
+              <span
+                className={`staff-login-sync-dot ${
+                  syncStatus.state === 'connected'
+                    ? 'staff-login-sync-dot--online'
+                    : syncStatus.state === 'disconnected'
+                      ? 'staff-login-sync-dot--offline'
+                      : 'staff-login-sync-dot--checking'
+                }`}
+                aria-hidden="true"
+              />
+              <span className="staff-login-sync-label">Sync</span>
+            </div>
+          </Tooltip>
         </div>
       </div>
     </div>
