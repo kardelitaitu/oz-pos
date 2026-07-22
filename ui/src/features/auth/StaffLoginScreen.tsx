@@ -4,6 +4,7 @@ import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { getLicenseStatus, type LicenseStatusDto } from '@/api/license';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
@@ -126,6 +127,21 @@ export default function StaffLoginScreen() {
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
   const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
   const syncStatus = useSyncConnection();
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatusDto | null>(null);
+
+  useEffect(() => {
+    getLicenseStatus()
+      .then(setLicenseStatus)
+      .catch(() => {
+        setLicenseStatus({
+          is_active: false,
+          status: 'missing',
+          tier: null,
+          payload: null,
+          message: null,
+        });
+      });
+  }, []);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -601,27 +617,61 @@ export default function StaffLoginScreen() {
           </Localized>
         </div>
         <div
-          className="staff-login-sync"
-          role="status"
-          aria-label={l10n.getString(
-            syncStatus.state === 'connected'
-              ? 'status-bar-sync-connected'
-              : syncStatus.state === 'disconnected'
-                ? 'status-bar-sync-disconnected'
-                : 'status-bar-sync-checking',
-          )}
+          className="staff-login-footer-right"
         >
-          <span
-            className={`staff-login-sync-dot ${
+          {/* License status dot */}
+          <div
+            className="staff-login-sync"
+            role="status"
+            aria-label={licenseStatus
+              ? (licenseStatus.is_active
+                  ? l10n.getString('staff-login-license-active')
+                  : l10n.getString('staff-login-license-inactive'))
+              : l10n.getString('shared-loading')}
+          >
+            <span
+              className={`staff-login-sync-dot ${
+                licenseStatus === null
+                  ? 'staff-login-sync-dot--checking'
+                  : licenseStatus.is_active
+                    ? 'staff-login-sync-dot--online'
+                    : licenseStatus.status === 'gracePeriod'
+                      ? 'staff-login-sync-dot--checking'
+                      : 'staff-login-sync-dot--offline'
+              }`}
+              aria-hidden="true"
+            />
+            <span className="staff-login-sync-label">
+              {licenseStatus?.tier
+                ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
+                : 'License'}
+            </span>
+          </div>
+
+          {/* Sync connection dot */}
+          <div
+            className="staff-login-sync"
+            role="status"
+            aria-label={l10n.getString(
               syncStatus.state === 'connected'
-                ? 'staff-login-sync-dot--online'
+                ? 'status-bar-sync-connected'
                 : syncStatus.state === 'disconnected'
-                  ? 'staff-login-sync-dot--offline'
-                  : 'staff-login-sync-dot--checking'
-            }`}
-            aria-hidden="true"
-          />
-          <span className="staff-login-sync-label">Sync</span>
+                  ? 'status-bar-sync-disconnected'
+                  : 'status-bar-sync-checking',
+            )}
+          >
+            <span
+              className={`staff-login-sync-dot ${
+                syncStatus.state === 'connected'
+                  ? 'staff-login-sync-dot--online'
+                  : syncStatus.state === 'disconnected'
+                    ? 'staff-login-sync-dot--offline'
+                    : 'staff-login-sync-dot--checking'
+              }`}
+              aria-hidden="true"
+            />
+            <span className="staff-login-sync-label">Sync</span>
+          </div>
         </div>
       </div>
     </div>

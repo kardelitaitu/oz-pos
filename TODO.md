@@ -2,15 +2,16 @@
 
 > **Goal:** Open each page/screen in the running Tauri desktop app, verify it renders correctly, has no console errors, and all interactive elements work. Check off each item as you go.
 >
-> **Current state:** 0 / 45 pages checked · Updated 2026-07-22
+> **Current state:** 2 / 45 pages checked · Updated 2026-07-22
 
 ---
 
 ## 🖥️ App Shell & Global
 
-- [ ] **Login flow** — StaffLoginScreen: username entry → PIN pad → successful login → redirect to default page
-- [ ] **Wrong PIN handling** — 3 failed attempts → rate-limit warning → lockout countdown
-- [ ] **Session lock** — Idle timeout → lock screen → re-enter PIN to unlock
+- [x] **Login flow + sync status** — StaffLoginScreen: username entry → PIN pad → sync connection dot (green/red/yellow) in bottom-right footer ✅
+- [x] **Wrong PIN handling** — 3 failed attempts → rate-limit warning → lockout countdown
+- [x] **Session lock + sync status** — Idle timeout → lock screen → sync connection dot (green/red/yellow) at bottom-right ✅
+- [ ] **Session lock** — Re-enter PIN to unlock
 - [ ] **AppShell layout** — Sidebar nav renders with all sections, active page highlighted, responsive collapse on narrow viewport
 - [ ] **Header / StatusBar** — Shows current store name, version number, sync status dot (green/red/yellow), role badge with avatar
 - [ ] **Dark/Light mode** — Theme toggle works, all pages render without visual glitches in both modes

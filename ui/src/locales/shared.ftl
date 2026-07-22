@@ -225,6 +225,9 @@ status-bar-authenticating = Authenticating...
 status-bar-sync-connected = Cloud sync connected
 status-bar-sync-disconnected = Cloud sync disconnected
 status-bar-sync-checking = Checking cloud sync connection…
+# License status (login screen)
+staff-login-license-active = License active
+staff-login-license-inactive = License inactive
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } sync conflict(s) resolved
 

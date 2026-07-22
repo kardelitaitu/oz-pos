@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { getLicenseStatus, type LicenseStatusDto } from '@/api/license';
 import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
 
@@ -37,6 +38,22 @@ export default function SessionLockScreen({
   const lastErrorRef = useRef<string | null>(null);
   const { l10n } = useLocalization();
   const syncStatus = useSyncConnection();
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatusDto | null>(null);
+
+  useEffect(() => {
+    getLicenseStatus()
+      .then(setLicenseStatus)
+      .catch(() => {
+        // IPC call failed — treat as inactive to avoid permanent yellow dot
+        setLicenseStatus({
+          is_active: false,
+          status: 'missing',
+          tier: null,
+          payload: null,
+          message: null,
+        });
+      });
+  }, []);
 
   // Auto-unlock after lockout period
   useEffect(() => {
@@ -249,29 +266,61 @@ export default function SessionLockScreen({
           </div>
         </div>
 
-        {/* ── Sync connection indicator ──────────────── */}
-        <div
-          className="session-lock-sync"
-          role="status"
-          aria-label={l10n.getString(
-            syncStatus.state === 'connected'
-              ? 'status-bar-sync-connected'
-              : syncStatus.state === 'disconnected'
-                ? 'status-bar-sync-disconnected'
-                : 'status-bar-sync-checking',
-          )}
-        >
-          <span
-            className={`session-lock-sync-dot ${
+        {/* ── Status indicators (license + sync) ──────── */}
+        <div className="session-lock-sync-group">
+          {/* License status dot */}
+          <div
+            className="session-lock-sync"
+            role="status"
+            aria-label={licenseStatus
+              ? (licenseStatus.is_active
+                  ? l10n.getString('staff-login-license-active')
+                  : l10n.getString('staff-login-license-inactive'))
+              : l10n.getString('shared-loading')}
+          >
+            <span
+              className={`session-lock-sync-dot ${
+                licenseStatus === null
+                  ? 'session-lock-sync-dot--checking'
+                  : licenseStatus.is_active
+                    ? 'session-lock-sync-dot--online'
+                    : licenseStatus.status === 'gracePeriod'
+                      ? 'session-lock-sync-dot--checking'
+                      : 'session-lock-sync-dot--offline'
+              }`}
+              aria-hidden="true"
+            />
+            <span className="session-lock-sync-label">
+              {licenseStatus?.tier
+                ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
+                : 'License'}
+            </span>
+          </div>
+
+          {/* Sync connection dot */}
+          <div
+            className="session-lock-sync"
+            role="status"
+            aria-label={l10n.getString(
               syncStatus.state === 'connected'
-                ? 'session-lock-sync-dot--online'
+                ? 'status-bar-sync-connected'
                 : syncStatus.state === 'disconnected'
-                  ? 'session-lock-sync-dot--offline'
-                  : 'session-lock-sync-dot--checking'
-            }`}
-            aria-hidden="true"
-          />
-          <span className="session-lock-sync-label">Sync</span>
+                  ? 'status-bar-sync-disconnected'
+                  : 'status-bar-sync-checking',
+            )}
+          >
+            <span
+              className={`session-lock-sync-dot ${
+                syncStatus.state === 'connected'
+                  ? 'session-lock-sync-dot--online'
+                  : syncStatus.state === 'disconnected'
+                    ? 'session-lock-sync-dot--offline'
+                    : 'session-lock-sync-dot--checking'
+              }`}
+              aria-hidden="true"
+            />
+            <span className="session-lock-sync-label">Sync</span>
+          </div>
         </div>
       </div>
     </div>

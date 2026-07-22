@@ -53,19 +53,26 @@
   animation: session-lock-shake 0.35s cubic-bezier(.36,.07,.19,.97) both;
 }
 
-/* ── Sync connection indicator (bottom-right) ──────────────────── */
+/* ── Status indicators group (bottom-right) ───────────────────── */
 
-.session-lock-sync {
+.session-lock-sync-group {
   position: fixed;
   bottom: var(--space-3);
   right: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.session-lock-sync {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-bg-elevated) 70%, transparent);
-  z-index: 10000;
   pointer-events: auto;
   transition: background var(--duration-150) var(--ease-out);
 }

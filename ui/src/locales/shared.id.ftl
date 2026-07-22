@@ -48,6 +48,9 @@ status-bar-authenticating = Mengautentikasi…
 status-bar-sync-connected = Sinkronisasi cloud terhubung
 status-bar-sync-disconnected = Sinkronisasi cloud terputus
 status-bar-sync-checking = Memeriksa koneksi sinkronisasi cloud…
+# License status (login screen)
+staff-login-license-active = Lisensi aktif
+staff-login-license-inactive = Lisensi tidak aktif
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 

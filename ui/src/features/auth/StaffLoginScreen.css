@@ -616,7 +616,16 @@
   opacity: 0.7;
 }
 
-/* ── Sync connection indicator ──────────────────────────────────── */
+/* ── Footer right segment (sync + license) ────────────────────── */
+
+.staff-login-footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  pointer-events: none;
+}
+
+/* ── Status indicators (sync, license) ──────────────────────────── */
 
 .staff-login-sync {
   display: inline-flex;
