@@ -280,7 +280,7 @@ export default function CategoryManagementScreen() {
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load]);
+  }, [deleteTarget, load, addToast, l10n]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);

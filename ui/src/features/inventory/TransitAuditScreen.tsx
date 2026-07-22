@@ -38,6 +38,7 @@ export default function TransitAuditScreen() {
 
   useEffect(() => {
     loadTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only load
   }, []);
 
   const handleReverseTransfer = async (id: string) => {
