@@ -344,6 +344,19 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   }),
   'save_report_schedule': () => null,
 
+  'load_topology': () => ({
+    nodes: [
+      { id: 'store-1', label: 'TOKO TEST', type: 'store', x: 100, y: 100, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
+      { id: 'ws-1', label: 'Store POS', type: 'workspace', x: 300, y: 50, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
+      { id: 'ws-2', label: 'Restaurant', type: 'workspace', x: 300, y: 180, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
+    ],
+    wires: [
+      { id: 'wire-1', from: 'store-1', fromPort: 'right', to: 'ws-1', toPort: 'left' },
+      { id: 'wire-2', from: 'store-1', fromPort: 'bottom', to: 'ws-2', toPort: 'left' },
+    ],
+  }),
+  'save_topology': () => null,
+
   'set_receipt_settings_scoped': () => null,
 
   'get_enabled_features': () => ({ features: ['sales', 'inventory', 'reporting', 'staff', 'settings'] }),
