@@ -278,14 +278,12 @@ export default function SessionLockScreen({
 
         {/* ── Connection status indicators ──────── */}
         <div className="session-lock-connection-group">
-          {/* Auth status — via checkLicenseStatus IPC */}
-          <div className="connection-status" title={authOnline === null ? 'Auth: Checking...' : authOnline ? `Auth: Online (${authLatency}ms)` : 'Auth: Offline'}>
+          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? 'Checking...' : authOnline ? 'Connected' : 'Disconnected'}>
             <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
             <span className="connection-label">Auth</span>
             {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
           </div>
-          {/* Sync status — via useSyncConnection IPC */}
-          <div className="connection-status" title={syncStatus.label}>
+          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? 'Checking...' : syncStatus.state === 'connected' ? 'Connected' : 'Disconnected'}>
             <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
             <span className="connection-label">Sync</span>
             {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
