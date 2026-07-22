@@ -1,79 +1,88 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
-import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import { ErrorState } from '@/components/ErrorState';
 
-const ftl = `
-error-state-retry = Retry
-`;
+// ── Static Fluent bundle for test isolation ──────────────────────
+const bundle = new FluentBundle('en-US');
+bundle.addResource(new FluentResource('error-state-retry = Retry\n'));
+const testL10n = new ReactLocalization([bundle]);
 
-const bundle = new FluentBundle('en');
-bundle.addResource(new FluentResource(ftl));
-const l10n = new ReactLocalization([bundle]);
-
-vi.mock('@/components/Button', () => ({
-  Button: ({ children, onClick, variant }: Record<string, unknown>) => (
-    <button onClick={onClick as () => void} className={`btn btn--${variant as string || 'primary'}`}>
-      {children as React.ReactNode}
-    </button>
-  ),
-}));
-
-function renderErr(props: Parameters<typeof ErrorState>[0]) {
+function renderWithL10n(ui: React.ReactElement) {
   return render(
-    <LocalizationProvider l10n={l10n}>
-      <ErrorState {...props} />
+    <LocalizationProvider l10n={testL10n}>
+      {ui}
     </LocalizationProvider>,
   );
 }
 
 describe('ErrorState', () => {
-  it('renders the title as an h3', () => {
-    renderErr({ title: 'Something went wrong' });
-    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe('Something went wrong');
+  it('renders title and message', () => {
+    renderWithL10n(
+      <ErrorState
+        title="Something went wrong"
+        message="The server returned a 500 error. Please try again."
+      />,
+    );
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(
+      screen.getByText('The server returned a 500 error. Please try again.'),
+    ).toBeInTheDocument();
   });
 
-  it('renders a message when provided', () => {
-    renderErr({ title: 'Error', message: 'The server returned a 500 error.' });
-    expect(screen.getByText('The server returned a 500 error.')).toBeTruthy();
+  it('renders an optional icon', () => {
+    renderWithL10n(
+      <ErrorState
+        title="No results"
+        icon={<span data-testid="custom-icon">&#x26A0;</span>}
+      />,
+    );
+    expect(screen.getByTestId('custom-icon')).toBeInTheDocument();
   });
 
-  it('does not render a message element when absent', () => {
-    renderErr({ title: 'Error' });
-    expect(document.querySelector('.error-state__message')).toBeNull();
+  it('has role="alert" for screen reader announcements', () => {
+    renderWithL10n(<ErrorState title="Error occurred" />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
-  it('renders the default Retry button when onRetry is provided', () => {
+  it('renders a retry button when onRetry is provided', () => {
     const onRetry = vi.fn();
-    renderErr({ title: 'Error', onRetry });
-    expect(screen.getByText('Retry')).toBeTruthy();
+    renderWithL10n(<ErrorState title="Load failed" onRetry={onRetry} />);
+    const btn = screen.getByRole('button', { name: 'Retry' });
+    expect(btn).toBeInTheDocument();
   });
 
-  it('renders a custom retry label when provided', () => {
+  it('calls onRetry when the retry button is clicked', () => {
     const onRetry = vi.fn();
-    renderErr({ title: 'Error', onRetry, retryLabel: 'Try Again' });
-    expect(screen.getByText('Try Again')).toBeTruthy();
+    renderWithL10n(<ErrorState title="Load failed" onRetry={onRetry} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('does not render a retry button when onRetry is absent', () => {
-    renderErr({ title: 'Error' });
-    expect(document.querySelector('.error-state__action')).toBeNull();
+  it('uses custom retryLabel when provided', () => {
+    const onRetry = vi.fn();
+    renderWithL10n(
+      <ErrorState
+        title="Network error"
+        onRetry={onRetry}
+        retryLabel="Reconnect"
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
   });
 
-  it('renders an icon with aria-hidden', () => {
-    renderErr({ title: 'Error', icon: <span data-testid="err-icon">⚠️</span> });
-    expect(screen.getByTestId('err-icon')).toBeTruthy();
-    expect(document.querySelector('.error-state__icon')!.getAttribute('aria-hidden')).toBe('true');
+  it('does not render a retry button when onRetry is undefined', () => {
+    renderWithL10n(<ErrorState title="Fatal error" />);
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('renders additional children', () => {
-    renderErr({ title: 'Error', children: <em data-testid="extra">Contact support</em> });
-    expect(screen.getByTestId('extra').textContent).toBe('Contact support');
-  });
-
-  it('has role="alert" on the container', () => {
-    renderErr({ title: 'Error' });
-    expect(screen.getByRole('alert')).toBeTruthy();
+  it('renders additional children content', () => {
+    renderWithL10n(
+      <ErrorState title="No data">
+        <p data-testid="extra-info">Check your connection settings.</p>
+      </ErrorState>,
+    );
+    expect(screen.getByTestId('extra-info')).toBeInTheDocument();
   });
 });

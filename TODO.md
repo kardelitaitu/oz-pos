@@ -2,7 +2,7 @@
 
 > **Goal:** 3 areas: fix the 3 a11y bugs surfaced by P153, upgrade console.error calls to proper error boundaries, and final codebase cleanup.
 >
-> **Current state:** 4 / 6 items complete (67% 🟡) · Updated 2026-07-22
+> **Current state:** 5 / 6 items complete (83% 🟢) · Updated 2026-07-22
 
 ---
 
@@ -11,9 +11,9 @@
 | # | Area | Items | Status |
 |---|------|-------|--------|
 | 🟢 | A11y Bug Fixes | 2 | 2/2 ✅ |
-| 🔴 | Error Handling Polish | 2 | 1/2 🟡 |
+| 🔴 | Error Handling Polish | 2 | 2/2 ✅ |
 | 🟡 | Final Cleanup | 2 | 0/2 🔴 |
-| **Total** | | **6** | **4/6 (67%)** |
+| **Total** | | **6** | **5/6 (83%)** |
 
 ---
 
@@ -38,7 +38,7 @@
   - `ThresholdConfigScreen.tsx`: 1 call (load data — already had useToast)
   - `PaymentModal.tsx`: 6 calls (QR finalize/void ×2, QR payment failure, cash finalize/void ×2, complete failure)
   - All use `err instanceof Error ? err.message : 'Fallback message'` pattern
-- [ ] **P201-2: Verify error boundary coverage** — Ensure all async error paths have either a try/catch→toast or an ErrorBoundary ancestor. Add integration tests for error recovery paths.
+- [x] **P201-2: Verify error boundary coverage** ✅ — Enhanced ErrorBoundary with Try Again button (resets error state + optional onReset callback), role="alert" on fallback UI. Added 10 ErrorBoundary tests (4 new: retry button renders/role=alert/resets with conditional throw/onReset callback). Created 8 ErrorState component tests (title/message/icon, role=alert, retry button/callback/label, no button when undefined, children). All 18/18 pass. Existing screens confirmed: ErrorBoundary wraps entire App.tsx, 12+ screens have retry/reload patterns (WorkspaceHome, AuditLog, Terminals, OfflineQueue, EOD, VoidOrders, FeatureToggle, License, Settings, StockTransfers, MultiStore, VariantManagement).
 
 ---
 

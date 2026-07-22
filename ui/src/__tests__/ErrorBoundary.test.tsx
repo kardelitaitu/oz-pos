@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -12,10 +12,12 @@ function BrokenComponent({ shouldThrow = false }: { shouldThrow?: boolean }) {
   return <p>All good</p>;
 }
 
-/** A child component that throws in useEffect. */
-function AsyncBrokenComponent() {
-  // This won't be caught by ErrorBoundary (it's async)
-  return <p>Async safe</p>;
+/** A child component that throws conditionally based on a prop. */
+function SometimesBroken({ fail }: { fail: boolean }) {
+  if (fail) {
+    throw new Error('Conditional test error');
+  }
+  return <p>Recovered</p>;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -24,7 +26,6 @@ describe('ErrorBoundary', () => {
   const preventJsdomError = (e: ErrorEvent) => e.preventDefault();
 
   beforeEach(() => {
-    // Suppress console.error during tests that intentionally throw.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     window.addEventListener('error', preventJsdomError);
   });
@@ -94,11 +95,69 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('New content after error')).toBeInTheDocument();
   });
 
-  it('does not catch async errors in useEffect', () => {
-    // ErrorBoundary only catches render-phase errors, not async ones.
+  // ── P201-2: Retry button tests ─────────────────────────────────
+
+  it('renders a Try Again button in the fallback UI', () => {
     render(
       <ErrorBoundary>
-        <AsyncBrokenComponent />
+        <BrokenComponent shouldThrow />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
+  });
+
+  it('fallback UI has role="alert" for screen reader announcements', () => {
+    render(
+      <ErrorBoundary>
+        <BrokenComponent shouldThrow />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('clicking Try Again resets error state so a non-throwing child renders', () => {
+    // Use SometimesBroken: first render with fail=true (triggers error),
+    // then rerender with fail=false (no error). Without the Try Again
+    // button click the ErrorBoundary would still show the stale error,
+    // so this verifies the button actually clears the error state.
+    const { rerender } = render(
+      <ErrorBoundary>
+        <SometimesBroken fail />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+
+    // Swap to non-failing child
+    rerender(
+      <ErrorBoundary>
+        <SometimesBroken fail={false} />
+      </ErrorBoundary>,
+    );
+
+    // Still showing error — the boundary holds the stale state
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+
+    // Click Try Again — now the boundary resets and renders the new child
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    expect(screen.getByText('Recovered')).toBeInTheDocument();
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+  });
+
+  it('calls onReset callback when Try Again is clicked', () => {
+    const onReset = vi.fn();
+    render(
+      <ErrorBoundary onReset={onReset}>
+        <BrokenComponent shouldThrow />
+      </ErrorBoundary>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not catch async errors in useEffect (class boundary limitation)', () => {
+    render(
+      <ErrorBoundary>
+        <p>Async safe</p>
       </ErrorBoundary>,
     );
     expect(screen.getByText('Async safe')).toBeInTheDocument();
