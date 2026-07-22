@@ -78,12 +78,18 @@
 .statusbar-dot--checking {
   background: var(--color-warning);
   box-shadow: 0 0 4px var(--color-warning);
-  animation: statusbar-dot-pulse 1.5s ease-in-out infinite;
 }
 
-@keyframes statusbar-dot-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+/* Pulse animation only when user hasn't requested reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .statusbar-dot--checking {
+    animation: statusbar-dot-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes statusbar-dot-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
 }
 
 /* ── Version text ─────────────────────────────────── */

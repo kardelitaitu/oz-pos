@@ -127,7 +127,7 @@ export default function EmailReportSettings() {
       });
     } catch (err) {
       addToast({
-        message: typeof err === 'string' ? err : 'Failed to save schedule',
+        message: typeof err === 'string' ? err : l10n.getString('settings-email-schedule-save-failed'),
         type: 'error',
       });
     } finally {
@@ -150,7 +150,7 @@ export default function EmailReportSettings() {
       const message = await sendTestReport();
       addToast({ message, type: 'success' });
     } catch (err) {
-      const errorMessage = typeof err === 'string' ? err : 'Failed to send test email';
+      const errorMessage = typeof err === 'string' ? err : l10n.getString('settings-email-test-send-failed');
       addToast({ message: errorMessage, type: 'error' });
     } finally {
       setSending(false);
@@ -524,29 +524,32 @@ export default function EmailReportSettings() {
             <span className="settings-field-input-wrap">
               <div className="settings-checkbox-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {([
-                  ['daily_revenue', 'Daily Revenue'],
-                  ['weekly_revenue', 'Weekly Revenue'],
-                  ['monthly_revenue', 'Monthly Revenue'],
-                  ['top_products', 'Top Products'],
-                  ['hourly_heatmap', 'Hourly Heatmap'],
-                  ['category_breakdown', 'Category Breakdown'],
-                  ['low_stock_alerts', 'Low Stock Alerts'],
-                ] as const).map(([key, label]) => (
-                  <label key={key} className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={schedule.report_types.includes(key)}
-                      onChange={(e) => {
-                        const next = e.target.checked
-                          ? [...schedule.report_types, key]
-                          : schedule.report_types.filter((r) => r !== key);
-                        updateSchedField('report_types', next);
-                      }}
-                      aria-label={label}
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
+                  ['daily_revenue', 'settings-schedule-report-type-daily-revenue'],
+                  ['weekly_revenue', 'settings-schedule-report-type-weekly-revenue'],
+                  ['monthly_revenue', 'settings-schedule-report-type-monthly-revenue'],
+                  ['top_products', 'settings-schedule-report-type-top-products'],
+                  ['hourly_heatmap', 'settings-schedule-report-type-hourly-heatmap'],
+                  ['category_breakdown', 'settings-schedule-report-type-category-breakdown'],
+                  ['low_stock_alerts', 'settings-schedule-report-type-low-stock-alerts'],
+                ] as const).map(([key, i18nKey]) => {
+                  const localized = l10n.getString(i18nKey) || i18nKey.replace(/^settings-schedule-report-type-/g, '').replace(/-/g, ' ');
+                  return (
+                    <label key={key} className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={schedule.report_types.includes(key)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...schedule.report_types, key]
+                            : schedule.report_types.filter((r) => r !== key);
+                          updateSchedField('report_types', next);
+                        }}
+                        aria-label={localized}
+                      />
+                      <span>{localized}</span>
+                    </label>
+                  );
+                })}
               </div>
             </span>
           </div>
@@ -569,7 +572,7 @@ export default function EmailReportSettings() {
                         next[i] = e.target.value;
                         updateSchedField('recipients', next);
                       }}
-                      aria-label={`Recipient ${i + 1}`}
+                      aria-label={l10n.getString('settings-schedule-recipient-aria', { number: String(i + 1) })}
                       style={{ flex: 1 }}
                     />
                     <button
@@ -579,7 +582,7 @@ export default function EmailReportSettings() {
                         const next = schedule.recipients.filter((_, j) => j !== i);
                         updateSchedField('recipients', next);
                       }}
-                      aria-label={`Remove recipient ${i + 1}`}
+                      aria-label={l10n.getString('settings-schedule-recipient-remove-aria', { number: String(i + 1) })}
                       style={{
                         background: 'none',
                         border: '1px solid #d1d5db',
@@ -597,7 +600,7 @@ export default function EmailReportSettings() {
                 <Button
                   variant="secondary"
                   onClick={() => updateSchedField('recipients', [...schedule.recipients, ''])}
-                  aria-label="Add recipient"
+                  aria-label={l10n.getString('settings-schedule-recipient-add-aria')}
                   style={{ alignSelf: 'flex-start' }}
                 >
                   <Localized id="settings-schedule-add-recipient">

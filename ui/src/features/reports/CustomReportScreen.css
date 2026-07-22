@@ -15,21 +15,155 @@
   font-size: var(--font-size-sm);
   min-height: 36px;
 }
+
+/* ── Column selector section ── */
 .custom-report-columns-section { margin-bottom: var(--space-3); }
-.custom-report-columns-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
-.custom-report-col-checkbox {
-  display: flex; align-items: center; gap: var(--space-1);
+.custom-report-columns-header { margin-bottom: var(--space-2); }
+.custom-report-columns-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.custom-report-columns-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-tertiary);
+  background: var(--color-bg-hover);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+/* ── Search ── */
+.custom-report-columns-search {
+  position: relative;
+  margin-bottom: var(--space-2);
+}
+.custom-report-search-input {
+  width: 100%;
   padding: var(--space-1) var(--space-2);
+  padding-right: 32px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-bg-hover);
-  cursor: pointer;
+  background: var(--color-bg);
+  color: var(--color-fg-primary);
   font-size: var(--font-size-sm);
   min-height: 36px;
-  user-select: none;
+  box-sizing: border-box;
 }
-.custom-report-col-checkbox:hover { border-color: var(--color-accent); }
+.custom-report-search-input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent-alpha);
+}
+.custom-report-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-fg-tertiary);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+.custom-report-search-clear:hover { color: var(--color-fg-primary); }
+
+/* ── Drag-and-drop column list ── */
+.custom-report-columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1);
+  background: var(--color-bg);
+}
+
+.custom-report-col-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  user-select: none;
+  transition: background-color 0.15s, box-shadow 0.15s;
+  font-size: var(--font-size-sm);
+  min-height: 36px;
+}
+.custom-report-col-item:hover {
+  background: var(--color-bg-hover);
+}
+.custom-report-col-item:active {
+  cursor: grabbing;
+}
+.custom-report-col-item--selected {
+  background: var(--color-bg-hover);
+  border-left: 3px solid var(--color-accent);
+}
+.custom-report-col-item--selected:hover {
+  background: var(--color-accent-alpha);
+}
+
+/* Drop target indicator during drag */
+.custom-report-col-item.drag-over {
+  border-top: 2px solid var(--color-accent);
+  background: var(--color-accent-alpha);
+}
+
+.custom-report-col-drag-handle {
+  color: var(--color-fg-tertiary);
+  font-size: var(--font-size-sm);
+  cursor: grab;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.custom-report-col-item:hover .custom-report-col-drag-handle {
+  opacity: 1;
+}
+
+.custom-report-col-checkbox-input {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.custom-report-col-label {
+  flex: 1;
+  font-weight: 500;
+  color: var(--color-fg-primary);
+}
+
+.custom-report-col-key {
+  font-size: var(--font-size-xs);
+  color: var(--color-fg-tertiary);
+  font-family: var(--font-mono, monospace);
+  background: var(--color-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.custom-report-col-no-results {
+  text-align: center;
+  padding: var(--space-4);
+  color: var(--color-fg-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+/* ── Actions ── */
+.custom-report-actions { margin-top: var(--space-2); }
+
+/* ── Error / No data ── */
 .custom-report-error { color: var(--color-danger); padding: var(--space-3) 0; }
+.custom-report-no-data { color: var(--color-fg-tertiary); padding: var(--space-3) 0; font-size: var(--font-size-sm); }
+
+/* ── Results ── */
 .custom-report-result-card { margin-top: var(--space-4); }
 .custom-report-result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
 .custom-report-section-title { font-size: var(--font-size-lg); font-weight: 600; color: var(--color-fg-primary); }

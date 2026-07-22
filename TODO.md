@@ -69,7 +69,7 @@
 | 🟡 P122 — Offline Sync Tests | 2 | 2/2 ✅ |
 | 🔵 P123 — Payment Error Recovery | 2 | 2/2 ✅ |
 | 🟣 P124 — Bug Bash & Polish | 2 | 2/2 ✅ |
-| 🟡 P272 | 0 | 0/1 🔴 |
+| 🟡 P272 — Sync Status UI | 1 | 1/1 ✅ |
 
 ---
 
@@ -84,6 +84,43 @@
 
 ---
 
+### Wave 1 — Quick Wins
+
+#### 🔴 1.1 Android APK Build Documentation
+
+> **Status:** CI pipeline exists at `.github/workflows/android.yml`. Ready for finalization.
+
+#### 🟢 1.2 i18n Gaps — Fixed ✅
+
+Fixed 12 hardcoded English strings in `EmailReportSettings.tsx`:
+- **7 report type labels**: `Daily Revenue`, `Weekly Revenue`, `Monthly Revenue`, `Top Products`, `Hourly Heatmap`, `Category Breakdown`, `Low Stock Alerts` → `l10n.getString()` with Fluent keys
+- **3 aria-labels**: Recipient #{n}, Remove recipient #{n}, Add recipient → `l10n.getString('settings-schedule-recipient-*', { number })`
+- **2 error fallbacks**: `'Failed to send test email'`, `'Failed to save schedule'` → `l10n.getString()`
+- Added 12 Fluent keys to `settings.ftl` + 12 Indonesian translations to `settings.id.ftl`
+
+#### ✅ 1.3 tokio-console + flamegraph — Already implemented
+
+- `platform/startup/src/console.rs` has both real and no-op `init_console_subscriber()`
+- Desktop, tablet clients call it; cloud-server has its own init
+- `scripts/profile.ps1` + `scripts/profile.sh` exist with full parameter sets
+
+### 🟢 Wave 2 — Custom Report Builder ✅
+
+> **Status:** Fully implemented in this sprint. Drag-and-drop column picker with 6 datasets, backend query generation with SQL injection protection via column whitelist, search/filter, column reordering, CSV export, error handling.
+
+| Task | Files | Scope |
+|------|-------|-------|
+| **Frontend** | `CustomReportScreen.tsx`, `CustomReportScreen.css` | Drag-and-drop column picker, 6 datasets (sales, inventory, customers, staff, tax_rates, shifts), search/filter, column reordering, results table, CSV export, error/empty states |
+| **Backend** | `crates/oz-core/src/export/mod.rs` | `build_custom_report()` with whitelist-filtered SQL, `get_dataset_def()` for 6 datasets with date filter support, SQL injection protection |
+| **Fluent i18n** | `reports.ftl`, `reports.id.ftl` | 11 keys (en + id), including column labels, dataset names, empty/error states |
+| **Tests** | `CustomReportScreen.test.tsx`, `crates/oz-core/src/export/mod.rs` | 19 vitest tests (column toggle, dataset switch, search, drag-and-drop, error handling, Run Report disabled state) + 8 Rust tests (unknown dataset, column filtering, sales basic, inventory, empty columns, CSV export) |
+
+### 🟡 Wave 2 — Remaining Feature Work
+
+| Task | Scope | Estimated Effort |
+|------|-------|-----------------|
+| **Analytics Cloud Export** | BigQuery/Snowflake adapter, credential management, scheduled export | **Major** (2-3 days) |
+
 ### 📊 Final Gate State
 
 | Gate | Status |
@@ -91,7 +128,7 @@
 | `cargo fmt` | ✅ Clean |
 | `cargo clippy` | ✅ 0 errors |
 | `npm run typecheck` | ✅ 0 errors |
-| `npm run lint` | ✅ 0 errors, 0 warnings |
-| `vitest` | ✅ 2,926 passed, 0 failures |
+| `npm run lint` | ✅ 0 errors |
+| `vitest` | ✅ 2,936 passed, 0 failures |
 
 > **Cumulative: 113 → 0 pre-existing vitest failures (100% reduction)**

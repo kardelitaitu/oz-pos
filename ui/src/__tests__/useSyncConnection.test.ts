@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 
 const mockTestSyncConnection = vi.fn();

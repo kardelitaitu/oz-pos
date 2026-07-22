@@ -67,3 +67,4 @@ custom-report-columns = Kolom
 custom-report-run = Jalankan
 custom-report-results = Hasil
 custom-report-export-csv = Ekspor CSV
+custom-report-no-columns-match = Tidak ada kolom yang cocok
