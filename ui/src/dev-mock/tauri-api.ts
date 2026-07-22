@@ -219,6 +219,18 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // LICENSE
   // ═══════════════════════════════════════════════════════════════
 
+  'list_all_features': () => ({
+    features: [
+      { key: 'sales', name: 'Sales', description: 'Point of sale transactions', group: 'Core', enabled: true, dependencies: [] },
+      { key: 'inventory', name: 'Inventory', description: 'Stock management', group: 'Core', enabled: true, dependencies: ['sales'] },
+      { key: 'reporting', name: 'Reporting', description: 'Sales and inventory reports', group: 'Reporting', enabled: false, dependencies: ['sales'] },
+      { key: 'staff', name: 'Staff', description: 'Staff management', group: 'Staff', enabled: true, dependencies: [] },
+      { key: 'settings', name: 'Settings', description: 'System settings', group: 'Core', enabled: true, dependencies: [] },
+    ],
+  }),
+  'set_feature': () => ({ success: true, features: [], auto_enabled: [] }),
+  'set_features_bulk': () => ({ features: [] }),
+
   'plugin:updater|check': () => null,
 
   'get_license_status': () => ({ is_valid: true, license_type: 'Pro', expires_at: null, is_active: true, status: 'valid', payload: null, message: null }),
