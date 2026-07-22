@@ -3,7 +3,7 @@
 **Status:** Proposed  
 **Date:** 2026-07-23  
 **Author:** Architecture Team & OZ-POS Contributors  
-**Tags:** settings, workspace, architecture, rbac, ui-components, design-system, i18n, a11y  
+**Tags:** settings, workspace, architecture, rbac, ui-components, design-system, i18n, a11y, multi-location, hal, crdt, event-bus  
 
 ---
 
@@ -17,7 +17,7 @@ Settings management in OZ-POS is currently fragmented across **5 distinct compon
 4. **`SettingsPopup.tsx`** (`ui/src/frontend/shared/SettingsPopup.tsx`): 4-tab quick settings modal popup used in various management screens (Tax, Categories, Customers, Staff, Terminals, Suppliers).
 5. **`KdsSettingsPanel.tsx`** (`ui/src/features/kds/KdsSettingsPanel.tsx`): Popover panel specifically for KDS screen preferences.
 
-### Operational Challenges
+### Operational & Technical Challenges
 
 1. **Inconsistent User Experience**: Depending on where a user opens settings, they see different tab layouts, styling tokens, and form controls.
 2. **Duplicate Code & Maintenance Overhead**: Backend IPC commands (e.g. `get_store_settings`, `get_receipt_settings`) are duplicated across `RetailOptionsScreen`, `SettingsSubScreen`, and `SettingsPage`.
@@ -25,12 +25,14 @@ Settings management in OZ-POS is currently fragmented across **5 distinct compon
    - **Owners & Managers** need a **Centralized Hub** where they can configure *all* workspace settings (Store POS, Restaurant POS, KDS, Inventory, Admin) from a single location without entering each workspace.
    - **In-Workspace Context**: When working inside a specific workspace (e.g. Store POS), an Owner or Manager needs quick access to *that workspace's settings* without wading through unrelated global options.
    - **Cashier / Staff Roles**: Staff working in a POS workspace should only have access to local terminal preferences (e.g. sound volume, dark mode toggle, scale zeroing), while administrative store settings must be protected.
+4. **Lack of Real-Time Reactivity**: Changing a setting (e.g. tender presets or KDS SLA timers) in one screen currently requires a full manual reload for active UI components to reflect the update.
+5. **Multi-Location & Hardware Isolation**: Workspace settings must respect location-scoped overrides (ADR #18 / ADR #19) and bind cleanly to HAL peripheral drivers (`crates/oz-hal`).
 
 ---
 
 ## Decision
 
-We propose a **Unified 2-Tier Workspace Settings Architecture** built around **shared workspace settings components**.
+We propose a **Bulletproof Unified 2-Tier Workspace Settings Architecture** built around **shared workspace settings components, real-time event-bus reactivity, offline CRDT delta sync, and hardware driver bindings**.
 
 ### 1. Conceptual Model — 2-Tier Dual-Access Architecture
 
@@ -58,9 +60,10 @@ We propose a **Unified 2-Tier Workspace Settings Architecture** built around **s
 
 ---
 
-### 2. Architecture & Shared Component Strategy
+### 2. Bulletproof Architectural Pillars
 
-To eliminate component duplication between Tier 1 and Tier 2, all workspace settings forms will be extracted into **reusable workspace card components** under `ui/src/features/settings/workspace-cards/`:
+#### Pillar A: Shared Card Modularization
+All workspace configuration logic lives in modular, reusable card components:
 
 ```
 ui/src/features/settings/
@@ -75,14 +78,12 @@ ui/src/features/settings/
 └── WorkspaceSettingsModal.tsx             <-- Tier 2 Contextual Modal (Renders Active Shared Card)
 ```
 
-#### Reusable Card Interface
-
-Each workspace settings card exposes a clean, standardized component API:
-
 ```tsx
 export interface WorkspaceCardProps {
   /** Session token for scoped IPC calls (ADR #7) */
   sessionToken?: string;
+  /** Active location ID for multi-location scoping (ADR #18) */
+  locationId?: string;
   /** Whether the component is rendered inside Tier 2 modal or Tier 1 full page */
   variant?: 'full-page' | 'modal';
   /** Callback fired after settings are successfully saved */
@@ -90,52 +91,44 @@ export interface WorkspaceCardProps {
 }
 ```
 
----
+#### Pillar B: Real-Time Event Bus Reactivity (`SETTINGS_UPDATED`)
+When any setting is saved in Tier 1 or Tier 2, the Rust backend emits a `settings_updated` scoped event via the Event Bus (`crates/oz-bus`).
+The frontend `SettingsContext` listens to this event and invalidates stale state immediately:
+- Updating receipt layout in Settings instantly updates the preview in POS cart without F5.
+- Changing KDS SLA thresholds immediately updates open KDS ticket timers.
 
-### 3. Tier 1: Centralized Settings Hub Layout (`SettingsPage.tsx`)
-
-In `SettingsNavTree.tsx`, a dedicated **Workspace Configurations** category will be added to the left sidebar tree:
-
-```
-⚙️ Settings
-├── 🌐 Global System
-│   ├── General & Store Info
-│   ├── Appearance & Themes
-│   ├── Tax & Currency
-│   ├── Staff & Roles
-│   ├── Cloud Sync & License
-│   └── Data Management
-│
-└── 🖥️ Workspace Configurations
-    ├── Store POS
-    ├── Restaurant POS
-    ├── Kitchen Display (KDS)
-    └── Inventory Management
+```tsx
+useScopedEvent('settings_updated', (payload) => {
+  if (payload.scope === activeWorkspace) {
+    refetchSettings();
+  }
+});
 ```
 
-Selecting any workspace under **Workspace Configurations** renders the corresponding shared card (`WorkspaceStorePosSettings`, `WorkspaceKdsSettings`, etc.) within the main dithered card container.
+#### Pillar C: Offline-First CRDT Delta Sync & Transaction Isolation
+- All database mutations run inside **rusqlite transactions** (`conn.transaction()`).
+- Settings changes write a CRDT delta ledger record (`setting_updated`) to sync seamlessly across multi-terminal offline clusters.
+- Conflict resolution uses `last-write-wins` with wall-clock vector timestamps.
+
+#### Pillar D: Hardware Abstraction Layer (HAL) Peripheral Testing
+Workspace settings cards integrate directly with `crates/oz-hal` drivers:
+- **Receipt & Printer**: Embedded **"Test Print"** button that sends raw ESC/POS test packets to the configured printer driver.
+- **Weight Scale**: Real-time **"Scale Diagnostics & Zeroing"** widget reading live HAL serial data.
+- **Barcode Scanner**: Live **"Test Barcode Scan"** input box to verify HAL scanner handler input.
+
+#### Pillar E: Entitlements & Subscription Tier Guarding
+Features gated by subscription tier (`Basic`, `Pro`, `Enterprise`) render graceful entitlement badges:
+- If a store is on `Basic`, advanced multi-location inventory deduction settings show a locked `Pro Feature 🔒` badge with an upgrade callout.
+
+#### Pillar F: Resilient Error Boundaries & Fallback
+Each shared card is wrapped in a dedicated `<ErrorBoundary>`:
+- If an IPC network call fails or schema validation errors occur, the card renders a localized `<ErrorState retry={refetch} />` without crashing the parent Settings page or POS session.
 
 ---
 
-### 4. Tier 2: In-Workspace Contextual Modal (`WorkspaceSettingsModal.tsx`)
+### 3. Storage Layer & Data Persistence Mapping
 
-When an Owner or Manager opens settings inside an active workspace (e.g. pressing `F10` in Store POS or clicking the Gear icon in Restaurant POS/KDS), `WorkspaceSettingsModal.tsx` opens as a modern slide-over/dialog modal.
-
-#### Modal Header Features:
-- **Title**: Shows active workspace name (e.g., `Store POS Settings`).
-- **Scope Indicator**: Displays active workspace badge.
-- **Admin Shortcut Button**: `Admin Settings ↗` button. Clicking this closes the modal and navigates directly to `#/settings` (Tier 1) for full system configuration.
-- **Close Button**: Symmetric exit animation via `useExitAnimation`.
-
-#### Modal Body:
-- Renders the workspace's dedicated shared card (`WorkspaceStorePosSettings`).
-- Renders `TerminalPreferencesCard` for hardware/display tweaks specific to the local device.
-
----
-
-### 5. Storage Layer & Data Persistence Mapping
-
-Settings across OZ-POS belong to 3 distinct persistence categories. Shared workspace cards map their state according to this structure:
+Settings belong to 3 distinct persistence categories:
 
 | Setting Scope | Target Persistence Layer | Backend IPC / Storage Key | Example Properties |
 | :--- | :--- | :--- | :--- |
@@ -146,12 +139,10 @@ Settings across OZ-POS belong to 3 distinct persistence categories. Shared works
 
 ---
 
-### 6. Accessibility (A11y) & Keyboard Navigation Standards
-
-To maintain POS keyboard usability and accessibility compliance:
+### 4. Accessibility (A11y) & Keyboard Navigation Standards
 
 - **Keyboard Hotkey**: Pressing `F10` toggles `WorkspaceSettingsModal`.
-- **Keyboard Dismissal**: Pressing `Esc` closes the modal using `useExitAnimation` for smooth entry/exit.
+- **Keyboard Dismissal**: Pressing `Esc` closes the modal using `useExitAnimation`.
 - **Focus Management**: Uses `useFocusTrap` to trap tab focus within `WorkspaceSettingsModal` while open.
 - **ARIA Semantics**:
   - Container uses `role="dialog"` and `aria-modal="true"`.
@@ -160,10 +151,9 @@ To maintain POS keyboard usability and accessibility compliance:
 
 ---
 
-### 7. Internationalization (i18n) & Fluent FTL Contract
+### 5. Internationalization (i18n) & Fluent FTL Contract
 
 In accordance with project standards and githooks bundle parity verification (`scripts/verify-bundle-parity.py`):
-
 - All user-visible text uses `@fluent/react` (`<Localized id="...">`).
 - New Fluent keys are added symmetrically to both `ui/src/locales/settings.ftl` and `ui/src/locales/settings.id.ftl`:
   - `settings-workspace-category-title`
@@ -175,7 +165,7 @@ In accordance with project standards and githooks bundle parity verification (`s
 
 ---
 
-### 8. Role-Based Access Control (RBAC) Matrix
+### 6. Role-Based Access Control (RBAC) Matrix
 
 | Role | Access Level | In-Workspace Behavior |
 | :--- | :--- | :--- |
@@ -188,14 +178,10 @@ In accordance with project standards and githooks bundle parity verification (`s
 ## Consequences
 
 ### Positive
-- **Single Source of Truth**: Setting forms (inputs, validation, IPC calls) exist in one shared file per workspace.
-- **Visual Consistency**: All settings UI uses modern design system tokens, dither cards (`.noise-dither`), and `@fluent/react` localization strings.
-- **Owner Efficiency**: Owners/Managers can adjust any workspace from the Admin settings hub, or quickly tweak the active workspace in-context.
+- **Single Source of Truth**: Setting forms exist in one shared file per workspace.
+- **Real-Time Responsiveness**: Setting changes propagate instantly across open UI screens via Event Bus.
+- **Hardware Diagnostic Confidence**: Integrated HAL test buttons eliminate guesswork during hardware setup.
 - **Clean Deprecation**: Obsoletes `RetailOptionsScreen.tsx`, `SettingsSubScreen`, and `SettingsPopup.tsx`.
-
-### Risks & Mitigations
-- **IPC State Parity**: Shared workspace cards must maintain state synchronization across both Tier 1 and Tier 2 views.  
-  *Mitigation*: Use existing IPC hooks (`useStoreSettings`, `useReceiptSettings`) and invalidate cache on save.
 
 ---
 
@@ -203,7 +189,7 @@ In accordance with project standards and githooks bundle parity verification (`s
 
 1. **Unit Tests**:
    - `WorkspaceSettingsModal.test.tsx`: Test modal render, focus trapping, `Esc` closing, and `Admin Settings ↗` navigation.
-   - `WorkspaceStorePosSettings.test.tsx`: Test form load and save routines for Store POS settings.
+   - `WorkspaceStorePosSettings.test.tsx`: Test form load, HAL test button triggers, and save routines.
 2. **Noise-Dither Test**: Add `.workspace-settings-modal` to `KNOWN_NOISE_SELECTORS` in `ui/src/__tests__/noiseDitherCompliance.test.ts`.
 3. **E2E Playwright**: Update `ui/e2e/new-flows.spec.ts` (E2E-27) to verify opening settings via `F10` in Store POS.
 
@@ -213,8 +199,8 @@ In accordance with project standards and githooks bundle parity verification (`s
 
 | Phase | Description | Key Files Created/Modified |
 | :--- | :--- | :--- |
-| **Phase 1: Shared Cards** | Extract settings logic into `WorkspaceStorePosSettings`, `WorkspaceKdsSettings`, and `TerminalPreferencesCard`. | `ui/src/features/settings/workspace-cards/*` |
+| **Phase 1: Shared Cards** | Extract settings logic into `WorkspaceStorePosSettings`, `WorkspaceKdsSettings`, and `TerminalPreferencesCard` with HAL test actions. | `ui/src/features/settings/workspace-cards/*` |
 | **Phase 2: Tier 1 Integration** | Update `SettingsNavTree.tsx` & `SettingsPage.tsx` to include the **Workspace Configurations** tree group. | `SettingsNavTree.tsx`, `SettingsPage.tsx` |
-| **Phase 3: Tier 2 Modal** | Implement `WorkspaceSettingsModal.tsx` with role checking and `Admin Settings ↗` header shortcut. | `WorkspaceSettingsModal.tsx` |
+| **Phase 3: Tier 2 Modal** | Implement `WorkspaceSettingsModal.tsx` with Event Bus subscription, role checking, and `Admin Settings ↗` header shortcut. | `WorkspaceSettingsModal.tsx` |
 | **Phase 4: Workspace Wiring** | Replace `RetailOptionsScreen` in `RetailPosScreen.tsx` and `SettingsSubScreen` in `PosScreen.tsx` with `WorkspaceSettingsModal`. | `RetailPosScreen.tsx`, `PosScreen.tsx` |
 | **Phase 5: Deprecation** | Delete obsolete `RetailOptionsScreen.tsx` and clean up legacy CSS rules. | `RetailOptionsScreen.tsx`, `RetailPosScreen.css` |
