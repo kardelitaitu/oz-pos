@@ -11,6 +11,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
+import { useToast } from '@/frontend/shared/Toast';
 import './CategoryManagementScreen.css';
 
 // ── Predefined colour palette for the colour picker ──────────────────
@@ -165,6 +166,7 @@ function colourToId(name: string): string {
 /** Category management screen — create, edit, and delete product categories with colour and icon selection. */
 export default function CategoryManagementScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -274,7 +276,7 @@ export default function CategoryManagementScreen() {
       await deleteCategory(deleteTarget.id);
       await load();
     } catch (err) {
-      console.error('Failed to delete category:', err);
+      addToast({ message: l10n.getString('category-delete-failed'), type: 'error' });
     } finally {
       setDeleting(null);
     }

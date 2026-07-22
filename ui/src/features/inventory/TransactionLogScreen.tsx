@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Localized } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listInventoryTransactions,
@@ -13,6 +14,7 @@ import './TransactionLogScreen.css';
 
 export default function TransactionLogScreen() {
   const { sessionToken } = useWorkspace();
+  const { addToast } = useToast();
 
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -42,9 +44,9 @@ export default function TransactionLogScreen() {
         setTransactions(txs);
         setLocations(locs);
       })
-      .catch(console.error)
+      .catch((err) => addToast({ message: err instanceof Error ? err.message : 'Failed to load transactions', type: 'error' }))
       .finally(() => setLoading(false));
-  }, [sessionToken]);
+  }, [sessionToken, addToast]);
 
   const handleRowClick = async (txId: string) => {
     if (!sessionToken) return;
@@ -62,7 +64,7 @@ export default function TransactionLogScreen() {
         setExpandedLines(detail[1]);
       }
     } catch (err) {
-      console.error('Failed to load transaction details:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to load transaction details', type: 'error' });
     } finally {
       setLoadingLines(false);
     }

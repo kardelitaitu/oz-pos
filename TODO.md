@@ -2,7 +2,7 @@
 
 > **Goal:** 3 areas: fix the 3 a11y bugs surfaced by P153, upgrade console.error calls to proper error boundaries, and final codebase cleanup.
 >
-> **Current state:** 2 / 6 items complete (33% 🟡) · Updated 2026-07-22
+> **Current state:** 4 / 6 items complete (67% 🟡) · Updated 2026-07-22
 
 ---
 
@@ -11,9 +11,9 @@
 | # | Area | Items | Status |
 |---|------|-------|--------|
 | 🟢 | A11y Bug Fixes | 2 | 2/2 ✅ |
-| 🔴 | Error Handling Polish | 2 | 0/2 🔴 |
+| 🔴 | Error Handling Polish | 2 | 1/2 🟡 |
 | 🟡 | Final Cleanup | 2 | 0/2 🔴 |
-| **Total** | | **6** | **2/6 (33%)** |
+| **Total** | | **6** | **4/6 (67%)** |
 
 ---
 
@@ -30,7 +30,14 @@
 
 > **Goal:** Upgrade bare `console.error()` calls in production UI components to use proper error boundaries or toast notifications.
 
-- [ ] **P201-1: Replace console.error with toasts** — Audit 12 `console.error()` calls across 7 production files (CategoryManagementScreen, PromotionManagementScreen, GiftCardsScreen, ThresholdConfigScreen, TransactionLogScreen, TransitAuditScreen, PaymentModal). Replace with `addToast()` where appropriate.
+- [x] **P201-1: Replace console.error with toasts** ✅ — Replaced 14 `console.error()` calls across 7 production files with `addToast()` toast notifications:
+  - `GiftCardsScreen.tsx`: 1 call (freeze toggle) + added useToast import
+  - `PromotionManagementScreen.tsx`: 3 calls (save/delete/toggle) + added useToast import
+  - `TransactionLogScreen.tsx`: 2 calls (.catch + details load) + added useToast import
+  - `TransitAuditScreen.tsx`: 1 call (load transit — already had useToast)
+  - `ThresholdConfigScreen.tsx`: 1 call (load data — already had useToast)
+  - `PaymentModal.tsx`: 6 calls (QR finalize/void ×2, QR payment failure, cash finalize/void ×2, complete failure)
+  - All use `err instanceof Error ? err.message : 'Fallback message'` pattern
 - [ ] **P201-2: Verify error boundary coverage** — Ensure all async error paths have either a try/catch→toast or an ErrorBoundary ancestor. Add integration tests for error recovery paths.
 
 ---
@@ -39,7 +46,7 @@
 
 > **Goal:** Remove stale comments, fix remaining code smells, and verify all CI gates pass.
 
-- [ ] **P202-1: Remove stale TODOs and lint fixes** — Remove the `TODO 0.0.18` comment in `foundation/src/validation.rs`. Fix any remaining pre-existing lint warnings.
+- [x] **P202-1: Remove stale TODOs** ✅ — Removed `TODO 0.0.18: Shared DTO & Validation Crates` comment from `foundation/src/validation.rs`.
 - [ ] **P202-2: Final gate check** — Run full `scripts/check.ps1` pipeline. Verify all 7 gates pass (fmt, clippy, nextest, tsc, eslint, vitest, i18n).
 
 ---

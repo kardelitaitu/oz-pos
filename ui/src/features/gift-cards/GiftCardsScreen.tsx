@@ -8,6 +8,7 @@ import {
   type GiftCardWithTransactions,
   type GiftCardFilter,
 } from '@/api/giftCards';
+import { useToast } from '@/frontend/shared/Toast';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -33,6 +34,7 @@ export default function GiftCardsScreen() {
   const [topUpCardId, setTopUpCardId] = useState<string | null>(null);
   const [topUpAmount, setTopUpAmount] = useState('');
   const [topUpError, setTopUpError] = useState('');
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,9 +62,9 @@ export default function GiftCardsScreen() {
       }
       await load();
     } catch (err) {
-      console.error('Failed to toggle freeze:', err);
+      addToast({ message: err instanceof Error ? err.message : 'Failed to toggle freeze', type: 'error' });
     }
-  }, [load]);
+  }, [load, addToast]);
 
   const handleTopUp = useCallback(async (cardNumber: string) => {
     const amount = parseInt(topUpAmount, 10);

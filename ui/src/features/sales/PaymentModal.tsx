@@ -475,11 +475,11 @@ export default function PaymentModal({
         try {
           await finalizeSale(sessionToken, saleResult.saleId);
         } catch (finalizeErr) {
-          console.error('[Sale] Finalize FAILED, voiding:', finalizeErr);
+          addToast({ message: `Finalize failed, attempting void: ${finalizeErr instanceof Error ? finalizeErr.message : String(finalizeErr)}`, type: 'error' });
           try {
             await voidPendingSale(sessionToken, saleResult.saleId);
           } catch (voidErr) {
-            console.error('[Sale] Void ALSO failed:', voidErr);
+            addToast({ message: `Void also failed: ${voidErr instanceof Error ? voidErr.message : String(voidErr)}`, type: 'error' });
           }
           throw finalizeErr;
         }
@@ -499,13 +499,13 @@ export default function PaymentModal({
 
       setDone(true);
     } catch (err) {
-      console.error('QR payment failed:', err);
+      addToast({ message: `QR payment failed: ${err instanceof Error ? err.message : String(err)}`, type: 'error' });
       const classified = classifyError(err);
       setPaymentError(classified);
     } finally {
       setProcessing(false);
     }
-  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError]);
+  }, [lineItems, total, discountPercent, discountLabel, userId, sessionToken, qrReference, selectedCustomer, effectiveTotal, loyaltyAccount, redeemPoints, loyaltyDiscount, serialNumbers, tableNumber, classifyError, addToast]);
 
   const { sufficient, change } = useMemo(() => {
     if (method !== 'cash') return { sufficient: true, change: null };
@@ -716,11 +716,11 @@ export default function PaymentModal({
           await finalizeSale(sessionToken, saleResult.saleId);
         } catch (finalizeErr) {
           // Attempt to void the pending sale to restore stock
-          console.error('[Sale] Finalize FAILED, voiding:', finalizeErr);
+          addToast({ message: `Finalize failed, attempting void: ${finalizeErr instanceof Error ? finalizeErr.message : String(finalizeErr)}`, type: 'error' });
           try {
             await voidPendingSale(sessionToken, saleResult.saleId);
           } catch (voidErr) {
-            console.error('[Sale] Void ALSO failed:', voidErr);
+            addToast({ message: `Void also failed: ${voidErr instanceof Error ? voidErr.message : String(voidErr)}`, type: 'error' });
           }
           // Throw the original finalize error so the outer catch handles it
           throw finalizeErr;
@@ -802,7 +802,6 @@ export default function PaymentModal({
       if (change) setChangeDue(change);
       setDone(true);
     } catch (err) {
-      console.error('[Sale] Complete FAILED:', err);
       // Try to detect PartialStockResult from the backend error
       const errMsg = err instanceof Error ? err.message : String(err);
       const parsed = tryParsePartialStockResult(errMsg);
