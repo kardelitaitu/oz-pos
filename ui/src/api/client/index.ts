@@ -12,3 +12,6 @@
 export { OZPosClient } from './oz-pos-client';
 export { ApiError, HttpClient, type ClientConfig, type HttpMethod } from './client';
 export type * from './types';
+export type { TaxRate } from './tax';
+export type { User } from './users';
+export type { SaleRecord } from './sales';

@@ -33,6 +33,26 @@ export class ProductsClient {
     );
   }
 
+  /** `PUT /api/v1/products/{sku}` — update an existing product. */
+  async update(
+    sku: string,
+    req: Partial<CreateProductRequest>,
+  ): Promise<ProductDetail> {
+    return this.http.request<ProductDetail>(
+      'PUT',
+      `/api/v1/products/${encodeURIComponent(sku)}`,
+      req,
+    );
+  }
+
+  /** `DELETE /api/v1/products/{sku}` — delete a product. */
+  async delete(sku: string): Promise<void> {
+    return this.http.request<void>(
+      'DELETE',
+      `/api/v1/products/${encodeURIComponent(sku)}`,
+    );
+  }
+
   /** `PATCH /api/v1/products/{sku}/stock` — adjust stock quantity. */
   async adjustStock(
     sku: string,

@@ -15,7 +15,7 @@
 //! the provided `fetchFn` (defaults to `globalThis.fetch`), making it
 //! easy to mock in tests.
 
-export type HttpMethod = 'GET' | 'POST' | 'PATCH';
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface ClientConfig {
   baseUrl: string;
