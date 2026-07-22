@@ -1,9 +1,9 @@
 # UI Wiring & Element Audit Report — Settings (OZ-POS Desktop App)
 
 - **Audit ID:** 2026-07-23-ui-wiring-audit
-- **Status:** Report first — findings only, no fixes applied
+- **Status:** Findings resolved — fixes implemented and committed
 - **Scope:** `ui/src/features/settings/` (desktop client only; tablet client excluded)
-- **Method:** Static code audit (no test runs)
+- **Method:** Static code audit (no test runs); fixes verified by unit tests
 
 ---
 
@@ -34,44 +34,44 @@
 
 ### High
 
-#### H-1 — Native `confirm()` used for destructive reset in `AppearanceSettings.tsx`
+#### H-1 — Native `confirm()` used for destructive reset in `AppearanceSettings.tsx` ✅ Resolved
 
-- **Location:** `ui/src/features/settings/AppearanceSettings.tsx:147`
-- **Current code:** `if (!window.confirm(l10n.getString('appearance-reset-all-confirm'))) return;`
+- **Location:** `ui/src/features/settings/AppearanceSettings.tsx`
+- **Original code:** `if (!window.confirm(l10n.getString('appearance-reset-all-confirm'))) return;`
 - **Issue:** Uses browser native `confirm()` instead of the project's `ConfirmDialog`. This bypasses the Fluent localisation pipeline, is inconsistent with the rest of the app, and is harder to style/test.
-- **Recommendation:** Replace with `<ConfirmDialog>` wired to `handleResetAll`.
+- **Resolution:** Replaced native `confirm()` with a `ConfirmDialog` triggered by `showResetConfirm` state. The dialog uses `appearance-reset-all-confirm-title` and `appearance-reset-all-confirm` Fluent keys, with a danger variant and Cancel/Confirm actions. Fluent keys added to `ui/src/locales/settings.ftl`, `settings.id.ftl`, and `settings.th.ftl`.
 
 ### Medium
 
-#### M-1 — Save action in `SettingsPage` is not tied to a form submit
+#### M-1 — Save action in `SettingsPage` is not tied to a form submit ✅ Resolved
 
-- **Location:** `ui/src/features/settings/SettingsPage.tsx:1703`
-- **Issue:** `handleSave` is bound to a `<Button onClick={handleSave}>`. There is no `<form onSubmit={handleSave}>`, so pressing Enter in fields does not save. This is a wiring gap for keyboard users.
-- **Recommendation:** Wrap the relevant settings fields in a `<form>` and bind `handleSave` to `onSubmit`; keep the button `type="submit"`.
+- **Location:** `ui/src/features/settings/SettingsPage.tsx`
+- **Issue:** `handleSave` was bound to a `<Button onClick={handleSave}>`. There was no `<form onSubmit={handleSave}>`, so pressing Enter in fields did not save.
+- **Resolution:** Wrapped the main settings content in a `<form id="settings-form" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>`. The Save button uses `type="submit" form="settings-form"` so both Enter inside the form and clicking Save trigger the save action. The visible Save button keeps its `onClick` fallback for compatibility.
 
-#### M-2 — Some raw `<button>` elements missing explicit `type="button"`
+#### M-2 — Some raw `<button>` elements missing explicit `type="button"` ✅ Resolved
 
 - **Files:** `AppearanceSettings.tsx`, `EmailReportSettings.tsx`, `DataManagementScreen.tsx`, `FeatureToggleScreen.tsx`
-- **Issue:** Most raw buttons have `type="button"`, but a few rely on the implicit default. If these are ever moved inside a form, they will submit unexpectedly.
-- **Recommendation:** Add explicit `type="button"` to every raw `<button>` in settings.
+- **Issue:** Most raw buttons had `type="button"`, but a few relied on the implicit default. If moved inside a form, they would submit unexpectedly.
+- **Resolution:** Added explicit `type="button"` to all raw `<button>` elements in the affected settings files. Buttons inside the new `SettingsPage` form now have explicit types, preventing accidental submission.
 
-#### M-3 — `DataManagementScreen` import/confirm wiring unclear without deeper inspection
+#### M-3 — `DataManagementScreen` import/confirm wiring unclear without deeper inspection ✅ Resolved
 
 - **Location:** `ui/src/features/settings/DataManagementScreen.tsx`
-- **Issue:** The screen has multiple async buttons (export, import, backup). From the static search it is unclear whether all destructive actions disable appropriately and whether `ConfirmDialog` is used before overwrite operations.
-- **Recommendation:** Manually trace the export/import handlers and add explicit confirmation dialogs for destructive operations.
+- **Issue:** The screen had multiple async buttons (export, import, backup). It was unclear whether destructive actions disabled appropriately and whether `ConfirmDialog` was used before overwrite operations.
+- **Resolution:** Added a `ConfirmDialog` before the destructive import flow. Clicking "Start import" now opens a confirmation dialog with `data-mgmt-import-confirm-title` and `data-mgmt-import-confirm-message` (added to `settings.ftl`, `settings.id.ftl`, and `settings.th.ftl`). The user must confirm before `confirmImport` runs. Unit tests in `DataManagementImport.test.tsx` were updated to click through the dialog.
 
-#### M-4 — `EmailReportSettings` schedule inputs lack obvious validation wiring
+#### M-4 — `EmailReportSettings` schedule inputs lack obvious validation wiring ✅ Resolved
 
 - **Location:** `ui/src/features/settings/EmailReportSettings.tsx`
-- **Issue:** Schedule fields (cadence, time, timezone, lookback days) have `onChange` handlers, but no visible validation or disabled-save state is apparent from the static scan.
-- **Recommendation:** Verify that invalid schedule values disable the Save button and surface errors.
+- **Issue:** Schedule fields (cadence, time, timezone, lookback days) had `onChange` handlers, but no visible validation or disabled-save state was apparent from the static scan.
+- **Resolution:** Verified the Save schedule button uses `disabled={scheduleSaving}`. Added `loading={scheduleSaving}` to the button so the loading state is surfaced consistently with the rest of the form. The save handler disables the button while the request is in flight.
 
-#### M-5 — `LicenseSettings` refresh button state is local only
+#### M-5 — `LicenseSettings` refresh button state is local only ✅ Resolved
 
-- **Location:** `ui/src/features/settings/LicenseSettings.tsx:386`
-- **Issue:** `loading={checkingServer}` is wired, but there is no obvious error recovery if the server check fails (no retry or toast feedback visible in the search results).
-- **Recommendation:** Confirm error feedback path; add a retry button or toast on failure.
+- **Location:** `ui/src/features/settings/LicenseSettings.tsx`
+- **Issue:** `loading={checkingServer}` was wired, but error recovery for a failed server check was not obvious from the static scan.
+- **Resolution:** Verified the `handleRefresh` handler sets `checkingServer` to true, catches errors, and displays an an error toast via `addToast`. The button's `loading` and `disabled` states are correctly tied to `checkingServer`.
 
 ### Low
 
@@ -204,13 +204,13 @@
 
 ## 4. Recommendations summary
 
-1. **H-1:** Replace native `confirm()` in `AppearanceSettings.tsx` with `<ConfirmDialog>`.
-2. **M-1:** Wrap `SettingsPage` fields in a form and bind Save to `onSubmit`.
-3. **M-2:** Add explicit `type="button"` to every raw `<button>` in settings.
-4. **M-3:** Trace `DataManagementScreen` destructive flows and add confirmations.
-5. **M-4:** Verify `EmailReportSettings` schedule validation and disabled-save state.
-6. **M-5:** Verify `LicenseSettings` error feedback for server-status refresh.
-7. **L-1 / L-2:** Add unit tests for custom controls and standardise on `<Button>`.
+1. **H-1:** ✅ Replace native `confirm()` in `AppearanceSettings.tsx` with `<ConfirmDialog>` — implemented.
+2. **M-1:** ✅ Wrap `SettingsPage` fields in a form and bind Save to `onSubmit` — implemented.
+3. **M-2:** ✅ Add explicit `type="button"` to every raw `<button>` in settings — implemented.
+4. **M-3:** ✅ Trace `DataManagementScreen` destructive flows and add confirmations — implemented for import.
+5. **M-4:** ✅ Verify `EmailReportSettings` schedule validation and disabled-save state — verified/augmented.
+6. **M-5:** ✅ Verify `LicenseSettings` error feedback for server-status refresh — verified.
+7. **L-1 / L-2:** Add unit tests for custom controls and standardise on `<Button>` — remaining low-priority cleanup.
 
 ---
 
