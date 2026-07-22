@@ -92,14 +92,13 @@ export interface WorkspaceCardProps {
 ```
 
 #### Pillar B: Workspace-Bound Hardware Peripheral Configuration
-Peripherals belong strictly to workspace cards:
-- **Receipt & Thermal Printer**: IP address, paper width (58mm/80mm), print margins, auto-cut, and ESC/POS test prints are configured directly inside `WorkspaceStorePosSettings.tsx` or `WorkspaceRestaurantPosSettings.tsx`.
-- **Barcode Scanner & Scale**: Port binding (`COM3` / `/dev/ttyUSB0`), baud rate, and scale zeroing calibration live inside the workspace card.
-- **Topology Simplification**: The topology canvas focuses exclusively on high-level enterprise routing (Store ─> Workspace ─> Warehouse), avoiding clutter from individual peripheral node wires.
+Peripherals belong strictly to workspace cards, with strict separation between Store-wide and Device-Local settings:
+- **Store-Wide Receipt Rules**: Store Logo, Footer Text, Tax display, Margins (mm) save to SQLite `receipt_settings`.
+- **Register-Local Hardware Bindings**: Printer IP address/USB path, Serial Scale COM Port, and Barcode Handler save to the local **`terminal_profile.json`** / `localStorage` per terminal ID. This prevents Register #2 from overwriting Register #1's hardware connections!
 
-#### Pillar C: Real-Time Event Bus Reactivity (`SETTINGS_UPDATED`)
-When any setting (including printer IP or receipt footer) is saved in Tier 1 or Tier 2, the Rust backend emits a `settings_updated` event via `crates/oz-bus`.
-The frontend `SettingsContext` listens to this event and invalidates stale state immediately across open screens.
+#### Pillar C: Real-Time Event Bus Reactivity & Deduplicated Context Refetching
+- When settings change, backend emits `settings_updated` via `crates/oz-bus`.
+- **Deduplication**: `SettingsContext` hosts the single listener. When `settings_updated` fires, `SettingsContext` performs a single, debounced refetch and updates shared React state. Individual UI components subscribe to `SettingsContext` rather than initiating independent concurrent IPC calls.
 
 #### Pillar D: Offline-First CRDT Delta Sync & Transaction Isolation
 - All database mutations run inside **rusqlite transactions** (`conn.transaction()`).
@@ -110,25 +109,39 @@ The frontend `SettingsContext` listens to this event and invalidates stale state
 - **Live Status Badges**: Topology nodes display live settings telemetry badges on the canvas (Receipt Configured `✓`, KDS SLA `5m`, Low Stock `12`).
 - **Sidebar Integration**: `SettingsNavTree.tsx` features a **Topology Map** menu item that renders the interactive node diagram directly within `SettingsPage.tsx`.
 
-#### Pillar F: Resilient Error Boundaries & Fallbacks
-Each shared card is wrapped in a localized `<ErrorBoundary>`:
-- IPC network failures or schema validation errors render a localized `<ErrorState retry={refetch} />` without crashing the parent canvas or POS session.
+#### Pillar F: Resilient Error Boundaries & Form Draft Isolation
+- **Local Form Draft Isolation**: Form fields inside shared cards operate on local draft state (`useState`). Unsaved edits are isolated; closing the modal via `Esc` discards uncommitted drafts without polluting global application state or active cart calculations.
+- **Error Boundaries**: Each shared card is wrapped in a localized `<ErrorBoundary>`. IPC errors render `<ErrorState retry={refetch} />` without crashing the parent view.
 
 ---
 
-### 3. Storage Layer & Data Persistence Mapping
+### 3. Edge Case Mitigations & Prevention Matrix
+
+| Identified Edge Case / Potential Bug | Impact | Architectural Mitigation |
+| :--- | :--- | :--- |
+| **1. Hardware Overwrite across Registers** | Register #2 overwrites Register #1's printer IP. | Split Store-wide rules (SQLite) from Register-local hardware bindings (`terminal_profile.json`). |
+| **2. POS Hotkey Leakage in Modal** | Pressing `F1` (Pay) while typing in settings input triggers checkout. | Enforce `if (document.querySelector('[aria-modal="true"]')) return;` guard on all POS key listeners. |
+| **3. IPC Event Storm on Refetch** | Multiple subscribers fire duplicate `get_store_settings` IPC calls. | Centralize `SETTINGS_UPDATED` event listener inside `SettingsContext` with debounced refetches. |
+| **4. Unsaved Draft Pollution** | Closing modal without saving leaves dirty state in cart/app. | Hold all form inputs in local draft state; only commit to context/IPC upon explicit user submission. |
+| **5. Session Role Swap / Timeout** | Manager session times out or swaps to Cashier while modal is open. | Re-evaluate `useAuth()` session reactively inside `WorkspaceSettingsModal`; fallback to `TerminalPreferencesCard`. |
+| **6. Visual Snap on Dismissal** | Modal snaps shut without exit animation. | Gate unmounting through `useExitAnimation` / `useAnimatedModal` duration. |
+
+---
+
+### 4. Storage Layer & Data Persistence Mapping
 
 | Setting Scope | Target Persistence Layer | Backend IPC / Storage Key | Example Properties |
 | :--- | :--- | :--- | :--- |
 | **Global Store Settings** | SQLite DB (`store_settings`) | `set_store_settings_scoped` | Store Name, Address, Tax ID, Currency |
-| **Receipt & Print Settings** | SQLite DB (`receipt_settings`) | `set_receipt_settings_scoped` | Printer IP, Paper width (58mm/80mm), Margins |
+| **Receipt & Print Settings** | SQLite DB (`receipt_settings`) | `set_receipt_settings_scoped` | Paper width (58mm/80mm), Footer, Margins |
+| **Terminal Hardware Bindings** | Device File / `localStorage` | `terminal_profile.json` | Printer IP/USB path, Scale COM port |
 | **Topology Connections** | SQLite DB (`workspace_instances`) | `save_topology_diagram` | Node positions, stock deduction priority wires |
 | **User Display Preferences** | SQLite DB (`user_preferences`) | `set_user_preference` | KDS layout mode (`kanban`/`focus`), Table toggles |
-| **Local Terminal Preferences** | `localStorage` / Device File | `localStorage.setItem(...)` | Sound volume, Dark/Light theme, Scale Zeroing |
+| **Local Terminal Preferences** | `localStorage` | `localStorage.setItem(...)` | Sound volume, Dark/Light theme, Scale Zeroing |
 
 ---
 
-### 4. Accessibility (A11y) & Keyboard Navigation Standards
+### 5. Accessibility (A11y) & Keyboard Navigation Standards
 
 - **Keyboard Hotkey**: Pressing `F10` toggles `WorkspaceSettingsModal`.
 - **Keyboard Dismissal**: Pressing `Esc` closes the modal using `useExitAnimation`.
@@ -139,7 +152,7 @@ Each shared card is wrapped in a localized `<ErrorBoundary>`:
 
 ---
 
-### 5. Internationalization (i18n) & Fluent FTL Contract
+### 6. Internationalization (i18n) & Fluent FTL Contract
 
 In accordance with project standards and githooks bundle parity verification (`scripts/verify-bundle-parity.py`):
 - All user-visible text uses `@fluent/react` (`<Localized id="...">`).
@@ -154,7 +167,7 @@ In accordance with project standards and githooks bundle parity verification (`s
 
 ---
 
-### 6. Role-Based Access Control (RBAC) Matrix
+### 7. Role-Based Access Control (RBAC) Matrix
 
 | Role | Access Level | Canvas & Modal Behavior |
 | :--- | :--- | :--- |
@@ -168,9 +181,9 @@ In accordance with project standards and githooks bundle parity verification (`s
 
 | Phase | Description | Key Files Created/Modified |
 | :--- | :--- | :--- |
-| **Phase 1: Shared Cards** | Extract settings logic (including printer/hardware config) into `WorkspaceStorePosSettings`, `WorkspaceRestaurantPosSettings`, `WorkspaceKdsSettings`, and `TerminalPreferencesCard`. | `ui/src/features/settings/workspace-cards/*` |
+| **Phase 1: Shared Cards & Local Profile** | Extract settings logic (with terminal profile separation for local hardware) into `WorkspaceStorePosSettings`, `WorkspaceRestaurantPosSettings`, `WorkspaceKdsSettings`, and `TerminalPreferencesCard`. | `ui/src/features/settings/workspace-cards/*`, `hooks/useTerminalProfile.ts` |
 | **Phase 2: Topology Integration** | Wire shared workspace cards into `NodeTopologyEditor.tsx` right Inspector Drawer. | `NodeTopologyEditor.tsx`, `TopologyScreen.tsx` |
 | **Phase 3: Tier 1 Integration** | Update `SettingsNavTree.tsx` & `SettingsPage.tsx` to include **Workspace Configurations** & **Topology Map**. | `SettingsNavTree.tsx`, `SettingsPage.tsx` |
-| **Phase 4: Tier 2 Modal** | Implement `WorkspaceSettingsModal.tsx` with Event Bus subscription, role checking, and `Admin Settings ↗` header shortcut. | `WorkspaceSettingsModal.tsx` |
-| **Phase 5: Workspace Wiring** | Replace `RetailOptionsScreen` in `RetailPosScreen.tsx` and `SettingsSubScreen` in `PosScreen.tsx` with `WorkspaceSettingsModal`. | `RetailPosScreen.tsx`, `PosScreen.tsx` |
+| **Phase 4: Tier 2 Modal** | Implement `WorkspaceSettingsModal.tsx` with Event Bus subscription, role checking, hotkey isolation, and `Admin Settings ↗` header shortcut. | `WorkspaceSettingsModal.tsx` |
+| **Phase 5: Workspace Wiring** | Replace `RetailOptionsScreen` in `RetailPosScreen.tsx` and `SettingsSubScreen` in `PosScreen.tsx` with `WorkspaceSettingsModal`. Add `aria-modal="true"` guards to POS hotkey handlers. | `RetailPosScreen.tsx`, `PosScreen.tsx` |
 | **Phase 6: Deprecation** | Delete obsolete `RetailOptionsScreen.tsx` and clean up legacy CSS rules. | `RetailOptionsScreen.tsx`, `RetailPosScreen.css` |
