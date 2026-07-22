@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { FluentBundle, FluentResource } from '@fluent/bundle';
+import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import TerminalStatusPanel from '@/features/stores/TerminalStatusPanel';
 import type { TerminalDto } from '@/api/terminals';
+import sharedFtl from '@/locales/shared.ftl?raw';
+
+const bundle = new FluentBundle('en-US');
+bundle.addResource(new FluentResource(sharedFtl));
+const l10n = new ReactLocalization([bundle]);
 
 const { mockListTerminals } = vi.hoisted(() => ({
   mockListTerminals: vi.fn(),
@@ -14,7 +21,11 @@ vi.mock('@/api/terminals', () => ({
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function renderPanel(refreshTrigger: number = 0) {
-  return render(<TerminalStatusPanel refreshTrigger={refreshTrigger} />);
+  return render(
+    <LocalizationProvider l10n={l10n}>
+      <TerminalStatusPanel refreshTrigger={refreshTrigger} />
+    </LocalizationProvider>,
+  );
 }
 
 function makeTerminal(overrides: Partial<TerminalDto> = {}): TerminalDto {

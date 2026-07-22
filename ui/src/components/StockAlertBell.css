@@ -37,7 +37,7 @@
   padding: 0 4px;
   border-radius: var(--radius-full);
   background-color: var(--color-danger);
-  color: #fff;
+  color: var(--color-text-on-danger, #fff);
   font-size: 10px;
   font-weight: 700;
   line-height: 16px;

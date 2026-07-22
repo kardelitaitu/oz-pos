@@ -211,6 +211,7 @@ const SCREENS: ScreenEntry[] = [
       'promo-mgmt',
       'mobile-open',
       'visible',
+      'settings-topology-container',
       // Visibility-hidden modifier classes for revert button & save-dot.
       // These are constructed via template-literal class toggling in
       // SettingsPage.tsx, so the static parser can't extract them.
@@ -261,6 +262,10 @@ const SCREENS: ScreenEntry[] = [
     name: 'MultiStoreDashboardScreen',
     tsx: 'stores/MultiStoreDashboardScreen.tsx',
     css: ['stores/MultiStoreDashboardScreen.css'],
+    externalClasses: [
+      'multi-store-view-toggle',
+      'multi-store-dashboard-topology-view',
+    ],
   },
   {
     name: 'TerminalStatusPanel',
