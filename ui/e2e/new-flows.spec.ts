@@ -95,7 +95,7 @@ test.describe('Session Lock', () => {
     // Verify lock card content.
     await expect(page.locator('.session-lock-time')).toBeVisible();
     await expect(page.locator('.session-lock-date')).toBeVisible();
-    await expect(page.locator('.session-lock-label')).toContainText('Locked');
+    await expect(page.locator('.session-lock-sub')).toContainText('Enter PIN');
 
     // Enter PIN to unlock.
     for (const digit of '1234') {

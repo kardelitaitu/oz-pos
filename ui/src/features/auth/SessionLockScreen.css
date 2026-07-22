@@ -73,12 +73,6 @@
   margin-bottom: var(--space-2);
 }
 
-.session-lock-label {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--color-fg);
-}
-
 .session-lock-sub {
   font-size: var(--text-sm);
   color: var(--color-fg-secondary);

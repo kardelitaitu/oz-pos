@@ -278,7 +278,7 @@ describe('AppShell — KDS workspace navigation', () => {
 
       // Screen should now be locked
       await waitFor(() => {
-        expect(screen.getByText(/session locked/i)).toBeInTheDocument();
+        expect(screen.getByText(/enter pin to unlock/i)).toBeInTheDocument();
       });
     });
 
