@@ -3,7 +3,7 @@
 **Status:** Proposed  
 **Date:** 2026-07-23  
 **Author:** Architecture Team & OZ-POS Contributors  
-**Tags:** settings, workspace, architecture, rbac, ui-components, design-system  
+**Tags:** settings, workspace, architecture, rbac, ui-components, design-system, i18n, a11y  
 
 ---
 
@@ -133,7 +133,49 @@ When an Owner or Manager opens settings inside an active workspace (e.g. pressin
 
 ---
 
-### 5. Role-Based Access Control (RBAC) Matrix
+### 5. Storage Layer & Data Persistence Mapping
+
+Settings across OZ-POS belong to 3 distinct persistence categories. Shared workspace cards map their state according to this structure:
+
+| Setting Scope | Target Persistence Layer | Backend IPC / Storage Key | Example Properties |
+| :--- | :--- | :--- | :--- |
+| **Global Store Settings** | SQLite DB (`store_settings`) | `set_store_settings_scoped` | Store Name, Address, Tax ID, Currency |
+| **Receipt & Print Settings** | SQLite DB (`receipt_settings`) | `set_receipt_settings_scoped` | Paper width (58mm/80mm), Footer, Margins |
+| **User Display Preferences** | SQLite DB (`user_preferences`) | `set_user_preference` | KDS layout mode (`kanban`/`focus`), Table toggles |
+| **Local Terminal Preferences** | `localStorage` / Device File | `localStorage.setItem(...)` | Sound volume, Dark/Light theme, Scale Zeroing |
+
+---
+
+### 6. Accessibility (A11y) & Keyboard Navigation Standards
+
+To maintain POS keyboard usability and accessibility compliance:
+
+- **Keyboard Hotkey**: Pressing `F10` toggles `WorkspaceSettingsModal`.
+- **Keyboard Dismissal**: Pressing `Esc` closes the modal using `useExitAnimation` for smooth entry/exit.
+- **Focus Management**: Uses `useFocusTrap` to trap tab focus within `WorkspaceSettingsModal` while open.
+- **ARIA Semantics**:
+  - Container uses `role="dialog"` and `aria-modal="true"`.
+  - Heading linked via `aria-labelledby="workspace-settings-title"`.
+  - Close button has explicit `aria-label`.
+
+---
+
+### 7. Internationalization (i18n) & Fluent FTL Contract
+
+In accordance with project standards and githooks bundle parity verification (`scripts/verify-bundle-parity.py`):
+
+- All user-visible text uses `@fluent/react` (`<Localized id="...">`).
+- New Fluent keys are added symmetrically to both `ui/src/locales/settings.ftl` and `ui/src/locales/settings.id.ftl`:
+  - `settings-workspace-category-title`
+  - `settings-workspace-store-pos`
+  - `settings-workspace-restaurant-pos`
+  - `settings-workspace-kds`
+  - `settings-workspace-inventory`
+  - `settings-workspace-admin-shortcut`
+
+---
+
+### 8. Role-Based Access Control (RBAC) Matrix
 
 | Role | Access Level | In-Workspace Behavior |
 | :--- | :--- | :--- |
@@ -154,6 +196,16 @@ When an Owner or Manager opens settings inside an active workspace (e.g. pressin
 ### Risks & Mitigations
 - **IPC State Parity**: Shared workspace cards must maintain state synchronization across both Tier 1 and Tier 2 views.  
   *Mitigation*: Use existing IPC hooks (`useStoreSettings`, `useReceiptSettings`) and invalidate cache on save.
+
+---
+
+## Verification & Testing Strategy
+
+1. **Unit Tests**:
+   - `WorkspaceSettingsModal.test.tsx`: Test modal render, focus trapping, `Esc` closing, and `Admin Settings ↗` navigation.
+   - `WorkspaceStorePosSettings.test.tsx`: Test form load and save routines for Store POS settings.
+2. **Noise-Dither Test**: Add `.workspace-settings-modal` to `KNOWN_NOISE_SELECTORS` in `ui/src/__tests__/noiseDitherCompliance.test.ts`.
+3. **E2E Playwright**: Update `ui/e2e/new-flows.spec.ts` (E2E-27) to verify opening settings via `F10` in Store POS.
 
 ---
 
