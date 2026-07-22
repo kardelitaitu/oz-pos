@@ -3039,12 +3039,11 @@ mod tests {
             std::thread::spawn(move || {
                 for _ in 0..25 {
                     let conn = Connection::open(&p).unwrap();
-                    if let Ok(Some(raw)) = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY) {
-                        if let Ok(loaded) = serde_json::from_str::<TopologyData>(&raw) {
-                            if !loaded.nodes.is_empty() {
-                                assert!(loaded.nodes[0].id.starts_with("write-"));
-                            }
-                        }
+                    if let Ok(Some(raw)) = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+                        && let Ok(loaded) = serde_json::from_str::<TopologyData>(&raw)
+                        && !loaded.nodes.is_empty()
+                    {
+                        assert!(loaded.nodes[0].id.starts_with("write-"));
                     }
                 }
             })
@@ -3269,7 +3268,7 @@ mod tests {
                     "null_val": null,
                     "bool_val": true,
                     "int_val": 42,
-                    "float_val": 3.14,
+                    "float_val": std::f64::consts::PI,
                     "string_val": "hello",
                     "array_val": [1, "two", false, null],
                     "object_val": {"nested": {"a": 1, "b": [2, 3]}},
@@ -3287,7 +3286,7 @@ mod tests {
         assert!(meta["null_val"].is_null());
         assert_eq!(meta["bool_val"].as_bool(), Some(true));
         assert_eq!(meta["int_val"].as_i64(), Some(42));
-        assert!((meta["float_val"].as_f64().unwrap() - 3.14).abs() < 1e-10);
+        assert!((meta["float_val"].as_f64().unwrap() - std::f64::consts::PI).abs() < 1e-10);
         assert_eq!(meta["string_val"].as_str(), Some("hello"));
         assert_eq!(meta["array_val"].as_array().unwrap().len(), 4);
         assert_eq!(meta["array_val"][0].as_i64(), Some(1));
