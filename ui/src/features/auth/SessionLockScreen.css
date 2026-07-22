@@ -66,6 +66,74 @@
   pointer-events: auto;
 }
 
+/* ── Connection status pills (matches ConnectionStatus.css) ───── */
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  opacity: 1;
+  appearance: none;
+  transition: all var(--duration-200);
+  user-select: none;
+}
+
+.connection-status:hover {
+  background: var(--color-bg-hover, var(--color-bg-surface));
+  border-color: var(--color-border-hover);
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-indicator.checking {
+  background-color: var(--color-warning);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .status-indicator.checking {
+    animation: cs-pulse var(--duration-1500) infinite var(--ease-in-out);
+  }
+}
+
+.status-indicator.online {
+  background-color: var(--color-success);
+  box-shadow: var(--shadow-glow-success);
+}
+
+.status-indicator.offline {
+  background-color: var(--color-danger);
+  box-shadow: var(--shadow-glow-danger);
+}
+
+.connection-label {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.connection-latency {
+  font-family: var(--font-mono);
+  color: var(--color-fg-secondary);
+  margin-left: var(--space-1);
+}
+
+@keyframes cs-pulse {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
 .session-lock-icon {
   color: var(--color-accent, #4f46e5);
   opacity: 0.8;

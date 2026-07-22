@@ -3,11 +3,12 @@ import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
+import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { checkLicenseStatus } from '@/api/license';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import ConnectionStatus from '@/components/ConnectionStatus';
 import './StaffLoginScreen.css';
 
 // ── SVG icons ───────────────────────────────────────────────────────
@@ -126,9 +127,33 @@ export default function StaffLoginScreen() {
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
   const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
 
-  // Read sync server URL from localStorage (set via Sync Settings)
-  const syncUrl = useMemo(() => {
-    try { return localStorage.getItem('retail-sync-server') || ''; } catch { return ''; }
+  const syncStatus = useSyncConnection();
+  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
+  const [authLatency, setAuthLatency] = useState<number | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const start = performance.now();
+        const result = await checkLicenseStatus();
+        if (!mounted) return;
+        if (result.active) {
+          setAuthLatency(Math.round(performance.now() - start));
+          setAuthOnline(true);
+        } else {
+          setAuthLatency(null);
+          setAuthOnline(false);
+        }
+      } catch {
+        if (!mounted) return;
+        setAuthLatency(null);
+        setAuthOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => { mounted = false; clearInterval(id); };
   }, []);
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -606,8 +631,18 @@ export default function StaffLoginScreen() {
         </div>
         <div className="staff-login-footer-right">
           <div className="staff-login-connection-group">
-            <ConnectionStatus label="Auth" url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" />
-            <ConnectionStatus label="Sync" url={syncUrl} />
+            {/* Auth status — via checkLicenseStatus IPC */}
+            <div className="connection-status" title={authOnline === null ? 'Auth: Checking...' : authOnline ? `Auth: Online (${authLatency}ms)` : 'Auth: Offline'}>
+              <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
+              <span className="connection-label">Auth</span>
+              {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
+            </div>
+            {/* Sync status — via useSyncConnection IPC */}
+            <div className="connection-status" title={syncStatus.label}>
+              <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
+              <span className="connection-label">Sync</span>
+              {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
+            </div>
           </div>
         </div>
       </div>

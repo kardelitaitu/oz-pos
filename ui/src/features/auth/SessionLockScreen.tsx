@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import ConnectionStatus from '@/components/ConnectionStatus';
+import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { checkLicenseStatus } from '@/api/license';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -35,9 +36,33 @@ export default function SessionLockScreen({
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
 
-  // Read sync server URL from localStorage (set via Sync Settings)
-  const syncUrl = useMemo(() => {
-    try { return localStorage.getItem('retail-sync-server') || ''; } catch { return ''; }
+  const syncStatus = useSyncConnection();
+  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
+  const [authLatency, setAuthLatency] = useState<number | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const start = performance.now();
+        const result = await checkLicenseStatus();
+        if (!mounted) return;
+        if (result.active) {
+          setAuthLatency(Math.round(performance.now() - start));
+          setAuthOnline(true);
+        } else {
+          setAuthLatency(null);
+          setAuthOnline(false);
+        }
+      } catch {
+        if (!mounted) return;
+        setAuthLatency(null);
+        setAuthOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => { mounted = false; clearInterval(id); };
   }, []);
 
   // Auto-unlock after lockout period
@@ -253,8 +278,18 @@ export default function SessionLockScreen({
 
         {/* ── Connection status indicators ──────── */}
         <div className="session-lock-connection-group">
-          <ConnectionStatus label="Auth" url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" />
-          <ConnectionStatus label="Sync" url={syncUrl} />
+          {/* Auth status — via checkLicenseStatus IPC */}
+          <div className="connection-status" title={authOnline === null ? 'Auth: Checking...' : authOnline ? `Auth: Online (${authLatency}ms)` : 'Auth: Offline'}>
+            <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
+            <span className="connection-label">Auth</span>
+            {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
+          </div>
+          {/* Sync status — via useSyncConnection IPC */}
+          <div className="connection-status" title={syncStatus.label}>
+            <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
+            <span className="connection-label">Sync</span>
+            {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
+          </div>
         </div>
       </div>
     </div>
