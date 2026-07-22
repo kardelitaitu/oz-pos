@@ -29,7 +29,12 @@ pub async fn spawn_redirect_server(new_url: &str) -> String {
         )
     }
 
+    async fn health_handler() -> impl IntoResponse {
+        (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+    }
+
     let app = Router::new()
+        .route("/api/health", get(health_handler))
         .route("/api/sync/push", post(handler))
         .route("/api/sync/pull", post(handler))
         .route("/api/sync/snapshot", get(handler))
@@ -93,7 +98,12 @@ pub async fn spawn_anchor_then_redirect_server(new_url: &str) -> String {
         )
     }
 
+    async fn health_handler() -> impl IntoResponse {
+        (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+    }
+
     let app = Router::new()
+        .route("/api/health", get(health_handler))
         .route("/api/sync/push", post(push_handler))
         .route("/api/sync/pull", post(pull_handler))
         .route("/api/sync/snapshot", get(snapshot_handler))
