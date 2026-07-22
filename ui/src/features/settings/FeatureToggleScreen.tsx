@@ -119,6 +119,11 @@ function getGroupIcon(group: string): React.ReactNode {
 /** Feature flag management screen — groups all 32 feature flags by category with toggle switches and automatic dependency resolution. */
 export default function FeatureToggleScreen() {
   const { l10n } = useLocalization();
+  // Keep a stable ref to l10n so callbacks can read the latest translations
+  // without listing l10n in their deps (which would recreate them every
+  // render and re-fire mount effects). Mirrors LicenseSettings.
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const [features, setFeatures] = useState<FeatureInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -179,11 +184,12 @@ export default function FeatureToggleScreen() {
       const result = await listAllFeatures();
       setFeatures(result.features);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('feature-toggle-error-load'));
+      setError(err instanceof Error ? err.message : l10nRef.current.getString('feature-toggle-error-load'));
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

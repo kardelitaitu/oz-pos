@@ -221,6 +221,13 @@ export default function SettingsPage() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  // Stable refs so the mount loader can read the latest l10n/addToast
+  // without listing them in its deps (which would re-fire the load effect
+  // on every render). Mirrors LicenseSettings.
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const addToastRef = useRef(addToast);
+  addToastRef.current = addToast;
   const { refreshBrandSettings } = useBrand();
   const { theme, toggleTheme } = useTheme();
 
@@ -434,10 +441,10 @@ export default function SettingsPage() {
 
       // Only surface a full-page error when every single API failed.
       if (results.every((r) => r.status === 'rejected')) {
-        setLoadError(l10n.getString('settings-load-failed'));
+        setLoadError(l10nRef.current.getString('settings-load-failed'));
       } else if (results.some((r) => r.status === 'rejected')) {
         // Some APIs failed — page loads partially; warn the user.
-        addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
+        addToastRef.current({ message: l10nRef.current.getString('settings-load-partial'), type: 'error' });
       }
       // Store snapshot of initial loaded values for revert.
       // Use local variables captured from the try block above (not from
@@ -463,7 +470,7 @@ export default function SettingsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, l10n, addToast]);
+  }, [userId]);
 
   useEffect(() => { load(); }, [load]);
 

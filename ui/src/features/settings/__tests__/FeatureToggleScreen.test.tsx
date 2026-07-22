@@ -124,6 +124,23 @@ describe('FeatureToggleScreen', () => {
     expect(screen.getByText(/2 \/ 5 enabled/)).toBeInTheDocument();
   });
 
+  // Regression: the mount loader must not depend on unstable hook objects
+  // (l10n/addToast). If `load` listed `l10n` in its deps it would be
+  // recreated every render and the mount effect would re-fire in a loop,
+  // calling list_all_features repeatedly and never settling. Assert it is
+  // invoked exactly once for the initial load.
+  it('loads features exactly once on mount (no effect re-fire loop)', async () => {
+    mockInvoke.mockResolvedValue({ features: createFeatures() });
+    render(<FeatureToggleScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('POS Core')).toBeInTheDocument();
+    });
+    const loadCalls = mockInvoke.mock.calls.filter(
+      (c) => c[0] === 'list_all_features',
+    );
+    expect(loadCalls).toHaveLength(1);
+  });
+
   it('shows error state when list_all_features fails', async () => {
     mockInvoke.mockRejectedValue(new Error('network error'));
     render(<FeatureToggleScreen />);
