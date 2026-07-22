@@ -1,10 +1,10 @@
 # UI Wiring & Element Audit Plan — OZ-POS Desktop App
 
 - **Audit ID:** 2026-07-23-ui-wiring-audit
-- **Status:** Planning
-- **Scope:** `ui/src/` React/TypeScript front-end used by `apps/desktop-client/` (Tauri Windows app)
-- **Out of scope:** Rust/Tauri command layer, database, API contracts, styling-only issues
-- **Goal:** Verify that buttons, inputs, forms, modals, and interactive elements are correctly wired to their handlers, states, and side-effects; identify inconsistencies, accessibility gaps, and missing test coverage before release.
+- **Status:** Planning — report delivered (see §8)
+- **Scope:** `ui/src/features/settings/` and related Settings UI in the React/TypeScript front-end used by `apps/desktop-client/` (Tauri Windows app)
+- **Out of scope:** Rust/Tauri command layer, database, API contracts, styling-only issues, tablet client, other feature areas
+- **Goal:** Identify every interactive element in Settings screens and verify whether it is correctly wired to its handler, state, and side-effect. Produce a Markdown findings report first; no code fixes until the report is reviewed.
 
 ---
 
@@ -12,20 +12,13 @@
 
 | Metric | Count | Notes |
 |--------|-------|-------|
-| `<Button>` usages | ~163 | Central `ui/src/components/Button.tsx` component |
-| Raw `<button>` usages | ~223 | Mix of legacy markup, shell UI, and test mocks |
-| `onClick=` handlers | ~166 | Spread across features and components |
-| `type="button"` explicit | ~181 | Many raw buttons already explicit |
-| `type="submit"` | ~2 | Login / PIN forms paths |
-| Button unit tests | 1 file | `ui/src/__tests__/Button.test.tsx` — 26 tests, comprehensive for component itself |
+| Settings screens | TBD | `ui/src/features/settings/` + `SettingsPopup`, `SettingsNavTree`, etc. |
+| `<Button>` usages | TBD | To be counted per Settings screen |
+| Raw `<button>` usages | TBD | To be counted per Settings screen |
+| `onClick=` handlers | TBD | To be counted per Settings screen |
+| Inputs / toggles | TBD | To be counted per Settings screen |
 
-**Known hotspots already spotted:**
-
-1. **Hybrid button ecosystem** — design-system `<Button>` coexists with many raw `<button>` elements carrying bespoke class names.
-2. **Test mocks using raw `<button>`** — several test files (`DataManagementScreen.test.tsx`, `DesignSystem.test.tsx`, `CustomReportScreen.test.tsx`, etc.) mock the UI with raw `<button>` instead of the real `<Button>` component, masking wiring regressions.
-3. **Workspace pin button** — `WorkspaceHome.tsx` uses a `<span role="button">` inside a `<button>` to avoid invalid nested `<button>` HTML. Functionally correct but semantically complex and keyboard-focusable only via JS.
-4. **Raw buttons without `type="button"`** — many raw buttons inside forms or dynamic markup may accidentally submit forms if not explicitly typed.
-5. **Mixed `loading` vs `state="processing"`** — `Button` supports both `loading` (deprecated) and `state`; audit should check consistency.
+**Scope clarification:** This audit focuses only on the Settings area. Other feature areas (sales, inventory, reports, etc.) are out of scope.
 
 ---
 
@@ -127,44 +120,32 @@ For each major feature under `ui/src/features/`, fill out a matrix row:
 | inventory/StockCountForm | ... | ... | ... | ... | ... | ... |
 | ... | ... | ... | ... | ... | ... | ... |
 
-### 3.3 Test pass
+### 3.3 Static code audit (no test runs)
 
-Run the UI test suite and capture wiring-related failures:
+Audit the code directly without executing tests:
 
-```bash
-cd ui
-npm run test -- --run
-```
+- Read each Settings screen file.
+- Map every interactive element to its handler.
+- Verify `type` attributes on raw `<button>` elements.
+- Verify `onClick` / `onSubmit` / `onChange` wiring.
+- Verify `disabled` and `loading` state wiring.
+- Note any `ConfirmDialog`, `alert()`, or native `confirm()` usage.
 
-Capture any test failures related to:
-- Button clicks not firing
-- Form submission not happening
-- Modal confirm/cancel not behaving
-- Loading states not reflecting
+### 3.4 Accessibility spot-check (static)
 
-### 3.4 Accessibility spot-check
-
-Run the existing a11y tests and manual keyboard walkthrough:
-
-```bash
-cd ui
-npm run test -- --run a11y
-```
-
-Focus on:
-- Buttons reachable by `Tab`
-- Icon-only buttons have accessible names
-- Disabled buttons are communicated via `aria-disabled` or `disabled`
+While reading the code, check:
+- Icon-only buttons have `aria-label`.
+- Disabled buttons are communicated via `disabled` or `aria-disabled`.
+- Form inputs have associated labels or `aria-label`.
 
 ---
 
 ## 4. Deliverables
 
-1. **Baseline inventory CSV** — every button/element found, its file, line, type, and handler.
-2. **Findings report** — categorized as Critical / High / Medium / Low with file/line references.
-3. **Prioritized fix backlog** — issues grouped by feature and impact.
-4. **Test coverage recommendations** — list of screens that need wiring tests.
-5. **(Optional) Fix PRs** — only if the team decides to move from "plan" to "execute".
+1. **Markdown findings report** — every Settings interactive element, its intended action, wiring status, and any gap.
+2. **Element wiring table** — per-screen inventory with file/line references.
+3. **Prioritized gap list** — elements that need wiring or fixes, grouped by severity.
+4. **(Future) Fix PRs** — only after the report is approved.
 
 ---
 
@@ -172,11 +153,10 @@ Focus on:
 
 | Phase | Duration | Activities |
 |-------|----------|------------|
-| **Phase 1 — Inventory** | 1 session | Run automated searches, produce baseline CSV, categorize Button vs raw button. |
-| **Phase 2 — Critical wiring check** | 1–2 sessions | Payment flow, login/PIN, modals with destructive actions, workspace switching. |
-| **Phase 3 — Feature-by-feature matrix** | 2–3 sessions | Fill the manual review matrix; identify missing `type` attrs, double-submit risks, stale handlers. |
-| **Phase 4 — Test coverage gap analysis** | 1 session | Map each finding to existing/missing tests; recommend new tests. |
-| **Phase 5 — Report & backlog** | 1 session | Write findings report, produce fix backlog, schedule PRs. |
+| **Phase 1 — Inventory** | 1 session | List every Settings screen and every interactive element (button, input, select, toggle, dialog). |
+| **Phase 2 — Per-element wiring audit** | 2–3 sessions | For each element, verify its handler, type, disabled/loading state, and side-effect. |
+| **Phase 3 — Findings report** | 1 session | Produce a Markdown report with all elements, their wiring status, and any gaps. |
+| **Phase 4 — Fix backlog (future)** | TBD | After report review, schedule fixes. Not part of this audit pass. |
 
 ---
 
@@ -190,7 +170,9 @@ Focus on:
 
 ---
 
-## 7. Related documents
+## 8. Related documents
+
+- `docs/specs/_active/2026-07-23-ui-wiring-audit-report.md` — findings report for this audit
 
 - `docs/ui-state-audit-2026-07-20.md` — loading, empty, and error state coverage
 - `docs/specs/_active/2026-07-12-desktop-app-audit.md` — desktop app security/integrity audit
