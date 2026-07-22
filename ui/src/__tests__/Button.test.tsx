@@ -57,6 +57,48 @@ describe('Button', () => {
     expect(btn.className).toContain('btn--lg');
   });
 
+  it('renders icon-only button with modifier class', () => {
+    render(
+      <Button iconOnly aria-label="Close">
+        <span data-testid="icon">×</span>
+      </Button>,
+    );
+    const btn = screen.getByRole('button');
+    expect(btn.className).toContain('btn--icon-only');
+  });
+
+  it('renders unstyled button without variant/size classes', () => {
+    render(
+      <Button unstyled aria-label="Toggle">
+        <span data-testid="icon">☰</span>
+      </Button>,
+    );
+    const btn = screen.getByRole('button');
+    expect(btn.className).not.toContain('btn--primary');
+    expect(btn.className).not.toContain('btn--md');
+    expect(btn.className).not.toContain('btn--ghost');
+    expect(btn.className).toContain('btn--unstyled');
+  });
+
+  it('preserves base button class with unstyled=false by default', () => {
+    render(<Button>Default</Button>);
+    const btn = screen.getByRole('button');
+    expect(btn.className).toContain('btn');
+    expect(btn.className).not.toContain('btn--unstyled');
+  });
+
+  it('applies icon-only class alongside variant and size classes', () => {
+    render(
+      <Button variant="ghost" size="sm" iconOnly aria-label="Close">
+        <span>×</span>
+      </Button>,
+    );
+    const btn = screen.getByRole('button');
+    expect(btn.className).toContain('btn--ghost');
+    expect(btn.className).toContain('btn--sm');
+    expect(btn.className).toContain('btn--icon-only');
+  });
+
   it('disables button and shows spinner when loading', () => {
     render(<Button loading>Loading</Button>);
     const btn = screen.getByRole('button');

@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'unstyled';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 export type ButtonState = 'ready' | 'processing';
 
@@ -25,6 +25,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   /** Optional icon placed before children. */
   icon?: ReactNode;
+  /** Render as an icon-only button (square, equal padding). Requires an visible label or `aria-label`. */
+  iconOnly?: boolean;
+  /** Remove design-system variant/size styling; keep base reset, focus ring, and disabled behaviour. */
+  unstyled?: boolean;
   /** Button text or content. */
   children: ReactNode;
 }
@@ -39,6 +43,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * <Button>Save</Button>
  * <Button variant="danger" size="lg">Delete</Button>
  * <Button variant="ghost" state="processing">Please wait…</Button>
+ * <Button variant="ghost" iconOnly aria-label="Close"><CloseIcon /></Button>
+ * <Button unstyled className="my-custom-toggle" aria-label="Toggle">☰</Button>
  * ```
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -49,6 +55,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       state = 'ready',
       loading,
       icon,
+      iconOnly,
+      unstyled,
       children,
       className,
       disabled,
@@ -60,12 +68,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const isProcessing = state === 'processing' || loading === true;
 
     const classNames = [
-      'btn',
-      `btn--${variant}`,
-      `btn--${size}`,
+      unstyled ? 'btn--unstyled' : 'btn',
+      !unstyled && `btn--${variant}`,
+      !unstyled && `btn--${size}`,
+      iconOnly && 'btn--icon-only',
       className ?? '',
     ]
-      .filter(Boolean)
+      .filter((v): v is string => Boolean(v))
       .join(' ');
 
     return (

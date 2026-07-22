@@ -389,8 +389,11 @@ export default function FeatureToggleScreen() {
             />
           </Localized>
           {searchQuery && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              iconOnly
               className="feature-toggle-search-clear"
               onClick={() => setSearchQuery('')}
               aria-label={l10n.getString('feature-toggle-search-clear-aria')}
@@ -399,7 +402,7 @@ export default function FeatureToggleScreen() {
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
-            </button>
+            </Button>
           )}
         </div>
       )}

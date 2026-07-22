@@ -212,8 +212,11 @@ export function AppearanceSettings({
               />
             </Localized>
             <Localized id="appearance-reset-colour-aria" attrs={{ 'aria-label': true }}>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                iconOnly
                 className="appearance-colour-reset"
                 onClick={() => updateColour(DEFAULT_COLOUR)}
                 aria-label="Reset colour to default"
@@ -223,7 +226,7 @@ export function AppearanceSettings({
                   <polyline points="1 4 1 10 7 10" />
                   <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
                 </svg>
-              </button>
+              </Button>
             </Localized>
           </div>
         </span>
