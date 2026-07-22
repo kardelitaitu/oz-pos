@@ -101,6 +101,10 @@ async function clickTab(label: string) {
   await user.click(tab);
 }
 
+async function confirmImportDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByText('Confirm'));
+}
+
 describe('DataManagement — Import', () => {
   // ═══════════════════════════════════════════════════════════════
   // Import wizard — file selection
@@ -270,6 +274,7 @@ describe('DataManagement — Import', () => {
     await user.click(screen.getByText('Analyse file'));
     await waitFor(() => expect(screen.getByText('Start import')).toBeInTheDocument());
     await user.click(screen.getByText('Start import'));
+    await confirmImportDialog(user);
     await waitFor(() => expect(screen.getByTestId('spinner')).toBeInTheDocument());
   });
 
@@ -285,6 +290,7 @@ describe('DataManagement — Import', () => {
     await user.click(screen.getByText('Analyse file'));
     await waitFor(() => expect(screen.getByText('Start import')).toBeInTheDocument());
     await user.click(screen.getByText('Start import'));
+    await confirmImportDialog(user);
     await waitFor(() => expect(screen.getByText('Import complete')).toBeInTheDocument());
   });
 
@@ -300,6 +306,7 @@ describe('DataManagement — Import', () => {
     await user.click(screen.getByText('Analyse file'));
     await waitFor(() => expect(screen.getByText('Start import')).toBeInTheDocument());
     await user.click(screen.getByText('Start import'));
+    await confirmImportDialog(user);
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
         expect.objectContaining({ message: 'data-mgmt-toast-import-success', type: 'success' }),
@@ -320,6 +327,7 @@ describe('DataManagement — Import', () => {
     await user.click(screen.getByText('Analyse file'));
     await waitFor(() => expect(screen.getByText('Start import')).toBeInTheDocument());
     await user.click(screen.getByText('Start import'));
+    await confirmImportDialog(user);
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
         expect.objectContaining({ message: 'Disk full', type: 'error' }),
@@ -340,6 +348,7 @@ describe('DataManagement — Import', () => {
     await user.click(screen.getByText('Analyse file'));
     await waitFor(() => expect(screen.getByText('Start import')).toBeInTheDocument());
     await user.click(screen.getByText('Start import'));
+    await confirmImportDialog(user);
     await waitFor(() => expect(screen.getByText('New import')).toBeInTheDocument());
     await user.click(screen.getByText('New import'));
     await waitFor(() => expect(screen.getByText('Select a backup file')).toBeInTheDocument());
