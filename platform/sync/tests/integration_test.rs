@@ -390,7 +390,7 @@ async fn api_key_is_sent_in_headers() {
 
 #[cfg_attr(not(feature = "slow-tests"), ignore)]
 #[tokio::test]
-async fn connection_refused_returns_error() {
+async fn connection_refused_returns_ok_with_zero_counts() {
     // Use a port that nothing is listening on.
     let port = 28999;
     let store = setup_store();
@@ -403,19 +403,18 @@ async fn connection_refused_returns_error() {
     let engine = SyncEngine::new(config);
     let result = engine.run_sync_cycle(&store).await;
 
+    // P271: The pre-sync health check returns Ok with zero counts when
+    // the server is unreachable (graceful skip, not an error).
     assert!(
-        result.is_err(),
-        "sync should fail when server is unreachable"
+        result.is_ok(),
+        "sync should gracefully return Ok when server is unreachable (P271 health check)"
     );
-    if let Err(e) = result {
-        let msg = e.to_string();
-        assert!(
-            msg.contains("transport")
-                || msg.contains("Connection refused")
-                || msg.contains("push request failed"),
-            "expected transport error, got: {msg}"
-        );
-    }
+    let rep_result = result.unwrap();
+    assert_eq!(rep_result.pushed, 0, "no items should be pushed");
+    assert_eq!(rep_result.pulled, 0, "no items should be pulled");
+    // Item should remain pending (not synced, not failed).
+    let pending = store.list_pending_offline().unwrap();
+    assert_eq!(pending.len(), 1, "item should remain pending");
 }
 
 #[cfg_attr(not(feature = "slow-tests"), ignore)]
