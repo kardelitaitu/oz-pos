@@ -139,6 +139,60 @@ pub fn init_module_system(
             "sale.completed",
             Box::new(crate::event_handlers::LoyaltyEarnHandler::new(handler_conn)),
         );
+
+        // ── WhatsApp notification handlers (opt-in via feature flag + env vars) ─
+        #[cfg(feature = "whatsapp-notifications")]
+        {
+            use oz_notification::NotificationClient;
+
+            match oz_notification::whatsapp::WhatsAppClient::from_env() {
+                Ok(whatsapp) => {
+                    let client: std::sync::Arc<dyn NotificationClient> =
+                        std::sync::Arc::new(whatsapp);
+
+                    bus.subscribe::<oz_core::events::SaleCompleted>(
+                        "sale.completed",
+                        Box::new(oz_notification::handlers::OrderConfirmationHandler::new(
+                            client.clone(),
+                            std::env::var("WHATSAPP_STORE_PHONE").ok(),
+                        )),
+                    );
+                    bus.subscribe::<oz_core::events::SaleCompleted>(
+                        "sale.completed",
+                        Box::new(oz_notification::handlers::PaymentReceiptHandler::new(
+                            client.clone(),
+                            std::env::var("WHATSAPP_RECEIPT_PHONE")
+                                .unwrap_or_else(|_| "+6280000000000".into()),
+                        )),
+                    );
+                    // Default threshold: alert when ≤ 5 items remaining.
+                    let threshold: i64 = std::env::var("WHATSAPP_STOCK_ALERT_THRESHOLD")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(5);
+                    let manager_phone = std::env::var("WHATSAPP_MANAGER_PHONE")
+                        .unwrap_or_else(|_| "+6280000000000".into());
+                    bus.subscribe::<oz_core::events::StockAdjusted>(
+                        "stock.adjusted",
+                        Box::new(oz_notification::handlers::StockLowAlertHandler::new(
+                            client,
+                            threshold,
+                            manager_phone,
+                        )),
+                    );
+
+                    tracing::info!(
+                        "WhatsApp notification handlers wired (3 handlers on sale.completed + stock.adjusted)"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "WhatsApp notifications compiled in but env vars not set — handlers skipped"
+                    );
+                }
+            }
+        }
     }
 
     info!("module system initialised with event bus handlers");
