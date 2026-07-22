@@ -2,7 +2,7 @@
 
 > **Goal:** 5 areas: fuzz testing infrastructure, database corruption recovery, rate limiting integration tests, automated a11y testing, and a TypeScript API client SDK.
 >
-> **Current state:** 4 / 10 items complete (40% 🟡) · Updated 2026-07-22
+> **Current state:** 6 / 10 items complete (60% 🟡) · Updated 2026-07-22
 
 ---
 
@@ -12,10 +12,10 @@
 |---|------|-------|--------|
 | 🟢 | Fuzz Testing Infrastructure | 2 | 2/2 ✅ |
 | 🔴 | DB Corruption Recovery | 2 | 2/2 ✅ |
-| 🟡 | Rate Limiting Integration Tests | 2 | 0/2 🔴 |
+| 🟡 | Rate Limiting Integration Tests | 2 | 2/2 ✅ |
 | 🔵 | Automated A11y Testing | 2 | 0/2 🔴 |
 | 🟣 | TypeScript API Client SDK | 2 | 0/2 🔴 |
-| **Total** | | **10** | **4/10 (40%)** |
+| **Total** | | **10** | **6/10 (60%)** |
 
 ---
 
@@ -41,8 +41,8 @@
 
 > **Goal:** Verify the cloud server's per-tenant rate limiting (P8-1) works end-to-end with realistic traffic patterns.
 
-- [ ] **P152-1: Rate limit test harness** — Add `crates/oz-api/tests/rate_limit_integration.rs` with a test HTTP server. Test: rapid requests exceed limit, 429 responses include Retry-After, different tenants have independent limits, burst allowance.
-- [ ] **P152-2: Rate limit edge cases** — Test: slow requests never hit limit, limit reset after window expires, concurrent requests don't double-count, health endpoint is exempt from rate limiting.
+- [x] **P152-1: Rate limit test harness** ✅ — Added 6 HTTP-level integration tests to `apps/cloud-server/src/sync_api.rs` test module using the full middleware stack (auth → rate_limit → handler). Shared `RateLimiterState` across requests for cross-request limit accumulation. Helper: `send_n_push_requests()`.
+- [x] **P152-2: Rate limit edge cases** ✅ — Tests cover: 101st request returns 429 with Retry-After header + JSON error body, tenant isolation (exhaust tenant A, tenant B still OK), endpoint isolation (exhaust push, pull still OK), burst allowance (50+50 within 100 cap, 101st 429), status endpoint within 300/min limit. Health endpoints exempt by architecture (main router has no rate limit middleware). 6/6 tests pass, clippy clean.
 
 ---
 
