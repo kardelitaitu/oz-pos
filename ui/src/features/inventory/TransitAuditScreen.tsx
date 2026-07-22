@@ -142,7 +142,7 @@ export default function TransitAuditScreen() {
                 </table>
 
                 <div className="transit-actions">
-                  <button className="reverse-btn" onClick={() => handleReverseTransfer(transfer.id)}>
+                  <button type="button" className="reverse-btn" onClick={() => handleReverseTransfer(transfer.id)}>
                     <Localized id="inv-transit-reverse-btn">
                       <span>Reverse Transfer</span>
                     </Localized>

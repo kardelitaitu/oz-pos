@@ -121,7 +121,7 @@ export default function ThresholdConfigScreen() {
         <Localized id="inv-threshold-title">
           <h2 className="threshold-title">Stock Threshold Configuration</h2>
         </Localized>
-        <button className="shift-btn shift-btn-primary" onClick={handleOpenAddDialog}>
+        <button type="button" className="shift-btn shift-btn-primary" onClick={handleOpenAddDialog}>
           <Localized id="inv-threshold-add-btn">
             <span>+ Add Threshold</span>
           </Localized>
@@ -204,12 +204,12 @@ export default function ThresholdConfigScreen() {
                   </td>
                   <td className="threshold-actions">
                     <Localized id="edit">
-                      <button className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
+                      <button type="button" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
                         <span>Edit</span>
                       </button>
                     </Localized>
                     <Localized id="delete">
-                      <button className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDelete(t.id)}>
+                      <button type="button" className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDelete(t.id)}>
                         <span>Delete</span>
                       </button>
                     </Localized>

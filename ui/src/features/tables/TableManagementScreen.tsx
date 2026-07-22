@@ -34,10 +34,10 @@ export default function TableManagementScreen() {
     <div className="tables" role="region" aria-label={l10n.getString('tables-management-label')}>
       <h1 className="tables-title"><Localized id="tables-title">Table Management</Localized></h1>
       <div className="tables-sections">
-        <button className={`tables-section-btn ${section === null ? 'active' : ''}`}
+        <button type="button" className={`tables-section-btn ${section === null ? 'active' : ''}`}
           onClick={() => setSection(null)}><Localized id="tables-all">All</Localized></button>
         {[...new Set(tables.map(t => t.section).filter(Boolean))].map(s => (
-          <button key={s} className={`tables-section-btn ${section === s ? 'active' : ''}`}
+          <button type="button" key={s} className={`tables-section-btn ${section === s ? 'active' : ''}`}
             onClick={() => setSection(s)}>{s}</button>
         ))}
       </div>
@@ -45,7 +45,7 @@ export default function TableManagementScreen() {
         {tables.map((t) => {
           const shape = t.shape || 'circle';
           return (
-            <button key={t.id} className={`tables-table tables-table--${t.status} tables-table--${shape}`}
+            <button type="button" key={t.id} className={`tables-table tables-table--${t.status} tables-table--${shape}`}
               onClick={() => setSelected(t)}
               onContextMenu={(e) => { e.preventDefault(); statusAction(t); }}
               style={{

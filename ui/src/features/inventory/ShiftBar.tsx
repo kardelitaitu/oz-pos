@@ -151,7 +151,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
                 <span>Active Shift</span>
               </Localized>
             </span>
-            <button className="shift-btn shift-btn-danger" onClick={handleEndShift}>
+            <button type="button" className="shift-btn shift-btn-danger" onClick={handleEndShift}>
               <Localized id="inv-shift-end-btn">
                 <span>End Shift</span>
               </Localized>
@@ -227,7 +227,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               )}
             </ul>
 
-            <button className="shift-btn shift-btn-primary summary-close-btn" onClick={() => setShowSummary(false)}>
+            <button type="button" className="shift-btn shift-btn-primary summary-close-btn" onClick={() => setShowSummary(false)}>
               <Localized id="inv-cancel">
                 <span>Close</span>
               </Localized>

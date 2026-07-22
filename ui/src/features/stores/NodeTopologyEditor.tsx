@@ -799,7 +799,7 @@ export default function NodeTopologyEditor({
           <h3>Palette Tools</h3>
           <p className="tool-rack-desc">Drag or click to spawn topology nodes:</p>
 
-          <button className="tool-card" onClick={() => handleAddNode('store')}>
+          <button type="button" className="tool-card" onClick={() => handleAddNode('store')}>
             <span className="tool-card-icon"><StoreIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Store Node</strong>
@@ -807,7 +807,7 @@ export default function NodeTopologyEditor({
             </div>
           </button>
 
-          <button className="tool-card" onClick={() => handleAddNode('workspace')}>
+          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace')}>
             <span className="tool-card-icon"><PosIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Workspace Node</strong>
@@ -829,7 +829,7 @@ export default function NodeTopologyEditor({
             )}
           </button>
 
-          <button className="tool-card" onClick={() => handleAddNode('hardware')}>
+          <button type="button" className="tool-card" onClick={() => handleAddNode('hardware')}>
             <span className="tool-card-icon"><PrinterIcon size={22} /></span>
             <div className="tool-card-info">
               <strong>+ Hardware Node</strong>

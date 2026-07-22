@@ -221,7 +221,7 @@ export default function TransactionLogScreen() {
                     <td>{locationName}</td>
                     <td>{tx.staff_id}</td>
                     <td>
-                      <button className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
+                      <button type="button" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
                         <Localized id="inv-log-expand-btn">
                           <span>Details</span>
                         </Localized>
