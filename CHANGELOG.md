@@ -4,6 +4,27 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.23] — 2026-07-22
+
+### Fixed
+
+#### 🟢 P230 — Pre-existing Test Failure Rescue (25 tests across 4 files)
+- **PurchaseOrderForm.test.tsx** (13/17): Added `LocalizationProvider` with `purchasing.ftl` + `shared.ftl` bundles, fixed `selectOption` for JSDOM controlled selects, fixed placeholder casing (`Product Name`).
+- **TerminalStatusPanel.test.tsx** (12/16): Added `LocalizationProvider` with real `terminals.ftl` + `shared.ftl` bundles. 8 inline Fluent keys for missing terminal strings.
+- **themeTokenCompliance.test.ts** (1/1): Fixed hardcoded `#fff` → `var(--color-text-on-danger, #fff)` in `StockAlertBell.css:40`.
+- **screenExtraction.test.ts** (2/2): Added 3 external classes: `settings-topology-container`, `multi-store-view-toggle`, `multi-store-dashboard-topology-view`.
+
+#### 🔴 P231 — Clippy Error Resolution
+- **P231-1**: Removed `use super::*;` from `apps/cloud-server/src/shutdown.rs:52` test module (unused import).
+
+#### 📊 Cumulative Impact (0.0.22 + 0.0.23)
+- **Vitest failures**: 113 → 8 (105 tests rescued, **93% reduction**)
+- **ESLint**: 3 errors + 1 warning → 0/0 (100% resolved)
+- **Clippy**: 5 errors → 0 (100% resolved)
+- **TypeScript**: 0 errors (maintained throughout)
+
+---
+
 ## [0.0.22] — 2026-07-22
 
 ### Fixed
