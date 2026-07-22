@@ -219,6 +219,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // LICENSE
   // ═══════════════════════════════════════════════════════════════
 
+  'plugin:updater|check': () => null,
+
   'get_license_status': () => ({ is_valid: true, license_type: 'Pro', expires_at: null, is_active: true, status: 'valid', payload: null, message: null }),
   'check_license_status': () => ({ tenantId: 'tenant-1', status: 'active', tier: 'Pro', active: true, expiresAt: null, graceUntil: null, maxStores: 5 }),
   'get_machine_id': () => 'mock-machine-id-001',
@@ -837,6 +839,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_sync_settings': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
   'update_sync_settings': () => null,
   'sync_run': () => ({ synced: 0, failed: 0, error: null }),
+  'offline_queue_status_summary': () => ({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 }),
+
   'pending_sync_count': () => 0,
   'sync_pull': () => ({ productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: null }),
   'test_sync_connection': () => ({ ok: true, status: 'connected', latencyMs: 12 }),
