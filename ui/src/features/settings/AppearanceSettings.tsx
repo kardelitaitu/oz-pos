@@ -13,7 +13,7 @@ import { Button } from '@/components/Button';
 import { useAppZoom } from '@/contexts/ZoomContext';
 import type { ZoomLevel } from '@/contexts/ZoomContext';
 import { useHardwareAccel } from '@/contexts/HardwareAccelContext';
-import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
+import { useToast, useContextMenu, ContextMenu, ConfirmDialog } from '@/frontend/shared';
 import SettingsSelect from './SettingsSelect';
 import './AppearanceSettings.css';
 
@@ -60,6 +60,7 @@ export function AppearanceSettings({
   const [storeName, setStoreName] = useState('');
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const { zoomLevel, setZoomLevel } = useAppZoom();
   const { enabled: hwAccelEnabled, setEnabled: setHwAccelEnabled } = useHardwareAccel();
   const { addToast } = useToast();
@@ -143,8 +144,12 @@ export function AppearanceSettings({
     }
   }, [refreshBrandSettings, addToast, l10n]);
 
-  const handleResetAll = useCallback(async () => {
-    if (!window.confirm(l10n.getString('appearance-reset-all-confirm'))) return;
+  const handleResetAll = useCallback(() => {
+    setShowResetConfirm(true);
+  }, []);
+
+  const handleConfirmReset = useCallback(async () => {
+    setShowResetConfirm(false);
     setResetting(true);
     try {
       // Reset in-memory state immediately so the UI updates.
@@ -370,6 +375,14 @@ export function AppearanceSettings({
           onClose={cm.close}
         />
       )}
+      <ConfirmDialog
+        open={showResetConfirm}
+        title={l10n.getString('appearance-reset-all-confirm-title')}
+        message={l10n.getString('appearance-reset-all-confirm')}
+        variant="danger"
+        onConfirm={handleConfirmReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
       <div className="card card--padding-md card--shadow-sm">
         <div className="card-header">
           <h2 className="settings-section-title">

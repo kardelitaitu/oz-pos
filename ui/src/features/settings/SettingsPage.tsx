@@ -1699,8 +1699,8 @@ export default function SettingsPage() {
             <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
               <Button
                 variant="primary"
-                loading={saving}
                 onClick={handleSave}
+                loading={saving}
               >
                 {saved && !saving ? (
                   <span className="settings-saved-checkmark">
@@ -1731,7 +1731,8 @@ export default function SettingsPage() {
         />
 
         {/* ── Main content ──────────────────────────────── */}
-        <main className="settings-content" ref={settingsKeyboardRef as React.Ref<HTMLElement>}>
+        <form id="settings-form" className="settings-content" onSubmit={(e) => { e.preventDefault(); handleSave(); }} ref={settingsKeyboardRef as unknown as React.Ref<HTMLFormElement>}>
+          <button type="submit" hidden aria-hidden="true" tabIndex={-1}>Save</button>
           <div className="settings-content-header">
             {/* ── Section breadcrumb header ───────── */}
             {currentNavItem && (
@@ -1765,7 +1766,7 @@ export default function SettingsPage() {
             {renderSection(activeSection)}
           </div>
           </div>
-        </main>
+        </form>
       </div>
 
       {/* ── Footer ──────────────────────────────────────────── */}

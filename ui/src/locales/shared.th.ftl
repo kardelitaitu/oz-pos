@@ -46,6 +46,7 @@ nav-inventory = [TH] Inventory [/TH]
 
 # Common / Global
 cancel = [TH] Cancel [/TH]
+confirm = [TH] Confirm [/TH]
 save = [TH] Save [/TH]
 delete = [TH] Delete [/TH]
 edit = [TH] Edit [/TH]

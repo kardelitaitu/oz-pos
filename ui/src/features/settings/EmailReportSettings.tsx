@@ -158,7 +158,7 @@ export default function EmailReportSettings() {
     } finally {
       setSending(false);
     }
-  }, [addToast]);
+  }, [addToast, l10n]);
 
   const updateField = useCallback(
     <K extends keyof SmtpConfigDto>(key: K, value: SmtpConfigDto[K]) => {
@@ -621,7 +621,7 @@ export default function EmailReportSettings() {
               <Button
                 variant="primary"
                 onClick={saveSchedule}
-                disabled={scheduleSaving}
+                loading={scheduleSaving}
                 aria-label={l10n.getString('settings-schedule-save-btn')}
               >
                 {scheduleSaving ? (
