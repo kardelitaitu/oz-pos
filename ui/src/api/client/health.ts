@@ -1,6 +1,6 @@
 //! Health endpoints — no authentication required.
 
-import { HttpClient } from './client';
+import type { HttpClient } from './client';
 import type { HealthResponse } from './types';
 
 export class HealthClient {

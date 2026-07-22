@@ -1,6 +1,6 @@
 //! Category endpoints — requires JWT authentication.
 
-import { HttpClient } from './client';
+import type { HttpClient } from './client';
 import type { CategoryDto } from './types';
 
 export class CategoriesClient {

@@ -1,6 +1,6 @@
 //! Auth / Token endpoints.
 
-import { HttpClient } from './client';
+import type { HttpClient } from './client';
 import type { CreateTokenRequest, TokenResponse } from './types';
 
 export class AuthClient {

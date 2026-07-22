@@ -1,6 +1,6 @@
 //! Tax rate endpoints — requires JWT authentication.
 
-import { HttpClient } from './client';
+import type { HttpClient } from './client';
 import type { CreateTaxRateRequest } from './types';
 
 export class TaxClient {

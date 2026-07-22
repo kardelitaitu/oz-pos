@@ -3,7 +3,7 @@
 //! These are the offline queue push/pull endpoints used by terminals
 //! to sync data with the cloud server.
 
-import { HttpClient } from './client';
+import type { HttpClient } from './client';
 import type { SyncPullRequest, SyncQueueItem, SyncStatusResponse } from './types';
 
 export class SyncClient {

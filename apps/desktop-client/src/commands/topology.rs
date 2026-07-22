@@ -15,7 +15,9 @@ use crate::state::AppState;
 /// Serialised topology persisted in the settings table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyData {
+    /// Nodes in the topology graph (stores, workspaces, warehouses, hardware).
     pub nodes: Vec<TopologyNodePayload>,
+    /// Wires (edges) connecting nodes in the topology graph.
     pub wires: Vec<TopologyWirePayload>,
 }
 
@@ -75,22 +77,32 @@ where
 /// One node in the topology graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyNodePayload {
+    /// Unique identifier for the node (e.g. "store-1", "ws-main").
     pub id: String,
+    /// Node kind: "store", "workspace", "warehouse", or "hardware".
     #[serde(rename = "type")]
     pub node_type: String,
+    /// Display name shown on the topology card.
     pub name: String,
+    /// Optional subtitle shown below the name.
     #[serde(default)]
     pub subtitle: Option<String>,
+    /// X-coordinate of the node on the canvas.
     #[serde(serialize_with = "ser_f64_finite", deserialize_with = "de_f64_or_null")]
     pub x: f64,
+    /// Y-coordinate of the node on the canvas.
     #[serde(serialize_with = "ser_f64_finite", deserialize_with = "de_f64_or_null")]
     pub y: f64,
+    /// Minimum license tier required to use this node (e.g. "pro").
     #[serde(default)]
     pub tier_requirement: Option<String>,
+    /// Badge text shown on the node card (e.g. "Online", "2 POS").
     #[serde(default)]
     pub telemetry_badge: Option<String>,
+    /// Status indicator: "online", "offline", or "warning".
     #[serde(default)]
     pub telemetry_status: Option<String>,
+    /// Arbitrary JSON metadata (address, region, model, capacity, etc.).
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
 }
@@ -98,16 +110,23 @@ pub struct TopologyNodePayload {
 /// One wire connecting two ports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyWirePayload {
+    /// Unique identifier for this wire.
     pub id: String,
+    /// Node ID that the wire originates from.
     pub from_node_id: String,
+    /// Node ID that the wire connects to.
     pub to_node_id: String,
+    /// Direction: "one-way" (default) or "two-way".
     #[serde(default = "default_direction")]
     #[serde(deserialize_with = "de_direction_or_null")]
     pub direction: String,
+    /// Optional label displayed along the wire.
     #[serde(default)]
     pub label: Option<String>,
+    /// Source port anchor point (e.g. "left", "right", "top", "bottom").
     #[serde(default)]
     pub from_port: Option<String>,
+    /// Target port anchor point (e.g. "left", "right", "top", "bottom").
     #[serde(default)]
     pub to_port: Option<String>,
 }

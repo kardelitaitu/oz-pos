@@ -3,7 +3,7 @@
 //! These are for sending test webhook events to the cloud server.
 //! In production, Stripe/Square send webhooks directly to the server URL.
 
-import { HttpClient } from './client';
+import type { HttpClient } from './client';
 import type { StripeWebhookEvent, SquareWebhookEvent } from './types';
 
 export class WebhooksClient {
