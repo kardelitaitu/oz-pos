@@ -1,45 +1,62 @@
 # Workspace Topology Editor — Implementation Plan
 
-**Status:** Planning
-**Date:** 2026-07-21
+**Status:** Implemented (Phase 1 & 2); Phase 3 pending
+**Date:** 2026-07-21 (updated 2026-07-22)
 **Author:** Architecture Team
 **Tags:** workspace-editor, node-topology, settings, ui, multi-store, inventory-routing
 
 ---
 
+## Implementation Status (2026-07-22)
+
+The editor is **shipped and wired to the backend**. `NodeTopologyEditor` seeds
+real entities (`listWorkspacesScoped`, stores, terminals) on load and its
+`onSave` callback is bridged by `TopologyScreen` to the scoped workspace
+CRUD commands (`create`/`update`/`archive_workspace_instance_scoped`). The
+presets (`PRESET_RETAIL`/`PRESET_RESTAURANT`) remain only as the initial
+fallback state and as the "Load Preset" buttons — they are **not** the sole
+data source.
+
+Topology is **not** embedded inside Stores. Per the IA refactor, the
+`topology` nav entry renders the standalone `TopologyScreen`
+(`ui/src/features/stores/TopologyScreen.tsx`); `MultiStoreDashboardScreen`
+is stores-only and no longer has a cards/topology view-mode toggle.
+
+Phase 3 (polish/edge cases) remains a backlog.
+
 ## Implementation Checklist
 
 ### Phase 1 — Wire to Real Data
-- [ ] 1. Add `sessionToken` prop to `NodeTopologyEditor`
-- [ ] 2. Load real stores on mount → Store nodes
-- [ ] 3. Load real workspace instances → Workspace nodes
-- [ ] 4. Load real inventory locations → Warehouse nodes
-- [ ] 5. Load real terminals → Hardware nodes
-- [ ] 6. Load existing wires from inventory location bindings
-- [ ] 7. "+ Store Node" → create store via API
-- [ ] 8. "+ Workspace Node" → create workspace via API
-- [ ] 9. "+ Warehouse Node" → create inventory location via API
-- [ ] 10. "+ Hardware Node" → register terminal via API
-- [ ] 11. Wire: Store→Workspace (implicit via store_id)
-- [ ] 12. Wire: Workspace→Warehouse → `setWorkspaceInventoryLocations()`
-- [ ] 13. Wire: Workspace→Hardware → bind terminal to workspace
-- [ ] 14. "Apply Topology Changes" → batch commit
-- [ ] 15. Node Inspector drawer → real metadata
-- [ ] 16. Simulation debugger → real `getWorkspaceLocations()`
-- [ ] 17. Load/save canvas node positions (topology_layouts DB table)
-- [ ] 18. Create `topology_layouts` migration SQL
-- [ ] 19. Create `crates/oz-core/src/db/topology.rs` module
-- [ ] 20. Create `apps/desktop-client/src/commands/topology.rs` Tauri commands
-- [ ] 21. Register topology module in `lib.rs`, `db/mod.rs`, `commands/mod.rs`
+- [x] 1. Add `sessionToken` prop to `NodeTopologyEditor`
+- [x] 2. Load real stores on mount → Store nodes
+- [x] 3. Load real workspace instances → Workspace nodes
+- [x] 4. Load real inventory locations → Warehouse nodes
+- [x] 5. Load real terminals → Hardware nodes
+- [x] 6. Load existing wires from inventory location bindings
+- [x] 7. "+ Store Node" → create store via API
+- [x] 8. "+ Workspace Node" → create workspace via API
+- [x] 9. "+ Warehouse Node" → create inventory location via API
+- [x] 10. "+ Hardware Node" → register terminal via API
+- [x] 11. Wire: Store→Workspace (implicit via store_id)
+- [x] 12. Wire: Workspace→Warehouse → `setWorkspaceInventoryLocations()`
+- [x] 13. Wire: Workspace→Hardware → bind terminal to workspace
+- [x] 14. "Apply Topology Changes" → batch commit (via `onSave` → CRUD bridge)
+- [x] 15. Node Inspector drawer → real metadata
+- [x] 16. Simulation debugger → real `getWorkspaceLocations()`
+- [ ] 17. Load/save canvas node positions (topology_layouts DB table) — deferred; positions live in the saved diagram JSON
+- [ ] 18. Create `topology_layouts` migration SQL — deferred (see 17)
+- [ ] 19. Create `crates/oz-core/src/db/topology.rs` module — deferred; reuse workspace_instances + diagram persistence
+- [ ] 20. Create `apps/desktop-client/src/commands/topology.rs` Tauri commands — deferred; existing scoped workspace/inventory commands cover the cases
+- [ ] 21. Register topology module in `lib.rs`, `db/mod.rs`, `commands/mod.rs` — deferred (see 19/20)
 
 ### Phase 2 — Move to Settings
-- [ ] 1. Add `topology` nav item to `NAV_ITEMS` in `SettingsPage.tsx`
-- [ ] 2. Add `topology` to **Management** category in `CATEGORIES`
-- [ ] 3. Add `'topology': 'settings-nav-topology'` to `NAV_L10N_KEYS`
-- [ ] 4. Add `case 'topology':` to `renderSection()` rendering `<NodeTopologyEditor>`
-- [ ] 5. Remove topology toggle from `MultiStoreDashboardScreen.tsx`
-- [ ] 6. Add Fluent l10n keys in all locale `settings.ftl` files
-- [ ] 7. Adjust CSS for settings content area
+- [x] 1. Add `topology` nav item to `NAV_ITEMS` in `SettingsPage.tsx`
+- [x] 2. Add `topology` to **Management** category in `CATEGORIES`
+- [x] 3. Add `'topology': 'settings-nav-topology'` to `NAV_L10N_KEYS`
+- [x] 4. Add `case 'topology':` to `renderSection()` rendering `<TopologyScreen>` (standalone, not inline `NodeTopologyEditor`)
+- [x] 5. Remove topology toggle from `MultiStoreDashboardScreen.tsx`
+- [x] 6. Add Fluent l10n keys in all locale `settings.ftl` files
+- [x] 7. Adjust CSS for settings content area
 
 ### Phase 3 — Polish & Edge Cases
 - [ ] 1. Zoom-to-fit on load and after add/remove
@@ -76,11 +93,7 @@
 
 The Node Topology Editor is a visual canvas-based tool (inspired by node graph interfaces in **Blender**, **Grasshopper**, and **Node-RED**) that allows store owners to visually assemble and wire up their enterprise hierarchy using node cards and directional arrow connections.
 
-Currently a **functional prototype** in `ui/src/features/stores/NodeTopologyEditor.tsx`, it uses hardcoded demo data (`PRESET_RETAIL`, `PRESET_RESTAURANT`) and its `onSave` callback is never wired to the backend. The plan is to:
-
-1. **Wire it to real backend data** — replace every hardcoded node/wire with real entities from the database.
-2. **Move it into Settings** — give it a dedicated nav item in the Settings sidebar.
-3. **Polish for production** — add undo/redo, real telemetry, accessibility, loading states, and error handling.
+Now **implemented and wired to the backend** in `ui/src/features/stores/NodeTopologyEditor.tsx`. It seeds real entities (`listWorkspacesScoped`, stores, terminals) on load; the `PRESET_RETAIL`/`PRESET_RESTAURANT` constants remain only as the initial fallback state and the "Load Preset" buttons. Its `onSave` callback is bridged by `TopologyScreen` to the scoped workspace CRUD commands. The remaining work is Phase 3 polish (see checklist).
 
 ---
 
@@ -90,9 +103,10 @@ Currently a **functional prototype** in `ui/src/features/stores/NodeTopologyEdit
 
 | Component | Status | Purpose |
 |-----------|--------|---------|
-| `ui/src/features/stores/NodeTopologyEditor.tsx` | Prototype | Visual canvas with drag-and-drop nodes, SVG arrow wires, pan/zoom, simulation debugger, license tier enforcement. Uses `PRESET_RETAIL`/`PRESET_RESTAURANT` hardcoded data. |
-| `ui/src/features/stores/NodeTopologyEditor.css` | Prototype | Styling matching the prototype. |
-| `ui/src/features/stores/MultiStoreDashboardScreen.tsx` | Shipping | Has a `viewMode` toggle between `'cards'` and `'topology'` that renders `NodeTopologyEditor` with `currentTier="standard"` — but the component gets no real data. |
+| `ui/src/features/stores/NodeTopologyEditor.tsx` | Shipping | Visual canvas with drag-and-drop nodes, SVG arrow wires, pan/zoom, simulation debugger, license tier enforcement. Seeds real entities on load; `PRESET_RETAIL`/`PRESET_RESTAURANT` are the fallback initial state and "Load Preset" sources. |
+| `ui/src/features/stores/NodeTopologyEditor.css` | Shipping | Styling for the editor canvas + inspector. |
+| `ui/src/features/stores/TopologyScreen.tsx` | Shipping | Standalone topology screen (the `topology` nav entry). Owns the `onSave` CRUD bridge to scoped workspace commands. |
+| `ui/src/features/stores/MultiStoreDashboardScreen.tsx` | Shipping | Stores-only dashboard (stat cards + store cards). No topology toggle — topology lives in `TopologyScreen`. |
 
 ### Backend (Production-Ready)
 
