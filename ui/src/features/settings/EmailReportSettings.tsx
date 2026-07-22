@@ -78,7 +78,10 @@ export default function EmailReportSettings() {
   const loadSchedule = useCallback(async () => {
     try {
       const sched = await getReportSchedule();
-      setSchedule(sched);
+      // getReportSchedule returns null when no schedule exists yet
+      // (Tauri IPC resolves with null for unset data). Guard against
+      // overwriting the initial default values with null.
+      if (sched) setSchedule(sched);
     } catch {
       // Use defaults
     } finally {
