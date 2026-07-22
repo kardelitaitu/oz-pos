@@ -20,6 +20,7 @@ settings-nav-license = Lisensi
 settings-nav-exchange = Nilai Tukar
 settings-nav-promotions = Promosi
 settings-nav-topology = Topologi
+settings-nav-email = Laporan Email
 settings-category-operations = Operasional
 settings-category-system = Sistem
 settings-category-management = Manajemen
@@ -27,6 +28,7 @@ settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
 settings-sidebar-collapse-all-aria = Tutup semua kategori
+settings-sidebar-search-aria = Cari pengaturan
 settings-sidebar-search-clear-aria =
     .aria-label = Hapus pencarian
 settings-sidebar-no-results = Tidak ada bagian yang cocok
@@ -808,3 +810,21 @@ settings-schedule-recipients = Penerima
 settings-schedule-add-recipient = + Tambah Penerima
 settings-schedule-save-btn = Simpan Jadwal
 settings-email-schedule-saved = Jadwal laporan tersimpan
+
+# ── Report type labels for schedule ──
+settings-schedule-report-type-daily-revenue = Pendapatan Harian
+settings-schedule-report-type-weekly-revenue = Pendapatan Mingguan
+settings-schedule-report-type-monthly-revenue = Pendapatan Bulanan
+settings-schedule-report-type-top-products = Produk Terlaris
+settings-schedule-report-type-hourly-heatmap = Peta Panas Per Jam
+settings-schedule-report-type-category-breakdown = Rincian Kategori
+settings-schedule-report-type-low-stock-alerts = Peringatan Stok Rendah
+
+# ── Schedule recipient aria labels ──
+settings-schedule-recipient-aria = Penerima { $number }
+settings-schedule-recipient-remove-aria = Hapus penerima { $number }
+settings-schedule-recipient-add-aria = Tambah penerima
+
+# ── Email test/schedule error fallbacks ──
+settings-email-test-send-failed = Gagal mengirim email uji coba
+settings-email-schedule-save-failed = Gagal menyimpan jadwal
