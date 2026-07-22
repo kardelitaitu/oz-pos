@@ -6,6 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -37,11 +38,11 @@ const fmt = (minor: number, currency = 'USD') =>
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { currency } = useCurrency();
   const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const currency = 'USD';
 
   // ── Modals ────────────────────────────────────────────────────────
   const [showOpenModal, setShowOpenModal] = useState(false);

@@ -20,6 +20,10 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'IDR', setCurrency: vi.fn(), loading: false }),
+}));
+
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
 import { listShifts, getActiveShift, getShiftReport } from '@/api/shifts';
 

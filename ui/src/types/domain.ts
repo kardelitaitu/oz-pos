@@ -115,7 +115,12 @@ export const formatMoney = (
   };
   const exp = known[m.currency] ?? 2;
   const major = m.minor_units / 10 ** exp;
-  // USD → symbol ($), IDR → code (IDR)
-  const prefix = m.currency === 'USD' ? '$' : m.currency;
+  // Known currency → symbol mapping
+  const symbols: Record<string, string> = {
+    USD: '$', IDR: 'Rp', EUR: '€', GBP: '£', JPY: '¥', KRW: '₩',
+    SGD: 'S$', MYR: 'RM', PHP: '₱', VND: '₫', THB: '฿', CNY: '¥',
+    AUD: 'A$', CAD: 'C$', HKD: 'HK$', TWD: 'NT$', INR: '₹',
+  };
+  const prefix = symbols[m.currency] ?? m.currency;
   return `${prefix} ${fmt.format(major)}`;
 };
