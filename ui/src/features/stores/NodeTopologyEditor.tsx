@@ -1104,9 +1104,7 @@ export default function NodeTopologyEditor({
               {selectedNode.type === 'warehouse' && (
                 <div className="inspector-section">
                   <h4>Warehouse Settings</h4>
-                  <label className="inspector-checkbox">
-                    <input type="checkbox" defaultChecked /> Require Manager PIN for Stock Adjustments
-                  </label>
+                  <p className="inspector-hint">Warehouse behaviour is configured in Inventory settings.</p>
                 </div>
               )}
 
@@ -1134,9 +1132,6 @@ export default function NodeTopologyEditor({
                   {selectedNode.metadata?.['persisted'] === true && (
                     <p className="inspector-hint">Type is fixed after a workspace is saved.</p>
                   )}
-                  <label className="inspector-checkbox">
-                    <input type="checkbox" defaultChecked /> Allow Cashiers to Void Items
-                  </label>
                 </div>
               )}
             </div>
