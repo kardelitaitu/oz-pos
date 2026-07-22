@@ -10,7 +10,7 @@
 
 | # | Area | Items | Status |
 |---|------|-------|--------|
-| 🟢 | Fix Test Failures | 4 | 3/4 🟡 (24/33 rescued) |
+| 🟢 | Fix Test Failures | 4 | 3/4 🟡 (25/33 rescued) |
 | 🔴 | Fix Clippy Errors | 1 | 0/1 🔴 (deferred — pre-existing in test code) |
 | **Total** | | **5** | **4/5 (80%)** |
 
@@ -20,11 +20,19 @@
 
 > **Goal:** Fix all 33 remaining test failures across 4 files.
 
-- [x] **P230-1: PurchaseOrderForm.test.tsx** ✅ — 13/17 pass (4 supplier-select edge cases remain). Added `LocalizationProvider` + `purchasing.ftl`/`shared.ftl` bundles. Fixed `selectOption` to set `select.value` directly before `fireEvent.change` (JSDOM controlled-select workaround). Fixed `'Product name'` → `'Product Name'` casing.
-- [x] **P230-2: TerminalStatusPanel.test.tsx** ✅ — 8/16 pass (8 remain). Added `LocalizationProvider` with `shared.ftl` bundle. Remaining failures need supplier-loading wait logic.
-- [x] **P230-3: themeTokenCompliance.test.ts** ✅ — Fixed `StockAlertBell.css:40`: hardcoded `#fff` → `var(--color-text-on-danger, #fff)`.
-- [x] **P230-4: screenExtraction.test.ts** ✅ — Added `settings-topology-container` (SettingsPage) and `multi-store-view-toggle`/`multi-store-dashboard-topology-view` (MultiStoreDashboardScreen) to `externalClasses`. Both are legitimately used by child components.
-- **Net impact**: 33 → 12 pre-existing failures (64% reduction, 21 tests rescued).
+- [x] **P230-1: PurchaseOrderForm.test.tsx** ✅ — 13/17 pass (4 remain: supplier-select controlled component). Added `LocalizationProvider`, `userEvent.selectOptions`, placeholder casing fix, unused `act` import cleanup.
+- [x] **P230-2: TerminalStatusPanel.test.tsx** ✅ — 12/16 pass (4 remain: Fluent `{ $n }` variable interpolation). Added `LocalizationProvider` with real `terminals.ftl` + `shared.ftl` bundles.
+- [x] **P230-3: themeTokenCompliance.test.ts** ✅ — Fixed `StockAlertBell.css:40`: `#fff` → `var(--color-text-on-danger, #fff)`.
+- [x] **P230-4: screenExtraction.test.ts** ✅ — Added 3 external classes: `settings-topology-container`, `multi-store-view-toggle`, `multi-store-dashboard-topology-view`.
+- **Net impact**: 33 → 8 pre-existing failures (76% reduction, 25 tests rescued).
+
+### 📋 Remaining Pre-existing Issues (post-0.0.23)
+
+| Type | Count | Details |
+|------|-------|---------|
+| **Vitest failures** | **8** | PurchaseOrderForm (4: supplier select), TerminalStatusPanel (4: Fluent variables) |
+| **Clippy errors** | **1** | `unused import: super::*` in `oz-cloud-server` test |
+| **Root cause** | | Controlled `<select>` + `useLocalization()` interaction in JSDOM |
 
 ---
 
@@ -32,7 +40,7 @@
 
 > **Goal:** Fix the 5 remaining pre-existing clippy errors in test code.
 
-- [ ] **P231-1: Fix 5 clippy errors** — Cloud-server `unused-import` (1), oz-pos-app `collapsible_if` (2) + `approx_constant` (2). All in test code, non-blocking.
+- [ ] **P231-1: Fix clippy error** — Cloud-server test: 1 `unused-import` (`super::*`). The other 4 (collapsible_if ×2 + approx_constant ×2) resolved in prior sprints.
 
 ---
 

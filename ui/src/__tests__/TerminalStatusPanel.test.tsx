@@ -5,9 +5,11 @@ import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import TerminalStatusPanel from '@/features/stores/TerminalStatusPanel';
 import type { TerminalDto } from '@/api/terminals';
 import sharedFtl from '@/locales/shared.ftl?raw';
+import terminalsFtl from '@/locales/terminals.ftl?raw';
 
 const bundle = new FluentBundle('en-US');
 bundle.addResource(new FluentResource(sharedFtl));
+bundle.addResource(new FluentResource(terminalsFtl));
 const l10n = new ReactLocalization([bundle]);
 
 const { mockListTerminals } = vi.hoisted(() => ({

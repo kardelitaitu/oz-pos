@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, fireEvent, render } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import poFtl from '@/locales/purchasing.ftl?raw';
@@ -46,10 +47,9 @@ function clickButton(name: string | RegExp) {
   fireEvent.click(screen.getByRole('button', { name }));
 }
 
-function selectOption(_label: string | RegExp, value: string) {
-  const select = screen.getByRole('combobox') as HTMLSelectElement;
-  select.value = value;
-  fireEvent.change(select);
+async function selectOption(_label: string | RegExp, value: string) {
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox'), value);
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ describe('PurchaseOrderForm', () => {
   it('button enables when both PO number and supplier are filled', async () => {
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
     fillField('PO-001', 'PO-001');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     expect(screen.getByRole('button', { name: /create po/i })).toBeEnabled();
   });
 
@@ -130,7 +130,7 @@ describe('PurchaseOrderForm', () => {
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     fillField('PO-001', 'PO-001');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     // Leave the default empty SKU line.
     clickButton(/create po/i);
 
@@ -218,7 +218,7 @@ describe('PurchaseOrderForm', () => {
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={onSaved} />);
 
     fillField('PO-001', 'PO-001');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     fillField('SKU', 'SKU-001');
     fireEvent.change(screen.getByPlaceholderText('Product Name'), { target: { value: 'Test Product' } });
 
@@ -246,7 +246,7 @@ describe('PurchaseOrderForm', () => {
     renderForm(<PurchaseOrderForm editingId={null} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     fillField('PO-001', 'PO-FAIL');
-    selectOption(/supplier/i, 'sup-1');
+    await selectOption(/supplier/i, 'sup-1');
     fillField('SKU', 'SKU-X');
 
     clickButton(/create po/i);
