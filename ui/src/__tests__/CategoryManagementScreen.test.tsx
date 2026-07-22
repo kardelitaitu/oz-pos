@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import CategoryManagementScreen from '@/features/categories/CategoryManagementScreen';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import settingsFtl from '@/locales/settings.ftl?raw';
@@ -33,7 +34,9 @@ const l10n = new ReactLocalization([bundle]);
 function renderScreen() {
   return render(
     <LocalizationProvider l10n={l10n}>
-      <CategoryManagementScreen />
+      <ToastProvider>
+        <CategoryManagementScreen />
+      </ToastProvider>
     </LocalizationProvider>,
   );
 }
