@@ -51,10 +51,36 @@ export interface TopologyWireData {
   toPort?: PortName;
 }
 
+export interface WorkspaceInstanceSeed {
+  /** Instance id from workspace_instances — becomes the node id. */
+  instanceId: string;
+  /** Workspace type key (store-pos, restaurant-pos, kds, warehouse). */
+  typeKey: string;
+  name: string;
+  subtitle?: string;
+  colour?: string;
+}
+
 export interface NodeTopologyEditorProps {
   currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise';
   onSave?: (nodes: TopologyNodeData[], wires: TopologyWireData[]) => void;
+  /**
+   * Real workspace instances to seed the canvas with. When provided, the
+   * editor renders one workspace node per instance (positions restored from
+   * the saved topology diagram when available) instead of the demo preset.
+   * This makes the canvas reflect the actual `workspace_instances` table so
+   * the parent's onSave diff can create / update / archive correctly.
+   */
+  workspaceInstances?: WorkspaceInstanceSeed[];
 }
+
+/** Valid workspace type keys selectable when creating a workspace node. */
+export const WORKSPACE_TYPE_OPTIONS: { key: string; label: string }[] = [
+  { key: 'store-pos', label: 'Retail POS' },
+  { key: 'restaurant-pos', label: 'Restaurant POS' },
+  { key: 'kds', label: 'Kitchen Display (KDS)' },
+  { key: 'warehouse', label: 'Warehouse' },
+];
 
 // ── Presets ────────────────────────────────────────────────────────
 
@@ -122,6 +148,7 @@ type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
+  workspaceInstances,
 }: NodeTopologyEditorProps) {
   const { addToast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -168,22 +195,76 @@ export default function NodeTopologyEditor({
     let cancelled = false;
     loadTopology()
       .then((data) => {
+        // Build a lookup of saved node positions/metadata (the diagram layer).
+        const savedById = new Map<string, TopologyNodeData>();
+        if (data && data.nodes) {
+          for (const n of data.nodes) {
+            const node: TopologyNodeData = {
+              id: n.id,
+              type: n.type as NodeType,
+              name: n.name,
+              x: n.x,
+              y: n.y,
+            };
+            if (n.subtitle !== undefined) node.subtitle = n.subtitle;
+            if (n.tier_requirement !== undefined) node.tierRequirement = n.tier_requirement as 'pro' | 'enterprise';
+            if (n.telemetry_badge !== undefined) node.telemetryBadge = n.telemetry_badge;
+            if (n.telemetry_status !== undefined) node.telemetryStatus = n.telemetry_status as 'online' | 'warning' | 'offline';
+            if (n.metadata !== undefined) node.metadata = n.metadata;
+            savedById.set(n.id, node);
+          }
+        }
+
+        // When real workspace instances are supplied, they are authoritative
+        // for which workspace nodes exist. Restore positions from the saved
+        // diagram, but never resurrect a workspace node that no longer maps
+        // to a live instance (that would undo an archive). Non-workspace
+        // nodes (store/warehouse/hardware) still come from the saved diagram.
+        if (workspaceInstances) {
+          if (cancelled) return;
+          const wsNodes: TopologyNodeData[] = workspaceInstances.map((inst, i) => {
+            const saved = savedById.get(inst.instanceId);
+            const node: TopologyNodeData = {
+              id: inst.instanceId,
+              type: 'workspace',
+              name: inst.name,
+              subtitle: inst.subtitle ?? saved?.subtitle ?? '',
+              x: saved?.x ?? snap(340),
+              y: saved?.y ?? snap(80 + i * 140),
+              telemetryBadge: saved?.telemetryBadge ?? 'Active',
+              telemetryStatus: saved?.telemetryStatus ?? 'online',
+              metadata: { ...(saved?.metadata ?? {}), typeKey: inst.typeKey, persisted: true },
+            };
+            return node;
+          });
+          // Keep any saved non-workspace nodes (diagram-only in this pass).
+          const otherNodes = [...savedById.values()].filter((n) => n.type !== 'workspace');
+          const mergedNodes = [...otherNodes, ...wsNodes];
+          const validIds = new Set(mergedNodes.map((n) => n.id));
+          const loadedWires: TopologyWireData[] = (data?.wires ?? [])
+            .filter((w) => validIds.has(w.from_node_id) && validIds.has(w.to_node_id))
+            .map((w) => {
+              const wire: TopologyWireData = {
+                id: w.id,
+                fromNodeId: w.from_node_id,
+                toNodeId: w.to_node_id,
+                direction: w.direction as WireDirection,
+              };
+              if (w.label !== undefined) wire.label = w.label;
+              if (w.from_port !== undefined) wire.fromPort = w.from_port as PortName;
+              if (w.to_port !== undefined) wire.toPort = w.to_port as PortName;
+              return wire;
+            });
+          setNodes(mergedNodes);
+          setWires(loadedWires);
+          isDirtyRef.current = false;
+          return;
+        }
+
+        // No real instances supplied — legacy/demo behaviour: use the saved
+        // diagram verbatim, or fall back to the retail preset.
         if (cancelled || !data || !data.nodes || data.nodes.length === 0) return;
-        const loadedNodes: TopologyNodeData[] = data.nodes.map((n) => {
-          const node: TopologyNodeData = {
-            id: n.id,
-            type: n.type as NodeType,
-            name: n.name,
-            x: n.x,
-            y: n.y,
-          };
-          if (n.subtitle !== undefined) node.subtitle = n.subtitle;
-          if (n.tier_requirement !== undefined) node.tierRequirement = n.tier_requirement as 'pro' | 'enterprise';
-          if (n.telemetry_badge !== undefined) node.telemetryBadge = n.telemetry_badge;
-          if (n.telemetry_status !== undefined) node.telemetryStatus = n.telemetry_status as 'online' | 'warning' | 'offline';
-          if (n.metadata !== undefined) node.metadata = n.metadata;
-          return node;
-        });
+        setNodes([...savedById.values()]);
         const loadedWires: TopologyWireData[] = data.wires.map((w) => {
           const wire: TopologyWireData = {
             id: w.id,
@@ -196,7 +277,6 @@ export default function NodeTopologyEditor({
           if (w.to_port !== undefined) wire.toPort = w.to_port as PortName;
           return wire;
         });
-        setNodes(loadedNodes);
         setWires(loadedWires);
         isDirtyRef.current = false;
       })
@@ -213,7 +293,7 @@ export default function NodeTopologyEditor({
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [workspaceInstances]);
 
   const pushHistory = useCallback(() => {
     if (undoInProgressRef.current) return;
@@ -492,6 +572,10 @@ export default function NodeTopologyEditor({
       y: snap(150 + Math.random() * 100),
       telemetryBadge: 'Ready',
       telemetryStatus: 'online',
+      // New workspace nodes default to the retail POS type until the user
+      // picks another in the inspector. `persisted: false` marks it as not
+      // yet backed by a workspace_instances row so onSave will create it.
+      ...(type === 'workspace' ? { metadata: { typeKey: 'store-pos', persisted: false } } : {}),
     };
 
     setNodes((prev) => [...prev, newNode]);
@@ -1028,7 +1112,28 @@ export default function NodeTopologyEditor({
 
               {selectedNode.type === 'workspace' && (
                 <div className="inspector-section">
-                  <h4>Workspace Access</h4>
+                  <h4>Workspace Type</h4>
+                  <label className="inspector-field">
+                    <span>Register Type</span>
+                    <select
+                      value={(selectedNode.metadata?.['typeKey'] as string) ?? 'store-pos'}
+                      disabled={selectedNode.metadata?.['persisted'] === true}
+                      onChange={(e) => {
+                        const typeKey = e.target.value;
+                        setNodes((prev) => prev.map((n) => (n.id === selectedNode.id
+                          ? { ...n, metadata: { ...(n.metadata ?? {}), typeKey } }
+                          : n)));
+                      }}
+                      aria-label="Workspace register type"
+                    >
+                      {WORKSPACE_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.key} value={opt.key}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedNode.metadata?.['persisted'] === true && (
+                    <p className="inspector-hint">Type is fixed after a workspace is saved.</p>
+                  )}
                   <label className="inspector-checkbox">
                     <input type="checkbox" defaultChecked /> Allow Cashiers to Void Items
                   </label>

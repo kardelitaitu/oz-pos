@@ -7,6 +7,7 @@ members = [
     "crates/oz-lua",
     "crates/oz-plugin",
     "crates/oz-security",
+    "crates/oz-notification",
     "crates/oz-payment",
     "crates/oz-reporting",
     "crates/oz-logging",
@@ -32,7 +33,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.18"
+version = "0.0.19"
 edition = "2024"
 rust-version = "1.88"   # axum/tower-http deps (time 0.3.47+) require ≥ 1.88
 license = "SEE LICENSE IN LICENSE"
@@ -49,6 +50,7 @@ oz-hal = { path = "crates/oz-hal" }
 oz-lua = { path = "crates/oz-lua" }
 oz-plugin = { path = "crates/oz-plugin" }
 oz-security = { path = "crates/oz-security" }
+oz-notification = { path = "crates/oz-notification" }
 oz-payment = { path = "crates/oz-payment" }
 oz-reporting = { path = "crates/oz-reporting" }
 oz-logging = { path = "crates/oz-logging" }

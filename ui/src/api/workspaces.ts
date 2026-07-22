@@ -98,6 +98,36 @@ export async function createWorkspaceInstanceScoped(
   return loggedInvoke<WorkspaceDto>('create_workspace_instance_scoped', { sessionToken, req });
 }
 
+/** Editable fields of a workspace instance. `type_key` and `store_id` are immutable. */
+export interface UpdateInstanceFields {
+  name: string;
+  description?: string;
+  colour?: string;
+}
+
+/** Update a workspace instance's name/description/colour (admin). ADR #7. */
+export async function updateWorkspaceInstanceScoped(
+  sessionToken: string,
+  instanceId: string,
+  fields: UpdateInstanceFields,
+): Promise<void> {
+  return loggedInvoke<void>('update_workspace_instance_scoped', {
+    sessionToken,
+    instanceId,
+    name: fields.name,
+    description: fields.description ?? null,
+    colour: fields.colour ?? null,
+  });
+}
+
+/** Archive (soft-delete) a workspace instance (admin). ADR #7. */
+export async function archiveWorkspaceInstanceScoped(
+  sessionToken: string,
+  instanceId: string,
+): Promise<void> {
+  return loggedInvoke<void>('archive_workspace_instance_scoped', { sessionToken, instanceId });
+}
+
 /** List screens for a workspace type from the store-scoped database. ADR #7. */
 export async function listWorkspaceScreensScoped(
   sessionToken: string,

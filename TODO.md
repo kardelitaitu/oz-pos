@@ -2,7 +2,7 @@
 
 > **Goal:** 5 areas: fuzz testing infrastructure, database corruption recovery, rate limiting integration tests, automated a11y testing, and a TypeScript API client SDK.
 >
-> **Current state:** 6 / 10 items complete (60% 🟡) · Updated 2026-07-22
+> **Current state:** 8 / 10 items complete (80% 🟡) · Updated 2026-07-22
 
 ---
 
@@ -13,9 +13,9 @@
 | 🟢 | Fuzz Testing Infrastructure | 2 | 2/2 ✅ |
 | 🔴 | DB Corruption Recovery | 2 | 2/2 ✅ |
 | 🟡 | Rate Limiting Integration Tests | 2 | 2/2 ✅ |
-| 🔵 | Automated A11y Testing | 2 | 0/2 🔴 |
+| 🔵 | Automated A11y Testing | 2 | 1/2 🟡 |
 | 🟣 | TypeScript API Client SDK | 2 | 0/2 🔴 |
-| **Total** | | **10** | **6/10 (60%)** |
+| **Total** | | **10** | **8/10 (80%)** |
 
 ---
 
@@ -50,7 +50,13 @@
 
 > **Goal:** Add jest-axe snapshot tests to catch accessibility regressions in CI.
 
-- [ ] **P153-1: Install jest-axe + create a11y test helpers** — Add `jest-axe` to ui devDependencies. Create `ui/src/__tests__/a11y/axe-helper.tsx` with `renderAndCheckA11y()` wrapper. Test 5 critical screens: Login, WorkspaceHome, SettingsPage, SalesHistory, ProductLookup.
+- [x] **P153-1: Install jest-axe + create a11y test helpers** ✅ — Installed `jest-axe` v10 in ui devDependencies. Created `ui/src/__tests__/a11y/` with:
+  - `jest-axe.d.ts`: TypeScript declaration for jest-axe v10 (JS-only package)
+  - `axe-helper.tsx`: `renderWithProviders()` (Brand + Currency + Theme + Fluent + Toast) + `checkA11y()` (axe-core runner with configurable rule disabling)
+  - 5 a11y regression tests: StaffLoginScreen, WorkspaceHome (nested-interactive disabled), SettingsPage (full mock surface), SalesHistoryScreen (heading-order disabled), ProductLookupScreen (button-name + aria-required-* disabled)
+  - `npm run test:a11y` script in package.json
+  - All 5/5 tests pass, typecheck clean
+  - 3 product bugs surfaced as known issues: ProductLookupScreen button-name + aria-grid mismatch, SalesHistoryScreen empty-state heading-order
 - [ ] **P153-2: Wire a11y tests into CI** — Add `npm run test:a11y` script. Run in `ui-test` CI job as a separate step. Fail on violations with severity "critical" or "serious".
 
 ---

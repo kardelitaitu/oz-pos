@@ -1,0 +1,25 @@
+[package]
+name = "oz-notification"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "WhatsApp Cloud API notification client for OZ-POS — template messaging, media support, webhook verification, and mock driver for testing."
+
+[dependencies]
+oz-core = { workspace = true }
+foundation = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = "0.4"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+wiremock = "0.6.5"

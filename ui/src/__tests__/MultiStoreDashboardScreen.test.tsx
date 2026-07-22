@@ -25,6 +25,53 @@ vi.mock('@/api/terminals', () => ({
   listTerminals: () => mockListTerminals(),
 }));
 
+// Topology / workspace integration mocks (topology view is not exercised
+// by these tests, but the component imports these on mount).
+vi.mock('@/api/license', () => ({
+  checkLicenseStatus: () => Promise.resolve({ tier: 'standard' }),
+}));
+
+const mockListWorkspacesScoped = vi.fn();
+const mockCreateWorkspace = vi.fn();
+const mockUpdateWorkspace = vi.fn();
+const mockArchiveWorkspace = vi.fn();
+
+vi.mock('@/api/workspaces', () => ({
+  listWorkspacesScoped: (...args: unknown[]) => mockListWorkspacesScoped(...args),
+  createWorkspaceInstanceScoped: (...args: unknown[]) => mockCreateWorkspace(...args),
+  updateWorkspaceInstanceScoped: (...args: unknown[]) => mockUpdateWorkspace(...args),
+  archiveWorkspaceInstanceScoped: (...args: unknown[]) => mockArchiveWorkspace(...args),
+}));
+
+const mockSaveTopology = vi.fn();
+
+vi.mock('@/api/topology', () => ({
+  saveTopology: (...args: unknown[]) => mockSaveTopology(...args),
+  loadTopology: () => Promise.resolve(null),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'test-session-token' }),
+}));
+
+const mockAddToast = vi.fn();
+vi.mock('@/frontend/shared/Toast', () => ({
+  useToast: () => ({ addToast: mockAddToast }),
+}));
+
+// Capture the props (onSave + seed) the dashboard passes to the editor so
+// tests can drive the save-diff logic without the real canvas.
+let capturedEditorProps: {
+  onSave?: (nodes: unknown[], wires: unknown[]) => void;
+  workspaceInstances?: unknown[];
+} = {};
+vi.mock('@/features/stores/NodeTopologyEditor', () => ({
+  default: (props: { onSave?: (n: unknown[], w: unknown[]) => void; workspaceInstances?: unknown[] }) => {
+    capturedEditorProps = props;
+    return null;
+  },
+}));
+
 vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
     l10n: { getString: (id: string) => id },
@@ -93,8 +140,15 @@ const sampleTerminals: TerminalDto[] = [
 
 describe('MultiStoreDashboardScreen', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    capturedEditorProps = {};
     mockListStores.mockResolvedValue(sampleStores);
     mockListTerminals.mockResolvedValue(sampleTerminals);
+    mockListWorkspacesScoped.mockResolvedValue([]);
+    mockCreateWorkspace.mockResolvedValue(undefined);
+    mockUpdateWorkspace.mockResolvedValue(undefined);
+    mockArchiveWorkspace.mockResolvedValue(undefined);
+    mockSaveTopology.mockResolvedValue(undefined);
   });
 
   // ── Loading state ─────────────────────────────────────────────
@@ -117,7 +171,7 @@ describe('MultiStoreDashboardScreen', () => {
     render(<MultiStoreDashboardScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load data')).toBeInTheDocument();
+      expect(screen.getByText('multi-store-error-load')).toBeInTheDocument();
     });
 
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
@@ -129,7 +183,7 @@ describe('MultiStoreDashboardScreen', () => {
     render(<MultiStoreDashboardScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load data')).toBeInTheDocument();
+      expect(screen.getByText('multi-store-error-load')).toBeInTheDocument();
     });
 
     // On retry, resolve successfully.
@@ -169,5 +223,103 @@ describe('MultiStoreDashboardScreen', () => {
 
     // Both store names visible
     expect(screen.getByText('Downtown')).toBeInTheDocument();
+  });
+
+  // ── Topology → workspace CRUD bridge ──────────────────────────
+  //
+  // The dashboard passes an onSave handler to NodeTopologyEditor that
+  // diffs canvas workspace nodes against the loaded workspace_instances
+  // and calls create / update / archive accordingly.
+
+  const loadedInstances = [
+    {
+      instance_id: 'ws-existing',
+      type_key: 'store-pos',
+      store_id: 'store-1',
+      store_name: 'Main Street',
+      name: 'Front Register',
+      description: 'Old desc',
+      icon: 'pos',
+      layout_mode: 'sidebar',
+      colour: null,
+      is_default: false,
+    },
+  ];
+
+  const renderTopologyReady = async () => {
+    mockListWorkspacesScoped.mockResolvedValue(loadedInstances);
+    render(<MultiStoreDashboardScreen />);
+    // Switch to topology view so NodeTopologyEditor (mock) mounts and
+    // captures the onSave prop.
+    await waitFor(() => expect(screen.getByText('Main Street')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('🗺️ Node Topology Builder'));
+    await waitFor(() => expect(capturedEditorProps.onSave).toBeDefined());
+  };
+
+  it('seeds the editor with loaded workspace instances', async () => {
+    await renderTopologyReady();
+    expect(capturedEditorProps.workspaceInstances).toEqual([
+      { instanceId: 'ws-existing', typeKey: 'store-pos', name: 'Front Register', subtitle: 'Old desc' },
+    ]);
+  });
+
+  it('creates a new workspace instance for a new canvas node', async () => {
+    await renderTopologyReady();
+    const nodes = [
+      { id: 'ws-existing', type: 'workspace', name: 'Front Register', subtitle: 'Old desc', x: 0, y: 0, metadata: { typeKey: 'store-pos', persisted: true } },
+      { id: 'ws-new', type: 'workspace', name: 'New Register', subtitle: 'Register', x: 10, y: 10, metadata: { typeKey: 'kds', persisted: false } },
+    ];
+    await capturedEditorProps.onSave!(nodes, []);
+
+    expect(mockCreateWorkspace).toHaveBeenCalledTimes(1);
+    expect(mockCreateWorkspace).toHaveBeenCalledWith('test-session-token', expect.objectContaining({
+      id: 'ws-new',
+      type_key: 'kds',
+      name: 'New Register',
+      store_id: 'store-1',
+    }));
+    expect(mockUpdateWorkspace).not.toHaveBeenCalled();
+    expect(mockArchiveWorkspace).not.toHaveBeenCalled();
+    expect(mockSaveTopology).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates a renamed existing workspace node', async () => {
+    await renderTopologyReady();
+    const nodes = [
+      { id: 'ws-existing', type: 'workspace', name: 'Renamed Register', subtitle: 'Old desc', x: 0, y: 0, metadata: { typeKey: 'store-pos', persisted: true } },
+    ];
+    await capturedEditorProps.onSave!(nodes, []);
+
+    expect(mockUpdateWorkspace).toHaveBeenCalledTimes(1);
+    expect(mockUpdateWorkspace).toHaveBeenCalledWith('test-session-token', 'ws-existing', {
+      name: 'Renamed Register',
+    });
+    expect(mockCreateWorkspace).not.toHaveBeenCalled();
+    expect(mockArchiveWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('archives a workspace instance removed from the canvas', async () => {
+    await renderTopologyReady();
+    // Canvas has no workspace nodes → the loaded instance was removed.
+    await capturedEditorProps.onSave!([], []);
+
+    expect(mockArchiveWorkspace).toHaveBeenCalledTimes(1);
+    expect(mockArchiveWorkspace).toHaveBeenCalledWith('test-session-token', 'ws-existing');
+    expect(mockCreateWorkspace).not.toHaveBeenCalled();
+    expect(mockUpdateWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('does not update an unchanged existing workspace node', async () => {
+    await renderTopologyReady();
+    const nodes = [
+      { id: 'ws-existing', type: 'workspace', name: 'Front Register', subtitle: 'Old desc', x: 0, y: 0, metadata: { typeKey: 'store-pos', persisted: true } },
+    ];
+    await capturedEditorProps.onSave!(nodes, []);
+
+    expect(mockCreateWorkspace).not.toHaveBeenCalled();
+    expect(mockUpdateWorkspace).not.toHaveBeenCalled();
+    expect(mockArchiveWorkspace).not.toHaveBeenCalled();
+    // Diagram is still persisted even when no CRUD changes occurred.
+    expect(mockSaveTopology).toHaveBeenCalledTimes(1);
   });
 });
