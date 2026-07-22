@@ -221,6 +221,48 @@ describe('ProductsClient', () => {
     expect(result.previous_qty).toBe(100);
     expect(result.new_qty).toBe(90);
   });
+
+  it('update() sends PUT and returns updated product', async () => {
+    server.use(
+      http.put(`${BASE_URL}/api/v1/products/SKU-001`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body['name']).toBe('Updated Espresso');
+        return HttpResponse.json({
+          id: 'p1', sku: 'SKU-001', name: 'Updated Espresso',
+          price: { minor_units: 300, currency: 'USD' },
+          category_id: null, category_name: null, barcode: null,
+          stock_qty: 100, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-07-22T00:00:00Z',
+        });
+      }),
+    );
+
+    const client = createClient();
+    const product = await client.products.update('SKU-001', { name: 'Updated Espresso' });
+    expect(product.sku).toBe('SKU-001');
+    expect(product.name).toBe('Updated Espresso');
+  });
+
+  it('delete() sends DELETE and returns void on 204', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/v1/products/SKU-001`, () =>
+        new HttpResponse(null, { status: 204 }),
+      ),
+    );
+
+    const client = createClient();
+    await expect(client.products.delete('SKU-001')).resolves.toBeUndefined();
+  });
+
+  it('delete() throws ApiError on 404', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/v1/products/MISSING`, () =>
+        HttpResponse.json({ error: 'Product not found' }, { status: 404 }),
+      ),
+    );
+
+    const client = createClient();
+    await expect(client.products.delete('MISSING')).rejects.toMatchObject({ status: 404 });
+  });
 });
 
 // ── Categories ────────────────────────────────────────────────────
@@ -241,11 +283,64 @@ describe('CategoriesClient', () => {
     expect(categories).toHaveLength(1);
     expect(categories[0]!.name).toBe('Drinks');
   });
+
+  it('get() returns category by ID', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/v1/categories/c1`, () =>
+        HttpResponse.json({ id: 'c1', name: 'Drinks', colour: '#06b6d4', created_at: '2026-01-01T00:00:00Z' }),
+      ),
+    );
+
+    const client = createClient();
+    const cat = await client.categories.get('c1');
+    expect(cat).not.toBeNull();
+    expect(cat!.name).toBe('Drinks');
+  });
+
+  it('create() sends body and returns category', async () => {
+    server.use(
+      http.post(`${BASE_URL}/api/v1/categories`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body['name']).toBe('New');
+        return HttpResponse.json({ id: 'c-new', name: 'New', colour: '#f97316', created_at: '2026-07-22T00:00:00Z' }, { status: 201 });
+      }),
+    );
+
+    const client = createClient();
+    const cat = await client.categories.create({ name: 'New', colour: '#f97316' });
+    expect(cat.id).toBe('c-new');
+  });
+
+  it('delete() returns void on 204', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/v1/categories/c1`, () =>
+        new HttpResponse(null, { status: 204 }),
+      ),
+    );
+
+    const client = createClient();
+    await expect(client.categories.delete('c1')).resolves.toBeUndefined();
+  });
 });
 
 // ── Sales ─────────────────────────────────────────────────────────
 
 describe('SalesClient', () => {
+  it('list() returns sales array', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/v1/sales`, () =>
+        HttpResponse.json([
+          { id: 's1', status: 'completed', total_minor: 500, currency: 'USD', customer_id: null, created_at: '2026-07-22T00:00:00Z', updated_at: '2026-07-22T00:00:00Z' },
+        ]),
+      ),
+    );
+
+    const client = createClient();
+    const sales = await client.sales.list();
+    expect(sales).toHaveLength(1);
+    expect(sales[0]!.status).toBe('completed');
+  });
+
   it('create() sends line items', async () => {
     let receivedBody: unknown;
 
@@ -348,6 +443,34 @@ describe('SyncClient', () => {
 // ── Tax + Users ───────────────────────────────────────────────────
 
 describe('TaxClient', () => {
+  it('list() returns tax rates', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/v1/tax-rates`, () =>
+        HttpResponse.json([
+          { id: 't1', name: 'VAT 10%', rate: 10.0, category_id: null, product_id: null, active: true },
+        ]),
+      ),
+    );
+
+    const client = createClient();
+    const rates = await client.tax.list();
+    expect(rates).toHaveLength(1);
+    expect(rates[0]!.name).toBe('VAT 10%');
+  });
+
+  it('get() returns tax rate by ID', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/v1/tax-rates/t1`, () =>
+        HttpResponse.json({ id: 't1', name: 'VAT', rate: 10.0, category_id: null, product_id: null, active: true }),
+      ),
+    );
+
+    const client = createClient();
+    const rate = await client.tax.get('t1');
+    expect(rate).not.toBeNull();
+    expect(rate!.name).toBe('VAT');
+  });
+
   it('create() sends tax rate', async () => {
     let receivedBody: unknown;
 
@@ -370,9 +493,48 @@ describe('TaxClient', () => {
     expect(body['name']).toBe('VAT 10%');
     expect(body['rate_bps']).toBe(1000);
   });
+
+  it('update() sends PUT with partial fields', async () => {
+    server.use(
+      http.put(`${BASE_URL}/api/v1/tax-rates/t1`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body['rate_bps']).toBe(1100);
+        return new HttpResponse(null, { status: 200 });
+      }),
+    );
+
+    const client = createClient();
+    await expect(client.tax.update('t1', { rate_bps: 1100 })).resolves.toBeUndefined();
+  });
+
+  it('delete() returns void on 204', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/v1/tax-rates/t1`, () =>
+        new HttpResponse(null, { status: 204 }),
+      ),
+    );
+
+    const client = createClient();
+    await expect(client.tax.delete('t1')).resolves.toBeUndefined();
+  });
 });
 
 describe('UsersClient', () => {
+  it('list() returns users', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/v1/users`, () =>
+        HttpResponse.json([
+          { id: 'u1', username: 'cashier1', role: 'cashier', active: true, created_at: '2026-07-22T00:00:00Z' },
+        ]),
+      ),
+    );
+
+    const client = createClient();
+    const users = await client.users.list();
+    expect(users).toHaveLength(1);
+    expect(users[0]!.username).toBe('cashier1');
+  });
+
   it('create() sends user data', async () => {
     let receivedBody: unknown;
 
@@ -394,6 +556,30 @@ describe('UsersClient', () => {
     const body = receivedBody as Record<string, unknown>;
     expect(body['username']).toBe('cashier1');
     expect(body['role_id']).toBe('role-cashier');
+  });
+
+  it('update() sends PUT with partial fields', async () => {
+    server.use(
+      http.put(`${BASE_URL}/api/v1/users/u1`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        expect(body['display_name']).toBe('Updated Name');
+        return new HttpResponse(null, { status: 200 });
+      }),
+    );
+
+    const client = createClient();
+    await expect(client.users.update('u1', { display_name: 'Updated Name' })).resolves.toBeUndefined();
+  });
+
+  it('delete() throws ApiError on 404', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/api/v1/users/ghost`, () =>
+        HttpResponse.json({ error: 'User not found' }, { status: 404 }),
+      ),
+    );
+
+    const client = createClient();
+    await expect(client.users.delete('ghost')).rejects.toMatchObject({ status: 404 });
   });
 });
 
