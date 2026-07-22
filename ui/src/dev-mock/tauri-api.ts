@@ -241,6 +241,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // WORKSPACES (ADR #4 / #7)
   // ═══════════════════════════════════════════════════════════════
 
+  'list_workspaces': () => MOCK_WORKSPACES,
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
