@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSyncConnection } from '@/hooks/useSyncConnection';
-import { getLicenseStatus, type LicenseStatusDto } from '@/api/license';
-import { useLocalization } from '@fluent/react';
-import Tooltip from '@/frontend/shell/Tooltip';
+import ConnectionStatus from '@/components/ConnectionStatus';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -37,24 +34,7 @@ export default function SessionLockScreen({
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
-  const { l10n } = useLocalization();
-  const syncStatus = useSyncConnection();
-  const [licenseStatus, setLicenseStatus] = useState<LicenseStatusDto | null>(null);
 
-  useEffect(() => {
-    getLicenseStatus()
-      .then(setLicenseStatus)
-      .catch(() => {
-        // IPC call failed — treat as inactive to avoid permanent yellow dot
-        setLicenseStatus({
-          is_active: false,
-          status: 'missing',
-          tier: null,
-          payload: null,
-          message: null,
-        });
-      });
-  }, []);
 
   // Auto-unlock after lockout period
   useEffect(() => {
@@ -267,81 +247,10 @@ export default function SessionLockScreen({
           </div>
         </div>
 
-        {/* ── Status indicators (license + sync) ──────── */}
-        <div className="session-lock-sync-group">
-          {/* License status dot */}
-          <Tooltip
-            content={licenseStatus
-              ? (licenseStatus.is_active
-                  ? `${licenseStatus.tier
-                      ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
-                      : 'License'} - Active`
-                  : licenseStatus.status === 'gracePeriod'
-                    ? 'License - Grace Period'
-                    : 'License - Offline')
-              : 'Checking license…'}
-            position="top"
-            showDelay={200}
-          >
-            <div
-              className="session-lock-sync"
-              role="status"
-              aria-label={licenseStatus
-                ? (licenseStatus.is_active
-                    ? l10n.getString('staff-login-license-active')
-                    : l10n.getString('staff-login-license-inactive'))
-                : l10n.getString('shared-loading')}
-            >
-              <span
-                className={`session-lock-sync-dot ${
-                  licenseStatus === null
-                    ? 'session-lock-sync-dot--checking'
-                    : licenseStatus.is_active
-                      ? 'session-lock-sync-dot--online'
-                      : licenseStatus.status === 'gracePeriod'
-                        ? 'session-lock-sync-dot--checking'
-                        : 'session-lock-sync-dot--offline'
-                }`}
-                aria-hidden="true"
-              />
-              <span className="session-lock-sync-label">
-                {licenseStatus?.tier
-                  ? (licenseStatus.tier.charAt(0).toUpperCase() + licenseStatus.tier.slice(1))
-                  : 'License'}
-              </span>
-            </div>
-          </Tooltip>
-
-          {/* Sync connection dot */}
-          <Tooltip
-            content={syncStatus.label}
-            position="top"
-            showDelay={200}
-          >
-            <div
-              className="session-lock-sync"
-              role="status"
-              aria-label={l10n.getString(
-                syncStatus.state === 'connected'
-                  ? 'status-bar-sync-connected'
-                  : syncStatus.state === 'disconnected'
-                    ? 'status-bar-sync-disconnected'
-                    : 'status-bar-sync-checking',
-              )}
-            >
-              <span
-                className={`session-lock-sync-dot ${
-                  syncStatus.state === 'connected'
-                    ? 'session-lock-sync-dot--online'
-                    : syncStatus.state === 'disconnected'
-                      ? 'session-lock-sync-dot--offline'
-                      : 'session-lock-sync-dot--checking'
-                }`}
-                aria-hidden="true"
-              />
-              <span className="session-lock-sync-label">Sync</span>
-            </div>
-          </Tooltip>
+        {/* ── Connection status indicators ──────── */}
+        <div className="session-lock-connection-group">
+          <ConnectionStatus label="Auth" url="" />
+          <ConnectionStatus label="Sync" url="" />
         </div>
       </div>
     </div>
