@@ -136,35 +136,46 @@ describe('TransitAuditScreen', () => {
 
   // ── Reverse transfer ──────────────────────────────────────────
 
-  it('calls cancelStockTransfer when Reverse Transfer is clicked', async () => {
+  it('calls cancelStockTransfer when Reverse Transfer is confirmed', async () => {
     const user = userEvent.setup();
-    window.confirm = vi.fn(() => true);
     renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('TXN-001')).toBeInTheDocument();
     });
 
+    // Click Reverse Transfer to open ConfirmDialog
     const reverseBtns = screen.getAllByText('Reverse Transfer');
     await user.click(reverseBtns[0]!);
 
+    // Wait for dialog and click "Reverse" confirm button
     await waitFor(() => {
-      expect(window.confirm).toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Reverse'));
+
+    await waitFor(() => {
       expect(mockCancelTransfer).toHaveBeenCalled();
     });
   });
 
-  it('does not cancel when confirm is dismissed', async () => {
+  it('does not cancel when dialog is dismissed', async () => {
     const user = userEvent.setup();
-    window.confirm = vi.fn(() => false);
     renderWithProvidersSync(<TransitAuditScreen />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('TXN-001')).toBeInTheDocument();
     });
 
+    // Click Reverse Transfer to open ConfirmDialog
     const reverseBtns = screen.getAllByText('Reverse Transfer');
     await user.click(reverseBtns[0]!);
+
+    // Wait for dialog and click Cancel
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cancel'));
 
     expect(mockCancelTransfer).not.toHaveBeenCalled();
   });

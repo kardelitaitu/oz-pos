@@ -24,10 +24,6 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
   }),
 }));
 
-// Mock window.confirm
-const originalConfirm = window.confirm;
-const confirmResult = true;
-
 import ThresholdConfigScreen from '@/features/inventory/ThresholdConfigScreen';
 import {
   listInventoryLocations,
@@ -64,16 +60,11 @@ const thresholds = [
 describe('ThresholdConfigScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    window.confirm = vi.fn(() => confirmResult);
     mockLocations.mockResolvedValue(locations);
     mockThresholds.mockResolvedValue(thresholds);
     mockListProducts.mockResolvedValue(products);
     mockSetThreshold.mockResolvedValue(undefined);
     mockDeleteThreshold.mockResolvedValue(undefined);
-  });
-
-  afterAll(() => {
-    window.confirm = originalConfirm;
   });
 
   // ── Rendering ─────────────────────────────────────────────────
@@ -210,7 +201,6 @@ describe('ThresholdConfigScreen', () => {
 
   it('deletes a threshold when Delete is clicked and confirmed', async () => {
     const user = userEvent.setup();
-    window.confirm = vi.fn(() => true);
     await renderWithProviders(<ThresholdConfigScreen />, inventoryFtl);
 
     await waitFor(() => {
@@ -218,9 +208,16 @@ describe('ThresholdConfigScreen', () => {
       expect(screen.getAllByText('SKU-001').length).toBeGreaterThanOrEqual(2);
     });
 
-    // Click the first Delete button
+    // Click the first Delete button to open the ConfirmDialog
     const deleteBtns = screen.getAllByText('Delete');
     await user.click(deleteBtns[0]!);
+
+    // Wait for dialog to appear and click the confirm "Delete" button
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    const confirmBtn = screen.getAllByText('Delete').at(-1)!;
+    await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(mockDeleteThreshold).toHaveBeenCalledWith('mock-session-token', 'th-1');
