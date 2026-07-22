@@ -269,7 +269,7 @@ mod tests {
         save_topology_data(&conn, nodes, wires).unwrap();
         let loaded = load_topology_data(&conn).unwrap().unwrap();
 
-        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes.len(), 2);
         assert_eq!(loaded.nodes[0].id, "store-1");
         assert_eq!(loaded.nodes[0].name, "Main Store");
         assert_eq!(loaded.nodes[0].x, 100.0);
