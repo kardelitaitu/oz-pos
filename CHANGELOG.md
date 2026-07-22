@@ -4,15 +4,24 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.0.18] — Unreleased
+## [0.0.21] — 2026-07-22
 
 ### Added
 
-> _Sprint planning in progress — items will be added as implemented._
+#### 🟢 P210 — Pre-existing Warning Resolution
+- **P210-1 (Clippy)**: Added `///` doc comments to 19 struct fields in `topology.rs` (TopologyData, TopologyNodePayload, TopologyWirePayload). Clippy clean on `oz-pos-app`.
+- **P210-2 (ESLint)**: Auto-fixed 9 `consistent-type-imports` warnings in API client files. Fixed 3 `react-hooks/exhaustive-deps` warnings (CategoryManagementScreen, TransitAuditScreen, MultiStoreDashboardScreen).
 
-### Changed
+#### 🔴 P201 — Error Handling Polish (continued from 0.0.20)
+- **Security audit**: Verified all 14 migrated `addToast` calls use safe error patterns. No PII leaks, no stack traces exposed. All use `err instanceof Error ? err.message : 'Fallback'` guard.
 
-> _Placeholder._
+---
+
+## [0.0.18] — 2026-07-22
+
+### Added
+
+> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
 
 ### Fixed
 
@@ -103,7 +112,29 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.0.20] — 2026-07-21
+## [0.0.20] — 2026-07-22
+
+### Added
+
+#### 🔴 P201 — Error Handling Polish
+- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
+- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
+- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
+- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
+
+### Fixed
+
+#### 🟢 P200 — A11y Bug Fixes
+- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
+- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
+
+#### 🟡 P202 — Final Cleanup
+- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
+- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
+
+---
+
+## [0.0.20-original] — 2026-07-21
 
 ### Fixed
 

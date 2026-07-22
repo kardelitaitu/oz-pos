@@ -52,16 +52,13 @@ import FeatureToggleScreen from './FeatureToggleScreen';
 import DataManagementScreen from './DataManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 import TerminalManagementScreen from '@/features/terminals/TerminalManagementScreen';
-import { MultiStoreDashboardScreen } from '@/features/stores';
+import { MultiStoreDashboardScreen, TopologyScreen } from '@/features/stores';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import OfflineQueueScreen from '@/features/offline/OfflineQueueScreen';
 import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
-import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
-import { getLicenseStatus } from '@/api/license';
-import { saveTopology, type TopologyNodePayload, type TopologyWirePayload } from '@/api/topology';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
@@ -276,8 +273,6 @@ export default function SettingsPage() {
   const { session } = useAuth();
   const userId = session?.user_id ?? 'default';
 
-  const [licenseTier, setLicenseTier] = useState('standard');
-
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
   const [displayFontSmoothing, setDisplayFontSmoothing] = useState('antialiased');
@@ -402,9 +397,8 @@ export default function SettingsPage() {
       getUserPreferences(userId),
       getBrandSettings(),
       getVersion(),
-      getLicenseStatus(),
     ]);
-    const [rR, sR, cR, syncR, prefsR, brandR, verR, licR] = results;
+    const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
 
     // Local variables capture the newly-loaded values for the snapshot
     // (avoid reading React state, which would add deps and cause loops).
@@ -437,7 +431,6 @@ export default function SettingsPage() {
         applyAccentPalette(palette);
       }
       if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
-      if (licR.status === 'fulfilled' && licR.value.tier) setLicenseTier(licR.value.tier.toLowerCase());
 
       // Only surface a full-page error when every single API failed.
       if (results.every((r) => r.status === 'rejected')) {
@@ -1579,45 +1572,7 @@ export default function SettingsPage() {
         return <PromotionManagementScreen />;
 
       case 'topology':
-        return (
-          <div className="settings-topology-container">
-            <NodeTopologyEditor
-              currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'}
-              onSave={(nodes, wires) => {
-                const nodePayloads: TopologyNodePayload[] = nodes.map((n) => {
-                  const p: TopologyNodePayload = {
-                    id: n.id,
-                    type: n.type,
-                    name: n.name,
-                    x: n.x,
-                    y: n.y,
-                  };
-                  if (n.subtitle !== undefined) p.subtitle = n.subtitle;
-                  if (n.tierRequirement !== undefined) p.tier_requirement = n.tierRequirement;
-                  if (n.telemetryBadge !== undefined) p.telemetry_badge = n.telemetryBadge;
-                  if (n.telemetryStatus !== undefined) p.telemetry_status = n.telemetryStatus;
-                  if (n.metadata !== undefined) p.metadata = n.metadata;
-                  return p;
-                });
-                const wirePayloads: TopologyWirePayload[] = wires.map((w) => {
-                  const p: TopologyWirePayload = {
-                    id: w.id,
-                    from_node_id: w.fromNodeId,
-                    to_node_id: w.toNodeId,
-                    direction: w.direction,
-                  };
-                  if (w.label !== undefined) p.label = w.label;
-                  if (w.fromPort !== undefined) p.from_port = w.fromPort;
-                  if (w.toPort !== undefined) p.to_port = w.toPort;
-                  return p;
-                });
-                saveTopology(nodePayloads, wirePayloads)
-                  .then(() => addToast({ message: l10n.getString('topology-saved') || 'Topology saved', type: 'success' }))
-                  .catch((err) => addToast({ message: String(err), type: 'error' }));
-              }}
-            />
-          </div>
-        );
+        return <TopologyScreen />;
 
       default:
         return null;
