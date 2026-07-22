@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import './SessionLockScreen.css';
@@ -35,6 +35,10 @@ export default function SessionLockScreen({
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
 
+  // Read sync server URL from localStorage (set via Sync Settings)
+  const syncUrl = useMemo(() => {
+    try { return localStorage.getItem('retail-sync-server') || ''; } catch { return ''; }
+  }, []);
 
   // Auto-unlock after lockout period
   useEffect(() => {
@@ -249,8 +253,8 @@ export default function SessionLockScreen({
 
         {/* ── Connection status indicators ──────── */}
         <div className="session-lock-connection-group">
-          <ConnectionStatus label="Auth" url="" />
-          <ConnectionStatus label="Sync" url="" />
+          <ConnectionStatus label="Auth" url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" />
+          <ConnectionStatus label="Sync" url={syncUrl} />
         </div>
       </div>
     </div>

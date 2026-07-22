@@ -126,6 +126,10 @@ export default function StaffLoginScreen() {
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
   const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
 
+  // Read sync server URL from localStorage (set via Sync Settings)
+  const syncUrl = useMemo(() => {
+    try { return localStorage.getItem('retail-sync-server') || ''; } catch { return ''; }
+  }, []);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -602,8 +606,8 @@ export default function StaffLoginScreen() {
         </div>
         <div className="staff-login-footer-right">
           <div className="staff-login-connection-group">
-            <ConnectionStatus label="Auth" url="" />
-            <ConnectionStatus label="Sync" url="" />
+            <ConnectionStatus label="Auth" url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" />
+            <ConnectionStatus label="Sync" url={syncUrl} />
           </div>
         </div>
       </div>
