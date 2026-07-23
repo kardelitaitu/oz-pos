@@ -454,14 +454,23 @@ impl Kernel {
     /// [`Stopped`](ModuleStatus::Stopped) state. Calls `on_start()` on
     /// the module and updates its status to [`Started`](ModuleStatus::Started).
     ///
+    /// When restarting a [`Stopped`](ModuleStatus::Stopped) module,
+    /// `on_load()` is re-run first to restore the load-time invariant
+    /// (configuration validation and event-handler registration). This
+    /// is required because `stop_module` removes the module's event-bus
+    /// handlers via `unsubscribe_module`; without re-running `on_load`,
+    /// a restarted module would silently lose every event-bus
+    /// subscription (the `Module` contract documents `on_load` as the
+    /// hook where handlers are registered).
+    ///
     /// Only starts the module itself — dependencies must be started
     /// separately via `start_all()`.
     ///
     /// # Errors
     ///
-    /// Returns [`KernelError::LifecycleError`] if `on_start` fails, or
-    /// [`KernelError::Internal`] if the module is not registered or is
-    /// in an invalid state.
+    /// Returns [`KernelError::LifecycleError`] if `on_load` (on
+    /// restart) or `on_start` fails, or [`KernelError::Internal`] if
+    /// the module is not registered or is in an invalid state.
     pub fn start_module(&mut self, id: &'static str) -> Result<(), KernelError> {
         let module = self
             .modules
@@ -477,6 +486,21 @@ impl Kernel {
             let msg =
                 format!("module '{id}' is in state {current_status:?}, expected Loaded or Stopped");
             return Err(KernelError::Internal(msg));
+        }
+
+        // Restart path: a Stopped module must re-run on_load to restore
+        // the load-time invariant (handler registration, config
+        // validation) before on_start, mirroring how start_all after
+        // stop_all re-runs load_all → on_load (stop_all clears
+        // self.loaded). Without this, event-bus handlers removed by
+        // stop_module's unsubscribe_module call are never re-registered.
+        if current_status == ModuleStatus::Stopped {
+            debug!(module = id, "re-loading module on restart");
+            module.on_load().map_err(|e| KernelError::LifecycleError {
+                module: id,
+                operation: "load",
+                source: e,
+            })?;
         }
 
         debug!(module = id, "starting single module");
@@ -1362,6 +1386,102 @@ mod tests {
         assert!(
             handler_b.called.load(Ordering::SeqCst),
             "running module's handler must still fire"
+        );
+    }
+
+    /// A stopped-then-restarted module must have its `on_load` handler
+    /// registration re-established, because the `Module` trait contract
+    /// says `on_load` is where event handlers are registered ("Use this
+    /// to validate configuration and register event handlers"), while
+    /// `on_start`/`on_stop` only manage runtime resources.
+    ///
+    /// `stop_module` removes the module's handlers via
+    /// `unsubscribe_module` (Bug #6 fix). A restart via `start_module`
+    /// goes `Stopped → Started` and calls `on_start` but NOT `on_load`,
+    /// so the handlers `stop_module` removed are never re-registered —
+    /// the restarted module silently loses every event-bus subscription.
+    ///
+    /// This test pins the root cause: `start_module` on a Stopped module
+    /// must re-run `on_load` (the only hook that registers handlers) to
+    /// restore the load-time invariant, mirroring how `start_all` after
+    /// `stop_all` already re-runs `load_all` → `on_load` (because
+    /// `stop_all` clears `self.loaded`).
+    #[test]
+    fn restart_via_start_module_re_runs_on_load_to_restore_handlers() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicI32;
+
+        // A module that counts on_load invocations. on_load is the
+        // documented hook for registering event handlers, so its call
+        // count is a direct proxy for "were handlers re-registered?".
+        #[derive(Debug)]
+        struct CountingModule {
+            id: &'static str,
+            load_count: Arc<AtomicI32>,
+        }
+        impl Module for CountingModule {
+            fn id(&self) -> &'static str {
+                self.id
+            }
+            fn on_load(&mut self) -> ModuleResult {
+                self.load_count.fetch_add(1, Ordering::SeqCst);
+                // In a real module this is where subscribe_for_module
+                // would register the module's event-bus handlers.
+                Ok(())
+            }
+        }
+
+        // ── Path A: stop_all → start_all re-runs on_load (works today).
+        let mut kernel = Kernel::new();
+        let load_count_a = Arc::new(AtomicI32::new(0));
+        kernel
+            .register(Box::new(CountingModule {
+                id: "mod-a",
+                load_count: load_count_a.clone(),
+            }))
+            .unwrap();
+        kernel.start_all().unwrap();
+        assert_eq!(
+            load_count_a.load(Ordering::SeqCst),
+            1,
+            "initial start_all runs on_load once"
+        );
+        kernel.stop_all().unwrap();
+        kernel.start_all().unwrap();
+        assert_eq!(
+            load_count_a.load(Ordering::SeqCst),
+            2,
+            "start_all after stop_all re-runs on_load (self.loaded was cleared)"
+        );
+
+        // ── Path B: stop_module → start_module does NOT re-run on_load (BUG).
+        let mut kernel = Kernel::new();
+        let load_count_b = Arc::new(AtomicI32::new(0));
+        kernel
+            .register(Box::new(CountingModule {
+                id: "mod-b",
+                load_count: load_count_b.clone(),
+            }))
+            .unwrap();
+        kernel.start_all().unwrap();
+        assert_eq!(
+            load_count_b.load(Ordering::SeqCst),
+            1,
+            "initial start_all runs on_load once"
+        );
+        kernel.stop_module("mod-b").unwrap();
+        // Restart the stopped module via start_module.
+        kernel.start_module("mod-b").unwrap();
+        // EXPECTED after fix: on_load re-runs on restart → count == 2.
+        // CURRENT (buggy): on_load is NOT re-run → count stays 1, so any
+        // handlers registered in on_load were permanently lost by the
+        // stop_module cleanup (Bug #6) and never restored.
+        assert_eq!(
+            load_count_b.load(Ordering::SeqCst),
+            2,
+            "start_module on a Stopped module must re-run on_load to \
+             restore the load-time invariant (handler registration), \
+             mirroring start_all after stop_all"
         );
     }
 }
