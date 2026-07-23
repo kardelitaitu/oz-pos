@@ -1621,6 +1621,45 @@ mod tests {
         );
     }
 
+    /// Prove that `write_delta()` works when called from within an outer
+    /// transaction. rusqlite converts the nested BEGIN to a SAVEPOINT,
+    /// so the delta write is atomic within the outer transaction.
+    #[test]
+    fn write_delta_works_inside_outer_transaction() {
+        let conn = fresh_with_delta();
+        // Start an outer transaction.
+        let outer_tx = conn.unchecked_transaction().unwrap();
+        // Call `write_delta()` — it internally creates another
+        // `unchecked_transaction()` which becomes a SAVEPOINT.
+        Settings::write_delta(&conn, "store.name", "nested-val", "term-nest").unwrap();
+        // Commit the outer transaction.
+        outer_tx.commit().unwrap();
+        // Delta must be visible.
+        assert_eq!(
+            Settings::get_version(&conn, "store.name", "term-nest").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// Prove that a `write_delta()` inside an outer transaction that gets
+    /// rolled back also rolls back the delta — confirming the SAVEPOINT
+    /// is nested within the outer transaction.
+    #[test]
+    fn write_delta_rolls_back_with_outer_transaction() {
+        let conn = fresh_with_delta();
+        // Start outer tx, write delta, then rollback.
+        {
+            let _outer_tx = conn.unchecked_transaction().unwrap();
+            Settings::write_delta(&conn, "receipt.footer", "rollback-me", "term-rb").unwrap();
+            // _outer_tx dropped → ROLLBACK
+        }
+        // Delta must NOT be visible after rollback.
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-rb").unwrap(),
+            None
+        );
+    }
+
     /// Different keys from the same terminal track independent version counters.
     #[test]
     fn set_tracked_multiple_keys_independent_versions() {
