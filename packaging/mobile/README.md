@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings, 1 low-severity observe) · all concrete paths verified: ui/vite.tablet.config.ts, ui/src/main.tablet.tsx, ui/src/frontend/shell/tablet/, ui/src/hooks/{useOrientation,useSwipe,useKeyboardAvoidance}.ts, ui/index.tablet.html, .github/workflows/{android,ios}.yml, apps/tablet-client/Cargo.toml crate-type [staticlib,cdylib,rlib], apps/tablet-client/AGENTS.md (linked) · observe: line 429 references ui/dist-tablet/ as a stale build dir to delete — that is a gitignored vite build artifact, not in tree (expected; it is an instruction, not a claim the dir exists) · iOS/Android build commands + signing env vars match the tablet-client setup · WCAG 2.2 44x44 touch targets consistent with docs/a11y.md -->
+
 # OZ-POS Mobile Build & Deployment Guide
 
 > Build OZ-POS for Android tablets and iPads using Tauri v2 mobile.
