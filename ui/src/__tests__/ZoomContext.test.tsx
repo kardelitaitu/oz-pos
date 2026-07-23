@@ -156,6 +156,27 @@ describe('ZoomContext — element sizing', () => {
     expect(screen.getByTestId('zoom-level').textContent).toBe('auto');
   });
 
+  it('does not change zoom when Ctrl+= is pressed inside an input field', () => {
+    renderWithZoom(
+      <div>
+        <ZoomConsumer />
+        <input data-testid="test-input" type="text" />
+      </div>,
+    );
+
+    const input = screen.getByTestId('test-input') as HTMLInputElement;
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    // Dispatch on the focused input so the event target is the input element
+    // (simulates real browser behavior where keydown originates from the
+    // focused element and bubbles to window). The zoom handler must check
+    // e.target and ignore events from input/textarea elements.
+    fireEvent.keyDown(input, { key: '=', ctrlKey: true });
+
+    expect(screen.getByTestId('zoom-level').textContent).toBe('auto');
+  });
+
   // ── Error boundary ───────────────────────────────────────────
 
   it('throws error when useAppZoom is used outside ZoomProvider', () => {
