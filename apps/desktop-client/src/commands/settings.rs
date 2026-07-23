@@ -1094,7 +1094,6 @@ mod tests {
         assert_eq!(result, Some("".into()));
     }
 
-    #[test]
     /// After wiring ADR #22, `run_set_setting` writes a delta row
     /// in addition to updating the settings table. This test verifies
     /// the Tauri command layer actually produces delta records.
@@ -1114,6 +1113,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn get_setting_after_multiple_keys_only_returns_requested() {
         let conn = fresh_conn();
         run_set_setting(&conn, "a", "1", "test-terminal").unwrap();

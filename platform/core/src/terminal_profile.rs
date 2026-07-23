@@ -196,12 +196,13 @@ mod tests {
         let dir = temp_dir();
         let path = TerminalProfile::profile_path(dir.path(), "term-001");
 
-        let mut profile = TerminalProfile::default();
-        profile.printer_connection = "network".into();
-        profile.printer_device_path = "192.168.1.100".into();
-        profile.printer_paper_size = "58".into();
-        profile.scanner_device_id = "scanner-001".into();
-        profile.scanner_input_mode = "serial".into();
+        let profile = TerminalProfile {
+            printer_connection: "network".into(),
+            printer_device_path: "192.168.1.100".into(),
+            printer_paper_size: "58".into(),
+            scanner_device_id: "scanner-001".into(),
+            scanner_input_mode: "serial".into(),
+        };
 
         profile.save(&path).unwrap();
         assert!(path.exists());
@@ -248,12 +249,16 @@ mod tests {
         let dir = temp_dir();
         let path = TerminalProfile::profile_path(dir.path(), "term");
 
-        let mut p1 = TerminalProfile::default();
-        p1.printer_connection = "usb".into();
+        let p1 = TerminalProfile {
+            printer_connection: "usb".into(),
+            ..Default::default()
+        };
         p1.save(&path).unwrap();
 
-        let mut p2 = TerminalProfile::default();
-        p2.printer_connection = "network".into();
+        let p2 = TerminalProfile {
+            printer_connection: "network".into(),
+            ..Default::default()
+        };
         p2.save(&path).unwrap();
 
         let loaded = TerminalProfile::load(&path).unwrap().unwrap();
@@ -309,13 +314,17 @@ mod tests {
     fn multiple_terminals_have_separate_profiles() {
         let dir = temp_dir();
 
-        let mut p_a = TerminalProfile::default();
-        p_a.printer_connection = "usb".into();
+        let p_a = TerminalProfile {
+            printer_connection: "usb".into(),
+            ..Default::default()
+        };
         p_a.save(&TerminalProfile::profile_path(dir.path(), "term-a"))
             .unwrap();
 
-        let mut p_b = TerminalProfile::default();
-        p_b.printer_connection = "network".into();
+        let p_b = TerminalProfile {
+            printer_connection: "network".into(),
+            ..Default::default()
+        };
         p_b.save(&TerminalProfile::profile_path(dir.path(), "term-b"))
             .unwrap();
 

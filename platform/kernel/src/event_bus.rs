@@ -664,7 +664,6 @@ mod tests {
         assert!(bus.has_handlers("test.event"));
     }
 
-    #[test]
     /// Panicking handler does not poison the bus. Since `publish()` uses
     /// a read lock and panics drop read guards without poisoning the RwLock,
     /// subsequent publishes must still succeed.

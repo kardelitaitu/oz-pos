@@ -1876,7 +1876,7 @@ mod tests {
         for v in 1..=100 {
             tx.execute(
                 "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES (?1, ?2, ?3, ?4)",
-                params![&format!("key.v"), &format!("val{v}"), "term-bulk", v],
+                params!["key.v", &format!("val{v}"), "term-bulk", v],
             )
             .unwrap();
         }
