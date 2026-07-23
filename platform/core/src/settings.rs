@@ -2319,4 +2319,46 @@ mod tests {
             Some(1000)
         );
     }
+
+    /// `set_batch` (without delta tracking) should not affect the
+    /// `setting_updated` table. Delta and non-delta writes must be
+    /// independent.
+    #[test]
+    fn set_batch_does_not_affect_delta_table() {
+        let conn = fresh_with_delta();
+        // Write a delta first to establish a baseline.
+        Settings::write_delta(&conn, "ind.k", "v0", "term-ind").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "ind.k", "term-ind").unwrap(),
+            Some(1)
+        );
+        // Now use set_batch on the same key — no delta should be written.
+        let rows: Vec<(String, String)> = vec![("ind.k".into(), "v1".into())];
+        Settings::set_batch(&conn, &rows).unwrap();
+        // Setting value should be updated.
+        assert_eq!(Settings::get(&conn, "ind.k").unwrap(), Some("v1".into()));
+        // Delta version should NOT have changed (still 1, not 2).
+        assert_eq!(
+            Settings::get_version(&conn, "ind.k", "term-ind").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// Removing a setting should not delete its delta history.
+    /// The delta ledger is an append-only audit trail.
+    #[test]
+    fn remove_preserves_delta_history() {
+        let conn = fresh_with_delta();
+        Settings::set_tracked(&conn, "rm.k", "v1", "term-rm").unwrap();
+        Settings::set_tracked(&conn, "rm.k", "v2", "term-rm").unwrap();
+        // Remove the setting.
+        assert!(Settings::remove(&conn, "rm.k").unwrap());
+        // Setting should be gone.
+        assert_eq!(Settings::get(&conn, "rm.k").unwrap(), None);
+        // But delta history must survive — 2 versions still exist.
+        assert_eq!(
+            Settings::get_version(&conn, "rm.k", "term-rm").unwrap(),
+            Some(2)
+        );
+    }
 }
