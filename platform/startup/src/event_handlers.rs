@@ -1048,4 +1048,65 @@ mod tests {
             .unwrap();
         assert!(points > 0, "should have earned points for {points}");
     }
+
+    // ── SettingsUpdatedHandler edge cases (ADR #22) ────────────────
+
+    /// Handler should not panic when `changed_keys` is empty.
+    /// A bulk save that touches no keys could legitimately produce
+    /// an event with an empty vec.
+    #[tokio::test]
+    async fn settings_updated_handler_empty_changed_keys() {
+        clear_settings_emit_fn();
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        let event = SettingsUpdated {
+            changed_keys: vec![],
+            terminal_id: "term-empty".into(),
+        };
+        bus.publish(&event).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Handler should not panic; emit may or may not fire for empty keys.
+        // The key invariant: no crash, no hang.
+        clear_settings_emit_fn();
+    }
+
+    /// Handler should tolerate special characters in terminal_id
+    /// (Unicode, quotes, backslashes) without panicking.
+    #[tokio::test]
+    async fn settings_updated_handler_special_terminal_id() {
+        clear_settings_emit_fn();
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        let event = SettingsUpdated {
+            changed_keys: vec!["store.name".into()],
+            terminal_id: "term-\u{2603}-\"quoted\"".into(),
+        };
+        bus.publish(&event).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(
+            !calls.lock().unwrap().is_empty(),
+            "handler should emit for special terminal_id"
+        );
+        clear_settings_emit_fn();
+    }
 }

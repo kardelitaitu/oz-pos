@@ -158,7 +158,7 @@ impl DomainEvent for CourseFired {
 ///
 /// Published AFTER the SQLite transaction commits so handlers see the
 /// new values. Delta rows are written by `Settings::write_delta()` (Phase 0d).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SettingsUpdated {
     /// The keys that changed (e.g. `["receipt.footer", "store.name"]`).
     pub changed_keys: Vec<String>,
@@ -348,5 +348,67 @@ mod tests {
         assert!(json.contains("store.name"));
         assert!(json.contains("receipt.footer"));
         assert!(json.contains("term-a"));
+    }
+
+    /// Empty `changed_keys` vec is valid — settings could be updated
+    /// by a bulk operation that affects no keys.
+    #[test]
+    fn settings_updated_empty_changed_keys_serializes() {
+        let event = SettingsUpdated {
+            changed_keys: vec![],
+            terminal_id: "term-a".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"changed_keys\":[]"));
+        let back: SettingsUpdated = serde_json::from_str(&json).unwrap();
+        assert!(back.changed_keys.is_empty());
+        assert_eq!(back.terminal_id, "term-a");
+    }
+
+    /// Special characters in terminal_id and changed_keys should
+    /// survive JSON round-trip (Unicode, quotes, backslashes).
+    #[test]
+    fn settings_updated_special_characters_roundtrip() {
+        let event = SettingsUpdated {
+            changed_keys: vec!["caf\u{00e9}.key".into(), "key with \"quotes\"".into()],
+            terminal_id: "term-\u{2603}".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let back: SettingsUpdated = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.changed_keys.len(), 2);
+        assert_eq!(back.changed_keys[0], "caf\u{00e9}.key");
+        assert_eq!(back.changed_keys[1], "key with \"quotes\"");
+        assert_eq!(back.terminal_id, "term-\u{2603}");
+    }
+
+    /// Large number of changed_keys should serialize and deserialize
+    /// without truncation or corruption.
+    #[test]
+    fn settings_updated_large_changed_keys_vec() {
+        let keys: Vec<String> = (0..500).map(|i| format!("key.{i:04}")).collect();
+        let event = SettingsUpdated {
+            changed_keys: keys.clone(),
+            terminal_id: "bulk-sync".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let back: SettingsUpdated = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.changed_keys.len(), 500);
+        assert_eq!(back.changed_keys[0], "key.0000");
+        assert_eq!(back.changed_keys[499], "key.0499");
+        assert_eq!(back.terminal_id, "bulk-sync");
+    }
+
+    /// Deserializing malformed JSON for SettingsUpdated should fail
+    /// gracefully — no panics.
+    #[test]
+    fn settings_updated_rejects_invalid_json() {
+        assert!(serde_json::from_str::<SettingsUpdated>("{}").is_err());
+        assert!(serde_json::from_str::<SettingsUpdated>("\"not an object\"").is_err());
+        assert!(
+            serde_json::from_str::<SettingsUpdated>(
+                "{\"changed_keys\":[1,2,3],\"terminal_id\":\"t\"}"
+            )
+            .is_err()
+        );
     }
 }

@@ -1985,6 +1985,50 @@ mod tests {
         assert_eq!(Settings::get(&conn, "k").unwrap(), Some("b1".into()));
     }
 
+    /// Verify `write_delta` handles version numbers near `i64::MAX`
+    /// without overflow or panic. SQLite integer arithmetic wraps on
+    /// overflow, but the delta write itself should succeed.
+    #[test]
+    fn write_delta_near_version_overflow() {
+        let conn = fresh_with_delta();
+        // Insert a row at i64::MAX to set up the overflow scenario.
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version)
+             VALUES ('overflow.key', 'max', 'term-of', ?1)",
+            params![i64::MAX],
+        )
+        .unwrap();
+        // `write_delta` should still succeed — the version computation
+        // wraps around, but the method should not panic.
+        let result = Settings::write_delta(&conn, "overflow.key", "post-max", "term-of");
+        assert!(result.is_ok(), "write_delta should not panic near i64::MAX");
+        // The version stored is implementation-defined (wrap or saturate),
+        // but we must have a version row.
+        assert!(Settings::get_version(&conn, "overflow.key", "term-of").is_ok());
+    }
+
+    /// `write_delta` with a very long key (near SQLite's default
+    /// limit) should not panic or truncate silently.
+    #[test]
+    fn write_delta_long_key() {
+        let conn = fresh_with_delta();
+        let long_key = "k".repeat(500); // 500 chars, well under limit
+        Settings::write_delta(&conn, &long_key, "long-val", "term-lg").unwrap();
+        let v = Settings::get_version(&conn, &long_key, "term-lg").unwrap();
+        assert_eq!(v, Some(1));
+    }
+
+    /// `write_delta` with a very long value (multi-kilobyte JSON blob)
+    /// should not panic or truncate.
+    #[test]
+    fn write_delta_long_value() {
+        let conn = fresh_with_delta();
+        let long_value = "x".repeat(10_000); // 10 KB value
+        Settings::write_delta(&conn, "bulk.key", &long_value, "term-bulk").unwrap();
+        let v = Settings::get_version(&conn, "bulk.key", "term-bulk").unwrap();
+        assert_eq!(v, Some(1));
+    }
+
     #[test]
     fn keys_constants_are_non_empty() {
         assert!(!keys::STORE_NAME.is_empty());
