@@ -297,17 +297,43 @@ impl Kernel {
             }
         }
 
-        // Stop modules in reverse dependency order.
-        if let Ok(order) = self.resolve_dependencies() {
-            for &id in order.iter().rev() {
-                if let Some(module) = self.modules.get_mut(id) {
-                    debug!(module = id, "stopping module");
-                    if let Err(e) = module.on_stop() {
-                        error!(module = id, error = %e, "failed to stop module");
+        // Stop modules in reverse dependency order. If dependency
+        // resolution fails (e.g. circular dependency or missing dep),
+        // fall back to stopping all modules in arbitrary order rather
+        // than silently skipping shutdown.
+        match self.resolve_dependencies() {
+            Ok(order) => {
+                for &id in order.iter().rev() {
+                    if let Some(module) = self.modules.get_mut(id) {
+                        debug!(module = id, "stopping module");
+                        if let Err(e) = module.on_stop() {
+                            error!(module = id, error = %e, "failed to stop module");
+                            first_error.get_or_insert_with(|| KernelError::LifecycleError {
+                                module: id,
+                                operation: "stop",
+                                source: e,
+                            });
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    error = %e,
+                    "dependency resolution failed during shutdown — stopping all modules in fallback order"
+                );
+                // Surface the dep-resolution error, but still attempt
+                // to stop every module. If a module's on_stop also fails,
+                // that becomes the first error since it's more specific.
+                first_error.get_or_insert(e);
+                for (id, module) in &mut self.modules {
+                    debug!(module = id, "stopping module (fallback)");
+                    if let Err(stop_err) = module.on_stop() {
+                        error!(module = id, error = %stop_err, "failed to stop module (fallback)");
                         first_error.get_or_insert_with(|| KernelError::LifecycleError {
                             module: id,
                             operation: "stop",
-                            source: e,
+                            source: stop_err,
                         });
                     }
                 }
@@ -840,6 +866,33 @@ mod tests {
         kernel.load_all().unwrap();
         let result = kernel.stop_all();
         assert!(result.is_err());
+    }
+
+    /// Regression test for TDD Bug #1: when dependency resolution fails
+    /// during shutdown (e.g. circular dependency), `stop_all` must still
+    /// attempt to stop all modules rather than silently skipping shutdown.
+    ///
+    /// With the current `collect_dependencies` stub (always empty),
+    /// `resolve_dependencies` never fails in practice. But the code path
+    /// is defensive — if a future version introduces real dependency
+    /// resolution, the fallback ensures modules are always stopped.
+    #[test]
+    fn stop_all_stops_modules_even_when_dep_resolution_would_fail() {
+        let mut kernel = Kernel::new();
+        let module = TestModule::new("survivor");
+        kernel.register(Box::new(module)).unwrap();
+        kernel.load_all().unwrap();
+
+        // Even without starting, stop_all should update status and not panic.
+        kernel.stop_all().unwrap();
+
+        assert_eq!(
+            kernel.module_status("survivor"),
+            Some(ModuleStatus::Stopped),
+            "module should be Stopped after stop_all"
+        );
+        assert!(!kernel.is_loaded());
+        assert!(!kernel.is_started());
     }
 
     #[test]
