@@ -1,11 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  getReceiptSettings,
   setReceiptSettings,
-  getStoreSettings,
   setStoreSettings,
-  getUserPreferences,
   setUserPreferences,
   setSetting,
   type ReceiptSettingsDto,
@@ -13,13 +10,12 @@ import {
 } from '@/api/settings';
 import { setDecimalSep } from '@/utils/storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import {
-  listCurrencies,
   type CurrencyDto,
 } from '@/api/currency';
 import {
-  getSyncSettings,
   updateSyncSettings,
   syncRun,
   syncPull,
@@ -31,9 +27,8 @@ import {
   type PullResult,
   type PingResult,
 } from '@/api/offline';
-import { getVersion } from '@/api/system';
+
 import {
-  getBrandSettings,
   setBrandPrimaryColour,
   setBrandStoreName as setBrandStoreNameApi,
 } from '@/api/branding';
@@ -134,8 +129,17 @@ function getToday(): string {
 
 /** Settings hub — sidebar-driven navigation across general, appearance, features, data management, staff, terminals, multi-store, audit, offline queue, shifts, tax, currency, and promotions. */
 export default function SettingsPage() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  return (
+    <SettingsProvider>
+      <SettingsPageContent />
+    </SettingsProvider>
+  );
+}
+
+/** Inner component that consumes useSettings() — wrapped by SettingsProvider. */
+function SettingsPageContent() {
+  const settingsCtx = useSettings();
+  const loadError = settingsCtx.error;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -179,13 +183,7 @@ export default function SettingsPage() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  // Stable refs so the mount loader can read the latest l10n/addToast
-  // without listing them in its deps (which would re-fire the load effect
-  // on every render). Mirrors LicenseSettings.
-  const l10nRef = useRef(l10n);
-  l10nRef.current = l10n;
-  const addToastRef = useRef(addToast);
-  addToastRef.current = addToast;
+
   const { refreshBrandSettings } = useBrand();
   const { theme, toggleTheme } = useTheme();
 
@@ -349,88 +347,56 @@ export default function SettingsPage() {
     document.documentElement.setAttribute('data-font-smoothing', displayFontSmoothing);
   }, [displayFontSmoothing]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    // Use allSettled so a single failing API doesn't block the entire
-    // settings page — each successful result is applied independently.
-    const results = await Promise.allSettled([
-      getReceiptSettings(),
-      getStoreSettings(),
-      listCurrencies(),
-      getSyncSettings(),
-      getUserPreferences(userId),
-      getBrandSettings(),
-      getVersion(),
-    ]);
-    const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
+  // ── Initialize local draft state from SettingsContext ─────
+  const [initialized, setInitialized] = useState(false);
 
-    // Local variables capture the newly-loaded values for the snapshot
-    // (avoid reading React state, which would add deps and cause loops).
-    let snapReceipt: ReceiptSettingsDto | undefined;
-    let snapCardSize: number | undefined;
-    let snapFontSize: number | undefined;
-    let snapFontSmoothing: string | undefined;
-    let snapBrandColour: string | undefined;
-    let snapStoreName: string | undefined;
+  useEffect(() => {
+    // Once context finishes loading, copy values into local editable state.
+    // Only do this on the initial load — subsequent context refetches
+    // (e.g. from markSettingsUpdated) should NOT overwrite user edits.
+    if (!settingsCtx.loading && !initialized) {
+      const s = settingsCtx.settings;
+      setReceipt(s.receipt);
+      setStore(s.store);
+      setCurrencies(s.currencies);
+      setSync(s.sync);
+      setSyncServerUrl(s.sync.serverUrl ?? '');
+      setDisplayCardSize(s.preferences.cardSize);
+      setDisplayFontSize(s.preferences.fontSize);
+      setDisplayFontSmoothing(s.preferences.fontSmoothing);
+      setBrandColour(s.brand.colour);
+      setBrandStoreName(s.brand.storeName);
+      setAppVersion(s.appVersion);
+      setDecimalSep(s.receipt.decimalSeparator);
 
-    try {
-      if (rR.status === 'fulfilled') { snapReceipt = rR.value; setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
-      if (sR.status === 'fulfilled') setStore(sR.value);
-      if (cR.status === 'fulfilled') setCurrencies(cR.value);
-      if (syncR.status === 'fulfilled') { setSync(syncR.value); setSyncServerUrl(syncR.value.serverUrl ?? ''); }
-      if (prefsR.status === 'fulfilled') {
-        const p = prefsR.value;
-        const cs = p['cardsize'];
-        if (cs !== undefined) { snapCardSize = Math.min(4, Math.max(0, parseInt(cs, 10) || 0)); setDisplayCardSize(snapCardSize); }
-        const fs = p['fontsize'];
-        if (fs !== undefined) { snapFontSize = Math.min(4, Math.max(0, parseInt(fs, 10) || 0)); setDisplayFontSize(snapFontSize); }
-        if (p['font-smoothing'] !== undefined) { snapFontSmoothing = p['font-smoothing']; setDisplayFontSmoothing(snapFontSmoothing); }
-      }
-      if (brandR.status === 'fulfilled') {
-        snapBrandColour = brandR.value.primary_colour;
-        snapStoreName = brandR.value.store_name;
-        setBrandColour(snapBrandColour);
-        setBrandStoreName(snapStoreName);
-        const palette = deriveAccentPalette(snapBrandColour);
-        applyAccentPalette(palette);
-      }
-      if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
+      const palette = deriveAccentPalette(s.brand.colour);
+      applyAccentPalette(palette);
 
-      // Only surface a full-page error when every single API failed.
-      if (results.every((r) => r.status === 'rejected')) {
-        setLoadError(l10nRef.current.getString('settings-load-failed'));
-      } else if (results.some((r) => r.status === 'rejected')) {
-        // Some APIs failed — page loads partially; warn the user.
-        addToastRef.current({ message: l10nRef.current.getString('settings-load-partial'), type: 'error' });
-      }
-      // Store snapshot of initial loaded values for revert.
-      // Use local variables captured from the try block above (not from
-      // React state) to avoid adding these values to the deps array and
-      // causing an infinite re-load loop.
-      // On retry (initialSnapshotRef.current is set), preserve previous
-      // snapshot values for any API that failed to avoid reverting to
-      // default/empty state for backend data that is still valid.
-      const prev = initialSnapshotRef.current;
+      // Set the initial snapshot for Revert-to-saved
       initialSnapshotRef.current = {
-        receipt: rR.status === 'fulfilled' ? rR.value : (snapReceipt ?? prev?.receipt ?? receipt),
-        store: sR.status === 'fulfilled' ? sR.value : (prev?.store ?? store),
-        defaultCurrency: ctxCurrency,
-        sync: syncR.status === 'fulfilled' ? syncR.value : (prev?.sync ?? sync),
-        syncServerUrl: syncR.status === 'fulfilled' ? (syncR.value.serverUrl ?? '') : (prev?.syncServerUrl ?? syncServerUrl),
-        displayCardSize: snapCardSize ?? prev?.displayCardSize ?? displayCardSize,
-        displayFontSize: snapFontSize ?? prev?.displayFontSize ?? displayFontSize,
-        displayFontSmoothing: snapFontSmoothing ?? prev?.displayFontSmoothing ?? displayFontSmoothing,
-        brandColour: snapBrandColour ?? prev?.brandColour ?? brandColour,
-        brandStoreName: snapStoreName ?? prev?.brandStoreName ?? brandStoreName,
+        receipt: s.receipt,
+        store: s.store,
+        defaultCurrency,
+        sync: s.sync,
+        syncServerUrl: s.sync.serverUrl ?? '',
+        displayCardSize: s.preferences.cardSize,
+        displayFontSize: s.preferences.fontSize,
+        displayFontSmoothing: s.preferences.fontSmoothing,
+        brandColour: s.brand.colour,
+        brandStoreName: s.brand.storeName,
       };
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
 
-  useEffect(() => { load(); }, [load]);
+      // Show toast for partial load failures (regression guard from Phase 0b)
+      if (settingsCtx.hasPartialError) {
+        addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
+      }
+
+      setInitialized(true);
+    }
+  }, [settingsCtx.loading, settingsCtx.settings, settingsCtx.hasPartialError, initialized, defaultCurrency, addToast, l10n]);
+
+  // Derive loading/error state from context
+  const loading = settingsCtx.loading && !initialized;
 
   // Scroll content to top and focus the first heading when navigating sections.
   useEffect(() => {
@@ -529,6 +495,19 @@ export default function SettingsPage() {
       addToast({ message: l10n.getString('settings-save-partial'), type: 'error' });
     }
 
+    // Notify SettingsContext so other components reflect the changes
+    const changedKeys: string[] = [];
+    if (results[0]?.status === 'fulfilled') changedKeys.push('receipt.footer', 'receipt.showCurrency', 'receipt.showTax', 'receipt.paperWidth', 'receipt.showTableNumber', 'receipt.decimalSeparator');
+    if (results[1]?.status === 'fulfilled') changedKeys.push('store.name', 'store.address', 'store.taxId');
+    if (results[2]?.status === 'fulfilled') changedKeys.push('currency.default');
+    if (results[3]?.status === 'fulfilled') changedKeys.push('prefs.cardsize', 'prefs.fontsize', 'prefs.font-smoothing');
+    if (results[4]?.status === 'fulfilled') changedKeys.push('sync.serverUrl', 'sync.apiKey', 'sync.enabled');
+    if (results[5]?.status === 'fulfilled') changedKeys.push('brand.primary_colour');
+    if (results[6]?.status === 'fulfilled') changedKeys.push('brand.store_name');
+    if (changedKeys.length > 0) {
+      settingsCtx.markSettingsUpdated(changedKeys);
+    }
+
     setSaving(false);
   };
 
@@ -618,7 +597,7 @@ export default function SettingsPage() {
       <div className="settings-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="settings-error" role="alert">
           <p>{loadError}</p>
-          <Button variant="secondary" onClick={() => { setLoadError(null); setLoading(true); load(); }}>
+          <Button variant="secondary" onClick={() => { setInitialized(false); settingsCtx.refetch(); }}>
             <Localized id="settings-retry"><span>Retry</span></Localized>
           </Button>
         </div>
