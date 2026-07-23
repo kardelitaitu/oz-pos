@@ -2245,4 +2245,78 @@ mod tests {
             "set_tracked should error when settings table missing"
         );
     }
+
+    // ── ADR #22 completeness: timestamps, batch edges, stress ─────
+
+    /// The `settings` table has an `updated_at` column with a DEFAULT
+    /// that should be populated automatically on INSERT.
+    #[test]
+    fn settings_updated_at_is_populated_on_set() {
+        let conn = fresh();
+        Settings::set(&conn, "ts.key", "ts-val").unwrap();
+        let ts: String = conn
+            .query_row(
+                "SELECT updated_at FROM settings WHERE key = 'ts.key'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!ts.is_empty(), "updated_at should be populated");
+        assert!(ts.contains('T'), "updated_at should be ISO 8601: {ts}");
+    }
+
+    /// `updated_at` should change when a setting value is overwritten,
+    /// providing a per-key modification timestamp.
+    #[test]
+    fn settings_updated_at_changes_on_overwrite() {
+        let conn = fresh();
+        Settings::set(&conn, "ts.k", "v1").unwrap();
+        let ts1: String = conn
+            .query_row(
+                "SELECT updated_at FROM settings WHERE key = 'ts.k'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        // Small delay to ensure timestamp changes (10ms margin).
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        Settings::set(&conn, "ts.k", "v2").unwrap();
+        let ts2: String = conn
+            .query_row(
+                "SELECT updated_at FROM settings WHERE key = 'ts.k'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_ne!(ts1, ts2, "updated_at should change on overwrite");
+    }
+
+    /// `set_batch_tracked` with an empty terminal_id should work
+    /// — empty string is a valid terminal identifier.
+    #[test]
+    fn set_batch_tracked_empty_terminal_id() {
+        let conn = fresh_with_delta();
+        let rows: Vec<(String, String)> =
+            vec![("bt.k1".into(), "v1".into()), ("bt.k2".into(), "v2".into())];
+        Settings::set_batch_tracked(&conn, &rows, "").unwrap();
+        assert_eq!(Settings::get(&conn, "bt.k1").unwrap(), Some("v1".into()));
+        assert_eq!(Settings::get(&conn, "bt.k2").unwrap(), Some("v2".into()));
+        assert_eq!(Settings::get_version(&conn, "bt.k1", "").unwrap(), Some(1));
+        assert_eq!(Settings::get_version(&conn, "bt.k2", "").unwrap(), Some(1));
+    }
+
+    /// Stress test: 1,000 consecutive `write_delta` calls on the same
+    /// (key, terminal_id) pair. The version counter should reach 1,000
+    /// without stalling, wrapping, or erroring.
+    #[test]
+    fn write_delta_1000_consecutive_calls() {
+        let conn = fresh_with_delta();
+        for i in 1..=1000 {
+            Settings::write_delta(&conn, "stress.k", &format!("v{i}"), "term-stress").unwrap();
+        }
+        assert_eq!(
+            Settings::get_version(&conn, "stress.k", "term-stress").unwrap(),
+            Some(1000)
+        );
+    }
 }
