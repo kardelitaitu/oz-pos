@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · store_id: Option<String> verified on SaleCompleted (crates/oz-core/src/events.rs:27) and CourseFired (events.rs:126); apps/desktop-client/src/lan_server.rs (LAN forwarder, port 9180) exists; complete_sale_scoped emits store_id; tablet complete_sale uses None per the doc · ADR #4/#7 cross-refs valid · Status "Implemented (2026-07-10)" consistent -->
+
 # ADR #8: Scoped Real-Time Event Bus
 
 **Status:** Implemented (2026-07-10)

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · foundational ADR; structs verified: SessionContext (crates/oz-core/src/session.rs:24), WorkspaceType/WorkspaceInstance (db/workspaces.rs:48/67), InstanceStatus enum (subscription.rs:33); crates/oz-core/src/db/workspaces.rs + platform/core/src + StoreDatabaseManager (platform/core/src/database/manager.rs) present; AppShell.tsx type_key switch (restaurant-pos/store-pos) confirmed; terminals migration 016 binding columns + HMAC design match implementation; store-scoped DB model + SessionContext immutability match ADR #7's resolve_scope() · referenced ADRs (#5/#6/#7/#8/#9) all exist · Status "Implemented (2026-07-10)" consistent -->
+
 # ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture
 
 **Status:** Implemented (2026-07-10)
