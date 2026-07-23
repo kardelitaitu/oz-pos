@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/sales.rs, apps/desktop-client/src/commands/pos.rs, ui/src/features/sales, ui/src/api/sales.ts, ui/src/locales/sales.ftl; modules/sales/manifest.json deps [inventory] match; Module trait + Kernel::register/load_all/start_all match platform/kernel API · Status "Phase 2.2 POC" consistent with files still in original locations -->
+
 # Sales Module
 
 **Status:** Active (Phase 2.2 — Proof of Concept)

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · behavioral claim verified: SaleCompletedReporter (modules/reporting/src/handlers.rs:25) subscribes to sale.completed and creates+inserts into report_sales table (handlers.rs:38/70); ReportingModule implements Module and registers handler in on_load; modules/reporting/manifest.json deps [inventory, sales] match; Kernel::register/load_all/start_all match platform/kernel API -->
+
 # Reporting Module
 
 **Status:** Active (Phase 3 — Event Bus Subscriber)
