@@ -330,16 +330,30 @@ pub async fn add_line(
 ///
 /// ADR #7 / ADR-19 §5.1: rejects the command when the cart has no
 /// `deduction_location_id` lock.
+///
+/// Requires `SALES_PROCESS` permission from the resolved session (Bug #3).
 #[command]
 pub async fn add_line_scoped(
     session_token: String,
     args: AddLineArgs,
     state: State<'_, AppState>,
 ) -> Result<AddLineResult, AppError> {
-    let _session = state.resolve_session(&session_token)?;
-
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    run_add_line_scoped(&db, &session.user_id, &args)
+}
+
+/// Shared business logic: permission-check + add line to cart.
+/// Extracted so the `SALES_PROCESS` gate is unit-testable without
+/// constructing an `AppState` (Bug #3 fix).
+fn run_add_line_scoped(
+    db: &rusqlite::Connection,
+    user_id: &str,
+    args: &AddLineArgs,
+) -> Result<AddLineResult, AppError> {
+    let store = Store::new(db);
+
+    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_PROCESS)?;
 
     // ADR-19 §5.1: reject add_line when the cart has no deduction location lock.
     store
@@ -366,7 +380,6 @@ pub async fn add_line_scoped(
     cart.add_line(line)
         .map_err(|e| AppError::Invalid(e.to_string()))?;
     store.save_active_cart(&cart, None)?;
-    drop(db);
 
     Ok(AddLineResult {
         line_id,
@@ -1441,5 +1454,73 @@ mod tests {
             err.contains("not found") || err.contains("active_cart"),
             "error must mention not-found, got: {err}"
         );
+    }
+
+    // ── Bug #3: add_line_scoped session authorization ──────────────
+
+    /// Seed a user with NO sales permissions at all.
+    fn seed_user_without_sales_process(conn: &Connection, user_id: &str) {
+        conn.execute_batch(&format!(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-no-sales', 'No Sales', 'No sales permissions', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
+                ('{user_id}', '{user_id}', 'No Sales', 'role-no-sales', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        )).unwrap();
+    }
+
+    #[test]
+    fn add_line_scoped_rejects_user_without_sales_process() {
+        // Bug #3: add_line_scoped resolved the session but stored it as
+        // _session (unused). A user without SALES_PROCESS could add lines
+        // to any cart — a silent authorization gap. After the fix, the
+        // permission check must reject unprivileged users.
+        let conn = fresh_conn();
+        seed_user_without_sales_process(&conn, "user-no-sales");
+        let cart_id = seed_active_cart(&conn);
+
+        let args = AddLineArgs {
+            cart_id,
+            sku: Sku::new("COFFEE"),
+            qty: 1,
+            unit_price_minor: 350,
+        };
+        let result = run_add_line_scoped(&conn, "user-no-sales", &args);
+
+        assert!(
+            result.is_err(),
+            "Bug #3: add_line_scoped lacked SALES_PROCESS check — \
+             user without sales:process must be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.to_lowercase().contains("permission") || err.to_lowercase().contains("denied"),
+            "error must mention permission/denied, got: {err}"
+        );
+    }
+
+    #[test]
+    fn add_line_scoped_allows_user_with_sales_process() {
+        // Happy-path regression: a cashier with SALES_PROCESS must be
+        // able to add lines to a cart with a deduction_location lock.
+        let conn = fresh_conn();
+        // seed_cashier_without_override_permission gives the user sales:process
+        seed_cashier_without_override_permission(&conn, "user-cashier");
+        let cart_id = seed_active_cart(&conn);
+
+        let args = AddLineArgs {
+            cart_id,
+            sku: Sku::new("LATTE"),
+            qty: 2,
+            unit_price_minor: 450,
+        };
+        let result = run_add_line_scoped(&conn, "user-cashier", &args);
+
+        assert!(
+            result.is_ok(),
+            "cashier with SALES_PROCESS must be allowed to add lines, got: {:?}",
+            result.err()
+        );
+        let r = result.unwrap();
+        assert_eq!(r.line_total.unwrap().minor_units, 900);
     }
 }
