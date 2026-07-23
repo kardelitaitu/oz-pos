@@ -144,6 +144,12 @@ impl Store<'_> {
     }
 
     /// Insert a new purchase order with line items (all in one transaction).
+    ///
+    /// The header INSERT and every line INSERT execute inside a single
+    /// SQLite transaction (`unchecked_transaction` + `commit`). If any
+    /// line INSERT fails, the entire batch — header and prior lines —
+    /// rolls back, preventing the orphaned partial-PO state the previous
+    /// autocommit version could leave behind.
     pub fn create_purchase_order(
         &self,
         po_number: &str,
@@ -180,7 +186,9 @@ impl Store<'_> {
             subtotal += line.qty * line.unit_cost_minor;
         }
 
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+
+        tx.execute(
             "INSERT INTO purchase_orders (id, po_number, supplier_id, status, order_date,
                                           expected_date, subtotal_minor, tax_minor, total_minor,
                                           notes, created_by, created_at, updated_at)
@@ -204,7 +212,7 @@ impl Store<'_> {
         for line in lines {
             let line_id = uuid::Uuid::now_v7().to_string();
             let line_total = line.qty * line.unit_cost_minor;
-            self.conn.execute(
+            tx.execute(
                 "INSERT INTO purchase_order_lines (id, po_id, sku, product_name, qty,
                                                     unit_cost_minor, line_total_minor)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -228,6 +236,8 @@ impl Store<'_> {
                 line_total_minor: line_total,
             });
         }
+
+        tx.commit()?;
 
         Ok(PurchaseOrderWithLines {
             order: PurchaseOrder {
@@ -847,5 +857,90 @@ mod tests {
         assert_eq!(list[0].order.po_number, "PO-DESC-B");
         assert_eq!(list[1].order.po_number, "PO-DESC-A");
         assert!(list[0].order.created_at >= list[1].order.created_at);
+    }
+
+    // ── TDD: create_purchase_order atomicity ────────────────────────
+    //
+    // The doc comment claims "all in one transaction" but the function
+    // issues the header INSERT and each line INSERT directly on
+    // self.conn (autocommit mode) with no enclosing transaction. If a
+    // line INSERT fails, the header and prior lines are already
+    // committed — leaving an orphaned partial PO.
+    //
+    // This test forces the 2nd line INSERT to fail via a RAISE(ABORT)
+    // trigger and asserts the entire PO (header + line 1) was rolled
+    // back — proving (non-)atomicity.
+
+    #[test]
+    fn create_purchase_order_rolls_back_on_line_insert_failure() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        // Install a trigger that rejects any line with product_name
+        // 'TRIGGER_FAIL'. This simulates a disk/IO/constraint failure
+        // on the 2nd line INSERT only.
+        conn.execute_batch(
+            "CREATE TRIGGER reject_fail_line
+             BEFORE INSERT ON purchase_order_lines
+             WHEN NEW.product_name = 'TRIGGER_FAIL'
+             BEGIN
+                 SELECT RAISE(ABORT, 'forced failure on line insert');
+             END;",
+        )
+        .unwrap();
+
+        let lines = vec![
+            CreatePoLineInput {
+                sku: "SKU-001".into(),
+                product_name: "Widget".into(),
+                qty: 5,
+                unit_cost_minor: 1000,
+            },
+            CreatePoLineInput {
+                sku: "SKU-002".into(),
+                product_name: "TRIGGER_FAIL".into(), // triggers RAISE
+                qty: 3,
+                unit_cost_minor: 500,
+            },
+        ];
+
+        // The 2nd line INSERT hits the trigger and fails.
+        let result =
+            store(&conn).create_purchase_order("PO-ATOMIC-1", "sup-po", "", "", None, &lines);
+        assert!(
+            result.is_err(),
+            "create_purchase_order must surface the forced line-insert failure"
+        );
+
+        // Atomicity contract: because the writes should be wrapped in
+        // one transaction, the failed 2nd line must roll back the header
+        // INSERT and the 1st line INSERT. If they persist, the function
+        // is non-atomic (the bug).
+        let header_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM purchase_orders WHERE po_number = 'PO-ATOMIC-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let line_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM purchase_order_lines WHERE sku IN ('SKU-001', 'SKU-002')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        // These assertions FAIL in the RED phase (no transaction →
+        // header + line 1 persist despite the 2nd line failing) and PASS
+        // once a transaction wraps the batch.
+        assert_eq!(
+            header_count, 0,
+            "PO header must be rolled back, got {header_count} row(s)"
+        );
+        assert_eq!(
+            line_count, 0,
+            "PO lines must be rolled back, got {line_count} row(s)"
+        );
     }
 }
