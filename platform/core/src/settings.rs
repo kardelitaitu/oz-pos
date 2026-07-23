@@ -69,42 +69,53 @@ impl Settings {
 
     // ── Delta ledger methods ──────────────────────────────────────
 
-    /// Standalone delta writer — opens its own transaction.
+    /// Standalone delta writer — uses a savepoint for nesting safety.
     ///
     /// Computes `version = MAX(version) + 1` for the `(key, terminal_id)`
-    /// pair and inserts a new row. Wraps the SELECT MAX + INSERT in a
-    /// transaction to prevent version collisions under concurrent writes.
-    ///
-    /// **Important:** Callers already inside a transaction (e.g. from
-    /// `unchecked_transaction()`) must use [`write_delta_on_tx`] instead —
-    /// SQLite does not permit nested `BEGIN` statements.
+    /// pair and inserts a new row. Uses a savepoint so the SELECT MAX +
+    /// INSERT are atomic and the call is safe from within an existing
+    /// transaction (no nested `BEGIN` error).
     pub fn write_delta(
         conn: &Connection,
         key: &str,
         value: &str,
         terminal_id: &str,
     ) -> Result<(), PlatformError> {
-        // Wrap in a transaction so the SELECT MAX and INSERT are atomic.
-        // When called from set_tracked()'s outer transaction, this creates
-        // a savepoint — SQLite automatically converts nested BEGIN to SAVEPOINT.
-        let tx = conn.unchecked_transaction()?;
-        let version: i64 = tx
-            .query_row(
-                "SELECT COALESCE(MAX(version), 0) + 1
-                 FROM setting_updated
-                 WHERE key = ?1 AND terminal_id = ?2",
-                params![key, terminal_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(1);
+        // Use a savepoint so this works both standalone and when called
+        // from within an existing transaction (e.g. set_tracked).
+        // `execute_batch` is used instead of `conn.savepoint()` because
+        // the latter requires `&mut Connection`.
+        let sp = format!("_oz_delta_{}", std::process::id());
+        conn.execute_batch(&format!("SAVEPOINT {sp}"))?;
+        let result = (|| -> Result<(), PlatformError> {
+            let version: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(MAX(version), 0) + 1
+                     FROM setting_updated
+                     WHERE key = ?1 AND terminal_id = ?2",
+                    params![key, terminal_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(1);
 
-        tx.execute(
-            "INSERT INTO setting_updated (key, value, terminal_id, version)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![key, value, terminal_id, version],
-        )?;
-        tx.commit()?;
-        Ok(())
+            conn.execute(
+                "INSERT INTO setting_updated (key, value, terminal_id, version)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![key, value, terminal_id, version],
+            )?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                conn.execute_batch(&format!("RELEASE {sp}"))?;
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!(key, terminal_id, error = %e, "delta write failed, rolling back savepoint");
+                let _ = conn.execute_batch(&format!("ROLLBACK TO {sp}"));
+                Err(e)
+            }
+        }
     }
 
     /// Get the latest version number for a `(key, terminal_id)` pair.
@@ -1579,11 +1590,9 @@ mod tests {
             Settings::get(&conn, "receipt.footer").unwrap(),
             Some("NoDelta!".into())
         );
-        // The delta write must have failed — no version should exist.
-        assert_eq!(
-            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
-            None
-        );
+        // The delta write must have failed — version lookup will fail
+        // because the `setting_updated` table does not exist.
+        assert!(Settings::get_version(&conn, "receipt.footer", "term-a").is_err());
     }
 
     /// Empty terminal_id is valid — `set_tracked` should not panic or error.
@@ -1732,29 +1741,64 @@ mod tests {
 
     /// Concurrent `set_tracked` calls on different keys must not interfere.
     /// Each key gets its own version counter regardless of thread scheduling.
+    /// Concurrent `set_tracked` on independent keys from separate threads.
+    /// Uses a temp file DB so each thread can open its own `Connection`.
+    /// In-memory DBs can't be shared across threads because
+    /// `rusqlite::Connection` contains a `RefCell` (not `Sync`).
     #[test]
     fn set_tracked_concurrent_threads_independent_keys() {
-        use std::sync::Arc;
         use std::thread;
 
-        let conn = Arc::new(fresh_with_delta());
-        let c1 = conn.clone();
-        let c2 = conn.clone();
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+
+        // Create the DB with schema first.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                );
+                CREATE TABLE IF NOT EXISTS setting_updated (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key         TEXT    NOT NULL,
+                    value       TEXT    NOT NULL,
+                    terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                    version     INTEGER NOT NULL,
+                    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                );
+                CREATE INDEX IF NOT EXISTS idx_setting_updated_key_version
+                    ON setting_updated(key, version DESC);
+                CREATE INDEX IF NOT EXISTS idx_setting_updated_terminal
+                    ON setting_updated(terminal_id, created_at DESC);
+                PRAGMA journal_mode=WAL;
+            ",
+            )
+            .unwrap();
+        }
+
+        let p1 = db_path.clone();
+        let p2 = db_path.clone();
 
         let t1 = thread::spawn(move || {
+            let conn = Connection::open(&p1).unwrap();
             for i in 1..=10 {
-                Settings::set_tracked(&c1, "thread.a", &format!("v{i}"), "t1").unwrap();
+                Settings::set_tracked(&conn, "thread.a", &format!("v{i}"), "t1").unwrap();
             }
         });
         let t2 = thread::spawn(move || {
+            let conn = Connection::open(&p2).unwrap();
             for i in 1..=10 {
-                Settings::set_tracked(&c2, "thread.b", &format!("v{i}"), "t2").unwrap();
+                Settings::set_tracked(&conn, "thread.b", &format!("v{i}"), "t2").unwrap();
             }
         });
 
         t1.join().unwrap();
         t2.join().unwrap();
 
+        let conn = Connection::open(&db_path).unwrap();
         // Each key should have exactly 10 versions.
         assert_eq!(
             Settings::get_version(&conn, "thread.a", "t1").unwrap(),
