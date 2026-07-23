@@ -125,11 +125,11 @@ describe('SettingsNavTree', () => {
   it('shows count badges with correct item counts', () => {
     render(<SettingsNavTree {...defaultProps} />);
 
-    // 2 items in Business, 3 in Operations, 4 in System, 10 in Management
+    // 2 items in Business, 4 in Operations, 7 in System, 10 in Management
     const badges = screen.getAllByText(/^\d+$/);
     expect(badges.length).toBe(4);
     const counts = badges.map((b) => Number(b.textContent)).sort((a, b) => a - b);
-    expect(counts).toEqual([2, 3, 4, 10]);
+    expect(counts).toEqual([2, 4, 7, 10]);
   });
 
   it('highlights the active section nav item', () => {

@@ -422,6 +422,21 @@ mod tests {
     }
 
     #[test]
+    fn settings_updated_handler_is_registered() {
+        let kernel = AsyncMutex::new(Kernel::new());
+        let (_dir, db_path) = create_temp_db();
+
+        init_module_system(&kernel, &db_path).unwrap();
+
+        let k = kernel.blocking_lock();
+        let bus = k.event_bus();
+        assert!(
+            bus.has_handlers("settings.updated"),
+            "ADR #22: settings.updated topic must have at least one handler registered"
+        );
+    }
+
+    #[test]
     fn event_bus_has_correct_handler_topics() {
         let kernel = AsyncMutex::new(Kernel::new());
         let (_dir, db_path) = create_temp_db();

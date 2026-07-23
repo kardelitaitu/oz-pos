@@ -1866,6 +1866,32 @@ mod tests {
         );
     }
 
+    /// Verify the `get_version` query uses the
+    /// `idx_setting_updated_key_version` index for efficient lookups
+    /// rather than a full table scan.
+    #[test]
+    fn get_version_uses_covering_index() {
+        let conn = fresh_with_delta();
+        let mut stmt = conn
+            .prepare(
+                "EXPLAIN QUERY PLAN SELECT version FROM setting_updated
+                 WHERE key = 'k' AND terminal_id = 't'
+                 ORDER BY version DESC LIMIT 1",
+            )
+            .unwrap();
+        let plans: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(3))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        let plan_text = plans.join(" ");
+        assert!(
+            plan_text.contains("idx_setting_updated_key_version")
+                || plan_text.contains("COVERING INDEX"),
+            "get_version query should use idx_setting_updated_key_version, got: {plan_text}"
+        );
+    }
+
     /// `get_version` returns Only the MAX version, even when multiple
     /// version rows exist for the same (key, terminal_id) pair.
     #[test]
