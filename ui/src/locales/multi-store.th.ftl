@@ -20,6 +20,7 @@ multi-store-label-terminals = [TH] Terminals [/TH]
 multi-store-section-stores-overview = [TH] Stores overview [/TH]
 multi-store-section-terminal-status = [TH] Terminal status [/TH]
 topology-builder-title = [TH] Visual Store & Workspace Topology Builder [/TH]
+multi-store-error-load = [TH] Failed to load data [/TH]
 
 # ── Topology Editor ──
 
