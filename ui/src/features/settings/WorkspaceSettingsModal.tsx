@@ -4,6 +4,7 @@ import { Localized } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import {
@@ -57,6 +58,14 @@ function renderWorkspaceCard(
   }
 }
 
+function useWorkspaceOptional() {
+  try {
+    return useWorkspace();
+  } catch {
+    return null;
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 /**
@@ -77,6 +86,7 @@ export default function WorkspaceSettingsModal({
   presentation = 'overlay',
 }: WorkspaceSettingsModalProps) {
   const { isManager } = useAuth();
+  const workspaceCtx = useWorkspaceOptional();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // ── Nested modal depth (React state for reactivity) ─────────
@@ -103,7 +113,10 @@ export default function WorkspaceSettingsModal({
 
   // ── Admin Settings shortcut ─────────────────────────────────
   const handleAdminSettings = () => {
-    // Navigate to Tier 1 settings hub immediately, bypassing exit animation
+    // Switch active workspace to admin and navigate to Tier 1 settings hub
+    if (workspaceCtx?.setActiveWorkspace) {
+      workspaceCtx.setActiveWorkspace('admin');
+    }
     window.location.hash = '#/settings';
     onClose();
   };

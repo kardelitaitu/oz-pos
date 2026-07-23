@@ -22,6 +22,19 @@ const mocks = vi.hoisted(() => ({
   manager: true,
   owner: false,
   hashTarget: '',
+  setActiveWorkspace: vi.fn(),
+}));
+
+// ── WorkspaceContext mock ─────────────────────────────────────────
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'store-pos',
+    setActiveWorkspace: mocks.setActiveWorkspace,
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+  }),
 }));
 
 // ── AuthContext mock ──────────────────────────────────────────────
@@ -324,7 +337,7 @@ describe('WorkspaceSettingsModal', () => {
 
   // ── Admin Settings shortcut ─────────────────────────────────
 
-  it('Admin Settings button sets location.hash to #/settings and calls onClose', async () => {
+  it('Admin Settings button sets activeWorkspace to admin, location.hash to #/settings and calls onClose', async () => {
     const onClose = vi.fn();
     mocks.manager = true;
     renderModal({ onClose });
@@ -335,6 +348,7 @@ describe('WorkspaceSettingsModal', () => {
 
     fireEvent.click(screen.getByText('Admin Settings'));
 
+    expect(mocks.setActiveWorkspace).toHaveBeenCalledWith('admin');
     expect(mocks.hashTarget).toBe('#/settings');
     expect(onClose).toHaveBeenCalled();
   });
