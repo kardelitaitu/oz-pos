@@ -52,11 +52,11 @@ import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
-import GeneralSection from './sections/GeneralSection';
-import AppearanceSection from './sections/AppearanceSection';
-import ReceiptSection from './sections/ReceiptSection';
-import SyncSection from './sections/SyncSection';
-import AboutSection from './sections/AboutSection';
+const GeneralSection = lazy(() => import('./sections/GeneralSection'));
+const AppearanceSection = lazy(() => import('./sections/AppearanceSection'));
+const ReceiptSection = lazy(() => import('./sections/ReceiptSection'));
+const SyncSection = lazy(() => import('./sections/SyncSection'));
+const AboutSection = lazy(() => import('./sections/AboutSection'));
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
 import SettingsNavTree, {
   NAV_ITEMS as NAV_ITEMS_REF,
@@ -973,10 +973,11 @@ function SettingsPageContent() {
               </header>
             )}
           </div>
-          <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}>
-            <div key={activeSection}>
-            {renderSection(activeSection)}
-          </div>
+          <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}><div key={activeSection}>
+              <Suspense fallback={<div className="section-loading">Loading...</div>}>
+                {renderSection(activeSection)}
+              </Suspense>
+            </div>
           </div>
         </form>
       </div>
