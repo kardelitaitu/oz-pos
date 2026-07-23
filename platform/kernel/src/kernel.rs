@@ -274,7 +274,9 @@ impl Kernel {
     ///
     /// Services stop first (reverse registration order), then modules
     /// (reverse dependency order). Errors are logged but all items are
-    /// stopped regardless.
+    /// stopped regardless. Each stopped module also has its event-bus
+    /// handlers removed via [`EventBus::unsubscribe_module`] so that
+    /// stopped modules do not keep receiving events.
     ///
     /// # Errors
     ///
@@ -315,6 +317,11 @@ impl Kernel {
                             });
                         }
                     }
+                    // Remove this module's event-bus handlers so a stopped
+                    // module doesn't keep receiving events. Done regardless of
+                    // on_stop outcome: stop_all tears down the entire kernel,
+                    // so every module is marked Stopped below.
+                    self.event_bus.unsubscribe_module(id);
                 }
             }
             Err(e) => {
@@ -336,6 +343,9 @@ impl Kernel {
                             source: stop_err,
                         });
                     }
+                    // Remove handlers even in fallback shutdown so stopped
+                    // modules don't keep receiving events.
+                    self.event_bus.unsubscribe_module(id);
                 }
             }
         }
@@ -483,7 +493,8 @@ impl Kernel {
     /// Stop a single module by id.
     ///
     /// The module must be in [`Started`](ModuleStatus::Started) state.
-    /// Calls `on_stop()` on the module and updates its status to
+    /// Calls `on_stop()` on the module, removes its event-bus handlers
+    /// via [`EventBus::unsubscribe_module`], and updates its status to
     /// [`Stopped`](ModuleStatus::Stopped).
     ///
     /// Does **not** cascade to dependents — callers must decide whether
@@ -516,6 +527,9 @@ impl Kernel {
             operation: "stop",
             source: e,
         })?;
+        // Remove this module's event-bus handlers so a stopped module
+        // doesn't keep receiving events after shutdown.
+        self.event_bus.unsubscribe_module(id);
         self.statuses.insert(id, ModuleStatus::Stopped);
         info!(module = id, "single module stopped");
         Ok(())
@@ -1186,5 +1200,168 @@ mod tests {
         assert_eq!(k1.module_count(), k2.module_count());
         assert_eq!(k1.is_loaded(), k2.is_loaded());
         assert_eq!(k1.is_started(), k2.is_started());
+    }
+
+    // ── TDD: stop_all must unsubscribe module handlers from EventBus ─
+    //
+    // Bug: Kernel::stop_all() stops modules and services but never
+    // calls event_bus.unsubscribe_module(id) for each stopped module.
+    // Stopped modules continue to receive events — their handlers
+    // remain registered on the bus, potentially accessing freed
+    // resources or wasting cycles.
+    //
+    // This test subscribes a handler for a module, stops the kernel,
+    // then publishes an event and asserts the handler was NOT called.
+
+    #[test]
+    fn stop_all_unsubscribes_module_handlers_from_event_bus() {
+        use foundation::contracts::{DomainEvent, EventHandler};
+
+        #[derive(Debug, Clone)]
+        struct TestBusEvent {
+            _value: i32,
+        }
+        impl DomainEvent for TestBusEvent {
+            fn event_name(&self) -> &'static str {
+                "test.bus.event"
+            }
+        }
+
+        struct BusHandler {
+            called: AtomicBool,
+        }
+        impl EventHandler<TestBusEvent> for BusHandler {
+            fn handle(&self, _event: &TestBusEvent) -> ModuleResult {
+                self.called.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        impl EventHandler<TestBusEvent> for std::sync::Arc<BusHandler> {
+            fn handle(&self, event: &TestBusEvent) -> ModuleResult {
+                (**self).handle(event)
+            }
+        }
+
+        let mut kernel = Kernel::new();
+        kernel
+            .register(Box::new(TestModule::new("test-mod")))
+            .unwrap();
+        kernel.start_all().unwrap();
+
+        // Subscribe a handler owned by "test-mod".
+        let handler = std::sync::Arc::new(BusHandler {
+            called: AtomicBool::new(false),
+        });
+        kernel.event_bus().subscribe_for_module(
+            "test-mod",
+            "test.bus.event",
+            Box::new(handler.clone()),
+        );
+        assert_eq!(
+            kernel.event_bus().handler_count_for_module("test-mod"),
+            1,
+            "handler should be registered before stop"
+        );
+
+        // Stop the kernel — this must unsubscribe "test-mod" handlers.
+        kernel.stop_all().unwrap();
+
+        // The handler should have been removed from the bus.
+        assert_eq!(
+            kernel.event_bus().handler_count_for_module("test-mod"),
+            0,
+            "stop_all must unsubscribe module handlers from the event bus"
+        );
+
+        // Publish an event — the stopped module's handler must NOT fire.
+        kernel
+            .event_bus()
+            .publish(&TestBusEvent { _value: 42 })
+            .unwrap();
+        assert!(
+            !handler.called.load(Ordering::SeqCst),
+            "stopped module's handler must not be called after stop_all"
+        );
+    }
+
+    #[test]
+    fn stop_module_unsubscribes_that_modules_handlers() {
+        use foundation::contracts::{DomainEvent, EventHandler};
+
+        #[derive(Debug, Clone)]
+        struct TestStopEvent {
+            _value: i32,
+        }
+        impl DomainEvent for TestStopEvent {
+            fn event_name(&self) -> &'static str {
+                "test.stop.event"
+            }
+        }
+
+        struct StopHandler {
+            called: AtomicBool,
+        }
+        impl EventHandler<TestStopEvent> for StopHandler {
+            fn handle(&self, _event: &TestStopEvent) -> ModuleResult {
+                self.called.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        impl EventHandler<TestStopEvent> for std::sync::Arc<StopHandler> {
+            fn handle(&self, event: &TestStopEvent) -> ModuleResult {
+                (**self).handle(event)
+            }
+        }
+
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("mod-a"))).unwrap();
+        kernel.register(Box::new(TestModule::new("mod-b"))).unwrap();
+        kernel.start_all().unwrap();
+
+        let handler_a = std::sync::Arc::new(StopHandler {
+            called: AtomicBool::new(false),
+        });
+        kernel.event_bus().subscribe_for_module(
+            "mod-a",
+            "test.stop.event",
+            Box::new(handler_a.clone()),
+        );
+
+        let handler_b = std::sync::Arc::new(StopHandler {
+            called: AtomicBool::new(false),
+        });
+        kernel.event_bus().subscribe_for_module(
+            "mod-b",
+            "test.stop.event",
+            Box::new(handler_b.clone()),
+        );
+
+        // Stop only mod-a — its handlers must be removed, mod-b's kept.
+        kernel.stop_module("mod-a").unwrap();
+
+        assert_eq!(
+            kernel.event_bus().handler_count_for_module("mod-a"),
+            0,
+            "stop_module must unsubscribe that module's handlers"
+        );
+        assert_eq!(
+            kernel.event_bus().handler_count_for_module("mod-b"),
+            1,
+            "other modules' handlers must remain"
+        );
+
+        // Publish — mod-a's handler must NOT fire, mod-b's must.
+        kernel
+            .event_bus()
+            .publish(&TestStopEvent { _value: 1 })
+            .unwrap();
+        assert!(
+            !handler_a.called.load(Ordering::SeqCst),
+            "stopped module's handler must not fire"
+        );
+        assert!(
+            handler_b.called.load(Ordering::SeqCst),
+            "running module's handler must still fire"
+        );
     }
 }
