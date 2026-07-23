@@ -756,9 +756,16 @@ impl Settings {
     }
 
     /// Get the Redis cache TTL in seconds.
+    ///
+    /// Returns an error if the stored value cannot be parsed as a u64.
     pub fn get_redis_cache_ttl(conn: &Connection) -> Result<u64, PlatformError> {
         let val = Self::get(conn, keys::REDIS_CACHE_TTL)?;
-        Ok(val.as_deref().unwrap_or("300").parse().unwrap_or(300))
+        val.as_deref().unwrap_or("300").parse().map_err(|_| {
+            PlatformError::Internal(format!(
+                "invalid redis cache TTL: {}",
+                val.as_deref().unwrap_or("(missing)")
+            ))
+        })
     }
 
     /// Set the Redis cache TTL in seconds.
@@ -1419,6 +1426,33 @@ mod tests {
         Settings::set(&conn, "k", "same").unwrap();
         Settings::set(&conn, "k", "same").unwrap();
         assert_eq!(Settings::get(&conn, "k").unwrap(), Some("same".into()));
+    }
+
+    // ── Bug: get_redis_cache_ttl silent parse failure ───────────
+
+    #[test]
+    fn get_redis_cache_ttl_returns_error_on_invalid_value() {
+        let conn = fresh();
+        Settings::set(&conn, keys::REDIS_CACHE_TTL, "not-a-number").unwrap();
+        let result = Settings::get_redis_cache_ttl(&conn);
+        assert!(
+            result.is_err(),
+            "invalid TTL value 'not-a-number' must return error, \
+             not silently default to 300"
+        );
+    }
+
+    #[test]
+    fn get_redis_cache_ttl_default_is_300() {
+        let conn = fresh();
+        assert_eq!(Settings::get_redis_cache_ttl(&conn).unwrap(), 300);
+    }
+
+    #[test]
+    fn get_redis_cache_ttl_valid_value() {
+        let conn = fresh();
+        Settings::set(&conn, keys::REDIS_CACHE_TTL, "600").unwrap();
+        assert_eq!(Settings::get_redis_cache_ttl(&conn).unwrap(), 600);
     }
 
     // ── Delta ledger tests ──────────────────────────────────────
