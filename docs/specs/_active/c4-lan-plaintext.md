@@ -1,10 +1,11 @@
 # C-4 — LAN event server: default-bind to loopback, add PSK for opt-in KDS bridge
 
-- **Status:** TODO
+- **Status:** DONE
 - **Sprint:** 0.0.5-rc
 - **Severity:** CRITICAL
-- **Owner:** TBD (audit-triage)
-- **Implementer:** pending
+- **Owner:** RSA-Agent (Buffy)
+- **Implementer:** RSA-Agent (Buffy)
+- **Closed by:** commit (2026-07-23)
 - **Closes:** audit finding C-4 (2026-07-12-desktop-app-audit)
 - **Audit source:** `docs/specs/_active/2026-07-12-desktop-app-audit.md` §2
 

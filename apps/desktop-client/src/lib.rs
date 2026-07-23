@@ -101,7 +101,30 @@ pub fn run() {
             });
 
             // ── LAN event forwarder ────────────────────────────────────
-            let forwarder = crate::lan_server::LanEventForwarder::new();
+            // Read LAN server config from the settings table (C-4).
+            // Default: loopback-only, no PSK. External bind requires
+            // both lan_server.bind="0.0.0.0" AND a non-empty lan_server.psk.
+            let (lan_bind_addr, lan_psk) = {
+                let state = app.state::<AppState>();
+                let db = state.db.blocking_lock();
+                let bind = oz_core::Settings::get(&db, "lan_server.bind")
+                    .unwrap_or(None)
+                    .unwrap_or_else(|| "127.0.0.1".to_string());
+                let psk = oz_core::Settings::get(&db, "lan_server.psk")
+                    .unwrap_or(None)
+                    .filter(|s| !s.is_empty());
+                // Reject external bind without a PSK.
+                let bind = if bind == "0.0.0.0" && psk.is_none() {
+                    tracing::warn!(
+                        "lan_server.bind is 0.0.0.0 but lan_server.psk is empty — falling back to 127.0.0.1"
+                    );
+                    "127.0.0.1".to_string()
+                } else {
+                    bind
+                };
+                (format!("{bind}:9180"), psk)
+            };
+            let forwarder = crate::lan_server::LanEventForwarder::new(lan_bind_addr, lan_psk);
             let handle = forwarder.handle();
             platform_startup::spawn_daemon("LAN event forwarder", forwarder.run());
 

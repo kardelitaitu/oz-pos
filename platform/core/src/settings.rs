@@ -328,6 +328,18 @@ pub mod keys {
     pub const RATE_SYNC_INTERVAL: &str = "rate_sync.interval";
     /// Base currency for exchange rates. Default `"USD"`.
     pub const RATE_SYNC_BASE_CURRENCY: &str = "rate_sync.base_currency";
+
+    // ── LAN server settings (C-4) ────────────────────────────
+    /// Bind address for the LAN event forwarder.
+    /// Default `"127.0.0.1"` (loopback only). Set to `"0.0.0.0"`
+    /// to allow external KDS tablet connections — requires
+    /// `lan_server.psk` to be non-empty.
+    pub const LAN_SERVER_BIND: &str = "lan_server.bind";
+    /// Pre-shared key for the LAN event forwarder.
+    /// Required when `lan_server.bind` is `"0.0.0.0"`.
+    /// Peers must send `{"op":"hello","psk":"<value>"}` as
+    /// their first message or the connection is dropped.
+    pub const LAN_SERVER_PSK: &str = "lan_server.psk";
 }
 
 impl Settings {
@@ -1581,5 +1593,7 @@ mod tests {
         assert!(!keys::BRAND_PRIMARY_COLOUR.is_empty());
         assert!(!keys::BRAND_LOGO_PATH.is_empty());
         assert!(!keys::BRAND_STORE_NAME.is_empty());
+        assert!(!keys::LAN_SERVER_BIND.is_empty());
+        assert!(!keys::LAN_SERVER_PSK.is_empty());
     }
 }

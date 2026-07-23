@@ -25,7 +25,7 @@
 //! ```no_run
 //! use oz_pos_app_lib::lan_server::LanEventForwarder;
 //!
-//! let forwarder = LanEventForwarder::new();
+//! let forwarder = LanEventForwarder::default();
 //! ```
 
 use std::collections::HashMap;
@@ -33,12 +33,10 @@ use std::sync::Arc;
 
 use foundation::contracts::{EventHandler, ModuleResult};
 use oz_core::events::{CourseFired, SaleCompleted};
-use tokio::io::AsyncWriteExt;
+use serde::Deserialize;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, broadcast};
-
-/// TCP port for the LAN event forwarding server.
-const LAN_PORT: u16 = 9180;
 
 /// Maximum number of pending broadcast messages before old ones are
 /// dropped (avoids unbounded memory growth for slow peers).
@@ -46,6 +44,16 @@ const CHANNEL_CAPACITY: usize = 256;
 
 /// Interval between heartbeat pings sent to each peer (seconds).
 const HEARTBEAT_INTERVAL_SECS: u64 = 5;
+
+/// Timeout for the PSK handshake (seconds).
+const PSK_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
+
+/// First message a peer must send when PSK is configured.
+#[derive(Debug, Deserialize)]
+struct HelloMsg {
+    op: String,
+    psk: String,
+}
 
 // ── LanEventForwarder ────────────────────────────────────────────────
 
@@ -59,6 +67,12 @@ pub struct LanEventForwarder {
     /// Per-peer offline buffer. Maps peer address → buffered JSON events
     /// that could not be delivered due to disconnection.
     offline_buffer: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    /// TCP bind address (e.g. `"127.0.0.1:9180"` or `"0.0.0.0:9180"`).
+    bind_addr: String,
+    /// Optional pre-shared key for external bind mode.
+    /// When `Some`, peers must send `{"op":"hello","psk":"<value>"}`
+    /// as their first message or the connection is dropped.
+    psk: Option<Arc<String>>,
 }
 
 /// Handle for registering event bus handlers.
@@ -71,11 +85,13 @@ pub struct LanForwarderHandle {
 
 impl LanEventForwarder {
     /// Create a new forwarder with an empty offline buffer.
-    pub fn new() -> Self {
+    pub fn new(bind_addr: String, psk: Option<String>) -> Self {
         let (tx, _) = broadcast::channel(CHANNEL_CAPACITY);
         Self {
             tx,
             offline_buffer: Arc::new(Mutex::new(HashMap::new())),
+            bind_addr,
+            psk: psk.map(Arc::new),
         }
     }
 
@@ -89,22 +105,24 @@ impl LanEventForwarder {
     /// Bind the TCP listener and start accepting connections.
     ///
     /// Spawns a tokio task for each accepted connection that:
-    /// 1. Flushes any buffered events for this peer address
-    /// 2. Subscribes to the broadcast channel
-    /// 3. Sends heartbeat pings every 5s
-    /// 4. Buffers events on write failure and exits
+    /// 1. Optionally performs a PSK handshake (for external bind)
+    /// 2. Flushes any buffered events for this peer address
+    /// 3. Subscribes to the broadcast channel
+    /// 4. Sends heartbeat pings every 5s
+    /// 5. Buffers events on write failure and exits
     pub async fn run(self) {
-        let addr = format!("0.0.0.0:{LAN_PORT}");
-        let listener = match TcpListener::bind(&addr).await {
+        let listener = match TcpListener::bind(&self.bind_addr).await {
             Ok(l) => {
-                tracing::info!(address = %addr, "LAN event forwarder started");
+                tracing::info!(address = %self.bind_addr, "LAN event forwarder started");
                 l
             }
             Err(e) => {
-                tracing::error!(address = %addr, error = %e, "failed to bind LAN forwarder");
+                tracing::error!(address = %self.bind_addr, error = %e, "failed to bind LAN forwarder");
                 return;
             }
         };
+
+        let psk = self.psk.clone();
 
         loop {
             match listener.accept().await {
@@ -130,7 +148,15 @@ impl LanEventForwarder {
 
                     let rx = self.tx.subscribe();
                     let buffer = self.offline_buffer.clone();
-                    tokio::spawn(handle_peer(stream, addr, rx, buffer, initial_events));
+                    let psk_clone = psk.clone();
+                    tokio::spawn(handle_peer(
+                        stream,
+                        addr,
+                        rx,
+                        buffer,
+                        initial_events,
+                        psk_clone,
+                    ));
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "LAN accept failed");
@@ -161,7 +187,7 @@ impl LanEventForwarder {
 
 impl Default for LanEventForwarder {
     fn default() -> Self {
-        Self::new()
+        Self::new("127.0.0.1:9180".to_string(), None)
     }
 }
 
@@ -178,7 +204,43 @@ async fn handle_peer(
     mut rx: broadcast::Receiver<String>,
     offline_buffer: Arc<Mutex<HashMap<String, Vec<String>>>>,
     initial_events: Vec<String>,
+    psk: Option<Arc<String>>,
 ) {
+    // Phase 0: PSK handshake (only when configured for external bind).
+    // The handshake runs inside the spawned task so a slow/malicious
+    // peer cannot block the accept loop (DoS protection).
+    if let Some(expected_psk) = &psk {
+        let mut reader = BufReader::new(&mut stream);
+        let mut line = String::new();
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(PSK_HANDSHAKE_TIMEOUT_SECS),
+            reader.read_line(&mut line),
+        )
+        .await
+        {
+            Ok(Ok(_)) => {
+                let hello: Result<HelloMsg, _> = serde_json::from_str(line.trim());
+                match hello {
+                    Ok(msg) if msg.op == "hello" && msg.psk == **expected_psk => {
+                        tracing::debug!(peer = %peer_addr, "LAN PSK handshake accepted");
+                    }
+                    _ => {
+                        tracing::warn!(peer = %peer_addr, "LAN PSK handshake rejected — bad credentials");
+                        return;
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                tracing::warn!(peer = %peer_addr, error = %e, "LAN PSK handshake failed — read error");
+                return;
+            }
+            Err(_elapsed) => {
+                tracing::warn!(peer = %peer_addr, "LAN PSK handshake timed out");
+                return;
+            }
+        }
+    }
+
     // Phase 1: Flush any buffered events first.
     for event in initial_events {
         let line = format!("{event}\n");
@@ -319,13 +381,13 @@ mod tests {
 
     #[test]
     fn forwarder_new_creates_channel() {
-        let fwd = LanEventForwarder::new();
+        let fwd = LanEventForwarder::default();
         fwd.broadcast("{\"test\":1}".into());
     }
 
     #[test]
     fn forwarder_handle_is_clone() {
-        let fwd = LanEventForwarder::new();
+        let fwd = LanEventForwarder::default();
         let h1 = fwd.handle();
         let h2 = fwd.handle();
         let _ = h1.sale_completed_handler();
@@ -340,7 +402,7 @@ mod tests {
 
     #[tokio::test]
     async fn forwarder_buffered_count_starts_zero() {
-        let fwd = LanEventForwarder::new();
+        let fwd = LanEventForwarder::default();
         assert_eq!(fwd.buffered_count().await, 0);
         assert_eq!(fwd.buffered_peer_count().await, 0);
     }
@@ -462,7 +524,7 @@ mod tests {
 
         let server_handle = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
-            handle_peer(stream, "test-peer".into(), rx, buffer, initial_events).await;
+            handle_peer(stream, "test-peer".into(), rx, buffer, initial_events, None).await;
         });
 
         let client = TcpStream::connect(addr).await.unwrap();
@@ -670,7 +732,7 @@ mod tests {
 
     #[tokio::test]
     async fn forwarder_buffered_count_reflects_buffer() {
-        let fwd = LanEventForwarder::new();
+        let fwd = LanEventForwarder::default();
         assert_eq!(fwd.buffered_count().await, 0);
 
         // Manually insert a buffered event.
