@@ -895,3 +895,14 @@ workspace-terminal-prefs-heading = Terminal Preferences
 workspace-terminal-sound = Sound Volume
 workspace-terminal-dark-mode = Dark Mode
 workspace-terminal-scale-zero = Auto-Zero Scale on Boot
+
+# ── Store Info Card (ADR #22 Phase 2) ──
+workspace-store-info-heading = Store Info
+workspace-store-info-name = Name
+workspace-store-info-address = Address
+workspace-store-info-branch = Branch
+workspace-store-info-currency = Currency
+workspace-store-info-tax-id = Tax ID
+
+# ── Topology Editor (ADR #22 Phase 2) ──
+workspace-type-selector-label = Workspace Type

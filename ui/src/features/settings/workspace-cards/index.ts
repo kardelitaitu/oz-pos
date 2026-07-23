@@ -5,3 +5,4 @@ export { WorkspaceRestaurantPosSettings } from './WorkspaceRestaurantPosSettings
 export { WorkspaceKdsSettings } from './WorkspaceKdsSettings';
 export { WorkspaceInventorySettings } from './WorkspaceInventorySettings';
 export { TerminalPreferencesCard } from './TerminalPreferencesCard';
+export { StoreInfoCard } from './StoreInfoCard';

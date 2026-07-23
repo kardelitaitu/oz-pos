@@ -873,3 +873,14 @@ workspace-terminal-prefs-heading = Preferensi Terminal
 workspace-terminal-sound = Volume Suara
 workspace-terminal-dark-mode = Mode Gelap
 workspace-terminal-scale-zero = Nolkan Otomatis Timbangan Saat Boot
+
+# ── Store Info Card (ADR #22 Phase 2) ──
+workspace-store-info-heading = Info Toko
+workspace-store-info-name = Nama
+workspace-store-info-address = Alamat
+workspace-store-info-branch = Cabang
+workspace-store-info-currency = Mata Uang
+workspace-store-info-tax-id = NPWP
+
+# ── Topology Editor (ADR #22 Phase 2) ──
+workspace-type-selector-label = Tipe Workspace

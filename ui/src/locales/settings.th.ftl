@@ -834,3 +834,14 @@ workspace-terminal-sound = [TH] Sound Volume [/TH]
 workspace-terminal-dark-mode = [TH] Dark Mode [/TH]
 workspace-terminal-scale-zero = [TH] Auto-Zero Scale on Boot [/TH]
 
+# ── Store Info Card (ADR #22 Phase 2) ──
+workspace-store-info-heading = [TH] Store Info [/TH]
+workspace-store-info-name = [TH] Name [/TH]
+workspace-store-info-address = [TH] Address [/TH]
+workspace-store-info-branch = [TH] Branch [/TH]
+workspace-store-info-currency = [TH] Currency [/TH]
+workspace-store-info-tax-id = [TH] Tax ID [/TH]
+
+# ── Topology Editor (ADR #22 Phase 2) ──
+workspace-type-selector-label = [TH] Workspace Type [/TH]
+

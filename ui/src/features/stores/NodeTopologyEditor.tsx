@@ -4,6 +4,15 @@ import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { loadTopology } from '@/api/topology';
+import { useSettings } from '@/contexts/SettingsContext';
+import {
+  WorkspaceStorePosSettings,
+  WorkspaceRestaurantPosSettings,
+  WorkspaceKdsSettings,
+  WorkspaceInventorySettings,
+  StoreInfoCard,
+  type WorkspaceCardProps,
+} from '@/features/settings/workspace-cards';
 import {
   StoreIcon,
   PosIcon,
@@ -151,6 +160,7 @@ export default function NodeTopologyEditor({
   workspaceInstances,
 }: NodeTopologyEditorProps) {
   const { addToast } = useToast();
+  const { settings } = useSettings();
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const [nodes, setNodes] = useState<TopologyNodeData[]>(PRESET_RETAIL.nodes);
@@ -715,6 +725,54 @@ export default function NodeTopologyEditor({
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
+  // ── Workspace card adapter (ADR #22 Phase 2) ────────────────
+
+  /** Map a workspace node's typeKey to the correct settings card. */
+  const renderWorkspaceCard = useCallback((node: TopologyNodeData) => {
+    const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
+    const cardProps: WorkspaceCardProps = {
+      variant: 'inspector-drawer',
+      terminalId: node.id,
+    };
+
+    switch (typeKey) {
+      case 'restaurant-pos':
+        return <WorkspaceRestaurantPosSettings key={node.id} {...cardProps} />;
+      case 'kds':
+        return <WorkspaceKdsSettings key={node.id} {...cardProps} />;
+      default:
+        return <WorkspaceStorePosSettings key={node.id} {...cardProps} />;
+    }
+  }, []);
+
+  // ── Live telemetry (ADR #22 Phase 2) ─────────────────────────
+
+  /** Compute live telemetry for a node from SettingsContext. */
+  const getTelemetry = useCallback((node: TopologyNodeData): { badge: string; status: 'online' | 'warning' | 'offline' } | null => {
+    if (node.type === 'store') {
+      return { badge: settings.store.name ? 'Active' : 'Unconfigured', status: settings.store.name ? 'online' : 'warning' };
+    }
+    if (node.type === 'workspace') {
+      const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
+      if (typeKey === 'kds') {
+        return { badge: 'KDS Ready', status: 'online' };
+      }
+      return {
+        badge: settings.receipt.paperWidth === 'standard' ? 'Receipt ✓' : 'Receipt 58mm',
+        status: 'online',
+      };
+    }
+    if (node.type === 'warehouse') {
+      // Inventory settings are not yet wired into SettingsContext.
+      // When the inventory scope is added (Phase 3+), update this to
+      // show live low-stock counts from settings.inventory.
+      return { badge: 'Active', status: 'online' };
+    }
+    return node.telemetryBadge
+      ? { badge: node.telemetryBadge, status: node.telemetryStatus ?? 'online' }
+      : null;
+  }, [settings]);
+
   /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
   return (
     <div className="node-topology-editor">
@@ -1026,11 +1084,21 @@ export default function NodeTopologyEditor({
 
                   <div className="node-body">
                     <span className="node-subtitle">{node.subtitle}</span>
-                    {node.telemetryBadge && (
-                      <span className={`node-telemetry-badge telemetry-${node.telemetryStatus || 'online'}`}>
-                        {node.telemetryBadge}
-                      </span>
-                    )}
+                    {(() => {
+                      const telemetry = getTelemetry(node);
+                      if (!telemetry) {
+                        return node.telemetryBadge ? (
+                          <span className={`node-telemetry-badge telemetry-${node.telemetryStatus || 'online'}`}>
+                            {node.telemetryBadge}
+                          </span>
+                        ) : null;
+                      }
+                      return (
+                        <span className={`node-telemetry-badge telemetry-${telemetry.status}`}>
+                          {telemetry.badge}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="node-port-sockets-group">
@@ -1096,43 +1164,44 @@ export default function NodeTopologyEditor({
                 />
               </label>
 
-              <div className="inspector-info-box">
-                <strong>Node Type:</strong> {selectedNode.type.toUpperCase()}<br />
-                <strong>Coordinates:</strong> X: {selectedNode.x}, Y: {selectedNode.y}
-              </div>
-
-              {selectedNode.type === 'warehouse' && (
-                <div className="inspector-section">
-                  <h4>Warehouse Settings</h4>
-                  <p className="inspector-hint">Warehouse behaviour is configured in Inventory settings.</p>
-                </div>
-              )}
-
+              {/* Workspace type selector + settings card */}
               {selectedNode.type === 'workspace' && (
                 <div className="inspector-section">
-                  <h4>Workspace Type</h4>
-                  <label className="inspector-field">
-                    <span>Register Type</span>
-                    <select
-                      value={(selectedNode.metadata?.['typeKey'] as string) ?? 'store-pos'}
-                      disabled={selectedNode.metadata?.['persisted'] === true}
-                      onChange={(e) => {
-                        const typeKey = e.target.value;
-                        setNodes((prev) => prev.map((n) => (n.id === selectedNode.id
-                          ? { ...n, metadata: { ...(n.metadata ?? {}), typeKey } }
-                          : n)));
-                      }}
-                      aria-label="Workspace register type"
-                    >
-                      {WORKSPACE_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.key} value={opt.key}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  {selectedNode.metadata?.['persisted'] === true && (
-                    <p className="inspector-hint">Type is fixed after a workspace is saved.</p>
-                  )}
+                  <h4>
+                    <Localized id="workspace-type-selector-label">Workspace Type</Localized>
+                  </h4>
+                  <select
+                    className="inspector-select"
+                    value={(selectedNode.metadata?.['typeKey'] as string) ?? 'store-pos'}
+                    onChange={(e) => {
+                      const newTypeKey = e.target.value;
+                      setNodes((prev) =>
+                        prev.map((n) =>
+                          n.id === selectedNode.id
+                            ? { ...n, metadata: { ...n.metadata, typeKey: newTypeKey } }
+                            : n,
+                        ),
+                      );
+                    }}
+                    aria-label="Select workspace type"
+                  >
+                    {WORKSPACE_TYPE_OPTIONS.filter((opt) => opt.key !== 'warehouse').map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  {renderWorkspaceCard(selectedNode)}
                 </div>
+              )}
+              {selectedNode.type === 'warehouse' && (
+                <WorkspaceInventorySettings
+                  variant="inspector-drawer"
+                  locationId={selectedNode.id}
+                />
+              )}
+              {selectedNode.type === 'store' && (
+                <StoreInfoCard variant="inspector-drawer" />
               )}
             </div>
           </div>
