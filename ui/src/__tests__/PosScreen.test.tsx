@@ -648,11 +648,9 @@ describe('PosScreen – bundle scanning toast', () => {
 
   // ── Settings sub-screen (4-tab-routing) ────────────────────────
   //
-  // Mirrors the same pattern tested in RetailOptionsScreen.test.tsx
-  // for the desktop: the Settings sub-screen has four tabs
-  // (Appearance / Features / Data / Sync) that route to dedicated
-  // settings sub-screens. Lets the restaurant tablet cover the same
-  // Settings surface as the desktop client.
+  // The Settings sub-screen has four tabs (Appearance / Features /
+  // Data / Sync) that route to dedicated settings sub-screens.
+  // (RetailOptionsScreen removed in Phase 6, ADR #22.)
 
   it('opens the Settings sub-screen and renders the Appearance tab by default', async () => {
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);

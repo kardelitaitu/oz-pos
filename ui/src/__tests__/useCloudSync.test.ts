@@ -1,6 +1,6 @@
 // ── useCloudSync hook tests ───────────────────────────────────────
 //
-// Covers the hook in isolation (no RetailOptionsScreen wrapper):
+// Covers the hook in isolation:
 //   1. Lazy localStorage hydration on mount
 //   2. IPC token load on mount (get_setting)
 //   3. persist() routing (localStorage + updateSyncSettings + set_setting)
