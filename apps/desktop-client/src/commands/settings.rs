@@ -1217,4 +1217,25 @@ mod tests {
         assert_eq!(back.printer_connection, "Network");
         assert_eq!(back.scanner_device_id, "scanner-2");
     }
+
+    /// The orphan-cleanup keys in `get_hardware_settings` must stay
+    /// in sync with the constants in `platform_core::settings::keys`.
+    /// If this test fails, update the `hw_keys` array.
+    #[test]
+    fn hw_orphan_keys_match_platform_core_constants() {
+        use platform_core::settings::keys;
+        let expected = [
+            keys::PRINTER_CONNECTION,
+            keys::PRINTER_DEVICE_PATH,
+            keys::PRINTER_PAPER_SIZE,
+            keys::SCANNER_DEVICE_ID,
+            keys::SCANNER_INPUT_MODE,
+        ];
+        // These must match the hw_keys array in get_hardware_settings.
+        assert_eq!(expected[0], "printer.connection");
+        assert_eq!(expected[1], "printer.device_path");
+        assert_eq!(expected[2], "printer.paper_size");
+        assert_eq!(expected[3], "scanner.device_id");
+        assert_eq!(expected[4], "scanner.input_mode");
+    }
 }

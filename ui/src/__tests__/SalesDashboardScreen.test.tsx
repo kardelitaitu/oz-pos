@@ -43,6 +43,8 @@ beforeEach(() => {
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === 'export_daily_summary') return Promise.resolve(SAMPLE_SUMMARY);
     if (cmd === 'export_sales_by_hour') return Promise.resolve(SAMPLE_HOURLY);
+    if (cmd === 'get_category_breakdown') return Promise.resolve([]);
+    if (cmd === 'get_hourly_heatmap') return Promise.resolve([]);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
