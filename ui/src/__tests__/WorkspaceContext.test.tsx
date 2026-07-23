@@ -239,6 +239,39 @@ describe('WorkspaceContext', () => {
   });
 
   describe('workspace screens', () => {
+    it('handles race condition: stale listWorkspaceScreens does not overwrite new screens', async () => {
+      let resolveScreensA!: (value: unknown) => void;
+      const screensAPromise = new Promise((resolve) => { resolveScreensA = resolve; });
+
+      // First call (for A) hangs; second call (for B) resolves immediately
+      mocks.listWorkspaceScreens
+        .mockImplementationOnce(() => screensAPromise)
+        .mockImplementationOnce(() =>
+          Promise.resolve([{ screen_key: 'pos', sort_order: 1 }]),
+        );
+
+      const { result } = renderWorkspaceHook();
+      await waitForLoaded(result);
+
+      // Select workspace A (triggers first listWorkspaceScreens call that hangs)
+      act(() => { result.current.workspace.setActiveWorkspace('restaurant-pos'); });
+      await flushAsync();
+
+      // Switch to B while A's screens are still loading
+      act(() => { result.current.workspace.setActiveInstance(STORE_POS); });
+
+      // Wait for B's screens to resolve
+      await waitFor(() => {
+        expect(result.current.workspace.workspaceScreens).toEqual(['pos']);
+      }, FAST_WAIT);
+
+      // Now resolve A's deferred promise — the stale .then() must NOT overwrite
+      await act(async () => { resolveScreensA!([{ screen_key: 'orders', sort_order: 1 }]); });
+
+      // B's screens should still be 'pos' (not overwritten by A's 'orders')
+      expect(result.current.workspace.workspaceScreens).toEqual(['pos']);
+    });
+
     it('loads screens when an instance is activated', async () => {
       const { result } = renderWorkspaceHook();
 

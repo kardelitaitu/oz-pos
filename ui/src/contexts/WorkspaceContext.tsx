@@ -383,19 +383,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [roleId, userId, fetchWorkspaces]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!activeInstance) {
       setWorkspaceScreensState([]);
       return;
     }
     listWorkspaceScreens(activeInstance.type_key)
       .then((screens) => {
+        if (cancelled) return;
         if (screens.length > 0) {
           setWorkspaceScreensState(screens.map((s) => s.screen_key));
         } else {
           setWorkspaceScreensState([]);
         }
       })
-      .catch(() => setWorkspaceScreensState([]));
+      .catch(() => {
+        if (!cancelled) setWorkspaceScreensState([]);
+      });
+    return () => { cancelled = true; };
   }, [activeInstance]);
 
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
