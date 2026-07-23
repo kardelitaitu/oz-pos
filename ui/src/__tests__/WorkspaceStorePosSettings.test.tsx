@@ -389,4 +389,27 @@ describe('WorkspaceStorePosSettings', () => {
       expect(btn).toBeDisabled();
     });
   });
+
+  // ── i18n: no hardcoded "Toggle" sr-only strings ───────────────
+  //
+  // Each settings toggle switch renders a `<span className="sr-only">`
+  // as the accessible name for the `role="switch"` input. The literal
+  // English "Toggle" text bypasses @fluent/react — AGENTS.md mandates
+  // <Localized> for all user-visible strings. A screen reader announces
+  // the untranslated word instead of a localized control label.
+  // This test asserts the sr-only text is NOT the hardcoded English
+  // "Toggle" — after the fix it is wrapped in <Localized id="toggle">.
+
+  it('does not render hardcoded English "Toggle" as sr-only switch labels', () => {
+    renderCard();
+    // Every toggle on this card previously rendered <span class="sr-only">Toggle</span>.
+    // After localization, the text comes from the Fluent bundle, not the
+    // literal string "Toggle". queryAllByText returns [] when no match
+    // (getAllByText throws) — we assert zero hardcoded "Toggle" strings.
+    const toggleSpans = screen.queryAllByText('Toggle');
+    expect(
+      toggleSpans,
+      'found hardcoded English "Toggle" sr-only strings — these must be wrapped in <Localized id="toggle">',
+    ).toHaveLength(0);
+  });
 });

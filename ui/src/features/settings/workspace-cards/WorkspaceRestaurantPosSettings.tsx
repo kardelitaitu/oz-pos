@@ -87,7 +87,7 @@ export function WorkspaceRestaurantPosSettings({
             <Localized id="workspace-resto-table-enable">Enable Table Layout</Localized>
           </label>
             <label className="settings-toggle" htmlFor="resto-table-mgmt">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
                   id="resto-table-mgmt"
@@ -126,7 +126,7 @@ export function WorkspaceRestaurantPosSettings({
             <Localized id="workspace-resto-courses-enable">Enable Course Firing</Localized>
           </label>
             <label className="settings-toggle" htmlFor="resto-course-firing">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
                   id="resto-course-firing"

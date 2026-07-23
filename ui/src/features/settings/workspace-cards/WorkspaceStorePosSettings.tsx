@@ -118,7 +118,7 @@ export function WorkspaceStorePosSettings({
             <Localized id="workspace-pos-show-currency">Show Currency</Localized>
           </label>
           <label className="settings-toggle" htmlFor="pos-show-currency">
-            <span className="sr-only">Toggle</span>
+            <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
             <span className="settings-toggle-switch">
               <input
                 id="pos-show-currency"
@@ -139,7 +139,7 @@ export function WorkspaceStorePosSettings({
             <Localized id="workspace-pos-show-tax">Show Tax</Localized>
           </label>
           <label className="settings-toggle" htmlFor="pos-show-tax">
-            <span className="sr-only">Toggle</span>
+            <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
             <span className="settings-toggle-switch">
               <input
                 id="pos-show-tax"
@@ -160,7 +160,7 @@ export function WorkspaceStorePosSettings({
             <Localized id="workspace-pos-show-table">Show Table Number</Localized>
           </label>
           <label className="settings-toggle" htmlFor="pos-show-table">
-            <span className="sr-only">Toggle</span>
+            <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
             <span className="settings-toggle-switch">
               <input
                 id="pos-show-table"

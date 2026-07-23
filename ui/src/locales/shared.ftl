@@ -56,6 +56,7 @@ print = Print
 back = Back
 retry = Retry
 search = Search
+toggle = Toggle
 no-results = No results found
 error-occurred = An error occurred
 

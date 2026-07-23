@@ -7,6 +7,7 @@ delete = Hapus
 edit = Ubah
 close = Tutup
 search = Cari
+toggle = Alih
 filter = Saring
 confirm = Konfirmasi
 back = Kembali

@@ -109,7 +109,7 @@ export function WorkspaceInventorySettings({
             <Localized id="workspace-inv-deduction-warehouse">Prefer Warehouse First</Localized>
           </label>
               <label className="settings-toggle" htmlFor="inv-deduction-wh">
-                <span className="sr-only">Toggle</span>
+                <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
                 <span className="settings-toggle-switch">
                   <input
                     id="inv-deduction-wh"

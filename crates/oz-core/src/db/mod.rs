@@ -230,7 +230,9 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
     let sku_str: String = row.get("sku")?;
     let cur_str: String = row.get("currency")?;
     let barcode_raw: Option<String> = row.get("barcode")?;
-    let product_type_str: Option<String> = row.get("product_type").ok();
+    // Use Option<String> for nullable column — reads NULL as None
+    // rather than swallowing errors via .ok().
+    let product_type_str: Option<String> = row.get("product_type")?;
     Ok(crate::Product {
         id: row.get("id")?,
         sku: crate::Sku::new(sku_str),

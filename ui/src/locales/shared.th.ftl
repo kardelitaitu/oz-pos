@@ -56,6 +56,7 @@ print = [TH] Print [/TH]
 back = [TH] Back [/TH]
 retry = [TH] Retry [/TH]
 search = [TH] Search [/TH]
+toggle = [TH] Toggle [/TH]
 no-results = [TH] No results found [/TH]
 error-occurred = [TH] An error occurred [/TH]
 

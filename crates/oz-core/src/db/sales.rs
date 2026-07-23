@@ -117,7 +117,7 @@ impl Store<'_> {
     ///    with per-SKU shortfall details and available alternatives.
     /// 5. If ALL lines sufficed: calls [`adjust_stock_batch`](crate::db::Store::adjust_stock_batch)
     ///    atomically, creates the sale + payments, writes `deduction_locations`
-    ///    JSON on the `sales` row, transitions to Active→Completed, COMMIT.
+    ///    JSON on the `sales` row with status = 'pending', COMMIT.
     ///
     /// The `workspace_instance_id` is used to resolve the primary location.
     /// Pass `None` for legacy single-location deployments — the canonical

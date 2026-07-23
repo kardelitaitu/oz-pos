@@ -101,7 +101,7 @@ export function WorkspaceKdsSettings({
             <Localized id="workspace-kds-sound">New Order Sound</Localized>
           </label>
             <label className="settings-toggle" htmlFor="kds-sound">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
                   id="kds-sound"
@@ -176,7 +176,7 @@ export function WorkspaceKdsSettings({
             <Localized id="workspace-kds-auto-ack">Auto-Acknowledge</Localized>
           </label>
             <label className="settings-toggle" htmlFor="kds-auto-ack">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
                   id="kds-auto-ack"
