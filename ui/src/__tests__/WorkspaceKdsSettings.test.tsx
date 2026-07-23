@@ -1,0 +1,155 @@
+// ── WorkspaceKdsSettings tests ─────────────────────────────────────
+//
+// Covers: SLA thresholds (yellow/red sliders), sound toggle,
+// auto-acknowledge toggle, ticket display density select,
+// dirty tracking, save flow, variant differences.
+//
+// ADR #22 Phase 1 testing gate (§9).
+
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { ReactNode, ReactElement } from 'react';
+import { LocalizationProvider } from '@fluent/react';
+import { WorkspaceKdsSettings } from '@/features/settings/workspace-cards/WorkspaceKdsSettings';
+
+const testL10n = {
+  bundles: [], areBundlesEmpty: () => true,
+  parseMarkup: (str: string) => [{ nodeName: '#text', textContent: str } as unknown as Node],
+  getElement: (sourceElement: ReactElement) => sourceElement,
+  getString: (id: string) => {
+    const d: Record<string, string> = {
+      'workspace-kds-sla-heading': 'SLA Escalation',
+      'workspace-kds-sound': 'New Order Sound',
+      'workspace-kds-yellow-threshold': 'Yellow Alert (min)',
+      'workspace-kds-red-threshold': 'Red Alert (min)',
+      'workspace-kds-display-heading': 'Ticket Display',
+      'workspace-kds-auto-ack': 'Auto-Acknowledge',
+      'workspace-kds-density': 'Density',
+      'save': 'Save',
+    };
+    return d[id] ?? id;
+  },
+  reportError: () => {}, getBundle: () => null, getChildren: (str: string) => str,
+};
+
+const mocks = vi.hoisted(() => ({
+  fontSmoothing: 'antialiased' as string,
+}));
+
+// Stable preferences reference — prevents useEffect([settings.preferences])
+// from re-firing on every render (which would cause infinite setDraft loop).
+const stablePrefs = {
+  cardSize: 0, fontSize: 0,
+  get fontSmoothing() { return mocks.fontSmoothing; },
+};
+
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: () => ({
+    settings: {
+      preferences: stablePrefs,
+      receipt: { showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '',
+        paperWidth: 'standard' as const, showTableNumber: false,
+        marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 },
+      store: { name: '', address: '', taxId: '', currency: 'USD', branch: '' },
+      sync: { serverUrl: null, hasApiKey: false, enabled: false },
+      brand: { colour: '#10b981', storeName: '' },
+      currencies: [], appVersion: '',
+    },
+    loading: false, error: null, hasPartialError: false,
+    refetch: vi.fn(), lastChangedKeys: [], markSettingsUpdated: vi.fn(),
+  }),
+}));
+
+vi.mock('../features/settings/SettingsSelect', () => ({
+  default: ({ id, value, onChange, options }: {
+    id: string; value: string; onChange: (v: string) => void;
+    options: Array<{ value: string; label: string }>;
+  }) => (
+    <select id={id} data-testid={id} value={value}
+      onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  ),
+}));
+
+function Wrapper({ children }: { children: ReactNode }) {
+  return <LocalizationProvider l10n={testL10n}>{children}</LocalizationProvider>;
+}
+function renderCard(overrides: Record<string, unknown> = {}) {
+  return render(<Wrapper><WorkspaceKdsSettings
+    variant="full-page" onSaved={vi.fn()} {...overrides} /></Wrapper>);
+}
+
+beforeEach(() => { mocks.fontSmoothing = 'antialiased'; });
+
+describe('WorkspaceKdsSettings', () => {
+  it('renders SLA Escalation heading', () => {
+    renderCard();
+    expect(screen.getByText('SLA Escalation')).toBeInTheDocument();
+  });
+
+  it('renders sound toggle (initially checked from antialiased prefs)', () => {
+    renderCard();
+    const t = document.getElementById('kds-sound') as HTMLInputElement;
+    // fontSmoothing === 'antialiased' → soundEnabled = true
+    expect(t.checked).toBe(true);
+  });
+
+  it('renders yellow threshold slider', () => {
+    renderCard();
+    expect(screen.getByLabelText('Yellow escalation threshold in minutes')).toBeInTheDocument();
+  });
+
+  it('renders red threshold slider', () => {
+    renderCard();
+    expect(screen.getByLabelText('Red escalation threshold in minutes')).toBeInTheDocument();
+  });
+
+  it('renders Ticket Display heading', () => {
+    renderCard();
+    expect(screen.getByText('Ticket Display')).toBeInTheDocument();
+  });
+
+  it('renders auto-acknowledge toggle', () => {
+    renderCard();
+    const t = document.getElementById('kds-auto-ack') as HTMLInputElement;
+    expect(t.checked).toBe(false);
+  });
+
+  it('renders density select', () => {
+    renderCard();
+    expect(screen.getByTestId('kds-density')).toBeInTheDocument();
+  });
+
+  // ── Dirty tracking ───────────────────────────────────────────
+  // originalsRef starts matching draft (DEFAULT_KDS), so dirty=false
+
+  it('Save button disabled when clean', () => {
+    renderCard();
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+  });
+
+  it('Save button enabled after toggling auto-acknowledge', async () => {
+    renderCard();
+    const t = document.getElementById('kds-auto-ack') as HTMLInputElement;
+    fireEvent.click(t);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    });
+  });
+
+  it('calls onSaved after successful save', async () => {
+    const onSaved = vi.fn();
+    renderCard({ onSaved });
+    const t = document.getElementById('kds-auto-ack') as HTMLInputElement;
+    fireEvent.click(t);
+    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  });
+
+  it('hides Save button in inspector-drawer variant', () => {
+    renderCard({ variant: 'inspector-drawer' });
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  });
+});
