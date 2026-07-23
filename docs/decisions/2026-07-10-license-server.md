@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · apps/license-server/ is a Go PocketBase backend exactly as described: main.go + activate.go + renew.go + status.go + expiry.go + ratelimit.go + go.mod (NO Rust Cargo.toml); embedded public key oz-pos-updater.key.pub present at repo root; DEPLOY.md/SCHEMA.md + pb_schema.json + docker-compose.yml present; the RSA signing + /api/v1/license/{activate,renew,status} flow matches the Go code · Status "Implemented (2026-07-15)" consistent · tier/duration/grace model (ADR #5) is the source of truth -->
+
 # ADR #9: License Server Architecture (PocketBase on Northflank)
 
 **Status:** Implemented (2026-07-15)
