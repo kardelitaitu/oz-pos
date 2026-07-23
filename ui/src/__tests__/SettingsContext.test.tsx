@@ -530,4 +530,38 @@ describe('SettingsContext', () => {
     // After unmount, the listener should be cleaned up
     expect(tauriListenHandler.fn).toBeNull();
   });
+
+  // ── Edge cases ──────────────────────────────────────────────
+
+  it('maps currencies.* keys to currencies scope', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    // Mutate currencies list
+    mocks.currencies.length = 0;
+    mocks.currencies.push({ code: 'JPY', name: 'Japanese Yen', minor_exponent: 0, symbol: '¥' });
+    act(() => { result.current.markSettingsUpdated(['currency.default']); });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.currencies).toHaveLength(1);
+    expect(result.current.settings.currencies[0]?.code).toBe('JPY');
+    vi.useRealTimers();
+  });
+
+  it('mixed known and unknown keys triggers full refetch', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    Object.assign(mocks.storeSettings, { name: 'Mixed Key Store' });
+    // unknown key + known key should trigger full refetch
+    act(() => { result.current.markSettingsUpdated(['unknown.scope', 'store.name']); });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.store.name).toBe('Mixed Key Store');
+    vi.useRealTimers();
+  });
 });

@@ -152,4 +152,21 @@ describe('WorkspaceKdsSettings', () => {
     renderCard({ variant: 'inspector-drawer' });
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
   });
+
+  // ── Boundary values ─────────────────────────────────────────
+
+  it('yellow threshold slider has min=3', () => {
+    renderCard();
+    const slider = screen.getByLabelText('Yellow escalation threshold in minutes') as HTMLInputElement;
+    expect(Number(slider.min)).toBe(3);
+    expect(Number(slider.max)).toBe(10);
+  });
+
+  it('red threshold slider min depends on yellow threshold + 1', () => {
+    // Yellow starts at 5, so red min = max(5+1, 6) = 6
+    renderCard();
+    const slider = screen.getByLabelText('Red escalation threshold in minutes') as HTMLInputElement;
+    expect(Number(slider.min)).toBe(6);
+    expect(Number(slider.max)).toBe(15);
+  });
 });

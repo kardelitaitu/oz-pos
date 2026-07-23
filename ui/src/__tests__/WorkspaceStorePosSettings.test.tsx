@@ -349,4 +349,32 @@ describe('WorkspaceStorePosSettings', () => {
     const textarea = screen.getByLabelText('Receipt Footer') as HTMLTextAreaElement;
     expect(textarea.value).toBe('Thank you!');
   });
+
+  // ── Edge cases ──────────────────────────────────────────────
+
+  it('renders without printer section when terminalId is undefined', () => {
+    renderCard({ terminalId: undefined });
+    expect(screen.queryByText('Printer')).not.toBeInTheDocument();
+    expect(screen.queryByText('Barcode Scanner')).not.toBeInTheDocument();
+  });
+
+  it('revert to original disables Save button again', async () => {
+    renderCard();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    });
+
+    // Toggle Show Currency on
+    fireEvent.click(screen.getByLabelText('Show Currency'));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    });
+
+    // Toggle Show Currency back off (revert)
+    fireEvent.click(screen.getByLabelText('Show Currency'));
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: /save/i });
+      expect(btn).toBeDisabled();
+    });
+  });
 });

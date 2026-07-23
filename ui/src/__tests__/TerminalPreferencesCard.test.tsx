@@ -229,4 +229,24 @@ describe('TerminalPreferencesCard', () => {
       expect(toggle.checked).toBe(true);
     });
   });
+
+  // ── Edge case: revert to original ───────────────────────────
+
+  it('revert sound volume to original disables Save again', async () => {
+    renderCard();
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+
+    // Change volume
+    const slider = screen.getByLabelText('Sound volume');
+    fireEvent.change(slider, { target: { value: '50' } });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    });
+
+    // Revert back to original
+    fireEvent.change(slider, { target: { value: '80' } });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    });
+  });
 });
