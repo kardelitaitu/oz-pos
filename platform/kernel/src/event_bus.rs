@@ -665,15 +665,47 @@ mod tests {
     }
 
     #[test]
-    fn handler_state_persists_after_publish() {
-        let bus = EventBus::new();
-        let handler = TestHandler::new();
-        bus.subscribe("test.event", Box::new(handler.clone()));
+    /// Panicking handler does not poison the bus. Since `publish()` uses
+    /// a read lock and panics drop read guards without poisoning the RwLock,
+    /// subsequent publishes must still succeed.
+    #[test]
+    fn panicking_handler_does_not_poison_bus() {
+        use std::sync::Arc;
 
-        bus.publish(&TestEvent { value: 10 }).unwrap();
-        assert_eq!(handler.last_value(), 10);
+        let bus = Arc::new(EventBus::new());
 
-        bus.publish(&TestEvent { value: 20 }).unwrap();
-        assert_eq!(handler.last_value(), 20);
+        // Handler that panics on odd values.
+        struct PanicOnOdd;
+        impl EventHandler<TestEvent> for PanicOnOdd {
+            fn handle(&self, event: &TestEvent) -> ModuleResult {
+                if event.value % 2 != 0 {
+                    panic!("handler panicked on odd value: {}", event.value);
+                }
+                Ok(())
+            }
+        }
+
+        let good_handler = TestHandler::new();
+        bus.subscribe("test.event", Box::new(PanicOnOdd));
+        bus.subscribe("test.event", Box::new(good_handler.clone()));
+
+        // First publish with odd value should panic through publish().
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bus.publish(&TestEvent { value: 1 })
+        }));
+        // The panic should propagate out of publish().
+        assert!(result.is_err(), "publish() should propagate handler panic");
+        // The second handler was never called — panic skipped it.
+        // This is a known limitation: panics drop remaining handlers silently.
+        assert_eq!(
+            good_handler.last_value(),
+            0,
+            "handler after panicking handler should not have been called"
+        );
+
+        // The bus must NOT be poisoned — subsequent publish should work.
+        let result2 = bus.publish(&TestEvent { value: 2 });
+        assert!(result2.is_ok(), "bus should still be usable after panic");
+        assert_eq!(good_handler.last_value(), 2);
     }
 }
