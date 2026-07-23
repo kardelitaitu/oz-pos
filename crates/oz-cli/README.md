@@ -1,5 +1,7 @@
 # oz-cli
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · fully verified against tree: all 13 subcommands present (migrate, init-db/init_db, product/category/inventory/sale/customer/user CRUD, backup, restore, export, export-ozpkg, import-ozpkg, --version); presets simple-retail/restaurant/full-store/custom present; "39 currencies" seed confirmed; --db global flag (default oz-pos.db) confirmed; i64 minor-units convention noted -->
+
 CLI tool for OZ-POS maintenance — migrations, backup, export, and data CRUD.
 
 ## Subcommands

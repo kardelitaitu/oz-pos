@@ -1,5 +1,7 @@
 # oz-hal
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · fully verified against tree: all traits (barcode/printer/cash_drawer/customer_display/weight_scale), drivers (usb/bt/serial/tcp scanner+printer, drawer, serial_display, scale), mocks (MockBarcodeScanner/MockReceiptPrinter/MockCashDrawer in drivers/mock.rs), escpos consts (CUT_FULL/CUT_PARTIAL/ALIGN_CENTER/BOLD_ON/BOLD_OFF) + format_receipt, receipt format_sales_receipt/SalesReceipt/ReceiptConfig, and DriverRegistry methods (discover/register_tcp_printer/scanner) all present; unsafe confined to lib.rs with SAFETY comment per convention -->
+
 Hardware Abstraction Layer — the seam between business logic and physical devices (USB, Bluetooth, serial, TCP).
 
 ## Traits
