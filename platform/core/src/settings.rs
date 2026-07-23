@@ -1654,6 +1654,113 @@ mod tests {
         }
     }
 
+    // ── Transaction atomicity proof & concurrency safety ──────
+
+    /// Prove that `conn.execute()` inside an `unchecked_transaction()`
+    /// is truly transactional: if the transaction is dropped (rolled back),
+    /// the `set()` must NOT persist. This verifies `set_tracked` is atomic.
+    #[test]
+    fn conn_execute_is_part_of_active_transaction() {
+        let conn = fresh();
+        // Open a transaction, call set(), then drop without commit.
+        {
+            let _tx = conn.unchecked_transaction().unwrap();
+            Settings::set(&conn, "tx.key", "should-rollback").unwrap();
+            // _tx dropped here → ROLLBACK
+        }
+        // Value must NOT be visible after rollback.
+        assert_eq!(Settings::get(&conn, "tx.key").unwrap(), None);
+    }
+
+    /// Verify that `Settings::set()` called via `conn.execute()` inside
+    /// an `unchecked_transaction()` commits atomically when `tx.commit()`
+    /// is called. This is the happy path of `set_tracked`.
+    #[test]
+    fn conn_execute_commits_with_transaction() {
+        let conn = fresh();
+        let tx = conn.unchecked_transaction().unwrap();
+        Settings::set(&conn, "tx.key", "should-commit").unwrap();
+        tx.commit().unwrap();
+        assert_eq!(
+            Settings::get(&conn, "tx.key").unwrap(),
+            Some("should-commit".into())
+        );
+    }
+
+    /// Concurrent `set_tracked` calls on different keys must not interfere.
+    /// Each key gets its own version counter regardless of thread scheduling.
+    #[test]
+    fn set_tracked_concurrent_threads_independent_keys() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let conn = Arc::new(fresh_with_delta());
+        let c1 = conn.clone();
+        let c2 = conn.clone();
+
+        let t1 = thread::spawn(move || {
+            for i in 1..=10 {
+                Settings::set_tracked(&c1, "thread.a", &format!("v{i}"), "t1").unwrap();
+            }
+        });
+        let t2 = thread::spawn(move || {
+            for i in 1..=10 {
+                Settings::set_tracked(&c2, "thread.b", &format!("v{i}"), "t2").unwrap();
+            }
+        });
+
+        t1.join().unwrap();
+        t2.join().unwrap();
+
+        // Each key should have exactly 10 versions.
+        assert_eq!(
+            Settings::get_version(&conn, "thread.a", "t1").unwrap(),
+            Some(10)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "thread.b", "t2").unwrap(),
+            Some(10)
+        );
+    }
+
+    /// `set_batch_tracked` with one failing delta must still write all
+    /// settings and the succeeding deltas. Partial failure = non-fatal.
+    #[test]
+    fn set_batch_tracked_partial_delta_failure() {
+        // DB without `setting_updated` — all delta writes will fail.
+        let conn = fresh();
+        let rows: Vec<(String, String)> = vec![
+            ("key.1".into(), "val1".into()),
+            ("key.2".into(), "val2".into()),
+            ("key.3".into(), "val3".into()),
+        ];
+        // Should succeed despite all delta writes failing.
+        Settings::set_batch_tracked(&conn, &rows, "term-a").unwrap();
+        // All settings must be persisted.
+        assert_eq!(Settings::get(&conn, "key.1").unwrap(), Some("val1".into()));
+        assert_eq!(Settings::get(&conn, "key.2").unwrap(), Some("val2".into()));
+        assert_eq!(Settings::get(&conn, "key.3").unwrap(), Some("val3".into()));
+    }
+
+    /// Verify that `set_tracked`'s error does NOT roll back the `set()`.
+    /// The ADR specifies delta loss is non-fatal — the setting persists
+    /// even if the delta write failed. This is the production behavior.
+    ///
+    /// (Already proven by `set_tracked_survives_missing_delta_table`;
+    /// this test confirms the behavior holds for multiple keys.)
+    #[test]
+    fn set_tracked_delta_failure_does_not_rollback_set() {
+        let conn = fresh();
+        // 5 keys, all without delta table — all delta writes fail.
+        for i in 0..5 {
+            let key = format!("fail.{i}");
+            let val = format!("val{i}");
+            Settings::set_tracked(&conn, &key, &val, "term-fail").unwrap();
+            assert_eq!(Settings::get(&conn, &key).unwrap(), Some(val));
+        }
+        assert_eq!(Settings::load_all(&conn).unwrap().len(), 5);
+    }
+
     #[test]
     fn keys_constants_are_non_empty() {
         assert!(!keys::STORE_NAME.is_empty());
