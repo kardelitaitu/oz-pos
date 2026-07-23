@@ -3,6 +3,8 @@ name: tauri-ipc
 description: Tauri v2 command and front-end API conventions for OZ-POS — where Rust commands live, how they are registered, and how the React/TypeScript front-end calls them. Use when adding a new IPC surface or wiring a new feature end-to-end.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding — incomplete/wrong layout example) · F1: Layout section lists command modules sales/inventory/payments/hardware/reports and shows payments.rs; payments.rs does NOT exist (no payments* file/dir in commands/ — payment cmds are split, e.g. void.rs) and the dir actually has 47 command modules (audit/auth/authz/branding/bundles/categories/currencies/customers/data/email/exchange_rates/features/gift_cards/hardware/health/history/inventory/inventory_counts/kds/license/...), not 5 · verified accurate: commands/ dir exists, sales/inventory/hardware/reports .rs present, pos.ts sole entry point, ui/src/types/domain.ts exists, AppError enum in apps/desktop-client/src/error.rs, invoke_handler(generate_handler![...]) in lib.rs, State<AppState> + async Result<T,AppError> convention -->
+
 # Tauri IPC & Front-end API
 
 OZ-POS uses Tauri v2 to bridge Rust and a React/TypeScript front-end. The IPC boundary is the single most important architectural seam in the app: every command is a contract, and every contract must be in the right place.

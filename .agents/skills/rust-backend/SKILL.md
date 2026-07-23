@@ -3,6 +3,8 @@ name: rust-backend
 description: Rust & database standards for the OZ-POS framework — Money struct, rusqlite transactions, thiserror/anyhow, clippy, doc comments. Use when adding or modifying Rust code in any `oz-*` crate.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (3 noted findings, doc-staleness) · F1 (wrong path, recurring): line 134 says migrations live in migrations/<timestamp>_<name>.sql; no root migrations/ exists, actual crates/oz-core/migrations/NNN_*.sql (98 .sql files, e.g. 001_sales.sql) · F2 (wrong claim, recurring): line 231 says mocks gated by #[cfg(test)] or a mock feature; oz-hal/Cargo.toml has no [features] section at all (no mock feature; mocks not feature-gated — same drift as hal-drivers) · F3 (advisory): line 135 suggests r2d2_sqlite/deadpool-sqlite pooling; not present in workspace Cargo.toml · verified accurate: Money/Currency struct shape matches foundation/src/money.rs (minor_units:i64, currency:Currency, Currency(pub [u8;3])), i64-minor-units + thiserror conventions hold -->
+
 # Rust Backend & Database Standards
 
 The OZ-POS framework is built on Rust. This skill enforces the project's coding standards, especially around **money safety**, **database integrity**, and **error handling**.
