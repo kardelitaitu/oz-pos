@@ -47,6 +47,10 @@ export default defineConfig({
   // Shared base URL — override with BASE_URL env var for custom dev ports.
   use: {
     baseURL: process.env['BASE_URL'] ?? 'http://localhost:1420',
+    // Force English locale so tests can rely on English labels and
+    // avoid failures when the dev environment/browser defaults to
+    // another language (e.g. Indonesian).
+    locale: 'en-US',
     // Collect trace on first failure (screenshots + DOM snapshots).
     trace: 'retain-on-failure',
     // Capture screenshot on failure for debugging.
