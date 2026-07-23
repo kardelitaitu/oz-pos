@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · modules/currency/src/lib.rs exists with CurrencyModule (line 49) implementing the Module trait; modules/currency/manifest.json present and matches spec schema; lifecycle + registration code (Kernel::register/load_all/start_all) match platform/kernel API · Status "Phase 2 Module Extraction" consistent -->
+
 # Currency/Exchange Module
 
 **Status:** Active (Phase 2 — Module Extraction)

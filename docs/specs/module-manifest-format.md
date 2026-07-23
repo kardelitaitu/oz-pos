@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · platform/kernel/src/manifest.rs exists with ModuleManifest::from_json (line 56) + validate (line 92); crate is platform-kernel (matches use platform_kernel::ModuleManifest); modules/<name>/manifest.json files exist for all 10 modules (crm, currency, inventory, loyalty, reporting, sales, settings, staff, tax, terminal) — consistent with Status: Draft + ADR #1 'not parsed at runtime in Phase 2' · related links valid -->
+
 # Module Manifest Format Specification
 
 **Version:** 1.0

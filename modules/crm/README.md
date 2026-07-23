@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/customers.rs, apps/desktop-client/src/commands/customers.rs, ui/src/features/customers/, ui/src/api/customers.ts, ui/src/locales/{customers,customers.id,customers.th}.ftl; modules/crm/manifest.json present and matches spec schema; registration code (Kernel::register/load_all/start_all) matches platform/kernel API · Status "Phase 2.4 POC" consistent with files still in original locations -->
+
 # CRM Module
 
 **Status:** Active (Phase 2.4 — Proof of Concept)
