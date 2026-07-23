@@ -19,6 +19,7 @@ import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import { AppearanceSettings } from '@/features/settings/AppearanceSettings';
 import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
 import DataManagementScreen from '@/features/settings/DataManagementScreen';
+import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import { formatMoney, COURSES, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
@@ -474,6 +475,12 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+
+  // Feature flag for workspace-settings-v2 (ADR #22 Phase 5)
+  const workspaceSettingsV2 = useRef(
+    localStorage.getItem('workspace-settings-v2') === 'true',
+  ).current;
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
@@ -1265,6 +1272,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }
 
   return (
+    <>
     <div className="pos-screen" ref={posScreenRef}>
       {/* ── Left: Product lookup ─────────────────── */}
       <div className="pos-products">
@@ -1413,7 +1421,13 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             <button
               type="button"
               className="pos-cart-lock-btn"
-              onClick={() => setShowSettings(true)}
+              onClick={() => {
+                if (workspaceSettingsV2) {
+                  setShowWorkspaceSettings(true);
+                } else {
+                  setShowSettings(true);
+                }
+              }}
               aria-label={l10n.getString('settings-page-title') || 'Settings'}
               title={l10n.getString('settings-page-title') || 'Settings'}
               style={{ marginRight: 4 }}
@@ -2269,5 +2283,16 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         onVerified={handleDeductionPinVerified}
       />
     </div>
+
+    {/* ── Workspace Settings Modal (ADR #22 Phase 5) ── */}
+    {showWorkspaceSettings && (
+      <WorkspaceSettingsModal
+        open={showWorkspaceSettings}
+        onClose={() => setShowWorkspaceSettings(false)}
+        workspaceType="restaurant-pos"
+        presentation="slideover"
+      />
+    )}
+  </>
   );
 }

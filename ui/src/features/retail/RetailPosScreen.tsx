@@ -24,6 +24,7 @@ import { formatMoney, type CartId, type LineId, type Money, type Product, type S
 import { useSound } from '@/frontend/shared/useSound';
 import ScaleIndicator from './ScaleIndicator';
 import RetailOptionsScreen from './RetailOptionsScreen';
+import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
@@ -780,9 +781,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     return () => { mounted = false; };
   }, [addToast]);
 
-  // ── Options full-screen page ─────────────────────────────────
+  // ── Options / Workspace Settings ──────────────────────────
 
   const [showOptions, setShowOptions] = useState(false);
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+
+  // Feature flag for workspace-settings-v2 (ADR #22 Phase 5)
+  const workspaceSettingsV2 = useMemo(
+    () => localStorage.getItem('workspace-settings-v2') === 'true',
+    [],
+  );
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
   const [showTables, setShowTables] = useState(false);
@@ -849,8 +857,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   // ── Keyboard shortcuts ────────────────────────────────────────
 
   useEffect(() => {
+    const isAnyModalOpen = () => document.querySelector('[aria-modal="true"]') !== null;
     const handler = (e: KeyboardEvent) => {
-      if (showOptions || showPayment || showOpenShift || showCloseShift || showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showSalesHistory || showStockInquiry || showTables) return;
+      // Guard: block all hotkeys while any aria-modal is open (e.g. WorkspaceSettingsModal)
+      if (isAnyModalOpen()) return;
+      // Guard: block hotkeys while local overlays/dialogs are visible
+      if (showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showOpenShift || showCloseShift) return;
       switch (e.key) {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
@@ -861,14 +873,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F7': setShowCustomerSearch(true); break;
         case 'F8': setShowStockInquiry(true); break;
         case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
-        case 'F10': if (session?.role_name !== 'cashier') setShowOptions(true); break;
+        case 'F10':
+          if (workspaceSettingsV2) {
+            setShowWorkspaceSettings(true);
+          } else if (session?.role_name !== 'cashier') {
+            setShowOptions(true);
+          }
+          break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': onNavigate?.('kds'); break;
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
+  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, workspaceSettingsV2]);
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -894,7 +912,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     );
   }
 
-  // ── Options screen ──────────────────────────────────────────
+  // ── Options screen (legacy, feature-flagged) ──────────────
   if (showOptions) {
     return <RetailOptionsScreen onClose={() => setShowOptions(false)} theme={theme} onThemeChange={handleThemeChange} />;
   }
@@ -972,6 +990,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }
 
   return (
+    <>
     <div className="retail-pos" data-theme={theme}>
       {/* ── Header ──────────────────────────── */}
       <header className="retail-header">
@@ -1898,6 +1917,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       {/* ── Scan flash overlay ─────────────── */}
       {scanFlash && <div className="retail-scan-flash" />}
     </div>
+
+    {/* ── Workspace Settings Modal (ADR #22 Phase 5) ── */}
+    {showWorkspaceSettings && (
+      <WorkspaceSettingsModal
+        open={showWorkspaceSettings}
+        onClose={() => setShowWorkspaceSettings(false)}
+        workspaceType="store-pos"
+        presentation="overlay"
+      />
+    )}
+  </>
   );
 }
 
