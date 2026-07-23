@@ -69,7 +69,11 @@ impl FromStr for Currency {
             return Err(InvalidCurrencyCode);
         }
         let mut out = [0u8; 3];
-        out.copy_from_slice(bytes);
+        // Normalise to uppercase so e.g. "jpy" and "JPY" produce the same
+        // Currency value and match the same minor_unit_exponent patterns.
+        for (i, b) in bytes.iter().enumerate() {
+            out[i] = b.to_ascii_uppercase();
+        }
         Ok(Self(out))
     }
 }
@@ -467,5 +471,34 @@ mod tests {
         assert_eq!(usd().minor_unit_exponent(), 2);
         assert_eq!("JPY".parse::<Currency>().unwrap().minor_unit_exponent(), 0);
         assert_eq!("KWD".parse::<Currency>().unwrap().minor_unit_exponent(), 3);
+    }
+
+    #[test]
+    fn lowercase_currency_parses_with_correct_exponent() {
+        // Lowercase codes should parse and produce the same exponent as uppercase.
+        let jpy: Currency = "jpy".parse().unwrap();
+        assert_eq!(
+            jpy.minor_unit_exponent(),
+            0,
+            "'jpy' should have 0 exponent like 'JPY'"
+        );
+        let krw: Currency = "krw".parse().unwrap();
+        assert_eq!(
+            krw.minor_unit_exponent(),
+            0,
+            "'krw' should have 0 exponent like 'KRW'"
+        );
+        let kwd: Currency = "kwd".parse().unwrap();
+        assert_eq!(
+            kwd.minor_unit_exponent(),
+            3,
+            "'kwd' should have 3 exponent like 'KWD'"
+        );
+    }
+
+    #[test]
+    fn mixed_case_currency_parses_with_correct_exponent() {
+        let jpy: Currency = "Jpy".parse().unwrap();
+        assert_eq!(jpy.minor_unit_exponent(), 0, "'Jpy' should have 0 exponent");
     }
 }
