@@ -446,6 +446,11 @@ export default function NodeTopologyEditor({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Guard: don't handle canvas shortcuts while the user is typing in a text field.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
       if (e.key === 'Escape') {
         setConnectingFromNodeId(null);
         setConnectingFromPort(null);
@@ -515,6 +520,7 @@ export default function NodeTopologyEditor({
   const executeDelete = useCallback(() => {
     if (confirmDelete === '') {
       if (selectedWireId) {
+        pushHistory();
         setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
         setSelectedWireId(null);
       }

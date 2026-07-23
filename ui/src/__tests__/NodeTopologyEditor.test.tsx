@@ -16,6 +16,7 @@ const renderEditor = (props?: { onSave?: (nodes: unknown, wires: unknown) => voi
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />);
 
 const getNodeCount = () => document.querySelectorAll('.topology-node').length;
+const getWireCount = () => document.querySelectorAll('.wire-group').length;
 
 const selectFirstNode = () => {
   const firstNode = document.querySelector('.topology-node');
@@ -248,6 +249,36 @@ describe('NodeTopologyEditor Component', () => {
     expect(getNodeCount()).toBe(initialCount);
   });
 
+  // ── Wire deletion undo (#2) ─────────────────────────────────────
+
+  it('restores deleted wire on undo', () => {
+    renderEditor();
+
+    // Retail preset has 2 wires
+    const initialWireCount = getWireCount();
+    expect(initialWireCount).toBe(2);
+
+    // Click a wire hitbox to select the wire (hitting the label text
+    // only toggles direction — it doesn't set selectedWireId)
+    const hitbox = document.querySelector('.wire-hitbox');
+    expect(hitbox).not.toBeNull();
+    fireEvent.click(hitbox!);
+
+    const deleteBtn = screen.getByText('Delete Selected Element');
+    fireEvent.click(deleteBtn);
+
+    // Confirm the wire deletion dialog
+    const confirmDeleteBtn = screen.getByText('Delete');
+    fireEvent.click(confirmDeleteBtn);
+
+    expect(getWireCount()).toBe(initialWireCount - 1);
+
+    // Undo should restore the wire
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(getWireCount()).toBe(initialWireCount);
+  });
+
   // ── Wire direction toggle ───────────────────────────────────────
 
   it('toggles wire direction on label click', () => {
@@ -270,5 +301,26 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Zoom: 100%')).toBeInTheDocument();
     expect(screen.getByText('Fit All')).toBeInTheDocument();
     expect(screen.getByText('Reset View')).toBeInTheDocument();
+  });
+
+  // ── Keyboard shortcut guard (#3) ────────────────────────────────
+
+  it('does not delete node when Backspace is pressed in a text field', () => {
+    renderEditor();
+
+    // Add a node and select it to open the inspector
+    fireEvent.click(screen.getByText('+ Store Node'));
+    const nodeCountAfterAdd = getNodeCount();
+
+    // Find the Node Name input in the inspector
+    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+
+    // Focus the input and fire Backspace
+    nameInput.focus();
+    fireEvent.keyDown(nameInput, { key: 'Backspace' });
+
+    // Node count should be unchanged — Backspace was handled by the input
+    expect(getNodeCount()).toBe(nodeCountAfterAdd);
   });
 });
