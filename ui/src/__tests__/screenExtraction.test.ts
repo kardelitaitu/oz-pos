@@ -63,6 +63,14 @@ interface ScreenEntry {
    * Entries here are excluded from the "used but not defined" check.
    */
   knownDynamicFragments?: string[];
+  /**
+   * Additional TSX files (beyond the primary `tsx` file) to scan for
+   * used class names. Useful when a screen's inline JSX has been
+   * extracted into sub-components that share the same CSS file.
+   *
+   * Paths are relative to src/features/, same as `tsx`.
+   */
+  additionalTsx?: string[];
 }
 
 const SCREENS: ScreenEntry[] = [
@@ -184,6 +192,13 @@ const SCREENS: ScreenEntry[] = [
     name: 'SettingsPage',
     tsx: 'settings/SettingsPage.tsx',
     css: ['settings/SettingsPage.css'],
+    additionalTsx: [
+      'settings/sections/GeneralSection.tsx',
+      'settings/sections/AppearanceSection.tsx',
+      'settings/sections/ReceiptSection.tsx',
+      'settings/sections/SyncSection.tsx',
+      'settings/sections/AboutSection.tsx',
+    ],
     knownDynamicFragments: [
       // Object-key strings inside template-literal interpolations that
       // the static class-name parser falsely extracts as CSS classes.
@@ -504,9 +519,18 @@ const SCREENS: ScreenEntry[] = [
 
 describe.each(SCREENS)(
   'CSS class integrity — $name',
-  ({ name, tsx, css, dynamicClassPrefixes, externalClasses, knownDynamicFragments }: ScreenEntry) => {
+  ({ name, tsx, css, dynamicClassPrefixes, externalClasses, knownDynamicFragments, additionalTsx }: ScreenEntry) => {
     const tsxPath = path.join(FEATURES_DIR, tsx);
-    const tsxContent = fs.readFileSync(tsxPath, 'utf8');
+    let tsxContent = fs.readFileSync(tsxPath, 'utf8');
+
+    // Also scan additional TSX files (e.g. extracted section components)
+    if (additionalTsx) {
+      for (const extraTsx of additionalTsx) {
+        const extraPath = path.join(FEATURES_DIR, extraTsx);
+        tsxContent += fs.readFileSync(extraPath, 'utf8');
+      }
+    }
+
     const used = extractUsedClassNames(tsxContent);
 
     // Build reverse map: className -> [file1, file2, ...]
