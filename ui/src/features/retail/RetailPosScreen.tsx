@@ -23,7 +23,6 @@ import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { formatMoney, type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import ScaleIndicator from './ScaleIndicator';
-import RetailOptionsScreen from './RetailOptionsScreen';
 import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
@@ -166,16 +165,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setQuickReturnSale(null);
   }, []);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  const [theme, _setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('retail-theme');
     if (saved === 'dark' || saved === 'light') return saved;
     try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
     catch { return 'light'; }
   });
-  const handleThemeChange = useCallback((t: 'light' | 'dark') => {
-    setTheme(t);
-    localStorage.setItem('retail-theme', t);
-  }, []);
+
 
   // ── Cart panel resize state ───────────────────────────────────────
   const [retailCartWidth, setRetailCartWidth] = useState(() => {
@@ -783,14 +779,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Options / Workspace Settings ──────────────────────────
 
-  const [showOptions, setShowOptions] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
-
-  // Feature flag for workspace-settings-v2 (ADR #22 Phase 5)
-  const workspaceSettingsV2 = useMemo(
-    () => localStorage.getItem('workspace-settings-v2') === 'true',
-    [],
-  );
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
   const [showTables, setShowTables] = useState(false);
@@ -873,20 +862,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F7': setShowCustomerSearch(true); break;
         case 'F8': setShowStockInquiry(true); break;
         case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
-        case 'F10':
-          if (workspaceSettingsV2) {
-            setShowWorkspaceSettings(true);
-          } else if (session?.role_name !== 'cashier') {
-            setShowOptions(true);
-          }
-          break;
+        case 'F10': setShowWorkspaceSettings(true); break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': onNavigate?.('kds'); break;
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showOptions, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, workspaceSettingsV2]);
+  }, [showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -910,11 +893,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onClose={() => setShowPayment(false)}
       />
     );
-  }
-
-  // ── Options screen (legacy, feature-flagged) ──────────────
-  if (showOptions) {
-    return <RetailOptionsScreen onClose={() => setShowOptions(false)} theme={theme} onThemeChange={handleThemeChange} />;
   }
 
   // ── Sales History screen ────────────────────────────────────
@@ -1422,7 +1400,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         >
           <span className="retail-fn-key">F9</span> {activeShift ? l10n.getString('pos-shift-close-btn') : l10n.getString('pos-shift-open-btn')} {l10n.getString('retail-fn-shift')}
         </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowOptions(true)} disabled={session?.role_name === 'cashier'} style={session?.role_name === 'cashier' ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
+        <button type="button" className="retail-fn-btn" onClick={() => setShowWorkspaceSettings(true)}>
           <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
         </button>
         {isEnabled(FEATURES.QUICK_RETURN) && (

@@ -16,9 +16,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
-import { AppearanceSettings } from '@/features/settings/AppearanceSettings';
-import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
-import DataManagementScreen from '@/features/settings/DataManagementScreen';
+
 import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import { formatMoney, COURSES, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
@@ -319,78 +317,7 @@ function CartLineItem({
  * desktop client. Rendered as a full-screen overlay above PosScreen;
  * the `onBack` callback returns to the main sales screen.
  */
-function SettingsSubScreen({ onBack }: { onBack: () => void }) {
-  const { l10n } = useLocalization();
-  type Tab = 'appearance' | 'features' | 'data' | 'sync';
-  const [activeTab, setActiveTab] = useState<Tab>('appearance');
-
-  const tabs: { id: Tab; key: string; fallback: string }[] = [
-    { id: 'appearance', key: 'settings-appearance-tab', fallback: 'Appearance' },
-    { id: 'features', key: 'settings-features-tab', fallback: 'Features' },
-    { id: 'data', key: 'settings-data-tab', fallback: 'Data' },
-    { id: 'sync', key: 'settings-sync-tab', fallback: 'Sync' },
-  ];
-
-  return (
-    <div className="pos-screen">
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border, #ddd)' }}>
-        <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>
-          {l10n.getString('settings-page-title') || 'Settings'}
-        </h2>
-        <div role="tablist" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === t.id}
-              className={`pos-settings-tab${activeTab === t.id ? ' pos-settings-tab--active' : ''}`}
-              onClick={() => setActiveTab(t.id)}
-              data-testid={`pos-settings-tab-${t.id}`}
-              style={{
-                padding: '6px 12px',
-                fontSize: 13,
-                border: '1px solid var(--color-border, #ccc)',
-                borderRadius: 4,
-                background: activeTab === t.id ? '#1a3a5c' : '#f5f5f5',
-                color: activeTab === t.id ? '#fff' : '#333',
-                cursor: 'pointer',
-              }}
-            >
-              {l10n.getString(t.key) || t.fallback}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto' }} data-testid={`pos-settings-panel-${activeTab}`}>
-        {activeTab === 'appearance' && <AppearanceSettings />}
-        {activeTab === 'features' && <FeatureToggleScreen />}
-        {activeTab === 'data' && <DataManagementScreen />}
-        {activeTab === 'sync' && (
-          <div style={{ padding: 16 }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>
-              {l10n.getString('settings-sync-heading') || 'Cloud Sync'}
-            </h3>
-            <p style={{ color: '#666', fontSize: 12, margin: 0 }}>
-              {l10n.getString('settings-sync-info') ||
-                'Cloud sync is configured via the desktop Settings page. The tablet mirrors the server snapshot on the next sync cycle.'}
-            </p>
-          </div>
-        )}
-      </div>
-      <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
-        <button
-          type="button"
-          className="pos-cart-pay-btn"
-          onClick={onBack}
-          style={{ width: '100%' }}
-        >
-          &larr; {l10n.getString('back')}
-        </button>
-      </div>
-    </div>
-  );
-}
+// SettingsSubScreen removed in Phase 6 (ADR #22) — replaced by WorkspaceSettingsModal.
 
 /**
  * POS sales screen — product lookup on the left, cart panel on the right.
@@ -474,13 +401,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const [showTables, setShowTables] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
-
-  // Feature flag for workspace-settings-v2 (ADR #22 Phase 5)
-  const workspaceSettingsV2 = useRef(
-    localStorage.getItem('workspace-settings-v2') === 'true',
-  ).current;
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
@@ -1252,9 +1173,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   // (Appearance / Features / Data / Sync) that route to the
   // dedicated settings sub-screens. Lets the restaurant tablet
   // cover the same Settings surface as the desktop client.
-  if (showSettings) {
-    return <SettingsSubScreen onBack={() => setShowSettings(false)} />;
-  }
+
 
   if (!session) {
     return (
@@ -1421,13 +1340,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             <button
               type="button"
               className="pos-cart-lock-btn"
-              onClick={() => {
-                if (workspaceSettingsV2) {
-                  setShowWorkspaceSettings(true);
-                } else {
-                  setShowSettings(true);
-                }
-              }}
+              onClick={() => setShowWorkspaceSettings(true)}
               aria-label={l10n.getString('settings-page-title') || 'Settings'}
               title={l10n.getString('settings-page-title') || 'Settings'}
               style={{ marginRight: 4 }}
