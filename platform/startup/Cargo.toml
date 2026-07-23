@@ -37,4 +37,5 @@ console = ["dep:console-subscriber"]
 whatsapp-notifications = ["dep:oz-notification"]
 
 [dev-dependencies]
+serial_test = "3"
 tempfile = "3"

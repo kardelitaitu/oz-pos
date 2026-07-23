@@ -824,8 +824,13 @@ mod tests {
     }
 
     // ── SettingsUpdatedHandler (ADR #22 Phase 0e) ────────────────
+    //
+    // All SettingsUpdatedHandler tests share the global SETTINGS_EMIT_FN
+    // static. They are serialized to prevent race conditions between
+    // parallel tokio test tasks.
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn settings_updated_handler_is_non_blocking() {
         let bus = EventBus::new();
         let handler = SettingsUpdatedHandler::new();
@@ -851,6 +856,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn handler_runs_even_without_emit_fn() {
         let bus = EventBus::new();
         let handler = SettingsUpdatedHandler::new();
@@ -869,6 +875,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn handler_emits_via_callback() {
         use std::sync::Mutex as StdMutex;
 
@@ -916,6 +923,7 @@ mod tests {
     /// Verifies that `clear_settings_emit_fn` correctly resets the global
     /// state and a new callback can be installed afterward.
     #[tokio::test]
+    #[serial_test::serial]
     async fn emit_fn_set_clear_reset_lifecycle() {
         use std::sync::Mutex as StdMutex;
 
@@ -1055,6 +1063,7 @@ mod tests {
     /// A bulk save that touches no keys could legitimately produce
     /// an event with an empty vec.
     #[tokio::test]
+    #[serial_test::serial]
     async fn settings_updated_handler_empty_changed_keys() {
         clear_settings_emit_fn();
 
@@ -1083,6 +1092,7 @@ mod tests {
     /// Handler should tolerate special characters in terminal_id
     /// (Unicode, quotes, backslashes) without panicking.
     #[tokio::test]
+    #[serial_test::serial]
     async fn settings_updated_handler_special_terminal_id() {
         clear_settings_emit_fn();
 
@@ -1114,6 +1124,7 @@ mod tests {
     /// `SettingsUpdated` events in a tight loop and verify the
     /// emit callback receives all of them.
     #[tokio::test]
+    #[serial_test::serial]
     async fn settings_updated_handler_rapid_fire_100_events() {
         clear_settings_emit_fn();
 
@@ -1147,6 +1158,7 @@ mod tests {
     /// replaced between publishes. Old callback fires for old events,
     /// new callback fires for new events.
     #[tokio::test]
+    #[serial_test::serial]
     async fn settings_updated_handler_replaced_callback_mid_flight() {
         clear_settings_emit_fn();
 
