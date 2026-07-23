@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · EventHandler/DomainEvent traits verified in foundation/src/contracts.rs:62/71 (handle/event_name signatures match); EventBus in platform/kernel/src/event_bus.rs:88 with subscribe/publish (subscribe takes a topic param beyond the ADR sketch — design intent preserved); Status "Implemented (2026-07-15)" consistent with the live synchronous in-process bus · related links valid -->
+
 # ADR #2: Event Bus Design
 
 **Status:** Implemented (2026-07-15)
