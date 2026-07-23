@@ -9,6 +9,11 @@ use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tauri::{State, command};
 
+use oz_core::db::Store;
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
+use crate::commands::workspaces::CreateInstanceRequest;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -374,6 +379,128 @@ pub async fn save_topology(
 pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<TopologyData>, AppError> {
     let conn = state.db.lock().await;
     load_topology_data(&conn)
+}
+
+/// Request body for updating a workspace instance within a topology diff.
+#[derive(Debug, serde::Deserialize)]
+pub struct UpdateInstanceRequest {
+    /// Instance ID to update.
+    pub id: String,
+    /// New display name.
+    pub name: String,
+}
+
+/// Apply a full topology diff atomically (Critical #4).
+///
+/// Creates, updates, and archives workspace instances within a single
+/// SQLite transaction on the store database, then saves the topology
+/// diagram (nodes + wires) on the global database.
+///
+/// # Transaction guarantee
+///
+/// All workspace instance mutations (create, update, archive) execute
+/// inside a single SQLite transaction. If any operation fails, the
+/// entire set of workspace changes rolls back. Nested transactions from
+/// `Store::create_workspace_instance` become savepoints and are visible
+/// to subsequent operations within the same outer transaction.
+///
+/// The topology diagram save is a separate step on the global DB and
+/// is not part of the workspace transaction. If the diagram save
+/// fails, the workspace mutations have already been committed.
+#[command]
+pub async fn apply_topology_diff(
+    session_token: String,
+    workspace_creations: Vec<CreateInstanceRequest>,
+    workspace_updates: Vec<UpdateInstanceRequest>,
+    workspace_archives: Vec<String>,
+    diagram_nodes: Vec<TopologyNodePayload>,
+    diagram_wires: Vec<TopologyWirePayload>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    // Capture lengths before the workspace block consumes the vectors
+    // (via `into_iter`-style moves). Also used for tracing after the
+    // diagram save.
+    let created = workspace_creations.len();
+    let updated = workspace_updates.len();
+    let archived = workspace_archives.len();
+    let node_count = diagram_nodes.len();
+    let wire_count = diagram_wires.len();
+
+    // ── Workspace CRUD in a single transaction ────────────────────────
+    //
+    // Scoped in a block so all non-`Send` types (MutexGuard, Store,
+    // Transaction) are dropped before the `state.db.lock().await` call
+    // below. Tauri requires command futures to be `Send`.
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+
+        // Permission: workspace topology changes require admin access.
+        require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+
+        // Inside this transaction, `create_workspace_instance` opens its
+        // own transaction (which becomes a savepoint).  The savepoint
+        // commits are visible to subsequent operations within the outer
+        // transaction. If the outer transaction rolls back, all savepoint
+        // changes are also rolled back — full atomicity for workspace
+        // mutations.
+        let tx = db
+            .unchecked_transaction()
+            .map_err(|e| AppError::Internal(format!("begin transaction: {e}")))?;
+        let tx_store = Store::new(&tx);
+
+        // 1. Create new workspace instances.
+        for creation in &workspace_creations {
+            tx_store.create_workspace_instance(
+                &creation.id,
+                &creation.type_key,
+                &creation.store_id,
+                &creation.name,
+                creation.description.as_deref().unwrap_or(""),
+                creation.colour.as_deref(),
+            )?;
+        }
+
+        // 2. Update existing workspace instances (rename only).
+        for update in &workspace_updates {
+            tx_store.update_workspace_instance(&update.id, &update.name, None, None)?;
+        }
+
+        // 3. Archive workspace instances removed from the canvas.
+        for archive_id in &workspace_archives {
+            tx_store.archive_instance(archive_id)?;
+        }
+
+        tx.commit()
+            .map_err(|e| AppError::Internal(format!("commit transaction: {e}")))?;
+        // db, store, tx, tx_store all drop here when the block ends.
+    }
+
+    // ── Save topology diagram on global database ─────────────────────
+    //
+    // This `.await` is now safe — all non-`Send` types from the store
+    // DB block have been dropped.
+    let global_db = state.db.lock().await;
+    save_topology_data(&global_db, diagram_nodes, diagram_wires)?;
+
+    tracing::info!(
+        created,
+        updated,
+        archived,
+        nodes = node_count,
+        wires = wire_count,
+        "topology diff applied"
+    );
+
+    Ok(())
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

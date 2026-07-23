@@ -3,12 +3,13 @@ import { useLocalization } from '@fluent/react';
 import { listStores, type StoreProfile } from '@/api/stores';
 import {
   listWorkspacesScoped,
-  createWorkspaceInstanceScoped,
-  updateWorkspaceInstanceScoped,
-  archiveWorkspaceInstanceScoped,
   type WorkspaceDto,
 } from '@/api/workspaces';
-import { saveTopology } from '@/api/topology';
+import {
+  applyTopologyDiff,
+  type CreateInstanceRequest,
+  type UpdateInstanceRequest,
+} from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { checkLicenseStatus } from '@/api/license';
@@ -74,9 +75,16 @@ export default function TopologyScreen() {
   );
 
   /**
-   * Persist topology edits: diff the canvas workspace nodes against the
-   * loaded workspace_instances and create / update / archive accordingly,
-   * then save the diagram (positions + wires) for layout restoration.
+   * Persist topology edits atomically (Critical #4 + #5):
+   *
+   * 1. Resolve store_id for each workspace node from topology wires
+   *    (Store→Workspace edges determine which store a register belongs to,
+   *    fixing the #5 bug where all registers bound to the first loaded
+   *    instance's store_id).
+   * 2. Diff workspace nodes against loaded instances and send creates,
+   *    updates, and archives as a single `apply_topology_diff` call.
+   *    The backend executes all workspace CRUD in one SQLite transaction,
+   *    then saves the diagram on the global DB.
    */
   const handleTopologySave = useCallback(
     async (nodes: TopologyNodeData[], wires: TopologyWireData[]) => {
@@ -89,80 +97,120 @@ export default function TopologyScreen() {
       const loadedById = new Map(workspaceInstances.map((w) => [w.instance_id, w]));
       const canvasIds = new Set(wsNodes.map((n) => n.id));
 
-      let created = 0;
-      let updated = 0;
-      let archived = 0;
+      // ── Wire-based store_id resolution (Critical #5) ─────────────────
+      //
+      // Build the set of store-node IDs on the canvas, then walk every
+      // wire to find which store node each workspace node is connected to.
+      // The resolved store_id flows into the workspace's creation request.
+      const storeNodeIds = new Set(nodes.filter((n) => n.type === 'store').map((n) => n.id));
+      const wsToStoreNode = new Map<string, string>();
+      for (const wire of wires) {
+        if (storeNodeIds.has(wire.fromNodeId) && canvasIds.has(wire.toNodeId)) {
+          wsToStoreNode.set(wire.toNodeId, wire.fromNodeId);
+        }
+        if (storeNodeIds.has(wire.toNodeId) && canvasIds.has(wire.fromNodeId)) {
+          wsToStoreNode.set(wire.fromNodeId, wire.toNodeId);
+        }
+      }
+
+      const resolveStoreId = (node: TopologyNodeData): string => {
+        const storeNodeId = wsToStoreNode.get(node.id);
+        if (storeNodeId) {
+          // Heuristic: match by node name against loaded store profiles.
+          // If the topology store node's name matches a real store_profile
+          // name, use that profile's id. Falls back to the primary store
+          // when no match is found (same behaviour as single-store setups).
+          const storeNode = nodes.find((n) => n.id === storeNodeId);
+          if (storeNode) {
+            const matched = stores.find((s) => s.name === storeNode.name);
+            if (matched) return matched.id;
+          }
+        }
+        // Fallback: primary store (same behaviour as before for single-store setups).
+        return stores.find((s) => s.is_primary)?.id ?? 'default';
+      };
+
+      // ── Build diff vectors ───────────────────────────────────────────
+
+      const creations: CreateInstanceRequest[] = [];
+      const updates: UpdateInstanceRequest[] = [];
+      const archives: string[] = [];
+
+      for (const node of wsNodes) {
+        const existing = loadedById.get(node.id);
+        const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
+
+        if (!existing) {
+          // New workspace node — needs a creation.
+          creations.push({
+            id: node.id,
+            type_key: typeKey,
+            store_id: resolveStoreId(node),
+            name: node.name,
+          });
+        } else if (existing.name !== node.name) {
+          // Existing node with a changed name.
+          updates.push({ id: node.id, name: node.name });
+        }
+      }
+
+      // Archive instances that were removed from the canvas.
+      for (const inst of workspaceInstances) {
+        if (!canvasIds.has(inst.instance_id)) {
+          archives.push(inst.instance_id);
+        }
+      }
+
+      // ── Atomic apply ─────────────────────────────────────────────────
 
       try {
-        // Create + update workspace nodes.
-        //
-        // NOTE: only `name` is diffed/persisted. The instance `description`
-        // column is NOT round-trippable through WorkspaceDto (which returns
-        // the workspace *type* description, not the instance's), so a node's
-        // subtitle is treated as read-only cosmetic — persisting it would
-        // produce phantom "changed" diffs on every reload.
-        for (const node of wsNodes) {
-          const existing = loadedById.get(node.id);
-          const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
-          if (!existing) {
-            // New node — not yet backed by a workspace_instances row.
-            await createWorkspaceInstanceScoped(sessionToken, {
-              id: node.id,
-              type_key: typeKey,
-              store_id: loadedById.size > 0
-                ? [...loadedById.values()][0]!.store_id
-                : (stores.find((s) => s.is_primary)?.id ?? 'default'),
-              name: node.name,
-            });
-            created += 1;
-          } else if (existing.name !== node.name) {
-            await updateWorkspaceInstanceScoped(sessionToken, node.id, {
-              name: node.name,
-            });
-            updated += 1;
-          }
-        }
+        // Map the editor's camelCase shapes to the backend's snake_case payloads.
+        // applyTopologyDiff param order: (sessionToken, creations, updates, archives, diagramNodes, diagramWires).
+        // Use Parameters<typeof applyTopologyDiff>[4] for the diagramNodes and [5] for diagramWires.
+        type DiagramNodePayload = Parameters<typeof applyTopologyDiff>[4][number];
+        type DiagramWirePayload = Parameters<typeof applyTopologyDiff>[5][number];
 
-        // Archive instances that were removed from the canvas.
-        for (const inst of workspaceInstances) {
-          if (!canvasIds.has(inst.instance_id)) {
-            await archiveWorkspaceInstanceScoped(sessionToken, inst.instance_id);
-            archived += 1;
-          }
-        }
+        const diagramNodes: DiagramNodePayload[] = nodes.map((n) => {
+          const payload: DiagramNodePayload = {
+            id: n.id,
+            type: n.type,
+            name: n.name,
+            x: n.x,
+            y: n.y,
+          };
+          if (n.subtitle !== undefined) payload.subtitle = n.subtitle;
+          if (n.tierRequirement !== undefined) payload.tier_requirement = n.tierRequirement;
+          if (n.telemetryBadge !== undefined) payload.telemetry_badge = n.telemetryBadge;
+          if (n.telemetryStatus !== undefined) payload.telemetry_status = n.telemetryStatus;
+          if (n.metadata !== undefined) payload.metadata = n.metadata;
+          return payload;
+        });
 
-        // Persist the visual diagram (node positions + wires). Map the
-        // editor's camelCase shapes to the backend's snake_case payloads.
-        await saveTopology(
-          nodes.map((n) => {
-            const payload = {
-              id: n.id,
-              type: n.type,
-              name: n.name,
-              x: n.x,
-              y: n.y,
-            } as Parameters<typeof saveTopology>[0][number];
-            if (n.subtitle !== undefined) payload.subtitle = n.subtitle;
-            if (n.tierRequirement !== undefined) payload.tier_requirement = n.tierRequirement;
-            if (n.telemetryBadge !== undefined) payload.telemetry_badge = n.telemetryBadge;
-            if (n.telemetryStatus !== undefined) payload.telemetry_status = n.telemetryStatus;
-            if (n.metadata !== undefined) payload.metadata = n.metadata;
-            return payload;
-          }),
-          wires.map((w) => {
-            const payload = {
-              id: w.id,
-              from_node_id: w.fromNodeId,
-              to_node_id: w.toNodeId,
-              direction: w.direction,
-            } as Parameters<typeof saveTopology>[1][number];
-            if (w.label !== undefined) payload.label = w.label;
-            if (w.fromPort !== undefined) payload.from_port = w.fromPort;
-            if (w.toPort !== undefined) payload.to_port = w.toPort;
-            return payload;
-          }),
+        const diagramWires: DiagramWirePayload[] = wires.map((w) => {
+          const payload: DiagramWirePayload = {
+            id: w.id,
+            from_node_id: w.fromNodeId,
+            to_node_id: w.toNodeId,
+            direction: w.direction,
+          };
+          if (w.label !== undefined) payload.label = w.label;
+          if (w.fromPort !== undefined) payload.from_port = w.fromPort;
+          if (w.toPort !== undefined) payload.to_port = w.toPort;
+          return payload;
+        });
+
+        await applyTopologyDiff(
+          sessionToken,
+          creations,
+          updates,
+          archives,
+          diagramNodes,
+          diagramWires,
         );
 
+        const created = creations.length;
+        const updated = updates.length;
+        const archived = archives.length;
         addToast({
           message: `Topology saved: ${created} created, ${updated} updated, ${archived} archived.`,
           type: 'success',

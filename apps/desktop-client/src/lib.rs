@@ -546,6 +546,7 @@ pub fn run() {
             commands::license::check_license_status,
             commands::topology::save_topology,
             commands::topology::load_topology,
+            commands::topology::apply_topology_diff,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);
