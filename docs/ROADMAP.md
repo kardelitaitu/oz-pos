@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (5 findings, doc-staleness path/count claims — body is a phase checklist, mostly self-consistent) · F1 (line 94): styles/tokens.css -> ui/src/frontend/themes/tokens.css (no ui/src/styles/) · F2 (line 456): ui/src/locales/en-US.ftl -> per-feature bundles.ftl (no en-US.ftl) · F3 (line 457): ui/src/i18n/id.ftl -> bundles.id.ftl (no ui/src/i18n/) · F4 (line 457): "25 translation files" -> 72 .ftl files in tree · F5 (line 461): "48 Fluent bundles" -> 24 .id.ftl bundles (en-side is *.ftl, not separate bundles) · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding -->
+
 # OZ-POS — Roadmap
 
 > *Small codebase. Limitless possibilities.*
