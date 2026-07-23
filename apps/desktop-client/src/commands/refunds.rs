@@ -219,17 +219,30 @@ pub async fn lookup_sale_by_receipt_barcode(
 /// Look up a sale by receipt barcode from the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `lookup_sale_by_receipt_barcode`.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn lookup_sale_by_receipt_barcode_scoped(
     session_token: String,
     barcode: String,
     state: State<'_, AppState>,
 ) -> Result<Option<Sale>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
     drop(db);
     Ok(sale)
@@ -253,17 +266,30 @@ pub async fn list_refunds(
 /// List all refunds for a sale from the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `list_refunds`.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn list_refunds_scoped(
     session_token: String,
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<Refund>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let refunds = store.list_refunds_for_sale(&sale_id)?;
     drop(db);
     Ok(refunds)
