@@ -162,6 +162,12 @@ export function TerminalPreferencesCard({
         </div>
       </Card>
 
+      {hw.error && (
+        <div className="settings-error-banner" role="alert">
+          {hw.error}
+        </div>
+      )}
+
       {/* Save button */}
       {variant !== 'inspector-drawer' && (
         <div className="settings-actions">

@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
     darkMode: false,
     scaleAutoZero: true,
   },
+  hwError: null as string | null,
 }));
 
 // Stable profile object — must NOT create a new reference on each
@@ -66,7 +67,7 @@ const stableProfile = {
 vi.mock('@/hooks/useTerminalHardware', () => ({
   useTerminalHardware: (terminalId: string) => {
     if (!terminalId) return {
-      profile: null, isLoading: false, error: null,
+      profile: null, isLoading: false, error: mocks.hwError,
       updatePrinter: vi.fn(), updateScale: vi.fn(), updateScanner: vi.fn(),
       updateLocalPrefs: vi.fn(), save: vi.fn(), reload: vi.fn(),
     };
@@ -74,7 +75,7 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
     return {
       profile: stableProfile,
       isLoading: false,
-      error: null,
+      error: mocks.hwError,
       updatePrinter: vi.fn(),
       updateScale: vi.fn(),
       updateScanner: vi.fn(),
@@ -110,6 +111,7 @@ function renderCard(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   Object.assign(mocks.localPrefs, { soundVolume: 80, darkMode: false, scaleAutoZero: true });
+  mocks.hwError = null;
 });
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -207,6 +209,18 @@ describe('TerminalPreferencesCard', () => {
     await waitFor(() => {
       expect(onSaved).toHaveBeenCalled();
     });
+  });
+
+  // ── Error display ───────────────────────────────────────────
+  // When hw.error is non-null the card must show an error banner
+  // so the user knows the last operation failed.
+
+  it('displays error message when hw.error is set', () => {
+    mocks.hwError = 'Save failed: connection timeout';
+    renderCard();
+    const banners = screen.getAllByRole('alert');
+    expect(banners).toHaveLength(1);
+    expect(banners[0]).toHaveTextContent(/Save failed/i);
   });
 
   // ── Scale auto-zero toggle ───────────────────────────────────
