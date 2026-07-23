@@ -1,5 +1,7 @@
 # oz-lua
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (3 noted findings, doc-staleness) · F1 (API contract): README shows hooks taking Lua tables (apply_discount(lines_table)); actual lib.rs:34-36 uses lines_json (JSON) e.g. apply_discount(lines_json) -> {percent,label}|nil — signatures outdated table->JSON · F2 (minor): README says `os` fully removed; actual lib.rs:19-22 only nils os.execute/remove/rename/exit (partial restriction), os partially present · F3 (stale): "18 passed" tests — tree now has 62+ test fns (count stale) · verified accurate: rlua 0.20, 3 hooks (apply_discount/calc_line_tax/validate_order) exist, load_dir() exists, safe libs (math/string/table/etc.) preserved -->
+
 Embedded Lua scripting runtime for OZ-POS — lets merchants customize business
 rules, promotions, and order validation at runtime without recompiling the core.
 

@@ -1,5 +1,7 @@
 # oz-api
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding — incomplete, not wrong) · F1: route table omits 2 now-existing endpoints present in lib.rs: POST /api/v1/tax-rates (tax_rates::create_tax_rate) and POST /api/v1/users (users::create_user) · verified accurate: oz_api::serve() exists, default port 3099 via OZ_API_PORT, all 10 listed routes present (health/tokens public, rest JWT), Swagger/OpenAPI correctly absent here (lives in cloud-server) -->
+
 REST API server for OZ-POS. Runs an axum HTTP server alongside the Tauri front-end for third-party scripts, kitchen displays, and inventory scanners.
 
 ## Quick start

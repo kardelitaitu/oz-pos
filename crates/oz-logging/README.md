@@ -1,5 +1,7 @@
 # oz-logging
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · fully verified against tree: all 4 init fns present (init, init_json, init_with_file, init_json_with_file) with matching signatures; syslog (Linux) + eventlog (Windows) pub mods present; #![warn(missing_docs)] present; RUST_LOG default info; retention_days cleanup logic present -->
+
 Structured logging facade wrapping the `tracing` ecosystem.
 
 ## Public API
