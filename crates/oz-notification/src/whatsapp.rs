@@ -308,15 +308,19 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn from_env_missing_vars_returns_config_error() {
+        // Save original values so we can restore after the test.
+        // SAFETY: serial_test::serial serializes access to this test,
+        // preventing races with other tests that read these env vars.
+        let saved_phone_id = std::env::var("WHATSAPP_PHONE_NUMBER_ID").ok();
+        let saved_access_token = std::env::var("WHATSAPP_ACCESS_TOKEN").ok();
+        let saved_app_secret = std::env::var("WHATSAPP_APP_SECRET").ok();
+
         // Clear env vars to simulate missing config
         unsafe {
             std::env::remove_var("WHATSAPP_PHONE_NUMBER_ID");
-        }
-        unsafe {
             std::env::remove_var("WHATSAPP_ACCESS_TOKEN");
-        }
-        unsafe {
             std::env::remove_var("WHATSAPP_APP_SECRET");
         }
 
@@ -324,6 +328,21 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("WHATSAPP_PHONE_NUMBER_ID"));
+
+        // Restore env vars to their previous state.
+        // SAFETY: serialize_test::serial ensures exclusive access;
+        // restoring prevents leakage to other tests in the same process.
+        unsafe {
+            if let Some(val) = saved_phone_id {
+                std::env::set_var("WHATSAPP_PHONE_NUMBER_ID", val);
+            }
+            if let Some(val) = saved_access_token {
+                std::env::set_var("WHATSAPP_ACCESS_TOKEN", val);
+            }
+            if let Some(val) = saved_app_secret {
+                std::env::set_var("WHATSAPP_APP_SECRET", val);
+            }
+        }
     }
 
     #[test]
