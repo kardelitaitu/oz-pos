@@ -1,5 +1,7 @@
 # Agents Configuration
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding) · finding A1: version claim says locked at 0.0.18 but manifests (Cargo.toml, tauri.conf.json, ui/package.json) read 0.0.19 — user-owned divergence, not auto-corrected per prior instruction · structural claims (command dirs, ui/src/api rule, Money/i64 policy, .githooks gates) verified against current tree -->
+
 ## Global Rules
 
 - Maintain documentation integrity. Preserve all existing comments and docstrings unless explicitly modified.

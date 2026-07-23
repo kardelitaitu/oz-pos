@@ -1,5 +1,7 @@
 # OZ-POS Architecture
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (4 noted findings, all doc-staleness — architecture itself holds) · F1: "9 modules" → 10 now (loyalty/ added) · F2: "three ADRs" → 29 ADRs in docs/decisions/ · F3: "22+ crates" → 29 workspace members · F4: module-README rule met by 9/10 modules (loyalty/ lacks README) · verified: ui/src/frontend dirs exist, 3 named ADR paths exist, event-bus/module principles intact -->
+
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
 
