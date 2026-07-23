@@ -10,6 +10,7 @@ use tauri::command;
 
 use std::collections::HashMap;
 
+use oz_core::events::SettingsUpdated;
 use oz_core::permissions;
 use oz_core::{Settings, UserPreferences};
 
@@ -561,7 +562,6 @@ pub async fn get_setting(
 fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, AppError> {
     Ok(Settings::get(conn, key)?)
 }
-
 /// **Deprecated — use `set_setting_scoped` (ADR #7).**
 ///
 /// Write (or overwrite) a single setting value.
@@ -574,15 +574,40 @@ pub async fn set_setting(
     user_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    run_set_setting(&conn, &key, &value)
+    // Extract terminal_id first.
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Scope block: drop sync guards before .await below.
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+        run_set_setting(&conn, &key, &value, &terminal_id)?;
+    } // conn, store dropped here
+
+    // Publish SettingsUpdated event for cross-terminal reactivity (ADR #22).
+    let kernel = state.kernel.lock().await;
+    let bus = kernel.event_bus();
+    let event = oz_core::events::SettingsUpdated {
+        changed_keys: vec![key.clone()],
+        terminal_id,
+    };
+    if let Err(e) = bus.publish(&event) {
+        tracing::warn!(key = %key, error = %e, "failed to publish SettingsUpdated event");
+    }
+
+    Ok(())
 }
 
 /// Write (or overwrite) a single setting value resolved from a session token. ADR #7.
 ///
 /// Pass an empty string to store an empty value.
+/// Writes a delta record and publishes a `SettingsUpdated` event (ADR #22).
 #[command]
 pub async fn set_setting_scoped(
     session_token: String,
@@ -591,21 +616,55 @@ pub async fn set_setting_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
+
+    // Extract terminal_id before locking the store DB to avoid
+    // holding a non-Send MutexGuard across an .await point.
+    let terminal_id = state
+        .terminal_id
         .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = oz_core::db::Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
-    run_set_setting(&db, &key, &value)
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Scope block: all sync guards (MutexGuard, Store) must be
+    // dropped before any .await below.
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = oz_core::db::Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+        run_set_setting(&db, &key, &value, &terminal_id)?;
+    } // db, store, conn dropped here — safe to .await below
+
+    // Publish SettingsUpdated event for cross-terminal reactivity (ADR #22).
+    let kernel = state.kernel.lock().await;
+    let bus = kernel.event_bus();
+    let event = oz_core::events::SettingsUpdated {
+        changed_keys: vec![key.clone()],
+        terminal_id,
+    };
+    if let Err(e) = bus.publish(&event) {
+        tracing::warn!(key = %key, error = %e, "failed to publish SettingsUpdated event");
+    }
+
+    Ok(())
 }
 
 /// Business logic for `set_setting` (extracted for testing).
-fn run_set_setting(conn: &rusqlite::Connection, key: &str, value: &str) -> Result<(), AppError> {
-    Ok(Settings::set(conn, key, value)?)
+/// Uses `set_tracked` so every settings change writes a delta record
+/// (ADR #22).
+fn run_set_setting(
+    conn: &rusqlite::Connection,
+    key: &str,
+    value: &str,
+    terminal_id: &str,
+) -> Result<(), AppError> {
+    Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
 }
 
 #[cfg(test)]
@@ -919,7 +978,13 @@ mod tests {
     #[test]
     fn set_setting_persists_and_get_returns_it() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "payment.stripe_key", "sk_test_abc123").unwrap();
+        run_set_setting(
+            &conn,
+            "payment.stripe_key",
+            "sk_test_abc123",
+            "test-terminal",
+        )
+        .unwrap();
         let result = run_get_setting(&conn, "payment.stripe_key").unwrap();
         assert_eq!(result, Some("sk_test_abc123".into()));
     }
@@ -927,8 +992,8 @@ mod tests {
     #[test]
     fn set_setting_overwrites_previous_value() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "my.key", "v1").unwrap();
-        run_set_setting(&conn, "my.key", "v2").unwrap();
+        run_set_setting(&conn, "my.key", "v1", "test-terminal").unwrap();
+        run_set_setting(&conn, "my.key", "v2", "test-terminal").unwrap();
         let result = run_get_setting(&conn, "my.key").unwrap();
         assert_eq!(result, Some("v2".into()));
     }
@@ -936,8 +1001,8 @@ mod tests {
     #[test]
     fn set_setting_empty_string_clears_value() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "key", "hello").unwrap();
-        run_set_setting(&conn, "key", "").unwrap();
+        run_set_setting(&conn, "key", "hello", "test-terminal").unwrap();
+        run_set_setting(&conn, "key", "", "test-terminal").unwrap();
         let result = run_get_setting(&conn, "key").unwrap();
         assert_eq!(result, Some("".into()));
     }
@@ -945,9 +1010,9 @@ mod tests {
     #[test]
     fn get_setting_after_multiple_keys_only_returns_requested() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "a", "1").unwrap();
-        run_set_setting(&conn, "b", "2").unwrap();
-        run_set_setting(&conn, "c", "3").unwrap();
+        run_set_setting(&conn, "a", "1", "test-terminal").unwrap();
+        run_set_setting(&conn, "b", "2", "test-terminal").unwrap();
+        run_set_setting(&conn, "c", "3", "test-terminal").unwrap();
         assert_eq!(run_get_setting(&conn, "b").unwrap(), Some("2".into()));
         assert_eq!(run_get_setting(&conn, "d").unwrap(), None);
     }

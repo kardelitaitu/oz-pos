@@ -680,6 +680,66 @@ impl Settings {
         }
         Ok(removed)
     }
+
+    // ── Delta ledger (ADR #22) ──────────────────────────────────
+    // These delegate to platform_core::settings::Settings which
+    // manages the `setting_updated` table for versioned change tracking.
+
+    /// Write a setting value AND a delta record atomically.
+    pub fn set_tracked(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_tracked(
+            conn,
+            key,
+            value,
+            terminal_id,
+        )?)
+    }
+
+    /// Get the latest delta version for a (key, terminal_id) pair.
+    pub fn get_version(
+        conn: &Connection,
+        key: &str,
+        terminal_id: &str,
+    ) -> Result<Option<i64>, CoreError> {
+        Ok(platform_core::settings::Settings::get_version(
+            conn,
+            key,
+            terminal_id,
+        )?)
+    }
+
+    /// Write a delta record without updating the settings table.
+    pub fn write_delta(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::write_delta(
+            conn,
+            key,
+            value,
+            terminal_id,
+        )?)
+    }
+
+    /// Batch write settings AND delta records for every row.
+    pub fn set_batch_tracked(
+        conn: &Connection,
+        rows: &[(String, String)],
+        terminal_id: &str,
+    ) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_batch_tracked(
+            conn,
+            rows,
+            terminal_id,
+        )?)
+    }
 }
 
 #[cfg(test)]
