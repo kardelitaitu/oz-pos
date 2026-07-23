@@ -1557,6 +1557,103 @@ mod tests {
         );
     }
 
+    // ── Delta ledger resilience & edge cases ───────────────────
+
+    /// Verify that `set_tracked` still persists the setting value even when
+    /// the `setting_updated` table does not exist (delta write fails).
+    /// The ADR specifies delta loss is non-fatal — the settings table write
+    /// must succeed regardless.
+    #[test]
+    fn set_tracked_survives_missing_delta_table() {
+        // Fresh DB WITHOUT the `setting_updated` table.
+        let conn = fresh();
+        let result = Settings::set_tracked(&conn, "receipt.footer", "NoDelta!", "term-a");
+        // Should succeed — delta failure is caught and logged, not propagated.
+        assert!(result.is_ok());
+        // The setting value must still be persisted.
+        assert_eq!(
+            Settings::get(&conn, "receipt.footer").unwrap(),
+            Some("NoDelta!".into())
+        );
+        // The delta write must have failed — no version should exist.
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
+            None
+        );
+    }
+
+    /// Empty terminal_id is valid — `set_tracked` should not panic or error.
+    #[test]
+    fn set_tracked_empty_terminal_id() {
+        let conn = fresh_with_delta();
+        Settings::set_tracked(&conn, "store.name", "Shop", "").unwrap();
+        assert_eq!(
+            Settings::get(&conn, "store.name").unwrap(),
+            Some("Shop".into())
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "store.name", "").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// `set_batch_tracked` with an empty slice is a no-op — no panic, no error.
+    #[test]
+    fn set_batch_tracked_empty_batch() {
+        let conn = fresh_with_delta();
+        let rows: Vec<(String, String)> = vec![];
+        Settings::set_batch_tracked(&conn, &rows, "term-a").unwrap();
+        assert_eq!(Settings::load_all(&conn).unwrap().len(), 0);
+    }
+
+    /// Delta writes handle special characters in keys and values
+    /// (Unicode, quotes, backslashes).
+    #[test]
+    fn write_delta_special_characters() {
+        let conn = fresh_with_delta();
+        let key = "store.name";
+        let value = "Caf\u{00e9} \"OZ\" — 100% natural";
+        Settings::write_delta(&conn, key, value, "term-\u{2603}").unwrap();
+        // The version should be 1 — special chars don't affect SQL execution.
+        assert_eq!(
+            Settings::get_version(&conn, key, "term-\u{2603}").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// Different keys from the same terminal track independent version counters.
+    #[test]
+    fn set_tracked_multiple_keys_independent_versions() {
+        let conn = fresh_with_delta();
+        // Key "a" gets versions 1, 2.
+        Settings::set_tracked(&conn, "a", "v1", "term-x").unwrap();
+        Settings::set_tracked(&conn, "a", "v2", "term-x").unwrap();
+        // Key "b" should start at version 1, NOT 3.
+        Settings::set_tracked(&conn, "b", "v1", "term-x").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "a", "term-x").unwrap(),
+            Some(2)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "b", "term-x").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// `set_tracked` with many sequential writes verifies monotonically
+    /// increasing version numbers.
+    #[test]
+    fn set_tracked_monotonic_version_sequence() {
+        let conn = fresh_with_delta();
+        for i in 1..=5 {
+            Settings::set_tracked(&conn, "receipt.footer", &format!("v{i}"), "term-mono").unwrap();
+            assert_eq!(
+                Settings::get_version(&conn, "receipt.footer", "term-mono").unwrap(),
+                Some(i)
+            );
+        }
+    }
+
     #[test]
     fn keys_constants_are_non_empty() {
         assert!(!keys::STORE_NAME.is_empty());

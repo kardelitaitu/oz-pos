@@ -912,6 +912,74 @@ mod tests {
         clear_settings_emit_fn();
     }
 
+    /// Full lifecycle: set emit fn → publish → clear → re-set → publish.
+    /// Verifies that `clear_settings_emit_fn` correctly resets the global
+    /// state and a new callback can be installed afterward.
+    #[tokio::test]
+    async fn emit_fn_set_clear_reset_lifecycle() {
+        use std::sync::Mutex as StdMutex;
+
+        clear_settings_emit_fn();
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        // Phase 1: Set first callback and verify it fires.
+        let calls1 = Arc::new(StdMutex::new(Vec::new()));
+        let c1 = calls1.clone();
+        set_settings_emit_fn(Box::new(move |event_name, _payload| {
+            c1.lock().unwrap().push(event_name.to_string());
+        }));
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["key.a".into()],
+            terminal_id: "lifecycle-1".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(
+            !calls1.lock().unwrap().is_empty(),
+            "first emit callback should have fired"
+        );
+
+        // Phase 2: Clear and verify the old callback no longer fires.
+        clear_settings_emit_fn();
+        let count_after_clear = calls1.lock().unwrap().len();
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["key.b".into()],
+            terminal_id: "lifecycle-2".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(
+            calls1.lock().unwrap().len(),
+            count_after_clear,
+            "old callback should not fire after clear"
+        );
+
+        // Phase 3: Re-set a new callback and verify it fires.
+        let calls2 = Arc::new(StdMutex::new(Vec::new()));
+        let c2 = calls2.clone();
+        let c2_for_closure = calls2.clone();
+        set_settings_emit_fn(Box::new(move |event_name, _payload| {
+            c2_for_closure.lock().unwrap().push(event_name.to_string());
+        }));
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["key.c".into()],
+            terminal_id: "lifecycle-3".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(
+            !c2.lock().unwrap().is_empty(),
+            "re-set emit callback should fire"
+        );
+
+        clear_settings_emit_fn();
+    }
+
     #[test]
     fn loyalty_earn_creates_account_and_earns_points() {
         let db = fresh_db();
