@@ -53,7 +53,7 @@ export function WorkspaceKdsSettings({
   const dirty = useMemo(() => hasChanges(
     draft as unknown as Record<string, unknown>,
     originalsRef.current as unknown as Record<string, unknown>,
-  ), [draft]);
+  ), [draft, originalsLoaded]);
 
   // ── Initialise from settings ─────────────────────────────────
 

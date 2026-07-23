@@ -85,9 +85,16 @@ vi.mock('@/api/system', () => ({
 }));
 
 // ── Tauri event listener mock ───────────────────────────────────
+// Captures the listen handler so integration tests can simulate
+// settings_updated events arriving from the Rust backend.
+
+const tauriListenHandler = vi.hoisted(() => ({ fn: null as ((event: unknown) => void) | null }));
 
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(() => Promise.resolve(() => {})),
+  listen: vi.fn((_event: string, handler: (event: unknown) => void) => {
+    tauriListenHandler.fn = handler;
+    return Promise.resolve(() => { tauriListenHandler.fn = null; });
+  }),
 }));
 
 // ── AuthContext mock ─────────────────────────────────────────────
@@ -431,5 +438,96 @@ describe('SettingsContext', () => {
 
     expect(result.current.settings.preferences.cardSize).toBe(4);
     vi.useRealTimers();
+  });
+
+  it('maps brand.* keys to brand scope', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    Object.assign(mocks.brandSettings, { primary_colour: '#ff0000', store_name: 'Brand Refreshed' });
+    act(() => { result.current.markSettingsUpdated(['brand.primary_colour']); });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.brand.colour).toBe('#ff0000');
+    expect(result.current.settings.brand.storeName).toBe('Brand Refreshed');
+    vi.useRealTimers();
+  });
+
+  // ── Event bus integration (Pillar C) ───────────────────────
+  // Verifies that the Tauri settings_updated listener triggers
+  // markSettingsUpdated and causes a scoped refetch.
+
+  it('registers a settings_updated listener on mount', async () => {
+    const { listen } = await import('@tauri-apps/api/event');
+    renderHook(() => useSettings(), { wrapper });
+
+    // The listener is registered in a useEffect, which runs after render.
+    // Dynamic import inside useEffect means we need to wait for it.
+    await waitFor(() => {
+      expect(listen).toHaveBeenCalledWith('settings_updated', expect.any(Function));
+    });
+  });
+
+  it('settings_updated event triggers scoped refetch', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => { vi.advanceTimersByTime(0); });
+
+    // Wait for the dynamic import + listen promise to resolve
+    // (the useEffect sets up the listener via import().then())
+    await act(async () => {
+      await Promise.resolve(); // flush microtasks
+      vi.advanceTimersByTime(0);
+    });
+    expect(result.current.loading).toBe(false);
+
+    // Simulate a settings_updated event from the Rust backend
+    Object.assign(mocks.storeSettings, { name: 'Event Bus Store' });
+    expect(tauriListenHandler.fn).not.toBeNull();
+    tauriListenHandler.fn!({
+      payload: { changed_keys: ['store.name'], terminal_id: 'term-a' },
+    });
+
+    // Debounce + refetch
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.store.name).toBe('Event Bus Store');
+    vi.useRealTimers();
+  });
+
+  it('settings_updated event with empty keys list does not crash', async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useSettings(), { wrapper });
+    await act(async () => { vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    // Event with empty changed_keys — should be a no-op
+    expect(tauriListenHandler.fn).not.toBeNull();
+    expect(() => {
+      tauriListenHandler.fn!({
+        payload: { changed_keys: [], terminal_id: 'term-b' },
+      });
+    }).not.toThrow();
+
+    await act(async () => { vi.advanceTimersByTime(400); });
+    expect(result.current.loading).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('unlisten is called on unmount', async () => {
+    const { unmount } = renderHook(() => useSettings(), { wrapper });
+
+    // Wait for listener registration
+    await waitFor(() => {
+      expect(tauriListenHandler.fn).not.toBeNull();
+    });
+
+    unmount();
+
+    // After unmount, the listener should be cleaned up
+    expect(tauriListenHandler.fn).toBeNull();
   });
 });

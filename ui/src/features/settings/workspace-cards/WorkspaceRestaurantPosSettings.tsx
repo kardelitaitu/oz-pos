@@ -40,7 +40,7 @@ export function WorkspaceRestaurantPosSettings({
   const dirty = useMemo(() => hasChanges(
     { tableManagement, courseFiring } as Record<string, unknown>,
     originalsRef.current,
-  ), [tableManagement, courseFiring]);
+  ), [tableManagement, courseFiring, originalsLoaded]);
 
   // ── Initialise ───────────────────────────────────────────────
 
