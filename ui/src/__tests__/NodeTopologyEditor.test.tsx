@@ -3,17 +3,101 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor from '../features/stores/NodeTopologyEditor';
 import { loadTopology, saveTopology } from '@/api/topology';
+import multiStoreFtl from '@/locales/multi-store.ftl?raw';
+import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/topology', () => ({
   loadTopology: vi.fn(),
   saveTopology: vi.fn(),
 }));
 
+// Passthrough mock: keep real LocalizationProvider/ReactLocalization so
+// withFluent (used by renderWithProvidersSync) still works, but replace
+// <Localized> with a simple children-rendering passthrough and stub
+// useLocalization().getString with a lookup that returns the English
+// fallback for known topology keys (tests assert on English text).
+//
+// <Localized> passthrough handles all UI label text; this map covers the
+// ~20 keys used via l10n.getString() for node names, subtitles, toasts,
+// dialogs, workspace type labels, and aria attributes.
+const TOPOLOGY_EN: Record<string, string> = {
+  'topology-new-store': 'New Store',
+  'topology-new-store-subtitle': 'Branch',
+  'topology-new-workspace': 'New Workspace',
+  'topology-new-workspace-subtitle': 'Register',
+  'topology-new-warehouse': 'New Warehouse',
+  'topology-new-warehouse-subtitle': 'Storage',
+  'topology-new-hardware': 'New Hardware',
+  'topology-new-hardware-subtitle': 'Peripheral',
+  'topology-new-ready': 'Ready',
+  'topology-toast-multi-warehouse': 'Multi-Warehouse storage locations require a Pro Tier license.',
+  'topology-toast-wire-duplicate': 'A wire already connects these ports.',
+  'topology-toast-fallback-warehouse': 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
+  'topology-toast-load-error': 'Failed to load topology',
+  'topology-confirm-delete-node-title': 'Delete Node',
+  'topology-confirm-delete-wire-title': 'Delete Wire',
+  'topology-confirm-delete-node-msg':
+    'This node has connected wires. Deleting it will remove all its wires too. This action cannot be undone.',
+  'topology-confirm-delete-wire-msg': 'Delete this wire connection? This action cannot be undone.',
+  'topology-confirm-delete-label': 'Delete',
+  'topology-confirm-preset-title': 'Load Preset',
+  'topology-confirm-preset-msg':
+    'Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading.',
+  'topology-confirm-preset-label': 'Load Preset',
+  'topology-canvas-aria-label': 'Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo.',
+  'topology-ws-type-store-pos': 'Retail POS',
+  'topology-ws-type-restaurant-pos': 'Restaurant POS',
+  'topology-ws-type-kds': 'Kitchen Display (KDS)',
+  'topology-ws-type-warehouse': 'Warehouse',
+};
+
+vi.mock('@fluent/react', async () => {
+  const actual = await vi.importActual('@fluent/react');
+  return {
+    ...actual,
+    Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+    useLocalization: () => ({
+      l10n: { getString: (id: string) => TOPOLOGY_EN[id] ?? id },
+    }),
+  };
+});
+
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: () => ({
+    settings: {
+      receipt: {
+        showCurrency: false,
+        decimalSeparator: 'dot',
+        showTax: true,
+        footer: '',
+        paperWidth: 'standard',
+        showTableNumber: false,
+        marginTop: 0,
+        marginBottom: 0,
+        marginLeft: 0,
+        marginRight: 0,
+      },
+      store: { name: 'Test Store', address: '', taxId: '', currency: 'IDR', branch: '' },
+      sync: { serverUrl: null, hasApiKey: false, enabled: false },
+      brand: { colour: '#10b981', storeName: 'Test Store' },
+      preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
+      currencies: [],
+      appVersion: '0.0.19',
+    },
+    loading: false,
+    error: null,
+    hasPartialError: false,
+    refetch: vi.fn(),
+    lastChangedKeys: [],
+    markSettingsUpdated: vi.fn(),
+  }),
+}));
+
 const mockLoadTopology = vi.mocked(loadTopology);
 const mockSaveTopology = vi.mocked(saveTopology);
 
 const renderEditor = (props?: { onSave?: (nodes: unknown, wires: unknown) => void }) =>
-  renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />);
+  renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
 const getNodeCount = () => document.querySelectorAll('.topology-node').length;
 const getWireCount = () => document.querySelectorAll('.wire-group').length;
