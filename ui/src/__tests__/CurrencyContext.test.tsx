@@ -102,6 +102,24 @@ describe('CurrencyContext', () => {
       expect(result.current.currency).toBe('EUR');
     });
 
+    it('setCurrency does not update state when API rejects', async () => {
+      mockGetDefaultCurrency.mockResolvedValue('USD');
+      mockSetDefaultCurrency.mockRejectedValue(new Error('API error'));
+      const { result } = renderHook(() => useCurrency(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      // The promise should reject, and currency should remain unchanged
+      await act(async () => {
+        await expect(result.current.setCurrency('EUR')).rejects.toThrow('API error');
+      });
+
+      expect(result.current.currency).toBe('USD');
+      expect(mockSetDefaultCurrency).toHaveBeenCalledWith({ code: 'EUR' });
+    });
+
     it('does not update state after unmount', async () => {
       let resolvePromise!: (value: string | null) => void;
       mockGetDefaultCurrency.mockImplementation(

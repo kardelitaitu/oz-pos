@@ -100,6 +100,56 @@ describe('BrandContext', () => {
     expect(mockGetBrandSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('survives sequential refresh errors without losing current settings', async () => {
+    // Load initial settings
+    await renderProvider();
+    await waitFor(() => {
+      expect(screen.getByTestId('store').textContent).toBe('Test Store');
+    });
+
+    // Two sequential refresh failures
+    mockGetBrandSettings.mockRejectedValue(new Error('Offline'));
+    act(() => screen.getByTestId('refresh').click());
+    await waitFor(() => {
+      expect(screen.getByTestId('store').textContent).toBe('Test Store');
+    });
+
+    mockGetBrandSettings.mockRejectedValue(new Error('Still offline'));
+    act(() => screen.getByTestId('refresh').click());
+    await waitFor(() => {
+      expect(screen.getByTestId('store').textContent).toBe('Test Store');
+    });
+  });
+
+  it('recovers from refresh error when next attempt succeeds', async () => {
+    // Load initial settings
+    await renderProvider();
+    await waitFor(() => {
+      expect(screen.getByTestId('store').textContent).toBe('Test Store');
+    });
+
+    // Refresh fails
+    mockGetBrandSettings.mockRejectedValue(new Error('Offline'));
+    act(() => screen.getByTestId('refresh').click());
+    await waitFor(() => {
+      expect(screen.getByTestId('store').textContent).toBe('Test Store');
+    });
+
+    // Next refresh succeeds with updated data
+    mockGetBrandSettings.mockClear();
+    mockGetBrandSettings.mockResolvedValue({
+      primary_colour: '#22c55e',
+      logo_path: '/new-logo.png',
+      store_name: 'Recovered Store',
+    });
+    act(() => screen.getByTestId('refresh').click());
+    await waitFor(() => {
+      expect(screen.getByTestId('store').textContent).toBe('Recovered Store');
+      expect(screen.getByTestId('colour').textContent).toBe('#22c55e');
+      expect(screen.getByTestId('logo').textContent).toBe('/new-logo.png');
+    });
+  });
+
   it('throws when useBrand is used outside BrandProvider', () => {
     // Suppress console.error from React and JSDOM for this expected error
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});

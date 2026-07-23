@@ -364,6 +364,32 @@ describe('SettingsContext', () => {
     expect(true).toBe(true);
   });
 
+  it('handles unmount when all 7 APIs are pending (no stale side effects)', async () => {
+    // A promise that never settles — keeps loadAll suspended forever.
+    const hangPromise = new Promise<never>(() => { /* never settles */ });
+
+    // Override ALL 7 API mocks ONCE so they hang instead of resolving.
+    type MockedFn = ReturnType<typeof vi.fn>;
+    const mocksToHang: MockedFn[] = [
+      (await import('@/api/settings')).getReceiptSettings,
+      (await import('@/api/settings')).getStoreSettings,
+      (await import('@/api/settings')).getUserPreferences,
+      (await import('@/api/offline')).getSyncSettings,
+      (await import('@/api/currency')).listCurrencies,
+      (await import('@/api/branding')).getBrandSettings,
+      (await import('@/api/system')).getVersion,
+    ] as MockedFn[];
+    for (const m of mocksToHang) {
+      m.mockReturnValueOnce(hangPromise);
+    }
+
+    const { unmount } = renderHook(() => useSettings(), { wrapper });
+
+    // Unmount while all 7 promises are still pending — loadAll is suspended.
+    // Because hangPromise never settles, no stale setState can fire.
+    expect(() => unmount()).not.toThrow();
+  });
+
   // ── useOptionalSettings ─────────────────────────────────────
 
   it('useOptionalSettings returns null outside a SettingsProvider', () => {

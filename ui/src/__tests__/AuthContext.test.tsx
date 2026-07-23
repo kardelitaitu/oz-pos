@@ -15,13 +15,14 @@ vi.mock('@/api/staff', () => ({
 
 // ── test consumer ─────────────────────────────────────────────────────
 function TestConsumer() {
-  const { session, loading, error, login, logout, clearError, isManager, isOwner } = useAuth();
+  const { session, loading, error, login, logout, clearError, isManager, isOwner, swapSession } = useAuth();
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="error">{error ?? 'no-error'}</span>
       <span data-testid="session">{session ? session.display_name : 'no-session'}</span>
       <span data-testid="role">{session?.role_name ?? 'none'}</span>
+      <span data-testid="userId">{session?.user_id ?? 'none'}</span>
       <span data-testid="isManager">{String(isManager)}</span>
       <span data-testid="isOwner">{String(isOwner)}</span>
       <button data-testid="login-btn" onClick={() => login('alice', '1234')}>
@@ -32,6 +33,12 @@ function TestConsumer() {
       </button>
       <button data-testid="clear-btn" onClick={clearError}>
         Clear error
+      </button>
+      <button
+        data-testid="swap-btn"
+        onClick={() => swapSession({ display_name: 'Bob', role_name: 'cashier', user_id: 'u2', role_id: 'r2' })}
+      >
+        Swap
       </button>
     </div>
   );
@@ -143,6 +150,61 @@ describe('AuthContext', () => {
     await waitFor(() => {
       expect(screen.getByTestId('isOwner').textContent).toBe('true');
       expect(screen.getByTestId('isManager').textContent).toBe('true');
+    });
+  });
+
+  describe('swapSession (ADR #6 hot-swap)', () => {
+    it('replaces session without changing loading state', async () => {
+      mockStaffLogin.mockResolvedValue({
+        session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+      });
+      await renderProvider();
+      fireEvent.click(screen.getByTestId('login-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('session').textContent).toBe('Alice');
+        expect(screen.getByTestId('loading').textContent).toBe('false');
+      });
+
+      // Hot-swap to Bob — loading must NOT change
+      fireEvent.click(screen.getByTestId('swap-btn'));
+
+      expect(screen.getByTestId('session').textContent).toBe('Bob');
+      expect(screen.getByTestId('userId').textContent).toBe('u2');
+      expect(screen.getByTestId('loading').textContent).toBe('false');
+    });
+
+    it('clears any existing error on swap', async () => {
+      mockStaffLogin.mockRejectedValue(new Error('Invalid PIN'));
+      await renderProvider();
+      fireEvent.click(screen.getByTestId('login-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('error').textContent).toBe('Invalid PIN');
+      });
+
+      // Swap to a different user — error must be cleared
+      fireEvent.click(screen.getByTestId('swap-btn'));
+
+      expect(screen.getByTestId('error').textContent).toBe('no-error');
+      expect(screen.getByTestId('session').textContent).toBe('Bob');
+    });
+
+    it('does not call staffLogin API', async () => {
+      mockStaffLogin.mockResolvedValue({
+        session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+      });
+      await renderProvider();
+      fireEvent.click(screen.getByTestId('login-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('session').textContent).toBe('Alice');
+      });
+
+      mockStaffLogin.mockClear();
+      fireEvent.click(screen.getByTestId('swap-btn'));
+
+      expect(mockStaffLogin).not.toHaveBeenCalled();
     });
   });
 
