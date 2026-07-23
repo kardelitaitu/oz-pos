@@ -884,3 +884,9 @@ workspace-store-info-tax-id = NPWP
 
 # ── Topology Editor (ADR #22 Phase 2) ──
 workspace-type-selector-label = Tipe Workspace
+
+# ── Phase 3 workspace nav items ──
+settings-nav-store-pos = POS Toko
+settings-nav-restaurant-pos = POS Restoran
+settings-nav-kds = Tampilan Dapur
+settings-nav-inventory = Inventaris

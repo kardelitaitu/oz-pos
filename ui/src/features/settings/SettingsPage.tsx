@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   setReceiptSettings,
@@ -64,6 +64,20 @@ import SettingsNavTree, {
   CATEGORY_I18N_KEYS as CATEGORY_I18N_KEYS_REF,
   NAV_L10N_KEYS as NAV_L10N_KEYS_REF,
 } from './SettingsNavTree';
+
+// ── Lazy-loaded workspace settings cards (ADR #22 Phase 3) ──
+const WorkspaceStorePosSettings = lazy(() =>
+  import('./workspace-cards/WorkspaceStorePosSettings').then((m) => ({ default: m.WorkspaceStorePosSettings })),
+);
+const WorkspaceRestaurantPosSettings = lazy(() =>
+  import('./workspace-cards/WorkspaceRestaurantPosSettings').then((m) => ({ default: m.WorkspaceRestaurantPosSettings })),
+);
+const WorkspaceKdsSettings = lazy(() =>
+  import('./workspace-cards/WorkspaceKdsSettings').then((m) => ({ default: m.WorkspaceKdsSettings })),
+);
+const WorkspaceInventorySettings = lazy(() =>
+  import('./workspace-cards/WorkspaceInventorySettings').then((m) => ({ default: m.WorkspaceInventorySettings })),
+);
 import './SettingsPage.css';
 import './SettingsNavTree.css';
 
@@ -747,6 +761,34 @@ function SettingsPageContent() {
 
       case 'topology':
         return <TopologyScreen />;
+
+      case 'store-pos':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceStorePosSettings variant="full-page" />
+          </Suspense>
+        );
+
+      case 'restaurant-pos':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceRestaurantPosSettings variant="full-page" />
+          </Suspense>
+        );
+
+      case 'kds':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceKdsSettings variant="full-page" />
+          </Suspense>
+        );
+
+      case 'inventory':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceInventorySettings variant="full-page" />
+          </Suspense>
+        );
 
       default:
         return null;

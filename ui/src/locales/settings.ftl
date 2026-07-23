@@ -906,3 +906,9 @@ workspace-store-info-tax-id = Tax ID
 
 # ── Topology Editor (ADR #22 Phase 2) ──
 workspace-type-selector-label = Workspace Type
+
+# ── Phase 3 workspace nav items ──
+settings-nav-store-pos = Store POS
+settings-nav-restaurant-pos = Restaurant POS
+settings-nav-kds = Kitchen Display
+settings-nav-inventory = Inventory
