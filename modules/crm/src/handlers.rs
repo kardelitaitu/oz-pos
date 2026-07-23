@@ -46,7 +46,12 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
             .db
             .lock()
             .map_err(|e| anyhow::anyhow!("crm handler: db lock failed: {e}"))?;
-        let store = Store::new(&conn);
+
+        // Wrap the entire read-modify-write in a transaction so concurrent
+        // SaleCompleted events for the same customer cannot race on the
+        // read of total_spent_minor / loyalty_points (lost-update prevention).
+        let tx = conn.unchecked_transaction()?;
+        let store = Store::new(&tx);
 
         // Fetch the current customer record.
         let mut customer = match store.get_customer(customer_id)? {
@@ -57,6 +62,8 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
                     sale_id = %event.sale_id,
                     "crm handler: customer not found"
                 );
+                // Transaction will auto-rollback on drop; explicit rollback
+                // is not needed since no writes occurred yet.
                 return Ok(());
             }
         };
@@ -76,14 +83,13 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
             .checked_add(points_earned)
             .ok_or_else(|| anyhow::anyhow!("loyalty_points overflow for customer {customer_id}"))?;
 
-        // Persist the update. Use update_customer to save changes, but we need
-        // to preserve the existing fields. update_customer only takes specific args,
-        // so we do a direct SQL update for the spending/loyalty fields.
+        // Persist the update inside the transaction.
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        conn.execute(
+        tx.execute(
             "UPDATE customers SET total_spent_minor = ?1, loyalty_points = ?2, updated_at = ?3 WHERE id = ?4",
             rusqlite::params![customer.total_spent_minor, customer.loyalty_points, now, customer_id],
         )?;
+        tx.commit()?;
 
         info!(
             customer_id = %customer_id,
@@ -253,5 +259,62 @@ mod tests {
         let customer = store.get_customer("cust-3").unwrap().unwrap();
         assert_eq!(customer.total_spent_minor, 1700);
         assert_eq!(customer.loyalty_points, 17);
+    }
+
+    /// Thread-safety regression test: verifies the handler is safe to call
+    /// from multiple threads sharing the same `Arc<Mutex<Connection>>`.
+    /// The Mutex serializes access (preventing lost updates in practice),
+    /// and the internal transaction provides defense-in-depth for the
+    /// read-modify-write of customer spending/loyalty fields.
+    #[test]
+    fn handler_is_thread_safe_and_accumulates_correctly() {
+        let db = fresh_db();
+        {
+            let conn = db.lock().unwrap();
+            seed_customer(&conn, "cust-concurrent", "Dana");
+        }
+
+        let db_a = db.clone();
+        let db_b = db.clone();
+
+        // Simulate two concurrent SaleCompleted events on separate threads.
+        let t1 = std::thread::spawn(move || {
+            let handler = CrmHistoryHandler::new(db_a);
+            handler
+                .handle(&SaleCompleted {
+                    sale_id: "sale-concurrent-a".into(),
+                    store_id: None,
+                    line_items: vec![],
+                    total_minor: 1000,
+                    currency: "USD".into(),
+                    customer_id: Some("cust-concurrent".into()),
+                })
+                .unwrap();
+        });
+
+        let t2 = std::thread::spawn(move || {
+            let handler = CrmHistoryHandler::new(db_b);
+            handler
+                .handle(&SaleCompleted {
+                    sale_id: "sale-concurrent-b".into(),
+                    store_id: None,
+                    line_items: vec![],
+                    total_minor: 2000,
+                    currency: "USD".into(),
+                    customer_id: Some("cust-concurrent".into()),
+                })
+                .unwrap();
+        });
+
+        t1.join().unwrap();
+        t2.join().unwrap();
+
+        let conn = db.lock().unwrap();
+        let store = Store::new(&conn);
+        let customer = store.get_customer("cust-concurrent").unwrap().unwrap();
+        // Both sales should be accumulated: 1000 + 2000 = 3000
+        assert_eq!(customer.total_spent_minor, 3000);
+        // Loyalty: 1000/100 + 2000/100 = 10 + 20 = 30
+        assert_eq!(customer.loyalty_points, 30);
     }
 }
