@@ -321,13 +321,15 @@ impl Store<'_> {
                     id: line.sku.clone(),
                 })?;
 
-            let prev_qty: i64 = tx
-                .query_row(
-                    "SELECT COALESCE(qty, 0) FROM inventory WHERE product_id = ?1",
-                    params![product_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+            let prev_qty: i64 = match tx.query_row(
+                "SELECT COALESCE(qty, 0) FROM inventory WHERE product_id = ?1",
+                params![product_id],
+                |row| row.get(0),
+            ) {
+                Ok(q) => q,
+                Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                Err(e) => return Err(CoreError::Db(e)),
+            };
 
             let new_qty = prev_qty
                 .checked_sub(line.qty)
@@ -431,13 +433,15 @@ impl Store<'_> {
                     })?;
 
                 // Increment destination inventory.
-                let prev_qty: i64 = tx
-                    .query_row(
-                        "SELECT COALESCE(qty, 0) FROM inventory WHERE product_id = ?1",
-                        params![product_id],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
+                let prev_qty: i64 = match tx.query_row(
+                    "SELECT COALESCE(qty, 0) FROM inventory WHERE product_id = ?1",
+                    params![product_id],
+                    |row| row.get(0),
+                ) {
+                    Ok(q) => q,
+                    Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                    Err(e) => return Err(CoreError::Db(e)),
+                };
 
                 let new_qty = prev_qty
                     .checked_add(rl.received_qty)

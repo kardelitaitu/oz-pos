@@ -232,7 +232,12 @@ impl Store<'_> {
                 None => continue,
             };
 
-            let previous_qty = self.get_stock(&product_id).unwrap_or(0);
+            // Distinguish DB errors from "no inventory row yet" (0 stock).
+            let previous_qty = match self.get_stock(&product_id) {
+                Ok(q) => q,
+                Err(CoreError::Db(e)) => return Err(CoreError::Db(e)),
+                Err(_) => 0,
+            };
             let delta = counted_qty - previous_qty;
 
             // Update inventory.

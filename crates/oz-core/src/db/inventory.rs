@@ -523,22 +523,28 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-        // Check if a row already exists for this unique combination
+        // Check if a row already exists for this unique combination.
+        // Distinguish QueryReturnedNoRows (no threshold yet → INSERT)
+        // from real DB errors (corruption → propagate).
         let existing_id: Option<String> = match location_id {
-            Some(loc) => tx
-                .query_row(
-                    "SELECT id FROM stock_thresholds WHERE product_id = ?1 AND location_id = ?2",
-                    params![product_id, loc],
-                    |row| row.get(0),
-                )
-                .ok(),
-            None => tx
-                .query_row(
-                    "SELECT id FROM stock_thresholds WHERE product_id = ?1 AND location_id IS NULL",
-                    params![product_id],
-                    |row| row.get(0),
-                )
-                .ok(),
+            Some(loc) => match tx.query_row(
+                "SELECT id FROM stock_thresholds WHERE product_id = ?1 AND location_id = ?2",
+                params![product_id, loc],
+                |row| row.get(0),
+            ) {
+                Ok(id) => Some(id),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(CoreError::Db(e)),
+            },
+            None => match tx.query_row(
+                "SELECT id FROM stock_thresholds WHERE product_id = ?1 AND location_id IS NULL",
+                params![product_id],
+                |row| row.get(0),
+            ) {
+                Ok(id) => Some(id),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(CoreError::Db(e)),
+            },
         };
 
         if let Some(id) = existing_id {
