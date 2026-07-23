@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (5 findings, doc-staleness counts/paths) · F1: "164 test files, 2533+ tests" -> 205 .test.ts* files in tree (count stale) · F2: ui/src/locales/en-US.ftl ("1900+ IDs across 25 .ftl files") -> no en-US.ftl; 72 .ftl, per-feature bundles.ftl/bundles.id.ftl/bundles.th.ftl · F3: ui/src/styles/ (reset.css/tokens.css/components.css) -> no ui/src/styles/; tokens in ui/src/frontend/themes/tokens.css · F4: "29 per-domain files" in api/ -> 34 .ts files · F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
+
 # `ui/` — OZ-POS Frontend
 
 React 18 + TypeScript + Vite 5 + Tauri v2 webview.

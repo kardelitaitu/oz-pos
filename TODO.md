@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: AUDITED (living planning/QA doc — NOT a code-claim audit) · top header is "0.0.19 — Manual QA: Full App Walkthrough" (8/45 pages checked, updated 2026-07-22); this is an active QA checklist, not a claims-about-code document, so it is stamped as current-scope rather than judged ACCURATE/STALE against the codebase · do not auto-fix; re-audit when the walkthrough is completed or the version header changes -->
+
 # 0.0.19 — Manual QA: Full App Walkthrough
 
 > **Goal:** Open each page/screen in the running Tauri desktop app, verify it renders correctly, has no console errors, and all interactive elements work. Check off each item as you go.
