@@ -3,6 +3,8 @@ name: skill-drift-guard
 description: Meta-skill that detects and patches drift in the other OZ-POS skills. Use when a code change is made that touches a path, type, trait, or convention referenced in a skill; when onboarding a new contributor who might have added a crate or module; or as a periodic CI check. Always run before merging a change that touches `oz-*` crates, `apps/desktop-client/`, or `ui/`.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 noted finding, doc-staleness) · F1 (internal path drift, recurring): references `hal/` in 3 places (lines 17, 307, 447) but no `hal/` dir exists in the repo; the crate is `crates/oz-hal` (same drift as hal-drivers F1) · verified accurate: scripts/detect.sh + scripts/run-tests.sh + tests/*.bats present, ui/src/locales/ exists (Check 7 path valid), taxonomy + detection workflow consistent with audit practice -->
+
 # Skill Drift Guard
 
 A skill is a **claim about the code**. When the code changes and the skill doesn't, the skill becomes a lie. Future agents read the lie, write code that matches the lie, and the lie propagates.
