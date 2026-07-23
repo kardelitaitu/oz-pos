@@ -170,6 +170,8 @@ pub async fn start_sale(
 ///
 /// Resolves the primary deduction location from the workspace instance
 /// and locks it on the `active_carts` row at cart-start time.
+///
+/// Requires `SALES_PROCESS` permission from the resolved session (Bug #4).
 #[command]
 pub async fn start_sale_scoped(
     session_token: String,
@@ -190,6 +192,12 @@ pub async fn start_sale_scoped(
     let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
 
     // Resolve the primary deduction location for this workspace instance.
     let deduction_location_id =

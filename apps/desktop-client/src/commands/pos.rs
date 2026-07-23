@@ -181,6 +181,8 @@ pub async fn start_sale(
 ///
 /// ADR-19 §5.1: resolves the primary deduction location from the workspace
 /// instance and locks it on the `active_carts` row at cart-start time.
+///
+/// Requires `SALES_PROCESS` permission from the resolved session (Bug #5).
 #[command]
 pub async fn start_sale_scoped(
     session_token: String,
@@ -203,6 +205,12 @@ pub async fn start_sale_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
 
     // Resolve the primary deduction location for this workspace instance.
     let deduction_location_id =
@@ -352,17 +360,29 @@ pub async fn add_line(
 /// ADR-19 §5.1: rejects the command when the cart has no `deduction_location_id`
 /// lock (carts must be created via `start_sale_scoped` which resolves and locks
 /// the deduction location at cart-start time).
+///
+/// Requires `SALES_PROCESS` permission from the resolved session (Bug #6).
 #[command]
 pub async fn add_line_scoped(
     session_token: String,
     args: AddLineArgs,
     state: State<'_, AppState>,
 ) -> Result<AddLineResult, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
 
     // ADR-19 §5.1: reject add_line when the cart has no deduction location lock.
     store
