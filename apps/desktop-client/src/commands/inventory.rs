@@ -181,11 +181,10 @@ pub async fn get_workspace_inventory_locations(
 
 // ── Inventory Shifts ────────────────────────────────────────────────
 
-/// Start a new inventory shift for a user at a location.
+/// Start a new inventory shift for the current user at a location.
 #[command]
 pub async fn start_inventory_shift(
     session_token: String,
-    user_id: String,
     location_id: String,
     notes: String,
     state: State<'_, AppState>,
@@ -200,8 +199,12 @@ pub async fn start_inventory_shift(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    let shift =
-        store.start_inventory_shift(&user_id, &location_id, Some(&session.terminal_id), &notes)?;
+    let shift = store.start_inventory_shift(
+        &session.user_id,
+        &location_id,
+        Some(&session.terminal_id),
+        &notes,
+    )?;
     Ok(shift)
 }
 
@@ -226,11 +229,10 @@ pub async fn end_inventory_shift(
     Ok(())
 }
 
-/// Retrieve the active inventory shift for a user, if any.
+/// Retrieve the active inventory shift for the current user, if any.
 #[command]
 pub async fn get_active_inventory_shift(
     session_token: String,
-    user_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<InventoryShift>, AppError> {
     let session = state.resolve_session(&session_token)?;
@@ -243,7 +245,7 @@ pub async fn get_active_inventory_shift(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    let shift = store.get_active_inventory_shift(&user_id)?;
+    let shift = store.get_active_inventory_shift(&session.user_id)?;
     Ok(shift)
 }
 
