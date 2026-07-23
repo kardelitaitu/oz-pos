@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => ({
     footer: '', paperWidth: 'standard' as const, decimalSeparator: 'dot' as const,
     marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 },
   storeSettings: { name: '', address: '', taxId: '', currency: 'USD', branch: '' },
+  hwError: null as string | null,
 }));
 
 // Stable profile — prevents useEffect([hw.profile]) from re-firing
@@ -68,10 +69,10 @@ vi.mock('@/contexts/SettingsContext', () => ({
 
 vi.mock('@/hooks/useTerminalHardware', () => ({
   useTerminalHardware: (terminalId: string) => {
-    if (!terminalId) return { profile: null, isLoading: false, error: null,
+    if (!terminalId) return { profile: null, isLoading: false, error: mocks.hwError,
       updatePrinter: vi.fn(), updateScale: vi.fn(), updateScanner: vi.fn(),
       updateLocalPrefs: vi.fn(), save: vi.fn(), reload: vi.fn() };
-    return { profile: stableProfile, isLoading: false, error: null,
+    return { profile: stableProfile, isLoading: false, error: mocks.hwError,
       updatePrinter: vi.fn(), updateScale: vi.fn(), updateScanner: vi.fn(),
       updateLocalPrefs: vi.fn(), save: vi.fn().mockResolvedValue(undefined), reload: vi.fn() };
   },
@@ -105,6 +106,7 @@ beforeEach(() => {
     showCurrency: false, showTax: true, footer: '', paperWidth: 'standard',
     decimalSeparator: 'dot', marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 });
   Object.assign(mocks.storeSettings, { name: '', address: '', taxId: '', currency: 'USD', branch: '' });
+  mocks.hwError = null;
 });
 
 describe('WorkspaceRestaurantPosSettings', () => {
@@ -171,5 +173,15 @@ describe('WorkspaceRestaurantPosSettings', () => {
   it('hides Save button in inspector-drawer variant', () => {
     renderCard({ variant: 'inspector-drawer' });
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+  });
+
+  // ── Error display ────────────────────────────────────────────
+
+  it('displays error message when hw.error is set', () => {
+    mocks.hwError = 'Kitchen printer not found';
+    renderCard();
+    const banners = screen.getAllByRole('alert');
+    expect(banners).toHaveLength(1);
+    expect(banners[0]).toHaveTextContent(/Kitchen printer not found/i);
   });
 });

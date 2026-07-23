@@ -316,6 +316,11 @@ export function WorkspaceStorePosSettings({
       {receiptSection}
       {printerSection}
       {scannerSection}
+      {hw.error && (
+        <div className="settings-error-banner" role="alert">
+          {hw.error}
+        </div>
+      )}
       {saveButton}
     </ErrorBoundary>
   );

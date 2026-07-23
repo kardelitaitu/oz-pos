@@ -63,6 +63,7 @@ const mocks = vi.hoisted(() => ({
   },
   // Hoisted save control for the "save while saving" test
   _saveHang: null as (() => void) | null,
+  hwError: null as string | null,
 }));
 
 // Stable profile object — prevents useEffect([hw.profile]) from
@@ -104,7 +105,7 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
     if (!terminalId) return {
       profile: null,
       isLoading: false,
-      error: null,
+      error: mocks.hwError,
       updatePrinter: vi.fn(),
       updateScale: vi.fn(),
       updateScanner: vi.fn(),
@@ -116,7 +117,7 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
     return {
       profile: stableProfile,
       isLoading: false,
-      error: null,
+      error: mocks.hwError,
       updatePrinter: vi.fn(),
       updateScale: vi.fn(),
       updateScanner: vi.fn(),
@@ -189,6 +190,7 @@ beforeEach(() => {
     name: 'Test Store', address: '', taxId: '', currency: 'USD', branch: '',
   });
   mocks._saveHang = null;
+  mocks.hwError = null;
 });
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -348,6 +350,16 @@ describe('WorkspaceStorePosSettings', () => {
     renderCard();
     const textarea = screen.getByLabelText('Receipt Footer') as HTMLTextAreaElement;
     expect(textarea.value).toBe('Thank you!');
+  });
+
+  // ── Error display ────────────────────────────────────────────
+
+  it('displays error message when hw.error is set', () => {
+    mocks.hwError = 'Printer connection failed';
+    renderCard();
+    const banners = screen.getAllByRole('alert');
+    expect(banners).toHaveLength(1);
+    expect(banners[0]).toHaveTextContent(/Printer connection/i);
   });
 
   // ── Edge cases ──────────────────────────────────────────────
