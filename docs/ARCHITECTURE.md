@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (multiple findings — superseded early-architecture snapshot) · F1: "15+ members" -> 28 workspace members · F2: "oz-core migrations 20 embedded" -> 98 .sql files (crates/oz-core/migrations/) · F3: scaffold crates (oz-lua/oz-security/oz-reporting) are now IMPLEMENTED — oz-lua has apply_discount/calc_line_tax/validate_order/load_dir; oz-security has full keyring/TLS/mask; oz-reporting has daily_summary/menu_engineering/metrics engines (contradicts "Scaffold Crates" section) · F4: Node ">=18" -> ui/package.json engines >=22 · F5: i18n paths wrong (en-US.ftl, styles/) -> per-feature bundles.ftl + ui/src/frontend/themes/tokens.css · F6: "LICENSE: MIT" -> proprietary (All Rights Reserved) · F7: commands "62+" -> 47 desktop modules, 618 total IPC (README audit) · accurate: 9 modules, Feature 32 flags, React18+@fluent/react+pos.ts rule, oz-hal DriverRegistry/traits, oz-api port 3099 -->
+
 # OZ-POS – Codebase Architecture
 
 ## Overview
