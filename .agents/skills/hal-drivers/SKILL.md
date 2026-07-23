@@ -3,6 +3,8 @@ name: hal-drivers
 description: Hardware Abstraction Layer (HAL) conventions for OZ-POS — embedded-hal traits, drivers for barcode scanners, receipt printers, NFC readers, and payment terminals, plus mandatory mock implementations. Use when adding a new device driver or wiring hardware into a feature.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (4 noted findings, doc-staleness) · F1: claims HAL built on embedded-hal traits + crate path hal/; actual oz-hal has NO embedded-hal dep and lives at crates/oz-hal/ (not hal/) · F2: layout lists traits nfc.rs + payment_terminal.rs — neither exists; actual traits dir has barcode/cash_drawer/customer_display/printer only (no NfcReader/PaymentTerminal trait) · F3: driver files shown as honeywell_barcode/star_printer/acr122u_nfc/idtech_payment — actual drivers are generic usb/bt/serial/tcp_scanner + usb/bt/tcp_printer + drawer/serial_display/scale (no vendor-specific named drivers) · F4: claims mocks gated by mock feature (cargo test --features mock) — no mock feature in Cargo.toml and mock.rs has no cfg(feature) gate (mocks always compiled) · verified accurate: BarcodeScanner trait signature matches code (connect/poll/cancel/device_info, &self/&mut self/Box<dyn>), register_scanner + register_tcp_printer + DriverRegistry::discover present, mocks in drivers/mock.rs, async Result<T,HalError> convention -->
+
 # Hardware Abstraction Layer (HAL)
 
 OZ-POS runs on real hardware: barcode scanners, receipt printers, NFC readers, cash drawers, payment terminals. The HAL (`oz-hal`) is the seam between the **business logic** (which wants "scan a barcode") and the **physical device** (which sends bytes over USB, Bluetooth, or serial).

@@ -3,6 +3,8 @@ name: project-scaffold
 description: Project scaffolding, Cargo workspace layout, CI configuration, and Git conventions for OZ-POS. Use when setting up the initial repo, adding a new crate, configuring GitHub Actions, or committing changes.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (6 noted findings, doc-staleness) · F1: workspace rust-version shown as 1.85 -> actual 1.88 (Cargo.toml) · F2: workspace version shown as 0.0.1 -> actual 0.0.19 (and CHANGELOG/AGENTS say 0.0.18; user-owned divergence) · F3: members list shows 8 crates+2 apps -> actual 29 workspace members · F4: license shown as MIT -> actual "SEE LICENSE IN LICENSE" (proprietary; matches CONTRIBUTING/README) · F5 (wrong path): shows migrations/ at repo root -> no such dir; migrations live in crates/oz-core/migrations/ · F6: CI node-version '20' -> ui/package.json engines requires >=22 (same Node drift as QUICKSTART) · verified accurate: resolver=2, edition=2024, rusqlite 0.31, .github/workflows ci/security/release present, Conventional Commits + branch rules, spec _active/_done workflow, Cargo.lock committed for binaries -->
+
 # Project Scaffold, CI & Git
 
 OZ-POS is a multi-crate Cargo workspace with a Tauri front-end, a strict style policy, and a CI pipeline that catches mistakes before they merge. This skill covers the workspace layout, the CI matrix, and the Git workflow.
