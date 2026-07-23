@@ -1,5 +1,7 @@
 # Contributing to OZ-POS
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings) · F1 (doc bug): internal contradiction — line 45 lists `fix/<name>` as a valid branch prefix and line 79 shows `fix(payment):` as a correct example, but line 85 forbids `fix` as a commit prefix; the `fix/` type is simultaneously allowed and forbidden and the doc's own example violates its rule · F2 (minor): references SECURITY.md ("when it exists") — file still absent, but hedged so consistent · verified accurate: all referenced docs/skills/scripts exist (WHITEPAPER, QUICKSTART, ROADMAP, ARCHITECTURE, AGENTS, LICENSE, onboarding-guide, skill-drift-guard, detect.sh, coverage.sh); PR commands match AGENTS.md -->
+
 Thanks for your interest in OZ-POS! This project is a Rust + Tauri v2 POS framework built around a "wizard behind the curtain" philosophy: the merchant sees effortless checkout, and the lean Rust engine silently handles transactions, encryption, hardware, sync, and business logic.
 
 This guide covers how to contribute effectively. The full project conventions live in `AGENTS.md` (the source of truth for coding standards) and the skills under `.agents/skills/` (the source of truth for how to do specific tasks).

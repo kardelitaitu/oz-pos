@@ -1,5 +1,7 @@
 # Quickstart
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings) · F1 (actionable stale): "Node.js 18 or 20 LTS" (lines 12, 203) but ui/package.json engines requires ">=22" — a contributor on Node 20 following the doc would fail to build · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present -->
+
 This guide gets OZ-POS building and running on your machine in under 15 minutes. It's aimed at first-time contributors — for the deeper project conventions, see [`CONTRIBUTING.md`](../CONTRIBUTING.md), [`AGENTS.md`](../AGENTS.md), and the skills under `.agents/skills/`.
 
 ---

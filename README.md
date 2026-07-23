@@ -1,6 +1,8 @@
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square) [![Nightly CI](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml/badge.svg)](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml)
 
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (5 noted findings, all doc-staleness — understated counts) · F1: "51 migrations" -> 98 .sql migration files in crates/oz-core · F2: "164 frontend test files (2533+ tests)" -> 205 .test.ts* files · F3: "1900+ IDs across 25 files" (locales) -> 72 .ftl files · F4: payment drivers "(Stripe, mock)" -> stripe, mock, qris, square (QRIS+Square added 0.0.18, omitted) · F5: "200+ IPC commands" -> 618 #[tauri::command]/#[command] (lower bound still holds) · verified accurate: React 18.3.1 + Vite 6, rlua 0.20, docs/MODULAR_APP_PLAN.md exists, cloud-server referenced, "v0.0.18 on branch 0.0.18" (manifests read 0.0.19 — see AGENTS.md stamp A1, user-owned divergence) -->
+
 # OZ-POS
 
 > **A modular, offline-first Point-of-Sale platform built with Rust and Tauri v2.**
