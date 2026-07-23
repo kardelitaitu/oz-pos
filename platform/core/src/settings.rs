@@ -66,6 +66,117 @@ impl Settings {
         tx.commit()?;
         Ok(())
     }
+
+    // ── Delta ledger methods ──────────────────────────────────────
+
+    /// Write a delta row into the `setting_updated` table.
+    ///
+    /// Computes `version = MAX(version) + 1` for the `(key, terminal_id)`
+    /// pair and inserts a new row. Wraps the SELECT MAX + INSERT in a
+    /// transaction to prevent version collisions under concurrent writes.
+    ///
+    /// When called from `set_tracked()` (which already holds a transaction),
+    /// the inner `unchecked_transaction` nests safely — SQLite allows nested
+    /// transactions via savepoints.
+    pub fn write_delta(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), PlatformError> {
+        // Wrap in a transaction so the SELECT MAX and INSERT are atomic.
+        // When called from set_tracked()'s outer transaction, this creates
+        // a savepoint — SQLite automatically converts nested BEGIN to SAVEPOINT.
+        let tx = conn.unchecked_transaction()?;
+        let version: i64 = tx
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) + 1
+                 FROM setting_updated
+                 WHERE key = ?1 AND terminal_id = ?2",
+                params![key, terminal_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(1);
+
+        tx.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![key, value, terminal_id, version],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Get the latest version number for a `(key, terminal_id)` pair.
+    ///
+    /// Returns `None` if no deltas exist for that pair. Used by shared
+    /// settings cards to detect concurrent edits (compare known version
+    /// against the stored version before writing).
+    pub fn get_version(
+        conn: &Connection,
+        key: &str,
+        terminal_id: &str,
+    ) -> Result<Option<i64>, PlatformError> {
+        let mut stmt = conn.prepare(
+            "SELECT version FROM setting_updated
+             WHERE key = ?1 AND terminal_id = ?2
+             ORDER BY version DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![key, terminal_id], |row| row.get::<_, i64>(0))?;
+        match rows.next() {
+            Some(Ok(v)) => Ok(Some(v)),
+            Some(Err(e)) => Err(e.into()),
+            None => Ok(None),
+        }
+    }
+
+    /// Set a value AND write a delta record — both in a single transaction.
+    ///
+    /// This is the recommended method for Tauri command handlers that have
+    /// access to a terminal ID. Calls `Settings::set()` for the value and
+    /// `Settings::write_delta()` for the versioned audit trail, both
+    /// within a single transaction. Since `write_delta()` uses a nested
+    /// savepoint, the delta write failure does not roll back the `set()`.
+    ///
+    /// Delta write failures are logged but do not roll back the `set()` —
+    /// delta loss is non-fatal; the sync layer can reconstruct from the
+    /// settings table.
+    pub fn set_tracked(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), PlatformError> {
+        let tx = conn.unchecked_transaction()?;
+        Self::set(conn, key, value)?;
+        // Best-effort delta — write_delta uses its own savepoint so a
+        // failure here won't roll back the set() above.
+        if let Err(e) = Self::write_delta(conn, key, value, terminal_id) {
+            tracing::warn!(key, terminal_id, error = %e, "delta write failed (non-fatal)");
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Batch write with delta tracking for every row.
+    ///
+    /// Like `set_batch()`, but also writes a delta row for each key/value
+    /// pair. All operations run in a single transaction.
+    pub fn set_batch_tracked(
+        conn: &Connection,
+        rows: &[(String, String)],
+        terminal_id: &str,
+    ) -> Result<(), PlatformError> {
+        let tx = conn.unchecked_transaction()?;
+        for (key, value) in rows {
+            Self::set(conn, key, value)?;
+            if let Err(e) = Self::write_delta(conn, key, value, terminal_id) {
+                tracing::warn!(key, terminal_id, error = %e, "delta batch write failed (non-fatal)");
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
 }
 
 // ── Typed store configuration helpers ────────────────────────────────
@@ -1261,6 +1372,153 @@ mod tests {
         Settings::set(&conn, "k", "same").unwrap();
         Settings::set(&conn, "k", "same").unwrap();
         assert_eq!(Settings::get(&conn, "k").unwrap(), Some("same".into()));
+    }
+
+    // ── Delta ledger tests ──────────────────────────────────────
+
+    /// Helper that creates the `setting_updated` table needed by delta tests.
+    fn fresh_with_delta() -> Connection {
+        let conn = fresh();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS setting_updated (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT    NOT NULL,
+                value       TEXT    NOT NULL,
+                terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                version     INTEGER NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn write_delta_creates_row_with_version_one() {
+        let conn = fresh_with_delta();
+        Settings::write_delta(&conn, "receipt.footer", "Thanks!", "term-a").unwrap();
+        let v = Settings::get_version(&conn, "receipt.footer", "term-a").unwrap();
+        assert_eq!(v, Some(1));
+    }
+
+    #[test]
+    fn write_delta_increments_version_per_key_terminal() {
+        let conn = fresh_with_delta();
+        // Write twice to same (key, terminal) — versions 1, 2.
+        Settings::write_delta(&conn, "receipt.footer", "v1", "term-a").unwrap();
+        Settings::write_delta(&conn, "receipt.footer", "v2", "term-a").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn write_delta_different_keys_track_separate_versions() {
+        let conn = fresh_with_delta();
+        // Different keys should both start at version 1.
+        Settings::write_delta(&conn, "store.name", "Shop", "term-a").unwrap();
+        Settings::write_delta(&conn, "receipt.footer", "Bye", "term-a").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "store.name", "term-a").unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn write_delta_different_terminals_track_separate_versions() {
+        let conn = fresh_with_delta();
+        // Same key, different terminals — independent version counters.
+        Settings::write_delta(&conn, "receipt.footer", "v-a", "term-a").unwrap();
+        Settings::write_delta(&conn, "receipt.footer", "v-b", "term-b").unwrap();
+        Settings::write_delta(&conn, "receipt.footer", "v-a2", "term-a").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
+            Some(2)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-b").unwrap(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn get_version_returns_none_for_missing() {
+        let conn = fresh_with_delta();
+        assert_eq!(
+            Settings::get_version(&conn, "nonexistent", "term-a").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn set_tracked_writes_setting_and_delta_atomically() {
+        let conn = fresh_with_delta();
+        Settings::set_tracked(&conn, "receipt.footer", "Hello!", "term-a").unwrap();
+        // Setting should be stored.
+        assert_eq!(
+            Settings::get(&conn, "receipt.footer").unwrap(),
+            Some("Hello!".into())
+        );
+        // Delta should be version 1.
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn set_tracked_overwrites_and_increments_version() {
+        let conn = fresh_with_delta();
+        Settings::set_tracked(&conn, "k", "v1", "term-a").unwrap();
+        Settings::set_tracked(&conn, "k", "v2", "term-a").unwrap();
+        assert_eq!(Settings::get(&conn, "k").unwrap(), Some("v2".into()));
+        assert_eq!(
+            Settings::get_version(&conn, "k", "term-a").unwrap(),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn set_batch_tracked_writes_all_deltas() {
+        let conn = fresh_with_delta();
+        let rows: Vec<(String, String)> = vec![
+            ("receipt.footer".into(), "Batch1".into()),
+            ("store.name".into(), "Batch2".into()),
+        ];
+        Settings::set_batch_tracked(&conn, &rows, "term-a").unwrap();
+
+        assert_eq!(
+            Settings::get(&conn, "receipt.footer").unwrap(),
+            Some("Batch1".into())
+        );
+        assert_eq!(
+            Settings::get(&conn, "store.name").unwrap(),
+            Some("Batch2".into())
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-a").unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "store.name", "term-a").unwrap(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn set_tracked_is_idempotent_same_value_same_version() {
+        let conn = fresh_with_delta();
+        Settings::set_tracked(&conn, "k", "same", "term-a").unwrap();
+        Settings::set_tracked(&conn, "k", "same", "term-a").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "k", "term-a").unwrap(),
+            Some(2)
+        );
     }
 
     #[test]

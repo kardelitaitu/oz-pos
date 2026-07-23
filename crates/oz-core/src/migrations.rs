@@ -511,6 +511,14 @@ pub const ALL: &[Migration] = &[
         id: "099_inventory_transactions_created_at.sql",
         sql: include_str!("../migrations/099_inventory_transactions_created_at.sql"),
     },
+    // ── ADR #22 Phase 0d: Settings delta ledger ──────────────────
+    // Adds setting_updated table with per-(key, terminal_id) version
+    // tracking. Enables concurrent-edit conflict detection and the
+    // settings_updated event consumed by the SettingsContext provider.
+    Migration {
+        id: "100_setting_updated.sql",
+        sql: include_str!("../migrations/100_setting_updated.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -746,6 +754,8 @@ mod tests {
             // ── ADR #19 Phase 3 (migrations 093-094) ──
             // 093 adds deduction_locations column to sales (no new table).
             // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
+            // ── ADR #22 Phase 0d (migration 100) ──
+            "setting_updated",
         ];
 
         for table in &expected_tables {
