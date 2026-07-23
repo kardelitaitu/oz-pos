@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use oz_core::permissions;
 use oz_core::{Settings, UserPreferences};
 
+use platform_core::terminal_profile::TerminalProfile;
+
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -410,42 +412,92 @@ pub struct HardwareSettingsDto {
     pub scanner_input_mode: String,
 }
 
+impl From<TerminalProfile> for HardwareSettingsDto {
+    fn from(p: TerminalProfile) -> Self {
+        Self {
+            printer_connection: p.printer_connection,
+            printer_device_path: p.printer_device_path,
+            printer_paper_size: p.printer_paper_size,
+            scanner_device_id: p.scanner_device_id,
+            scanner_input_mode: p.scanner_input_mode,
+        }
+    }
+}
+
+impl From<HardwareSettingsDto> for TerminalProfile {
+    fn from(dto: HardwareSettingsDto) -> Self {
+        Self {
+            printer_connection: dto.printer_connection,
+            printer_device_path: dto.printer_device_path,
+            printer_paper_size: dto.printer_paper_size,
+            scanner_device_id: dto.scanner_device_id,
+            scanner_input_mode: dto.scanner_input_mode,
+        }
+    }
+}
+
+/// Helper: resolve the app data directory from db_path.
+fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, AppError> {
+    state
+        .db_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| AppError::Internal("db_path has no parent directory".into()))
+}
+
 #[command]
-/// Get hardware settings.
+/// Get hardware settings for the current terminal from `terminal_profiles/<id>.json`.
+///
+/// Returns defaults if no profile exists yet (first boot).
 pub async fn get_hardware_settings(
     state: State<'_, AppState>,
 ) -> Result<HardwareSettingsDto, AppError> {
-    let conn = state.db.lock().await;
-    Ok(HardwareSettingsDto {
-        printer_connection: Settings::get_printer_connection(&conn)?,
-        printer_device_path: Settings::get_printer_device_path(&conn)?,
-        printer_paper_size: Settings::get_printer_paper_size(&conn)?,
-        scanner_device_id: Settings::get_scanner_device_id(&conn)?,
-        scanner_input_mode: Settings::get_scanner_input_mode(&conn)?,
-    })
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    let base_dir = app_data_dir(&state)?;
+    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
+    let profile = TerminalProfile::load(&path)?.unwrap_or_default();
+    Ok(HardwareSettingsDto::from(profile))
 }
 
 /// **Deprecated — use `set_hardware_settings_scoped` (ADR #7).**
+///
+/// Now writes to `terminal_profiles/<id>.json` instead of SQLite (ADR #22).
 #[command]
 pub async fn set_hardware_settings(
     args: HardwareSettingsDto,
     user_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    let tx = conn.unchecked_transaction()?;
-    Settings::set_printer_connection(&tx, &args.printer_connection)?;
-    Settings::set_printer_device_path(&tx, &args.printer_device_path)?;
-    Settings::set_printer_paper_size(&tx, &args.printer_paper_size)?;
-    Settings::set_scanner_device_id(&tx, &args.scanner_device_id)?;
-    Settings::set_scanner_input_mode(&tx, &args.scanner_input_mode)?;
-    tx.commit()?;
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Permission check still requires DB access.
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+    }
+
+    let base_dir = app_data_dir(&state)?;
+    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
+    let profile = TerminalProfile::from(args);
+    profile.save(&path)?;
     Ok(())
 }
 
 /// Set hardware settings resolved from a session token. ADR #7.
+///
+/// Hardware settings are now per-terminal, stored in
+/// `terminal_profiles/<terminal_id>.json` (ADR #22).
 #[command]
 pub async fn set_hardware_settings_scoped(
     session_token: String,
@@ -453,22 +505,32 @@ pub async fn set_hardware_settings_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
+
+    // Extract terminal_id before locking DB (avoids Send guard across .await).
+    let terminal_id = state
+        .terminal_id
         .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = oz_core::db::Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
-    let tx = db.unchecked_transaction()?;
-    Settings::set_printer_connection(&tx, &args.printer_connection)?;
-    Settings::set_printer_device_path(&tx, &args.printer_device_path)?;
-    Settings::set_printer_paper_size(&tx, &args.printer_paper_size)?;
-    Settings::set_scanner_device_id(&tx, &args.scanner_device_id)?;
-    Settings::set_scanner_input_mode(&tx, &args.scanner_input_mode)?;
-    tx.commit()?;
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Permission check requires the store-scoped DB.
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = oz_core::db::Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    }
+
+    let base_dir = app_data_dir(&state)?;
+    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
+    let profile = TerminalProfile::from(args);
+    profile.save(&path)?;
     Ok(())
 }
 
