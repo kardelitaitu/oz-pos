@@ -176,6 +176,14 @@ impl Kernel {
 
     /// Call `on_load` on every registered module in dependency order.
     ///
+    /// Idempotent for already-loaded modules: a retry after a partial
+    /// failure (module N's `on_load` failed) skips modules 1..N-1 that
+    /// already reached [`Loaded`](ModuleStatus::Loaded) state, so their
+    /// `on_load` (and thus event-bus handler registration) is not
+    /// re-run. Without this guard, a retry would double-register
+    /// handlers (1 → 2 → 3 ... per retry), so every published event
+    /// would fire them multiple times.
+    ///
     /// # Errors
     ///
     /// Returns [`KernelError::NoModulesRegistered`] if no modules are
@@ -191,6 +199,22 @@ impl Kernel {
         info!("loading {} modules in dependency order", order.len());
 
         for &id in &order {
+            // Skip modules that already loaded successfully — this makes
+            // load_all idempotent across retries after a partial failure
+            // (and across accidental double load_all calls). Re-running
+            // on_load would double-register event-bus handlers (the
+            // Module contract documents on_load as the handler-
+            // registration hook), corrupting the subscriber registry.
+            let current_status = self
+                .statuses
+                .get(id)
+                .copied()
+                .unwrap_or(ModuleStatus::Registered);
+            if current_status == ModuleStatus::Loaded {
+                debug!(module = id, "already loaded — skipping on_load");
+                continue;
+            }
+
             let module = self.modules.get_mut(id).ok_or_else(|| {
                 KernelError::Internal(format!(
                     "module '{id}' not found after dependency resolution"
@@ -1482,6 +1506,80 @@ mod tests {
             "start_module on a Stopped module must re-run on_load to \
              restore the load-time invariant (handler registration), \
              mirroring start_all after stop_all"
+        );
+    }
+
+    /// `load_all` must be idempotent for already-loaded modules: a retry
+    /// after a partial failure (module N's on_load fails) must NOT
+    /// re-run on_load for modules 1..N-1 that already loaded
+    /// successfully.
+    ///
+    /// The `Module` contract documents on_load as the hook where event
+    /// handlers are registered ("Use this to validate configuration and
+    /// register event handlers"). Re-running on_load on an already-
+    /// loaded module double-registers its handlers (1 → 2 → 3 ... per
+    /// retry), so every published event fires the handler multiple
+    /// times. This is a real state-inconsistency bug (Axes 5 & 8):
+    /// partial-failure recovery silently corrupts the handler registry.
+    #[test]
+    fn load_all_retry_does_not_re_run_on_load_on_already_loaded_modules() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicI32;
+
+        // A module that counts on_load invocations. Its on_load is the
+        // proxy for "did the module re-register its event-bus handlers?".
+        #[derive(Debug)]
+        struct CountingModule {
+            id: &'static str,
+            load_count: Arc<AtomicI32>,
+        }
+        impl Module for CountingModule {
+            fn id(&self) -> &'static str {
+                self.id
+            }
+            fn on_load(&mut self) -> ModuleResult {
+                self.load_count.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+
+        let mut kernel = Kernel::new();
+        // A single counting module. load_all is called twice in full
+        // success (no failure). The second call must be a no-op for the
+        // already-Loaded module — its on_load must NOT re-run, because
+        // re-running would double-register any event-bus handlers it
+        // registered the first time (Module contract: on_load is the
+        // handler-registration hook).
+        //
+        // This is deterministic: no second module, no dependency-order
+        // nondeterminism, no partial failure. It isolates the exact
+        // invariant: load_all is idempotent for already-Loaded modules.
+        let load_count = Arc::new(AtomicI32::new(0));
+        kernel
+            .register(Box::new(CountingModule {
+                id: "counter",
+                load_count: load_count.clone(),
+            }))
+            .unwrap();
+
+        // First load_all: counter loads, on_load runs once.
+        kernel.load_all().unwrap();
+        assert_eq!(
+            load_count.load(Ordering::SeqCst),
+            1,
+            "on_load runs once on first load_all"
+        );
+
+        // Second load_all: counter is already Loaded. BUG (before fix):
+        // load_all re-runs on_load (count → 2), double-registering
+        // handlers. After fix: on_load is skipped, count stays 1.
+        kernel.load_all().unwrap();
+
+        assert_eq!(
+            load_count.load(Ordering::SeqCst),
+            1,
+            "load_all must NOT re-run on_load on already-Loaded modules \
+             (prevents duplicate event-bus handler registration)"
         );
     }
 }
