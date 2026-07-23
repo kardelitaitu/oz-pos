@@ -448,7 +448,9 @@ fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, AppError> {
 #[command]
 /// Get hardware settings for the current terminal from `terminal_profiles/<id>.json`.
 ///
-/// Returns defaults if no profile exists yet (first boot).
+/// On first access after upgrading from a version that stored hardware
+/// settings in SQLite, the old values are migrated to JSON automatically.
+/// Returns defaults only when neither JSON nor SQLite has saved values.
 pub async fn get_hardware_settings(
     state: State<'_, AppState>,
 ) -> Result<HardwareSettingsDto, AppError> {
@@ -460,7 +462,31 @@ pub async fn get_hardware_settings(
         .unwrap_or_else(|| "unknown".to_string());
     let base_dir = app_data_dir(&state)?;
     let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
-    let profile = TerminalProfile::load(&path)?.unwrap_or_default();
+
+    // Fast path: JSON file already exists (post-migration or fresh install).
+    if let Some(profile) = TerminalProfile::load(&path)? {
+        return Ok(HardwareSettingsDto::from(profile));
+    }
+
+    // Migration path: no JSON file yet → read from SQLite, write to JSON.
+    let conn = state.db.lock().await;
+    let profile = TerminalProfile {
+        printer_connection: Settings::get_printer_connection(&conn)?,
+        printer_device_path: Settings::get_printer_device_path(&conn)?,
+        printer_paper_size: Settings::get_printer_paper_size(&conn)?,
+        scanner_device_id: Settings::get_scanner_device_id(&conn)?,
+        scanner_input_mode: Settings::get_scanner_input_mode(&conn)?,
+    };
+
+    // Persist to JSON so future reads take the fast path.
+    if let Err(e) = profile.save(&path) {
+        tracing::warn!(
+            terminal_id = %terminal_id,
+            error = %e,
+            "failed to migrate hardware settings to JSON — will retry next read"
+        );
+    }
+
     Ok(HardwareSettingsDto::from(profile))
 }
 
