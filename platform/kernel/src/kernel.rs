@@ -60,6 +60,11 @@ pub struct Kernel {
     loaded: bool,
     /// Whether `start_all` has been called.
     started: bool,
+    /// IDs of services that successfully started during `start_all`.
+    /// Tracked so `stop_all` only calls `stop()` on services that were
+    /// actually started — never on services skipped after a partial
+    /// `start_all` failure (Service contract: stop() only after start()).
+    started_service_ids: Vec<&'static str>,
     /// In-process event bus for module-to-module communication.
     event_bus: EventBus,
 }
@@ -73,6 +78,7 @@ impl Kernel {
             statuses: HashMap::new(),
             loaded: false,
             started: false,
+            started_service_ids: Vec::new(),
             event_bus: EventBus::new(),
         }
     }
@@ -277,7 +283,10 @@ impl Kernel {
             self.statuses.insert(id, ModuleStatus::Started);
         }
 
-        // Start services after modules.
+        // Start services after modules. Track each successfully-started
+        // service id so stop_all only stops services that actually started
+        // (skip services after a partial-start failure point).
+        self.started_service_ids.clear();
         for service in &mut self.services {
             let id = service.id();
             debug!(svc = id, "starting service");
@@ -286,6 +295,9 @@ impl Kernel {
                 operation: "start",
                 source: e,
             })?;
+            // Record only AFTER a successful start — a service whose
+            // start() returned Err is NOT considered started.
+            self.started_service_ids.push(id);
         }
 
         self.started = true;
@@ -302,6 +314,12 @@ impl Kernel {
     /// handlers removed via [`EventBus::unsubscribe_module`] so that
     /// stopped modules do not keep receiving events.
     ///
+    /// Only services that were actually started (recorded during
+    /// `start_all`) have `stop()` called on them — services skipped
+    /// after a partial `start_all` failure are left untouched, honoring
+    /// the `Service` contract that `stop()` only runs after a successful
+    /// `start()`.
+    ///
     /// # Errors
     ///
     /// Returns the first error encountered (if any), but stopping
@@ -309,9 +327,19 @@ impl Kernel {
     pub fn stop_all(&mut self) -> Result<(), KernelError> {
         let mut first_error: Option<KernelError> = None;
 
-        // Stop services in reverse order.
+        // Stop services in reverse order — but ONLY those that were
+        // actually started. A partial start_all failure leaves services
+        // after the failure point never-started; calling stop() on them
+        // violates the Service contract (stop() only after start()) and
+        // can panic/misbehave for services that allocate stop() resources
+        // in start().
+        let started: HashSet<&'static str> = self.started_service_ids.iter().copied().collect();
         for service in self.services.iter_mut().rev() {
             let id = service.id();
+            if !started.contains(id) {
+                debug!(svc = id, "skipping stop — service was never started");
+                continue;
+            }
             debug!(svc = id, "stopping service");
             if let Err(e) = service.stop() {
                 error!(svc = id, error = %e, "failed to stop service");
@@ -383,6 +411,9 @@ impl Kernel {
 
         self.started = false;
         self.loaded = false;
+        // Clear the started-service tracking so a subsequent start_all
+        // records a fresh set (no stale ids from the prior run).
+        self.started_service_ids.clear();
 
         match first_error {
             Some(e) => Err(e),
@@ -1580,6 +1611,131 @@ mod tests {
             1,
             "load_all must NOT re-run on_load on already-Loaded modules \
              (prevents duplicate event-bus handler registration)"
+        );
+    }
+
+    /// `stop_all` must NOT call `stop()` on services that were never
+    /// started. When `start_all` fails partway through the services
+    /// loop (service N fails start, services 1..N-1 already started),
+    /// the caller recovers with `stop_all`. But `stop_all` currently
+    /// calls `stop()` on EVERY service unconditionally — including
+    /// service N (never started) and services N+1..end (never started).
+    ///
+    /// This violates the `Service` contract: `stop()` is only
+    /// meaningful after a successful `start()`. For services that
+    /// allocate `stop()` resources in `start()` (shutdown channels,
+    /// join handles), calling `stop()` without `start()` panics or
+    /// silently no-ops, masking the partial-start state (Axis 8:
+    /// silent failure / contract violation).
+    #[test]
+    fn stop_all_does_not_stop_services_that_were_never_started() {
+        use std::sync::{Arc, Mutex};
+
+        // A service that records whether start() and stop() were called,
+        // and can be configured to fail start(). Shared via Arc<Mutex<>>,
+        // because Service::start/stop take &mut self and the test must
+        // retain access to the flags after registering the service.
+        #[derive(Debug)]
+        struct TrackingService {
+            id: &'static str,
+            fail_start: bool,
+            start_called: bool,
+            stop_called: bool,
+        }
+        impl TrackingService {
+            fn new(id: &'static str) -> Self {
+                Self {
+                    id,
+                    fail_start: false,
+                    start_called: false,
+                    stop_called: false,
+                }
+            }
+            fn with_fail_start(mut self) -> Self {
+                self.fail_start = true;
+                self
+            }
+        }
+        impl Service for TrackingService {
+            fn id(&self) -> &'static str {
+                self.id
+            }
+            fn start(&mut self) -> ModuleResult {
+                if self.fail_start {
+                    return Err(anyhow::anyhow!("service start failed"));
+                }
+                self.start_called = true;
+                Ok(())
+            }
+            fn stop(&mut self) -> ModuleResult {
+                self.stop_called = true;
+                Ok(())
+            }
+        }
+
+        let mut kernel = Kernel::new();
+        kernel.register(Box::new(TestModule::new("mod"))).unwrap();
+
+        // svc-a starts successfully; svc-b fails to start; svc-c is
+        // after the failure so never reached. Wrapped in Arc<Mutex<>> so
+        // the test can inspect flags after start_all/stop_all run.
+        let svc_a = Arc::new(Mutex::new(TrackingService::new("svc-a")));
+        let svc_b = Arc::new(Mutex::new(TrackingService::new("svc-b").with_fail_start()));
+        let svc_c = Arc::new(Mutex::new(TrackingService::new("svc-c")));
+
+        // Thin Service wrapper that forwards to the shared Arc<Mutex<...>>.
+        #[derive(Debug)]
+        struct ServiceRef(Arc<Mutex<TrackingService>>);
+        impl Service for ServiceRef {
+            fn id(&self) -> &'static str {
+                self.0.lock().unwrap().id
+            }
+            fn start(&mut self) -> ModuleResult {
+                self.0.lock().unwrap().start()
+            }
+            fn stop(&mut self) -> ModuleResult {
+                self.0.lock().unwrap().stop()
+            }
+        }
+
+        kernel.register_service(Box::new(ServiceRef(svc_a.clone())));
+        kernel.register_service(Box::new(ServiceRef(svc_b.clone())));
+        kernel.register_service(Box::new(ServiceRef(svc_c.clone())));
+
+        // start_all fails at svc-b. svc-a started; svc-b and svc-c did not.
+        let result = kernel.start_all();
+        assert!(result.is_err(), "start_all should fail at svc-b");
+        assert!(
+            svc_a.lock().unwrap().start_called,
+            "svc-a should have been started"
+        );
+        assert!(
+            !svc_b.lock().unwrap().start_called,
+            "svc-b should NOT have completed start (it failed)"
+        );
+        assert!(
+            !svc_c.lock().unwrap().start_called,
+            "svc-c should NOT have been started (after the failure)"
+        );
+
+        // Caller recovers with stop_all. BUG: stop_all calls stop() on
+        // svc-b and svc-c, which were never started.
+        kernel.stop_all().unwrap();
+
+        // svc-a (started) should be stopped.
+        assert!(
+            svc_a.lock().unwrap().stop_called,
+            "svc-a (started) should be stopped"
+        );
+        // svc-b and svc-c were NEVER started — stop() must NOT be called
+        // on them (Service contract: stop() only after a successful start()).
+        assert!(
+            !svc_b.lock().unwrap().stop_called,
+            "stop_all must NOT call stop() on svc-b, which was never started"
+        );
+        assert!(
+            !svc_c.lock().unwrap().stop_called,
+            "stop_all must NOT call stop() on svc-c, which was never started"
         );
     }
 }
