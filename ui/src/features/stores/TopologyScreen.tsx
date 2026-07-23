@@ -94,7 +94,7 @@ export default function TopologyScreen() {
       const idMap: Record<string, string> = {};
 
       if (!sessionToken) {
-        addToast({ message: 'No active session — cannot save workspaces.', type: 'error' });
+        addToast({ message: l10n.getString('topology-toast-no-session'), type: 'error' });
         return idMap;
       }
 
@@ -260,7 +260,7 @@ export default function TopologyScreen() {
           parts.push(`${typeChangeCount} type-changed`);
         }
         addToast({
-          message: `Topology saved: ${parts.join(', ')}.`,
+          message: l10n.getString('topology-toast-saved', { detail: parts.join(', ') }),
           type: 'success',
         });
 
@@ -274,13 +274,13 @@ export default function TopologyScreen() {
         return idMap;
       } catch (err) {
         addToast({
-          message: `Failed to save topology: ${err instanceof Error ? err.message : String(err)}`,
+          message: `${l10n.getString('topology-toast-save-error')}: ${err instanceof Error ? err.message : String(err)}`,
           type: 'error',
         });
         return {};
       }
     },
-    [sessionToken, workspaceInstances, stores, addToast],
+    [sessionToken, workspaceInstances, stores, addToast, l10n],
   );
 
   return (

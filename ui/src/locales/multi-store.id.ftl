@@ -75,4 +75,32 @@ topology-ws-type-restaurant-pos = POS Restoran
 topology-ws-type-kds = Kitchen Display (KDS)
 topology-ws-type-warehouse = Gudang
 
+# ── Aria labels & tooltips ──
+topology-node-drag-hint = Seret untuk memindahkan
+topology-wire-toggle-aria = Alihkan arah koneksi
+topology-inspector-close-aria = Tutup inspektur
+topology-ws-type-select-aria = Pilih tipe workspace
+# $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
+topology-port-aria = Port { $port } { $name }
+
+# ── Toast messages ──
+topology-toast-save-error = Gagal menyimpan topologi
+topology-toast-no-session = Tidak ada sesi aktif — tidak dapat menyimpan workspace.
+topology-toast-saved = Topologi tersimpan: { $detail }.
+
+# ── Canvas HUD (aria-hidden decorative text) ──
+topology-hud-nodes = { $count } { $count ->
+    [one] node
+   *[other] node
+}
+topology-hud-wires = { $count } { $count ->
+    [one] koneksi
+   *[other] koneksi
+}
+
+# ── Wire labels ──
+topology-wire-label-connected = Terhubung
+topology-wire-label-stock-deduct = Potong Stok (P{ $priority })
+topology-wire-label-fallback = Cadangan (P{ $priority })
+
 # ── Offline Queue ──

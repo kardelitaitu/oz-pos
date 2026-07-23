@@ -302,7 +302,6 @@ export default function NodeTopologyEditor({
           // Skip the full rebuild when our own save triggered this reload —
           // only update persisted flags, preserving in-flight canvas edits (#8).
           if (skipNextLoadRef.current) {
-            skipNextLoadRef.current = false;
             setNodes((prev) =>
               prev.map((n) => {
                 if (n.type === 'workspace') {
@@ -355,7 +354,7 @@ export default function NodeTopologyEditor({
         // No real instances supplied — legacy/demo behaviour: use the saved
         // diagram verbatim, or fall back to the retail preset.
         if (cancelled || !data || !data.nodes || data.nodes.length === 0) return;
-        if (skipNextLoadRef.current) { skipNextLoadRef.current = false; return; }
+        if (skipNextLoadRef.current) { return; }
         setNodes([...savedById.values()]);
         const loadedWires: TopologyWireData[] = data.wires.map((w) => {
           const wire: TopologyWireData = {
@@ -756,9 +755,12 @@ export default function NodeTopologyEditor({
 
     const newWireId = `wire-${crypto.randomUUID()}`;
     const isWarehouseWire = fromNode.type === 'workspace' && toNode.type === 'warehouse';
+    const priority = existingWarehouseWires.length === 0 ? 1 : existingWarehouseWires.length + 1;
     const label = isWarehouseWire
-      ? existingWarehouseWires.length === 0 ? 'Stock Deduct (P1)' : `Fallback (P${existingWarehouseWires.length + 1})`
-      : 'Connected';
+      ? existingWarehouseWires.length === 0
+        ? l10n.getString('topology-wire-label-stock-deduct', { priority })
+        : l10n.getString('topology-wire-label-fallback', { priority })
+      : l10n.getString('topology-wire-label-connected');
 
     setWires((prev) => [
       ...prev,
@@ -959,34 +961,46 @@ export default function NodeTopologyEditor({
               variant="primary"
               onClick={async () => {
                 skipNextLoadRef.current = true;
-                const idMap = await onSave?.(nodes, wires);
-                if (idMap && Object.keys(idMap).length > 0) {
-                  // Remap old UUIDs to new UUIDs from archive+recreate
-                  // operations so the canvas stays in sync with the backend.
-                  // Clear selection to avoid dangling references to old IDs.
-                  setSelectedNodeId(null);
-                  setSelectedWireId(null);
-                  setNodes((prev) =>
-                    prev.map((n) => {
-                      const newId = idMap[n.id];
-                      return newId ? { ...n, id: newId } : n;
-                    }),
-                  );
-                  setWires((prev) =>
-                    prev.map((w) => {
-                      const newFrom = idMap[w.fromNodeId];
-                      const newTo = idMap[w.toNodeId];
-                      if (newFrom || newTo) {
-                        return {
-                          ...w,
-                          fromNodeId: newFrom ?? w.fromNodeId,
-                          toNodeId: newTo ?? w.toNodeId,
-                        };
-                      }
-                      return w;
-                    }),
-                  );
+                try {
+                  const idMap = await onSave?.(nodes, wires);
+                  if (idMap && Object.keys(idMap).length > 0) {
+                    // Remap old UUIDs to new UUIDs from archive+recreate
+                    // operations so the canvas stays in sync with the backend.
+                    // Clear selection to avoid dangling references to old IDs.
+                    setSelectedNodeId(null);
+                    setSelectedWireId(null);
+                    setNodes((prev) =>
+                      prev.map((n) => {
+                        const newId = idMap[n.id];
+                        return newId ? { ...n, id: newId } : n;
+                      }),
+                    );
+                    setWires((prev) =>
+                      prev.map((w) => {
+                        const newFrom = idMap[w.fromNodeId];
+                        const newTo = idMap[w.toNodeId];
+                        if (newFrom || newTo) {
+                          return {
+                            ...w,
+                            fromNodeId: newFrom ?? w.fromNodeId,
+                            toNodeId: newTo ?? w.toNodeId,
+                          };
+                        }
+                        return w;
+                      }),
+                    );
+                  }
+                } catch (err) {
+                  addToast({
+                    message: `${l10n.getString('topology-toast-save-error')}: ${err instanceof Error ? err.message : String(err)}`,
+                    type: 'error',
+                  });
+                  skipNextLoadRef.current = false;
+                  return;
                 }
+                // Defer reset so React commits state updates + fires effects first,
+                // preventing post-save reload from clobbering in-flight edits (#8).
+                setTimeout(() => { skipNextLoadRef.current = false; }, 0);
               }}
               icon={<CheckIcon size={16} />}
             >
@@ -1159,7 +1173,7 @@ export default function NodeTopologyEditor({
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
                       role="button"
                       tabIndex={0}
-                      aria-label="Toggle wire direction"
+                      aria-label={l10n.getString('topology-wire-toggle-aria')}
                     >
                       <rect x="-55" y="-12" width="110" height="24" rx="12" className="wire-label-bg" />
                       <text x="0" y="4" textAnchor="middle" className="wire-label-text">
@@ -1193,7 +1207,7 @@ export default function NodeTopologyEditor({
                 >
                   <div className="node-header">
                     <span className="node-type-accent" />
-                    <span className="node-grip" aria-hidden="true" title="Drag to move">
+                    <span className="node-grip" aria-hidden="true" title={l10n.getString('topology-node-drag-hint')}>
                       <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
                         <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
                         <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
@@ -1237,7 +1251,7 @@ export default function NodeTopologyEditor({
                           key={port}
                           className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''}`}
                           onClick={(e) => handlePortClick(e, node.id, port)}
-                          aria-label={`${node.name} ${port} port`}
+                          aria-label={l10n.getString('topology-port-aria', { name: node.name, port })}
                         >
                         </button>
                       );
@@ -1252,9 +1266,9 @@ export default function NodeTopologyEditor({
           <div className="canvas-hud" aria-hidden="true">
             <span className="canvas-hud-item">{Math.round(zoom * 100)}%</span>
             <span className="canvas-hud-divider" />
-            <span className="canvas-hud-item">{nodes.length} node{nodes.length !== 1 ? 's' : ''}</span>
+            <span className="canvas-hud-item">{l10n.getString('topology-hud-nodes', { count: nodes.length })}</span>
             <span className="canvas-hud-divider" />
-            <span className="canvas-hud-item">{wires.length} wire{wires.length !== 1 ? 's' : ''}</span>
+            <span className="canvas-hud-item">{l10n.getString('topology-hud-wires', { count: wires.length })}</span>
           </div>
         </div>
 
@@ -1262,7 +1276,7 @@ export default function NodeTopologyEditor({
           <div className="node-inspector-drawer">
             <div className="inspector-header">
               <h3><Localized id="topology-inspector-title">Node Inspector</Localized></h3>
-              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label="Close inspector">{null}</Button>
+              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label={l10n.getString('topology-inspector-close-aria')}>{null}</Button>
             </div>
 
             <div className="inspector-content">
@@ -1311,7 +1325,7 @@ export default function NodeTopologyEditor({
                         ),
                       );
                     }}
-                    aria-label="Select workspace type"
+                    aria-label={l10n.getString('topology-ws-type-select-aria')}
                   >
                     {WORKSPACE_TYPE_KEYS.filter((k) => k !== 'warehouse').map((k) => (
                       <option key={k} value={k}>

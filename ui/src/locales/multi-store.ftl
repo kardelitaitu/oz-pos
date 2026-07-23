@@ -76,3 +76,31 @@ topology-ws-type-store-pos = Retail POS
 topology-ws-type-restaurant-pos = Restaurant POS
 topology-ws-type-kds = Kitchen Display (KDS)
 topology-ws-type-warehouse = Warehouse
+
+# ── Aria labels & tooltips ──
+topology-node-drag-hint = Drag to move
+topology-wire-toggle-aria = Toggle wire direction
+topology-inspector-close-aria = Close inspector
+topology-ws-type-select-aria = Select workspace type
+# $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
+topology-port-aria = { $name } { $port } port
+
+# ── Toast messages ──
+topology-toast-save-error = Failed to save topology
+topology-toast-no-session = No active session — cannot save workspaces.
+topology-toast-saved = Topology saved: { $detail }.
+
+# ── Canvas HUD (aria-hidden decorative text) ──
+topology-hud-nodes = { $count } { $count ->
+    [one] node
+   *[other] nodes
+}
+topology-hud-wires = { $count } { $count ->
+    [one] wire
+   *[other] wires
+}
+
+# ── Wire labels ──
+topology-wire-label-connected = Connected
+topology-wire-label-stock-deduct = Stock Deduct (P{ $priority })
+topology-wire-label-fallback = Fallback (P{ $priority })
