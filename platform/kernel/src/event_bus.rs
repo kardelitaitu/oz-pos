@@ -17,20 +17,24 @@
 
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use foundation::contracts::{DomainEvent, EventHandler, ModuleResult};
 use tracing::{debug, error};
 
 /// A type-erased event handler stored in the bus.
-type HandlerFn = Box<dyn Fn(&dyn Any) -> ModuleResult + Send + Sync>;
+/// Uses `Arc` so [`SubscriberEntry`] is `Clone`, enabling the
+/// publish loop to clone the handler list under a read lock and
+/// release it before dispatching (prevents reentrant deadlocks —
+/// Bug #2).
+type HandlerFn = Arc<dyn Fn(&dyn Any) -> ModuleResult + Send + Sync>;
 
 /// Wrap an `EventHandler<E>` into a type-erased `HandlerFn`.
 fn wrap_handler<E>(handler: Box<dyn EventHandler<E>>) -> HandlerFn
 where
     E: DomainEvent + 'static,
 {
-    Box::new(move |event: &dyn Any| -> ModuleResult {
+    Arc::new(move |event: &dyn Any| -> ModuleResult {
         match event.downcast_ref::<E>() {
             Some(typed) => handler.handle(typed),
             None => Err(anyhow::anyhow!(
@@ -42,6 +46,9 @@ where
 }
 
 /// A registered subscriber entry, optionally owned by a module.
+/// `Clone` is derived so the publish loop can snapshot handlers
+/// under a read lock before releasing it for dispatch (Bug #2).
+#[derive(Clone)]
 struct SubscriberEntry {
     /// The module that registered this handler, or `""` for anonymous.
     module_id: &'static str,
@@ -219,28 +226,53 @@ impl EventBus {
         let topic = event.event_name();
         let any_ref: &dyn Any = event;
 
-        let subs = self
-            .subscribers
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let entries = match subs.get(topic) {
-            Some(h) => h,
-            None => {
-                debug!(topic, "no handlers registered for this event");
-                return Ok(());
+        // Snapshot the handler list under a short-lived read lock so the
+        // lock can be released before dispatching. This prevents reentrant
+        // deadlocks when a handler calls subscribe/unsubscribe during its
+        // callback (Bug #2).
+        let entries: Vec<SubscriberEntry> = {
+            let subs = self
+                .subscribers
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            match subs.get(topic) {
+                Some(h) => h.clone(),
+                None => {
+                    debug!(topic, "no handlers registered for this event");
+                    return Ok(());
+                }
             }
-        };
+        }; // read lock released here
 
         let count = entries.len();
         for (i, entry) in entries.iter().enumerate() {
-            if let Err(e) = (entry.handler)(any_ref) {
-                error!(
-                    topic,
-                    handler_index = i,
-                    module = entry.module_id,
-                    error = %e,
-                    "event handler failed (continuing)"
-                );
+            let result =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (entry.handler)(any_ref)));
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    error!(
+                        topic,
+                        handler_index = i,
+                        module = entry.module_id,
+                        error = %e,
+                        "event handler failed (continuing)"
+                    );
+                }
+                Err(panic_payload) => {
+                    let panic_msg = panic_payload
+                        .downcast_ref::<&str>()
+                        .copied()
+                        .or_else(|| panic_payload.downcast_ref::<String>().map(|s| s.as_str()))
+                        .unwrap_or("unknown panic");
+                    error!(
+                        topic,
+                        handler_index = i,
+                        module = entry.module_id,
+                        panic = %panic_msg,
+                        "event handler panicked (continuing)"
+                    );
+                }
             }
         }
 
@@ -664,13 +696,98 @@ mod tests {
         assert!(bus.has_handlers("test.event"));
     }
 
-    /// Panicking handler does not poison the bus. Since `publish()` uses
-    /// a read lock and panics drop read guards without poisoning the RwLock,
-    /// subsequent publishes must still succeed.
+    /// A handler that calls `subscribe()` during publish must NOT deadlock.
+    /// This is the regression test for Bug #2 — `publish()` must release
+    /// the read lock before dispatching so re-entrant subscribe/unsubscribe
+    /// calls don't deadlock on the RwLock write lock.
+    #[test]
+    fn handler_can_subscribe_during_publish() {
+        let bus = Arc::new(EventBus::new());
+
+        // Handler that subscribes to another topic during handle().
+        struct SubscribingHandler {
+            bus: Arc<EventBus>,
+        }
+        impl EventHandler<TestEvent> for SubscribingHandler {
+            fn handle(&self, _event: &TestEvent) -> ModuleResult {
+                self.bus
+                    .subscribe("other.event", Box::new(CalledHandler::new()));
+                Ok(())
+            }
+        }
+
+        bus.subscribe(
+            "test.event",
+            Box::new(SubscribingHandler { bus: bus.clone() }),
+        );
+
+        // Publish in a separate thread so a deadlock doesn't hang the test runner.
+        let bus_clone = bus.clone();
+        let handle = std::thread::spawn(move || bus_clone.publish(&TestEvent { value: 1 }));
+
+        // Before the fix this will hang (deadlock).
+        // Join with a 5-second timeout via std::sync::mpsc.
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(handle.join());
+        });
+        let result = rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("publish should not deadlock (timeout = 5s)")
+            .expect("publish thread should not panic");
+
+        assert!(result.is_ok(), "publish should succeed");
+        assert!(
+            bus.has_handlers("other.event"),
+            "handler should have subscribed to other.event during publish"
+        );
+    }
+
+    /// Remaining handlers after a panicking handler are still called.
+    /// This is the regression test for Bug #1 — the `publish()` method
+    /// must catch individual handler panics so that the rest of the
+    /// handler chain is not silently dropped.
+    #[test]
+    fn handlers_after_panicking_handler_are_still_called() {
+        let bus = EventBus::new();
+
+        struct PanicHandler;
+        impl EventHandler<TestEvent> for PanicHandler {
+            fn handle(&self, _event: &TestEvent) -> ModuleResult {
+                panic!("intentional panic");
+            }
+        }
+
+        let second = Arc::new(AtomicBool::new(false));
+        struct SecondHandler(Arc<AtomicBool>);
+        impl EventHandler<TestEvent> for SecondHandler {
+            fn handle(&self, _event: &TestEvent) -> ModuleResult {
+                self.0.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+
+        bus.subscribe("test.event", Box::new(PanicHandler));
+        bus.subscribe("test.event", Box::new(SecondHandler(second.clone())));
+
+        // The publish should NOT panic — the panicking handler must be caught
+        // so remaining handlers still run.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bus.publish(&TestEvent { value: 1 })
+        }));
+        assert!(result.is_ok(), "publish should not propagate handler panic");
+        let inner = result.unwrap();
+        assert!(inner.is_ok(), "publish should return Ok");
+        assert!(
+            second.load(Ordering::SeqCst),
+            "second handler should have been called despite first panicking"
+        );
+    }
+
+    /// Panicking handler does not poison the bus and remaining handlers
+    /// still run (Bug #1 fix uses `catch_unwind` per-handler).
     #[test]
     fn panicking_handler_does_not_poison_bus() {
-        use std::sync::Arc;
-
         let bus = Arc::new(EventBus::new());
 
         // Handler that panics on odd values.
@@ -688,18 +805,26 @@ mod tests {
         bus.subscribe("test.event", Box::new(PanicOnOdd));
         bus.subscribe("test.event", Box::new(good_handler.clone()));
 
-        // First publish with odd value should panic through publish().
+        // First publish with odd value — handler panics but publish catches it
+        // (Bug #1 fix: catch_unwind isolates each handler).
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             bus.publish(&TestEvent { value: 1 })
         }));
-        // The panic should propagate out of publish().
-        assert!(result.is_err(), "publish() should propagate handler panic");
-        // The second handler was never called — panic skipped it.
-        // This is a known limitation: panics drop remaining handlers silently.
+        // The panic is caught internally — publish returns Ok.
+        assert!(
+            result.is_ok(),
+            "publish should catch handler panic internally"
+        );
+        let inner = result.unwrap();
+        assert!(
+            inner.is_ok(),
+            "publish should return Ok even if a handler panicked"
+        );
+        // The good handler was called with value 1 despite the panic.
         assert_eq!(
             good_handler.last_value(),
-            0,
-            "handler after panicking handler should not have been called"
+            1,
+            "handler after panicking handler should still be called"
         );
 
         // The bus must NOT be poisoned — subsequent publish should work.

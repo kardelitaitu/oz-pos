@@ -444,4 +444,217 @@ mod tests {
             .unwrap();
         store.delete_store_profile("store-b2").unwrap();
     }
+
+    // ── Additional coverage: field roundtrip, ordering, edge cases ──
+
+    /// Helper: create a non-primary store with full fields.
+    fn make_second(store: &Store<'_>, id: &str, name: &str) -> StoreProfile {
+        let p = StoreProfile {
+            id: id.into(),
+            name: name.into(),
+            address: "456 Oak Ave".into(),
+            tax_id: "TAX-002".into(),
+            currency: "IDR".into(),
+            timezone: "Asia/Jakarta".into(),
+            is_primary: false,
+            created_at: "2026-07-01T10:00:00Z".into(),
+            updated_at: "2026-07-01T10:00:00Z".into(),
+        };
+        store.create_store_profile(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn update_all_fields_roundtrip() {
+        // Verify every mutable field (name, address, tax_id, currency,
+        // timezone) is persisted and returned. The existing test only
+        // checks name + address.
+        let (store, id) = setup();
+        let updated = store
+            .update_store_profile(
+                &id,
+                "New Name",
+                "New Address",
+                "TAX-NEW",
+                "EUR",
+                "Europe/Berlin",
+            )
+            .unwrap();
+        assert_eq!(updated.name, "New Name");
+        assert_eq!(updated.address, "New Address");
+        assert_eq!(updated.tax_id, "TAX-NEW");
+        assert_eq!(updated.currency, "EUR");
+        assert_eq!(updated.timezone, "Europe/Berlin");
+        assert_eq!(updated.id, id);
+        assert!(updated.is_primary, "is_primary must not change on update");
+
+        // Re-fetch to confirm persistence.
+        let fetched = store.get_store_profile(&id).unwrap().unwrap();
+        assert_eq!(fetched.name, "New Name");
+        assert_eq!(fetched.tax_id, "TAX-NEW");
+        assert_eq!(fetched.currency, "EUR");
+        assert_eq!(fetched.timezone, "Europe/Berlin");
+    }
+
+    #[test]
+    fn list_orders_primary_first() {
+        // list_store_profiles orders by is_primary DESC, created_at ASC.
+        // The primary must appear before any non-primary stores.
+        let (store, _) = setup();
+        make_second(&store, "branch-a", "Branch A");
+        make_second(&store, "branch-b", "Branch B");
+
+        let profiles = store.list_store_profiles().unwrap();
+        assert_eq!(profiles.len(), 3);
+        assert!(profiles[0].is_primary, "primary store must be listed first");
+        assert!(
+            !profiles[1].is_primary && !profiles[2].is_primary,
+            "non-primary stores must follow"
+        );
+    }
+
+    #[test]
+    fn create_store_with_is_primary_true_rejected_by_db() {
+        // The store_profiles table has a partial unique index on
+        // is_primary=1 (migration 025). Creating a second store with
+        // is_primary=true is rejected at the DB level, so the
+        // single-primary invariant is enforced by the schema, not by
+        // create_store_profile. This test documents that enforcement.
+        let (store, _) = setup();
+        let second = StoreProfile {
+            id: "branch-p".into(),
+            name: "Branch P".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: true, // would create a second primary
+            created_at: "2026-07-01T10:00:00Z".into(),
+            updated_at: "2026-07-01T10:00:00Z".into(),
+        };
+        let result = store.create_store_profile(&second);
+        assert!(
+            result.is_err(),
+            "DB must reject a second primary store via the partial unique index"
+        );
+        assert!(matches!(result.unwrap_err(), CoreError::Db(_)));
+    }
+
+    #[test]
+    fn set_primary_on_already_primary_is_noop() {
+        // set_primary_store on the store that's already primary should
+        // succeed and leave the state unchanged (demote then re-promote).
+        let (store, id) = setup();
+        let result = store.set_primary_store(&id).unwrap();
+        assert!(result.is_primary);
+        // Still exactly one primary.
+        let primaries: Vec<_> = store
+            .list_store_profiles()
+            .unwrap()
+            .into_iter()
+            .filter(|p| p.is_primary)
+            .collect();
+        assert_eq!(primaries.len(), 1);
+        assert_eq!(primaries[0].id, id);
+    }
+
+    #[test]
+    fn set_primary_rolls_back_on_nonexistent() {
+        // set_primary_store demotes the current primary BEFORE
+        // promoting the target. If the target doesn't exist, the
+        // rollback (tx.rollback()) must restore the original primary.
+        // This test verifies the transaction is rolled back correctly.
+        let (store, original_id) = setup();
+        let err = store.set_primary_store("nonexistent").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+
+        // The original primary must STILL be primary — the demote was
+        // rolled back.
+        let original = store.get_store_profile(&original_id).unwrap().unwrap();
+        assert!(
+            original.is_primary,
+            "original primary must be restored after rollback"
+        );
+        let primaries: Vec<_> = store
+            .list_store_profiles()
+            .unwrap()
+            .into_iter()
+            .filter(|p| p.is_primary)
+            .collect();
+        assert_eq!(primaries.len(), 1, "exactly one primary after rollback");
+    }
+
+    #[test]
+    fn create_and_delete_cycle() {
+        // Full lifecycle: create, verify, delete, verify gone.
+        let (store, _) = setup();
+        let p = make_second(&store, "temp-store", "Temp");
+        assert_eq!(store.list_store_profiles().unwrap().len(), 2);
+
+        store.delete_store_profile(&p.id).unwrap();
+        assert_eq!(store.list_store_profiles().unwrap().len(), 1);
+        assert!(store.get_store_profile(&p.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn update_does_not_change_is_primary() {
+        // Updating a non-primary store must not promote it.
+        let (store, _) = setup();
+        let p = make_second(&store, "branch-u", "Branch U");
+        store
+            .update_store_profile(&p.id, "Renamed", "", "", "USD", "UTC")
+            .unwrap();
+        let fetched = store.get_store_profile(&p.id).unwrap().unwrap();
+        assert!(!fetched.is_primary, "update must not change is_primary");
+    }
+
+    #[test]
+    fn get_primary_returns_none_when_no_primary() {
+        // Edge case: if no store is marked primary (corrupted state),
+        // get_primary_store returns None rather than erroring.
+        let (store, _) = setup();
+        // Demote the only primary to simulate corruption.
+        store
+            .conn
+            .execute("UPDATE store_profiles SET is_primary = 0", [])
+            .unwrap();
+        let result = store.get_primary_store().unwrap();
+        assert!(result.is_none(), "no primary must return None, not error");
+    }
+
+    #[test]
+    fn multiple_stores_distinct_currencies() {
+        // Verify stores with different currencies coexist.
+        let (store, _) = setup();
+        let p1 = StoreProfile {
+            id: "usd-store".into(),
+            name: "USD Branch".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "USD".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-07-02T00:00:00Z".into(),
+            updated_at: "2026-07-02T00:00:00Z".into(),
+        };
+        store.create_store_profile(&p1).unwrap();
+
+        let p2 = StoreProfile {
+            id: "eur-store".into(),
+            name: "EUR Branch".into(),
+            address: "".into(),
+            tax_id: "".into(),
+            currency: "EUR".into(),
+            timezone: "UTC".into(),
+            is_primary: false,
+            created_at: "2026-07-02T00:00:00Z".into(),
+            updated_at: "2026-07-02T00:00:00Z".into(),
+        };
+        store.create_store_profile(&p2).unwrap();
+
+        let profiles = store.list_store_profiles().unwrap();
+        let currencies: Vec<&str> = profiles.iter().map(|p| p.currency.as_str()).collect();
+        assert!(currencies.contains(&"USD"));
+        assert!(currencies.contains(&"EUR"));
+    }
 }
