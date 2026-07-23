@@ -10,7 +10,6 @@ use tauri::command;
 
 use std::collections::HashMap;
 
-use oz_core::events::SettingsUpdated;
 use oz_core::permissions;
 use oz_core::{Settings, UserPreferences};
 
