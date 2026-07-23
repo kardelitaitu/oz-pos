@@ -1423,7 +1423,11 @@ mod tests {
                 terminal_id TEXT    NOT NULL DEFAULT 'unknown',
                 version     INTEGER NOT NULL,
                 created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-            )",
+            );
+             CREATE INDEX IF NOT EXISTS idx_setting_updated_key_version
+                 ON setting_updated(key, version DESC);
+             CREATE INDEX IF NOT EXISTS idx_setting_updated_terminal
+                 ON setting_updated(terminal_id, created_at DESC);",
         )
         .unwrap();
         conn
