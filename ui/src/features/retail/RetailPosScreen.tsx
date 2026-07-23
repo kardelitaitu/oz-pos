@@ -68,7 +68,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken, setActiveWorkspace } = useWorkspace();
   const userId = session!.user_id;
 
   const {
@@ -843,6 +843,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     return `${h}h ${m}m`;
   }, [activeShift, clock]);
 
+  const handleOpenSettings = useCallback(() => {
+    if (onNavigate) {
+      onNavigate('settings');
+    } else {
+      setActiveWorkspace('admin');
+    }
+  }, [onNavigate, setActiveWorkspace]);
+
   // ── Keyboard shortcuts ────────────────────────────────────────
 
   useEffect(() => {
@@ -862,7 +870,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F7': setShowCustomerSearch(true); break;
         case 'F8': setShowStockInquiry(true); break;
         case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
-        case 'F10': setShowWorkspaceSettings(true); break;
+        case 'F10': handleOpenSettings(); break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': onNavigate?.('kds'); break;
       }
@@ -1400,7 +1408,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         >
           <span className="retail-fn-key">F9</span> {activeShift ? l10n.getString('pos-shift-close-btn') : l10n.getString('pos-shift-open-btn')} {l10n.getString('retail-fn-shift')}
         </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowWorkspaceSettings(true)}>
+        <button type="button" className="retail-fn-btn" onClick={handleOpenSettings}>
           <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
         </button>
         {isEnabled(FEATURES.QUICK_RETURN) && (

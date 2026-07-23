@@ -364,9 +364,17 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   const { session, logout, isManager } = useAuth();
-  const { activeWorkspace, sessionToken } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, sessionToken } = useWorkspace();
   const { isEnabled } = useFeatures();
   const userId = session!.user_id;
+
+  const handleOpenSettings = useCallback(() => {
+    if (onNavigate) {
+      onNavigate('settings');
+    } else {
+      setActiveWorkspace('admin');
+    }
+  }, [onNavigate, setActiveWorkspace]);
 
   // ── Restore locked cart on mount ────────────────────────────────
   const LOCKED_CART_KEY = 'pos-locked-cart';
@@ -1340,7 +1348,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             <button
               type="button"
               className="pos-cart-lock-btn"
-              onClick={() => setShowWorkspaceSettings(true)}
+              onClick={handleOpenSettings}
               aria-label={l10n.getString('settings-page-title') || 'Settings'}
               title={l10n.getString('settings-page-title') || 'Settings'}
               style={{ marginRight: 4 }}
