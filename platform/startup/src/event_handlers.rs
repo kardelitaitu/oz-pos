@@ -1109,4 +1109,90 @@ mod tests {
         );
         clear_settings_emit_fn();
     }
+
+    /// Rapid-fire publishes should not drop events. Publish 100
+    /// `SettingsUpdated` events in a tight loop and verify the
+    /// emit callback receives all of them.
+    #[tokio::test]
+    async fn settings_updated_handler_rapid_fire_100_events() {
+        clear_settings_emit_fn();
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        for i in 0..100 {
+            let event = SettingsUpdated {
+                changed_keys: vec![format!("key.{i}")],
+                terminal_id: "rapid-fire".into(),
+            };
+            bus.publish(&event).unwrap();
+        }
+
+        // Allow all spawned tasks to complete.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let emitted = calls.lock().unwrap().len();
+        assert_eq!(emitted, 100, "should emit all 100 events, got {emitted}");
+        clear_settings_emit_fn();
+    }
+
+    /// A panicking emit callback should not take down the handler
+    /// or poison the global `SETTINGS_EMIT_FN` mutex. Subsequent
+    /// publishes must still work after replacing the callback.
+    #[tokio::test]
+    async fn settings_updated_handler_survives_panicking_emit_fn() {
+        clear_settings_emit_fn();
+
+        // Set a callback that panics.
+        let panicked = Arc::new(AtomicBool::new(false));
+        let p = panicked.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, _payload| {
+            p.store(true, std::sync::atomic::Ordering::SeqCst);
+            panic!("intentional panic in emit callback");
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        // This publish should not panic — the handler spawns a task,
+        // and the task's panic should be contained.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bus.publish(&SettingsUpdated {
+                changed_keys: vec!["k".into()],
+                terminal_id: "panic-test".into(),
+            })
+            .unwrap();
+        }));
+        assert!(result.is_ok(), "publish itself should not panic");
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Replace the panicking callback with a working one.
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["k2".into()],
+            terminal_id: "recovery".into(),
+        })
+        .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(
+            !calls.lock().unwrap().is_empty(),
+            "replacement callback should fire after panicking one"
+        );
+        clear_settings_emit_fn();
+    }
 }
