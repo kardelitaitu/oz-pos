@@ -857,6 +857,8 @@ mod tests {
     #[test]
     fn set_does_not_write_delta() {
         let conn = fresh();
+        // Minimal schema — indexes from migration 100_setting_updated.sql
+        // are omitted since this test only counts rows.
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS setting_updated (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,

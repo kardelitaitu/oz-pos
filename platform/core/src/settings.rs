@@ -2167,18 +2167,11 @@ mod tests {
         );
     }
 
-    /// Direct test of `write_delta_on_tx` through an outer transaction.
-    /// Proves the private method works correctly when given a tx reference.
+    /// `set_tracked` calls `write_delta_on_tx` internally — verify both
+    /// the setting and delta are persisted atomically.
     #[test]
-    fn write_delta_on_tx_direct() {
+    fn set_tracked_persists_setting_and_delta() {
         let conn = fresh_with_delta();
-        let tx = conn.unchecked_transaction().unwrap();
-        // We can't call the private method directly, so call write_delta
-        // which internally uses savepoints, then verify the public API.
-        // Instead, test through set_tracked which calls write_delta_on_tx.
-        drop(tx); // rollback unused tx
-
-        // set_tracked uses write_delta_on_tx internally.
         Settings::set_tracked(&conn, "direct.k", "direct-v", "term-dir").unwrap();
         assert_eq!(
             Settings::get_version(&conn, "direct.k", "term-dir").unwrap(),
@@ -2187,6 +2180,19 @@ mod tests {
         assert_eq!(
             Settings::get(&conn, "direct.k").unwrap(),
             Some("direct-v".into())
+        );
+    }
+
+    /// Single-quote (apostrophe) in key names is a common real-world
+    /// edge case — e.g. store names like "Joe's Caf\u{00e9}".
+    #[test]
+    fn write_delta_single_quote_in_key() {
+        let conn = fresh_with_delta();
+        let key = "store.it's";
+        Settings::write_delta(&conn, key, "val", "term-sq").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, key, "term-sq").unwrap(),
+            Some(1)
         );
     }
 }
