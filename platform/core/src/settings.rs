@@ -112,7 +112,9 @@ impl Settings {
             }
             Err(e) => {
                 tracing::warn!(key, terminal_id, error = %e, "delta write failed, rolling back savepoint");
-                let _ = conn.execute_batch(&format!("ROLLBACK TO {sp}"));
+                if let Err(rollback_err) = conn.execute_batch(&format!("ROLLBACK TO {sp}")) {
+                    tracing::error!(key, terminal_id, error = %rollback_err, "ROLLBACK TO savepoint failed — savepoint may linger");
+                }
                 Err(e)
             }
         }

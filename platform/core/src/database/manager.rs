@@ -63,7 +63,7 @@ impl StoreDatabaseManager {
     ///
     /// If the file doesn't exist, creates it with all migrations applied.
     /// Migrations are always run on open to recover from partial failures.
-    /// Uses `entry().or_insert_with()` to prevent TOCTOU races.
+    /// The Mutex guard is held for the entire check-then-insert span, preventing TOCTOU races.
     pub fn open_store(&self, store_id: &str) -> Result<Arc<Mutex<Connection>>, PlatformError> {
         let mut store_dbs = self
             .store_dbs
@@ -132,7 +132,10 @@ impl StoreDatabaseManager {
     pub fn close_store(&self, store_id: &str) {
         let mut store_dbs = match self.store_dbs.lock() {
             Ok(dbs) => dbs,
-            Err(_) => return,
+            Err(poison) => {
+                tracing::error!(store_id, error = %poison, "store_dbs mutex poisoned during close_store");
+                return;
+            }
         };
         if store_dbs.remove(store_id).is_some() {
             tracing::debug!(store_id, "store database closed");
@@ -143,7 +146,10 @@ impl StoreDatabaseManager {
     pub fn close_all(&self) {
         let mut store_dbs = match self.store_dbs.lock() {
             Ok(dbs) => dbs,
-            Err(_) => return,
+            Err(poison) => {
+                tracing::error!(error = %poison, "store_dbs mutex poisoned during close_all");
+                return;
+            }
         };
         let count = store_dbs.len();
         store_dbs.clear();
