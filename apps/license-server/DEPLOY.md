@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · scripts/generate-license-keys.{ps1,sh} verified; Dockerfile uses golang:1.25-alpine -> alpine:3.20; health.go (GET /api/health, returns status: ok) + healthcheck.go present; pb_schema.json present; go.mod is go 1.25.0; all build/deploy/env-var claims match the Go code -->
+
 # OZ-POS License Server — Northflank Deployment Guide
 
 > **ADR:** [`docs/decisions/2026-07-10-license-server.md`](../../docs/decisions/2026-07-10-license-server.md)

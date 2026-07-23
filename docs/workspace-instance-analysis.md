@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: AUDITED (draft, superseded by ADR #4) · pre-decision analysis doc; all referenced files verified present: crates/oz-core/src/db/workspaces.rs, apps/desktop-client/src/commands/workspaces.rs, ui/src/contexts/WorkspaceContext.tsx, ui/src/features/workspaces/WorkspaceHome.tsx, ui/src/frontend/shell/AppShell.tsx; StoreProfile (crates/oz-core/src/store_profile.rs:14) + MultiStoreDashboardScreen (ui/src/App.tsx:37) confirmed · note: its Phase 3 recommended query-level WHERE store_id=? scoping was NOT the mechanism adopted — ADR #4 (2026-07-10-workspace-type-instance-design.md) chose store-scoped SQLite DBs (filesystem isolation) instead; treat as historical draft, not as-built claim -->
+
 # Workspace Instance Architecture — Analysis & Recommendation
 
 **Date:** 2026-07-10  
