@@ -10,6 +10,7 @@ use tauri::{State, command};
 use oz_core::db::Store;
 use oz_core::settings::Settings;
 use oz_core::sync_client::{self, PullResult, SyncAttemptResult, SyncConfig};
+use rusqlite::Connection;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -58,17 +59,38 @@ pub async fn update_sync_settings(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
+    update_sync_settings_data(&db, &args)?;
+    drop(db);
+    Ok(())
+}
+
+/// Persist sync settings (server URL, API key, enabled flag) atomically.
+///
+/// All three writes execute inside a single SQLite transaction so a
+/// failure on any one rolls back the others — preventing the
+/// partially-updated state the previous sequential-write version could
+/// leave behind (e.g. a new API key persisted while the `enabled` flag
+/// still held its old value).
+///
+/// Extracted as a free function so the atomicity contract can be tested
+/// without a Tauri runtime
+/// (see `update_sync_settings_data_rolls_back_on_partial_failure`).
+pub fn update_sync_settings_data(
+    conn: &Connection,
+    args: &UpdateSyncSettingsArgs,
+) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction()?;
     // Always update server URL (passing `null` or empty string clears it).
     let url = args.server_url.as_deref().unwrap_or("");
-    Settings::set_sync_server_url(&db, url)?;
+    Settings::set_sync_server_url(&tx, url)?;
     // Only update API key if `Some(key)` was passed from the UI.
     // When `args.api_key` is `None` (the masked API field on the front-end was not modified),
     // preserve the existing key stored in the database.
     if let Some(ref key) = args.api_key {
-        Settings::set_sync_api_key(&db, key)?;
+        Settings::set_sync_api_key(&tx, key)?;
     }
-    Settings::set_sync_enabled(&db, args.enabled)?;
-    drop(db);
+    Settings::set_sync_enabled(&tx, args.enabled)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -314,5 +336,117 @@ mod tests {
         };
         let json = serde_json::to_value(&r).unwrap();
         assert_eq!(json["error"], "network unreachable");
+    }
+
+    // ── TDD Bug Hunt: non-atomic sync settings writes ────────────────
+    //
+    // update_sync_settings_data persists three settings (server_url,
+    // api_key, enabled). If the writes are NOT wrapped in a single
+    // transaction, a failure on the third write leaves the first two
+    // committed — a partially-updated, inconsistent state. This test
+    // forces the third write to fail and asserts that the prior writes
+    // were rolled back (i.e. the function is atomic).
+
+    use oz_core::migrations;
+
+    fn fresh_sync_conn() -> Connection {
+        let conn = migrations::fresh_db();
+        // Install triggers that reject any write to the `sync_enabled`
+        // key — on both INSERT (fresh row) and UPDATE (existing row).
+        // This simulates a disk/IO failure on the THIRD write only,
+        // letting the first two (server_url, api_key) succeed.
+        conn.execute_batch(
+            "CREATE TRIGGER reject_sync_enabled_ins
+             BEFORE INSERT ON settings
+             WHEN NEW.key = 'sync_enabled'
+             BEGIN
+                 SELECT RAISE(ABORT, 'forced failure on sync_enabled insert');
+             END;
+             CREATE TRIGGER reject_sync_enabled_upd
+             BEFORE UPDATE ON settings
+             WHEN NEW.key = 'sync_enabled'
+             BEGIN
+                 SELECT RAISE(ABORT, 'forced failure on sync_enabled update');
+             END;",
+        )
+        .expect("install reject trigger");
+        conn
+    }
+
+    #[test]
+    fn update_sync_settings_data_rolls_back_on_partial_failure() {
+        let conn = fresh_sync_conn();
+        let args = UpdateSyncSettingsArgs {
+            server_url: Some("https://sync.example.com".into()),
+            api_key: Some("sk-secret".into()),
+            enabled: true,
+        };
+
+        // The third write (set_sync_enabled) hits the trigger and fails.
+        let result = update_sync_settings_data(&conn, &args);
+        assert!(
+            result.is_err(),
+            "update must surface the forced sync_enabled failure"
+        );
+
+        // Atomicity contract: because the function wraps all three writes
+        // in one transaction, the failed third write must roll back the
+        // first two. If they are NOT rolled back, the function is
+        // non-atomic (the bug).
+        let server_url = Settings::get_sync_server_url(&conn).unwrap();
+        let api_key = Settings::get_sync_api_key(&conn).unwrap();
+
+        // These assertions FAIL in the RED phase (no transaction → first
+        // two writes persist) and PASS once a transaction wraps the batch.
+        assert!(
+            server_url.as_deref() != Some("https://sync.example.com"),
+            "server_url must be rolled back, got: {server_url:?}"
+        );
+        assert!(
+            api_key.as_deref() != Some("sk-secret"),
+            "api_key must be rolled back, got: {api_key:?}"
+        );
+    }
+
+    #[test]
+    fn update_sync_settings_data_commits_all_when_no_failure() {
+        // Happy path: all three writes succeed and persist together.
+        let conn = migrations::fresh_db();
+        let args = UpdateSyncSettingsArgs {
+            server_url: Some("https://sync.example.com".into()),
+            api_key: Some("sk-secret".into()),
+            enabled: true,
+        };
+        update_sync_settings_data(&conn, &args).unwrap();
+
+        assert_eq!(
+            Settings::get_sync_server_url(&conn).unwrap().as_deref(),
+            Some("https://sync.example.com")
+        );
+        assert_eq!(
+            Settings::get_sync_api_key(&conn).unwrap().as_deref(),
+            Some("sk-secret")
+        );
+        assert!(Settings::is_sync_enabled(&conn).unwrap());
+    }
+
+    #[test]
+    fn update_sync_settings_data_preserves_api_key_when_none() {
+        // When api_key is None, the existing key must be preserved.
+        let conn = migrations::fresh_db();
+        Settings::set_sync_api_key(&conn, "existing-key").unwrap();
+
+        let args = UpdateSyncSettingsArgs {
+            server_url: Some("https://x".into()),
+            api_key: None,
+            enabled: false,
+        };
+        update_sync_settings_data(&conn, &args).unwrap();
+
+        assert_eq!(
+            Settings::get_sync_api_key(&conn).unwrap().as_deref(),
+            Some("existing-key")
+        );
+        assert!(!Settings::is_sync_enabled(&conn).unwrap());
     }
 }

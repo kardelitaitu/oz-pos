@@ -106,6 +106,12 @@ pub struct SyncTransport {
 
 impl SyncTransport {
     /// Create a new transport targeting the given server URL.
+    ///
+    ///
+    /// If the HTTP client cannot be built (e.g. TLS backend unavailable),
+    /// falls back to a default client and logs an error. Previously this
+    /// fallback was silent — now the error is logged so operators can
+    /// detect the degraded state.
     pub fn new(server_url: &str, api_key: Option<&str>) -> Self {
         let mut headers = reqwest::header::HeaderMap::new();
         if let Some(key) = api_key
@@ -119,7 +125,16 @@ impl SyncTransport {
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_default();
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    error = %e,
+                    "failed to build HTTP client for sync transport — falling back to default (no auth, no timeout)"
+                );
+                tracing::warn!(
+                    "sync transport operating without timeout — requests may hang indefinitely"
+                );
+                reqwest::Client::new()
+            });
 
         Self {
             client,
@@ -326,8 +341,6 @@ mod tests {
 
     #[test]
     fn transport_with_api_key() {
-        // API key is used to set the Authorization header during construction.
-        // We verify it doesn't crash and the transport works.
         let transport = SyncTransport::new("http://localhost:3099", Some("sk-test"));
         assert_eq!(transport.base_url, "http://localhost:3099");
     }

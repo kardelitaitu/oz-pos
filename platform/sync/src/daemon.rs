@@ -15,7 +15,6 @@ use rand::Rng;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
-use oz_core::offline::OfflineQueueItem;
 use oz_core::settings::Settings;
 use oz_core::sync_client::SyncConfig;
 
