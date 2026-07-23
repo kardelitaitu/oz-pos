@@ -1800,6 +1800,117 @@ mod tests {
         assert_eq!(Settings::load_all(&conn).unwrap().len(), 5);
     }
 
+    /// Prove that `get_version` is case-sensitive — SQLite uses BINARY
+    /// collation by default. 'Key' and 'key' are different keys.
+    #[test]
+    fn get_version_case_sensitive_keys() {
+        let conn = fresh_with_delta();
+        Settings::write_delta(&conn, "KEY", "val1", "term-x").unwrap();
+        Settings::write_delta(&conn, "key", "val2", "term-x").unwrap();
+        // Uppercase KEY is independent from lowercase key.
+        assert_eq!(
+            Settings::get_version(&conn, "KEY", "term-x").unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "key", "term-x").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// `write_delta_on_tx` correctly picks the MAX version when hundreds
+    /// of existing delta rows exist for the same (key, terminal_id) pair.
+    #[test]
+    fn write_delta_on_tx_with_large_version_count() {
+        let conn = fresh_with_delta();
+        // Insert 100 deltas manually so MAX(version) = 100.
+        let tx = conn.unchecked_transaction().unwrap();
+        for v in 1..=100 {
+            tx.execute(
+                "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES (?1, ?2, ?3, ?4)",
+                params![&format!("key.v"), &format!("val{v}"), "term-bulk", v],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+
+        // Now call write_delta — it should compute version 101.
+        Settings::write_delta(&conn, "key.v", "latest", "term-bulk").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "key.v", "term-bulk").unwrap(),
+            Some(101)
+        );
+    }
+
+    /// `set_batch_tracked` with duplicate keys in a single batch.
+    /// The second write must overwrite the first, and the delta version
+    /// must increment per key.
+    #[test]
+    fn set_batch_tracked_duplicate_keys_in_batch() {
+        let conn = fresh_with_delta();
+        let rows: Vec<(String, String)> = vec![
+            ("receipt.footer".into(), "v1".into()),
+            ("receipt.footer".into(), "v2".into()),
+        ];
+        Settings::set_batch_tracked(&conn, &rows, "term-dup").unwrap();
+
+        // Final value should be v2 (last write wins).
+        assert_eq!(
+            Settings::get(&conn, "receipt.footer").unwrap(),
+            Some("v2".into())
+        );
+        // Delta should reflect both writes: version 2.
+        assert_eq!(
+            Settings::get_version(&conn, "receipt.footer", "term-dup").unwrap(),
+            Some(2)
+        );
+    }
+
+    /// `get_version` returns Only the MAX version, even when multiple
+    /// version rows exist for the same (key, terminal_id) pair.
+    #[test]
+    fn get_version_returns_max_for_multiple_versions() {
+        let conn = fresh_with_delta();
+        Settings::write_delta(&conn, "k", "v1", "term-x").unwrap();
+        Settings::write_delta(&conn, "k", "v2", "term-x").unwrap();
+        Settings::write_delta(&conn, "k", "v3", "term-x").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "k", "term-x").unwrap(),
+            Some(3)
+        );
+        // Verify we have exactly 3 delta rows, not just the latest.
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM setting_updated WHERE key = 'k' AND terminal_id = 'term-x'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 3, "all three delta rows should be preserved");
+    }
+
+    /// `set_tracked` with the same key called from two different terminals
+    /// must track completely independent version counters (LWW per-terminal).
+    #[test]
+    fn set_tracked_independent_terminal_version_counters() {
+        let conn = fresh_with_delta();
+        // Terminal A writes key "k" twice.
+        Settings::set_tracked(&conn, "k", "a1", "term-a").unwrap();
+        Settings::set_tracked(&conn, "k", "a2", "term-a").unwrap();
+        // Terminal B writes key "k" once.
+        Settings::set_tracked(&conn, "k", "b1", "term-b").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "k", "term-a").unwrap(),
+            Some(2)
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "k", "term-b").unwrap(),
+            Some(1)
+        );
+        // The settings value should be the last write across all terminals.
+        assert_eq!(Settings::get(&conn, "k").unwrap(), Some("b1".into()));
+    }
+
     #[test]
     fn keys_constants_are_non_empty() {
         assert!(!keys::STORE_NAME.is_empty());
