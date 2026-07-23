@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/tax.rs, commands/tax.rs, features/tax, api/tax.ts, ui/src/locales/tax.ftl; modules/tax/src/lib.rs has TaxModule; manifest deps [] + permissions [tax:view,tax:edit] match · Kernel API matches -->
+
 # Tax Module
 
 **Status:** Active (Phase 2.5 — Proof of Concept)

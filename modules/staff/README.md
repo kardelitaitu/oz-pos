@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/user.rs + db/staff.rs, commands/{staff,auth}.rs, features/staff, api/staff.ts, ui/src/locales/staff.ftl; modules/staff/src/lib.rs has StaffModule; manifest deps [] + permissions [staff:view,staff:edit,staff:auth] match · Kernel API matches -->
+
 # Staff Module
 
 **Status:** Active (Phase 2.7)
