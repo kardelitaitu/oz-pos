@@ -851,3 +851,9 @@ settings-nav-restaurant-pos = [TH] Restaurant POS [/TH]
 settings-nav-kds = [TH] Kitchen Display [/TH]
 settings-nav-inventory = [TH] Inventory [/TH]
 
+# ── Workspace Settings Modal (ADR #22 Phase 4) ──
+workspace-modal-title = [TH] Workspace Settings [/TH]
+workspace-modal-admin-settings = [TH] Admin Settings ↗ [/TH]
+workspace-modal-role-manager = [TH] Manager [/TH]
+workspace-modal-role-cashier = [TH] Cashier [/TH]
+

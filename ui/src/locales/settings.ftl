@@ -912,3 +912,9 @@ settings-nav-store-pos = Store POS
 settings-nav-restaurant-pos = Restaurant POS
 settings-nav-kds = Kitchen Display
 settings-nav-inventory = Inventory
+
+# ── Workspace Settings Modal (ADR #22 Phase 4) ──
+workspace-modal-title = Workspace Settings
+workspace-modal-admin-settings = Admin Settings ↗
+workspace-modal-role-manager = Manager
+workspace-modal-role-cashier = Cashier
