@@ -2179,4 +2179,70 @@ mod tests {
             Some(1)
         );
     }
+
+    // ── ADR #22 error-path bug hunting ──────────────────────────
+
+    /// `write_delta` should not panic when the `setting_updated` table
+    /// does not exist. The ROLLBACK path must execute cleanly.
+    /// This proves the savepoint error-recovery code path is reachable
+    /// and works correctly.
+    #[test]
+    fn write_delta_rolls_back_cleanly_on_missing_table() {
+        // DB without `setting_updated` — SELECT will fail.
+        let conn = fresh();
+        let result = Settings::write_delta(&conn, "k", "v", "term-rb");
+        // write_delta should return an error, not panic.
+        assert!(result.is_err(), "write_delta should error on missing table");
+        // The settings table should be unaffected (no partial writes).
+        assert!(Settings::load_all(&conn).is_ok());
+        // Connection must still be usable after the savepoint rollback —
+        // a subsequent write to the settings table should succeed.
+        Settings::set(&conn, "recovery.key", "recovered").unwrap();
+        assert_eq!(
+            Settings::get(&conn, "recovery.key").unwrap(),
+            Some("recovered".into())
+        );
+    }
+
+    /// `set_batch_tracked` should persist settings even when delta
+    /// writes fail for every row. Delta loss is non-fatal.
+    /// This proves the batch-level error resilience.
+    #[test]
+    fn set_batch_tracked_survives_all_delta_failures() {
+        // DB without `setting_updated` — all delta writes will fail.
+        let conn = fresh();
+        let rows: Vec<(String, String)> = vec![
+            ("batch.a".into(), "va".into()),
+            ("batch.b".into(), "vb".into()),
+            ("batch.c".into(), "vc".into()),
+        ];
+        let result = Settings::set_batch_tracked(&conn, &rows, "term-batch");
+        // Should succeed — delta failures are non-fatal.
+        assert!(
+            result.is_ok(),
+            "set_batch_tracked should succeed despite delta failures"
+        );
+        // All three settings must be persisted.
+        assert_eq!(Settings::get(&conn, "batch.a").unwrap(), Some("va".into()));
+        assert_eq!(Settings::get(&conn, "batch.b").unwrap(), Some("vb".into()));
+        assert_eq!(Settings::get(&conn, "batch.c").unwrap(), Some("vc".into()));
+        // No deltas should have been written — the delta table doesn't exist.
+        assert!(Settings::get_version(&conn, "batch.a", "term-batch").is_err());
+        assert!(Settings::get_version(&conn, "batch.b", "term-batch").is_err());
+        assert!(Settings::get_version(&conn, "batch.c", "term-batch").is_err());
+    }
+
+    /// `set_tracked` should return an error (not panic) when the
+    /// `settings` table itself is missing — the outer transaction
+    /// must roll back cleanly.
+    #[test]
+    fn set_tracked_errors_when_settings_table_missing() {
+        let conn = Connection::open_in_memory().unwrap();
+        // No tables at all — `set()` will fail.
+        let result = Settings::set_tracked(&conn, "k", "v", "term");
+        assert!(
+            result.is_err(),
+            "set_tracked should error when settings table missing"
+        );
+    }
 }
