@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings — convention skill) · reference files verified: ui/src/features/sales/PosScreen.tsx, ui/src/features/sales/CartPanel.css, ui/src/utils/animation.ts (animDuration at line 25); the CSS mirror + --exiting + animDuration + id-set-compare pattern matches the shipped undo-bar + CartLineItem implementations · (file also carries its own 'last audited 19-07-26 by skill-drift-guard' line in a different convention) -->
+
 ---
 name: exit-animation-pattern
 description: OZ-POS convention for symmetric CSS entry/exit animations + the React state machine that gates a dismiss through the CSS animation duration. Applies to pills, badges, banners, modals, and any in-flight overlay whose dismissal currently snaps to unmount. Use when adding a smooth fade-out sibling to an existing entry animation, or when reviewing a polish commit for the four required components.
