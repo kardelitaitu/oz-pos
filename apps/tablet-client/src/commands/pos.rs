@@ -526,19 +526,36 @@ pub async fn get_cart_deduction_location(
 /// **Deprecated for session-scoped auth (ADR #7):** Use
 /// `override_cart_deduction_location_scoped` which reads the user ID from
 /// the resolved session.
+///
+/// Requires `SALES_OVERRIDE_PRICE` permission (Bug #2 fix).
 #[command]
 pub async fn override_cart_deduction_location(
     cart_id: CartId,
+    user_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    run_override_cart_deduction_location(&db, &user_id, &cart_id)
+}
+
+/// Shared business logic: permission-check + override.
+/// Extracted so both the deprecated and scoped commands share the same
+/// `SALES_OVERRIDE_PRICE` gate, and so the gate is unit-testable without
+/// constructing an `AppState`.
+fn run_override_cart_deduction_location(
+    db: &rusqlite::Connection,
+    user_id: &str,
+    cart_id: &CartId,
+) -> Result<(), AppError> {
+    let store = Store::new(db);
+
+    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
 
     store
-        .override_active_cart_deduction_location(&cart_id)
+        .override_active_cart_deduction_location(cart_id)
         .map_err(|e| AppError::Internal(format!("failed to override deduction location: {e}")))?;
 
-    tracing::info!(cart_id = %cart_id, "deduction location override recorded");
+    tracing::info!(cart_id = %cart_id, user_id = %user_id, "deduction location override recorded");
     Ok(())
 }
 
@@ -554,24 +571,7 @@ pub async fn override_cart_deduction_location_scoped(
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_OVERRIDE_PRICE,
-    )?;
-
-    store
-        .override_active_cart_deduction_location(&cart_id)
-        .map_err(|e| AppError::Internal(format!("failed to override deduction location: {e}")))?;
-
-    tracing::info!(
-        cart_id = %cart_id,
-        user_id = %session.user_id,
-        "deduction location override recorded (scoped)",
-    );
-    Ok(())
+    run_override_cart_deduction_location(&db, &session.user_id, &cart_id)
 }
 
 // ── Complete Sale ────────────────────────────────────────────────────
@@ -1253,6 +1253,8 @@ pub async fn delete_held_cart_scoped(
 mod tests {
     use super::*;
     use oz_core::Currency;
+    use oz_core::migrations;
+    use rusqlite::Connection;
 
     fn usd() -> Currency {
         "USD".parse().unwrap()
@@ -1328,5 +1330,116 @@ mod tests {
         assert!(args.tendered_minor.is_none());
         assert!(args.customer_id.is_none());
         assert!(args.serial_numbers.is_none());
+    }
+
+    // ── Bug #2: override_cart_deduction_location permission check ───
+
+    fn fresh_conn() -> Connection {
+        migrations::fresh_db()
+    }
+
+    /// Seed a user with ONLY sales:process permission (no SALES_OVERRIDE_PRICE).
+    fn seed_cashier_without_override_permission(conn: &Connection, user_id: &str) {
+        conn.execute_batch(&format!(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-cashier', 'Cashier', 'Cashier', '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
+                ('{user_id}', '{user_id}', 'Cashier', 'role-cashier', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        )).unwrap();
+    }
+
+    /// Seed a user with SALES_OVERRIDE_PRICE permission.
+    fn seed_manager_with_override_permission(conn: &Connection, user_id: &str) {
+        conn.execute_batch(&format!(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-manager', 'Manager', 'Manager', '[\"sales:override_price\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
+                ('{user_id}', '{user_id}', 'Manager', 'role-manager', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        )).unwrap();
+    }
+    /// Insert an active cart row and return its `CartId`.
+    /// Also seeds a minimal inventory_location row so the FK on
+    /// `deduction_location_id` is satisfied.
+    fn seed_active_cart(conn: &Connection) -> CartId {
+        // Satisfy the FK from active_carts.deduction_location_id → inventory_locations(id).
+        conn.execute(
+            "INSERT OR IGNORE INTO inventory_locations (id, name, created_at, updated_at)
+             VALUES ('loc-warehouse-1', 'Warehouse', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let cart = oz_core::Cart::new("USD".parse::<Currency>().unwrap());
+        let cart_id = cart.id();
+        let cart_data = serde_json::to_string(&cart).unwrap();
+        conn.execute(
+            "INSERT INTO active_carts (id, cart_data, deduction_location_id, updated_at)
+             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![cart_id.to_string(), cart_data, "loc-warehouse-1"],
+        )
+        .unwrap();
+        cart_id
+    }
+
+    #[test]
+    fn override_cart_deduction_location_rejects_user_without_sales_override_price() {
+        // Bug #2: the non-scoped command had NO permission check, so any
+        // caller could override a deduction location — a silent privilege
+        // bypass. After the fix, a user without SALES_OVERRIDE_PRICE must
+        // be rejected before the DB write executes.
+        let conn = fresh_conn();
+        seed_cashier_without_override_permission(&conn, "user-cashier");
+        let cart_id = seed_active_cart(&conn);
+
+        let result = run_override_cart_deduction_location(&conn, "user-cashier", &cart_id);
+
+        assert!(
+            result.is_err(),
+            "Bug #2: override lacked permission check — \
+             cashier without SALES_OVERRIDE_PRICE must be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.to_lowercase().contains("permission") || err.to_lowercase().contains("denied"),
+            "error must mention permission/denied, got: {err}"
+        );
+    }
+
+    #[test]
+    fn override_cart_deduction_location_allows_user_with_sales_override_price() {
+        // Happy-path regression: a manager with SALES_OVERRIDE_PRICE should
+        // succeed — the permission check must not reject authorised users.
+        let conn = fresh_conn();
+        seed_manager_with_override_permission(&conn, "user-mgr");
+        let cart_id = seed_active_cart(&conn);
+
+        let result = run_override_cart_deduction_location(&conn, "user-mgr", &cart_id);
+
+        assert!(
+            result.is_ok(),
+            "manager with SALES_OVERRIDE_PRICE must be allowed, got: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn override_cart_deduction_location_fails_for_nonexistent_cart() {
+        // Edge case: permission check passes but the cart doesn't exist.
+        let conn = fresh_conn();
+        seed_manager_with_override_permission(&conn, "user-mgr");
+
+        // Create a CartId that won't exist in the DB.
+        let cart_id = oz_core::Cart::new("USD".parse::<Currency>().unwrap()).id();
+        let result = run_override_cart_deduction_location(&conn, "user-mgr", &cart_id);
+
+        assert!(
+            result.is_err(),
+            "nonexistent cart must fail after permission check"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("not found") || err.contains("active_cart"),
+            "error must mention not-found, got: {err}"
+        );
     }
 }
