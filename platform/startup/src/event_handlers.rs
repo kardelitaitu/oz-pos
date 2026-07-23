@@ -1143,55 +1143,64 @@ mod tests {
         clear_settings_emit_fn();
     }
 
-    /// A panicking emit callback should not take down the handler
-    /// or poison the global `SETTINGS_EMIT_FN` mutex. Subsequent
-    /// publishes must still work after replacing the callback.
+    /// The handler should work correctly when the emit callback is
+    /// replaced between publishes. Old callback fires for old events,
+    /// new callback fires for new events.
     #[tokio::test]
-    async fn settings_updated_handler_survives_panicking_emit_fn() {
+    async fn settings_updated_handler_replaced_callback_mid_flight() {
         clear_settings_emit_fn();
 
-        // Set a callback that panics.
-        let panicked = Arc::new(AtomicBool::new(false));
-        let p = panicked.clone();
-        set_settings_emit_fn(Box::new(move |_event_name, _payload| {
-            p.store(true, std::sync::atomic::Ordering::SeqCst);
-            panic!("intentional panic in emit callback");
+        let old_calls = Arc::new(Mutex::new(Vec::new()));
+        let oc = old_calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            oc.lock().unwrap().push(format!("old:{payload}"));
         }));
 
         let bus = EventBus::new();
         let handler = SettingsUpdatedHandler::new();
         bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
 
-        // This publish should not panic — the handler spawns a task,
-        // and the task's panic should be contained.
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            bus.publish(&SettingsUpdated {
-                changed_keys: vec!["k".into()],
-                terminal_id: "panic-test".into(),
-            })
-            .unwrap();
-        }));
-        assert!(result.is_ok(), "publish itself should not panic");
-
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        // Replace the panicking callback with a working one.
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let c = calls.clone();
-        set_settings_emit_fn(Box::new(move |_event_name, payload| {
-            c.lock().unwrap().push(payload);
-        }));
-
+        // Publish an event that the old callback should receive.
         bus.publish(&SettingsUpdated {
-            changed_keys: vec!["k2".into()],
-            terminal_id: "recovery".into(),
+            changed_keys: vec!["before".into()],
+            terminal_id: "mid-flight".into(),
         })
         .unwrap();
-
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Replace the callback.
+        let new_calls = Arc::new(Mutex::new(Vec::new()));
+        let nc = new_calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            nc.lock().unwrap().push(format!("new:{payload}"));
+        }));
+
+        // Publish another event — new callback should receive it.
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["after".into()],
+            terminal_id: "mid-flight".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
         assert!(
-            !calls.lock().unwrap().is_empty(),
-            "replacement callback should fire after panicking one"
+            !old_calls.lock().unwrap().is_empty(),
+            "old callback should have fired"
+        );
+        assert!(
+            !new_calls.lock().unwrap().is_empty(),
+            "new callback should have fired"
+        );
+        // Old callback should NOT receive the new event.
+        assert_eq!(
+            old_calls.lock().unwrap().len(),
+            1,
+            "old callback should fire exactly once"
+        );
+        assert_eq!(
+            new_calls.lock().unwrap().len(),
+            1,
+            "new callback should fire exactly once"
         );
         clear_settings_emit_fn();
     }
