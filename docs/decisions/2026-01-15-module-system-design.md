@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings, 1 low-severity observation) · foundation/src/contracts.rs has Module trait (on_load/on_start/on_stop, ModuleResult) — matches ADR; Kernel in platform/kernel/src/kernel.rs:52 with register/load_all/start_all — matches; FeatureRegistry in crates/oz-core/src/features.rs:171 — matches; Status "Implemented (2026-07-15)" consistent with live module system · obs: ADR shows id()->&'static str but actual trait returns ModuleId (typed id) — design intent preserved, not a drift · Related links (ARCHITECTURE.md, RESTRUCTURING.md) valid -->
+
 # ADR #1: Module System Design
 
 **Status:** Implemented (2026-07-15)
