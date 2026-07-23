@@ -1821,7 +1821,7 @@ mod tests {
     /// `write_delta_on_tx` correctly picks the MAX version when hundreds
     /// of existing delta rows exist for the same (key, terminal_id) pair.
     #[test]
-    fn write_delta_on_tx_with_large_version_count() {
+    fn write_delta_with_large_version_count() {
         let conn = fresh_with_delta();
         // Insert 100 deltas manually so MAX(version) = 100.
         let tx = conn.unchecked_transaction().unwrap();

@@ -122,7 +122,7 @@ test.describe('ADR #22 — Topology canvas', () => {
 
     // Inspector drawer or settings panel should appear on the right.
     const inspector = page.locator('[class*="inspector"], [class*="drawer"], [role="complementary"]');
-    const inspectorVisible = await inspector.first().isVisible({ timeout: 5_000 }).catch(() => false);
+    const _inspectorVisible = await inspector.first().isVisible({ timeout: 5_000 }).catch(() => false);
     // At minimum, the topology screen should still be visible after interaction.
     await expect(page.locator('.settings-section-title').filter({ hasText: /topology/i }).first())
       .toBeVisible({ timeout: 5_000 });
