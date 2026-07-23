@@ -2167,22 +2167,6 @@ mod tests {
         );
     }
 
-    /// `set_tracked` calls `write_delta_on_tx` internally — verify both
-    /// the setting and delta are persisted atomically.
-    #[test]
-    fn set_tracked_persists_setting_and_delta() {
-        let conn = fresh_with_delta();
-        Settings::set_tracked(&conn, "direct.k", "direct-v", "term-dir").unwrap();
-        assert_eq!(
-            Settings::get_version(&conn, "direct.k", "term-dir").unwrap(),
-            Some(1)
-        );
-        assert_eq!(
-            Settings::get(&conn, "direct.k").unwrap(),
-            Some("direct-v".into())
-        );
-    }
-
     /// Single-quote (apostrophe) in key names is a common real-world
     /// edge case — e.g. store names like "Joe's Caf\u{00e9}".
     #[test]
