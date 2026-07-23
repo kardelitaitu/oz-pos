@@ -485,6 +485,29 @@ pub async fn get_hardware_settings(
             error = %e,
             "failed to migrate hardware settings to JSON — will retry next read"
         );
+        // Don't clean SQLite keys if the JSON save failed — the
+        // next read will retry the migration.
+        return Ok(HardwareSettingsDto::from(profile));
+    }
+
+    // Migration succeeded — delete the old SQLite keys so they don't
+    // linger as orphans in the settings table.
+    // Keys match the constants in platform_core::settings (PRINTER_CONNECTION, …).
+    let hw_keys = [
+        "printer.connection",
+        "printer.device_path",
+        "printer.paper_size",
+        "scanner.device_id",
+        "scanner.input_mode",
+    ];
+    for key in hw_keys {
+        if let Err(e) = Settings::remove(&conn, key) {
+            tracing::warn!(
+                key,
+                error = %e,
+                "failed to remove orphaned SQLite hardware setting"
+            );
+        }
     }
 
     Ok(HardwareSettingsDto::from(profile))
