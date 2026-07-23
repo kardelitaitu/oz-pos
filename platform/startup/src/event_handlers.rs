@@ -396,11 +396,12 @@ impl EventHandler<SaleCompleted> for LoyaltyEarnHandler {
 /// The emit callback is set by the client app during setup via
 /// [`set_settings_emit_fn`]. Until set, events are logged at debug level
 /// (no-op bridge).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SettingsUpdatedHandler;
 
 impl SettingsUpdatedHandler {
     /// Create a new handler.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self
     }
@@ -441,11 +442,13 @@ impl EventHandler<SettingsUpdated> for SettingsUpdatedHandler {
 ///
 /// Uses a `Mutex` (not `OnceLock`) so tests can replace the callback
 /// between test cases — `OnceLock` can only be set once per process lifetime.
+#[allow(clippy::type_complexity)]
 static SETTINGS_EMIT_FN: std::sync::Mutex<
     Option<Box<dyn Fn(&str, serde_json::Value) + Send + Sync>>,
 > = std::sync::Mutex::new(None);
 
 /// Register the emit callback used by [`SettingsUpdatedHandler`].
+#[allow(clippy::type_complexity)]
 ///
 /// Called once from the client app's setup closure after the module system
 /// is initialized. The callback typically calls `app_handle.emit(event, payload)`.
