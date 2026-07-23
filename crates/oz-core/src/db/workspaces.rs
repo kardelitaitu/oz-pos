@@ -1565,4 +1565,338 @@ mod tests {
         assert_eq!(suspended, 1);
         assert_eq!(store.count_active_instances("default").unwrap(), 1);
     }
+
+    // ── TOPOLOGY_AUDIT follow-up tests ───────────────────────────────
+    //
+    // Cover audit #1 (type_key / store_id immutability) and audit #4
+    // (atomicity of the create + update + archive diff that
+    // `apply_topology_diff` runs in one SQLite transaction).
+
+    /// Helper: fetch a single instance row by id, panicking if absent.
+    fn fetch_instance(store: &Store<'_>, id: &str) -> WorkspaceInstanceRow {
+        store
+            .list_all_instances("default")
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == id)
+            .unwrap_or_else(|| panic!("instance {id} not found"))
+    }
+
+    // ── #4 regression: create_workspace_instance CANNOT be called from
+    //    inside an open transaction (it uses unchecked_transaction, which
+    //    issues a raw BEGIN that SQLite rejects when a tx is active).
+    //
+    // `apply_topology_diff` opens an outer transaction and then runs the
+    // create INSERT SQL directly on it (NOT via this method) for exactly
+    // this reason. This test documents the constraint so it is not
+    // accidentally regressed.
+
+    #[test]
+    fn create_workspace_instance_cannot_nest_in_open_transaction() {
+        let (store, _) = fresh();
+        let conn = store.conn;
+        let outer = conn.unchecked_transaction().unwrap();
+        let tx_store = Store::new(&outer);
+
+        let result = tx_store.create_workspace_instance(
+            "nested-should-fail",
+            "restaurant-pos",
+            "default",
+            "Nested",
+            "",
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "create_workspace_instance must not nest inside an open transaction; \
+             apply_topology_diff must run the SQL directly on its own tx instead"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("cannot start a transaction within a transaction"),
+            "expected the SQLite nesting error, got: {err}"
+        );
+        drop(outer);
+        // Nothing was created.
+        assert!(
+            store
+                .list_all_instances("default")
+                .unwrap()
+                .iter()
+                .all(|r| r.id != "nested-should-fail")
+        );
+    }
+
+    // ── #4: the correct pattern — run SQL directly on an outer tx ──
+
+    #[test]
+    fn direct_insert_on_outer_tx_persists_on_commit() {
+        // The pattern apply_topology_diff uses: open one tx, run the
+        // INSERT directly, commit once.
+        let (store, _) = fresh();
+        let conn = store.conn;
+        let tx = conn.unchecked_transaction().unwrap();
+
+        tx.execute(
+            "INSERT INTO workspace_instances \
+             (id, type_key, store_id, name, description, colour, status, last_accessed_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, 'active', \
+                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            params!["direct-1", "restaurant-pos", "default", "Direct", ""],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let row = fetch_instance(&store, "direct-1");
+        assert_eq!(row.type_key, "restaurant-pos");
+        assert_eq!(row.status, "active");
+    }
+
+    #[test]
+    fn direct_insert_on_outer_tx_rolls_back_on_drop() {
+        // Dropping the outer tx without commit rolls everything back —
+        // the atomicity guarantee apply_topology_diff relies on.
+        let (store, _) = fresh();
+        let conn = store.conn;
+        {
+            let tx = conn.unchecked_transaction().unwrap();
+            tx.execute(
+                "INSERT INTO workspace_instances \
+                 (id, type_key, store_id, name, description, colour, status, last_accessed_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, 'active', \
+                         strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                params!["rollback-1", "restaurant-pos", "default", "Roll", ""],
+            )
+            .unwrap();
+            // Drop without commit → rollback.
+        }
+        assert!(
+            store
+                .list_all_instances("default")
+                .unwrap()
+                .iter()
+                .all(|r| r.id != "rollback-1")
+        );
+    }
+
+    #[test]
+    fn mixed_create_update_archive_on_one_tx_commits_atomically() {
+        // Audit #4 happy path: create + update + archive in one tx all
+        // succeed and commit together (direct SQL, no nested tx).
+        let (store, _) = fresh();
+        let conn = store.conn;
+        let tx = conn.unchecked_transaction().unwrap();
+
+        // Create two.
+        for (id, name) in [("diff-a", "A"), ("diff-b", "B")] {
+            tx.execute(
+                "INSERT INTO workspace_instances \
+                 (id, type_key, store_id, name, description, colour, status, last_accessed_at) \
+                 VALUES (?1, 'store-pos', 'default', ?2, '', NULL, 'active', \
+                         strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                params![id, name],
+            )
+            .unwrap();
+        }
+        // Update A's name.
+        tx.execute(
+            "UPDATE workspace_instances SET name = ?2, \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+             WHERE id = ?1",
+            params!["diff-a", "A Renamed"],
+        )
+        .unwrap();
+        // Archive B.
+        tx.execute(
+            "UPDATE workspace_instances SET status = 'archived', \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+             WHERE id = ?1",
+            params!["diff-b"],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let instances = store.list_all_instances("default").unwrap();
+        let a = instances.iter().find(|r| r.id == "diff-a").unwrap();
+        assert_eq!(a.name, "A Renamed");
+        assert_eq!(a.status, "active");
+        let b = instances.iter().find(|r| r.id == "diff-b").unwrap();
+        assert_eq!(b.status, "archived");
+    }
+
+    #[test]
+    fn failed_step_rolls_back_entire_diff_tx() {
+        // Audit #4: if a later step fails, prior creates/updates must
+        // roll back — no partial persistence.
+        let (store, _) = fresh();
+        let conn = store.conn;
+        let tx = conn.unchecked_transaction().unwrap();
+
+        // Create.
+        tx.execute(
+            "INSERT INTO workspace_instances \
+             (id, type_key, store_id, name, description, colour, status, last_accessed_at) \
+             VALUES (?1, 'store-pos', 'default', 'Will Roll Back', '', NULL, 'active', \
+                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            params!["diff-rollback"],
+        )
+        .unwrap();
+        // Archive a non-existent id → 0 rows affected (failure signal).
+        let archived = tx
+            .execute(
+                "UPDATE workspace_instances SET status = 'archived' WHERE id = ?1",
+                params!["ghost-id"],
+            )
+            .unwrap();
+        assert_eq!(archived, 0, "ghost archive affects 0 rows");
+        // Roll back (apply_topology_diff returns the error, drops the tx).
+        drop(tx);
+
+        assert!(
+            store
+                .list_all_instances("default")
+                .unwrap()
+                .iter()
+                .all(|r| r.id != "diff-rollback")
+        );
+    }
+
+    // ── #1: type_key and store_id are immutable via update ──────────
+
+    #[test]
+    fn update_does_not_change_type_key() {
+        // Audit #1: a rename must not silently change the type. The
+        // update path has no type_key parameter, so the type stays.
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance(
+                "imm-type",
+                "restaurant-pos",
+                "default",
+                "Original",
+                "",
+                None,
+            )
+            .unwrap();
+
+        store
+            .update_workspace_instance("imm-type", "Renamed", None, None)
+            .unwrap();
+
+        let row = fetch_instance(&store, "imm-type");
+        assert_eq!(row.name, "Renamed");
+        assert_eq!(
+            row.type_key, "restaurant-pos",
+            "type_key must be immutable across an update"
+        );
+    }
+
+    #[test]
+    fn update_does_not_change_store_id() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance("imm-store", "store-pos", "default", "Original", "", None)
+            .unwrap();
+
+        store
+            .update_workspace_instance("imm-store", "Renamed", None, None)
+            .unwrap();
+
+        let row = fetch_instance(&store, "imm-store");
+        assert_eq!(row.name, "Renamed");
+        assert_eq!(
+            row.store_id, "default",
+            "store_id must be immutable across an update"
+        );
+    }
+
+    #[test]
+    fn update_preserves_type_and_store_when_changing_other_fields() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance(
+                "imm-full",
+                "kds",
+                "default",
+                "Kitchen",
+                "old desc",
+                Some("#aaaaaa"),
+            )
+            .unwrap();
+
+        store
+            .update_workspace_instance(
+                "imm-full",
+                "Kitchen Renamed",
+                Some("new desc"),
+                Some("#bbbbbb"),
+            )
+            .unwrap();
+
+        let row = fetch_instance(&store, "imm-full");
+        assert_eq!(row.name, "Kitchen Renamed");
+        assert_eq!(row.description, "new desc");
+        assert_eq!(row.colour.as_deref(), Some("#bbbbbb"));
+        // Immutable fields untouched.
+        assert_eq!(row.type_key, "kds");
+        assert_eq!(row.store_id, "default");
+    }
+
+    #[test]
+    fn update_cannot_move_instance_to_another_store() {
+        // Even when a second store exists, update has no store_id param.
+        let (store, _) = fresh();
+        store
+            .conn
+            .execute(
+                "INSERT INTO store_profiles (id, name, address, currency, timezone)
+                 VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+                [],
+            )
+            .unwrap();
+        store
+            .create_workspace_instance("stay", "store-pos", "default", "A", "", None)
+            .unwrap();
+
+        store
+            .update_workspace_instance("stay", "Renamed", None, None)
+            .unwrap();
+
+        let row = fetch_instance(&store, "stay");
+        assert_eq!(row.store_id, "default");
+        let store_b = store.list_all_instances("store-b").unwrap();
+        assert!(
+            !store_b.iter().any(|r| r.id == "stay"),
+            "instance must not leak across stores on update"
+        );
+    }
+
+    #[test]
+    fn update_coalesces_unchanged_fields_preserving_type_and_store() {
+        // COALESCE contract: None for description/colour keeps existing
+        // values — the mechanism that makes partial updates safe and
+        // never clobbers type/store.
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance(
+                "coalesce",
+                "store-pos",
+                "default",
+                "Name",
+                "keep me",
+                Some("#abcdef"),
+            )
+            .unwrap();
+
+        store
+            .update_workspace_instance("coalesce", "Renamed", None, None)
+            .unwrap();
+
+        let row = fetch_instance(&store, "coalesce");
+        assert_eq!(row.name, "Renamed");
+        assert_eq!(row.description, "keep me");
+        assert_eq!(row.colour.as_deref(), Some("#abcdef"));
+        assert_eq!(row.type_key, "store-pos");
+        assert_eq!(row.store_id, "default");
+    }
 }
