@@ -201,9 +201,14 @@ pub async fn lookup_sale_by_receipt_barcode_scoped(
     barcode: String,
     state: State<'_, AppState>,
 ) -> Result<Option<Sale>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
     drop(db);
     Ok(sale)
@@ -229,9 +234,14 @@ pub async fn list_refunds_scoped(
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<Refund>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let refunds = store.list_refunds_for_sale(&sale_id)?;
     drop(db);
     Ok(refunds)

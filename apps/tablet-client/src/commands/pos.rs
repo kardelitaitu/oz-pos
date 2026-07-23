@@ -230,9 +230,14 @@ pub async fn list_active_carts_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<CartId>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let ids = store.list_active_carts()?;
     drop(db);
     Ok(ids)
@@ -261,9 +266,14 @@ pub async fn get_active_cart_scoped(
     cart_id: CartId,
     state: State<'_, AppState>,
 ) -> Result<Option<Cart>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let cart = store.load_active_cart(&cart_id)?;
     drop(db);
     Ok(cart)
@@ -892,12 +902,17 @@ pub async fn compute_cart_tax_scoped(
     currency: String,
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let parsed: oz_core::Currency = currency
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let tax = store.compute_cart_tax(&lines, parsed)?;
     drop(db);
     Ok(tax.minor_units)
@@ -1135,9 +1150,14 @@ pub async fn hold_cart_scoped(
     args: HoldCartArgs,
     state: State<'_, AppState>,
 ) -> Result<HoldCartResult, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let id = store.hold_cart(
         &args.label,
         &args.cart_data,
@@ -1171,9 +1191,14 @@ pub async fn list_held_carts_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let carts = store.list_held_carts()?;
     drop(db);
     Ok(carts)
@@ -1197,9 +1222,14 @@ pub async fn list_open_bills_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let carts = store.list_open_bills()?;
     drop(db);
     Ok(carts)
@@ -1225,9 +1255,14 @@ pub async fn get_held_cart_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     let cart = store.get_held_cart(&id)?;
     drop(db);
     Ok(cart)
@@ -1251,9 +1286,14 @@ pub async fn delete_held_cart_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
     store.delete_held_cart(&id)?;
     drop(db);
     tracing::info!(held_cart_id = %id, "held cart deleted (scoped)");
