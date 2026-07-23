@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · DONE card accurately reflects code: apps/desktop-client/tauri.conf.json + apps/tablet-client/tauri.conf.json both have NON-NULL strict CSP allowlists matching the acceptance criteria (default-src 'self', script-src 'self', style-src 'self' 'unsafe-inline', connect-src 'self' + dev/asset schemes, frame-src 'none', object-src 'none', base-uri/form-action 'self'); docs/specs/_active/2026-07-12-desktop-app-audit.md §2 marked C-3 CLOSED (file stamped earlier) · closed by commit 2026-07-23 per card -->
+
 # C-3 — Enable a strict Content Security Policy (`csp: null` → explicit allowlist)
 
 - **Status:** DONE

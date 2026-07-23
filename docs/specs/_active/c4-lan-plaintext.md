@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 minor note) · DONE card matches code: apps/desktop-client/src/lan_server.rs defaults to "127.0.0.1:9180" (line 190) with configurable bind_addr (line 114); PSK handshake present (HelloMsg{psk}, PSK_HANDSHAKE_TIMEOUT_SECS=5, psk: Option<Arc<String>>, lines 48-94); tests for loopback-default + external-rejected + psk paths exist. Minor: card references Settings::get_lan_server_bind/set_lan_server_bind in db/settings.rs/settings.rs, which don't exist by that name — bind is read via LanServerConfig/bind_addr instead; narrative otherwise accurate · closed by commit 2026-07-23 per card -->
+
 # C-4 — LAN event server: default-bind to loopback, add PSK for opt-in KDS bridge
 
 - **Status:** DONE
