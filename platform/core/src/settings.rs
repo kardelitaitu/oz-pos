@@ -69,15 +69,15 @@ impl Settings {
 
     // ── Delta ledger methods ──────────────────────────────────────
 
-    /// Write a delta row into the `setting_updated` table.
+    /// Standalone delta writer — opens its own transaction.
     ///
     /// Computes `version = MAX(version) + 1` for the `(key, terminal_id)`
     /// pair and inserts a new row. Wraps the SELECT MAX + INSERT in a
     /// transaction to prevent version collisions under concurrent writes.
     ///
-    /// When called from `set_tracked()` (which already holds a transaction),
-    /// the inner `unchecked_transaction` nests safely — SQLite allows nested
-    /// transactions via savepoints.
+    /// **Important:** Callers already inside a transaction (e.g. from
+    /// `unchecked_transaction()`) must use [`write_delta_on_tx`] instead —
+    /// SQLite does not permit nested `BEGIN` statements.
     pub fn write_delta(
         conn: &Connection,
         key: &str,
@@ -149,9 +149,9 @@ impl Settings {
     ) -> Result<(), PlatformError> {
         let tx = conn.unchecked_transaction()?;
         Self::set(conn, key, value)?;
-        // Best-effort delta — write_delta uses its own savepoint so a
-        // failure here won't roll back the set() above.
-        if let Err(e) = Self::write_delta(conn, key, value, terminal_id) {
+        // Inline delta write within the existing transaction to avoid
+        // nested BEGIN (SQLite does not support nested transactions).
+        if let Err(e) = Self::write_delta_on_tx(&tx, key, value, terminal_id) {
             tracing::warn!(key, terminal_id, error = %e, "delta write failed (non-fatal)");
         }
         tx.commit()?;
@@ -170,11 +170,35 @@ impl Settings {
         let tx = conn.unchecked_transaction()?;
         for (key, value) in rows {
             Self::set(conn, key, value)?;
-            if let Err(e) = Self::write_delta(conn, key, value, terminal_id) {
+            if let Err(e) = Self::write_delta_on_tx(&tx, key, value, terminal_id) {
                 tracing::warn!(key, terminal_id, error = %e, "delta batch write failed (non-fatal)");
             }
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    /// Write a delta row using an existing transaction (no nested BEGIN).
+    fn write_delta_on_tx(
+        tx: &rusqlite::Transaction,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), PlatformError> {
+        let version: i64 = tx
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) + 1
+                 FROM setting_updated
+                 WHERE key = ?1 AND terminal_id = ?2",
+                params![key, terminal_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(1);
+        tx.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![key, value, terminal_id, version],
+        )?;
         Ok(())
     }
 }
