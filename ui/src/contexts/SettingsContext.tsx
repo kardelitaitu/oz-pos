@@ -379,7 +379,38 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     };
   }, [loadAll]);
 
-  // ── Memoized value ──────────────────────────────────────────
+  // ── Tauri event listener (Phase 0e: async event bridge) ────
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    // Dynamic import gracefully handles non-Tauri environments (browser dev).
+    import('@tauri-apps/api/event')
+      .then(({ listen }) => {
+        listen<{ changed_keys: string[]; terminal_id: string }>(
+          'settings_updated',
+          (event) => {
+            const keys = event.payload.changed_keys;
+            if (keys && keys.length > 0) {
+              markSettingsUpdated(keys);
+            }
+          },
+        )
+          .then((fn) => {
+            unlisten = fn;
+          })
+          .catch((err) => {
+            console.warn('Failed to register settings_updated listener:', err);
+          });
+      })
+      .catch(() => {
+        // @tauri-apps/api/event not available — running outside Tauri (e.g. browser dev)
+      });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [markSettingsUpdated]);
 
   const value = useMemo<SettingsContextValue>(
     () => ({

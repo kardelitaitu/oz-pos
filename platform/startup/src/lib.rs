@@ -140,6 +140,12 @@ pub fn init_module_system(
             Box::new(crate::event_handlers::LoyaltyEarnHandler::new(handler_conn)),
         );
 
+        // ── ADR #22 Phase 0e: SettingsUpdated handler (non-blocking) ──
+        bus.subscribe::<oz_core::events::SettingsUpdated>(
+            "settings.updated",
+            Box::new(crate::event_handlers::SettingsUpdatedHandler::new()),
+        );
+
         // ── WhatsApp notification handlers (opt-in via feature flag + env vars) ─
         #[cfg(feature = "whatsapp-notifications")]
         {
@@ -424,6 +430,6 @@ mod tests {
 
         let k = kernel.blocking_lock();
         let bus = k.event_bus();
-        assert_eq!(bus.topic_count(), 3, "should have 3 event topics");
+        assert_eq!(bus.topic_count(), 4, "should have 4 event topics");
     }
 }
