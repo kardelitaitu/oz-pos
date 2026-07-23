@@ -153,6 +153,18 @@ describe('WorkspaceKdsSettings', () => {
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
   });
 
+  // ── soundEnabled independence from font smoothing ───────────
+  // soundEnabled must NOT be derived from fontSmoothing — those
+  // are orthogonal concerns. When fontSmoothing='subpixel' the
+  // sound toggle should still default to true.
+
+  it('sound toggle is checked when fontSmoothing is subpixel', () => {
+    mocks.fontSmoothing = 'subpixel';
+    renderCard();
+    const t = document.getElementById('kds-sound') as HTMLInputElement;
+    expect(t.checked).toBe(true);
+  });
+
   // ── Boundary values ─────────────────────────────────────────
 
   it('yellow threshold slider has min=3', () => {

@@ -3,7 +3,6 @@ import { Localized } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { useSettings } from '@/contexts/SettingsContext';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -40,8 +39,6 @@ export function WorkspaceKdsSettings({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
-  const { settings } = useSettings();
-
   // ── Draft state ──────────────────────────────────────────────
 
   const [draft, setDraft] = useState<KdsDraftState>(DEFAULT_KDS);
@@ -58,20 +55,11 @@ export function WorkspaceKdsSettings({
   // ── Initialise from settings ─────────────────────────────────
 
   useEffect(() => {
-    // Load KDS preferences from settings context (Phase 3 will
-    // provide dedicated KDS API; for now use user preferences)
-    setDraft((prev) => {
-      const updated = {
-        ...prev,
-        soundEnabled: settings.preferences.fontSmoothing === 'antialiased',
-      };
-      if (!originalsLoaded) {
-        originalsRef.current = updated;
-        setOriginalsLoaded(true);
-      }
-      return updated;
-    });
-  }, [settings.preferences, originalsLoaded]);
+    if (!originalsLoaded) {
+      originalsRef.current = { ...draft };
+      setOriginalsLoaded(true);
+    }
+  }, [originalsLoaded]);
 
   // ── Update helpers ───────────────────────────────────────────
 
