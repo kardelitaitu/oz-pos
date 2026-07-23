@@ -81,3 +81,4 @@ ui/tsconfig.node.tsbuildinfo
 # Root-level node deps & Vite cache (some tooling installs at root)
 /node_modules/
 /.vite/
+TOPOLOGY_AUDIT.md
