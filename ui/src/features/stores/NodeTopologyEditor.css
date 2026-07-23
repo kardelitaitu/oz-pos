@@ -197,12 +197,12 @@
 }
 
 /* Wires SVG */
+/* SVG dimensions are now set dynamically via inline style (svgBounds useMemo);
+   fixed 5000×5000 removed to eliminate clipping on large canvases. */
 .node-wires-svg {
   position: absolute;
   top: 0;
   left: 0;
-  width: 5000px;
-  height: 5000px;
   pointer-events: none;
 }
 
@@ -288,6 +288,11 @@
 
 .topology-node:hover {
   border-color: var(--color-accent);
+}
+
+.topology-node:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .node-selected {

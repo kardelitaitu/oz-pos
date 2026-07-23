@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Localized } from '@fluent/react';
+import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -83,13 +83,19 @@ export interface NodeTopologyEditorProps {
   workspaceInstances?: WorkspaceInstanceSeed[];
 }
 
-/** Valid workspace type keys selectable when creating a workspace node. */
-const WORKSPACE_TYPE_OPTIONS: { key: string; label: string }[] = [
-  { key: 'store-pos', label: 'Retail POS' },
-  { key: 'restaurant-pos', label: 'Restaurant POS' },
-  { key: 'kds', label: 'Kitchen Display (KDS)' },
-  { key: 'warehouse', label: 'Warehouse' },
-];
+/** Valid workspace type keys selectable when creating a workspace node.
+ *  Labels are resolved at render time via l10n.getString for i18n. */
+const WORKSPACE_TYPE_KEYS = ['store-pos', 'restaurant-pos', 'kds', 'warehouse'] as const;
+
+function getWorkspaceTypeLabel(key: string, l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  const map: Record<string, string> = {
+    'store-pos': l10n.getString('topology-ws-type-store-pos'),
+    'restaurant-pos': l10n.getString('topology-ws-type-restaurant-pos'),
+    'kds': l10n.getString('topology-ws-type-kds'),
+    'warehouse': l10n.getString('topology-ws-type-warehouse'),
+  };
+  return map[key] ?? key;
+}
 
 // ── Presets ────────────────────────────────────────────────────────
 
@@ -154,12 +160,18 @@ const GRID_SIZE = 24;
 const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 
+/** Isolated simulation pulse circle so the 30ms tick doesn't re-render the whole canvas. */
+const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
+  return <circle cx={x} cy={y} r="6" className="wire-simulation-pulse" />;
+});
+
 export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
   workspaceInstances,
 }: NodeTopologyEditorProps) {
   const { addToast } = useToast();
+  const { l10n } = useLocalization();
   const { settings } = useSettings();
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -176,6 +188,8 @@ export default function NodeTopologyEditor({
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   /** Set of node ids that were just added (for scale-in animation). */
   const [freshNodeIds, setFreshNodeIds] = useState<Set<string>>(new Set());
+  /** Timers for fresh-node animation cleanup; cleared on unmount to prevent leaks. */
+  const freshTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -190,15 +204,63 @@ export default function NodeTopologyEditor({
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const undoInProgressRef = useRef(false);
+  /** Mirror of `history` state for synchronous reads in undo/redo handlers. */
+  const historyRef = useRef<HistoryEntry[]>([]);
+  historyRef.current = history;
+  const [redo, setRedo] = useState<HistoryEntry[]>([]);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
 
+  /** Skip the next workspaceInstances-triggered reload (set before calling onSave). */
+  const skipNextLoadRef = useRef(false);
   /** Track whether user has made any edits since last preset load. */
   const isDirtyRef = useRef(false);
 
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
+
+  /** O(1) node lookup by id — replaces `nodes.find` in hot paths (wire rendering, etc.). */
+  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  /** Precomputed wire path geometry — avoids recomputing bezier curves on every render. */
+  const wireGeometries = useMemo(() => {
+    const geo = new Map<string, {
+      x1: number; y1: number; x2: number; y2: number;
+      dx: number;
+      pathD: string;
+      labelX: number; labelY: number;
+    }>();
+    for (const wire of wires) {
+      const fromNode = nodeMap.get(wire.fromNodeId);
+      const toNode = nodeMap.get(wire.toNodeId);
+      if (!fromNode || !toNode) continue;
+      const fromPort = wire.fromPort ?? 'right';
+      const toPort = wire.toPort ?? 'left';
+      const fromOff = PORT_OFFSET[fromPort];
+      const toOff = PORT_OFFSET[toPort];
+      const x1 = fromNode.x + fromOff.dx;
+      const y1 = fromNode.y + fromOff.dy;
+      const x2 = toNode.x + toOff.dx;
+      const y2 = toNode.y + toOff.dy;
+      const dx = Math.abs(x2 - x1) * 0.5;
+      geo.set(wire.id, {
+        x1, y1, x2, y2, dx,
+        pathD: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`,
+        labelX: cubicBezier(0.5, x1, x1 + dx, x2 - dx, x2),
+        labelY: cubicBezier(0.5, y1, y1, y2, y2),
+      });
+    }
+    return geo;
+  }, [wires, nodeMap]);
+
+  /** Dynamic SVG bounds derived from node positions — replaces fixed 5000×5000px clipping. */
+  const svgBounds = useMemo(() => {
+    if (nodes.length === 0) return { width: 0, height: 0 };
+    const maxX = nodes.reduce((acc, n) => Math.max(acc, n.x + NODE_WIDTH), -Infinity);
+    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + NODE_HEIGHT), -Infinity);
+    if (!isFinite(maxX) || !isFinite(maxY)) return { width: 0, height: 0 };
+    return { width: maxX + 200, height: maxY + 200 };
+  }, [nodes]);
 
   // Load persisted topology on mount, fall back to retail preset.
   useEffect(() => {
@@ -232,6 +294,20 @@ export default function NodeTopologyEditor({
         // nodes (store/warehouse/hardware) still come from the saved diagram.
         if (workspaceInstances) {
           if (cancelled) return;
+          // Skip the full rebuild when our own save triggered this reload —
+          // only update persisted flags, preserving in-flight canvas edits (#8).
+          if (skipNextLoadRef.current) {
+            skipNextLoadRef.current = false;
+            setNodes((prev) =>
+              prev.map((n) => {
+                if (n.type === 'workspace') {
+                  return { ...n, metadata: { ...n.metadata, persisted: true } };
+                }
+                return n;
+              }),
+            );
+            return;
+          }
           const wsNodes: TopologyNodeData[] = workspaceInstances.map((inst, i) => {
             const saved = savedById.get(inst.instanceId);
             const node: TopologyNodeData = {
@@ -274,6 +350,7 @@ export default function NodeTopologyEditor({
         // No real instances supplied — legacy/demo behaviour: use the saved
         // diagram verbatim, or fall back to the retail preset.
         if (cancelled || !data || !data.nodes || data.nodes.length === 0) return;
+        if (skipNextLoadRef.current) { skipNextLoadRef.current = false; return; }
         setNodes([...savedById.values()]);
         const loadedWires: TopologyWireData[] = data.wires.map((w) => {
           const wire: TopologyWireData = {
@@ -297,7 +374,7 @@ export default function NodeTopologyEditor({
         // rather than silently swallowed.
         if (cancelled) return;
         addToast({
-          message: `Failed to load topology: ${err instanceof Error ? err.message : String(err)}`,
+          message: `${l10n.getString('topology-toast-load-error')}: ${err instanceof Error ? err.message : String(err)}`,
           type: 'error',
         });
       });
@@ -306,8 +383,8 @@ export default function NodeTopologyEditor({
   }, [workspaceInstances]);
 
   const pushHistory = useCallback(() => {
-    if (undoInProgressRef.current) return;
     isDirtyRef.current = true;
+    setRedo([]); // new edit invalidates the redo branch
     setHistory((prev) => {
       const entry: HistoryEntry = { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) };
       const next = [...prev, entry];
@@ -328,23 +405,34 @@ export default function NodeTopologyEditor({
   }, [pushHistory]);
 
   const popUndo = useCallback(() => {
-    setHistory((prev) => {
-      if (prev.length === 0) return prev;
-      undoInProgressRef.current = true;
-      const entry = prev[prev.length - 1];
-      if (entry) {
-        setNodes(entry.nodes);
-        setWires(entry.wires);
-      }
-      setTimeout(() => { undoInProgressRef.current = false; }, 0);
-      return prev.slice(0, -1);
-    });
-  }, []);
+    const stack = historyRef.current;
+    if (stack.length === 0) return;
+    const entry = stack[stack.length - 1]!;
+    // Push current state to redo before restoring
+    setRedo((prev) => [...prev, { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) }]);
+    // Sibling setState calls (not nested in updater — fixes ADR audit #6)
+    setNodes(entry.nodes);
+    setWires(entry.wires);
+    setHistory((prev) => prev.slice(0, -1));
+  }, [nodes, wires]);
 
-  // Clean up pan listeners on unmount to prevent leaks
+  const popRedo = useCallback(() => {
+    if (redo.length === 0) return;
+    const entry = redo[redo.length - 1]!;
+    // Push current state to history before restoring
+    setHistory((prev) => [...prev, { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) }]);
+    setNodes(entry.nodes);
+    setWires(entry.wires);
+    setRedo((prev) => prev.slice(0, -1));
+  }, [redo, nodes, wires]);
+
+  // Clean up pan listeners and fresh-node timers on unmount
   useEffect(() => {
+    const timers = freshTimersRef.current;
     return () => {
       panCleanupRef.current?.();
+      timers.forEach(clearTimeout);
+      timers.clear();
     };
   }, []);
 
@@ -384,7 +472,16 @@ export default function NodeTopologyEditor({
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
         e.preventDefault();
-        popUndo();
+        if (e.shiftKey) {
+          popRedo();
+        } else {
+          popUndo();
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        popRedo();
         return;
       }
       if (selectedNodeId && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
@@ -406,7 +503,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo]);
+  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo, popRedo]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -432,10 +529,12 @@ export default function NodeTopologyEditor({
 
   const zoomToFit = useCallback(() => {
     if (nodes.length === 0) return;
-    const minX = Math.min(...nodes.map((n) => n.x));
-    const minY = Math.min(...nodes.map((n) => n.y));
-    const maxX = Math.max(...nodes.map((n) => n.x + NODE_WIDTH));
-    const maxY = Math.max(...nodes.map((n) => n.y + NODE_HEIGHT));
+    const minX = nodes.reduce((acc, n) => Math.min(acc, n.x), Infinity);
+    const minY = nodes.reduce((acc, n) => Math.min(acc, n.y), Infinity);
+    const maxX = nodes.reduce((acc, n) => Math.max(acc, n.x + NODE_WIDTH), -Infinity);
+    const maxY = nodes.reduce((acc, n) => Math.max(acc, n.y + NODE_HEIGHT), -Infinity);
+    // Guard against degenerate bounding box with zero or negative dimensions
+    if (!isFinite(minX) || !isFinite(maxX) || maxX <= minX || maxY <= minY) return;
     const padding = 60;
     const viewW = (canvasRef.current?.clientWidth ?? 800) - padding * 2;
     const viewH = (canvasRef.current?.clientHeight ?? 600) - padding * 2;
@@ -455,7 +554,7 @@ export default function NodeTopologyEditor({
     setSelectedWireId(null);
     setDraggingNodeId(nodeId);
 
-    const node = nodes.find((n) => n.id === nodeId);
+    const node = nodeMap.get(nodeId);
     if (node) {
       dragOffsetRef.current = {
         x: e.clientX / zoom - node.x,
@@ -527,10 +626,7 @@ export default function NodeTopologyEditor({
         };
 
         const handleMouseUp = () => {
-          isPanningRef.current = false;
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
-          panCleanupRef.current = null;
+          panCleanupRef.current?.();
         };
 
         document.addEventListener('mousemove', handleMouseMove);
@@ -567,20 +663,20 @@ export default function NodeTopologyEditor({
 
   const handleAddNode = (type: NodeType) => {
     if (type === 'warehouse' && !isProAllowed && nodes.filter((n) => n.type === 'warehouse').length >= 1) {
-      addToast({ message: 'Multi-Warehouse storage locations require a Pro Tier license.', type: 'warning' });
+      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
       return;
     }
     pushHistory();
 
-    const id = `${type}-${Date.now()}`;
+    const id = `${type}-${crypto.randomUUID()}`;
     const newNode: TopologyNodeData = {
       id,
       type,
-      name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
-      subtitle: type === 'store' ? 'Branch' : type === 'workspace' ? 'Register' : type === 'warehouse' ? 'Storage' : 'Peripheral',
+      name: l10n.getString(`topology-new-${type}`),
+      subtitle: l10n.getString(`topology-new-${type}-subtitle`),
       x: snap(200 + Math.random() * 100),
       y: snap(150 + Math.random() * 100),
-      telemetryBadge: 'Ready',
+      telemetryBadge: l10n.getString('topology-new-ready'),
       telemetryStatus: 'online',
       // New workspace nodes default to the retail POS type until the user
       // picks another in the inspector. `persisted: false` marks it as not
@@ -591,9 +687,11 @@ export default function NodeTopologyEditor({
     setNodes((prev) => [...prev, newNode]);
     setFreshNodeIds((prev) => new Set(prev).add(id));
     // Remove from fresh set after animation completes
-    setTimeout(() => {
+    const freshTimer = setTimeout(() => {
       setFreshNodeIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+      freshTimersRef.current.delete(freshTimer);
     }, 400);
+    freshTimersRef.current.add(freshTimer);
     setSelectedNodeId(id);
   };
 
@@ -612,8 +710,8 @@ export default function NodeTopologyEditor({
       return;
     }
 
-    const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
-    const toNode = nodes.find((n) => n.id === nodeId);
+    const fromNode = nodeMap.get(connectingFromNodeId);
+    const toNode = nodeMap.get(nodeId);
     if (!fromNode || !toNode) { setConnectingFromNodeId(null); setConnectingFromPort(null); return; }
 
     const duplicate = wires.some(
@@ -624,7 +722,7 @@ export default function NodeTopologyEditor({
           && w.fromPort === port && w.toPort === connectingFromPort),
     );
     if (duplicate) {
-      addToast({ message: 'A wire already connects these ports.', type: 'warning' });
+      addToast({ message: l10n.getString('topology-toast-wire-duplicate'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
       return;
@@ -633,19 +731,19 @@ export default function NodeTopologyEditor({
     pushHistory();
 
     const existingWarehouseWires = wires.filter((w) => {
-      const fn = nodes.find((n) => n.id === w.fromNodeId);
-      const tn = nodes.find((n) => n.id === w.toNodeId);
+      const fn = nodeMap.get(w.fromNodeId);
+      const tn = nodeMap.get(w.toNodeId);
       return fn?.type === 'workspace' && tn?.type === 'warehouse';
     });
 
     if (fromNode.type === 'workspace' && toNode.type === 'warehouse' && existingWarehouseWires.length >= 1 && !isProAllowed) {
-      addToast({ message: 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.', type: 'warning' });
+      addToast({ message: l10n.getString('topology-toast-fallback-warehouse'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
       return;
     }
 
-    const newWireId = `wire-${Date.now()}`;
+    const newWireId = `wire-${crypto.randomUUID()}`;
     const isWarehouseWire = fromNode.type === 'workspace' && toNode.type === 'warehouse';
     const label = isWarehouseWire
       ? existingWarehouseWires.length === 0 ? 'Stock Deduct (P1)' : `Fallback (P${existingWarehouseWires.length + 1})`
@@ -689,7 +787,7 @@ export default function NodeTopologyEditor({
 
   const wirePreviewLine = useMemo(() => {
     if (!connectingFromNodeId || !connectingFromPort) return null;
-    const fromNode = nodes.find((n) => n.id === connectingFromNodeId);
+    const fromNode = nodeMap.get(connectingFromNodeId);
     if (!fromNode) return null;
     const portOff = PORT_OFFSET[connectingFromPort];
     const x1 = fromNode.x + portOff.dx;
@@ -721,7 +819,7 @@ export default function NodeTopologyEditor({
 
     const dx = Math.abs(mx - x1) * 0.5;
     return { d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${mx - dx} ${my}, ${mx} ${my}` };
-  }, [connectingFromNodeId, connectingFromPort, nodes, zoom, pan, hoveredTarget]);
+  }, [connectingFromNodeId, connectingFromPort, nodeMap, nodes, zoom, pan, hoveredTarget]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
@@ -766,7 +864,7 @@ export default function NodeTopologyEditor({
       // Inventory settings are not yet wired into SettingsContext.
       // When the inventory scope is added (Phase 3+), update this to
       // show live low-stock counts from settings.inventory.
-      return { badge: 'Active', status: 'online' };
+      return { badge: 'Inventory: n/a', status: 'online' };
     }
     return node.telemetryBadge
       ? { badge: node.telemetryBadge, status: node.telemetryStatus ?? 'online' }
@@ -782,14 +880,16 @@ export default function NodeTopologyEditor({
           open
           onCancel={() => setConfirmDelete(null)}
           onConfirm={executeDelete}
-          title={confirmDelete ? 'Delete Node' : 'Delete Wire'}
+          title={confirmDelete
+            ? l10n.getString('topology-confirm-delete-node-title')
+            : l10n.getString('topology-confirm-delete-wire-title')}
           message={
             confirmDelete
-              ? 'This node has connected wires. Deleting it will remove all its wires too. This action cannot be undone.'
-              : 'Delete this wire connection? This action cannot be undone.'
+              ? l10n.getString('topology-confirm-delete-node-msg')
+              : l10n.getString('topology-confirm-delete-wire-msg')
           }
           variant="danger"
-          confirmLabel="Delete"
+          confirmLabel={l10n.getString('topology-confirm-delete-label')}
         />
       )}
 
@@ -799,10 +899,10 @@ export default function NodeTopologyEditor({
           open
           onCancel={() => setConfirmPreset(null)}
           onConfirm={executePresetLoad}
-          title="Load Preset"
-          message="Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading."
+          title={l10n.getString('topology-confirm-preset-title')}
+          message={l10n.getString('topology-confirm-preset-msg')}
           variant="warning"
-          confirmLabel="Load Preset"
+          confirmLabel={l10n.getString('topology-confirm-preset-label')}
         />
       )}
 
@@ -812,7 +912,9 @@ export default function NodeTopologyEditor({
             <h2>Visual Store & Workspace Topology Builder</h2>
           </Localized>
           <span className={`topology-tier-badge tier-${currentTier}`}>
-            {currentTier.toUpperCase()} TIER
+            <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
+              {currentTier.toUpperCase()} TIER
+            </Localized>
           </span>
         </div>
 
@@ -823,7 +925,9 @@ export default function NodeTopologyEditor({
             className="simulation-btn"
             icon={isSimulating ? <StopIcon size={16} /> : <FlaskIcon size={16} />}
           >
-            {isSimulating ? 'Stop Simulation' : 'Test Order Simulation'}
+            <Localized id={isSimulating ? 'topology-sim-stop' : 'topology-sim-start'}>
+              {isSimulating ? 'Stop Simulation' : 'Test Order Simulation'}
+            </Localized>
           </Button>
 
           <Button
@@ -831,7 +935,7 @@ export default function NodeTopologyEditor({
             onClick={() => { isDirtyRef.current ? setConfirmPreset('retail') : loadPreset('retail'); }}
             icon={<CartIcon size={16} />}
           >
-            Retail Preset
+            <Localized id="topology-preset-retail">Retail Preset</Localized>
           </Button>
 
           <Button
@@ -839,37 +943,38 @@ export default function NodeTopologyEditor({
             onClick={() => { isDirtyRef.current ? setConfirmPreset('restaurant') : loadPreset('restaurant'); }}
             icon={<UtensilsIcon size={16} />}
           >
-            Resto & KDS Preset
-          </Button>
-
-          <Button
-            variant="primary"
-            onClick={() => onSave?.(nodes, wires)}
-            icon={<CheckIcon size={16} />}
-          >
-            Apply Topology Changes
+            <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
+          </Button>            <Button
+              variant="primary"
+              onClick={() => {
+                skipNextLoadRef.current = true;
+                onSave?.(nodes, wires);
+              }}
+              icon={<CheckIcon size={16} />}
+            >
+            <Localized id="topology-apply-changes">Apply Topology Changes</Localized>
           </Button>
         </div>
       </div>
 
       <div className="node-topology-main">
         <div className="node-tool-rack">
-          <h3>Palette Tools</h3>
-          <p className="tool-rack-desc">Drag or click to spawn topology nodes:</p>
+          <h3><Localized id="topology-palette-title">Palette Tools</Localized></h3>
+          <p className="tool-rack-desc"><Localized id="topology-palette-desc">Drag or click to spawn topology nodes:</Localized></p>
 
           <button type="button" className="tool-card" onClick={() => handleAddNode('store')}>
             <span className="tool-card-icon"><StoreIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong>+ Store Node</strong>
-              <span>Store Branch Profile</span>
+              <strong><Localized id="topology-tool-store">+ Store Node</Localized></strong>
+              <span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span>
             </div>
           </button>
 
           <button type="button" className="tool-card" onClick={() => handleAddNode('workspace')}>
             <span className="tool-card-icon"><PosIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong>+ Workspace Node</strong>
-              <span>POS / Register Instance</span>
+              <strong><Localized id="topology-tool-workspace">+ Workspace Node</Localized></strong>
+              <span><Localized id="topology-tool-workspace-desc">POS / Register Instance</Localized></span>
             </div>
           </button>
 
@@ -879,19 +984,19 @@ export default function NodeTopologyEditor({
           >
             <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong>+ Warehouse Node</strong>
-              <span>Storage Location</span>
+              <strong><Localized id="topology-tool-warehouse">+ Warehouse Node</Localized></strong>
+              <span><Localized id="topology-tool-warehouse-desc">Storage Location</Localized></span>
             </div>
             {!isProAllowed && nodes.some((n) => n.type === 'warehouse') && (
-              <span className="lock-badge"><LockIcon size={12} /> Pro</span>
+              <span className="lock-badge"><LockIcon size={12} /> <Localized id="topology-lock-pro">Pro</Localized></span>
             )}
           </button>
 
           <button type="button" className="tool-card" onClick={() => handleAddNode('hardware')}>
             <span className="tool-card-icon"><PrinterIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong>+ Hardware Node</strong>
-              <span>Printer / KDS Peripheral</span>
+              <strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong>
+              <span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span>
             </div>
           </button>
 
@@ -899,23 +1004,31 @@ export default function NodeTopologyEditor({
 
           {selectedNodeId || selectedWireId ? (
             <Button variant="secondary" onClick={handleDeleteRequest} className="delete-btn" icon={<TrashIcon size={16} />}>
-              Delete Selected Element
+              <Localized id="topology-delete-selected">Delete Selected Element</Localized>
             </Button>
           ) : null}
 
           {history.length > 0 && (
             <Button variant="secondary" onClick={popUndo} style={{ fontSize: 'var(--text-xs)' }}>
-              Undo (Ctrl+Z)
+              <Localized id="topology-undo">Undo (Ctrl+Z)</Localized>
+            </Button>
+          )}
+
+          {redo.length > 0 && (
+            <Button variant="secondary" onClick={popRedo} style={{ fontSize: 'var(--text-xs)' }}>
+              <Localized id="topology-redo">Redo (Ctrl+Y)</Localized>
             </Button>
           )}
 
           <div className="canvas-controls-mini">
-            <span>Zoom: {Math.round(zoom * 100)}%</span>
+            <Localized id="topology-zoom" vars={{ zoom: Math.round(zoom * 100) }}>
+              <span>Zoom: {Math.round(zoom * 100)}%</span>
+            </Localized>
             <Button variant="secondary" onClick={zoomToFit}>
-              Fit All
+              <Localized id="topology-fit-all">Fit All</Localized>
             </Button>
             <Button variant="secondary" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>
-              Reset View
+              <Localized id="topology-reset-view">Reset View</Localized>
             </Button>
           </div>
         </div>
@@ -925,7 +1038,7 @@ export default function NodeTopologyEditor({
           className="node-canvas-container"
           tabIndex={0}
           role="application"
-          aria-label="Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo."
+          aria-label={l10n.getString('topology-canvas-aria-label')}
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseDown={handleCanvasMouseDown}
@@ -937,7 +1050,7 @@ export default function NodeTopologyEditor({
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             }}
           >
-            <svg className="node-wires-svg">
+            <svg className="node-wires-svg" style={{ width: svgBounds.width, height: svgBounds.height }}>
               <defs>
                 <marker
                   id="arrow-end"
@@ -965,29 +1078,11 @@ export default function NodeTopologyEditor({
               </defs>
 
               {wires.map((wire) => {
-                const fromNode = nodes.find((n) => n.id === wire.fromNodeId);
-                const toNode = nodes.find((n) => n.id === wire.toNodeId);
-                if (!fromNode || !toNode) return null;
+                // Wire geometry precomputed in wireGeometries useMemo — O(1) lookup vs O(n) find
+                const geo = wireGeometries.get(wire.id);
+                if (!geo) return null;
 
-                // Wire connects from port to port (default: right edge)
-                const fromPort = wire.fromPort ?? 'right';
-                const toPort = wire.toPort ?? 'right';
-                const fromOff = PORT_OFFSET[fromPort];
-                const toOff = PORT_OFFSET[toPort];
-                const x1 = fromNode.x + fromOff.dx;
-                const y1 = fromNode.y + fromOff.dy;
-                const x2 = toNode.x + toOff.dx;
-                const y2 = toNode.y + toOff.dy;
-
-                const dx = Math.abs(x2 - x1) * 0.5;
-                const pathD = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
-
-                // Label position: bezier midpoint offset perpendicular to the curve
-                // so labels float above the wire arc instead of sitting on the
-                // geometric midpoint (which can overlap with node cards).
-                const labelT = 0.5;
-                const lx = cubicBezier(labelT, x1, x1 + dx, x2 - dx, x2);
-                const ly = cubicBezier(labelT, y1, y1, y2, y2);
+                const { x1, y1, x2, y2, dx, pathD, labelX: lx, labelY: ly } = geo;
                 // Pulse follows the cubic bezier curve, not a straight line
                 const t = simPulseStep / 100;
                 const pulseX = cubicBezier(t, x1, x1 + dx, x2 - dx, x2);
@@ -1034,14 +1129,7 @@ export default function NodeTopologyEditor({
                       </text>
                     </g>
 
-                    {isSimulating && (
-                      <circle
-                        cx={pulseX}
-                        cy={pulseY}
-                        r="6"
-                        className="wire-simulation-pulse"
-                      />
-                    )}
+                    {isSimulating && <SimulationPulse x={pulseX} y={pulseY} />}
                   </g>
                 );
               })}
@@ -1135,13 +1223,14 @@ export default function NodeTopologyEditor({
         {selectedNode && (
           <div className="node-inspector-drawer">
             <div className="inspector-header">
-              <h3>Node Inspector</h3>
+              <h3><Localized id="topology-inspector-title">Node Inspector</Localized></h3>
               <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label="Close inspector">{null}</Button>
             </div>
 
             <div className="inspector-content">
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
               <label className="inspector-field">
-                <span>Node Name</span>
+                <span><Localized id="topology-inspector-node-name">Node Name</Localized></span>
                 <input
                   type="text"
                   value={selectedNode.name}
@@ -1152,8 +1241,9 @@ export default function NodeTopologyEditor({
                 />
               </label>
 
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
               <label className="inspector-field">
-                <span>Subtitle / Location</span>
+                <span><Localized id="topology-inspector-subtitle">Subtitle / Location</Localized></span>
                 <input
                   type="text"
                   value={selectedNode.subtitle || ''}
@@ -1185,9 +1275,9 @@ export default function NodeTopologyEditor({
                     }}
                     aria-label="Select workspace type"
                   >
-                    {WORKSPACE_TYPE_OPTIONS.filter((opt) => opt.key !== 'warehouse').map((opt) => (
-                      <option key={opt.key} value={opt.key}>
-                        {opt.label}
+                    {WORKSPACE_TYPE_KEYS.filter((k) => k !== 'warehouse').map((k) => (
+                      <option key={k} value={k}>
+                        {getWorkspaceTypeLabel(k, l10n)}
                       </option>
                     ))}
                   </select>

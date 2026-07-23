@@ -56,14 +56,14 @@ where
 ///
 /// `#[serde(default)]` only kicks in when the field is *absent*, not
 /// when it is explicitly `null`.  This helper covers the `null` case.
-fn de_direction_or_null<'de, D>(d: D) -> Result<String, D::Error>
+fn de_direction_or_null<'de, D>(d: D) -> Result<WireDirection, D::Error>
 where
     D: Deserializer<'de>,
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum Dir {
-        Some(String),
+        Some(WireDirection),
         Null,
     }
     match Dir::deserialize(d)? {
@@ -74,14 +74,129 @@ where
 
 // ── Data types ───────────────────────────────────────────────────
 
+/// Valid node types in the topology graph.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NodeType {
+    /// Retail store branch.
+    Store,
+    /// POS / register workspace.
+    Workspace,
+    /// Warehouse / storage location.
+    Warehouse,
+    /// Printer or peripheral hardware.
+    Hardware,
+    /// Catch-all for unknown/corrupt node types — rejected on save.
+    #[serde(other)]
+    Unknown,
+}
+
+impl PartialEq<&str> for NodeType {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            NodeType::Store => *other == "store",
+            NodeType::Workspace => *other == "workspace",
+            NodeType::Warehouse => *other == "warehouse",
+            NodeType::Hardware => *other == "hardware",
+            NodeType::Unknown => false,
+        }
+    }
+}
+
+impl From<&str> for NodeType {
+    fn from(s: &str) -> Self {
+        match s {
+            "store" => NodeType::Store,
+            "workspace" => NodeType::Workspace,
+            "warehouse" => NodeType::Warehouse,
+            "hardware" => NodeType::Hardware,
+            _ => NodeType::Unknown,
+        }
+    }
+}
+
+/// Valid wire directions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WireDirection {
+    /// One-directional flow (single arrow).
+    OneWay,
+    /// Bidirectional flow (arrows on both ends).
+    TwoWay,
+    /// Catch-all for unknown/corrupt directions — rejected on save.
+    #[serde(other)]
+    Unknown,
+}
+
+impl PartialEq<&str> for WireDirection {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            WireDirection::OneWay => *other == "one-way",
+            WireDirection::TwoWay => *other == "two-way",
+            WireDirection::Unknown => false,
+        }
+    }
+}
+
+impl From<&str> for WireDirection {
+    fn from(s: &str) -> Self {
+        match s {
+            "one-way" => WireDirection::OneWay,
+            "two-way" => WireDirection::TwoWay,
+            _ => WireDirection::Unknown,
+        }
+    }
+}
+
+/// Valid port names on a topology node.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PortName {
+    /// Top edge of the node card.
+    Top,
+    /// Right edge of the node card.
+    Right,
+    /// Bottom edge of the node card.
+    Bottom,
+    /// Left edge of the node card.
+    Left,
+    /// Catch-all for unknown/corrupt port names — rejected on save.
+    #[serde(other)]
+    Unknown,
+}
+
+impl PartialEq<&str> for PortName {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            PortName::Top => *other == "top",
+            PortName::Right => *other == "right",
+            PortName::Bottom => *other == "bottom",
+            PortName::Left => *other == "left",
+            PortName::Unknown => false,
+        }
+    }
+}
+
+impl From<&str> for PortName {
+    fn from(s: &str) -> Self {
+        match s {
+            "top" => PortName::Top,
+            "right" => PortName::Right,
+            "bottom" => PortName::Bottom,
+            "left" => PortName::Left,
+            _ => PortName::Unknown,
+        }
+    }
+}
+
 /// One node in the topology graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyNodePayload {
     /// Unique identifier for the node (e.g. "store-1", "ws-main").
     pub id: String,
-    /// Node kind: "store", "workspace", "warehouse", or "hardware".
+    /// Node kind: store, workspace, warehouse, or hardware.
     #[serde(rename = "type")]
-    pub node_type: String,
+    pub node_type: NodeType,
     /// Display name shown on the topology card.
     pub name: String,
     /// Optional subtitle shown below the name.
@@ -116,23 +231,23 @@ pub struct TopologyWirePayload {
     pub from_node_id: String,
     /// Node ID that the wire connects to.
     pub to_node_id: String,
-    /// Direction: "one-way" (default) or "two-way".
+    /// Direction: one-way (default) or two-way.
     #[serde(default = "default_direction")]
     #[serde(deserialize_with = "de_direction_or_null")]
-    pub direction: String,
+    pub direction: WireDirection,
     /// Optional label displayed along the wire.
     #[serde(default)]
     pub label: Option<String>,
-    /// Source port anchor point (e.g. "left", "right", "top", "bottom").
+    /// Source port anchor point (e.g. left, right, top, bottom).
     #[serde(default)]
-    pub from_port: Option<String>,
-    /// Target port anchor point (e.g. "left", "right", "top", "bottom").
+    pub from_port: Option<PortName>,
+    /// Target port anchor point (e.g. left, right, top, bottom).
     #[serde(default)]
-    pub to_port: Option<String>,
+    pub to_port: Option<PortName>,
 }
 
-fn default_direction() -> String {
-    "one-way".into()
+fn default_direction() -> WireDirection {
+    WireDirection::OneWay
 }
 
 // ── Free functions (testable without Tauri runtime) ────────────────
@@ -161,6 +276,38 @@ pub fn save_topology_data(
         if !seen_wire_ids.insert(&wire.id) {
             return Err(AppError::Internal(format!(
                 "duplicate wire id: {}",
+                wire.id
+            )));
+        }
+    }
+
+    // Validate node types are known (reject #[serde(other)]).
+    for node in &nodes {
+        if node.node_type == NodeType::Unknown {
+            return Err(AppError::Internal(format!(
+                "node {} has unknown type",
+                node.id
+            )));
+        }
+    }
+
+    // Validate wire directions and ports are known.
+    for wire in &wires {
+        if wire.direction == WireDirection::Unknown {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown direction",
+                wire.id
+            )));
+        }
+        if wire.from_port == Some(PortName::Unknown) {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown from_port",
+                wire.id
+            )));
+        }
+        if wire.to_port == Some(PortName::Unknown) {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown to_port",
                 wire.id
             )));
         }
@@ -294,7 +441,7 @@ mod tests {
         assert_eq!(loaded.nodes[0].x, 100.0);
         assert_eq!(loaded.wires.len(), 1);
         assert_eq!(loaded.wires[0].id, "w-1");
-        assert_eq!(loaded.wires[0].from_port.as_deref(), Some("right"));
+        assert_eq!(loaded.wires[0].from_port, Some(PortName::Right));
     }
 
     #[test]
@@ -637,8 +784,8 @@ mod tests {
             roundtripped.wires[0].label.as_deref(),
             Some("Print job channel")
         );
-        assert_eq!(roundtripped.wires[0].from_port.as_deref(), Some("usb"));
-        assert_eq!(roundtripped.wires[0].to_port.as_deref(), Some("network"));
+        assert_eq!(roundtripped.wires[0].from_port, Some(PortName::Unknown));
+        assert_eq!(roundtripped.wires[0].to_port, Some(PortName::Unknown));
     }
 
     #[test]
@@ -710,7 +857,7 @@ mod tests {
     fn node_empty_type() {
         let json = r#"{"id":"n1","type":"","name":"No Type","x":0,"y":0}"#;
         let node: TopologyNodePayload = serde_json::from_str(json).unwrap();
-        assert!(node.node_type.is_empty());
+        assert_eq!(node.node_type, NodeType::Unknown);
     }
 
     #[test]
@@ -938,7 +1085,7 @@ mod tests {
     fn wire_unexpected_direction_preserved() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":"bidirectional"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.direction, "bidirectional");
+        assert_eq!(wire.direction, WireDirection::Unknown);
     }
 
     #[test]
@@ -1076,7 +1223,7 @@ mod tests {
     fn wire_only_from_port() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","from_port":"left"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.from_port.as_deref(), Some("left"));
+        assert_eq!(wire.from_port, Some(PortName::Left));
         assert!(wire.to_port.is_none());
     }
 
@@ -1084,7 +1231,7 @@ mod tests {
     fn wire_only_to_port() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","to_port":"right"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.to_port.as_deref(), Some("right"));
+        assert_eq!(wire.to_port, Some(PortName::Right));
         assert!(wire.from_port.is_none());
     }
 
@@ -1093,8 +1240,8 @@ mod tests {
         let json =
             r#"{"id":"w1","from_node_id":"a","to_node_id":"b","from_port":"out","to_port":"in"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.from_port.as_deref(), Some("out"));
-        assert_eq!(wire.to_port.as_deref(), Some("in"));
+        assert_eq!(wire.from_port, Some(PortName::Unknown));
+        assert_eq!(wire.to_port, Some(PortName::Unknown));
     }
 
     #[test]
@@ -1121,8 +1268,8 @@ mod tests {
         let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtripped.direction, "two-way");
         assert_eq!(roundtripped.label.as_deref(), Some("bi-directional sync"));
-        assert_eq!(roundtripped.from_port.as_deref(), Some("primary"));
-        assert_eq!(roundtripped.to_port.as_deref(), Some("secondary"));
+        assert_eq!(roundtripped.from_port, Some(PortName::Unknown));
+        assert_eq!(roundtripped.to_port, Some(PortName::Unknown));
     }
 
     // ── TopologyData structural tests ──────────────────────────────
@@ -1745,8 +1892,14 @@ mod tests {
             .unwrap();
         let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
 
-        let loaded_types: Vec<&str> = loaded.nodes.iter().map(|n| n.node_type.as_str()).collect();
-        assert_eq!(loaded_types, types);
+        assert_eq!(
+            loaded
+                .nodes
+                .iter()
+                .map(|n| n.node_type.clone())
+                .collect::<Vec<_>>(),
+            types.iter().map(|t| NodeType::from(*t)).collect::<Vec<_>>(),
+        );
     }
 
     #[test]
@@ -1783,7 +1936,7 @@ mod tests {
         };
         let debug = format!("{node:?}");
         assert!(debug.contains("n1"));
-        assert!(debug.contains("store"));
+        assert!(debug.contains("Store"));
     }
 
     #[test]
@@ -2403,7 +2556,7 @@ mod tests {
     fn empty_direction_preserved() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":""}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.direction, "");
+        assert_eq!(wire.direction, WireDirection::Unknown);
     }
 
     #[test]
@@ -2419,7 +2572,7 @@ mod tests {
         };
         let json = serde_json::to_string(&wire).unwrap();
         let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
-        assert_eq!(roundtripped.direction, "↔ bidirectional ←→");
+        assert_eq!(roundtripped.direction, WireDirection::Unknown);
     }
 
     #[test]
@@ -2442,7 +2595,7 @@ mod tests {
                 id: "w1".into(),
                 from_node_id: "n1".into(),
                 to_node_id: "n2".into(),
-                direction: "custom-hybrid".into(),
+                direction: "two-way".into(),
                 label: None,
                 from_port: None,
                 to_port: None,
@@ -2454,7 +2607,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
-        assert_eq!(loaded.wires[0].direction, "custom-hybrid");
+        assert_eq!(loaded.wires[0].direction, "two-way");
     }
 
     // ── Metadata extreme values ────────────────────────────────────
@@ -3549,8 +3702,8 @@ mod tests {
         let json = serde_json::to_string(&wire).unwrap();
         let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtripped.label.as_deref(), Some(label.as_str()));
-        assert_eq!(roundtripped.from_port.as_deref(), Some("🔌"));
-        assert_eq!(roundtripped.to_port.as_deref(), Some("🔋"));
+        assert_eq!(roundtripped.from_port, Some(PortName::Unknown));
+        assert_eq!(roundtripped.to_port, Some(PortName::Unknown));
     }
 
     // ── Large-scale combined stress ─────────────────────────────────
