@@ -1007,6 +1007,25 @@ mod tests {
     }
 
     #[test]
+    /// After wiring ADR #22, `run_set_setting` writes a delta row
+    /// in addition to updating the settings table. This test verifies
+    /// the Tauri command layer actually produces delta records.
+    #[test]
+    fn run_set_setting_writes_delta_row() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "delta.test", "delta-val", "term-delta").unwrap();
+        // Settings value must be persisted.
+        assert_eq!(
+            Settings::get(&conn, "delta.test").unwrap(),
+            Some("delta-val".into())
+        );
+        // Delta row must exist at version 1.
+        assert_eq!(
+            Settings::get_version(&conn, "delta.test", "term-delta").unwrap(),
+            Some(1)
+        );
+    }
+
     fn get_setting_after_multiple_keys_only_returns_requested() {
         let conn = fresh_conn();
         run_set_setting(&conn, "a", "1", "test-terminal").unwrap();
