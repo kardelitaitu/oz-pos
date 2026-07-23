@@ -948,4 +948,56 @@ mod tests {
             "Settings::set() should NOT write to setting_updated"
         );
     }
+
+    /// After ADR #22 Phase 0d, `oz_core::Settings` delegates
+    /// `set_tracked` and `get_version` to `platform_core::Settings`.
+    /// Verify the delegation layer works end-to-end.
+    #[test]
+    fn set_tracked_delegation_writes_delta() {
+        let conn = fresh();
+        // Create the delta table inline (matching set_does_not_write_delta pattern).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS setting_updated (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT    NOT NULL,
+                value       TEXT    NOT NULL,
+                terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                version     INTEGER NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+        Settings::set_tracked(&conn, "deleg.k", "deleg-v", "term-del").unwrap();
+        assert_eq!(
+            Settings::get(&conn, "deleg.k").unwrap(),
+            Some("deleg-v".into())
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "deleg.k", "term-del").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// `write_delta` delegation: standalone delta write without
+    /// updating the settings table.
+    #[test]
+    fn write_delta_delegation_works() {
+        let conn = fresh();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS setting_updated (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT    NOT NULL,
+                value       TEXT    NOT NULL,
+                terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                version     INTEGER NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+        Settings::write_delta(&conn, "w.k", "w-v", "term-w").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "w.k", "term-w").unwrap(),
+            Some(1)
+        );
+    }
 }
