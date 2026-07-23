@@ -72,7 +72,12 @@ export interface WorkspaceInstanceSeed {
 
 export interface NodeTopologyEditorProps {
   currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise';
-  onSave?: (nodes: TopologyNodeData[], wires: TopologyWireData[]) => void;
+  /**
+   * Called when the user clicks "Apply Topology Changes". Returns an
+   * optional `oldId -> newId` map so the editor can remap its local
+   * state when archive+recreate assigns new UUIDs (Critical #1).
+   */
+  onSave?: (nodes: TopologyNodeData[], wires: TopologyWireData[]) => Promise<Record<string, string> | void>;
   /**
    * Real workspace instances to seed the canvas with. When provided, the
    * editor renders one workspace node per instance (positions restored from
@@ -952,9 +957,36 @@ export default function NodeTopologyEditor({
             <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
           </Button>            <Button
               variant="primary"
-              onClick={() => {
+              onClick={async () => {
                 skipNextLoadRef.current = true;
-                onSave?.(nodes, wires);
+                const idMap = await onSave?.(nodes, wires);
+                if (idMap && Object.keys(idMap).length > 0) {
+                  // Remap old UUIDs to new UUIDs from archive+recreate
+                  // operations so the canvas stays in sync with the backend.
+                  // Clear selection to avoid dangling references to old IDs.
+                  setSelectedNodeId(null);
+                  setSelectedWireId(null);
+                  setNodes((prev) =>
+                    prev.map((n) => {
+                      const newId = idMap[n.id];
+                      return newId ? { ...n, id: newId } : n;
+                    }),
+                  );
+                  setWires((prev) =>
+                    prev.map((w) => {
+                      const newFrom = idMap[w.fromNodeId];
+                      const newTo = idMap[w.toNodeId];
+                      if (newFrom || newTo) {
+                        return {
+                          ...w,
+                          fromNodeId: newFrom ?? w.fromNodeId,
+                          toNodeId: newTo ?? w.toNodeId,
+                        };
+                      }
+                      return w;
+                    }),
+                  );
+                }
               }}
               icon={<CheckIcon size={16} />}
             >

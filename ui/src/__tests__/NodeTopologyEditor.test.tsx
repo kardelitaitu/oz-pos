@@ -96,7 +96,7 @@ vi.mock('@/contexts/SettingsContext', () => ({
 const mockLoadTopology = vi.mocked(loadTopology);
 const mockSaveTopology = vi.mocked(saveTopology);
 
-const renderEditor = (props?: { onSave?: (nodes: unknown, wires: unknown) => void }) =>
+const renderEditor = (props?: { onSave?: (nodes: unknown, wires: unknown) => Promise<Record<string, string> | void> }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
 const getNodeCount = () => document.querySelectorAll('.topology-node').length;
@@ -406,5 +406,323 @@ describe('NodeTopologyEditor Component', () => {
 
     // Node count should be unchanged — Backspace was handled by the input
     expect(getNodeCount()).toBe(nodeCountAfterAdd);
+  });
+
+  // ── Apply button — idMap remapping (#1) ───────────────────────
+
+  it('remaps node and wire IDs when onSave returns idMap', async () => {
+    // Load a custom topology with known, stable node IDs so this test
+    // does NOT depend on the retail preset internals.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-test', type: 'store', name: 'Remap Store', x: 100, y: 100 },
+        { id: 'ws-test', type: 'workspace', name: 'Remap POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-test', from_node_id: 'store-test', to_node_id: 'ws-test', direction: 'one-way' }],
+    });
+
+    const onSave = vi.fn().mockResolvedValue({ 'ws-test': 'ws-remapped-id' });
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Remap POS')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // onSave receives the original IDs (remapping happens client-side AFTER return)
+    const [nodes] = onSave.mock.calls[0]!;
+    const wsTestNode = nodes.find((n: { id: string }) => n.id === 'ws-test');
+    expect(wsTestNode).toBeDefined();
+    expect(wsTestNode.name).toBe('Remap POS');
+
+    // After remapping, no nodes are lost and component is stable
+    expect(getNodeCount()).toBe(2);
+    expect(screen.getByText('Remap POS')).toBeInTheDocument();
+    expect(screen.getByText('Remap Store')).toBeInTheDocument();
+  });
+
+  it('clears selection after idMap remapping', async () => {
+    const onSave = vi.fn().mockResolvedValue({ 'ws-1': 'ws-new-id' });
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    // Select the workspace node first
+    const wsNode = document.querySelector('.node-type-workspace');
+    expect(wsNode).not.toBeNull();
+    fireEvent.mouseDown(wsNode as Element, { button: 0 });
+
+    // Inspector should be visible (Delete button appears when something is selected)
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    // Click Apply — the idMap remapping should clear selection
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // After remapping, the delete button should disappear (selection cleared)
+    await waitFor(() => {
+      expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
+    });
+  });
+
+  it('handles empty idMap gracefully (no remapping)', async () => {
+    const onSave = vi.fn().mockResolvedValue({});
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    const initialNodeCount = getNodeCount();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // Node count unchanged — no remapping occurred
+    expect(getNodeCount()).toBe(initialNodeCount);
+    // All original nodes should still be present
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
+  });
+
+  it('handles onSave returning undefined (backward compat)', async () => {
+    // vi.fn() returns undefined by default, which is the legacy behavior
+    const onSave = vi.fn();
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    const initialNodeCount = getNodeCount();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // No crash, no remapping
+    expect(getNodeCount()).toBe(initialNodeCount);
+  });
+
+  it('remaps wire endpoints when returning idMap', async () => {
+    // Load a custom topology with explicit wire endpoints so we can
+    // verify the endpoint IDs onSave receives AND that wires survive
+    // client-side remapping.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-wr', type: 'store', name: 'Wire Store', x: 100, y: 100 },
+        { id: 'ws-wr', type: 'workspace', name: 'Wire POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-wr', from_node_id: 'store-wr', to_node_id: 'ws-wr', direction: 'one-way' }],
+    });
+
+    const onSave = vi.fn().mockResolvedValue({ 'ws-wr': 'ws-remapped' });
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Wire POS')).toBeInTheDocument();
+    });
+
+    const initialWireCount = getWireCount();
+    expect(initialWireCount).toBe(1);
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // onSave received the wire with original endpoint IDs
+    const [, wires] = onSave.mock.calls[0]!;
+    expect(wires).toHaveLength(1);
+    expect(wires[0].fromNodeId).toBe('store-wr'); // unchanged
+    expect(wires[0].toNodeId).toBe('ws-wr'); // old ID, client remaps after return
+
+    // After remapping, wires should still be present (no loss)
+    expect(getWireCount()).toBe(1);
+  });
+
+  // ── Delete via keyboard shortcut also uses input guard (#3) ─────
+
+  it('does not delete node when Delete is pressed in a text field', () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    const nodeCountAfterAdd = getNodeCount();
+
+    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+
+    nameInput.focus();
+    fireEvent.keyDown(nameInput, { key: 'Delete' });
+
+    // Node count should be unchanged
+    expect(getNodeCount()).toBe(nodeCountAfterAdd);
+  });
+
+  it('does not intercept Ctrl+Z when typing in a text field', () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    const nodeCountAfterAdd = getNodeCount();
+
+    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+
+    nameInput.focus();
+    fireEvent.keyDown(nameInput, { key: 'z', ctrlKey: true });
+
+    // Ctrl+Z should be handled by the input field, not the canvas handler
+    expect(getNodeCount()).toBe(nodeCountAfterAdd);
+  });
+
+  // ── Delegation regression: no direct saveTopology when onSave is provided ──
+
+  it('does not call saveTopology directly when onSave is provided (delegation)', async () => {
+    const onSave = vi.fn();
+    renderEditor({ onSave });
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // The editor must delegate entirely to onSave — never invoke the
+    // old saveTopology directly. This verifies the boundary between
+    // the editor and the TopologyScreen parent.
+    expect(mockSaveTopology).not.toHaveBeenCalled();
+  });
+
+  // ── Undo sequence resilience (#6) ───────────────────────────────
+
+  it('undoes multiple sequential additions back to initial state', () => {
+    renderEditor();
+
+    const initialCount = getNodeCount();
+
+    // Add 3 nodes
+    fireEvent.click(screen.getByText('+ Store Node'));
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(getNodeCount()).toBe(initialCount + 3);
+
+    // Undo 3 times
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(getNodeCount()).toBe(initialCount);
+  });
+
+  // ── Redo (#7) ───────────────────────────────────────────────────
+
+  it('redos restore undone state', () => {
+    renderEditor();
+
+    const initialCount = getNodeCount();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(getNodeCount()).toBe(initialCount + 1);
+    expect(screen.getByText('New Store')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(getNodeCount()).toBe(initialCount);
+    // Redo button appears after undo
+    expect(screen.getByText('Redo (Ctrl+Y)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Redo (Ctrl+Y)'));
+    expect(getNodeCount()).toBe(initialCount + 1);
+    expect(screen.getByText('New Store')).toBeInTheDocument();
+    // Redo stack consumed, button gone
+    expect(screen.queryByText('Redo (Ctrl+Y)')).not.toBeInTheDocument();
+  });
+
+  it('clears redo stack on new edit after undo', () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    // Redo should be available
+    expect(screen.getByText('Redo (Ctrl+Y)')).toBeInTheDocument();
+
+    // New edit after undo — clears redo branch
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+    expect(screen.queryByText('Redo (Ctrl+Y)')).not.toBeInTheDocument();
+  });
+
+  it('Ctrl+Y keyboard shortcut triggers redo', () => {
+    renderEditor();
+
+    const initialCount = getNodeCount();
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(getNodeCount()).toBe(initialCount + 1);
+
+    // Ctrl+Z to undo
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(canvas).not.toBeNull();
+    fireEvent.keyDown(canvas!, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(initialCount);
+
+    // Ctrl+Y to redo
+    fireEvent.keyDown(canvas!, { key: 'y', ctrlKey: true });
+    expect(getNodeCount()).toBe(initialCount + 1);
+  });
+
+  it('Ctrl+Shift+Z also triggers redo', () => {
+    renderEditor();
+
+    const initialCount = getNodeCount();
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(getNodeCount()).toBe(initialCount + 1);
+
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(canvas).not.toBeNull();
+
+    // Ctrl+Z to undo
+    fireEvent.keyDown(canvas!, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(initialCount);
+
+    // Ctrl+Shift+Z to redo (via the undo handler's shiftKey check)
+    fireEvent.keyDown(canvas!, { key: 'z', ctrlKey: true, shiftKey: true });
+    expect(getNodeCount()).toBe(initialCount + 1);
+  });
+
+  // ── Corrupt wire direction resilience (#10) ─────────────────────
+
+  it('renders without crash when loaded topology has corrupt wire direction', async () => {
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Store', x: 100, y: 100 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-bad', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'bidirectional' }],
+    });
+
+    renderEditor();
+
+    // Should render without crashing — corrupt direction falls back to one-way
+    await waitFor(() => {
+      expect(screen.getByText('Store')).toBeInTheDocument();
+      expect(screen.getByText('POS')).toBeInTheDocument();
+    });
+
+    // Wire should still render (just without the two-way marker)
+    expect(getWireCount()).toBe(1);
   });
 });

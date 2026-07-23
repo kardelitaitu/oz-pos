@@ -617,6 +617,18 @@ impl Store<'_> {
     ///
     /// **Note:** Callers must verify subscription quota via
     /// `enforce_instance_quota()` before calling this method.
+    ///
+    /// # Nesting caveat
+    ///
+    /// This method opens its own transaction via `unchecked_transaction`,
+    /// which issues a raw `BEGIN`. SQLite rejects `BEGIN` when a
+    /// transaction is already open ("cannot start a transaction within a
+    /// transaction"), so this method **cannot be called from inside an
+    /// open transaction**. Callers that need to batch multiple mutations
+    /// atomically must run the INSERT SQL directly on their outer
+    /// transaction (see `apply_topology_diff` in desktop-client, which
+    /// does exactly this rather than delegating here). See the
+    /// `create_workspace_instance_cannot_nest_in_open_transaction` test.
     pub fn create_workspace_instance(
         &self,
         id: &str,

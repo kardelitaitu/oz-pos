@@ -134,7 +134,10 @@ fn run_process_refund(
     let refund_lines: Vec<RefundLine> = lines
         .iter()
         .map(|l| {
-            let currency: oz_core::Currency = l.currency.parse().unwrap_or(sale.currency);
+            let currency: oz_core::Currency = l
+                .currency
+                .parse()
+                .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", l.currency)))?;
             let unit_price = Money {
                 minor_units: l.unit_price_minor,
                 currency,
@@ -143,9 +146,15 @@ fn run_process_refund(
                 minor_units: l.line_total_minor,
                 currency,
             };
-            RefundLine::new(&l.sale_line_id, &l.sku, l.qty, unit_price, line_total)
+            Ok(RefundLine::new(
+                &l.sale_line_id,
+                &l.sku,
+                l.qty,
+                unit_price,
+                line_total,
+            ))
         })
-        .collect();
+        .collect::<Result<Vec<_>, AppError>>()?;
 
     let total_minor: i64 = refund_lines.iter().map(|l| l.line_total.minor_units).sum();
     let total = Money {
@@ -250,6 +259,17 @@ mod tests {
         "sale-1".to_string()
     }
 
+    /// Seed a user with refund permission so the permission check in
+    /// `run_process_refund` passes.
+    fn seed_user_with_refund_permission(conn: &Connection, user_id: &str) {
+        conn.execute_batch(&format!(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-refund', 'Refund Tester', 'Refund Tester', '[\"sales:refund\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
+                ('{user_id}', '{user_id}', 'Test User', 'role-refund', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        )).unwrap();
+    }
+
     #[test]
     fn process_full_refund() {
         let conn = fresh_conn();
@@ -336,6 +356,64 @@ mod tests {
         );
         let result = store.create_refund(&refund);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn refund_with_invalid_currency_returns_error_not_silent_fallback() {
+        let conn = fresh_conn();
+        let sale_id = seed_completed_sale(&conn);
+        seed_user_with_refund_permission(&conn, "user-refund-tester");
+
+        let lines = [RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "INVALID_ZZZ".into(),
+            line_total_minor: 700,
+        }];
+
+        let result =
+            run_process_refund(&conn, "user-refund-tester", &sale_id, "test", None, &lines);
+        // The bug: `unwrap_or(sale.currency)` silently falls back to USD
+        // when the currency parse fails. After the fix, this must return
+        // a proper error mentioning the invalid currency.
+        assert!(
+            result.is_err(),
+            "refund with invalid currency 'INVALID_ZZZ' must return Err, \
+             got Ok — currency parse failure was silently swallowed (bug #1)"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid currency") || err.contains("INVALID_ZZZ"),
+            "error should mention invalid currency, got: {err}"
+        );
+    }
+
+    #[test]
+    fn refund_with_valid_currency_succeeds_through_run_process_refund() {
+        // Regression: the collect::<Result> refactor must not regress valid flows.
+        let conn = fresh_conn();
+        let sale_id = seed_completed_sale(&conn);
+        seed_user_with_refund_permission(&conn, "user-valid");
+
+        let lines = [RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "USD".into(),
+            line_total_minor: 700,
+        }];
+
+        let result = run_process_refund(&conn, "user-valid", &sale_id, "test", None, &lines);
+        assert!(
+            result.is_ok(),
+            "valid currency must succeed, got: {:?}",
+            result.err()
+        );
+        let r = result.unwrap();
+        assert_eq!(r.total_minor, 700);
     }
 
     #[test]
