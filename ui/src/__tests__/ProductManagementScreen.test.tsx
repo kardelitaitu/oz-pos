@@ -5,6 +5,16 @@ import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import productsFtl from '@/locales/products.ftl?raw';
 import ProductManagementScreen from '@/features/products/ProductManagementScreen';
 
+const SAMPLE_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
+  { code: 'EUR', name: 'Euro', minor_exponent: 2, symbol: '€' },
+];
+
+const SAMPLE_CATEGORIES = [
+  { id: 'cat-1', name: 'Beverages', colour: '#3b82f6', icon: 'coffee' },
+  { id: 'cat-2', name: 'Food', colour: '#f97316', icon: 'food' },
+];
+
 const SAMPLE_PRODUCTS = [
   {
     sku: 'LATTE',
@@ -37,13 +47,19 @@ const SAMPLE_PRODUCTS = [
 
 const { invokeMock } = vi.hoisted(() => ({
   invokeMock: vi.fn((cmd: string) => {
-    if (cmd === 'list_products') {
+    if (cmd === 'list_products' || cmd === 'list_products_scoped') {
       return Promise.resolve(SAMPLE_PRODUCTS);
     }
+    if (cmd === 'list_currencies_scoped') {
+      return Promise.resolve(SAMPLE_CURRENCIES);
+    }
+    if (cmd === 'list_categories') {
+      return Promise.resolve(SAMPLE_CATEGORIES);
+    }
     if (
-      cmd === 'create_product' ||
-      cmd === 'update_product' ||
-      cmd === 'delete_product'
+      cmd === 'create_product' || cmd === 'create_product_scoped' ||
+      cmd === 'update_product' || cmd === 'update_product_scoped' ||
+      cmd === 'delete_product' || cmd === 'delete_product_scoped'
     ) {
       return Promise.resolve({ sku: 'LATTE' });
     }
@@ -72,13 +88,19 @@ vi.mock('@tauri-apps/api/core', () => ({
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === 'list_products') {
+    if (cmd === 'list_products' || cmd === 'list_products_scoped') {
       return Promise.resolve(SAMPLE_PRODUCTS);
     }
+    if (cmd === 'list_currencies_scoped') {
+      return Promise.resolve(SAMPLE_CURRENCIES);
+    }
+    if (cmd === 'list_categories') {
+      return Promise.resolve(SAMPLE_CATEGORIES);
+    }
     if (
-      cmd === 'create_product' ||
-      cmd === 'update_product' ||
-      cmd === 'delete_product'
+      cmd === 'create_product' || cmd === 'create_product_scoped' ||
+      cmd === 'update_product' || cmd === 'update_product_scoped' ||
+      cmd === 'delete_product' || cmd === 'delete_product_scoped'
     ) {
       return Promise.resolve({ sku: 'LATTE' });
     }
@@ -177,7 +199,7 @@ describe('ProductManagementScreen', () => {
     await userEvent.type(screen.getByPlaceholderText('450'), '999');
     await userEvent.click(screen.getByRole('button', { name: /create/i }));
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('create_product', expect.any(Object));
+      expect(invokeMock).toHaveBeenCalledWith('create_product_scoped', expect.any(Object));
     });
   });
 
@@ -190,7 +212,7 @@ describe('ProductManagementScreen', () => {
     await userEvent.type(nameInput, 'Latte Macchiato');
     await userEvent.click(screen.getByRole('button', { name: /update/i }));
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('update_product', expect.any(Object));
+      expect(invokeMock).toHaveBeenCalledWith('update_product_scoped', expect.any(Object));
     });
   });
 
@@ -199,15 +221,15 @@ describe('ProductManagementScreen', () => {
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('delete_product', expect.objectContaining({
-        args: { userId: 'test-user', sku: 'LATTE' },
+      expect(invokeMock).toHaveBeenCalledWith('delete_product_scoped', expect.objectContaining({
+        args: { sku: 'LATTE' },
       }));
     });
   });
 
   it('shows empty state when no products', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'list_products') return Promise.resolve([]);
+      if (cmd === 'list_products' || cmd === 'list_products_scoped') return Promise.resolve([]);
       return Promise.resolve([]);
     });
     renderWithFluentSync(<ProductManagementScreen />, productsFtl);
@@ -236,10 +258,12 @@ describe('ProductManagementScreen', () => {
   it('shows error message when createProduct fails (no silent swallow)', async () => {
     // Mock create_product to reject (e.g. duplicate SKU server-side).
     invokeMock.mockImplementation(((cmd: string) => {
-      if (cmd === 'list_products') return Promise.resolve(SAMPLE_PRODUCTS);
-      if (cmd === 'create_product') {
+      if (cmd === 'list_products' || cmd === 'list_products_scoped') return Promise.resolve(SAMPLE_PRODUCTS);
+      if (cmd === 'create_product' || cmd === 'create_product_scoped') {
         return Promise.reject(new Error('SKU already exists'));
       }
+      if (cmd === 'list_currencies_scoped') return Promise.resolve(SAMPLE_CURRENCIES);
+      if (cmd === 'list_categories') return Promise.resolve(SAMPLE_CATEGORIES);
       return Promise.resolve([]);
     }) as unknown as typeof invokeMock);
 

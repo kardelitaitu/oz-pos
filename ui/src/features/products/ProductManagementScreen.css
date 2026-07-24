@@ -450,6 +450,15 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+.product-mgmt-modal-error {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  margin-right: auto;
+}
+
 .product-mgmt-modal-actions {
   display: flex;
   justify-content: flex-end;

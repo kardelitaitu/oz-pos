@@ -5,12 +5,16 @@ import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import customersFtl from '@/locales/customers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
-vi.mock('@/api/customers', () => ({
-  listCustomers: vi.fn(),
-  createCustomer: vi.fn(),
-  updateCustomer: vi.fn(),
-  deleteCustomer: vi.fn(),
-}));
+vi.mock('@/api/customers', () => {
+  const listCustomers = vi.fn();
+  return {
+    listCustomers,
+    listCustomersScoped: (...args: unknown[]) => listCustomers(...args),
+    createCustomer: vi.fn(),
+    updateCustomer: vi.fn(),
+    deleteCustomer: vi.fn(),
+  };
+});
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({

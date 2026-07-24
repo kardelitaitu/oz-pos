@@ -19,6 +19,7 @@ vi.mock('@/api/sales', () => ({
 
 vi.mock('@/api/shifts', () => ({
   listShifts: (...args: unknown[]) => mockListShifts(...args),
+  listShiftsScoped: (...args: unknown[]) => mockListShifts(...args),
 }));
 
 vi.mock('@/api/hardware', () => ({

@@ -26,7 +26,6 @@ vi.mock('@/api/kds', () => ({
     mockUpdateKdsStatus(id, status),
   updateKdsStatusScoped: (
     _token: string,
-    _userId: string,
     id: string,
     status: string,
   ) => mockUpdateKdsStatus(id, status),

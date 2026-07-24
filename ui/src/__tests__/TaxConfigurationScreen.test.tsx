@@ -31,8 +31,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === 'list_tax_rates') return Promise.resolve(SAMPLE_TAX_RATES);
-    if (cmd === 'list_categories') return Promise.resolve(SAMPLE_CATEGORIES);
+    if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+    if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
     if (cmd === 'list_category_tax_rates') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
     if (cmd === 'create_tax_rate') return Promise.resolve({ ...SAMPLE_TAX_RATES[0], name: 'New Tax' });
     if (cmd === 'update_tax_rate') return Promise.resolve(SAMPLE_TAX_RATES[0]);
@@ -82,8 +82,8 @@ describe('TaxConfigurationScreen', () => {
 
   it('shows empty state when no tax rates exist', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'list_tax_rates') return Promise.resolve([]);
-      if (cmd === 'list_categories') return Promise.resolve([]);
+      if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve([]);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve([]);
       if (cmd === 'list_category_tax_rates') return Promise.resolve([]);
       return Promise.resolve([]);
     });
@@ -173,8 +173,8 @@ describe('TaxConfigurationScreen', () => {
     // Make delete slow so we can see the loading state
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'delete_tax_rate') return new Promise(() => {});
-      if (cmd === 'list_tax_rates') return Promise.resolve(SAMPLE_TAX_RATES);
-      if (cmd === 'list_categories') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
       if (cmd === 'list_category_tax_rates') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
       return Promise.resolve([]);
     });
@@ -211,8 +211,8 @@ describe('TaxConfigurationScreen', () => {
   it('handles save failure gracefully', async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'create_tax_rate') return Promise.reject(new Error('DB error'));
-      if (cmd === 'list_tax_rates') return Promise.resolve(SAMPLE_TAX_RATES);
-      if (cmd === 'list_categories') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
       if (cmd === 'list_category_tax_rates') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
       return Promise.resolve([]);
     });

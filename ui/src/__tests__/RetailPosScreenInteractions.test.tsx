@@ -69,31 +69,38 @@ vi.mock('@/features/sales/useBarcodeScanner', () => ({
   useBarcodeScanner: mockedBarcode.useBarcodeScanner,
 }));
 
+const mockProducts = [
+  { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+  { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+  { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+  { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+];
+const mockCategories = [
+  { id: 'cat-food', name: 'Makanan', colour: '#e74c3c' },
+  { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
+];
+
 vi.mock('@/api/products', () => ({
-  listProducts: vi.fn(() =>
-    Promise.resolve([
-      { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-      { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-      { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-      { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-    ]),
-  ),
-  listCategories: vi.fn(() =>
-    Promise.resolve([
-      { id: 'cat-food', name: 'Makanan', colour: '#e74c3c' },
-      { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
-    ]),
-  ),
+  listProducts: vi.fn(() => Promise.resolve(mockProducts)),
+  listProductsScoped: vi.fn((_token: string) => Promise.resolve(mockProducts)),
+  listCategories: vi.fn(() => Promise.resolve(mockCategories)),
+  listCategoriesScoped: vi.fn((_token: string) => Promise.resolve(mockCategories)),
   lookupProductBySku: vi.fn(() => Promise.resolve(null)),
+  lookupProductBySkuScoped: vi.fn((_token: string, _sku: string) => Promise.resolve(null)),
   lookupByBarcode: vi.fn(() => Promise.resolve(null)),
+  lookupByBarcodeScoped: vi.fn((_token: string, _code: string) => Promise.resolve(null)),
   createProduct: vi.fn(),
+  createProductScoped: vi.fn(),
   updateProduct: vi.fn(),
+  updateProductScoped: vi.fn(),
   deleteProduct: vi.fn(),
+  deleteProductScoped: vi.fn(),
   adjustStock: vi.fn(),
+  adjustStockScoped: vi.fn(),
   listProductVariants: vi.fn(() => Promise.resolve([])),
   getProductVariant: vi.fn(() => Promise.resolve(null)),
   createProductVariant: vi.fn(),
@@ -102,12 +109,14 @@ vi.mock('@/api/products', () => ({
   createCategory: vi.fn(),
   updateCategory: vi.fn(),
   deleteCategory: vi.fn(),
+  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
+  getProductTrackSerialScoped: vi.fn(() => Promise.resolve(false)),
 }));
 
 vi.mock('@/api/shifts', async () => {
   const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
   return createShiftsApiMock({
-    getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
+    getActiveShiftScoped: vi.fn(() => Promise.reject(new Error('no shift'))),
   });
 });
 
@@ -348,7 +357,7 @@ describe('RetailPosScreen — interactions', () => {
 
   it('calls lookupProductBySku when barcode is entered via SKU input', async () => {
     const productsApi = await import('@/api/products');
-    vi.mocked(productsApi.lookupProductBySku).mockResolvedValueOnce({
+    vi.mocked(productsApi.lookupProductBySkuScoped!).mockResolvedValueOnce({
       sku: 'REMOTE-SKU', name: 'Remote Product', category: null,
       price: { minor_units: 10000, currency: 'IDR' }, barcode: '1234567890',
       in_stock: true, stock_qty: 10, tax_rate_ids: [], created_at: '',
@@ -358,7 +367,7 @@ describe('RetailPosScreen — interactions', () => {
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
     await userEvent.type(skuInput, '1234567890{Enter}');
-    await waitFor(() => expect(productsApi.lookupProductBySku).toHaveBeenCalledWith('1234567890'));
+    await waitFor(() => expect(productsApi.lookupProductBySkuScoped).toHaveBeenCalledWith(expect.any(String), '1234567890'));
   });
 
   // ── Barcode scanning ─────────────────────────────────────────
@@ -388,7 +397,7 @@ describe('RetailPosScreen — interactions', () => {
     await waitFor(() => expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled());
     const productsApi = await import('@/api/products');
     act(() => { mockedBarcode.triggerScan('UNKNOWN-CODE'); });
-    await waitFor(() => expect(productsApi.lookupByBarcode).toHaveBeenCalledWith('UNKNOWN-CODE'));
+    await waitFor(() => expect(productsApi.lookupByBarcodeScoped).toHaveBeenCalledWith(expect.any(String), 'UNKNOWN-CODE'));
   });
 
   // ── Shift management ─────────────────────────────────────────
@@ -401,14 +410,14 @@ describe('RetailPosScreen — interactions', () => {
   });
 
   it('opens a shift when opening balance is submitted', async () => {
-    const { openShift } = await import('@/api/shifts');
+    const { openShiftScoped } = await import('@/api/shifts');
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText(/No shift/)).toBeInTheDocument());
     await userEvent.keyboard('{F9}');
     const input = screen.getByLabelText(/Opening balance/);
     await userEvent.type(input, '100000');
     await userEvent.click(screen.getByText('Open'));
-    await waitFor(() => expect(openShift).toHaveBeenCalledWith('user-1', 10000000));
+    await waitFor(() => expect(openShiftScoped).toHaveBeenCalledWith(expect.any(String), 10000000));
   });
 
   it('shows warning when Pay is pressed without an active shift', async () => {

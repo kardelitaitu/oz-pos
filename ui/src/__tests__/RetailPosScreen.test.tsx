@@ -67,31 +67,38 @@ vi.mock('@/features/sales/useBarcodeScanner', () => ({
   useBarcodeScanner: mockedBarcode.useBarcodeScanner,
 }));
 
+const mockProducts = [
+  { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+  { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+  { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+  { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
+    price_updated_at: '', product_type: 'retail' },
+];
+const mockCategories = [
+  { id: 'cat-food', name: 'Makanan', colour: '#e74c3c' },
+  { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
+];
+
 vi.mock('@/api/products', () => ({
-  listProducts: vi.fn(() =>
-    Promise.resolve([
-      { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-      { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-      { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-      { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
-      price_updated_at: '', product_type: 'retail' },
-    ]),
-  ),
-  listCategories: vi.fn(() =>
-    Promise.resolve([
-      { id: 'cat-food', name: 'Makanan', colour: '#e74c3c' },
-      { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
-    ]),
-  ),
+  listProducts: vi.fn(() => Promise.resolve(mockProducts)),
+  listProductsScoped: vi.fn((_token: string) => Promise.resolve(mockProducts)),
+  listCategories: vi.fn(() => Promise.resolve(mockCategories)),
+  listCategoriesScoped: vi.fn((_token: string) => Promise.resolve(mockCategories)),
   lookupProductBySku: vi.fn(() => Promise.resolve(null)),
+  lookupProductBySkuScoped: vi.fn((_token: string, _sku: string) => Promise.resolve(null)),
   lookupByBarcode: vi.fn(() => Promise.resolve(null)),
+  lookupByBarcodeScoped: vi.fn((_token: string, _code: string) => Promise.resolve(null)),
   createProduct: vi.fn(),
+  createProductScoped: vi.fn(),
   updateProduct: vi.fn(),
+  updateProductScoped: vi.fn(),
   deleteProduct: vi.fn(),
+  deleteProductScoped: vi.fn(),
   adjustStock: vi.fn(),
+  adjustStockScoped: vi.fn(),
   listProductVariants: vi.fn(() => Promise.resolve([])),
   getProductVariant: vi.fn(() => Promise.resolve(null)),
   createProductVariant: vi.fn(),
@@ -100,19 +107,21 @@ vi.mock('@/api/products', () => ({
   createCategory: vi.fn(),
   updateCategory: vi.fn(),
   deleteCategory: vi.fn(),
+  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
+  getProductTrackSerialScoped: vi.fn(() => Promise.resolve(false)),
 }));
 
 vi.mock('@/api/shifts', async () => {
   const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
   return createShiftsApiMock({
-    getActiveShift: vi.fn(() => Promise.reject(new Error('no shift'))),
+    getActiveShiftScoped: vi.fn(() => Promise.reject(new Error('no shift'))),
   });
 });
 
 vi.mock('@/api/settings', async () => {
   const { createSettingsApiMock } = await import('@/__tests__/test-utils/mocks/api');
   return createSettingsApiMock({
-    getStoreSettings: vi.fn(() =>
+    getStoreSettingsScoped: vi.fn(() =>
       Promise.resolve({ name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: '', currency: 'IDR', branch: 'Cabang A', logo: '' }),
     ),
   });

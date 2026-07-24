@@ -21,11 +21,14 @@ vi.mock('@/api/stores', () => ({
 
 vi.mock('@/api/terminals', () => ({
   listTerminals: () => mockListTerminals(),
+  listTerminalsScoped: () => mockListTerminals(),
 }));
+
+const mockL10n = { getString: (id: string) => id };
 
 vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
-    l10n: { getString: (id: string) => id },
+    l10n: mockL10n,
   }),
   Localized: ({ children }: { id: string; children: React.ReactNode }) => (
     <>{children}</>
