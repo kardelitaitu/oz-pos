@@ -74,16 +74,13 @@ impl Store<'_> {
 
         // If deduction_locations is NULL (pre-093 legacy sale), fall
         // back to crediting the canonical default location.
-        if deduction_locations_json.as_deref().unwrap_or("").is_empty()
-            || deduction_locations_json.as_deref() == Some("null")
-        {
-            self.credit_refund_to_default_location(&tx, refund)?;
-        } else {
-            self.credit_refund_from_deduction_locations(
-                &tx,
-                refund,
-                deduction_locations_json.as_deref().unwrap(),
-            )?;
+        match deduction_locations_json.as_deref() {
+            None | Some("null") | Some("") => {
+                self.credit_refund_to_default_location(&tx, refund)?;
+            }
+            Some(locations) => {
+                self.credit_refund_from_deduction_locations(&tx, refund, locations)?;
+            }
         }
 
         // ── 3. Write audit log inside the same transaction ─────────

@@ -18,7 +18,7 @@
 //! # Ok(())
 //! # }
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use regex::Regex;
 use rusqlite::Connection;
@@ -222,14 +222,15 @@ fn extract_table_references(sql: &str) -> Vec<String> {
     // Collect CTE names so we can exclude them
     let cte_names = extract_cte_names(sql);
 
-    // Patterns that capture table names (case-insensitive via regex)
-    // We use a series of patterns instead of one complex one for clarity.
+    // Patterns that capture table names (case-insensitive via regex).
+    // Each regex is compiled once into a static OnceLock.
 
     // Pattern 1: FROM <table1>, <table2>, ...
-    // Matches all comma-separated tables after FROM until WHERE/JOIN/ORDER/GROUP/etc.
-    let from_re =
+    static FROM_RE: OnceLock<Regex> = OnceLock::new();
+    let from_re = FROM_RE.get_or_init(|| {
         Regex::new(r"(?i)\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)")
-            .unwrap();
+            .expect("invalid FROM regex")
+    });
     for cap in from_re.captures_iter(sql) {
         let table_list = cap[1].to_string();
         for part in table_list.split(',') {
@@ -241,7 +242,10 @@ fn extract_table_references(sql: &str) -> Vec<String> {
     }
 
     // Pattern 2: JOIN <table>
-    let join_re = Regex::new(r"(?i)\bJOIN\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    static JOIN_RE: OnceLock<Regex> = OnceLock::new();
+    let join_re = JOIN_RE.get_or_init(|| {
+        Regex::new(r"(?i)\bJOIN\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid JOIN regex")
+    });
     for cap in join_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         if !cte_names.contains(&tbl.to_uppercase()) {
@@ -250,31 +254,42 @@ fn extract_table_references(sql: &str) -> Vec<String> {
     }
 
     // Pattern 3: INTO <table> (INSERT INTO)
-    let into_re = Regex::new(r"(?i)\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    static INTO_RE: OnceLock<Regex> = OnceLock::new();
+    let into_re = INTO_RE.get_or_init(|| {
+        Regex::new(r"(?i)\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid INTO regex")
+    });
     for cap in into_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
     }
 
     // Pattern 4: UPDATE <table>
-    let update_re = Regex::new(r"(?i)\bUPDATE\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    static UPDATE_RE: OnceLock<Regex> = OnceLock::new();
+    let update_re = UPDATE_RE.get_or_init(|| {
+        Regex::new(r"(?i)\bUPDATE\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid UPDATE regex")
+    });
     for cap in update_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
     }
 
     // Pattern 5: TABLE <table> (CREATE TABLE, DROP TABLE)
-    let table_re =
+    static TABLE_RE: OnceLock<Regex> = OnceLock::new();
+    let table_re = TABLE_RE.get_or_init(|| {
         Regex::new(r"(?i)\bTABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)")
-            .unwrap();
+            .expect("invalid TABLE regex")
+    });
     for cap in table_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
     }
 
-    // Pattern 6: INSERT INTO <table> — also caught by INTO above, but handle
-    // the case where INSERT INTO has a schema prefix like `INSERT INTO plugin_x.t`
-    let insert_into_re = Regex::new(r"(?i)\bINSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    // Pattern 6: INSERT INTO <table>
+    static INSERT_INTO_RE: OnceLock<Regex> = OnceLock::new();
+    let insert_into_re = INSERT_INTO_RE.get_or_init(|| {
+        Regex::new(r"(?i)\bINSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)")
+            .expect("invalid INSERT INTO regex")
+    });
     for cap in insert_into_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         if !tables.contains(&tbl) {
@@ -283,15 +298,21 @@ fn extract_table_references(sql: &str) -> Vec<String> {
     }
 
     // Pattern 7: DELETE FROM <table>
-    let delete_from_re = Regex::new(r"(?i)\bDELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    static DELETE_FROM_RE: OnceLock<Regex> = OnceLock::new();
+    let delete_from_re = DELETE_FROM_RE.get_or_init(|| {
+        Regex::new(r"(?i)\bDELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid DELETE regex")
+    });
     for cap in delete_from_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
     }
 
     // Pattern 8: DROP TABLE <table>
-    let drop_table_re =
-        Regex::new(r"(?i)\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)").unwrap();
+    static DROP_TABLE_RE: OnceLock<Regex> = OnceLock::new();
+    let drop_table_re = DROP_TABLE_RE.get_or_init(|| {
+        Regex::new(r"(?i)\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)")
+            .expect("invalid DROP TABLE regex")
+    });
     for cap in drop_table_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -310,13 +331,20 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 fn extract_cte_names(sql: &str) -> Vec<String> {
     let mut names = Vec::new();
     // Match: WITH <name> AS ( ... ) or WITH RECURSIVE <name> AS ( ... )
-    let cte_re =
-        Regex::new(r#"(?i)\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#).unwrap();
+    static CTE_RE: OnceLock<Regex> = OnceLock::new();
+    let cte_re = CTE_RE.get_or_init(|| {
+        Regex::new(r#"(?i)\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#)
+            .expect("invalid CTE regex")
+    });
     for cap in cte_re.captures_iter(sql) {
         names.push(cap[1].to_uppercase());
     }
     // Also match comma-separated CTEs: , <name> AS (
-    let cte_comma_re = Regex::new(r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#).unwrap();
+    static CTE_COMMA_RE: OnceLock<Regex> = OnceLock::new();
+    let cte_comma_re = CTE_COMMA_RE.get_or_init(|| {
+        Regex::new(r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#)
+            .expect("invalid CTE comma regex")
+    });
     for cap in cte_comma_re.captures_iter(sql) {
         names.push(cap[1].to_uppercase());
     }

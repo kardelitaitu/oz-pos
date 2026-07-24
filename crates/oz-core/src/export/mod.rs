@@ -546,11 +546,11 @@ impl Store<'_> {
 
         if dataset.has_date_filter {
             let date_col = dataset.date_column;
-            if req.start_date.is_some() {
+            if let Some(ref start_date) = req.start_date {
                 sql.push_str(&format!(" WHERE {} >= ?1", date_col));
-                params.push(req.start_date.clone().unwrap());
+                params.push(start_date.clone());
             }
-            if req.end_date.is_some() {
+            if let Some(ref end_date) = req.end_date {
                 let param_idx = params.len() + 1;
                 let where_clause = if req.start_date.is_some() {
                     " AND"
@@ -558,7 +558,7 @@ impl Store<'_> {
                     " WHERE"
                 };
                 sql.push_str(&format!("{} {} <= ?{}", where_clause, date_col, param_idx));
-                params.push(format!("{} 23:59:59", req.end_date.clone().unwrap()));
+                params.push(format!("{} 23:59:59", end_date));
             }
         }
 

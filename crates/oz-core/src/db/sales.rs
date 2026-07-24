@@ -161,7 +161,7 @@ impl Store<'_> {
                 Err(e) => return Err(CoreError::Db(e)),
             };
 
-            if product_info.is_none() {
+            let Some((pid, ptype_str)) = product_info else {
                 shortfalls.push(Shortfall {
                     sku: line.sku.clone(),
                     product_name: line.sku.clone(),
@@ -172,8 +172,7 @@ impl Store<'_> {
                     alternatives: vec![],
                 });
                 continue;
-            }
-            let (pid, ptype_str) = product_info.unwrap();
+            };
             let ptype = crate::product::ProductType::parse_str(&ptype_str).unwrap_or_default();
             let tracks_inventory = ptype.tracks_inventory();
             let recipe = self.get_recipe_ingredients(&pid)?;
