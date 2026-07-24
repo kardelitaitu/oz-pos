@@ -14,4 +14,6 @@ mod typed;
 pub mod keys;
 
 #[cfg(test)]
+mod split_tests;
+#[cfg(test)]
 mod tests;
