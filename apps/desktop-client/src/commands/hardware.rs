@@ -225,7 +225,9 @@ pub async fn print_sales_receipt_scoped(
 }
 
 /// Read receipt configuration and store info from the DB (synchronous — no async).
-fn read_receipt_config(conn: &rusqlite::Connection) -> Result<(receipt::ReceiptConfig, receipt::StoreInfo), AppError> {
+fn read_receipt_config(
+    conn: &rusqlite::Connection,
+) -> Result<(receipt::ReceiptConfig, receipt::StoreInfo), AppError> {
     let store_name = Settings::get_store_name(conn)?.unwrap_or_else(|| "OZ-POS Store".into());
     let store_address = Settings::get_store_address(conn)?.unwrap_or_default();
     let store_tax_id = Settings::get_store_tax_id(conn)?;
