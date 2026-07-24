@@ -58,10 +58,24 @@ vi.mock('@/contexts/WorkspaceContext', async (importOriginal) => {
     swapSessionToken: vi.fn(() => Promise.resolve()),
   };
 
+  // Non-null scope keeps components like KioskScreen and KdsScreen
+  // (which dereference .storeId/.instanceId/.typeKey) safe under the
+  // global stub — null would crash with a different NPE than the
+  // provider error we are replacing. typeKey is intentionally
+  // generic ('default') so components that branch on typeKey
+  // (e.g. KdsScreen vs. RestaurantMenu routing) do not silently
+  // render the wrong variant. Tests that need a specific typeKey
+  // should use vi.mocked(useWorkspaceScope).mockReturnValue(...).
+  const safeScopeDefault = {
+    storeId: 'default',
+    instanceId: 'default',
+    typeKey: 'default',
+  };
+
   return {
     ...actual,
     useWorkspace: vi.fn().mockImplementation(() => safeWorkspaceDefault),
-    useWorkspaceScope: vi.fn().mockImplementation(() => null),
+    useWorkspaceScope: vi.fn().mockImplementation(() => safeScopeDefault),
   };
 });
 

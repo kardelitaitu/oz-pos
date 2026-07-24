@@ -5,35 +5,73 @@ import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
+// Shared mock instances for ADR #7 scoped-API pattern. Each pair below
+// (legacy `getStockCount` + scoped `getStockCountScoped`, etc.) delegates
+// to the same vi.fn() instance so a single `mockGetStockCount.mockResolvedValue(...)`
+// call drives both the unscoped and scoped call sites.
+//
+// Write-side APIs (addCountLine, updateCountLine, removeCountLine and
+// their scoped siblings) default to resolving with an empty object so
+// the component's await returns cleanly without per-test setup.
+const {
+  mockGetStockCount,
+  mockComplete,
+  mockUpdateStatus,
+  mockGetLines,
+  mockAddCountLine,
+  mockUpdateCountLine,
+  mockRemoveCountLine,
+  mockListProducts,
+} = vi.hoisted(() => ({
+  mockGetStockCount: vi.fn(),
+  mockComplete: vi.fn(),
+  mockUpdateStatus: vi.fn(),
+  mockGetLines: vi.fn(),
+  mockAddCountLine: vi.fn(),
+  mockUpdateCountLine: vi.fn(),
+  mockRemoveCountLine: vi.fn(),
+  mockListProducts: vi.fn(),
+}));
+
 // getCountLines is dynamically imported — vi.fn() inside factory avoids hoisting issues.
 vi.mock('@/api/inventoryCounts', () => ({
-  getStockCount: vi.fn(),
-  addCountLine: vi.fn(),
-  updateCountLine: vi.fn(),
-  removeCountLine: vi.fn(),
-  completeStockCount: vi.fn(),
-  updateStockCountStatus: vi.fn(),
-  getCountLines: vi.fn(),
+  getStockCount: () => mockGetStockCount(),
+  getStockCountScoped: () => mockGetStockCount(),
+  addCountLine: () => mockAddCountLine(),
+  addCountLineScoped: () => mockAddCountLine(),
+  updateCountLine: () => mockUpdateCountLine(),
+  updateCountLineScoped: () => mockUpdateCountLine(),
+  removeCountLine: () => mockRemoveCountLine(),
+  removeCountLineScoped: () => mockRemoveCountLine(),
+  completeStockCount: () => mockComplete(),
+  completeStockCountScoped: () => mockComplete(),
+  updateStockCountStatus: () => mockUpdateStatus(),
+  updateStockCountStatusScoped: () => mockUpdateStatus(),
+  getCountLines: () => mockGetLines(),
+  getCountLinesScoped: () => mockGetLines(),
 }));
+
+// Default mock implementations: read paths return empty arrays / null,
+// write paths return empty objects. Tests override per-test as needed.
+beforeEach(() => {
+  mockGetStockCount.mockResolvedValue(null);
+  mockGetLines.mockResolvedValue([]);
+  mockComplete.mockResolvedValue(undefined);
+  mockUpdateStatus.mockResolvedValue(undefined);
+  mockAddCountLine.mockResolvedValue({});
+  mockUpdateCountLine.mockResolvedValue({});
+  mockRemoveCountLine.mockResolvedValue(undefined);
+  mockListProducts.mockResolvedValue([]);
+});
 
 // listProducts lives in @/api/products; mock it there so the
 // StockCountDetail component can call it without hitting the Tauri backend.
-vi.mock('@/api/products', () => ({ listProducts: vi.fn() }));
+vi.mock('@/api/products', () => ({
+  listProducts: () => mockListProducts(),
+  listProductsScoped: () => mockListProducts(),
+}));
 
 import StockCountDetail from '@/features/inventory/StockCountDetail';
-import { listProducts } from '@/api/products';
-import {
-  getStockCount,
-  completeStockCount,
-  updateStockCountStatus,
-  getCountLines,
-} from '@/api/inventoryCounts';
-
-const mockGetStockCount = getStockCount as ReturnType<typeof vi.fn>;
-const mockComplete = completeStockCount as ReturnType<typeof vi.fn>;
-const mockUpdateStatus = updateStockCountStatus as ReturnType<typeof vi.fn>;
-const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
-const mockGetLines = getCountLines as ReturnType<typeof vi.fn>;
 
 
 

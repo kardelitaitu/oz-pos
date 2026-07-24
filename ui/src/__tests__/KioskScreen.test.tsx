@@ -5,19 +5,22 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import kioskFtl from '@/locales/kiosk.ftl?raw';
 
+const { mockListProducts, mockListCategories } = vi.hoisted(() => ({
+  mockListProducts: vi.fn(),
+  mockListCategories: vi.fn(),
+}));
+
 vi.mock('@/api/products', () => ({
-  listProducts: vi.fn(),
-  listCategories: vi.fn(),
+  listProducts: () => mockListProducts(),
+  listProductsScoped: () => mockListProducts(),
+  listCategories: () => mockListCategories(),
+  listCategoriesScoped: () => mockListCategories(),
 }));
 
 import KioskScreen from '@/features/kiosk/KioskScreen';
 
 // KioskScreen uses useToast — must wrap in ToastProvider via renderWithProviders.
 const renderKiosk = (ftl: string) => renderWithProviders(<KioskScreen />, ftl);
-import { listProducts, listCategories } from '@/api/products';
-
-const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
-const mockListCategories = listCategories as ReturnType<typeof vi.fn>;
 
 const sampleProducts = [
   { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '', price_updated_at: '' },
