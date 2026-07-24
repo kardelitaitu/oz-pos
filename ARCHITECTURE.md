@@ -113,7 +113,7 @@ oz-pos/
 │   ├─ api/            Backend HTTP API (today: crates/oz-api/)
 │   └─ ui/             Frontend infrastructure (today: ui/src/frontend/)
 │
-├─ modules/           Business features (top 10 shown; today 9 exist)
+├─ modules/           Business features (top 10 shown; today 10 exist)
 │   ├─ sales/
 │   ├─ inventory/
 │   ├─ crm/
@@ -336,16 +336,17 @@ oz-pos/
 │   ├─ startup/        Shared startup: module registration + event wiring
 │   └─ sync/           Offline-first sync engine (queue, transport, replication, LWW conflict)
 │
-├─ modules/           Business features (9 modules)
+├─ modules/           Business features (10 modules)
 │   ├─ sales/          Point-of-sale (core cart, checkout, sales history)
 │   ├─ inventory/      Product catalog, stock management
-│   ├─ crm/            Customer management, loyalty
+│   ├─ crm/            Customer management
 │   ├─ tax/            Tax rate configuration
 │   ├─ settings/       Feature toggles, store configuration, sync settings
 │   ├─ staff/          Employee management, roles
 │   ├─ reporting/      Dashboard widgets, sales reports
 │   ├─ terminal/       POS terminal management
-│   └─ currency/       Multi-currency + exchange rates
+│   ├─ currency/       Multi-currency + exchange rates
+│   └─ loyalty/        Customer loyalty & rewards management
 │
 ├─ crates/            Low-level utility crates
 │   ├─ oz-core/        Database migrations, domain types, Store, sync_client, events
@@ -381,7 +382,7 @@ oz-pos/
 ├─ ARCHITECTURE.md    This file
 ├─ RESTRUCTURING.md    Phase tracking checklist
 ├─ agents.md           AI agent configuration
-└─ Cargo.toml          Workspace definition (22+ crates)
+└─ Cargo.toml          Workspace definition (29 crates)
 ```
 
 ---
@@ -402,7 +403,7 @@ the detailed task checklist.
 - [x] Extract `foundation/` crate (Money, Currency, contracts, errors, enums)
 - [x] Create `platform/core/` (database, auth, rbac, settings stubs)
 - [x] Create `platform/kernel/` (Kernel struct, lifecycle, dependency resolution)
-- [x] Create 9 business modules (sales, inventory, crm, tax, settings, staff, reporting, terminal, currency)
+- [x] Create 10 business modules (sales, inventory, crm, tax, settings, staff, reporting, terminal, currency, loyalty)
 - [x] Wire all modules into both desktop + tablet clients via shared startup
 
 ### Phase 3 — Event Bus ✅

@@ -25,7 +25,7 @@
 
 - [x] **P7 — Decide: React or SolidJS** — Write ADR #30 and delete the migration footnote from `ARCHITECTURE.md`. Ambiguity is costing design decisions. *(Decision + 1 day to document)*
 - [x] **P8 — Audit root context providers** — Determine which of the 9 providers in `App.tsx` genuinely need to be at the root. Move `HardwareAccelContext`, `ZoomContext`, `BrandContext` lower in the tree. *(Half day)*
-- [ ] **P9 — Update `ARCHITECTURE.md`** — Fix stale claims: "22+ crates" → 29, "three ADRs" → 29, "9 modules" → 10. *(30 min)*
+- [x] **P9 — Update `ARCHITECTURE.md`** — Fix stale claims: "22+ crates" → 29, "three ADRs" → 29, "9 modules" → 10. *(30 min)*
 - [ ] **P10 — Remove committed `nul` files** — Delete `ui/src/nul`, `ui/nul`, root `nul` and add to `.gitignore`. *(30 min)*
 
 ---
