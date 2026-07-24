@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (4 noted findings, all doc-staleness — architecture itself holds) · F1: "9 modules" → 10 now (loyalty/ added) · F2: "three ADRs" → 29 ADRs in docs/decisions/ · F3: "22+ crates" → 29 workspace members · F4: module-README rule met by 9/10 modules (loyalty/ lacks README) · verified: ui/src/frontend dirs exist, 3 named ADR paths exist, event-bus/module principles intact -->
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE · F1: 10/10 modules active (loyalty included) · F2: 31 ADRs in docs/decisions/ (ADR #30 oz-core modularization & ADR #31 decentralized UI self-registration) · F3: 29 workspace crates/modules · F4: module-README rule met by 10/10 modules · verified: ui/src/features/*/register.tsx self-registration active -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
