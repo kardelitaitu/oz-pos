@@ -19,11 +19,11 @@
 
 - [x] **P4 — Replace `rlua` with `mlua`** — Drop-in swap. `rlua` has been unmaintained since 2021. *(1 day)*
 - [ ] **P5 — Complete the 45-page manual QA walkthrough** — Run the full `TODO.md` checklist on the actual Tauri binary. Only 8/45 pages checked after 6 sprints. *(2 days)*
-- [ ] **P6 — Clean repository noise** — Add `vitest-profile.json`, `vitest-output.log`, `test-baseline.log`, `test-nextest-baseline.log`, `ui/nul`, `nul` to `.gitignore` and `git rm --cached`. *(1 day)*
+- [x] **P6 — Clean repository noise** — Add `vitest-profile.json`, `vitest-output.log`, `test-baseline.log`, `test-nextest-baseline.log`, `ui/nul`, `nul` to `.gitignore` and `git rm --cached`. *(1 day)*
 
 ### 🟡 Low (Next Sprint)
 
-- [ ] **P7 — Decide: React or SolidJS** — Write ADR #30 and delete the migration footnote from `ARCHITECTURE.md`. Ambiguity is costing design decisions. *(Decision + 1 day to document)*
+- [x] **P7 — Decide: React or SolidJS** — Write ADR #30 and delete the migration footnote from `ARCHITECTURE.md`. Ambiguity is costing design decisions. *(Decision + 1 day to document)*
 - [ ] **P8 — Audit root context providers** — Determine which of the 9 providers in `App.tsx` genuinely need to be at the root. Move `HardwareAccelContext`, `ZoomContext`, `BrandContext` lower in the tree. *(Half day)*
 - [ ] **P9 — Update `ARCHITECTURE.md`** — Fix stale claims: "22+ crates" → 29, "three ADRs" → 29, "9 modules" → 10. *(30 min)*
 - [ ] **P10 — Remove committed `nul` files** — Delete `ui/src/nul`, `ui/nul`, root `nul` and add to `.gitignore`. *(30 min)*

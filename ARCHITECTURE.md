@@ -31,7 +31,7 @@ codebase from a flat monolith to the modular architecture described below.
 | ---------------- | ---------------------- |
 | Core Backend     | Rust                   |
 | UI Shell         | Tauri v2               |
-| Frontend         | React → SolidJS*       |
+| Frontend         | React                 |
 | Database         | SQLite                 |
 | API              | Rust (Tauri IPC + HTTP)|
 | State Management | Solid Store*           |
@@ -39,7 +39,7 @@ codebase from a flat monolith to the modular architecture described below.
 | Testing          | Rust Test + Playwright |
 | Documentation    | Markdown + ADRs        |
 
-*\*Front-end migration from React to SolidJS is planned but not yet started.
+
 The architecture is designed to be framework-agnostic at the module level.*
 
 ---
