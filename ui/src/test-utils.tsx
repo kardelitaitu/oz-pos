@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { render, type RenderOptions } from '@testing-library/react';
 import { vi } from 'vitest';
 import {

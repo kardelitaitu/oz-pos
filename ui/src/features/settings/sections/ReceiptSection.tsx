@@ -53,7 +53,7 @@ export default function ReceiptSection({
 
         {/* Decimal separator */}
         <div className="settings-field settings-field--horizontal">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component */}
+          { }
           <label htmlFor="settings-field-decimal-separator" className="settings-label">
             {l10n.getString('settings-field-decimal-separator')}
           </label>
@@ -103,7 +103,7 @@ export default function ReceiptSection({
 
         {/* Paper width */}
         <div className="settings-field settings-field--horizontal">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component */}
+          { }
           <label htmlFor="settings-field-paper-width" className="settings-label">
             {l10n.getString('settings-field-paper-width')}
           </label>

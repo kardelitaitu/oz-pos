@@ -884,7 +884,7 @@ export default function NodeTopologyEditor({
       : null;
   }, [settings]);
 
-  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
+  /* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
   return (
     <div className="node-topology-editor">
       {/* ── Confirm delete dialog ── */}
@@ -1352,4 +1352,4 @@ export default function NodeTopologyEditor({
     </div>
   );
 }
-/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
+/* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */

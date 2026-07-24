@@ -310,7 +310,7 @@ export default function OfflineQueueScreen() {
             <tbody>{items.map((item) => (
                 <tr key={item.id}>
                   <td className="offline-queue-cell-action">{item.action}</td>
-                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label provided via l10n.getString */}
+                  { }
                   <td>
                     <Localized id={statusLabel(item.status)}>
                       <span className={`offline-queue-status-badge ${statusClass(item.status)}`}>

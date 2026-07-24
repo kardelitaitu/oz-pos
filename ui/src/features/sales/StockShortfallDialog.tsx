@@ -304,7 +304,7 @@ export default function StockShortfallDialog({
                       // Simple mode: radio buttons
                       <div className="shortfall-alt-list">
                         {shortfall.alternatives.map((alt) => (
-                          // eslint-disable-next-line jsx-a11y/label-has-associated-control
+                           
                           <label key={alt.locationId} className="shortfall-alt-option">
                             <input
                               type="radio"

@@ -90,7 +90,7 @@ export async function renderWithProviders(
  * `render()` internally. Use for components that don't trigger async
  * state updates on mount.
  */
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 export function renderWithProvidersSync(
   ui: ReactElement,
   ...ftlContents: string[]

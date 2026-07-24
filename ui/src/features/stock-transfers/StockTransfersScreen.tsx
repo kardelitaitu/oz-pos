@@ -670,7 +670,7 @@ export default function StockTransfersScreen() {
                   </div>
                 ))}
                 <datalist id="product-skus">
-                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- <option> inside <datalist>; false positive */}
+                  { }
                   {products.map((p) => <option key={p.sku} value={p.sku} />)}
                 </datalist>
               </div>

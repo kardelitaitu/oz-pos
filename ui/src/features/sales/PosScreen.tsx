@@ -1998,7 +1998,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   Cancel
                 </button>
               </Localized>
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+              { }
               <button
                 type="button"
                 className="pos-close-shift-confirm-btn"
@@ -2172,7 +2172,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   Cancel
                 </button>
               </Localized>
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+              { }
               <button
                 type="button"
                 className="pos-close-shift-confirm-btn"

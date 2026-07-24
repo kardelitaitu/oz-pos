@@ -72,7 +72,7 @@ export interface SyncSectionProps {
   setRequesting: (v: boolean) => void;
   tokenExpiresAt: string | null;
   setTokenExpiresAt: (v: string | null) => void;
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- spread onto <input> elements
+   
   cmInput: React.HTMLAttributes<HTMLInputElement>;
   markDirty: () => void;
   refreshPendingCount: () => Promise<void>;

@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/label-has-associated-control -- static analysis limitation */
+ 
 /**
  * LiveSetupPreview — real-time preview of which workspaces and
  * navigation items will be unlocked by the currently-selected features.

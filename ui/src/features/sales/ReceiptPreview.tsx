@@ -248,7 +248,7 @@ function generateQrModules(size: number): boolean[][] {
         const isInner = y >= 2 && y <= 4 && x >= 2 && x <= 4;
         if (isOuter || isInner) {
           if (ox + x < size && oy + y < size) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+             
             grid[oy + y]![ox + x] = true;
           }
         }
@@ -261,16 +261,16 @@ function generateQrModules(size: number): boolean[][] {
 
   // Timing patterns
   for (let i = 8; i < size - 8; i++) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+     
     grid[6]![i] = i % 2 === 0;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+     
     grid[i]![6] = i % 2 === 0;
   }
 
   // Data area — scattered modules for visual texture
   for (let y = 9; y < size - 8; y += 2) {
     for (let x = 9; x < size - 8; x += 2) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+       
       grid[y]![x] = ((x * y) % 7) < 3;
     }
   }

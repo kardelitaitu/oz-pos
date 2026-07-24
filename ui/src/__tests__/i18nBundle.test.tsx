@@ -202,7 +202,7 @@ describe('withFluentLocale integration', () => {
 describe('i18n translation completeness', () => {
   it('gift-cards.id.ftl is not a verbatim copy of gift-cards.ftl', () => {
     if (giftCardsId === giftCardsEn) {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[i18n] gift-cards.id.ftl is byte-identical to gift-cards.ftl \u2014 Indonesian translation for gift cards is missing; users with locale="id" see English text.',
       );
@@ -211,7 +211,7 @@ describe('i18n translation completeness', () => {
 
   it('purchasing.id.ftl is not a verbatim copy of purchasing.ftl', () => {
     if (purchasingId === purchasingEn) {
-      // eslint-disable-next-line no-console
+       
       console.warn(
         '[i18n] purchasing.id.ftl is byte-identical to purchasing.ftl \u2014 Indonesian translation for purchasing is missing; users with locale="id" see English text.',
       );
