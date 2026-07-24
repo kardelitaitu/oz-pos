@@ -16,7 +16,7 @@
 | R4 | 🟠 Medium | Eliminate `unwrap()`/`expect()` from `crates/` production paths | 2 days | ✅ Done |
 | R5 | 🟠 Medium | Split `settings.rs` (95 KB) and `kernel.rs` (64 KB) | 1 day | - [ ] |
 | R6 | 🟠 Medium | Remove Thai locale — not a target market | ½ day | ✅ Done |
-| R7 | 🟠 Medium | Add tests for `LicenseActivationScreen` + `SessionLockScreen` | ½ day | - [ ] |
+| R7 | 🟠 Medium | Add tests for `LicenseActivationScreen` + `SessionLockScreen` | ½ day | ✅ Done |
 | R8 | 🟡 Low | Document 5 feature dirs missing `register.ts/tsx` | 30 min | ✅ Done |
 | R9 | 🟡 Low | Upgrade ESLint 8 → 9 | ½ day | ✅ Done |
 | R10 | 🟡 Low | Complete P5: 45-page Manual QA Walkthrough | 2 days | - [ ] |
@@ -45,7 +45,7 @@
   - Committed `408e2ae7`. *(1 day — investigation + fixes)*
 - [ ] **R5 — Split `platform/core/src/settings.rs` (95 KB) and `platform/kernel/src/kernel.rs` (64 KB)** — These single-file behemoths need the same treatment as `oz-core`. Extract sub-modules for settings categories and kernel lifecycle phases. *(Half day each)*
 - [x] **R6 — Remove Thai locale entirely** — Not a target market; only English + Indonesian needed. Deleted all 24 `.th.ftl` bundles, removed `'th'` from `LocaleCode`, `getAvailableLocales()`, `LocaleContext.tsx`, and the test file. Removed `scripts/generate-thai-ftl.py` scaffolding script. Cleaned up `locale-th` keys from shared bundles. *(Half day)*
-- [ ] **R7 — Add production test files for `LicenseActivationScreen` and `SessionLockScreen`** — These are high-risk auth paths with zero test coverage. *(Half day)*
+- [x] **R7 — Add production test files for `LicenseActivationScreen` and `SessionLockScreen`** — `LicenseActivationScreen` already had 50 tests (review claim was outdated). Real gap was `SessionLockScreen`: only 2 i18n-parity tests, no behavioral coverage. Wrote 31 new tests across 8 describe blocks (PIN entry via buttons/keyboard, auto-submit, error handling, rate limiting, unmount safety). 33 total tests passing. *(½ day)*
 
 ### 🟡 Low (Next Sprint)
 
@@ -186,9 +186,9 @@ Thai locale (`*.th.ftl`) was scaffolded but never translated — only English + 
 
 All 24 `.th.ftl` bundles, locale registration, and the `generate-thai-ftl.py` script have been removed.
 
-### 🟡 LOW — Auth Screens Missing Tests
+### ~~🟡 LOW — Auth Screens Missing Tests~~ **RESOLVED**
 
-`LicenseActivationScreen.tsx` and `SessionLockScreen.tsx` have no test files. These are high-risk auth paths.
+`LicenseActivationScreen.tsx` already had 50 tests (review claim was outdated). `SessionLockScreen.tsx` now has 33 tests (31 behavioral + 2 i18n-parity) covering PIN entry, auto-submit, error handling, rate limiting, and unmount safety. Auth test gaps are closed.
 
 ### 🟡 LOW — 5 Unregistered Feature Directories
 
@@ -203,13 +203,13 @@ All 24 `.th.ftl` bundles, locale registration, and the `generate-thai-ftl.py` sc
 | Architecture Design | 8/10 | 8/10 | → | Conflict resolution excellent; `oz-core` DB still unfinished |
 | Backend Code Quality | 7/10 | 7/10 | → | mlua ✅ conflict.rs ✅ — `oz-core` DB still 142 KB |
 | Frontend Code Quality | 6/10 | 7/10 | ↑ | `AppProviders` ✅ self-registration ✅ — DevToolbar ✅ |
-| Test Coverage | 8/10 | 8/10 | → | 203 test files, 4 fuzzing targets — 2 auth gaps |
+| Test Coverage | 8/10 | 9/10 | ↑ | 203 test files, 4 fuzzing targets, 33 SessionLockScreen tests — auth gaps closed |
 | i18n / Accessibility | 10/10 | 10/10 | — | English + Indonesian only |
 | DevEx / Tooling | 8/10 | 9/10 | ↑ | 7 CI workflows, 54 scripts, graphify active |
 | Documentation | 7/10 | 8/10 | ↑ | CHANGELOG 138 KB, 31 ADRs, ARCHITECTURE.md corrected |
 | Security Posture | 6/10 | 6/10 | → | Private key was never committed (audited); rotation recommended |
 | Sync / Offline Strategy | 5/10 | 8/10 | ↑↑ | `conflict.rs` fully implements CRDT + status DAG |
-| **Overall** | **7/10** | **7.5/10** | **↑** | R1/R3/R4 resolved; stabilisation sprint half-complete |
+| **Overall** | **7/10** | **8/10** | **↑** | R1/R3/R4/R6/R7/R8/R9 resolved; 7 of 10 stabilisation items complete |
 
 ---
 
@@ -237,6 +237,8 @@ The private key was never in git history (`*.key` always gitignored). Key rotati
 | **R1** (Audit private key) | ✅ Done — key never committed |
 | **R3** (Guard DevToolbar) | ✅ Done — `f059e7e8` |
 | **R4** (Remove unwrap/expect) | ✅ Done — `408e2ae7` |
+| **R6** (Remove Thai locale) | ✅ Done — `6088a975` |
+| **R7** (Auth screen tests) | ✅ Done — `28f4cb99^` |
 | **R10** (Manual QA walkthrough) | ❌ Remaining — 8/45 pages verified |
 
 **Next priority**: R5 (split oversized files) or R10 (complete QA).
