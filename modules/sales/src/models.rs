@@ -264,6 +264,10 @@ impl Refund {
     ) -> Self {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let id = uuid::Uuid::now_v7().to_string();
+        let mut lines = lines;
+        for line in &mut lines {
+            line.refund_id = id.clone();
+        }
         Self {
             id,
             sale_id: sale_id.into(),
