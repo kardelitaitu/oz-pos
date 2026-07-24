@@ -35,6 +35,38 @@ export interface PrintReceiptResult {
 export const printReceipt = (args: PrintReceiptArgs): Promise<PrintReceiptResult> =>
   loggedInvoke<PrintReceiptResult>('print_receipt', { args });
 
+/**
+ * Arguments for printing a structured sales receipt.
+ * @deprecated Prefer using `printSalesReceiptScoped` in multi-store deployments.
+ */
+export interface PrintSalesReceiptArgs {
+  date: string;
+  receiptNumber: string;
+  items: {
+    name: string;
+    quantity: number;
+    unitPrice: { minorUnits: number; currency: string };
+    totalPrice: { minorUnits: number; currency: string };
+    taxAmount?: { minorUnits: number; currency: string } | null;
+  }[];
+  subtotal: { minorUnits: number; currency: string };
+  tax?: { minorUnits: number; currency: string } | null;
+  total: { minorUnits: number; currency: string };
+  payments: {
+    method: string;
+    amount: { minorUnits: number; currency: string };
+    change?: { minorUnits: number; currency: string } | null;
+  }[];
+  tableNumber?: string | null;
+}
+
+/** Print a structured sales receipt (scoped — ADR #7). */
+export const printSalesReceiptScoped = (
+  sessionToken: string,
+  args: PrintSalesReceiptArgs,
+): Promise<{ printed: boolean }> =>
+  loggedInvoke<{ printed: boolean }>('print_sales_receipt_scoped', { sessionToken, args });
+
 // ── Barcode Scanner ──────────────────────────────────────────────
 
 /**

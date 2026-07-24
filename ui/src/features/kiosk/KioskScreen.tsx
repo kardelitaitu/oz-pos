@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
-import { listProducts, listCategories } from '@/api/products';
+import { listProductsScoped, listCategories } from '@/api/products';
 import type { ProductDto, CategoryDto } from '@/api/products';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import './KioskScreen.css';
 
 const IDLE_TIMEOUT_MS = 60000;
@@ -23,6 +24,8 @@ interface CartItem {
 export default function KioskScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -38,7 +41,7 @@ export default function KioskScreen() {
   }, [idle]);
 
   useEffect(() => {
-    listProducts().then(setProducts);
+    listProductsScoped(sessionToken).then(setProducts);
     listCategories().then(setCategories);
     idleTimer.current = setTimeout(() => setIdle(true), IDLE_TIMEOUT_MS);
     return () => clearTimeout(idleTimer.current);

@@ -3,7 +3,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
 import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
-import { createKdsOrderFromSale } from '@/api/kds';
+import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
 import { formatMoney, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
@@ -465,7 +465,9 @@ export default function PaymentModal({
       }
 
       try {
-        await createKdsOrderFromSale(userId, saleResult.saleId);
+        await (sessionToken
+          ? createKdsOrderFromSaleScoped(sessionToken, saleResult.saleId)
+          : createKdsOrderFromSale(userId, saleResult.saleId));
       } catch {
         // KDS may not be configured — non-blocking.
       }
@@ -782,7 +784,9 @@ export default function PaymentModal({
       }
 
       try {
-        await createKdsOrderFromSale(userId, saleResult.saleId);
+        await (sessionToken
+          ? createKdsOrderFromSaleScoped(sessionToken, saleResult.saleId)
+          : createKdsOrderFromSale(userId, saleResult.saleId));
       } catch {
         // KDS may not be configured — non-blocking.
       }

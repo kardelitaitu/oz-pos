@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized } from '@fluent/react';
-import { exportSalesByHour, type SalesByHourRow } from '@/api/sales';
+import { exportSalesByHourScoped, type SalesByHourRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
 import { Skeleton } from '@/components/Skeleton';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 /**
  * Sales by Hour Widget — shows a bar chart of sales broken down
  * by hour of the day. Registered with the WidgetRegistry.
@@ -11,20 +12,22 @@ import { Skeleton } from '@/components/Skeleton';
  * provided by the host dashboard page.
  */
 export default function SalesByHourWidget() {
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [hourly, setHourly] = useState<SalesByHourRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const h = await exportSalesByHour();
+      const h = await exportSalesByHourScoped(sessionToken);
       setHourly(h);
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, Profiler } from 'react';
 import { Localized } from '@fluent/react';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { useAuth } from '@/contexts/AuthContext';
-import { useWorkspaceScope } from '@/contexts/WorkspaceContext';
-import { getKdsQueue, updateKdsStatus, type KdsOrder, type KdsStatus } from '@/api/kds';
+import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
+import { getKdsQueueScoped, updateKdsStatusScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
@@ -31,9 +30,9 @@ const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
 
 /** KDS (Kitchen Display System) screen — real-time order queue with switchable layouts and per-user preferences. */
 export default function KdsScreen() {
-  const { session } = useAuth();
   const workspaceScope = useWorkspaceScope();
-  const userId = session?.user_id ?? '';
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
@@ -44,7 +43,7 @@ export default function KdsScreen() {
 
   const fetchOrders = useCallback(() => {
     const zone = prefs.kdsZone || undefined;
-    getKdsQueue(userId, zone)
+    getKdsQueueScoped(sessionToken, zone)
       .then((allOrders) => {
         const activeStoreId = workspaceScope?.storeId;
         if (activeStoreId) {
@@ -57,7 +56,7 @@ export default function KdsScreen() {
         }
       })
       .catch((e) => setError(e.message ?? String(e)));
-  }, [userId, workspaceScope?.storeId, prefs.kdsZone]);
+  }, [sessionToken, workspaceScope?.storeId, prefs.kdsZone]);
 
   // P2-3: Adaptive polling with dynamic interval based on idle time.
   // Uses recursive setTimeout so the duration recalculates after every
@@ -123,12 +122,12 @@ export default function KdsScreen() {
     if (currentIdx < 0 || currentIdx >= STATUS_ORDER.length - 1) return;
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
     try {
-      await updateKdsStatus(userId, order.id, nextStatus);
+      await updateKdsStatusScoped(sessionToken, order.id, nextStatus);
       fetchOrders();
     } catch (e) {
       setError(String(e));
     }
-  }, [userId, fetchOrders]);
+  }, [sessionToken, fetchOrders]);
 
   // P7-3: Pull-to-refresh gesture on KDS ticket board
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({

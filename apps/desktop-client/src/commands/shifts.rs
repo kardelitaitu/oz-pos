@@ -288,9 +288,28 @@ pub async fn get_active_shift_scoped(
 }
 
 /// List all shifts, most recent first.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_shifts_scoped`.
 #[command]
 pub async fn list_shifts(state: State<'_, AppState>) -> Result<Vec<ShiftDto>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let shifts = store.list_shifts()?;
+    drop(db);
+
+    Ok(shifts.into_iter().map(ShiftDto::from).collect())
+}
+
+/// List shifts for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_shifts_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<ShiftDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let shifts = store.list_shifts()?;
     drop(db);

@@ -353,10 +353,30 @@ pub struct CreditSaleDto {
     pub cashier_name: String,
 }
 
-#[command]
 /// List credit sales.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_credit_sales_scoped`.
+#[command]
 pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditSaleDto>, AppError> {
     let conn = state.db.lock().await;
+    run_list_credit_sales(&conn)
+}
+
+/// List credit sales for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_credit_sales_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CreditSaleDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_list_credit_sales(&db)
+}
+
+/// Business logic for listing credit sales (extracted for testing).
+fn run_list_credit_sales(conn: &rusqlite::Connection) -> Result<Vec<CreditSaleDto>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, p.gateway_reference, s.total_minor, s.currency, s.created_at,
                 p.settled_at, COALESCE(u.display_name, '')

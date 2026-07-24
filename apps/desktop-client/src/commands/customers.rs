@@ -55,8 +55,26 @@ impl From<Customer> for CustomerDto {
 
 #[command]
 /// List customers.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_customers_scoped`.
 pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDto>, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let customers = store.list_customers()?;
+    drop(db);
+    Ok(customers.into_iter().map(CustomerDto::from).collect())
+}
+
+/// List customers for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_customers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CustomerDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let customers = store.list_customers()?;
     drop(db);

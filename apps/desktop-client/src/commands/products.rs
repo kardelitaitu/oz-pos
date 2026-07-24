@@ -748,12 +748,31 @@ pub async fn update_product_scoped(
 }
 
 /// Check whether a product tracks serial numbers.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `get_product_track_serial_scoped`.
 #[command]
 pub async fn get_product_track_serial(
     sku: String,
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
     let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let product = store.get_product(&sku)?;
+    drop(db);
+    Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
+}
+
+/// Check whether a product tracks serial numbers, store-scoped. ADR #7.
+#[command]
+pub async fn get_product_track_serial_scoped(
+    session_token: String,
+    sku: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let product = store.get_product(&sku)?;
     drop(db);

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listTaxRates,
+  listTaxRatesScoped,
   createTaxRate,
   updateTaxRate,
   deleteTaxRate,
@@ -10,7 +10,8 @@ import {
   type TaxRateDto,
 
 } from '@/api/tax';
-import { listCategories, type CategoryDto } from '@/api/products';
+import { listCategoriesScoped, type CategoryDto } from '@/api/products';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -35,6 +36,8 @@ const EMPTY_TAX_FORM: TaxFormData = {
 /** Tax configuration screen — CRUD for tax rates, inclusive/exclusive toggle, and per-category tax rate assignment. */
 export default function TaxConfigurationScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   // ── Tax rates state ─────────────────────────────────────────────
   const [rates, setRates] = useState<TaxRateDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,8 +62,8 @@ export default function TaxConfigurationScreen() {
     setLoading(true);
     try {
       const [items, cats, catTax] = await Promise.all([
-        listTaxRates(),
-        listCategories(),
+        listTaxRatesScoped(sessionToken),
+        listCategoriesScoped(sessionToken),
         listCategoryTaxRates(),
       ]);
       setRates(items);
@@ -76,7 +79,7 @@ export default function TaxConfigurationScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 

@@ -64,6 +64,10 @@ export const computeCartTax = (
 export const listTaxRates = (): Promise<TaxRateDto[]> =>
   loggedInvoke<TaxRateDto[]>('list_tax_rates');
 
+/** List all tax rates for the store resolved from a session token. ADR #7. */
+export const listTaxRatesScoped = (sessionToken: string): Promise<TaxRateDto[]> =>
+  loggedInvoke<TaxRateDto[]>('list_tax_rates_scoped', { sessionToken });
+
 /** Create a new tax rate. */
 export const createTaxRate = (args: CreateTaxRateArgs): Promise<TaxRateDto> =>
   loggedInvoke<TaxRateDto>('create_tax_rate', { args });

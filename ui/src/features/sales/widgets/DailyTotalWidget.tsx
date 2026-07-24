@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized } from '@fluent/react';
-import { exportDailySummary, type DailySummaryRow } from '@/api/sales';
+import { exportDailySummaryScoped, type DailySummaryRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
 import { Skeleton } from '@/components/Skeleton';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 /**
  * Daily Total Widget — shows revenue, sales count, and item count
  * for the current day. Registered with the WidgetRegistry so it
@@ -12,20 +13,22 @@ import { Skeleton } from '@/components/Skeleton';
  * provided by the host dashboard page.
  */
 export default function DailyTotalWidget() {
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [summary, setSummary] = useState<DailySummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const s = await exportDailySummary();
+      const s = await exportDailySummaryScoped(sessionToken);
       setSummary(s);
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

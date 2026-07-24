@@ -98,6 +98,10 @@ export const setCreditSettingsScoped = (sessionToken: string, args: CreditSettin
 export const listCreditSales = (): Promise<CreditSaleDto[]> =>
   loggedInvoke<CreditSaleDto[]>('list_credit_sales');
 
+/** List all credit sales for the store resolved from a session token. ADR #7. */
+export const listCreditSalesScoped = (sessionToken: string): Promise<CreditSaleDto[]> =>
+  loggedInvoke<CreditSaleDto[]>('list_credit_sales_scoped', { sessionToken });
+
 /** Settle (mark as paid) a credit sale. */
 export const settleCredit = (saleId: string, userId: string): Promise<void> =>
   loggedInvoke<void>('settle_credit', { saleId, userId });
@@ -179,7 +183,14 @@ export interface UserPrefEntry {
   value: string;
 }
 
-/** Get all preferences for a given user. */
+/**
+ * Get all preferences for a given user.
+ *
+ * @deprecated Use `getUserPreferencesScoped(sessionToken)` instead (ADR #7).
+ * The unscoped variant reads from the single-store database and will
+ * be removed in a future release. All callers should migrate to the
+ * scoped variant which resolves the store from the session token.
+ */
 export const getUserPreferences = (userId: string): Promise<Record<string, string>> =>
   loggedInvoke<Record<string, string>>('get_user_preferences', { userId });
 

@@ -74,6 +74,10 @@ export const getActiveShiftScoped = (sessionToken: string): Promise<ShiftDto | n
 export const listShifts = (): Promise<ShiftDto[]> =>
   loggedInvoke<ShiftDto[]>('list_shifts');
 
+/** List all shifts for the store resolved from a session token. ADR #7. */
+export const listShiftsScoped = (sessionToken: string): Promise<ShiftDto[]> =>
+  loggedInvoke<ShiftDto[]>('list_shifts_scoped', { sessionToken });
+
 /** Get a single shift by its identifier. */
 export const getShift = (id: string): Promise<ShiftDto | null> =>
   loggedInvoke<ShiftDto | null>('get_shift', { id });

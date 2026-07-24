@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
-  listCustomers,
+  listCustomersScoped,
   createCustomer,
   updateCustomer,
   deleteCustomer,
@@ -38,6 +39,8 @@ const EMPTY_FORM: FormData = {
 export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const userId = session?.user_id ?? '';
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,14 +57,14 @@ export default function CustomerManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listCustomers();
+      const data = await listCustomersScoped(sessionToken);
       setCustomers(data);
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

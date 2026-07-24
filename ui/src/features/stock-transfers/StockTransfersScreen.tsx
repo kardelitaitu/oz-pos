@@ -14,8 +14,9 @@ import {
   type StockTransferLine,
   type ReceivedLineInput,
 } from '@/api/stockTransfers';
-import { listProducts, type ProductDto } from '@/api/products';
-import { listTerminals, type TerminalDto } from '@/api/terminals';
+import { listProductsScoped, type ProductDto } from '@/api/products';
+import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Card } from '@/components/Card';
@@ -46,6 +47,8 @@ interface LineFormEntry {
 export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +109,8 @@ export default function StockTransfersScreen() {
     try {
       const [data, prodData, termData] = await Promise.all([
         listStockTransfers(),
-        listProducts().catch(() => []),
-        listTerminals().catch(() => []),
+        listProductsScoped(sessionToken).catch(() => []),
+        listTerminalsScoped(sessionToken).catch(() => []),
       ]);
       setTransfers(data);
       setProducts(prodData);
@@ -117,7 +120,7 @@ export default function StockTransfersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

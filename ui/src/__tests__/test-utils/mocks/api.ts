@@ -83,6 +83,7 @@ export function createSettingsApiMock(overrides: SettingsApiOverrides = {}) {
     dismissSetupWizard: vi.fn(),
     getSetupStatus: vi.fn(),
     getEnabledFeatures: vi.fn(),
+    // @deprecated kept for backward compat; new callers should use getUserPreferencesScoped
     getUserPreferences: vi.fn(),
     getUserPreferencesScoped: vi.fn(),
     getStoreSettingsScoped: vi.fn(),

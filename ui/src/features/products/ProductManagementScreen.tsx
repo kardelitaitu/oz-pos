@@ -1,18 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
-  listProducts,
-  createProduct,
-  updateProduct,
-  deleteProduct,
+  listProductsScoped,
+  createProductScoped,
+  updateProductScoped,
+  deleteProductScoped,
   listCategories,
   type ProductDto,
   type CategoryDto,
 } from '@/api/products';
 import { listTaxRates, type TaxRateDto } from '@/api/tax';
-import { listCurrencies, type CurrencyDto } from '@/api/currency';
+import { listCurrenciesScoped, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -66,9 +65,8 @@ function dtoToProduct(dto: ProductDto): Product {
 
 /** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
-  const { session } = useAuth();
-  const { sessionToken } = useWorkspace();
-  const userId = session?.user_id ?? '';
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);
@@ -120,7 +118,7 @@ export default function ProductManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dtos, rates, cats, currencyList] = await Promise.all([listProducts(), listTaxRates(), listCategories(), listCurrencies()]);
+      const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRates(), listCategories(), listCurrenciesScoped(sessionToken)]);
       setProductDtos(dtos);
       setProducts(dtos.map(dtoToProduct));
       setTaxRates(rates);
@@ -171,8 +169,7 @@ export default function ProductManagementScreen() {
       }
 
       if (editingSku) {
-        await updateProduct({
-          userId,
+        await updateProductScoped(sessionToken, {
           sku: editingSku,
           name: form.name,
           priceMinor,
@@ -183,8 +180,7 @@ export default function ProductManagementScreen() {
           taxRateIds: form.taxRateIds,
         });
       } else {
-        await createProduct({
-          userId,
+        await createProductScoped(sessionToken, {
           sku: form.sku,
           name: form.name,
           priceMinor,
@@ -207,18 +203,18 @@ export default function ProductManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, load, userId, l10n]);
+  }, [form, editingSku, load, sessionToken, l10n]);
 
   const confirmDelete = useCallback(async (sku: string) => {
     setDeleting(sku);
     try {
-      await deleteProduct({ userId, sku });
+      await deleteProductScoped(sessionToken, sku);
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
     }
-  }, [load, userId]);
+  }, [load, sessionToken]);
 
   return (
     <div className="product-mgmt">

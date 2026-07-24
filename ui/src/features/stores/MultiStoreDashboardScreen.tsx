@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { listStores, setPrimaryStore, deleteStore, type StoreProfile } from '@/api/stores';
-import { listTerminals, type TerminalDto } from '@/api/terminals';
+import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
@@ -18,6 +19,8 @@ function isOnline(lastSeenAt: string | null): boolean {
 /** Multi-store dashboard — overview of all store profiles with terminal status and primary store designation. */
 export default function MultiStoreDashboardScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [stores, setStores] = useState<StoreProfile[]>([]);
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +33,7 @@ export default function MultiStoreDashboardScreen() {
     try {
       const [storeData, termData] = await Promise.all([
         listStores(),
-        listTerminals(),
+        listTerminalsScoped(sessionToken),
       ]);
       setStores(storeData);
       setTerminals(termData);
@@ -39,8 +42,7 @@ export default function MultiStoreDashboardScreen() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -78,6 +78,7 @@ vi.mock('@/hooks/useFullscreen', () => ({
 }));
 
 vi.mock('@/api/settings', () => ({
+  // @deprecated kept for backward compat; RestaurantMenu uses getUserPreferencesScoped
   getUserPreferences: (...args: unknown[]) => mockGetUserPreferences(...args),
   getUserPreferencesScoped: (...args: unknown[]) => mockGetUserPreferences(...args),
   setUserPreferences: (...args: unknown[]) => mockSetUserPreferences(...args),

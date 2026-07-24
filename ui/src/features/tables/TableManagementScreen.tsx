@@ -1,33 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
-import { useAuth } from '@/contexts/AuthContext';
-import { listTables, updateTableStatus, releaseTable, type Table } from '@/api/tables';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { listTablesScoped, updateTableStatusScoped, releaseTableScoped, type Table } from '@/api/tables';
 import './TableManagementScreen.css';
 
 /** Table management screen — interactive floor-plan view for managing restaurant table status (available, occupied, reserved, cleaning). */
 export default function TableManagementScreen() {
   const { l10n } = useLocalization();
-  const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [tables, setTables] = useState<Table[]>([]);
   const [selected, setSelected] = useState<Table | null>(null);
   const [section, setSection] = useState<string | null>(null);
 
   useEffect(() => {
-    listTables(section ?? undefined).then(setTables);
-  }, [section]);
-
-  const userId = session?.user_id ?? '';
+    listTablesScoped(sessionToken, section ?? undefined).then(setTables);
+  }, [sessionToken, section]);
 
   const statusAction = (table: Table) => {
     if (table.status === 'available') {
-      updateTableStatus(userId, table.id, 'occupied');
+      updateTableStatusScoped(sessionToken, table.id, 'occupied');
     } else if (table.status === 'occupied') {
-      releaseTable(userId, table.id);
+      releaseTableScoped(sessionToken, table.id);
     } else if (table.status === 'reserved') {
-      updateTableStatus(userId, table.id, 'available');
+      updateTableStatusScoped(sessionToken, table.id, 'available');
     } else if (table.status === 'cleaning') {
-      updateTableStatus(userId, table.id, 'available');
+      updateTableStatusScoped(sessionToken, table.id, 'available');
     }
   };
 

@@ -36,6 +36,10 @@ export interface UpdateCustomerArgs {
 export const listCustomers = (): Promise<CustomerDto[]> =>
   loggedInvoke<CustomerDto[]>('list_customers');
 
+/** List all customers for the store resolved from a session token. ADR #7. */
+export const listCustomersScoped = (sessionToken: string): Promise<CustomerDto[]> =>
+  loggedInvoke<CustomerDto[]>('list_customers_scoped', { sessionToken });
+
 /** Get a single customer by their identifier. */
 export const getCustomer = (id: string): Promise<CustomerDto | null> =>
   loggedInvoke<CustomerDto | null>('get_customer', { id });

@@ -108,6 +108,7 @@ pub async fn print_receipt(
 // ── Structured sales receipt ────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Printsalesreceiptargs.
 pub struct PrintSalesReceiptArgs {
     /// Date.
@@ -130,6 +131,7 @@ pub struct PrintSalesReceiptArgs {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Lineitemdto.
 pub struct LineItemDto {
     /// Display name.
@@ -146,6 +148,7 @@ pub struct LineItemDto {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Paymentdto.
 pub struct PaymentDto {
     /// Method.
@@ -188,8 +191,80 @@ pub struct PrintSalesReceiptResult {
 
 #[command]
 /// Print sales receipt.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `print_sales_receipt_scoped`.
 pub async fn print_sales_receipt(
     args: PrintSalesReceiptArgs,
+    state: State<'_, AppState>,
+) -> Result<PrintSalesReceiptResult, AppError> {
+    let (config, store_info) = {
+        let db = state.db.lock().await;
+        read_receipt_config(&db)?
+    }; // MutexGuard dropped here before any .await
+    run_print_receipt_inner(args, config, store_info, state).await
+}
+
+/// Print sales receipt for the store resolved from a session token. ADR #7.
+/// Settings (store name, address, receipt config) are loaded from the
+/// store-scoped database, while the printer hardware itself is not
+/// store-specific.
+#[command]
+pub async fn print_sales_receipt_scoped(
+    session_token: String,
+    args: PrintSalesReceiptArgs,
+    state: State<'_, AppState>,
+) -> Result<PrintSalesReceiptResult, AppError> {
+    let (config, store_info) = {
+        let conn = state.resolve_store(&session_token)?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        read_receipt_config(&db)?
+    }; // MutexGuard dropped here before any .await
+    run_print_receipt_inner(args, config, store_info, state).await
+}
+
+/// Read receipt configuration and store info from the DB (synchronous — no async).
+fn read_receipt_config(conn: &rusqlite::Connection) -> Result<(receipt::ReceiptConfig, receipt::StoreInfo), AppError> {
+    let store_name = Settings::get_store_name(conn)?.unwrap_or_else(|| "OZ-POS Store".into());
+    let store_address = Settings::get_store_address(conn)?.unwrap_or_default();
+    let store_tax_id = Settings::get_store_tax_id(conn)?;
+    let decimals = Settings::get_receipt_decimal_separator(conn)?;
+    let decimal_separator = match decimals.as_str() {
+        "comma" => receipt::DecimalSeparator::Comma,
+        "none" => receipt::DecimalSeparator::None,
+        _ => receipt::DecimalSeparator::Dot,
+    };
+    let paper_width = match Settings::get_receipt_paper_width(conn)?.as_str() {
+        "narrow" => receipt::PaperWidth::Narrow,
+        _ => receipt::PaperWidth::Standard,
+    };
+    let config = receipt::ReceiptConfig {
+        paper_width,
+        show_currency: Settings::get_receipt_show_currency(conn)?,
+        decimal_separator,
+        show_tax: Settings::get_receipt_show_tax(conn)?,
+        footer: {
+            let f = Settings::get_receipt_footer(conn)?;
+            if f.is_empty() { None } else { Some(f) }
+        },
+        show_table_number: Settings::get_receipt_show_table_number(conn)?,
+        barcode_enabled: false,
+        payment_link_template: None,
+    };
+    let store_info = receipt::StoreInfo {
+        name: store_name,
+        address: store_address,
+        tax_id: store_tax_id,
+    };
+    Ok((config, store_info))
+}
+
+/// Async inner: format and print receipt (no DB reference — all config already loaded).
+pub async fn run_print_receipt_inner(
+    args: PrintSalesReceiptArgs,
+    config: receipt::ReceiptConfig,
+    store_info: receipt::StoreInfo,
     state: State<'_, AppState>,
 ) -> Result<PrintSalesReceiptResult, AppError> {
     let printer = state
@@ -212,42 +287,8 @@ pub async fn print_sales_receipt(
         );
     }
 
-    // Load store info + display settings from the DB.
-    let conn = state.db.lock().await;
-    let store_name = Settings::get_store_name(&conn)?.unwrap_or_else(|| "OZ-POS Store".into());
-    let store_address = Settings::get_store_address(&conn)?.unwrap_or_default();
-    let store_tax_id = Settings::get_store_tax_id(&conn)?;
-    let decimals = Settings::get_receipt_decimal_separator(&conn)?;
-    let decimal_separator = match decimals.as_str() {
-        "comma" => receipt::DecimalSeparator::Comma,
-        "none" => receipt::DecimalSeparator::None,
-        _ => receipt::DecimalSeparator::Dot,
-    };
-    let paper_width = match Settings::get_receipt_paper_width(&conn)?.as_str() {
-        "narrow" => receipt::PaperWidth::Narrow,
-        _ => receipt::PaperWidth::Standard,
-    };
-    let config = receipt::ReceiptConfig {
-        paper_width,
-        show_currency: Settings::get_receipt_show_currency(&conn)?,
-        decimal_separator,
-        show_tax: Settings::get_receipt_show_tax(&conn)?,
-        footer: {
-            let f = Settings::get_receipt_footer(&conn)?;
-            if f.is_empty() { None } else { Some(f) }
-        },
-        show_table_number: Settings::get_receipt_show_table_number(&conn)?,
-        barcode_enabled: false,
-        payment_link_template: None,
-    };
-    drop(conn); // release lock before printing
-
     let receipt = receipt::SalesReceipt {
-        store: receipt::StoreInfo {
-            name: store_name,
-            address: store_address,
-            tax_id: store_tax_id,
-        },
+        store: store_info,
         date: args.date,
         receipt_number: args.receipt_number,
         table_number: args.table_number,

@@ -6,6 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
@@ -15,7 +16,7 @@ import { NoShiftsIcon } from '@/components/EmptyStateIllustrations';
 import { Skeleton } from '@/components/Skeleton';
 import { formatMoney } from '@/types/domain';
 import {
-  listShifts,
+  listShiftsScoped,
   openShift,
   closeShift,
   getActiveShift,
@@ -38,6 +39,8 @@ const fmt = (minor: number, currency = 'USD') =>
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const { currency } = useCurrency();
   const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
@@ -68,7 +71,7 @@ export default function ShiftManagementScreen() {
     setLoading(true);
     try {
       const [allShifts, active] = await Promise.all([
-        listShifts(),
+        listShiftsScoped(sessionToken),
         userId ? getActiveShift(userId) : Promise.resolve(null),
       ]);
       setShifts(allShifts);
@@ -78,7 +81,7 @@ export default function ShiftManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

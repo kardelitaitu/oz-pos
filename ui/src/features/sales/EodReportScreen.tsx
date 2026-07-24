@@ -3,7 +3,8 @@ import {
   exportEodReport,
   type EodReport,
 } from '@/api/sales';
-import { listShifts, type ShiftDto } from '@/api/shifts';
+import { listShiftsScoped, type ShiftDto } from '@/api/shifts';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
@@ -238,6 +239,8 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
 /** End-of-day report screen — payment summary, cashier shift reconciliation, totals by method, and printable receipt. */
 export default function EodReportScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [report, setReport] = useState<EodReport | null>(null);
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -391,7 +394,7 @@ export default function EodReportScreen() {
     try {
       const [data, shiftData] = await Promise.all([
         exportEodReport(),
-        listShifts(),
+        listShiftsScoped(sessionToken),
       ]);
       setReport(data);
       setShifts(shiftData);

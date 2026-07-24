@@ -9,16 +9,16 @@ import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
-import { overrideLinePrice, startSale, getProductTrackSerial, lookupSaleByReceiptBarcode } from '@/api/sales';
+import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerial, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import RefundModal from '@/features/sales/RefundModal';
-import { listProducts, listCategories, lookupProductBySku, lookupByBarcode, type ProductDto, type CategoryDto } from '@/api/products';
+import { listProductsScoped, listCategories, lookupProductBySkuScoped, lookupByBarcodeScoped, type ProductDto, type CategoryDto } from '@/api/products';
 import { listCustomers, type CustomerDto } from '@/api/customers';
-import { getActiveShift, openShift, closeShift, type ShiftDto } from '@/api/shifts';
-import { holdCart, listHeldCarts, getHeldCart, deleteHeldCart, type HeldCartRow, type SaleDetail } from '@/api/sales';
-import { getStoreSettings, listCreditSales, settleCredit, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
+import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto } from '@/api/shifts';
+import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
+import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { formatMoney, type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
@@ -68,7 +68,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
-  const { sessionToken, setActiveWorkspace } = useWorkspace();
+  const { sessionToken: rawToken, setActiveWorkspace } = useWorkspace();
+  const sessionToken = rawToken!;
   const userId = session!.user_id;
 
   const {
@@ -142,7 +143,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!barcode) return;
     setQuickReturnLoading(true);
     try {
-      const sale = await lookupSaleByReceiptBarcode(barcode);
+      const sale = await lookupSaleByReceiptBarcodeScoped(sessionToken, barcode);
       if (sale) {
         setQuickReturnSale(sale);
         setShowQuickReturn(false);
@@ -318,7 +319,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   useEffect(() => {
     const controller = new AbortController();
-    listProducts().then(setProducts).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); } });
+    listProductsScoped(sessionToken).then(setProducts).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); } });
     listCategories().then((cats) => {
       if (controller.signal.aborted) return;
       setCategories(cats);
@@ -440,7 +441,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     const p = list.find((x) => x.sku === val || x.barcode === val);
     if (p) { handleAdd(p); return; }
     try {
-      const found = await lookupProductBySku(val);
+      const found = await lookupProductBySkuScoped(sessionToken, val);
       if (found) { handleAdd(found); return; }
     } catch { /* unreachable */ }
     addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
@@ -451,7 +452,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     const found = list.find((x) => x.barcode === payload.code);
     if (found) { handleAdd(found); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
     try {
-      const p = await lookupByBarcode(payload.code);
+      const p = await lookupByBarcodeScoped(sessionToken, payload.code);
       if (p) { handleAdd(p); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
     } catch { /* unreachable */ }
     playError();
@@ -465,7 +466,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [storeSettings, setStoreSettings] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
   useEffect(() => {
     let mounted = true;
-    getStoreSettings().then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
+    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
     return () => { mounted = false; };
   }, [addToast, l10n]);
 
@@ -501,18 +502,18 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   useEffect(() => {
     setActiveShift(null);
     setShiftLoading(true);
-    getActiveShift(userId)
+    getActiveShiftScoped(sessionToken)
       .then((s) => setActiveShift(s))
       .catch(() => setActiveShift(null))
       .finally(() => setShiftLoading(false));
-  }, [userId]);
+  }, [sessionToken]);
 
   const handleOpenShift = useCallback(async () => {
     const val = Math.round(parseFloat(openingBalance) * 100);
     if (Number.isNaN(val) || val < 0) return;
     setOpeningShift(true);
     try {
-      const s = await openShift(userId, val);
+      const s = await openShiftScoped(sessionToken, val);
       setActiveShift(s);
       setShowOpenShift(false);
       setOpeningBalance('');
@@ -530,7 +531,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setClosingShift(true);
     setCloseShiftError(null);
     try {
-      const s = await closeShift({ userId, id: activeShift.id, closingBalanceMinor: val, notes: shiftNotes || null });
+      const s = await closeShiftScoped(sessionToken, activeShift.id, val, shiftNotes || null);
       setClosedShiftSummary(s);
       setActiveShift(null);
     } catch (e) {
@@ -599,7 +600,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
     if (cartId) return cartId;
     try {
-      const { cartId: newCartId } = await startSale({ currency });
+      const { cartId: newCartId } = await startSaleScoped(sessionToken, { currency });
       setCartId(newCartId);
       return newCartId;
     } catch {
@@ -608,7 +609,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     }
   }, [cartId, addToast]);
 
-  const handleOverrideConfirm = useCallback(async (newPriceMinor: number, authorizingUserId: string) => {
+  const handleOverrideConfirm = useCallback(async (newPriceMinor: number) => {
     if (!overrideTarget) return;
     const cId = cartId;
     if (!cId) {
@@ -617,12 +618,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       return;
     }
     try {
-      await overrideLinePrice({
-        cartId: cId,
-        lineId: overrideTarget.id,
-        newPriceMinor,
-        userId: authorizingUserId,
-      });
+      await overrideLinePriceScoped(sessionToken, cId, overrideTarget.id, newPriceMinor);
       updateLinePrice(overrideTarget.id, {
         minor_units: newPriceMinor,
         currency: overrideTarget.unit_price.currency,
@@ -705,7 +701,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         discountLabel,
       });
       if (!subtotal) return;
-      const { id } = await holdCart({
+      const { id } = await holdCartScoped(sessionToken, {
         label: `Hold #${Date.now()}`,
         cart_data: cartData,
         item_count: lines.length,
@@ -723,7 +719,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleResumeCart = useCallback(async (cartId: string) => {
     try {
-      const full = await getHeldCart(cartId);
+      const full = await getHeldCartScoped(sessionToken, cartId);
       if (!full) return;
       const data = JSON.parse(full.cart_data);
       for (const l of data.lines) {
@@ -732,7 +728,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         }
       }
       if (data.discountPercent) setDiscount(data.discountPercent, data.discountLabel ?? '');
-      await deleteHeldCart(cartId);
+      await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartId(null);
       setShowHeldCartsList(false);
     } catch {
@@ -741,7 +737,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [addProduct, setDiscount, addToast, l10n]);
 
   const handleResume = useCallback(async () => {
-    const carts = await listHeldCarts();
+    const carts = await listHeldCartsScoped(sessionToken);
     const held = carts.filter((c) => c.bill_type === 'hold');
     if (held.length === 0) return;
     if (held.length === 1) {
@@ -754,20 +750,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleDeleteHeldCart = useCallback(async (cartId: string) => {
     try {
-      await deleteHeldCart(cartId);
+      await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartsList((prev) => prev.filter((c) => c.id !== cartId));
       if (heldCartId === cartId) setHeldCartId(null);
       addToast({ type: 'success', message: l10n.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
     } catch {
       addToast({ type: 'error', message: l10n.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
     }
-  }, [heldCartId, addToast, l10n]);
+  }, [sessionToken, heldCartId, addToast, l10n]);
 
   // ── Load persisted held carts on mount ───────────────────────
 
   useEffect(() => {
     let mounted = true;
-    listHeldCarts()
+    listHeldCartsScoped(sessionToken)
       .then((carts) => {
         if (!mounted) return;
         const held = carts.find((c) => c.bill_type === 'hold');
@@ -775,7 +771,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       })
       .catch(() => { if (mounted) addToast({ message: 'Failed to load held carts', type: 'error' }); });
     return () => { mounted = false; };
-  }, [addToast]);
+  }, [sessionToken, addToast]);
 
   // ── Options / Workspace Settings ──────────────────────────
 
@@ -804,7 +800,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleSettleCredit = useCallback(async (saleId: string) => {
     setSettlingId(saleId);
     try {
-      await settleCredit(saleId, userId);
+      await settleCreditScoped(sessionToken, saleId);
       setCreditSales((prev) => prev.filter((c) => c.saleId !== saleId));
       addToast({ message: l10n.getString('retail-toast-credit-settled') || 'Credit settled', type: 'success' });
     } catch {
