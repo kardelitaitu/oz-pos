@@ -40,10 +40,22 @@ pub fn mask_pan(pan: &str) -> String {
         return "****".to_string();
     }
 
+    // PCI-DSS 3.3: show first 6 + last 4 digits. But when the PAN is
+    // ≤ 10 digits, first_six and last_four overlap (or cover the entire
+    // PAN), so showing both exposes the full PAN. In that case, show
+    // only the last 4 digits (the more sensitive part to hide is the
+    // beginning, per PCI-DSS truncation guidance).
+    if digits.len() <= 10 {
+        let last_four = &digits[digits.len() - 4..];
+        let masked_len = digits.len() - 4;
+        let masked = "*".repeat(masked_len.max(4));
+        return format!("{masked}{last_four}");
+    }
+
     let first_six = &digits[..6];
     let last_four = &digits[digits.len() - 4..];
-    let masked_len = digits.len().saturating_sub(10);
-    let masked = "*".repeat(masked_len.max(4));
+    let masked_len = digits.len() - 10;
+    let masked = "*".repeat(masked_len);
 
     format!("{first_six}{masked}{last_four}")
 }
@@ -159,7 +171,9 @@ mod tests {
 
     #[test]
     fn mask_pan_exactly_10_digits() {
-        assert_eq!(mask_pan("1234567890"), "123456****7890");
+        // 10-digit PAN: first_six + last_four would cover the entire
+        // PAN, so only last 4 is shown (PCI-DSS 3.3 compliant).
+        assert_eq!(mask_pan("1234567890"), "******7890");
     }
 
     #[test]
@@ -229,5 +243,69 @@ mod tests {
         assert_eq!(mask_cvv("123"), "***");
         assert_eq!(mask_cvv(""), "***");
         assert_eq!(mask_cvv("9999"), "***");
+    }
+
+    // ── PCI-DSS 3.3: mask_pan must not expose the full PAN (Bug #16) ────
+    //
+    // PCI-DSS Requirement 3.3: "Mask PAN when displayed such that only
+    // the first six and last four digits are visible."
+    //
+    // For PANs of length 7-10, the current implementation shows BOTH
+    // the first 6 and last 4 digits. When the PAN is <= 10 digits,
+    // first_six + last_four covers (or exceeds) the entire PAN — so
+    // the full PAN is reconstructable from the "masked" output.
+    // The `.max(4)` on masked_len adds 4 stars, giving the *illusion*
+    // of masking while exposing the full number. This is a PCI-DSS
+    // violation and a security bug.
+
+    #[test]
+    fn mask_pan_10_digits_does_not_expose_full_pan() {
+        // A 10-digit "PAN": first_six="123456", last_four="7890".
+        // Together they cover ALL 10 digits — the full PAN is
+        // reconstructable by concatenating the visible first 6 and
+        // last 4. PCI-DSS 3.3 requires that the PAN NOT be fully
+        // recoverable from the masked display.
+        let pan = "1234567890";
+        let masked = mask_pan(pan);
+        // Extract all digit groups from the masked output (split on '*').
+        let visible_digits: String = masked
+            .split('*')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .concat();
+        // The visible digits (first 6 + last 4 concatenated) must NOT
+        // reconstruct the full original PAN.
+        assert_ne!(
+            visible_digits, pan,
+            "mask_pan must not expose enough digits to reconstruct the \
+             full 10-digit PAN — got '{masked}' (visible digits: '{visible_digits}' \
+             reconstruct the full PAN '{pan}')"
+        );
+    }
+
+    #[test]
+    fn mask_pan_7_digits_does_not_leak_more_than_4() {
+        // A 7-digit "PAN": first_six="123456", last_four="4567".
+        // These OVERLAP (digits 4-6 appear in both), so the masked
+        // output exposes all 7 digits — more than the 4 PCI-DSS allows
+        // for the "last four" display of a short PAN. The fix: when
+        // first_six and last_four overlap (PAN <= 10 digits), don't
+        // show first_six (show only last 4 with the rest masked).
+        let pan = "1234567";
+        let masked = mask_pan(pan);
+        // Extract all digit groups from the masked output.
+        let visible_digits: String = masked
+            .split('*')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .concat();
+        // For a 7-digit PAN, at most 4 digits should be visible (last 4).
+        assert!(
+            visible_digits.len() <= 4,
+            "mask_pan must show at most 4 digits for a 7-digit PAN (PCI-DSS \
+             allows first 6 + last 4 only when they don't overlap) — got \
+             '{masked}' (visible digits: '{visible_digits}', {} visible)",
+            visible_digits.len()
+        );
     }
 }
