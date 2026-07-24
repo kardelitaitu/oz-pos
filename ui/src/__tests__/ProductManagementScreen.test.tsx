@@ -223,4 +223,39 @@ describe('ProductManagementScreen', () => {
     const createBtn = screen.getByRole('button', { name: /create/i });
     expect(createBtn).toBeDisabled();
   });
+
+  // ── Bug #14: silent failure in handleSave (Axis 8) ────────────────────
+  //
+  // handleSave's catch block is empty (just a "// Error handling."
+  // comment). When createProduct/updateProduct fails (duplicate SKU,
+  // network error, validation), the error is silently swallowed — the
+  // user gets ZERO feedback. The modal's loading state clears and it
+  // appears to succeed, but nothing was saved. This test proves the
+  // user sees an error message when creation fails.
+
+  it('shows error message when createProduct fails (no silent swallow)', async () => {
+    // Mock create_product to reject (e.g. duplicate SKU server-side).
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === 'list_products') return Promise.resolve(SAMPLE_PRODUCTS);
+      if (cmd === 'create_product') {
+        return Promise.reject(new Error('SKU already exists'));
+      }
+      return Promise.resolve([]);
+    }) as unknown as typeof invokeMock);
+
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+
+    await userEvent.click(screen.getByRole('button', { name: /add product/i }));
+    await userEvent.type(screen.getByPlaceholderText('e.g. LATTE'), 'LATTE');
+    await userEvent.type(screen.getByPlaceholderText('e.g. Caffè Latte'), 'Duplicate');
+    await userEvent.type(screen.getByPlaceholderText('450'), '999');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+
+    // The user must see an error message — not a silent failure.
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(/.+/);
+  });
 });

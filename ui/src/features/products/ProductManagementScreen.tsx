@@ -81,6 +81,7 @@ export default function ProductManagementScreen() {
   const modalExit = useExitAnimation(showModal, () => setShowModal(false));
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
   const [variantProductName, setVariantProductName] = useState<string>('');
@@ -137,6 +138,7 @@ export default function ProductManagementScreen() {
   const openCreate = useCallback(() => {
     setForm(EMPTY_FORM);
     setEditingSku(null);
+    setSaveError(null);
     setShowModal(true);
   }, []);
 
@@ -154,14 +156,19 @@ export default function ProductManagementScreen() {
       taxRateIds: dto?.tax_rate_ids ?? [],
     });
     setEditingSku(p.sku);
+    setSaveError(null);
     setShowModal(true);
   }, [productDtos]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const priceMinor = parseInt(form.priceMinor, 10);
-      if (Number.isNaN(priceMinor) || priceMinor < 0) return;
+      if (Number.isNaN(priceMinor) || priceMinor < 0) {
+        setSaveError(l10n.getString('product-mgmt-error-invalid-price'));
+        return;
+      }
 
       if (editingSku) {
         await updateProduct({
@@ -191,12 +198,16 @@ export default function ProductManagementScreen() {
       }
       setShowModal(false);
       await load();
-    } catch {
-      // Error handling.
+    } catch (err) {
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : l10n.getString('product-mgmt-error-save')
+      );
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, load, userId]);
+  }, [form, editingSku, load, userId, l10n]);
 
   const confirmDelete = useCallback(async (sku: string) => {
     setDeleting(sku);
@@ -565,6 +576,11 @@ export default function ProductManagementScreen() {
             </div>
 
             <div className="product-mgmt-modal-actions">
+              {saveError && (
+                <div className="product-mgmt-modal-error" role="alert">
+                  {saveError}
+                </div>
+              )}
               <Localized id="product-mgmt-btn-cancel">
                 <Button variant="ghost" onClick={modalExit.requestClose} disabled={saving}>Cancel</Button>
               </Localized>
