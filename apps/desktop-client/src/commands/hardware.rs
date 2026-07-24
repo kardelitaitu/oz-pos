@@ -550,13 +550,13 @@ mod tests {
     fn print_sales_receipt_args_deserialise() {
         let json = r#"{
             "date": "01 Jan 2026",
-            "receipt_number": "REC-001",
+            "receiptNumber": "REC-001",
             "items": [
                 {
                     "name": "Coffee",
                     "quantity": 1,
-                    "unit_price": { "minor_units": 350, "currency": "USD" },
-                    "total_price": { "minor_units": 350, "currency": "USD" }
+                    "unitPrice": { "minor_units": 350, "currency": "USD" },
+                    "totalPrice": { "minor_units": 350, "currency": "USD" }
                 }
             ],
             "subtotal": { "minor_units": 350, "currency": "USD" },
@@ -667,7 +667,7 @@ mod tests {
 
     #[test]
     fn line_item_dto_deserialize() {
-        let json = r#"{"name":"Coffee","quantity":2,"unit_price":{"minor_units":350,"currency":"USD"},"total_price":{"minor_units":700,"currency":"USD"}}"#;
+        let json = r#"{"name":"Coffee","quantity":2,"unitPrice":{"minor_units":350,"currency":"USD"},"totalPrice":{"minor_units":700,"currency":"USD"}}"#;
         let item: LineItemDto = serde_json::from_str(json).unwrap();
         assert_eq!(item.name, "Coffee");
         assert_eq!(item.quantity, 2);
