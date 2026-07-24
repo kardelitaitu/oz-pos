@@ -55,7 +55,8 @@ fn submodule_public_paths_exist_after_split() {
 fn module_status_derives_are_present() {
     let a = ModuleStatus::Registered;
     let b = a; // Copy
-    let _c = a.clone(); // Clone
+    #[allow(clippy::clone_on_copy)]
+    let _c = a.clone(); // Clone (explicitly allowed for derive verification)
     let _debug = format!("{a:?}"); // Debug
     assert_eq!(a, b); // PartialEq
     assert_eq!(a, ModuleStatus::Registered); // Eq
