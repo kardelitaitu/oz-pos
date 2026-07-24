@@ -3445,6 +3445,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3466,47 +3467,65 @@ dependencies = [
 name = "modules-settings"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-staff"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
+ "platform-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
+ "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-tax"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-terminal"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4109,7 +4128,12 @@ dependencies = [
  "modules-crm",
  "modules-inventory",
  "modules-loyalty",
+ "modules-reporting",
  "modules-sales",
+ "modules-settings",
+ "modules-staff",
+ "modules-tax",
+ "modules-terminal",
  "platform-core",
  "proptest",
  "rand 0.8.6",

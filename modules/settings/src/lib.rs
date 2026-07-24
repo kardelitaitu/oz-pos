@@ -39,13 +39,16 @@ next: Migrate settings commands into this module | perf: N/A.
 //! consumers can access all settings-related types through a single crate:
 //!
 //! ```
-//! # use modules_settings::{SettingsModule, Settings, FeatureRegistry};
+//! # use modules_settings::{SettingsModule, SettingsService, SettingItem};
 //! ```
 
-// Re-export key settings domain types from oz-core so consumers can
-// access settings types through this module without importing oz-core.
-pub use oz_core::settings::keys;
-pub use oz_core::{Feature, FeatureRegistry, Settings};
+pub mod models;
+pub mod repository;
+pub mod service;
+
+pub use models::SettingItem;
+pub use repository::SettingsRepository;
+pub use service::SettingsService;
 
 use std::fmt::Debug;
 

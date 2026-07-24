@@ -41,9 +41,13 @@ next: Migrate auth/staff commands into this module | perf: N/A.
 //! # use modules_staff::{StaffModule, User, Role, builtin_roles};
 //! ```
 
-// Re-export key staff domain types from oz-core so consumers can
-// access staff types through this module without importing oz-core.
-pub use oz_core::{Role, User, builtin_roles, seed_users};
+pub mod models;
+pub mod repository;
+pub mod service;
+
+pub use models::{Role, User, UserId, builtin_roles, seed_users};
+pub use repository::StaffRepository;
+pub use service::StaffService;
 
 use std::fmt::Debug;
 

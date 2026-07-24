@@ -95,6 +95,11 @@ pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 
 /// Typed CRUD facade for the OZ-POS database.
 ///
+/// > **ADR #30 Modularization Note**: New code should prefer invoking dedicated
+/// > domain repositories (e.g. `SalesRepository`, `InventoryRepository`, `CrmRepository`,
+/// > `LoyaltyRepository`, `StaffRepository`, `TerminalRepository`, `SettingsRepository`,
+/// > `TaxRepository`, `ReportingRepository`) directly on `&Connection` / `&Transaction`.
+///
 /// All methods borrow `&self` and operate on the underlying
 /// [`Connection`] directly. The caller is responsible for
 /// synchronisation (e.g. `Mutex<Connection>`) and transaction

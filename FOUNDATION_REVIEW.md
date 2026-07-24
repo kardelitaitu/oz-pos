@@ -11,7 +11,7 @@
 
 ### 🔴 Critical (Do Before Beta)
 
-- [/] **P1 — Finish `oz-core` modularization** — Extract domain logic & DB persistence out of `oz-core` into each `modules/<name>/src/services/` and `modules/<name>/src/repositories/`. *(Phase 1: `modules/sales` ✅, Phase 2: `modules/inventory` ✅, Phase 3: `modules/crm` & `modules/loyalty` ✅)* *(Month 1–2)*
+- [x] **P1 — Finish `oz-core` modularization** — Extract domain logic & DB persistence out of `oz-core` into each `modules/<name>/src/services/` and `modules/<name>/src/repositories/`. *(All 5 phases complete: sales, inventory, crm, loyalty, staff, terminal, settings, tax, reporting ✅)* *(Month 1–2)*
 - [ ] **P2 — Fix `App.tsx` self-registration** — Each feature folder exports a `register()` function; `App.tsx` calls `registerAllModules()`. Remove all 35+ manual `registerPage()` / `registerNavItem()` calls from `App.tsx`. *(Week 1–2)*
 - [ ] **P3 — Rethink sync conflict strategy** — Replace blanket LWW with entity-specific rules: completed sales → immutable; stock → delta-merge; settings → LWW is fine. Implement before first multi-terminal merchant. *(Month 2–3)*
 

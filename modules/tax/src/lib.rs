@@ -40,9 +40,13 @@ next: Migrate tax commands into this module | perf: N/A.
 //! # use modules_tax::{TaxModule, TaxRate};
 //! ```
 
-// Re-export key tax domain types from oz-core so consumers can
-// access tax types through this module without importing oz-core.
-pub use oz_core::tax_rate::TaxRate;
+pub mod models;
+pub mod repository;
+pub mod service;
+
+pub use models::TaxRate;
+pub use repository::TaxRepository;
+pub use service::TaxService;
 
 use std::fmt::Debug;
 
