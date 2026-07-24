@@ -6,9 +6,9 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::repository::CrmRepository;
 use foundation::contracts::{EventHandler, ModuleResult};
-use oz_core::db::Store;
-use oz_core::events::SaleCompleted;
+use foundation::events::SaleCompleted;
 use rusqlite::Connection;
 use tracing::{info, warn};
 
@@ -42,7 +42,7 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
             return Ok(());
         };
 
-        let conn = self
+        let mut conn = self
             .db
             .lock()
             .map_err(|e| anyhow::anyhow!("crm handler: db lock failed: {e}"))?;
@@ -50,11 +50,11 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
         // Wrap the entire read-modify-write in a transaction so concurrent
         // SaleCompleted events for the same customer cannot race on the
         // read of total_spent_minor / loyalty_points (lost-update prevention).
-        let tx = conn.unchecked_transaction()?;
-        let store = Store::new(&tx);
+        let tx = conn.transaction()?;
+        let repo = CrmRepository::new(&tx);
 
         // Fetch the current customer record.
-        let mut customer = match store.get_customer(customer_id)? {
+        let mut customer = match repo.get_customer(customer_id)? {
             Some(c) => c,
             None => {
                 warn!(
@@ -105,6 +105,7 @@ impl EventHandler<SaleCompleted> for CrmHistoryHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::db::Store;
     use oz_core::migrations;
     use platform_kernel::EventBus;
 

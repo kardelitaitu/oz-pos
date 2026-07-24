@@ -41,10 +41,14 @@ next: Migrate DB CRUD + Tauri commands into this module | perf: N/A — no hot p
 //! ```
 
 pub mod handlers;
+pub mod models;
+pub mod repository;
+pub mod service;
 
-// Re-export key CRM domain types from oz-core so consumers can
-// access customer types through this module without importing oz-core.
-pub use oz_core::Customer;
+pub use foundation::{Email, Phone};
+pub use models::Customer;
+pub use repository::CrmRepository;
+pub use service::CrmService;
 
 use std::fmt::Debug;
 

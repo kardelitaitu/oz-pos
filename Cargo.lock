@@ -3385,6 +3385,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3419,6 +3420,8 @@ dependencies = [
 name = "modules-loyalty"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
@@ -3426,6 +3429,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4102,7 +4106,9 @@ dependencies = [
  "foundation",
  "hex",
  "mdns-sd",
+ "modules-crm",
  "modules-inventory",
+ "modules-loyalty",
  "modules-sales",
  "platform-core",
  "proptest",

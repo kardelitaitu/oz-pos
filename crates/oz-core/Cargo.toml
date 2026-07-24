@@ -11,6 +11,8 @@ foundation = { workspace = true }
 platform-core = { workspace = true }
 modules-sales = { workspace = true }
 modules-inventory = { workspace = true }
+modules-crm = { workspace = true }
+modules-loyalty = { workspace = true }
 serde = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
