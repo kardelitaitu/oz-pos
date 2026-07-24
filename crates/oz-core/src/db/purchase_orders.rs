@@ -311,23 +311,43 @@ impl Store<'_> {
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
-        self.conn.execute(
+        // Wrap the PO status update AND all stock adjustments in a single
+        // transaction so the receive is atomic: if any line's
+        // adjust_stock fails, the status change and all prior lines are
+        // rolled back. This matches the atomicity contract documented in
+        // db/mod.rs ("All writes that touch more than one row use
+        // unchecked_transaction for atomicity") and ADR-19 §5.2 (caller
+        // is responsible for BEGIN IMMEDIATE atomicity).
+        let tx = self.conn.unchecked_transaction()?;
+
+        tx.execute(
             "UPDATE purchase_orders SET status='received', received_date=?1, updated_at=?2 WHERE id=?3",
             params![now, now, id],
         )?;
 
+        let default_location = crate::inventory::LocationId::from(
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID.to_string(),
+        );
         for line in &po.lines {
             if !line.sku.is_empty() {
-                let _ = self.adjust_stock(&line.sku, line.qty).map_err(|e| {
-                    tracing::warn!(
-                        sku = %line.sku,
-                        qty = line.qty,
-                        error = %e,
-                        "failed to adjust stock during PO receive"
-                    );
-                });
+                // Use the transactional canonical API (accepts &Transaction)
+                // rather than adjust_stock() which starts its own
+                // transaction — that would break atomicity. Propagate
+                // errors via ? instead of silently swallowing them.
+                self.adjust_stock_at_location_with_reason(
+                    &tx,
+                    &line.sku,
+                    line.qty,
+                    &default_location,
+                    Some("purchase_order_receive"),
+                    None,
+                    None,
+                    None,
+                )?;
             }
         }
+
+        tx.commit()?;
 
         po.order.status = "received".into();
         po.order.received_date = Some(now.clone());
@@ -379,6 +399,15 @@ mod tests {
         conn.execute(
             "INSERT INTO inventory (product_id, qty) VALUES (?1, 10)",
             params!["prod-po"],
+        )
+        .unwrap();
+        // Also seed stock_summary at the canonical default location so
+        // the transactional adjust_stock_at_location_with_reason API
+        // (which reads current qty from stock_summary, not the legacy
+        // inventory table) sees the correct initial quantity.
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES (?1, ?2, 10, ?3)",
+            params!["prod-po", crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID, "2025-01-01T00:00:00.000Z"],
         )
         .unwrap();
     }
@@ -941,6 +970,135 @@ mod tests {
         assert_eq!(
             line_count, 0,
             "PO lines must be rolled back, got {line_count} row(s)"
+        );
+    }
+
+    // ── TDD: receive_purchase_order atomicity + error propagation ───────
+    //
+    // receive_purchase_order (line 299) has two defects:
+    //
+    // 1. NON-ATOMIC: it issues the PO status UPDATE (line 314) in
+    //    autocommit mode, then loops calling self.adjust_stock() which
+    //    each start/commit their OWN unchecked_transaction (products.rs
+    //    line 1204). If adjust_stock fails on line N of M, the PO is
+    //    already 'received' and lines 1..N-1 are already committed — a
+    //    partial receive that can't be retried.
+    //
+    // 2. SILENT FAILURE (Axis 8): line 321 uses `let _ = ... .map_err(
+    //    |e| tracing::warn!(...))` which discards the Result. The
+    //    function returns Ok(po) even if stock adjustments failed.
+    //
+    // This test forces the 2nd line's adjust_stock to fail (by deleting
+    // the product so product_id_by_sku returns NotFound) and asserts:
+    //   a) receive_purchase_order returns Err (not silently Ok)
+    //   b) the PO status is NOT 'received' (rollback — atomicity)
+
+    #[test]
+    fn receive_purchase_order_propagates_stock_adjust_failure_and_rolls_back() {
+        let conn = fresh();
+        seed_supplier(&conn);
+        // Seed two products with initial stock.
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at) VALUES (?1, ?2, ?3, 1000, 'USD', ?4, ?4, ?4)",
+            params!["prod-a", "SKU-A", "Widget A", "2025-01-01T00:00:00.000Z"],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO inventory (product_id, qty) VALUES ('prod-a', 10)",
+            [],
+        )
+        .unwrap();
+        // Seed stock_summary so adjust_stock_at_location_with_reason reads
+        // the correct initial qty (it reads from stock_summary, not inventory).
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES ('prod-a', ?1, 10, '2025-01-01T00:00:00.000Z')",
+            params![crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at) VALUES (?1, ?2, ?3, 1000, 'USD', ?4, ?4, ?4)",
+            params!["prod-b", "SKU-B", "Widget B", "2025-01-01T00:00:00.000Z"],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO inventory (product_id, qty) VALUES ('prod-b', 5)",
+            [],
+        )
+        .unwrap();
+
+        // Create + approve a PO with two lines.
+        let lines = vec![
+            CreatePoLineInput {
+                sku: "SKU-A".into(),
+                product_name: "Widget A".into(),
+                qty: 5,
+                unit_cost_minor: 1000,
+            },
+            CreatePoLineInput {
+                sku: "SKU-B".into(),
+                product_name: "Widget B".into(),
+                qty: 3,
+                unit_cost_minor: 500,
+            },
+        ];
+        let po = store(&conn)
+            .create_purchase_order("PO-RECV-ATOMIC", "sup-po", "", "", None, &lines)
+            .unwrap();
+        store(&conn)
+            .update_po_status(&po.order.id, "approved")
+            .unwrap();
+
+        // Delete SKU-B's product row so adjust_stock('SKU-B', ...) fails
+        // with NotFound. This simulates a mid-receive failure: line 1
+        // (SKU-A) would succeed, but line 2 (SKU-B) fails.
+        conn.execute("DELETE FROM inventory WHERE product_id = 'prod-b'", [])
+            .unwrap();
+        conn.execute("DELETE FROM products WHERE id = 'prod-b'", [])
+            .unwrap();
+
+        // receive_purchase_order must:
+        //   a) return Err (not silently Ok) — the stock-adjust failure
+        //      must be propagated, not swallowed by `let _ =`.
+        //   b) roll back the PO status UPDATE — the PO must NOT be
+        //      'received' because the receive was not atomic.
+        let result = store(&conn).receive_purchase_order(&po.order.id);
+
+        // (a) Error propagation — currently `let _ =` swallows it → Ok.
+        assert!(
+            result.is_err(),
+            "receive_purchase_order must propagate the stock-adjust failure, \
+             not silently return Ok (got {:?})",
+            result.ok()
+        );
+
+        // (b) Atomicity — the PO status must NOT be 'received'. If the
+        // status UPDATE and stock adjustments were in one transaction,
+        // the failure would roll back the status change too.
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM purchase_orders WHERE id = ?1",
+                params![po.order.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_ne!(
+            status, "received",
+            "PO status must be rolled back (not 'received') when stock \
+             adjustment fails — got '{status}'"
+        );
+
+        // (c) SKU-A's stock must NOT have been incremented either (full
+        // rollback). If only the status was rolled back but SKU-A's
+        // adjust_stock committed independently, that's still a partial
+        // receive.
+        let stock_a: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'prod-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            stock_a, 10,
+            "SKU-A stock must be rolled back to 10 (not incremented to 15) \
+             when the receive fails atomically — got {stock_a}"
         );
     }
 }
