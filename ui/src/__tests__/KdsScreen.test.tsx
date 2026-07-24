@@ -21,7 +21,15 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, m
 
 vi.mock('@/api/kds', () => ({
   getKdsQueue: (_userId: string) => mockGetKdsQueue(),
-  updateKdsStatus: (_userId: string, id: string, status: string) => mockUpdateKdsStatus(id, status),
+  getKdsQueueScoped: (_token: string, _userId: string) => mockGetKdsQueue(),
+  updateKdsStatus: (_userId: string, id: string, status: string) =>
+    mockUpdateKdsStatus(id, status),
+  updateKdsStatusScoped: (
+    _token: string,
+    _userId: string,
+    id: string,
+    status: string,
+  ) => mockUpdateKdsStatus(id, status),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
