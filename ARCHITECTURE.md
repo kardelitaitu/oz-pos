@@ -443,11 +443,12 @@ Every module must contain:
 - `CHANGELOG.md` — Version history
 
 Every architectural change must create an Architecture Decision Record (ADR).
-The three ADRs written to date are:
+Key ADRs in `docs/decisions/` include:
 ```
 docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md
 docs/decisions/2026-03-01-frontend-restructure.md
+docs/decisions/2026-07-24-domain-module-extraction.md
 ```
 
 ---

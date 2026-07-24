@@ -3446,12 +3446,15 @@ dependencies = [
 name = "modules-sales"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
- "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4098,6 +4101,7 @@ dependencies = [
  "foundation",
  "hex",
  "mdns-sd",
+ "modules-sales",
  "platform-core",
  "proptest",
  "rand 0.8.6",
