@@ -313,8 +313,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                     <Localized id="void-orders-col-actions-aria" attrs={{ 'aria-label': true }}><th aria-label="Actions"> </th></Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {Array.from({ length: 5 }).map((_, i) => (
+                <tbody>{Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
                       <td><Skeleton width="5rem" height="1rem" /></td>
                       <td><Skeleton width="8rem" height="1rem" /></td>
@@ -325,7 +324,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                       <td><Skeleton width="3rem" height="1.25rem" style={{ borderRadius: 'var(--radius-md)' }} /></td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             </div>
           </div>
@@ -381,8 +380,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                     </Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {filteredSales.map((sale) => (
+                <tbody>{filteredSales.map((sale) => (
                     <tr key={sale.id} className={sale.status === 'Active' ? 'void-orders-row--active' : ''}>
                       <td className="void-orders-cell-id">{sale.id.slice(0, 8)}&hellip;</td>
                       <td>{formatDate(sale.createdAt)}</td>
@@ -427,7 +425,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                       </td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             </Localized>
           </div>
@@ -507,8 +505,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                   <Localized id="void-orders-line-total"><th>Total</th></Localized>
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 4 }).map((_, i) => (
+              <tbody>{Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
                     <td><Skeleton width="4rem" height="1rem" /></td>
                     <td><Skeleton width="8rem" height="1rem" /></td>
@@ -517,7 +514,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                     <td><Skeleton width="4rem" height="1rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </Card>
         </div>
@@ -603,8 +600,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                     </Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {detail.lines.map((line, i) => (
+                <tbody>{detail.lines.map((line, i) => (
                     <tr key={i}>
                       <td className="void-orders-cell-mono">{line.sku}</td>
                       <td>{line.name}</td>
@@ -618,7 +614,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                       </td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             </Localized>
           </Card>

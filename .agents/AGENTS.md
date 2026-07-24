@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (1 noted finding) · F1: "Version is locked at 0.0.9" -> branch 0.0.19 + Cargo.toml version = 0.0.19 (user-owned divergence, do not "fix"; same class as root AGENTS.md version claim) · verified accurate: 4 pre-commit gates; scripts lint-i18n.sh/verify-bundle-parity.py/dedupe-ftl.py/check.sh exist; onboarding-guide SKILL.md exists; crates/oz-hal/src/drivers/mock.rs exists; command dirs + ui/src/api + ui/src/__tests__ present -->
+
 # Agents Configuration
 
 ## Global Rules

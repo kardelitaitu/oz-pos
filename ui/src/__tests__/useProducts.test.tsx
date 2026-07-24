@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/api/products', () => ({
   listProducts: (...args: unknown[]) => mocks.listProducts(...args),
+  listProductsScoped: (...args: unknown[]) => mocks.listProducts(...args),
   listCategories: (...args: unknown[]) => mocks.listCategories(...args),
+  listCategoriesScoped: (...args: unknown[]) => mocks.listCategories(...args),
 }));
 
 vi.mock('@fluent/react', () => ({

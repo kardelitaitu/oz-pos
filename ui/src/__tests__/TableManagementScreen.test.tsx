@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { renderWithWorkspace, MOCK_SESSION_TOKEN } from '@/test-utils';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
@@ -15,9 +16,13 @@ const { mockListTables, mockUpdateTableStatus, mockReleaseTable } = vi.hoisted((
 
 vi.mock('@/api/tables', () => ({
   listTables: (section?: string) => mockListTables(section),
+  listTablesScoped: (_token: string, section?: string) => mockListTables(section),
   updateTableStatus: (userId: string, id: string, status: string) =>
     mockUpdateTableStatus(userId, id, status),
+  updateTableStatusScoped: (_token: string, id: string, status: string) =>
+    mockUpdateTableStatus(_token, id, status),
   releaseTable: (userId: string, id: string) => mockReleaseTable(userId, id),
+  releaseTableScoped: (_token: string, id: string) => mockReleaseTable(_token, id),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -29,7 +34,7 @@ bundle.addResource(new FluentResource(tablesFtl));
 const l10n = new ReactLocalization([bundle]);
 
 function renderScreen() {
-  return render(
+  return renderWithWorkspace(
     <LocalizationProvider l10n={l10n}>
       <TableManagementScreen />
     </LocalizationProvider>,
@@ -201,7 +206,7 @@ describe('TableManagementScreen', () => {
     await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
 
     await waitFor(() =>
-      expect(mockUpdateTableStatus).toHaveBeenCalledWith('user-1', 't-1', 'occupied'),
+      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'occupied'),
     );
   });
 
@@ -214,7 +219,7 @@ describe('TableManagementScreen', () => {
     await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
 
     await waitFor(() =>
-      expect(mockReleaseTable).toHaveBeenCalledWith('user-1', 't-1'),
+      expect(mockReleaseTable).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1'),
     );
   });
 
@@ -227,7 +232,7 @@ describe('TableManagementScreen', () => {
     await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
 
     await waitFor(() =>
-      expect(mockUpdateTableStatus).toHaveBeenCalledWith('user-1', 't-1', 'available'),
+      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'available'),
     );
   });
 
@@ -264,7 +269,7 @@ describe('TableManagementScreen', () => {
     await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
 
     await waitFor(() =>
-      expect(mockUpdateTableStatus).toHaveBeenCalledWith('user-1', 't-1', 'available'),
+      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'available'),
     );
   });
 });

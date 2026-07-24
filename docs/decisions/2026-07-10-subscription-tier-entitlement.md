@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · tenant_subscription migration (061) verified; SubscriptionTier with max_stores()/max_pos_instances()/allows_workspace_type() present in crates/oz-core/src/subscription.rs (lines 113/122/185); InstanceStatus enum (Active/QuotaSuspended/Archived) at subscription.rs:33; crates/oz-core/src/license_verification.rs embeds ../oz-license.key.pub (file exists at crates/oz-core/oz-license.key.pub — distinct from root oz-pos-updater.key.pub named by ADR #9; both real); crates/oz-core/src/db/workspaces.rs + platform/core StoreDatabaseManager present; grace/clock-rollback logic present · Status "Implemented (2026-07-10)" consistent -->
+
 # ADR #5: Subscription Tier & Entitlement Architecture
 
 **Status:** Implemented (2026-07-10)

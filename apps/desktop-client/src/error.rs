@@ -141,6 +141,12 @@ impl From<rusqlite::Error> for AppError {
     }
 }
 
+impl From<platform_core::error::PlatformError> for AppError {
+    fn from(e: platform_core::error::PlatformError) -> Self {
+        Self::Internal(e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -41,8 +41,11 @@ beforeEach(() => {
   registerSalesWidgets();
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === 'export_daily_summary') return Promise.resolve(SAMPLE_SUMMARY);
-    if (cmd === 'export_sales_by_hour') return Promise.resolve(SAMPLE_HOURLY);
+    if (cmd === 'export_daily_summary' || cmd === 'export_daily_summary_scoped') return Promise.resolve(SAMPLE_SUMMARY);
+    if (cmd === 'export_sales_by_hour' || cmd === 'export_sales_by_hour_scoped') return Promise.resolve(SAMPLE_HOURLY);
+    if (cmd === 'get_category_breakdown') return Promise.resolve([]);
+    if (cmd === 'get_hourly_heatmap') return Promise.resolve([]);
+    if (cmd === 'get_daily_revenue') return Promise.resolve([]);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
@@ -83,8 +86,8 @@ describe('SalesDashboardScreen', () => {
 
   it('shows no data state', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'export_daily_summary') return Promise.resolve([]);
-      if (cmd === 'export_sales_by_hour') return Promise.resolve([]);
+      if (cmd === 'export_daily_summary' || cmd === 'export_daily_summary_scoped') return Promise.resolve([]);
+      if (cmd === 'export_sales_by_hour' || cmd === 'export_sales_by_hour_scoped') return Promise.resolve([]);
       return Promise.resolve([]);
     });
     const { container } = renderWithFluentSync(<SalesDashboardScreen />, salesFtl);

@@ -9,6 +9,11 @@ use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tauri::{State, command};
 
+use oz_core::db::Store;
+use oz_core::permissions;
+
+use crate::commands::authz::require_permission_for_user;
+use crate::commands::workspaces::CreateInstanceRequest;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -56,14 +61,14 @@ where
 ///
 /// `#[serde(default)]` only kicks in when the field is *absent*, not
 /// when it is explicitly `null`.  This helper covers the `null` case.
-fn de_direction_or_null<'de, D>(d: D) -> Result<String, D::Error>
+fn de_direction_or_null<'de, D>(d: D) -> Result<WireDirection, D::Error>
 where
     D: Deserializer<'de>,
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum Dir {
-        Some(String),
+        Some(WireDirection),
         Null,
     }
     match Dir::deserialize(d)? {
@@ -74,14 +79,129 @@ where
 
 // ── Data types ───────────────────────────────────────────────────
 
+/// Valid node types in the topology graph.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NodeType {
+    /// Retail store branch.
+    Store,
+    /// POS / register workspace.
+    Workspace,
+    /// Warehouse / storage location.
+    Warehouse,
+    /// Printer or peripheral hardware.
+    Hardware,
+    /// Catch-all for unknown/corrupt node types — rejected on save.
+    #[serde(other)]
+    Unknown,
+}
+
+impl PartialEq<&str> for NodeType {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            NodeType::Store => *other == "store",
+            NodeType::Workspace => *other == "workspace",
+            NodeType::Warehouse => *other == "warehouse",
+            NodeType::Hardware => *other == "hardware",
+            NodeType::Unknown => false,
+        }
+    }
+}
+
+impl From<&str> for NodeType {
+    fn from(s: &str) -> Self {
+        match s {
+            "store" => NodeType::Store,
+            "workspace" => NodeType::Workspace,
+            "warehouse" => NodeType::Warehouse,
+            "hardware" => NodeType::Hardware,
+            _ => NodeType::Unknown,
+        }
+    }
+}
+
+/// Valid wire directions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WireDirection {
+    /// One-directional flow (single arrow).
+    OneWay,
+    /// Bidirectional flow (arrows on both ends).
+    TwoWay,
+    /// Catch-all for unknown/corrupt directions — rejected on save.
+    #[serde(other)]
+    Unknown,
+}
+
+impl PartialEq<&str> for WireDirection {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            WireDirection::OneWay => *other == "one-way",
+            WireDirection::TwoWay => *other == "two-way",
+            WireDirection::Unknown => false,
+        }
+    }
+}
+
+impl From<&str> for WireDirection {
+    fn from(s: &str) -> Self {
+        match s {
+            "one-way" => WireDirection::OneWay,
+            "two-way" => WireDirection::TwoWay,
+            _ => WireDirection::Unknown,
+        }
+    }
+}
+
+/// Valid port names on a topology node.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PortName {
+    /// Top edge of the node card.
+    Top,
+    /// Right edge of the node card.
+    Right,
+    /// Bottom edge of the node card.
+    Bottom,
+    /// Left edge of the node card.
+    Left,
+    /// Catch-all for unknown/corrupt port names — rejected on save.
+    #[serde(other)]
+    Unknown,
+}
+
+impl PartialEq<&str> for PortName {
+    fn eq(&self, other: &&str) -> bool {
+        match self {
+            PortName::Top => *other == "top",
+            PortName::Right => *other == "right",
+            PortName::Bottom => *other == "bottom",
+            PortName::Left => *other == "left",
+            PortName::Unknown => false,
+        }
+    }
+}
+
+impl From<&str> for PortName {
+    fn from(s: &str) -> Self {
+        match s {
+            "top" => PortName::Top,
+            "right" => PortName::Right,
+            "bottom" => PortName::Bottom,
+            "left" => PortName::Left,
+            _ => PortName::Unknown,
+        }
+    }
+}
+
 /// One node in the topology graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopologyNodePayload {
     /// Unique identifier for the node (e.g. "store-1", "ws-main").
     pub id: String,
-    /// Node kind: "store", "workspace", "warehouse", or "hardware".
+    /// Node kind: store, workspace, warehouse, or hardware.
     #[serde(rename = "type")]
-    pub node_type: String,
+    pub node_type: NodeType,
     /// Display name shown on the topology card.
     pub name: String,
     /// Optional subtitle shown below the name.
@@ -116,23 +236,23 @@ pub struct TopologyWirePayload {
     pub from_node_id: String,
     /// Node ID that the wire connects to.
     pub to_node_id: String,
-    /// Direction: "one-way" (default) or "two-way".
+    /// Direction: one-way (default) or two-way.
     #[serde(default = "default_direction")]
     #[serde(deserialize_with = "de_direction_or_null")]
-    pub direction: String,
+    pub direction: WireDirection,
     /// Optional label displayed along the wire.
     #[serde(default)]
     pub label: Option<String>,
-    /// Source port anchor point (e.g. "left", "right", "top", "bottom").
+    /// Source port anchor point (e.g. left, right, top, bottom).
     #[serde(default)]
-    pub from_port: Option<String>,
-    /// Target port anchor point (e.g. "left", "right", "top", "bottom").
+    pub from_port: Option<PortName>,
+    /// Target port anchor point (e.g. left, right, top, bottom).
     #[serde(default)]
-    pub to_port: Option<String>,
+    pub to_port: Option<PortName>,
 }
 
-fn default_direction() -> String {
-    "one-way".into()
+fn default_direction() -> WireDirection {
+    WireDirection::OneWay
 }
 
 // ── Free functions (testable without Tauri runtime) ────────────────
@@ -161,6 +281,54 @@ pub fn save_topology_data(
         if !seen_wire_ids.insert(&wire.id) {
             return Err(AppError::Internal(format!(
                 "duplicate wire id: {}",
+                wire.id
+            )));
+        }
+    }
+
+    // Validate node IDs are unique.
+    //
+    // Without this, the `node_ids` HashSet built below would silently
+    // collapse duplicate node ids, making wire endpoint resolution
+    // ambiguous (a wire pointing at "n1" could resolve to either
+    // duplicate). This mirrors the wire-id uniqueness check.
+    let mut seen_node_ids = std::collections::HashSet::new();
+    for node in &nodes {
+        if !seen_node_ids.insert(&node.id) {
+            return Err(AppError::Internal(format!(
+                "duplicate node id: {}",
+                node.id
+            )));
+        }
+    }
+
+    // Validate node types are known (reject #[serde(other)]).
+    for node in &nodes {
+        if node.node_type == NodeType::Unknown {
+            return Err(AppError::Internal(format!(
+                "node {} has unknown type",
+                node.id
+            )));
+        }
+    }
+
+    // Validate wire directions and ports are known.
+    for wire in &wires {
+        if wire.direction == WireDirection::Unknown {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown direction",
+                wire.id
+            )));
+        }
+        if wire.from_port == Some(PortName::Unknown) {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown from_port",
+                wire.id
+            )));
+        }
+        if wire.to_port == Some(PortName::Unknown) {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown to_port",
                 wire.id
             )));
         }
@@ -229,6 +397,169 @@ pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Topology
     load_topology_data(&conn)
 }
 
+/// Request body for updating a workspace instance within a topology diff.
+#[derive(Debug, serde::Deserialize)]
+pub struct UpdateInstanceRequest {
+    /// Instance ID to update.
+    pub id: String,
+    /// New display name.
+    pub name: String,
+}
+
+/// Apply a full topology diff atomically (Critical #4).
+///
+/// Creates, updates, and archives workspace instances within a single
+/// SQLite transaction on the store database, then saves the topology
+/// diagram (nodes + wires) on the global database.
+///
+/// # Transaction guarantee
+///
+/// All workspace instance mutations (create, update, archive) execute
+/// inside a single SQLite transaction. If any operation fails, the
+/// entire set of workspace changes rolls back. The create step runs its
+/// INSERT SQL *directly* on the outer transaction rather than delegating
+/// to `Store::create_workspace_instance` — that helper opens its own
+/// `unchecked_transaction` (`BEGIN`), which SQLite rejects with "cannot
+/// start a transaction within a transaction" when nested (see the
+/// `create_workspace_instance_cannot_nest_in_open_transaction` test in
+/// oz-core). The update and archive steps delegate to
+/// `Store::{update_workspace_instance,archive_instance}`, which use
+/// `Connection::execute` directly and therefore compose safely inside
+/// the outer transaction.
+///
+/// The topology diagram save is a separate step on the global DB and
+/// is not part of the workspace transaction. If the diagram save
+/// fails, the workspace mutations have already been committed.
+#[command]
+pub async fn apply_topology_diff(
+    session_token: String,
+    workspace_creations: Vec<CreateInstanceRequest>,
+    workspace_updates: Vec<UpdateInstanceRequest>,
+    workspace_archives: Vec<String>,
+    diagram_nodes: Vec<TopologyNodePayload>,
+    diagram_wires: Vec<TopologyWirePayload>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    // Capture lengths before the workspace block consumes the vectors
+    // (via `into_iter`-style moves). Also used for tracing after the
+    // diagram save.
+    let created = workspace_creations.len();
+    let updated = workspace_updates.len();
+    let archived = workspace_archives.len();
+    let node_count = diagram_nodes.len();
+    let wire_count = diagram_wires.len();
+
+    // ── Workspace CRUD in a single transaction ────────────────────────
+    //
+    // Scoped in a block so all non-`Send` types (MutexGuard, Store,
+    // Transaction) are dropped before the `state.db.lock().await` call
+    // below. Tauri requires command futures to be `Send`.
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+
+        // Permission: workspace topology changes require admin access.
+        require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+
+        // Inside this transaction, all create / update / archive SQL runs
+        // *directly* on `tx`. We deliberately do NOT delegate to
+        // `Store::create_workspace_instance` here: that method opens its
+        // own transaction via `unchecked_transaction`, which issues a raw
+        // `BEGIN` that SQLite rejects ("cannot start a transaction within
+        // a transaction") when an outer transaction is already open. See
+        // `create_workspace_instance_cannot_nest_in_open_transaction` in
+        // oz-core. Running the INSERT/UPDATE SQL directly preserves the
+        // single-transaction atomicity: if any step fails, the whole
+        // batch rolls back.
+        let tx = db
+            .unchecked_transaction()
+            .map_err(|e| AppError::Internal(format!("begin transaction: {e}")))?;
+
+        // 1. Create new workspace instances (direct SQL — no nested tx).
+        for creation in &workspace_creations {
+            // Mirrors Store::create_workspace_instance's existence check
+            // + INSERT, minus the nested transaction.
+            let exists: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM workspace_instances WHERE id = ?1",
+                    rusqlite::params![creation.id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if exists {
+                return Err(AppError::Internal(format!(
+                    "workspace instance already exists: {}",
+                    creation.id
+                )));
+            }
+            tx.execute(
+                "INSERT INTO workspace_instances \
+                 (id, type_key, store_id, name, description, colour, status, last_accessed_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', \
+                         strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+                rusqlite::params![
+                    creation.id,
+                    creation.type_key,
+                    creation.store_id,
+                    creation.name,
+                    creation.description.as_deref().unwrap_or(""),
+                    creation.colour.as_deref(),
+                ],
+            )
+            .map_err(|e| AppError::Internal(format!("create instance {}: {e}", creation.id)))?;
+        }
+
+        // 2. Update existing workspace instances (rename only).
+        //
+        // `update_workspace_instance` uses `self.conn.execute` directly
+        // (no nested transaction), so it composes safely inside this tx.
+        let tx_store = Store::new(&tx);
+        for update in &workspace_updates {
+            tx_store.update_workspace_instance(&update.id, &update.name, None, None)?;
+        }
+
+        // 3. Archive workspace instances removed from the canvas.
+        //
+        // `archive_instance` also uses `self.conn.execute` directly, so
+        // it is safe to call within this transaction. A 0-rows-affected
+        // archive surfaces as NotFound, which aborts (and rolls back)
+        // the whole batch.
+        for archive_id in &workspace_archives {
+            tx_store.archive_instance(archive_id)?;
+        }
+
+        tx.commit()
+            .map_err(|e| AppError::Internal(format!("commit transaction: {e}")))?;
+        // db, store, tx, tx_store all drop here when the block ends.
+    }
+
+    // ── Save topology diagram on global database ─────────────────────
+    //
+    // This `.await` is now safe — all non-`Send` types from the store
+    // DB block have been dropped.
+    let global_db = state.db.lock().await;
+    save_topology_data(&global_db, diagram_nodes, diagram_wires)?;
+
+    tracing::info!(
+        created,
+        updated,
+        archived,
+        nodes = node_count,
+        wires = wire_count,
+        "topology diff applied"
+    );
+
+    Ok(())
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -294,7 +625,7 @@ mod tests {
         assert_eq!(loaded.nodes[0].x, 100.0);
         assert_eq!(loaded.wires.len(), 1);
         assert_eq!(loaded.wires[0].id, "w-1");
-        assert_eq!(loaded.wires[0].from_port.as_deref(), Some("right"));
+        assert_eq!(loaded.wires[0].from_port, Some(PortName::Right));
     }
 
     #[test]
@@ -637,8 +968,8 @@ mod tests {
             roundtripped.wires[0].label.as_deref(),
             Some("Print job channel")
         );
-        assert_eq!(roundtripped.wires[0].from_port.as_deref(), Some("usb"));
-        assert_eq!(roundtripped.wires[0].to_port.as_deref(), Some("network"));
+        assert_eq!(roundtripped.wires[0].from_port, Some(PortName::Unknown));
+        assert_eq!(roundtripped.wires[0].to_port, Some(PortName::Unknown));
     }
 
     #[test]
@@ -710,7 +1041,7 @@ mod tests {
     fn node_empty_type() {
         let json = r#"{"id":"n1","type":"","name":"No Type","x":0,"y":0}"#;
         let node: TopologyNodePayload = serde_json::from_str(json).unwrap();
-        assert!(node.node_type.is_empty());
+        assert_eq!(node.node_type, NodeType::Unknown);
     }
 
     #[test]
@@ -938,7 +1269,7 @@ mod tests {
     fn wire_unexpected_direction_preserved() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":"bidirectional"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.direction, "bidirectional");
+        assert_eq!(wire.direction, WireDirection::Unknown);
     }
 
     #[test]
@@ -1076,7 +1407,7 @@ mod tests {
     fn wire_only_from_port() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","from_port":"left"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.from_port.as_deref(), Some("left"));
+        assert_eq!(wire.from_port, Some(PortName::Left));
         assert!(wire.to_port.is_none());
     }
 
@@ -1084,7 +1415,7 @@ mod tests {
     fn wire_only_to_port() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","to_port":"right"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.to_port.as_deref(), Some("right"));
+        assert_eq!(wire.to_port, Some(PortName::Right));
         assert!(wire.from_port.is_none());
     }
 
@@ -1093,8 +1424,8 @@ mod tests {
         let json =
             r#"{"id":"w1","from_node_id":"a","to_node_id":"b","from_port":"out","to_port":"in"}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.from_port.as_deref(), Some("out"));
-        assert_eq!(wire.to_port.as_deref(), Some("in"));
+        assert_eq!(wire.from_port, Some(PortName::Unknown));
+        assert_eq!(wire.to_port, Some(PortName::Unknown));
     }
 
     #[test]
@@ -1121,8 +1452,8 @@ mod tests {
         let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtripped.direction, "two-way");
         assert_eq!(roundtripped.label.as_deref(), Some("bi-directional sync"));
-        assert_eq!(roundtripped.from_port.as_deref(), Some("primary"));
-        assert_eq!(roundtripped.to_port.as_deref(), Some("secondary"));
+        assert_eq!(roundtripped.from_port, Some(PortName::Unknown));
+        assert_eq!(roundtripped.to_port, Some(PortName::Unknown));
     }
 
     // ── TopologyData structural tests ──────────────────────────────
@@ -1745,8 +2076,14 @@ mod tests {
             .unwrap();
         let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
 
-        let loaded_types: Vec<&str> = loaded.nodes.iter().map(|n| n.node_type.as_str()).collect();
-        assert_eq!(loaded_types, types);
+        assert_eq!(
+            loaded
+                .nodes
+                .iter()
+                .map(|n| n.node_type.clone())
+                .collect::<Vec<_>>(),
+            types.iter().map(|t| NodeType::from(*t)).collect::<Vec<_>>(),
+        );
     }
 
     #[test]
@@ -1783,7 +2120,7 @@ mod tests {
         };
         let debug = format!("{node:?}");
         assert!(debug.contains("n1"));
-        assert!(debug.contains("store"));
+        assert!(debug.contains("Store"));
     }
 
     #[test]
@@ -2403,7 +2740,7 @@ mod tests {
     fn empty_direction_preserved() {
         let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":""}"#;
         let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
-        assert_eq!(wire.direction, "");
+        assert_eq!(wire.direction, WireDirection::Unknown);
     }
 
     #[test]
@@ -2419,7 +2756,7 @@ mod tests {
         };
         let json = serde_json::to_string(&wire).unwrap();
         let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
-        assert_eq!(roundtripped.direction, "↔ bidirectional ←→");
+        assert_eq!(roundtripped.direction, WireDirection::Unknown);
     }
 
     #[test]
@@ -2442,7 +2779,7 @@ mod tests {
                 id: "w1".into(),
                 from_node_id: "n1".into(),
                 to_node_id: "n2".into(),
-                direction: "custom-hybrid".into(),
+                direction: "two-way".into(),
                 label: None,
                 from_port: None,
                 to_port: None,
@@ -2454,7 +2791,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let loaded: TopologyData = serde_json::from_str(&loaded_raw).unwrap();
-        assert_eq!(loaded.wires[0].direction, "custom-hybrid");
+        assert_eq!(loaded.wires[0].direction, "two-way");
     }
 
     // ── Metadata extreme values ────────────────────────────────────
@@ -3549,8 +3886,8 @@ mod tests {
         let json = serde_json::to_string(&wire).unwrap();
         let roundtripped: TopologyWirePayload = serde_json::from_str(&json).unwrap();
         assert_eq!(roundtripped.label.as_deref(), Some(label.as_str()));
-        assert_eq!(roundtripped.from_port.as_deref(), Some("🔌"));
-        assert_eq!(roundtripped.to_port.as_deref(), Some("🔋"));
+        assert_eq!(roundtripped.from_port, Some(PortName::Unknown));
+        assert_eq!(roundtripped.to_port, Some(PortName::Unknown));
     }
 
     // ── Large-scale combined stress ─────────────────────────────────
@@ -3825,5 +4162,596 @@ mod tests {
         assert_eq!(loaded.wires.len(), 1);
         assert_eq!(loaded.wires[0].from_node_id, "store-a");
         assert_eq!(loaded.wires[0].to_node_id, "ws-1");
+    }
+    // ── Audit follow-up: node-id uniqueness + enum validation + atomicity ─
+    //
+    // These tests cover the gaps surfaced by TOPOLOGY_AUDIT (#4, #5, #11)
+    // and the node-id uniqueness asymmetry found while writing this suite.
+    // They exercise `save_topology_data` (the free function the
+    // `apply_topology_diff` command delegates to) and the serde enums
+    // introduced to fix audit #11.
+
+    fn node(id: &str, node_type: &str) -> TopologyNodePayload {
+        TopologyNodePayload {
+            id: id.into(),
+            node_type: node_type.into(),
+            name: format!("Node {id}"),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        }
+    }
+
+    fn wire(id: &str, from: &str, to: &str) -> TopologyWirePayload {
+        TopologyWirePayload {
+            id: id.into(),
+            from_node_id: from.into(),
+            to_node_id: to.into(),
+            direction: "one-way".into(),
+            label: None,
+            from_port: None,
+            to_port: None,
+        }
+    }
+
+    // ── #11: enum PartialEq<&str> + From<&str> consistency ───────────
+
+    #[test]
+    fn node_type_partial_eq_str_matches_all_known_variants() {
+        assert_eq!(NodeType::Store, "store");
+        assert_eq!(NodeType::Workspace, "workspace");
+        assert_eq!(NodeType::Warehouse, "warehouse");
+        assert_eq!(NodeType::Hardware, "hardware");
+        // Unknown never matches a concrete string.
+        assert_ne!(NodeType::Unknown, "store");
+        assert_ne!(NodeType::Unknown, "unknown");
+    }
+
+    #[test]
+    fn node_type_from_str_roundtrips_known_and_unknown() {
+        assert_eq!(NodeType::from("store"), NodeType::Store);
+        assert_eq!(NodeType::from("workspace"), NodeType::Workspace);
+        assert_eq!(NodeType::from("warehouse"), NodeType::Warehouse);
+        assert_eq!(NodeType::from("hardware"), NodeType::Hardware);
+        // Anything else collapses to Unknown (caught on save).
+        assert_eq!(NodeType::from("foo"), NodeType::Unknown);
+        assert_eq!(NodeType::from(""), NodeType::Unknown);
+        assert_eq!(NodeType::from("Store"), NodeType::Unknown); // case-sensitive
+    }
+
+    #[test]
+    fn wire_direction_partial_eq_and_from_consistent() {
+        assert_eq!(WireDirection::OneWay, "one-way");
+        assert_eq!(WireDirection::TwoWay, "two-way");
+        assert_ne!(WireDirection::Unknown, "one-way");
+        assert_eq!(WireDirection::from("one-way"), WireDirection::OneWay);
+        assert_eq!(WireDirection::from("two-way"), WireDirection::TwoWay);
+        assert_eq!(WireDirection::from("bidirectional"), WireDirection::Unknown);
+    }
+
+    #[test]
+    fn port_name_partial_eq_and_from_consistent() {
+        assert_eq!(PortName::Top, "top");
+        assert_eq!(PortName::Right, "right");
+        assert_eq!(PortName::Bottom, "bottom");
+        assert_eq!(PortName::Left, "left");
+        assert_ne!(PortName::Unknown, "left");
+        assert_eq!(PortName::from("top"), PortName::Top);
+        assert_eq!(PortName::from("left"), PortName::Left);
+        assert_eq!(PortName::from("usb"), PortName::Unknown);
+    }
+
+    // ── #11: save rejects every Unknown enum variant (fail-closed) ─────
+
+    #[test]
+    fn save_rejects_unknown_node_type_variant() {
+        let conn = fresh_conn();
+        // Build a node whose type deserialised to Unknown.
+        let mut n = node("n1", "store");
+        n.node_type = NodeType::Unknown;
+        let result = save_topology_data(&conn, vec![n], vec![]);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("unknown type"),
+            "expected 'unknown type' in error, got: {err}"
+        );
+        // DB must remain empty — nothing was persisted.
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn save_rejects_unknown_wire_direction_variant() {
+        let conn = fresh_conn();
+        let mut w = wire("w1", "n1", "n2");
+        w.direction = WireDirection::Unknown;
+        let result = save_topology_data(
+            &conn,
+            vec![node("n1", "store"), node("n2", "workspace")],
+            vec![w],
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("unknown direction"),
+            "expected 'unknown direction' in error, got: {err}"
+        );
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn save_rejects_unknown_from_port_variant() {
+        let conn = fresh_conn();
+        let mut w = wire("w1", "n1", "n2");
+        w.from_port = Some(PortName::Unknown);
+        let result = save_topology_data(
+            &conn,
+            vec![node("n1", "store"), node("n2", "workspace")],
+            vec![w],
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("unknown from_port"), "got: {err}");
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn save_rejects_unknown_to_port_variant() {
+        let conn = fresh_conn();
+        let mut w = wire("w1", "n1", "n2");
+        w.to_port = Some(PortName::Unknown);
+        let result = save_topology_data(
+            &conn,
+            vec![node("n1", "store"), node("n2", "workspace")],
+            vec![w],
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("unknown to_port"), "got: {err}");
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn save_accepts_all_four_valid_node_types() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            node("s", "store"),
+            node("w", "workspace"),
+            node("h", "warehouse"),
+            node("hw", "hardware"),
+        ];
+        save_topology_data(&conn, nodes, vec![]).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 4);
+        assert_eq!(loaded.nodes[0].node_type, NodeType::Store);
+        assert_eq!(loaded.nodes[1].node_type, NodeType::Workspace);
+        assert_eq!(loaded.nodes[2].node_type, NodeType::Warehouse);
+        assert_eq!(loaded.nodes[3].node_type, NodeType::Hardware);
+    }
+
+    // ── Bug fix: save_topology_data now rejects duplicate node ids ──────
+    //
+    // Previously only wire-id uniqueness was checked. Two nodes sharing an
+    // id would be accepted, then the `node_ids` HashSet would collapse
+    // them, making wire endpoint resolution ambiguous.
+
+    #[test]
+    fn save_rejects_duplicate_node_ids() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            node("dup", "store"),
+            TopologyNodePayload {
+                id: "dup".into(),
+                node_type: "workspace".into(),
+                ..node("dup", "store")
+            },
+        ];
+        let result = save_topology_data(&conn, nodes, vec![]);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate node id"),
+            "expected 'duplicate node id' in error, got: {err}"
+        );
+        // Nothing persisted.
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn save_rejects_duplicate_node_ids_with_valid_wires() {
+        let conn = fresh_conn();
+        // Two nodes share "n1"; a wire between them is otherwise valid.
+        let nodes = vec![
+            node("n1", "store"),
+            TopologyNodePayload {
+                id: "n1".into(),
+                node_type: "workspace".into(),
+                ..node("n1", "store")
+            },
+        ];
+        let wires = vec![wire("w1", "n1", "n1")];
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate node id")
+        );
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    // ── Transaction integrity: failed validation must not poison DB ────
+
+    #[test]
+    fn failed_save_does_not_overwrite_existing_topology() {
+        let conn = fresh_conn();
+        // Seed a valid topology.
+        save_topology_data(&conn, vec![node("good", "store")], vec![]).unwrap();
+        assert_eq!(load_topology_data(&conn).unwrap().unwrap().nodes.len(), 1);
+
+        // Attempt a save that fails validation (duplicate node id).
+        let bad = vec![node("dup", "store"), node("dup", "workspace")];
+        let result = save_topology_data(&conn, bad, vec![]);
+        assert!(result.is_err());
+
+        // The pre-existing good topology must be intact.
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes[0].id, "good");
+    }
+
+    #[test]
+    fn failed_save_due_to_bad_wire_leaves_existing_topology_intact() {
+        let conn = fresh_conn();
+        save_topology_data(&conn, vec![node("keep", "store")], vec![]).unwrap();
+
+        // Wire references a node that isn't in the new node list.
+        let result = save_topology_data(
+            &conn,
+            vec![node("other", "workspace")],
+            vec![wire("w1", "other", "ghost")],
+        );
+        assert!(result.is_err());
+        // Original topology preserved.
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert_eq!(loaded.nodes[0].id, "keep");
+    }
+
+    // ── Validation ordering: node checks run before wire checks ────────
+
+    #[test]
+    fn duplicate_node_id_error_takes_precedence_over_wire_errors() {
+        let conn = fresh_conn();
+        // Both a duplicate node id AND an orphan wire are present.
+        // Node-id uniqueness is checked first, so the error must mention
+        // the node, not the wire.
+        let nodes = vec![node("dup", "store"), node("dup", "workspace")];
+        let wires = vec![wire("w1", "ghost", "alsoghost")];
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate node id"),
+            "node-id check must run first, got: {err}"
+        );
+        assert!(!err.contains("from_node_id"));
+    }
+
+    // ── Round-trip of the full enum surface through the DB ─────────────
+
+    #[test]
+    fn all_valid_directions_and_ports_roundtrip_through_db() {
+        let conn = fresh_conn();
+        let nodes = vec![node("a", "store"), node("b", "workspace")];
+        let wires = vec![
+            TopologyWirePayload {
+                id: "w1".into(),
+                from_node_id: "a".into(),
+                to_node_id: "b".into(),
+                direction: "one-way".into(),
+                label: None,
+                from_port: Some("right".into()),
+                to_port: Some("left".into()),
+            },
+            TopologyWirePayload {
+                id: "w2".into(),
+                from_node_id: "a".into(),
+                to_node_id: "b".into(),
+                direction: "two-way".into(),
+                label: None,
+                from_port: Some("top".into()),
+                to_port: Some("bottom".into()),
+            },
+        ];
+        save_topology_data(&conn, nodes, wires).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.wires.len(), 2);
+        assert_eq!(loaded.wires[0].direction, WireDirection::OneWay);
+        assert_eq!(loaded.wires[0].from_port, Some(PortName::Right));
+        assert_eq!(loaded.wires[0].to_port, Some(PortName::Left));
+        assert_eq!(loaded.wires[1].direction, WireDirection::TwoWay);
+        assert_eq!(loaded.wires[1].from_port, Some(PortName::Top));
+        assert_eq!(loaded.wires[1].to_port, Some(PortName::Bottom));
+    }
+
+    // ── Backward-compat: load coerces legacy unknown values, save rejects ─
+
+    #[test]
+    fn legacy_unknown_node_type_loads_as_unknown_then_save_rejects() {
+        let conn = fresh_conn();
+        // Hand-edited legacy JSON with an unknown type.
+        let legacy =
+            r#"{"nodes":[{"id":"n1","type":"foo","name":"Legacy","x":0,"y":0}],"wires":[]}"#;
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, legacy).unwrap();
+
+        // Load coerces to Unknown (does not error — backward compat).
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes[0].node_type, NodeType::Unknown);
+
+        // Re-saving must fail-closed.
+        let result = save_topology_data(&conn, loaded.nodes, loaded.wires);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unknown type"));
+    }
+
+    #[test]
+    fn legacy_unknown_direction_loads_then_save_rejects() {
+        let conn = fresh_conn();
+        let legacy = r#"{"nodes":[{"id":"a","type":"store","name":"A","x":0,"y":0},
+                                  {"id":"b","type":"workspace","name":"B","x":1,"y":1}],
+                          "wires":[{"id":"w1","from_node_id":"a","to_node_id":"b","direction":"sideways"}]}"#;
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, legacy).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.wires[0].direction, WireDirection::Unknown);
+        let result = save_topology_data(&conn, loaded.nodes, loaded.wires);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown direction")
+        );
+    }
+
+    // ── Empty-string ids are still accepted (no spurious rejection) ────
+
+    #[test]
+    fn save_accepts_empty_node_id_when_unique() {
+        let conn = fresh_conn();
+        // A single empty-id node is unusual but not ambiguous; only
+        // duplicates should be rejected.
+        let mut n = node("", "store");
+        n.id = String::new();
+        save_topology_data(&conn, vec![n], vec![]).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        assert!(loaded.nodes[0].id.is_empty());
+    }
+
+    // ── Save is idempotent: identical data saves twice without drift ───
+
+    #[test]
+    fn identical_save_twice_produces_same_loaded_state() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            node("a", "store"),
+            node("b", "workspace"),
+            node("c", "warehouse"),
+        ];
+        let wires = vec![wire("w1", "a", "b"), wire("w2", "b", "c")];
+        save_topology_data(&conn, nodes.clone(), wires.clone()).unwrap();
+        let first = load_topology_data(&conn).unwrap().unwrap();
+        save_topology_data(&conn, nodes, wires).unwrap();
+        let second = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(first.nodes.len(), second.nodes.len());
+        assert_eq!(first.wires.len(), second.wires.len());
+        assert_eq!(second.nodes[0].id, "a");
+        assert_eq!(second.wires[1].from_node_id, "b");
+    }
+
+    // ── Atomicity: a single save is all-or-nothing on validation ───────
+    //
+    // If any element fails validation, nothing in the batch persists.
+
+    #[test]
+    fn save_with_mixed_valid_and_invalid_data_persists_neither() {
+        let conn = fresh_conn();
+        // One valid node + one invalid (unknown type). The whole batch
+        // must be rejected — no partial persistence.
+        let nodes = vec![node("ok", "store"), {
+            let mut n = node("bad", "store");
+            n.node_type = NodeType::Unknown;
+            n
+        }];
+        let result = save_topology_data(&conn, nodes, vec![]);
+        assert!(result.is_err());
+        // Neither the valid nor the invalid node was persisted.
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+
+    // ── Wire self-reference is allowed (a node can wire to itself) ─────
+
+    #[test]
+    fn save_allows_self_referential_wire() {
+        let conn = fresh_conn();
+        let nodes = vec![node("n1", "store")];
+        let wires = vec![wire("self", "n1", "n1")];
+        save_topology_data(&conn, nodes, wires).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.wires.len(), 1);
+        assert_eq!(loaded.wires[0].from_node_id, "n1");
+        assert_eq!(loaded.wires[0].to_node_id, "n1");
+    }
+
+    // ── Large valid graph passes all validation in one save ───────────
+
+    #[test]
+    fn large_valid_graph_with_wires_passes_validation() {
+        let conn = fresh_conn();
+        let nodes: Vec<TopologyNodePayload> =
+            (0..200).map(|i| node(&format!("n-{i}"), "store")).collect();
+        let wires: Vec<TopologyWirePayload> = (0..199)
+            .map(|i| {
+                wire(
+                    &format!("w-{i}"),
+                    &format!("n-{i}"),
+                    &format!("n-{}", i + 1),
+                )
+            })
+            .collect();
+        save_topology_data(&conn, nodes, wires).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 200);
+        assert_eq!(loaded.wires.len(), 199);
+        // Chain integrity: wire i connects n-i → n-(i+1).
+        for i in 0..199 {
+            assert_eq!(loaded.wires[i].from_node_id, format!("n-{i}"));
+            assert_eq!(loaded.wires[i].to_node_id, format!("n-{}", i + 1));
+        }
+    }
+
+    // ── One bad wire in a large batch rejects the entire batch ─────────
+
+    #[test]
+    fn one_orphan_wire_in_large_batch_rejects_all() {
+        let conn = fresh_conn();
+        let nodes: Vec<TopologyNodePayload> =
+            (0..100).map(|i| node(&format!("n-{i}"), "store")).collect();
+        let mut wires: Vec<TopologyWirePayload> = (0..99)
+            .map(|i| {
+                wire(
+                    &format!("w-{i}"),
+                    &format!("n-{i}"),
+                    &format!("n-{}", i + 1),
+                )
+            })
+            .collect();
+        // Append one wire referencing a non-existent node.
+        wires.push(wire("bad", "n-0", "ghost"));
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown to_node_id")
+        );
+        // Nothing persisted.
+        assert!(load_topology_data(&conn).unwrap().is_none());
+    }
+    // ── Wire direction / port serialization edge cases (#10, #11) ──
+
+    #[test]
+    fn wire_null_direction_defaults_to_one_way() {
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":null}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.direction, WireDirection::OneWay);
+    }
+
+    #[test]
+    fn wire_unknown_direction_becomes_unknown_variant() {
+        // Any unrecognized wire direction string maps to WireDirection::Unknown
+        // via #[serde(other)], which is then rejected by save_topology_data.
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","direction":"bidirectional"}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.direction, WireDirection::Unknown);
+    }
+
+    #[test]
+    fn wire_unknown_port_becomes_unknown_variant() {
+        let json = r#"{"id":"w1","from_node_id":"a","to_node_id":"b","from_port":"north","to_port":"south"}"#;
+        let wire: TopologyWirePayload = serde_json::from_str(json).unwrap();
+        assert_eq!(wire.from_port, Some(PortName::Unknown));
+        assert_eq!(wire.to_port, Some(PortName::Unknown));
+    }
+
+    #[test]
+    fn save_topology_data_rejects_wire_with_unknown_direction() {
+        let conn = fresh_conn();
+        let nodes = vec![TopologyNodePayload {
+            id: "n1".into(),
+            node_type: "store".into(),
+            name: "Store".into(),
+            subtitle: None,
+            x: 0.0,
+            y: 0.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: None,
+        }];
+        let wires = vec![TopologyWirePayload {
+            id: "w1".into(),
+            from_node_id: "n1".into(),
+            to_node_id: "n1".into(),
+            direction: WireDirection::Unknown,
+            label: None,
+            from_port: None,
+            to_port: None,
+        }];
+        let result = save_topology_data(&conn, nodes, wires);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("unknown direction"));
+    }
+
+    // ── Diagram metadata persistence (#1 follow-up) ───────────────
+
+    #[test]
+    fn diagram_node_with_persisted_metadata_roundtrips() {
+        let conn = fresh_conn();
+        let node = TopologyNodePayload {
+            id: "ws-diagram".into(),
+            node_type: "workspace".into(),
+            name: "Diagrammed POS".into(),
+            subtitle: None,
+            x: 340.0,
+            y: 80.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: Some(serde_json::json!({
+                "typeKey": "kds",
+                "persisted": true
+            })),
+        };
+        save_topology_data(&conn, vec![node], vec![]).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.nodes.len(), 1);
+        let meta = loaded.nodes[0].metadata.as_ref().unwrap();
+        assert_eq!(meta["typeKey"], "kds");
+        assert_eq!(meta["persisted"], true);
+    }
+
+    #[test]
+    fn diagram_node_without_persisted_metadata_roundtrips() {
+        let conn = fresh_conn();
+        // A freshly-added workspace node — not yet persisted to workspace_instances
+        let node = TopologyNodePayload {
+            id: "ws-draft".into(),
+            node_type: "workspace".into(),
+            name: "Draft POS".into(),
+            subtitle: None,
+            x: 340.0,
+            y: 80.0,
+            tier_requirement: None,
+            telemetry_badge: None,
+            telemetry_status: None,
+            metadata: Some(serde_json::json!({
+                "typeKey": "store-pos",
+                "persisted": false
+            })),
+        };
+        save_topology_data(&conn, vec![node], vec![]).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        let meta = loaded.nodes[0].metadata.as_ref().unwrap();
+        assert_eq!(meta["persisted"], false);
+        assert_eq!(meta["typeKey"], "store-pos");
     }
 }

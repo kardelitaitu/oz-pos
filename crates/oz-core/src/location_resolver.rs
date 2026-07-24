@@ -847,6 +847,7 @@ mod tests {
     // ── Cache tests ────────────────────────────────────────────────
 
     #[test]
+    #[serial_test::serial]
     fn location_cache_returns_cached_value_invalidation_forces_db_read() {
         // Uses entirely unique IDs to avoid any possible collision with seed data
         // or parallel test interference. The location name must be globally unique
@@ -907,6 +908,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn location_cache_notfound_cleared_by_invalidation() {
         let conn = migrated();
         seed_fks(&conn);
@@ -943,6 +945,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn location_cache_explicit_override_never_cached() {
         let conn = migrated();
         seed_fks(&conn);

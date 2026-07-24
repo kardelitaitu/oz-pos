@@ -30,8 +30,13 @@ next: Migrate terminal commands into this module | perf: N/A.
 //!
 //! See `modules/terminal/manifest.json` for the module metadata.
 
-// Re-export key terminal domain types from oz-core.
-pub use oz_core::Terminal;
+pub mod models;
+pub mod repository;
+pub mod service;
+
+pub use models::{Terminal, TerminalId};
+pub use repository::TerminalRepository;
+pub use service::TerminalService;
 
 use std::fmt::Debug;
 

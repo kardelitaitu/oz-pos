@@ -44,12 +44,17 @@ next: Migrate loyalty commands and DB layer into this module | perf: N/A.
 //! # use modules_loyalty::{LoyaltyModule, LoyaltyTier, LoyaltyAccount, LoyaltyTransaction, LoyaltyAccountWithDetails};
 //! ```
 
-// Re-export loyalty domain types from oz-core so consumers can
-// access them through this module without importing oz-core directly.
-pub use oz_core::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
-
-/// Loyalty repository — high-level operations wrapping oz-core Store methods.
+pub mod models;
 pub mod repository;
+pub mod service;
+
+pub use models::{
+    GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
+    LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction,
+    RedeemGiftCardResult,
+};
+pub use repository::LoyaltyRepository;
+pub use service::LoyaltyService;
 
 use std::fmt::Debug;
 

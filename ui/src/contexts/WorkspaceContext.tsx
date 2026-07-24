@@ -98,7 +98,8 @@ export interface WorkspaceScope {
   typeKey: string;
 }
 
-const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
+/** Exported for test helpers only — always use `useWorkspaceScope` in production code. */
+export const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
 
 /** Access the current workspace scope (storeId, instanceId, typeKey), or null. */
 // eslint-disable-next-line react-refresh/only-export-components
@@ -143,7 +144,8 @@ export interface WorkspaceContextValue {
   swapSessionToken: (newUserId: string, newRoleId: string) => Promise<void>;
 }
 
-const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
+/** Exported for test helpers only — always use `useWorkspace` in production code. */
+export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 /** Default store ID for Phase 1 (single-store mode).
  *  ADR #4 Phase 3: Replaced by dynamic resolution via resolveBootStore().
@@ -383,19 +385,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [roleId, userId, fetchWorkspaces]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!activeInstance) {
       setWorkspaceScreensState([]);
       return;
     }
     listWorkspaceScreens(activeInstance.type_key)
       .then((screens) => {
+        if (cancelled) return;
         if (screens.length > 0) {
           setWorkspaceScreensState(screens.map((s) => s.screen_key));
         } else {
           setWorkspaceScreensState([]);
         }
       })
-      .catch(() => setWorkspaceScreensState([]));
+      .catch(() => {
+        if (!cancelled) setWorkspaceScreensState([]);
+      });
+    return () => { cancelled = true; };
   }, [activeInstance]);
 
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 minor finding) · concrete claims verified: apps/cloud-server/ + crates/oz-plugin/ crates exist; crates/oz-reporting/src/menu_engineering.rs, crates/oz-core/src/recipe.rs + db/recipes.rs, crates/oz-core/src/sync/lan_discovery.rs, Dockerfile.server, docker-compose.yml all present; crates/oz-core/src/features.rs has cafe() (line 362) + franchise() (line 378) presets with tests · FINDING (minor): line 221 references version lock "0.0.4" — branch is 0.0.19 / docs say 0.0.18, so 0.0.4 is a stale version string in the plan text (not a code divergence). All 46/46 phase tasks reference real, existing code · master plan is internally consistent with the implemented modular architecture -->
+
 # Modular Application Master Plan: Feature-Based Configuration & Execution Roadmap
 
 **Status:** Active Planning Document  

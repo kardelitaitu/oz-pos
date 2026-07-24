@@ -12,6 +12,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Refundlinearg.
 pub struct RefundLineArg {
     /// ID of the associated sale line.
@@ -29,6 +30,7 @@ pub struct RefundLineArg {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Processrefundargs.
 pub struct ProcessRefundArgs {
     /// ID of the original completed sale.
@@ -46,6 +48,7 @@ pub struct ProcessRefundArgs {
 /// Args for `process_refund_scoped` — identical to `ProcessRefundArgs`
 /// but without `user_id` (read from the session token instead).
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessRefundScopedArgs {
     /// ID of the associated sale.
     pub sale_id: String,
@@ -143,10 +146,15 @@ fn run_process_refund(
     }
 
     // Build refund domain objects.
+    // Use collect::<Result> so invalid currency codes surface as errors
+    // instead of silently falling back to the sale currency via .unwrap_or().
     let refund_lines: Vec<RefundLine> = lines
         .iter()
         .map(|l| {
-            let currency: oz_core::Currency = l.currency.parse().unwrap_or(sale.currency);
+            let currency: oz_core::Currency = l
+                .currency
+                .parse()
+                .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", l.currency)))?;
             let unit_price = Money {
                 minor_units: l.unit_price_minor,
                 currency,
@@ -155,9 +163,15 @@ fn run_process_refund(
                 minor_units: l.line_total_minor,
                 currency,
             };
-            RefundLine::new(&l.sale_line_id, &l.sku, l.qty, unit_price, line_total)
+            Ok(RefundLine::new(
+                &l.sale_line_id,
+                &l.sku,
+                l.qty,
+                unit_price,
+                line_total,
+            ))
         })
-        .collect();
+        .collect::<Result<Vec<_>, AppError>>()?;
 
     let total_minor: i64 = refund_lines.iter().map(|l| l.line_total.minor_units).sum();
     let total = Money {
@@ -208,17 +222,30 @@ pub async fn lookup_sale_by_receipt_barcode(
 /// Look up a sale by receipt barcode from the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `lookup_sale_by_receipt_barcode`.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn lookup_sale_by_receipt_barcode_scoped(
     session_token: String,
     barcode: String,
     state: State<'_, AppState>,
 ) -> Result<Option<Sale>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
     drop(db);
     Ok(sale)
@@ -242,17 +269,30 @@ pub async fn list_refunds(
 /// List all refunds for a sale from the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `list_refunds`.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn list_refunds_scoped(
     session_token: String,
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<Refund>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let refunds = store.list_refunds_for_sale(&sale_id)?;
     drop(db);
     Ok(refunds)
@@ -430,7 +470,9 @@ mod tests {
 
     #[test]
     fn process_refund_scoped_args_deserialize() {
-        let json = r##"{"sale_id":"sale-1","reason":"Changed mind","note":null,"lines":[]}"##;
+        // camelCase — the exact format the frontend sends
+        // (ui/src/api/sales.ts ProcessRefundScopedArgs: { saleId, reason, note, lines }).
+        let json = r##"{"saleId":"sale-1","reason":"Changed mind","note":null,"lines":[]}"##;
         let args: ProcessRefundScopedArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sale_id, "sale-1");
         assert_eq!(args.reason, "Changed mind");
@@ -454,5 +496,117 @@ mod tests {
         let state = AppState::for_test();
         let result = state.resolve_session("nonexistent-token");
         assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    // ── Bug #11: invalid currency must not silently fall back ────
+
+    /// Seed a user with refund permission so the permission check passes.
+    fn seed_user_with_refund_permission(conn: &Connection, user_id: &str) {
+        conn.execute_batch(&format!(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-refund', 'Refund Tester', 'Refund Tester', '[\"sales:refund\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, display_name, role_id, pin_hash, is_active, created_at, updated_at) VALUES
+                ('{user_id}', '{user_id}', 'Test User', 'role-refund', 'hashed', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        )).unwrap();
+    }
+
+    #[test]
+    fn refund_with_invalid_currency_returns_error_not_silent_fallback() {
+        let conn = fresh_conn();
+        let sale_id = seed_completed_sale(&conn);
+        seed_user_with_refund_permission(&conn, "user-refund-tester");
+
+        let lines = [RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "INVALID_ZZZ".into(),
+            line_total_minor: 700,
+        }];
+
+        let result =
+            run_process_refund(&conn, &sale_id, "test", None, "user-refund-tester", &lines);
+        // Bug #11: .unwrap_or(sale.currency) silently fell back to USD.
+        // After the fix, this must return an error mentioning the invalid currency.
+        assert!(
+            result.is_err(),
+            "refund with invalid currency 'INVALID_ZZZ' must return Err, \
+             got Ok — currency parse failure was silently swallowed (bug #11)"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("invalid currency") || err.contains("INVALID_ZZZ"),
+            "error should mention invalid currency, got: {err}"
+        );
+    }
+
+    #[test]
+    fn refund_with_valid_currency_succeeds_through_run_process_refund() {
+        // Regression: the collect::<Result> refactor must not regress valid flows.
+        let conn = fresh_conn();
+        let sale_id = seed_completed_sale(&conn);
+        seed_user_with_refund_permission(&conn, "user-valid");
+
+        let lines = [RefundLineArg {
+            sale_line_id: "sl-1".into(),
+            sku: "COFFEE".into(),
+            qty: 2,
+            unit_price_minor: 350,
+            currency: "USD".into(),
+            line_total_minor: 700,
+        }];
+
+        let result = run_process_refund(&conn, &sale_id, "test", None, "user-valid", &lines);
+        assert!(
+            result.is_ok(),
+            "valid currency must succeed, got: {:?}",
+            result.err()
+        );
+        let r = result.unwrap();
+        assert_eq!(r.total_minor, 700);
+    }
+
+    // ── Frontend camelCase parity (Bug #13) ──────────────────────────────
+    //
+    // The frontend (ui/src/api/sales.ts) sends camelCase keys:
+    //   RefundLineArg:      { saleLineId, sku, qty, unitPriceMinor, currency, lineTotalMinor }
+    //   ProcessRefundArgs:  { saleId, reason, note, userId, lines }
+    //   ProcessRefundScopedArgs: { saleId, reason, note, lines }
+    // wrapped in { args: { ... } }. Tauri does NOT rename struct fields
+    // — serde uses the exact field names. Without #[serde(rename_all =
+    // "camelCase")], serde looks for "sale_line_id"/"unit_price_minor"/
+    // "line_total_minor"/"sale_id"/"user_id" and fails on the real
+    // frontend payload, breaking every refund call.
+
+    #[test]
+    fn refund_line_arg_deserialize_frontend_camelcase() {
+        let json = r##"{"saleLineId":"sl-1","sku":"COFFEE","qty":2,"unitPriceMinor":350,"currency":"USD","lineTotalMinor":700}"##;
+        let line: RefundLineArg = serde_json::from_str(json)
+            .expect("RefundLineArg must accept the frontend's camelCase payload");
+        assert_eq!(line.sale_line_id, "sl-1");
+        assert_eq!(line.unit_price_minor, 350);
+        assert_eq!(line.line_total_minor, 700);
+    }
+
+    #[test]
+    fn process_refund_args_deserialize_frontend_camelcase() {
+        let json = r##"{"saleId":"sale-1","reason":"Customer return","note":"damaged","userId":"u1","lines":[{"saleLineId":"sl-1","sku":"COFFEE","qty":2,"unitPriceMinor":350,"currency":"USD","lineTotalMinor":700}]}"##;
+        let args: ProcessRefundArgs = serde_json::from_str(json)
+            .expect("ProcessRefundArgs must accept the frontend's camelCase payload");
+        assert_eq!(args.sale_id, "sale-1");
+        assert_eq!(args.user_id, "u1");
+        assert_eq!(args.lines.len(), 1);
+        assert_eq!(args.lines[0].sale_line_id, "sl-1");
+    }
+
+    #[test]
+    fn process_refund_scoped_args_deserialize_frontend_camelcase() {
+        let json = r##"{"saleId":"sale-1","reason":"Customer return","note":null,"lines":[]}"##;
+        let args: ProcessRefundScopedArgs = serde_json::from_str(json)
+            .expect("ProcessRefundScopedArgs must accept the frontend's camelCase payload");
+        assert_eq!(args.sale_id, "sale-1");
+        assert_eq!(args.reason, "Customer return");
+        assert!(args.lines.is_empty());
     }
 }

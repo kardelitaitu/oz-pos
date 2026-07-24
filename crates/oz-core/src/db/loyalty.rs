@@ -246,8 +246,11 @@ impl Store<'_> {
                 created_at: String::new(),
             });
 
-        let points = ((total_minor * tier.points_per_unit / 100) as f64 * tier.earn_multiplier)
-            .round() as i64;
+        // Multiply first (still in i64) then convert to f64 for the /100 division
+        // to preserve fractional cents. Integer division truncates, which would
+        // cause precision loss for sub-dollar amounts.
+        let base = total_minor.saturating_mul(tier.points_per_unit);
+        let points = ((base as f64) / 100.0 * tier.earn_multiplier).round() as i64;
 
         if points <= 0 {
             return Err(CoreError::Validation {
@@ -677,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn earn_points_small_total_rounds_to_zero() {
+    fn earn_points_small_total_rounds_to_one() {
         let conn = fresh();
         seed_customer(&conn, "cust-1", "Alice");
         seed_sale(&conn, "sale-1");
@@ -685,9 +688,84 @@ mod tests {
             .get_or_create_loyalty_account("cust-1")
             .unwrap();
 
-        // total_minor = 9 → 9 * 10 / 100 * 1.0 = 0.9 → rounds to 0 → Validation error
-        let err = store(&conn).earn_points("cust-1", "sale-1", 9).unwrap_err();
+        // total_minor = 9 → base = 90 → 90.0 / 100.0 * 1.0 = 0.9 → rounds to 1
+        // With the fix for integer truncation, fractional cents are preserved
+        let txn = store(&conn).earn_points("cust-1", "sale-1", 9).unwrap();
+        assert_eq!(
+            txn.points, 1,
+            "9 cents with 10 pts/unit should round 0.9 → 1"
+        );
+    }
+
+    #[test]
+    fn earn_points_tiny_total_rounds_to_zero() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        // total_minor = 4 → base = 40 → 40.0 / 100.0 * 1.0 = 0.4 → rounds to 0 → err
+        let err = store(&conn).earn_points("cust-1", "sale-1", 4).unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "total_minor"));
+    }
+
+    #[test]
+    fn earn_points_no_integer_truncation_for_sub_dollar_amounts() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        // total_minor = 155 ($1.55), points_per_unit = 10, earn_multiplier = 1.0
+        // Correct math: 155 * 10 / 100 = 15.5 → round → 16
+        // Integer-division bug: 155 * 10 / 100 = 15 (truncated) → 15
+        let txn = store(&conn).earn_points("cust-1", "sale-1", 155).unwrap();
+        assert_eq!(
+            txn.points, 16,
+            "$1.55 with 10 pts/unit should earn 16 pts (rounded from 15.5), \
+             not {} from integer truncation",
+            txn.points
+        );
+
+        // Verify account balance matches
+        let details = store(&conn).get_loyalty_account("cust-1").unwrap().unwrap();
+        assert_eq!(details.account.points, 16);
+        assert_eq!(details.account.lifetime_points, 16);
+    }
+
+    #[test]
+    fn earn_points_multiple_sub_dollar_amounts_stack_correctly() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        seed_sale(&conn, "sale-2");
+        seed_sale(&conn, "sale-3");
+        let s = store(&conn);
+        s.get_or_create_loyalty_account("cust-1").unwrap();
+
+        // Three sub-dollar purchases that should round correctly
+        // $1.55 → 16 pts, $2.49 → 25 pts, $0.99 → 10 pts
+        s.earn_points("cust-1", "sale-1", 155).unwrap();
+        s.earn_points("cust-1", "sale-2", 249).unwrap();
+        s.earn_points("cust-1", "sale-3", 99).unwrap();
+
+        // Expected: 16 + 25 + 10 = 51 (with correct float division)
+        // Bug: 15 + 24 + 9 = 48 (with integer truncation before f64 cast)
+        let details = s.get_loyalty_account("cust-1").unwrap().unwrap();
+        assert_eq!(
+            details.account.points, 51,
+            "accumulated points from 155+249+99 should be 51, got {}",
+            details.account.points
+        );
+        assert_eq!(
+            details.account.lifetime_points, 51,
+            "lifetime_points should also be 51, got {}",
+            details.account.lifetime_points
+        );
     }
 
     #[test]

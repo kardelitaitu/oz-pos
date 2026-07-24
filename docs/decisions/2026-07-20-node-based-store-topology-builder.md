@@ -1,6 +1,6 @@
 # ADR #22: Visual Node-Based Store & Workspace Topology Builder
 
-**Status:** Implemented (2026-07-22) 
+**Status:** Implemented (2026-07-22) — Amended (2026-07-23)  
 **Date:** 2026-07-20  
 **Author:** Architecture Team & OZ-POS Contributors  
 **Tags:** store-topology, node-editor, multi-store, workspaces, inventory-routing, ux  
@@ -139,3 +139,117 @@ The Node Topology Builder dynamically enforces license limits based on the activ
 - Drag preset or custom nodes onto canvas and draw 1-Way and 2-Way arrow wires.
 - Run **Test Order Simulation** and verify pulse animation travels along connected arrow paths.
 - Click **Apply Topology Changes** and confirm SQLite updates atomically.
+
+---
+
+## Amendment 1 (2026-07-23) — Atomic Commit & Type-Change Handling
+
+This amendment documents two implementation decisions discovered during the
+topology editor audit (TOPOLOGY_AUDIT.md, Critical #1 and #4):
+
+### A. Workspace type_key is immutable — type changes require archive + recreate
+
+The `UpdateInstanceFields` DTO in `ui/src/api/workspaces.ts:101-106` documents
+that `type_key` and `store_id` are immutable fields on workspace instances. The
+backend update command does not accept `type_key`. Changing a workspace's type
+(e.g., `store-pos` → `restaurant-pos`) therefore cannot be a simple UPDATE.
+
+**Implementation** (`TopologyScreen.tsx:handleTopologySave`):
+
+When a persisted workspace node's `typeKey` differs from the backend's
+`type_key`, the save handler:
+
+1. **Archives** the old instance via `applyTopologyDiff` (sets `archived = 1`)
+2. **Creates** a replacement instance with the new `typeKey`, a freshly
+   generated UUID (`crypto.randomUUID()`), the same `name`, and the correct
+   `store_id` resolved from topology wires
+3. **Remaps** the topology diagram: all wire endpoints referencing the old
+   instance ID are updated to the new UUID, and the saved diagram node's
+   `id` is replaced
+4. Returns an `oldId → newId` map to the editor so the canvas state stays
+   consistent without requiring a full reload
+
+The type-change count is surfaced in the save toast: e.g.,
+"Topology saved: 0 created, 1 updated, 1 archived, 1 type-changed."
+
+For freshly-added workspace nodes (`metadata.persisted === false`), the type
+selector is fully functional — the user picks any type before the first save,
+and the chosen type is used at creation time. For persisted nodes, the visual
+type selector in the inspector is available; the archive+recreate path handles
+the backend constraint transparently.
+
+### B. Atomic commit promise (§4.5) is fulfilled by `applyTopologyDiff`
+
+The original ADR §4.5 promised a "TopologyDiffModal … before committing
+atomically." The implementation evolved from that design:
+
+1. **Atomic backend command**: The Tauri command `apply_topology_diff`
+   (`apps/desktop-client/src/commands/topology.rs`) accepts the full set of
+   workspace node changes (creates, updates, archives) plus the topology
+   diagram payload in a single call. All SQL writes execute inside one
+   `conn.transaction()`. On any error, the entire diff rolls back — partial
+   creates or orphaned diagram saves are impossible.
+
+2. **Diagram persistence is coupled**: The diagram (nodes + wires JSON) is
+   saved in the same atomic call as the workspace instance mutations, ensuring
+   the relational truth and the visual representation never drift.
+
+3. **Diff modal deferred**: The originally planned `TopologyDiffModal`
+   (interactive preview with Confirm/Cancel) is deferred to a follow-up UX
+   iteration. The current UX uses an `[ Apply Topology Changes ]` button with
+   a save toast showing the count of affected records. The atomic commit
+   guarantee is fully enforced at the backend layer regardless of the
+   frontend UX surface.
+
+4. **Post-save reload guard**: After a successful save, the editor sets
+   `skipNextLoadRef` to prevent the `workspaceInstances` prop change from
+   triggering a full canvas rebuild — in-flight edits are preserved
+   (TOPOLOGY_AUDIT.md, Major #8).
+
+### C. Wire-based store_id binding (§2)
+
+The original ADR §2 specified "Store ─> Workspace: Binds a workspace instance
+to a store location." The implementation (`TopologyScreen.tsx:handleTopologySave`)
+now resolves `store_id` for each new workspace node by walking the topology
+wires: it finds wires where the other endpoint is a `type === 'store'` node
+(in either direction) and uses that store node's `id` as the `store_id`. A
+fallback to the first primary store is used only when no Store→Workspace wire
+exists (TOPOLOGY_AUDIT.md, Critical #5).
+
+### D. Client-generated IDs replaced with UUIDs
+
+Node and wire IDs now use `crypto.randomUUID()` instead of the original
+`Date.now()`-based scheme. This eliminates same-millisecond collision
+risk when rapidly adding nodes/wires (TOPOLOGY_AUDIT.md, Major #9).
+Backend-assigned IDs (from `createWorkspaceInstanceScoped`) are remapped
+via the `idMap` return value so the canvas and backend stay synchronized.
+
+### E. Undo/Redo stack
+
+The editor implements a full undo/redo history (50-entry ring buffer) with
+standard semantics:
+- Every mutating action pushes the prior state to the undo stack and clears
+  the redo stack
+- `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` keyboard shortcuts
+- Dedicated Undo/Redo buttons in the tool rack
+(TOPOLOGY_AUDIT.md, Major #6 and #7)
+
+### F. Keyboard input guard
+
+The global `keydown` handler checks `e.target` for `INPUT`, `TEXTAREA`, or
+`contentEditable` elements and skips all canvas shortcuts (Delete, Backspace,
+Ctrl+Z, arrows) while the user is typing in a text field. This prevents
+accidental node/wire deletion while editing the Node Name or Subtitle inputs
+(TOPOLOGY_AUDIT.md, Critical #3).
+
+### G. Design constraint: type_key immutability
+
+The `type_key` column on `workspace_instances` is immutable by backend
+contract. The `UpdateInstanceFields` DTO (`ui/src/api/workspaces.ts`) only
+accepts `name`, `description`, and `colour`. Any future feature that requires
+in-place type changes (without archive+recreate) would require:
+1. A backend migration to accept `type_key` in the update command
+2. A corresponding `UpdateInstanceFields` DTO change
+3. Validation that the new `type_key` references a valid `workspace_types.key`
+
+Until then, archive+recreate is the only supported path for type changes.

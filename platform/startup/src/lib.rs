@@ -140,6 +140,12 @@ pub fn init_module_system(
             Box::new(crate::event_handlers::LoyaltyEarnHandler::new(handler_conn)),
         );
 
+        // ── ADR #22 Phase 0e: SettingsUpdated handler (non-blocking) ──
+        bus.subscribe::<oz_core::events::SettingsUpdated>(
+            "settings.updated",
+            Box::new(crate::event_handlers::SettingsUpdatedHandler::new()),
+        );
+
         // ── WhatsApp notification handlers (opt-in via feature flag + env vars) ─
         #[cfg(feature = "whatsapp-notifications")]
         {
@@ -416,6 +422,21 @@ mod tests {
     }
 
     #[test]
+    fn settings_updated_handler_is_registered() {
+        let kernel = AsyncMutex::new(Kernel::new());
+        let (_dir, db_path) = create_temp_db();
+
+        init_module_system(&kernel, &db_path).unwrap();
+
+        let k = kernel.blocking_lock();
+        let bus = k.event_bus();
+        assert!(
+            bus.has_handlers("settings.updated"),
+            "ADR #22: settings.updated topic must have at least one handler registered"
+        );
+    }
+
+    #[test]
     fn event_bus_has_correct_handler_topics() {
         let kernel = AsyncMutex::new(Kernel::new());
         let (_dir, db_path) = create_temp_db();
@@ -424,6 +445,6 @@ mod tests {
 
         let k = kernel.blocking_lock();
         let bus = k.event_bus();
-        assert_eq!(bus.topic_count(), 3, "should have 3 event topics");
+        assert_eq!(bus.topic_count(), 4, "should have 4 event topics");
     }
 }

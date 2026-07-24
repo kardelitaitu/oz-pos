@@ -1,5 +1,7 @@
 # Changelog
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE · post-merge structure verified: top header is [0.0.18] (2026-07-22), headers descend 0.0.18→0.0.11 in order, no stray 0.0.19+ section headers, version-numbering note removed · known cross-repo divergence (see AGENTS.md stamp A1): CHANGELOG documents 0.0.18 as current release while Cargo.toml/tauri.conf.json/package.json read 0.0.19 — user-owned, not auto-corrected -->
+
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).

@@ -9,6 +9,15 @@ description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
 [dependencies]
 foundation = { workspace = true }
 platform-core = { workspace = true }
+modules-sales = { workspace = true }
+modules-inventory = { workspace = true }
+modules-crm = { workspace = true }
+modules-loyalty = { workspace = true }
+modules-staff = { workspace = true }
+modules-terminal = { workspace = true }
+modules-settings = { workspace = true }
+modules-tax = { workspace = true }
+modules-reporting = { workspace = true }
 serde = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
@@ -40,6 +49,7 @@ reqwest = { workspace = true, optional = true }
 [dev-dependencies]
 criterion = { workspace = true }
 proptest = "1"
+serial_test = "3"
 
 [[bench]]
 name = "barcode_lookup"

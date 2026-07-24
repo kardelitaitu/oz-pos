@@ -3,6 +3,8 @@ name: onboarding-guide
 description: Meta-skill that routes tasks to the right OZ-POS skill. Use when starting a new task and unsure which specialized skill applies. Read this first when joining the project or picking up an unfamiliar area.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings, doc-staleness) · F1: 'Skills to defer (no code yet)' section (lines 66-72) says oz-lua/oz-payment/oz-security/oz-reporting are pre-code / do-not-create-skills — but all four crates now exist (verified), so the deferral is obsolete (cloud-sync -> apps/cloud-server also exists) · F2 (wrong path): line 91 says mock lives in hal/src/drivers/mock.rs; actual path is crates/oz-hal/src/drivers/mock.rs (same hal/ -> crates/oz-hal/ drift as hal-drivers skill) · verified accurate: exit-animation-pattern skill exists, scripts verify-bundle-parity.py + dedupe-ftl.py + lint-i18n.sh + check.sh exist, ui/src/api/pos.ts exists, .githooks/pre-commit 4-gate description matches -->
+
 # OZ-POS Onboarding Guide
 
 OZ-POS is a Rust + Tauri v2 POS framework. The codebase is organized into clear layers, and each layer has a dedicated skill. This guide routes you to the right skill for the work you want to do.

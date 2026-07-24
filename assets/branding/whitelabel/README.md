@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, template-doc verified) · example-tenant/ has all 4 subdirs (vector/web/desktop/hardware) + manifest.json + README.md matching documented layout; Copy-Item source path correct; sync-branding.ps1 accepts -Brand (param line 22) and -DryRun -->
+
 # Whitelabel Tenant Templates
 
 This directory contains template structures for creating whitelabel / multi-tenant brand configurations for OZ-POS.

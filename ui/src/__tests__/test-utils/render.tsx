@@ -13,10 +13,10 @@
 //   import { renderWithFluent } from '@/__tests__/test-utils/render';
 //   await renderWithFluent(<MyComponent />, fooFtl, barFtl);
 
+import { type ReactNode, type ReactElement } from 'react';
 import { render, type RenderResult } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { withFluent } from '@/locales/test-utils';
-import type { ReactNode, ReactElement } from 'react';
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
 import { ZoomProvider } from '@/contexts/ZoomContext';
 import { ToastProvider } from '@/frontend/shared/Toast';

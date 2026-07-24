@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings on code-claim basis — business/strategy doc) · market-facing feature descriptions match implemented capabilities verified in prior turns: Embedded Lua VM (oz-lua), Midtrans QRIS + Stripe (oz-payment qris.rs/stripe.rs), HAL peripherals (oz-hal), PostgreSQL outbox sync (platform/sync), offline-first SQLite · minor marketing nit (line 36 lists "Windows 7" while QUICKSTART scopes to 10/11) is a positioning claim, not code drift · no stale codebase claims -->
+
 # Business Plan: OZ-POS Platform
 
 ## 1. Executive Summary

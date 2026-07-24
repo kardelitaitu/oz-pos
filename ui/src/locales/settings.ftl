@@ -418,6 +418,7 @@ appearance-preview-badge-label = Live
 appearance-reset-all-aria =
     .aria-label = Reset all to defaults
 appearance-reset-all = Reset all to defaults
+appearance-reset-all-confirm-title = Reset Appearance
 appearance-reset-all-confirm = Reset all appearance settings to their defaults? This cannot be undone.
 appearance-reset-all-success = Appearance settings reset to defaults
 appearance-reset-all-failed = Failed to reset appearance settings
@@ -504,6 +505,8 @@ data-mgmt-import-password-placeholder = Enter the export password
 data-mgmt-import-cancel = Cancel
 data-mgmt-analyse-file = Analyse file
 data-mgmt-import-start = Start import
+data-mgmt-import-confirm-title = Import Data
+data-mgmt-import-confirm-message = Importing will overwrite current data with the contents of the backup file. This cannot be undone. Do you want to proceed?
 data-mgmt-import-analysing = Analysing file…
 data-mgmt-import-dry-run-complete = Dry-run complete — importing…
 data-mgmt-import-dry-run-title = Changes to be applied
@@ -850,3 +853,68 @@ settings-schedule-recipient-add-aria = Add recipient
 # ── Email test/schedule error fallbacks ──
 settings-email-test-send-failed = Failed to send test email
 settings-email-schedule-save-failed = Failed to save schedule
+
+# ── Workspace Cards (ADR #22 Phase 1) ──
+workspace-pos-receipt-heading = Receipt Settings
+workspace-pos-paper-width = Paper Width
+workspace-pos-show-currency = Show Currency
+workspace-pos-show-tax = Show Tax
+workspace-pos-show-table = Show Table Number
+workspace-pos-footer = Receipt Footer
+workspace-pos-printer-heading = Printer
+workspace-pos-printer-connection = Connection
+workspace-pos-printer-ip = IP Address
+workspace-pos-printer-paper-size = Paper Size
+workspace-pos-scanner-heading = Barcode Scanner
+workspace-pos-scanner-mode = Input Mode
+workspace-pos-scanner-device = Device ID
+workspace-resto-table-heading = Table Management
+workspace-resto-table-enable = Enable Table Layout
+workspace-resto-table-hint = Tables appear on the POS screen for dine-in orders
+workspace-resto-courses-heading = Course Firing
+workspace-resto-courses-enable = Enable Course Firing
+workspace-resto-courses-hint = Send appetizers, mains, and desserts to the kitchen in sequence
+workspace-resto-kitchen-printer-heading = Kitchen Printer
+workspace-resto-kp-connection = Connection
+workspace-resto-kp-ip = Kitchen Printer IP
+workspace-kds-sla-heading = SLA Escalation
+workspace-kds-sound = New Order Sound
+workspace-kds-yellow-threshold = Yellow Alert (min)
+workspace-kds-red-threshold = Red Alert (min)
+workspace-kds-display-heading = Ticket Display
+workspace-kds-auto-ack = Auto-Acknowledge
+workspace-kds-density = Density
+workspace-inv-threshold-heading = Stock Thresholds
+workspace-inv-low-stock = Low Stock Alert At
+workspace-inv-units = { $count } items
+workspace-inv-threshold-hint = Alert when stock falls below this quantity
+workspace-inv-deduction-heading = Deduction Rules
+workspace-inv-deduction-warehouse = Prefer Warehouse First
+workspace-inv-deduction-hint = When enabled, stock is deducted from warehouse before store shelves
+workspace-terminal-prefs-heading = Terminal Preferences
+workspace-terminal-sound = Sound Volume
+workspace-terminal-dark-mode = Dark Mode
+workspace-terminal-scale-zero = Auto-Zero Scale on Boot
+
+# ── Store Info Card (ADR #22 Phase 2) ──
+workspace-store-info-heading = Store Info
+workspace-store-info-name = Name
+workspace-store-info-address = Address
+workspace-store-info-branch = Branch
+workspace-store-info-currency = Currency
+workspace-store-info-tax-id = Tax ID
+
+# ── Topology Editor (ADR #22 Phase 2) ──
+workspace-type-selector-label = Workspace Type
+
+# ── Phase 3 workspace nav items ──
+settings-nav-store-pos = Store POS
+settings-nav-restaurant-pos = Restaurant POS
+settings-nav-kds = Kitchen Display
+settings-nav-inventory = Inventory
+
+# ── Workspace Settings Modal (ADR #22 Phase 4) ──
+workspace-modal-title = Workspace Settings
+workspace-modal-admin-settings = Admin Settings ↗
+workspace-modal-role-manager = Manager
+workspace-modal-role-cashier = Cashier

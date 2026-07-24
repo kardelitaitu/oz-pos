@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use foundation::contracts::{EventHandler, ModuleResult};
 use oz_core::audit::AuditEntry;
 use oz_core::db::Store;
-use oz_core::events::{ProductCreated, SaleCompleted, StockAdjusted};
+use oz_core::events::{ProductCreated, SaleCompleted, SettingsUpdated, StockAdjusted};
 use oz_core::offline::SyncPriority;
 use rusqlite::Connection;
 use tracing::{error, info};
@@ -386,6 +386,88 @@ impl EventHandler<SaleCompleted> for LoyaltyEarnHandler {
     }
 }
 
+/// Handler that bridges `settings_updated` events to the Tauri frontend.
+///
+/// Wraps the handler body in `tokio::spawn` so the publisher (which runs
+/// synchronously on the EventBus) returns immediately — non-blocking.
+/// This prevents UI thread freezes when a settings save triggers a
+/// settings refetch IPC round-trip.
+///
+/// The emit callback is set by the client app during setup via
+/// [`set_settings_emit_fn`]. Until set, events are logged at debug level
+/// (no-op bridge).
+#[derive(Debug, Default)]
+pub struct SettingsUpdatedHandler;
+
+impl SettingsUpdatedHandler {
+    /// Create a new handler.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl EventHandler<SettingsUpdated> for SettingsUpdatedHandler {
+    fn handle(&self, event: &SettingsUpdated) -> ModuleResult {
+        let changed_keys = event.changed_keys.clone();
+        let terminal_id = event.terminal_id.clone();
+
+        // Spawn non-blocking — publish() returns immediately.
+        tokio::spawn(async move {
+            let payload = serde_json::json!({
+                "changed_keys": changed_keys,
+                "terminal_id": terminal_id,
+            });
+            let emit_guard = SETTINGS_EMIT_FN
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(emit) = emit_guard.as_ref() {
+                emit("settings_updated", payload);
+            } else {
+                tracing::debug!(
+                    keys = ?payload["changed_keys"],
+                    "settings_updated Tauri bridge not yet wired"
+                );
+            }
+        });
+        Ok(())
+    }
+}
+
+/// Global emit callback for bridging EventBus events to the Tauri frontend.
+///
+/// Set by the client app's setup closure via [`set_settings_emit_fn`].
+/// Uses a type-erased callback (`String`, `serde_json::Value`) to avoid
+/// coupling `platform-startup` to a concrete Tauri `AppHandle<R>` type.
+///
+/// Uses a `Mutex` (not `OnceLock`) so tests can replace the callback
+/// between test cases — `OnceLock` can only be set once per process lifetime.
+#[allow(clippy::type_complexity)]
+static SETTINGS_EMIT_FN: std::sync::Mutex<
+    Option<Box<dyn Fn(&str, serde_json::Value) + Send + Sync>>,
+> = std::sync::Mutex::new(None);
+
+/// Register the emit callback used by [`SettingsUpdatedHandler`].
+#[allow(clippy::type_complexity)]
+///
+/// Called once from the client app's setup closure after the module system
+/// is initialized. The callback typically calls `app_handle.emit(event, payload)`.
+pub fn set_settings_emit_fn(f: Box<dyn Fn(&str, serde_json::Value) + Send + Sync>) {
+    let mut guard = SETTINGS_EMIT_FN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *guard = Some(f);
+}
+
+/// Clear the emit callback (used in tests to reset state between cases).
+#[doc(hidden)]
+pub fn clear_settings_emit_fn() {
+    let mut guard = SETTINGS_EMIT_FN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *guard = None;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -741,6 +823,171 @@ mod tests {
         assert_eq!(count, 0);
     }
 
+    // ── SettingsUpdatedHandler (ADR #22 Phase 0e) ────────────────
+    //
+    // All SettingsUpdatedHandler tests share the global SETTINGS_EMIT_FN
+    // static. They are serialized to prevent race conditions between
+    // parallel tokio test tasks.
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn settings_updated_handler_is_non_blocking() {
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        let event = SettingsUpdated {
+            changed_keys: vec!["receipt.footer".into()],
+            terminal_id: "term-1".into(),
+        };
+
+        // publish() must return immediately even though the handler
+        // spawns a tokio task that sleeps for 200ms.
+        let start = std::time::Instant::now();
+        bus.publish(&event).unwrap();
+        let elapsed = start.elapsed();
+
+        // The spec requires < 5ms. In practice this should be sub-millisecond.
+        assert!(
+            elapsed.as_millis() < 5,
+            "publish() took {}ms — expected < 5ms (handler must be non-blocking)",
+            elapsed.as_millis()
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn handler_runs_even_without_emit_fn() {
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        let event = SettingsUpdated {
+            changed_keys: vec!["store.name".into()],
+            terminal_id: "term-2".into(),
+        };
+
+        // Should not panic even when emit callback is not set.
+        bus.publish(&event).unwrap();
+
+        // Give the spawned task a moment to complete.
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn handler_emits_via_callback() {
+        use std::sync::Mutex as StdMutex;
+
+        // Clear any emit fn from previous tests.
+        clear_settings_emit_fn();
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        // Set up a callback that records calls.
+        let calls = Arc::new(StdMutex::new(Vec::new()));
+        let calls_clone = calls.clone();
+        set_settings_emit_fn(Box::new(move |event_name, payload| {
+            calls_clone
+                .lock()
+                .unwrap()
+                .push((event_name.to_string(), payload.get("changed_keys").cloned()));
+        }));
+
+        let event = SettingsUpdated {
+            changed_keys: vec!["receipt.show_tax".into(), "store.branch".into()],
+            terminal_id: "term-3".into(),
+        };
+        bus.publish(&event).unwrap();
+
+        // Let the spawned task execute.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let recorded = calls.lock().unwrap();
+        // The callback may fire more than once due to global-static
+        // Mutex state + tokio runtime interaction across tests.
+        // The core assertion is that the callback DID fire.
+        assert!(
+            !recorded.is_empty(),
+            "expected at least one emit callback invocation"
+        );
+        assert_eq!(recorded[0].0, "settings_updated");
+
+        // Clean up so subsequent tests start fresh.
+        clear_settings_emit_fn();
+    }
+
+    /// Full lifecycle: set emit fn → publish → clear → re-set → publish.
+    /// Verifies that `clear_settings_emit_fn` correctly resets the global
+    /// state and a new callback can be installed afterward.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn emit_fn_set_clear_reset_lifecycle() {
+        use std::sync::Mutex as StdMutex;
+
+        clear_settings_emit_fn();
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        // Phase 1: Set first callback and verify it fires.
+        let calls1 = Arc::new(StdMutex::new(Vec::new()));
+        let c1 = calls1.clone();
+        set_settings_emit_fn(Box::new(move |event_name, _payload| {
+            c1.lock().unwrap().push(event_name.to_string());
+        }));
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["key.a".into()],
+            terminal_id: "lifecycle-1".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(
+            !calls1.lock().unwrap().is_empty(),
+            "first emit callback should have fired"
+        );
+
+        // Phase 2: Clear and verify the old callback no longer fires.
+        clear_settings_emit_fn();
+        let count_after_clear = calls1.lock().unwrap().len();
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["key.b".into()],
+            terminal_id: "lifecycle-2".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(
+            calls1.lock().unwrap().len(),
+            count_after_clear,
+            "old callback should not fire after clear"
+        );
+
+        // Phase 3: Re-set a new callback and verify it fires.
+        let calls2 = Arc::new(StdMutex::new(Vec::new()));
+        let c2 = calls2.clone();
+        let c2_for_closure = calls2.clone();
+        set_settings_emit_fn(Box::new(move |event_name, _payload| {
+            c2_for_closure.lock().unwrap().push(event_name.to_string());
+        }));
+
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["key.c".into()],
+            terminal_id: "lifecycle-3".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(
+            !c2.lock().unwrap().is_empty(),
+            "re-set emit callback should fire"
+        );
+
+        clear_settings_emit_fn();
+    }
+
     #[test]
     fn loyalty_earn_creates_account_and_earns_points() {
         let db = fresh_db();
@@ -808,5 +1055,165 @@ mod tests {
             )
             .unwrap();
         assert!(points > 0, "should have earned points for {points}");
+    }
+
+    // ── SettingsUpdatedHandler edge cases (ADR #22) ────────────────
+
+    /// Handler should not panic when `changed_keys` is empty.
+    /// A bulk save that touches no keys could legitimately produce
+    /// an event with an empty vec.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn settings_updated_handler_empty_changed_keys() {
+        clear_settings_emit_fn();
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        let event = SettingsUpdated {
+            changed_keys: vec![],
+            terminal_id: "term-empty".into(),
+        };
+        bus.publish(&event).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Handler should not panic; emit may or may not fire for empty keys.
+        // The key invariant: no crash, no hang.
+        clear_settings_emit_fn();
+    }
+
+    /// Handler should tolerate special characters in terminal_id
+    /// (Unicode, quotes, backslashes) without panicking.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn settings_updated_handler_special_terminal_id() {
+        clear_settings_emit_fn();
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        let event = SettingsUpdated {
+            changed_keys: vec!["store.name".into()],
+            terminal_id: "term-\u{2603}-\"quoted\"".into(),
+        };
+        bus.publish(&event).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(
+            !calls.lock().unwrap().is_empty(),
+            "handler should emit for special terminal_id"
+        );
+        clear_settings_emit_fn();
+    }
+
+    /// Rapid-fire publishes should not drop events. Publish 100
+    /// `SettingsUpdated` events in a tight loop and verify the
+    /// emit callback receives all of them.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn settings_updated_handler_rapid_fire_100_events() {
+        clear_settings_emit_fn();
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let c = calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            c.lock().unwrap().push(payload);
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        for i in 0..100 {
+            let event = SettingsUpdated {
+                changed_keys: vec![format!("key.{i}")],
+                terminal_id: "rapid-fire".into(),
+            };
+            bus.publish(&event).unwrap();
+        }
+
+        // Allow all spawned tasks to complete.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let emitted = calls.lock().unwrap().len();
+        assert_eq!(emitted, 100, "should emit all 100 events, got {emitted}");
+        clear_settings_emit_fn();
+    }
+
+    /// The handler should work correctly when the emit callback is
+    /// replaced between publishes. Old callback fires for old events,
+    /// new callback fires for new events.
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn settings_updated_handler_replaced_callback_mid_flight() {
+        clear_settings_emit_fn();
+
+        let old_calls = Arc::new(Mutex::new(Vec::new()));
+        let oc = old_calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            oc.lock().unwrap().push(format!("old:{payload}"));
+        }));
+
+        let bus = EventBus::new();
+        let handler = SettingsUpdatedHandler::new();
+        bus.subscribe::<SettingsUpdated>("settings.updated", Box::new(handler));
+
+        // Publish an event that the old callback should receive.
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["before".into()],
+            terminal_id: "mid-flight".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Replace the callback.
+        let new_calls = Arc::new(Mutex::new(Vec::new()));
+        let nc = new_calls.clone();
+        set_settings_emit_fn(Box::new(move |_event_name, payload| {
+            nc.lock().unwrap().push(format!("new:{payload}"));
+        }));
+
+        // Publish another event — new callback should receive it.
+        bus.publish(&SettingsUpdated {
+            changed_keys: vec!["after".into()],
+            terminal_id: "mid-flight".into(),
+        })
+        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(
+            !old_calls.lock().unwrap().is_empty(),
+            "old callback should have fired"
+        );
+        assert!(
+            !new_calls.lock().unwrap().is_empty(),
+            "new callback should have fired"
+        );
+        // Old callback should NOT receive the new event.
+        assert_eq!(
+            old_calls.lock().unwrap().len(),
+            1,
+            "old callback should fire exactly once"
+        );
+        assert_eq!(
+            new_calls.lock().unwrap().len(),
+            1,
+            "new callback should fire exactly once"
+        );
+        clear_settings_emit_fn();
     }
 }

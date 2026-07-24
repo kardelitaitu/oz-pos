@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all implementation claims verified: stock_movements migration exists; adjust_stock_with_reason (products.rs:1165), get_stock_from_ledger (1250), rebuild_stock_summary (1290), list_stock_movements (1359), archive_stock_movements (1405) all present; platform/sync/src/daemon.rs (start_prune_task) + apps/cloud-server/src/prune.rs (start_prune_loop) exist; ui/src/components/FastPINOverlay.tsx + crates/oz-security/src/terminal.rs present; platform/sync/tests/integration_test.rs present; Uuid::now_v7() adopted + oz_core::new_id() (lib.rs:147) confirmed; stock_movements_archive (migration 072) + stock_summary cache match · Status "Implemented (2026-07-15)" consistent -->
+
 # ADR #6: CRDT Delta Ledger & Offline Sync
 
 **Status:** Implemented (2026-07-15)

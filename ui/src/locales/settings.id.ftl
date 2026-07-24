@@ -344,6 +344,7 @@ appearance-preview = Pratinjau
 appearance-reset-all-aria =
     .aria-label = Atur ulang semua ke default
 appearance-reset-all = Atur ulang semua ke default
+appearance-reset-all-confirm-title = Atur Ulang Tampilan
 appearance-reset-all-confirm = Atur ulang semua pengaturan tampilan ke default? Tindakan ini tidak dapat dibatalkan.
 appearance-reset-all-success = Pengaturan tampilan diatur ulang ke default
 appearance-reset-all-failed = Gagal mengatur ulang pengaturan tampilan
@@ -418,6 +419,8 @@ data-mgmt-import-password-placeholder = Masukkan kata sandi ekspor
 data-mgmt-import-cancel = Batal
 data-mgmt-analyse-file = Analisis file
 data-mgmt-import-start = Mulai impor
+data-mgmt-import-confirm-title = Impor Data
+data-mgmt-import-confirm-message = Mengimpor akan menimpa data saat ini dengan isi file cadangan. Tindakan ini tidak dapat dibatalkan. Lanjutkan?
 data-mgmt-import-analysing = Menganalisis file…
 data-mgmt-import-dry-run-complete = Dry-run selesai — mengimpor…
 data-mgmt-import-dry-run-title = Perubahan yang akan diterapkan
@@ -828,3 +831,68 @@ settings-schedule-recipient-add-aria = Tambah penerima
 # ── Email test/schedule error fallbacks ──
 settings-email-test-send-failed = Gagal mengirim email uji coba
 settings-email-schedule-save-failed = Gagal menyimpan jadwal
+
+# ── Workspace Cards (ADR #22 Phase 1) ──
+workspace-pos-receipt-heading = Pengaturan Struk
+workspace-pos-paper-width = Lebar Kertas
+workspace-pos-show-currency = Tampilkan Mata Uang
+workspace-pos-show-tax = Tampilkan Pajak
+workspace-pos-show-table = Tampilkan Nomor Meja
+workspace-pos-footer = Footer Struk
+workspace-pos-printer-heading = Printer
+workspace-pos-printer-connection = Koneksi
+workspace-pos-printer-ip = Alamat IP
+workspace-pos-printer-paper-size = Ukuran Kertas
+workspace-pos-scanner-heading = Pemindai Barcode
+workspace-pos-scanner-mode = Mode Input
+workspace-pos-scanner-device = ID Perangkat
+workspace-resto-table-heading = Manajemen Meja
+workspace-resto-table-enable = Aktifkan Tata Letak Meja
+workspace-resto-table-hint = Meja muncul di layar POS untuk pesanan dine-in
+workspace-resto-courses-heading = Pengiriman Course
+workspace-resto-courses-enable = Aktifkan Pengiriman Course
+workspace-resto-courses-hint = Kirim hidangan pembuka, utama, dan penutup ke dapur secara berurutan
+workspace-resto-kitchen-printer-heading = Printer Dapur
+workspace-resto-kp-connection = Koneksi
+workspace-resto-kp-ip = IP Printer Dapur
+workspace-kds-sla-heading = Eskalasi SLA
+workspace-kds-sound = Suara Pesanan Baru
+workspace-kds-yellow-threshold = Peringatan Kuning (mnt)
+workspace-kds-red-threshold = Peringatan Merah (mnt)
+workspace-kds-display-heading = Tampilan Tiket
+workspace-kds-auto-ack = Konfirmasi Otomatis
+workspace-kds-density = Kepadatan
+workspace-inv-threshold-heading = Ambang Stok
+workspace-inv-low-stock = Peringatan Stok Rendah Pada
+workspace-inv-units = { $count } item
+workspace-inv-threshold-hint = Peringatan saat stok di bawah jumlah ini
+workspace-inv-deduction-heading = Aturan Pengurangan
+workspace-inv-deduction-warehouse = Utamakan Gudang
+workspace-inv-deduction-hint = Saat diaktifkan, stok dikurangi dari gudang sebelum rak toko
+workspace-terminal-prefs-heading = Preferensi Terminal
+workspace-terminal-sound = Volume Suara
+workspace-terminal-dark-mode = Mode Gelap
+workspace-terminal-scale-zero = Nolkan Otomatis Timbangan Saat Boot
+
+# ── Store Info Card (ADR #22 Phase 2) ──
+workspace-store-info-heading = Info Toko
+workspace-store-info-name = Nama
+workspace-store-info-address = Alamat
+workspace-store-info-branch = Cabang
+workspace-store-info-currency = Mata Uang
+workspace-store-info-tax-id = NPWP
+
+# ── Topology Editor (ADR #22 Phase 2) ──
+workspace-type-selector-label = Tipe Workspace
+
+# ── Phase 3 workspace nav items ──
+settings-nav-store-pos = POS Toko
+settings-nav-restaurant-pos = POS Restoran
+settings-nav-kds = Tampilan Dapur
+settings-nav-inventory = Inventaris
+
+# ── Workspace Settings Modal (ADR #22 Phase 4) ──
+workspace-modal-title = Pengaturan Workspace
+workspace-modal-admin-settings = Admin Settings ↗
+workspace-modal-role-manager = Manajer
+workspace-modal-role-cashier = Kasir

@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listCategories,
+  listCategoriesScoped,
   createCategory,
   updateCategory,
   deleteCategory,
   type CategoryDto,
 } from '@/api/products';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -167,6 +168,8 @@ function colourToId(name: string): string {
 export default function CategoryManagementScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -197,14 +200,14 @@ export default function CategoryManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const cats = await listCategories();
+      const cats = await listCategoriesScoped(sessionToken);
       setCategories(cats);
     } catch {
       // IPC unavailable
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

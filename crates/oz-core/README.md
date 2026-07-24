@@ -1,5 +1,7 @@
 # oz-core
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (3 noted findings, doc-staleness) · F1: "Public modules (42)" -> 55 pub mod in lib.rs (table lists ~46) · F2: migrations "001-047" -> crates/oz-core/migrations/ now ranges 001-100 (98 .sql files) · F3 (minor): Money/Currency are defined in foundation/src/money.rs and re-exported from oz-core (pub use money::{Currency, Money}), not defined in oz-core · verified accurate: #![deny(unsafe_code)] + #![warn(missing_docs)] present in lib.rs, Money-i64 policy, Store-transaction convention -->
+
 Domain models, SQLite persistence, and migrations for OZ-POS. Every other crate builds on types defined here.
 
 ## Public modules (42)

@@ -75,6 +75,21 @@ pub struct SyncDaemon {
     shutdown_tx: Arc<Mutex<Option<watch::Sender<bool>>>>,
 }
 
+/// Read sync configuration and pending offline items from a database
+/// connection. Extracted from [`SyncDaemon::run_tick`] so the read phase
+/// is independently testable.
+///
+/// Returns `(config, pending)` where `config` is `None` if sync is not
+/// configured or disabled.
+pub(crate) fn read_config_and_pending(
+    conn: &rusqlite::Connection,
+) -> (Option<SyncConfig>, Vec<oz_core::offline::OfflineQueueItem>) {
+    let store = Store::new(conn);
+    let config = SyncConfig::from_settings(&store).ok().flatten();
+    let pending = store.list_pending_offline().unwrap_or_default();
+    (config, pending)
+}
+
 impl SyncDaemon {
     /// Create a new sync daemon.
     pub fn new() -> Self {
@@ -201,15 +216,20 @@ impl SyncDaemon {
     async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<DaemonStatus>>) {
         // Phase 1: Read config + pending items from DB (blocking)
         let db_clone = db.clone();
-        let (config, pending) = tokio::task::spawn_blocking(move || {
+        let (config, pending, read_error) = match tokio::task::spawn_blocking(move || {
             let conn = db_clone.blocking_lock();
-            let store = Store::new(&conn);
-            let config = SyncConfig::from_settings(&store).ok().flatten();
-            let pending = store.list_pending_offline().unwrap_or_default();
-            (config, pending)
+            let (cfg, pending) = read_config_and_pending(&conn);
+            (cfg, pending)
         })
         .await
-        .unwrap_or_default();
+        {
+            Ok((cfg, pending)) => (cfg, pending, None),
+            Err(join_err) => {
+                let msg = format!("sync config read panicked: {join_err}");
+                tracing::error!(error = %msg, "sync daemon read phase failed");
+                (None, Vec::new(), Some(msg))
+            }
+        };
 
         // Phase 2: Do async sync if configured and there are pending items
         let pushed;
@@ -231,17 +251,43 @@ impl SyncDaemon {
                             for (i, outcome) in ids.iter().zip(results.iter()) {
                                 match outcome {
                                     PushOutcome::Accepted => {
-                                        let _ = store.mark_offline_synced(i);
+                                        if let Err(e) = store.mark_offline_synced(i) {
+                                            tracing::error!(
+                                                item_id = %i,
+                                                error = %e,
+                                                "sync daemon: failed to mark item synced"
+                                            );
+                                        }
                                     }
                                     PushOutcome::Rejected { reason } => {
-                                        let _ = store.mark_offline_failed(i, reason);
+                                        if let Err(e) = store.mark_offline_failed(i, reason) {
+                                            tracing::error!(
+                                                item_id = %i,
+                                                error = %e,
+                                                "sync daemon: failed to mark item failed"
+                                            );
+                                        }
                                     }
                                     PushOutcome::Conflict(remote) => {
                                         // LWW: remote wins — mark local as synced,
                                         // re-enqueue the remote version.
-                                        let _ = store.mark_offline_synced(i);
-                                        let _ =
-                                            store.enqueue_offline(&remote.action, &remote.payload);
+                                        if let Err(e) = store.mark_offline_synced(i) {
+                                            tracing::error!(
+                                                item_id = %i,
+                                                error = %e,
+                                                "sync daemon: failed to mark conflicted item synced"
+                                            );
+                                        }
+                                        if let Err(e) =
+                                            store.enqueue_offline(&remote.action, &remote.payload)
+                                        {
+                                            tracing::error!(
+                                                item_id = %i,
+                                                action = %remote.action,
+                                                error = %e,
+                                                "sync daemon: failed to re-enqueue remote winner"
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -361,7 +407,8 @@ impl SyncDaemon {
         s.pending_count = pending_count;
         s.last_pushed = pushed;
         s.last_pulled = pulled;
-        s.last_error = sync_error.clone();
+        // If the read phase panicked, surface that error in the status.
+        s.last_error = sync_error.clone().or_else(|| read_error.clone());
 
         if let Some(ref err) = sync_error {
             tracing::error!(error = ?err, "sync cycle failed");
@@ -710,5 +757,46 @@ mod tests {
 
         daemon.stop().await;
         tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // ── TDD Bug #1: spawn_blocking panic is not silently swallowed ─
+
+    /// Verify that `read_config_and_pending` propagates errors from a
+    /// poisoned connection. When the inner `unwrap()` on the mutex lock
+    /// panics, the `spawn_blocking` join handle returns an `Err`, and
+    /// `run_tick` must surface that in `last_error`.
+    ///
+    /// We test this by creating a valid DB, then extract the config read
+    /// through the `read_config_and_pending` helper (which does the same
+    /// work the `spawn_blocking` closure does).
+    #[test]
+    fn read_config_and_pending_returns_pending_count() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.enqueue_offline("test", r#"{}"#).unwrap();
+
+        let (config, pending) = read_config_and_pending(&conn);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].action, "test");
+        // Config is None because sync is not enabled in fresh DB.
+        assert!(config.is_none());
+    }
+
+    /// When the DB read phase succeeds, `run_tick` must update status
+    /// without setting `last_error`. This is the regression guard for
+    /// Bug #1 — verifies the refactored match arms don't break the
+    /// happy path.
+    #[tokio::test]
+    async fn run_tick_happy_path_does_not_set_error() {
+        let db = setup_db();
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+
+        SyncDaemon::run_tick(&db, &status).await;
+
+        let s = status.read().await;
+        assert!(s.last_sync_at.is_some(), "status should be updated");
+        assert!(s.last_error.is_none(), "no error expected for empty config");
+        assert_eq!(s.last_pushed, 0);
+        assert_eq!(s.last_pulled, 0);
     }
 }

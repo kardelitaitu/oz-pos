@@ -105,6 +105,48 @@
   background: var(--color-border);
 }
 
+/* Icon-only modifier — square, equal padding, no text gap. */
+.btn--icon-only {
+  padding: var(--space-2);
+  aspect-ratio: 1 / 1;
+  gap: 0;
+}
+.btn--icon-only.btn--sm {
+  padding: var(--space-1);
+}
+.btn--icon-only.btn--md {
+  padding: var(--space-2);
+}
+.btn--icon-only.btn--lg {
+  padding: var(--space-3);
+}
+
+/* Unstyled escape hatch — keeps base reset, focus ring, and disabled behaviour,
+   but drops variant/size styling so consumers can apply custom CSS. */
+.btn--unstyled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+.btn--unstyled:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.btn--unstyled:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
 /* Loading spinner */
 .btn__spinner {
   width: 1em;
@@ -312,7 +354,9 @@
 .topology-node::after,
 .node-selected::after,
 .settings-shortcuts-popover::after,
-.canvas-hud::after {
+.canvas-hud::after,
+.panel::after,
+:global(.dark) .panel::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -416,7 +460,9 @@
 .topology-node::after,
 .node-selected::after,
 .settings-shortcuts-popover::after,
-.canvas-hud::after { display: none; }
+.canvas-hud::after,
+.panel::after,
+:global(.dark) .panel::after { display: none; }
 }
 
 /* Reduced motion — hide noise overlay to reduce GPU compositing
@@ -506,7 +552,9 @@
 .topology-node::after,
 .node-selected::after,
 .settings-shortcuts-popover::after,
-.canvas-hud::after { display: none; }
+.canvas-hud::after,
+.panel::after,
+:global(.dark) .panel::after { display: none; }
 }
 
 .card--padding-sm  { padding: var(--space-3); }

@@ -25,6 +25,13 @@ next: Migrate reporting logic into this module | perf: N/A.
 //! See `modules/reporting/manifest.json` for the module metadata.
 
 pub mod handlers;
+pub mod models;
+pub mod repository;
+pub mod service;
+
+pub use models::DailyReport;
+pub use repository::ReportingRepository;
+pub use service::ReportingService;
 
 use std::fmt::Debug;
 

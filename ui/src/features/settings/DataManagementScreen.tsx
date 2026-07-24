@@ -13,6 +13,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
 import {
   getBackupStatus,
@@ -153,6 +154,7 @@ export default function DataManagementScreen() {
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'backup'>('export');
   const [showExportPw, setShowExportPw] = useState(false);
   const [showImportPw, setShowImportPw] = useState(false);
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
   const { addToast } = useToast();
 
   // ── Row flash animation ─────────────────────────────────────────
@@ -400,6 +402,17 @@ export default function DataManagementScreen() {
       return;
     }
 
+    setShowImportConfirm(true);
+  }, [addToast, l10n]);
+
+  const confirmImport = useCallback(async () => {
+    setShowImportConfirm(false);
+    const is = importStateRef.current;
+    if (!is.selectedFile || !is.password) {
+      addToast({ message: l10n.getString('data-mgmt-toast-import-enter-password'), type: 'error' });
+      return;
+    }
+
     setImportState((prev) => ({ ...prev, step: 'importing', progress: 50, error: null }));
 
     try {
@@ -442,6 +455,14 @@ export default function DataManagementScreen() {
 
   return (
     <div className="data-mgmt">
+      <ConfirmDialog
+        open={showImportConfirm}
+        title={l10n.getString('data-mgmt-import-confirm-title')}
+        message={l10n.getString('data-mgmt-import-confirm-message')}
+        variant="danger"
+        onConfirm={confirmImport}
+        onCancel={() => setShowImportConfirm(false)}
+      />
       <div className="data-mgmt-header">
         <Localized id="data-mgmt-title">
           <h1 className="data-mgmt-title">Data Management</h1>

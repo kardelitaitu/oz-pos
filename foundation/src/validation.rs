@@ -113,7 +113,7 @@ pub fn validate_max_length(
     value: &str,
     max: usize,
 ) -> Result<(), ValidationError> {
-    let len = value.len();
+    let len = value.trim().len();
     if len > max {
         Err(ValidationError {
             field,
@@ -582,10 +582,26 @@ mod tests {
     }
 
     #[test]
-    fn max_length_does_not_trim() {
-        // validate_max_length uses the original length, not trimmed.
-        let err = validate_max_length("sku", "    ", 2).unwrap_err();
-        assert_eq!(err.field, "sku");
+    fn max_length_trims_before_check() {
+        // Consistent with validate_not_empty, validate_min_length, etc.
+        // Whitespace padding should not cause a rejection.
+        assert!(
+            validate_max_length("name", "  Coffee  ", 7).is_ok(),
+            "'  Coffee  ' trimmed to 6 chars should pass max=7"
+        );
+        // True overflow after trim still rejects
+        let err = validate_max_length("name", "  LongName  ", 5).unwrap_err();
+        assert_eq!(err.field, "name");
+        assert!(err.message.contains("at most 5"));
+    }
+
+    #[test]
+    fn max_length_whitespace_only_passes_when_within_max() {
+        // All-whitespace input trims to empty (0 chars), so max=2 should pass.
+        assert!(
+            validate_max_length("sku", "    ", 2).is_ok(),
+            "whitespace-only input trims to 0 chars, should pass max=2"
+        );
     }
 
     #[test]

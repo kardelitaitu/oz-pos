@@ -5,111 +5,9 @@
 //! implements `foundation::contracts::DomainEvent` for use with
 //! the kernel's `EventBus`.
 
-use foundation::Barcode;
 use foundation::contracts::DomainEvent;
 
-/// Published when a sale is completed at the POS.
-///
-/// Handlers should use this event to trigger side effects:
-/// - **Inventory** → decrement stock for each sold SKU
-/// - **CRM** → update customer purchase history
-/// - **Audit** → log the completed transaction
-/// - **Reporting** → update dashboard metrics
-/// - **LAN Forwarder** → broadcast to KDS tablet peers
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SaleCompleted {
-    /// Unique sale identifier (UUID v4).
-    pub sale_id: String,
-    /// The store where the sale occurred (ADR #8).
-    ///
-    /// `None` in single-store/legacy deployments or test contexts.
-    /// In multi-store mode, always set from the session's `store_id`.
-    pub store_id: Option<String>,
-    /// Line items sold in this transaction.
-    pub line_items: Vec<SaleCompletedLine>,
-    /// Total sale amount in minor units.
-    pub total_minor: i64,
-    /// ISO-4217 currency code.
-    pub currency: String,
-    /// Optional customer identifier (set if the sale was linked to a customer).
-    pub customer_id: Option<String>,
-}
-
-/// A single line item included in a completed sale.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SaleCompletedLine {
-    /// Stock-keeping unit code.
-    pub sku: String,
-    /// Quantity sold.
-    pub qty: i64,
-    /// Unit price in minor units.
-    pub unit_price_minor: i64,
-    /// Tax amount for this line in minor units (0 if no tax).
-    #[serde(default)]
-    pub tax_minor: i64,
-    /// Tax rate ID applied (None if no tax).
-    #[serde(default)]
-    pub tax_rate_id: Option<String>,
-}
-
-impl DomainEvent for SaleCompleted {
-    fn event_name(&self) -> &'static str {
-        "sale.completed"
-    }
-}
-
-/// Published when a new product is created in the catalog.
-///
-/// Handlers should use this event to trigger side effects:
-/// - **Audit** → log the product creation
-/// - **Sync** → queue the new product for cloud sync
-#[derive(Debug, Clone)]
-pub struct ProductCreated {
-    /// Stock-keeping unit of the new product.
-    pub sku: String,
-    /// Display name of the new product.
-    pub name: String,
-    /// Price in minor units.
-    pub price_minor: i64,
-    /// ISO-4217 currency code.
-    pub currency: String,
-    /// Optional category id.
-    pub category_id: Option<String>,
-    /// Optional barcode.
-    pub barcode: Option<Barcode>,
-    /// Initial stock quantity.
-    pub initial_stock: i64,
-}
-
-impl DomainEvent for ProductCreated {
-    fn event_name(&self) -> &'static str {
-        "product.created"
-    }
-}
-
-/// Published when a product's stock level is adjusted.
-///
-/// Handlers should use this event to trigger side effects:
-/// - **Audit** → log the stock adjustment
-/// - **Reporting** → update inventory dashboard metrics
-/// - **Sync** → queue the stock change for cloud sync
-#[derive(Debug, Clone)]
-pub struct StockAdjusted {
-    /// Stock-keeping unit of the adjusted product.
-    pub sku: String,
-    /// Quantity change (positive = restock, negative = removal).
-    pub delta: i64,
-    /// New stock quantity after adjustment.
-    pub new_qty: i64,
-    /// Reason for the adjustment (e.g. "stock-take", "damaged", "return").
-    pub reason: String,
-}
-
-impl DomainEvent for StockAdjusted {
-    fn event_name(&self) -> &'static str {
-        "stock.adjusted"
-    }
-}
+pub use foundation::events::{ProductCreated, SaleCompleted, SaleCompletedLine, StockAdjusted};
 
 /// Published when a course is fired from the Resto POS to the kitchen.
 ///
@@ -146,6 +44,29 @@ pub struct CourseItem {
 impl DomainEvent for CourseFired {
     fn event_name(&self) -> &'static str {
         "order.course_fired"
+    }
+}
+
+/// Published when one or more settings are changed at a terminal.
+///
+/// Handlers should use this event to trigger side effects:
+/// - **SettingsContext (UI)** → debounced refetch of changed settings scopes
+/// - **Sync** → queue the settings delta for cloud propagation
+/// - **Audit** → log the configuration change
+///
+/// Published AFTER the SQLite transaction commits so handlers see the
+/// new values. Delta rows are written by `Settings::write_delta()` (Phase 0d).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SettingsUpdated {
+    /// The keys that changed (e.g. `["receipt.footer", "store.name"]`).
+    pub changed_keys: Vec<String>,
+    /// The terminal that made the change.
+    pub terminal_id: String,
+}
+
+impl DomainEvent for SettingsUpdated {
+    fn event_name(&self) -> &'static str {
+        "settings.updated"
     }
 }
 
@@ -294,5 +215,98 @@ mod tests {
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("null"));
+    }
+
+    // ── SettingsUpdated (ADR #22 Phase 0e) ───────────────────────
+
+    #[test]
+    fn settings_updated_event_name() {
+        let event = SettingsUpdated {
+            changed_keys: vec!["receipt.footer".into()],
+            terminal_id: "term-1".into(),
+        };
+        assert_eq!(event.event_name(), "settings.updated");
+    }
+
+    #[test]
+    fn settings_updated_is_send_sync() {
+        fn assert_send<T: Send>() {}
+        fn assert_sync<T: Sync>() {}
+        assert_send::<SettingsUpdated>();
+        assert_sync::<SettingsUpdated>();
+    }
+
+    #[test]
+    fn settings_updated_serde_roundtrip() {
+        let event = SettingsUpdated {
+            changed_keys: vec!["store.name".into(), "receipt.footer".into()],
+            terminal_id: "term-a".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("store.name"));
+        assert!(json.contains("receipt.footer"));
+        assert!(json.contains("term-a"));
+    }
+
+    /// Empty `changed_keys` vec is valid — settings could be updated
+    /// by a bulk operation that affects no keys.
+    #[test]
+    fn settings_updated_empty_changed_keys_serializes() {
+        let event = SettingsUpdated {
+            changed_keys: vec![],
+            terminal_id: "term-a".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"changed_keys\":[]"));
+        let back: SettingsUpdated = serde_json::from_str(&json).unwrap();
+        assert!(back.changed_keys.is_empty());
+        assert_eq!(back.terminal_id, "term-a");
+    }
+
+    /// Special characters in terminal_id and changed_keys should
+    /// survive JSON round-trip (Unicode, quotes, backslashes).
+    #[test]
+    fn settings_updated_special_characters_roundtrip() {
+        let event = SettingsUpdated {
+            changed_keys: vec!["caf\u{00e9}.key".into(), "key with \"quotes\"".into()],
+            terminal_id: "term-\u{2603}".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let back: SettingsUpdated = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.changed_keys.len(), 2);
+        assert_eq!(back.changed_keys[0], "caf\u{00e9}.key");
+        assert_eq!(back.changed_keys[1], "key with \"quotes\"");
+        assert_eq!(back.terminal_id, "term-\u{2603}");
+    }
+
+    /// Large number of changed_keys should serialize and deserialize
+    /// without truncation or corruption.
+    #[test]
+    fn settings_updated_large_changed_keys_vec() {
+        let keys: Vec<String> = (0..500).map(|i| format!("key.{i:04}")).collect();
+        let event = SettingsUpdated {
+            changed_keys: keys.clone(),
+            terminal_id: "bulk-sync".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let back: SettingsUpdated = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.changed_keys.len(), 500);
+        assert_eq!(back.changed_keys[0], "key.0000");
+        assert_eq!(back.changed_keys[499], "key.0499");
+        assert_eq!(back.terminal_id, "bulk-sync");
+    }
+
+    /// Deserializing malformed JSON for SettingsUpdated should fail
+    /// gracefully — no panics.
+    #[test]
+    fn settings_updated_rejects_invalid_json() {
+        assert!(serde_json::from_str::<SettingsUpdated>("{}").is_err());
+        assert!(serde_json::from_str::<SettingsUpdated>("\"not an object\"").is_err());
+        assert!(
+            serde_json::from_str::<SettingsUpdated>(
+                "{\"changed_keys\":[1,2,3],\"terminal_id\":\"t\"}"
+            )
+            .is_err()
+        );
     }
 }

@@ -9,12 +9,13 @@ description = "OZ-POS Inventory Module: product catalog, stock management, varia
 [dependencies]
 anyhow = { workspace = true }
 foundation = { workspace = true }
-oz-core = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }
+uuid = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 platform-kernel = { workspace = true }
+oz-core = { workspace = true }

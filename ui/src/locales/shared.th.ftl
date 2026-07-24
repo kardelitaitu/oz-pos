@@ -46,6 +46,7 @@ nav-inventory = [TH] Inventory [/TH]
 
 # Common / Global
 cancel = [TH] Cancel [/TH]
+confirm = [TH] Confirm [/TH]
 save = [TH] Save [/TH]
 delete = [TH] Delete [/TH]
 edit = [TH] Edit [/TH]
@@ -55,6 +56,7 @@ print = [TH] Print [/TH]
 back = [TH] Back [/TH]
 retry = [TH] Retry [/TH]
 search = [TH] Search [/TH]
+toggle = [TH] Toggle [/TH]
 no-results = [TH] No results found [/TH]
 error-occurred = [TH] An error occurred [/TH]
 
@@ -177,6 +179,7 @@ nav-promotions = [TH] Promotions [/TH]
 nav-suppliers = [TH] Suppliers [/TH]
 nav-purchase-orders = [TH] Purchase Orders [/TH]
 nav-stock-transfers = [TH] Stock Transfers [/TH]
+nav-custom-report = [TH] Custom Report [/TH]
 nav-pos = [TH] POS [/TH]
 nav-stock = [TH] Stock [/TH]
 nav-history = [TH] History [/TH]
@@ -209,6 +212,8 @@ workspace-home-error-title = [TH] Connection Error [/TH]
 workspace-home-error-desc = [TH] Could not load your workspaces. Check your connection and try again. [/TH]
 workspace-home-retry = [TH] Try Again [/TH]
 workspace-home-retry-btn = [TH] Retry [/TH]
+workspace-card-pin-aria = [TH] Pin { $name } to top [/TH]
+workspace-card-unpin-aria = [TH] Unpin { $name } [/TH]
 
 # Shell
 shell-loading = [TH] Loading… [/TH]
@@ -218,6 +223,13 @@ status-bar-connected = [TH] Backend connected [/TH]
 status-bar-disconnected = [TH] Backend disconnected [/TH]
 status-bar-checking = [TH] Checking backend connection [/TH]
 status-bar-authenticating = [TH] Authenticating... [/TH]
+# Sync connection status
+status-bar-sync-connected = [TH] Cloud sync connected [/TH]
+status-bar-sync-disconnected = [TH] Cloud sync disconnected [/TH]
+status-bar-sync-checking = [TH] Checking cloud sync connection… [/TH]
+# License status (login screen)
+staff-login-license-active = [TH] License active [/TH]
+staff-login-license-inactive = [TH] License inactive [/TH]
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = [TH] { $count } sync conflict(s) resolved [/TH]
 

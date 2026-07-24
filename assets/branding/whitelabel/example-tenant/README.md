@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, template-doc verified) · example-tenant/ has all 4 subdirs (vector/web/desktop/hardware) + manifest.json + README.md; required-file tables (vector/web/desktop/hardware) match actual subdirs; sync-branding.ps1 -Brand/-DryRun documented correctly -->
+
 # Example Tenant — Whitelabel Brand Template
 
 This directory is a **template** for creating a whitelabel tenant brand. Add your own brand assets to the subdirectories listed below before running the sync script.

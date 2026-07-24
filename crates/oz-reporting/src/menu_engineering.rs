@@ -481,4 +481,111 @@ mod tests {
         assert_eq!(back.sku, "COFFEE");
         assert_eq!(back.total_margin_minor, 25000);
     }
+
+    // ── Boundary / invariant tests for menu_engineering ──────────────
+
+    /// When `cost > price`, `margin_per_unit` MUST be negative and
+    /// `total_margin_minor` MUST accumulate as a negative sum. Pins
+    /// the loss-leader menu item contract so P&L dashboards reflect
+    /// negative margin correctly.
+    #[test]
+    fn menu_engineering_negative_margin() {
+        let conn = fresh();
+        seed_product(&conn, "LOSS", 500, 800); // price=500, cost=800
+        complete_sale(&conn, "LOSS", 3, 500);
+
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].margin_per_unit, -300);
+        assert_eq!(result.rows[0].total_margin_minor, -900);
+        assert_eq!(result.rows[0].total_revenue_minor, 1500);
+    }
+
+    /// Quadrant classification is a relative comparison against the
+    /// median; when `median_margin < 0`, products performing at or
+    /// above this negative median are STILL classified as "high
+    /// margin". Pins the contract that classify uses ≥ (not >) so
+    /// equal-to-median counts as high.
+    #[test]
+    fn classify_quadrant_with_negative_median_margin() {
+        // High volume (100 >= 50), High margin (0 >= -500) -> Star.
+        assert_eq!(classify_quadrant(100, 0, 50.0, -500.0), MenuQuadrant::Star);
+        // High volume, equal-to-negative-median (0 >= -500) -> Star.
+        assert_eq!(
+            classify_quadrant(100, -500, 50.0, -500.0),
+            MenuQuadrant::Star
+        );
+        // Low volume (10 < 50), equal-to-negative-median margin → Puzzle.
+        assert_eq!(
+            classify_quadrant(10, -500, 50.0, -500.0),
+            MenuQuadrant::Puzzle
+        );
+        // Low volume, below negative median → Dog.
+        assert_eq!(classify_quadrant(10, -600, 50.0, -500.0), MenuQuadrant::Dog);
+    }
+
+    /// The same SKU sold at multiple disparate unit prices MUST
+    /// aggregate into a SINGLE reporting row. Pins the merge logic
+    /// in `merge_same_product_rows` so a price-promotion period
+    /// (e.g., happy hour at 60% off) shows up as one row.
+    #[test]
+    fn menu_engineering_merge_same_product_different_prices() {
+        let conn = fresh();
+        seed_product(&conn, "VAR", 500, 200); // price=500, cost=200
+        complete_sale(&conn, "VAR", 1, 500); // 1 @ 500
+        complete_sale(&conn, "VAR", 1, 600); // 1 @ 600
+
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].total_volume, 2);
+        assert_eq!(result.rows[0].total_revenue_minor, 1100);
+        // margin = (500-200)*1 + (600-200)*1 = 700.
+        assert_eq!(result.rows[0].total_margin_minor, 700);
+    }
+
+    /// A sale line with `unit_price = 0` (currency zero-boundary) MUST
+    /// contribute 0 to revenue. Pins the contract so 100%-discount
+    /// promotions and gift card zero-balance sales don't inflate
+    /// the in-app reports. (Note: `qty = 0` is rejected at the
+    /// foundation Cart boundary; testing it would be unreachable
+    /// code, so we test the equivalent real-world shape —
+    /// qty=1 with unit_price=0.)
+    #[test]
+    fn menu_engineering_zero_unit_price_product() {
+        let conn = fresh();
+        seed_product(&conn, "ZERO", 0, 0); // unit_price=0, cost=0
+        complete_sale(&conn, "ZERO", 1, 0);
+
+        let result = query_menu_engineering(&conn, "2000-01-01", "2099-12-31").unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].total_volume, 1);
+        assert_eq!(result.rows[0].total_revenue_minor, 0);
+        assert_eq!(result.rows[0].total_margin_minor, 0);
+    }
+
+    /// `median_of` correctly handles negative values. Pins the
+    /// algorithm contract for loss-leader menu engineering: medians
+    /// can be negative when many products lose money.
+    #[test]
+    fn median_of_handles_negatives() {
+        let v_odd = vec![-10.0_f64, 0.0, 10.0];
+        assert!((median_of(&v_odd, |&x| x) - 0.0).abs() < f64::EPSILON);
+
+        let v_even = vec![-10.0_f64, 0.0];
+        assert!((median_of(&v_even, |&x| x) - (-5.0)).abs() < f64::EPSILON);
+
+        let v_all_neg = vec![-30, -20, -10];
+        assert!((median_of(&v_all_neg, |&x| x as f64) - (-20.0)).abs() < f64::EPSILON);
+    }
+
+    /// Each `MenuQuadrant` recommendation MUST contain its
+    /// identifying keyword so downstream grep-based audit tools
+    /// can filter by quadrant without parsing JSON.
+    #[test]
+    fn menu_quadrant_recommendation_strings_stable() {
+        assert!(quadrant_recommendation(MenuQuadrant::Star).contains("Star"));
+        assert!(quadrant_recommendation(MenuQuadrant::Plowhorse).contains("Plowhorse"));
+        assert!(quadrant_recommendation(MenuQuadrant::Puzzle).contains("Puzzle"));
+        assert!(quadrant_recommendation(MenuQuadrant::Dog).contains("Dog"));
+    }
 }

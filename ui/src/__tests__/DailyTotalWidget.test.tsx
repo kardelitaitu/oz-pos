@@ -9,6 +9,7 @@ const mockExportDailySummary = vi.fn();
 
 vi.mock('@/api/sales', () => ({
   exportDailySummary: (...args: unknown[]) => mockExportDailySummary(...args),
+  exportDailySummaryScoped: (...args: unknown[]) => mockExportDailySummary(...args),
   exportSalesByHour: vi.fn(),
 }));
 
@@ -45,7 +46,7 @@ describe('DailyTotalWidget', () => {
     renderWithFluentSync(<DailyTotalWidget />, salesFtl);
 
     await waitFor(() => {
-      expect(screen.getByText((t) => t.includes('IDR'))).toBeTruthy();
+      expect(screen.getByText((t) => t.includes('Rp'))).toBeTruthy();
     });
 
     expect(screen.getByText('2')).toBeTruthy();

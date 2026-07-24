@@ -11,7 +11,8 @@ import {
   type StockCountDto,
   type StockCountLineDto,
 } from '@/api/inventoryCounts';
-import { type ProductDto, listProducts } from '@/api/products';
+import { type ProductDto, listProductsScoped } from '@/api/products';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -40,6 +41,8 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,8 +61,8 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
   useEffect(() => {
     load();
-    listProducts().then(setProducts).catch(() => {});
-  }, [load]);
+    listProductsScoped(sessionToken).then(setProducts).catch(() => {});
+  }, [load, sessionToken]);
 
   const isEditable = count?.status === 'draft' || count?.status === 'in_progress';
 

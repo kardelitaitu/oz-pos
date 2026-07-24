@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { Button } from '@/components/Button';
 import { Modal } from '@/components/Modal';
 import type { ModalProps } from '@/components/Modal';
 
@@ -113,9 +114,9 @@ export function ConfirmDialog({
 
   const defaultFooter = (
     <div className="confirm-dialog-actions">
-      <button
-        type="button"
-        className="btn btn--ghost btn--md"
+      <Button
+        variant="ghost"
+        size="md"
         onClick={onCancel}
         disabled={loading}
         aria-label={cancelLabel ?? l10n.getString('cancel')}
@@ -125,23 +126,21 @@ export function ConfirmDialog({
         ) : (
           <Localized id="cancel"><span>Cancel</span></Localized>
         )}
-      </button>
-      <button
-        type="button"
-        className={`btn btn--${variant === 'info' ? 'primary' : 'danger'} btn--md`}
+      </Button>
+      <Button
+        variant={variant === 'info' ? 'primary' : 'danger'}
+        size="md"
         onClick={onConfirm}
         disabled={disabled || loading}
-        aria-busy={loading || undefined}
+        loading={loading}
         aria-label={confirmLabel ?? l10n.getString('confirm')}
       >
-        {loading ? (
-          <span className="btn__spinner" aria-hidden="true" />
-        ) : confirmLabel ? (
+        {confirmLabel ? (
           confirmLabel
         ) : (
           <Localized id="confirm"><span>Confirm</span></Localized>
         )}
-      </button>
+      </Button>
     </div>
   );
 

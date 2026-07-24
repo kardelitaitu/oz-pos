@@ -654,8 +654,7 @@ export default function SalesHistoryScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 5 }, (_, r) => (
+              <tbody>{Array.from({ length: 5 }, (_, r) => (
                   <tr key={r}>
                     <td><Skeleton width="5rem" height="0.875rem" /></td>
                     <td><Skeleton width="7rem" height="0.875rem" /></td>
@@ -669,7 +668,7 @@ export default function SalesHistoryScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -757,8 +756,7 @@ export default function SalesHistoryScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {paginatedSales.map((s) => (
+            <tbody>{paginatedSales.map((s) => (
                 <SwipeableOrderRow
                   key={s.id}
                   sale={s}
@@ -768,7 +766,7 @@ export default function SalesHistoryScreen() {
                   cashierName={cashierName(s.userId)}
                 />
               ))}
-            </tbody>
+</tbody>
             </table>
           </Localized>
         </div>
@@ -958,8 +956,7 @@ export default function SalesHistoryScreen() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {Array.from({ length: 4 }, (_, r) => (
+                  <tbody>{Array.from({ length: 4 }, (_, r) => (
                       <tr key={r}>
                         <td><Skeleton width="4rem" height="0.875rem" /></td>
                         <td><Skeleton width="6rem" height="0.875rem" /></td>
@@ -968,7 +965,7 @@ export default function SalesHistoryScreen() {
                         <td><Skeleton width="3rem" height="0.875rem" /></td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
               </div>
             ) : (
@@ -1055,8 +1052,7 @@ export default function SalesHistoryScreen() {
                       )}
                     </tr>
                   </thead>
-                  <tbody>
-                    {detail.lines.map((line) => (
+                  <tbody>{detail.lines.map((line) => (
                       <tr key={line.id}>
                         <td>{line.sku}</td>
                         <td>{line.name}</td>
@@ -1066,7 +1062,7 @@ export default function SalesHistoryScreen() {
                         <td>{line.tax_amount ? formatMoney(line.tax_amount) : '\u2014'}</td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
                 </Localized>
 
@@ -1092,15 +1088,14 @@ export default function SalesHistoryScreen() {
                               <Localized id="refund-line-total"><th><span>Total</span></th></Localized>
                             </tr>
                           </thead>
-                          <tbody>
-                            {rf.lines.map((rfl) => (
+                          <tbody>{rf.lines.map((rfl) => (
                               <tr key={rfl.id}>
                                 <td>{rfl.sku}</td>
                                 <td>{rfl.qty}</td>
                                 <td>{formatMoney(rfl.lineTotal)}</td>
                               </tr>
                             ))}
-                          </tbody>
+</tbody>
                         </table>
                         </Localized>
                       </div>

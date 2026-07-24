@@ -511,6 +511,14 @@ pub const ALL: &[Migration] = &[
         id: "099_inventory_transactions_created_at.sql",
         sql: include_str!("../migrations/099_inventory_transactions_created_at.sql"),
     },
+    // ── ADR #22 Phase 0d: Settings delta ledger ──────────────────
+    // Adds setting_updated table with per-(key, terminal_id) version
+    // tracking. Enables concurrent-edit conflict detection and the
+    // settings_updated event consumed by the SettingsContext provider.
+    Migration {
+        id: "100_setting_updated.sql",
+        sql: include_str!("../migrations/100_setting_updated.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -746,6 +754,8 @@ mod tests {
             // ── ADR #19 Phase 3 (migrations 093-094) ──
             // 093 adds deduction_locations column to sales (no new table).
             // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
+            // ── ADR #22 Phase 0d (migration 100) ──
+            "setting_updated",
         ];
 
         for table in &expected_tables {
@@ -1038,6 +1048,106 @@ mod tests {
         assert!(
             plan_text.contains("idx_sales_store_status"),
             "expected query plan to use idx_sales_store_status, got: {plan_text}"
+        );
+    }
+
+    // ── ADR #22 Phase 0d: setting_updated migration ─────────────
+
+    #[test]
+    fn migration_100_creates_setting_updated_indexes() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Verify both indexes from 100_setting_updated.sql exist.
+        let indexes = [
+            "idx_setting_updated_key_version",
+            "idx_setting_updated_terminal",
+        ];
+        for idx in &indexes {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    rusqlite::params![idx],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(count, 1, "missing index {idx} from migration 100");
+        }
+    }
+
+    #[test]
+    fn migration_100_setting_updated_schema_integrity() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Verify all expected columns exist with correct constraints.
+        let columns: Vec<(String, String, i64)> = {
+            let mut stmt = conn
+                .prepare("SELECT name, type, \"notnull\" FROM pragma_table_info('setting_updated')")
+                .unwrap();
+            stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+        };
+
+        // Verify the 6 expected columns exist.
+        let expected = ["id", "key", "value", "terminal_id", "version", "created_at"];
+        for col in &expected {
+            assert!(
+                columns.iter().any(|(name, _, _)| name == col),
+                "missing column '{col}' in setting_updated"
+            );
+        }
+
+        // key, value, terminal_id, version must be NOT NULL.
+        for col in &["key", "value", "terminal_id", "version"] {
+            let notnull = columns
+                .iter()
+                .find(|(name, _, _)| name == col)
+                .map(|(_, _, nn)| *nn)
+                .unwrap_or(0);
+            assert_eq!(
+                notnull, 1,
+                "column '{col}' must be NOT NULL in setting_updated"
+            );
+        }
+    }
+
+    /// Verify the `setting_updated` table survives a migration re-run
+    /// (idempotent — uses `CREATE TABLE IF NOT EXISTS`).
+    #[test]
+    fn migration_100_is_idempotent_with_existing_data() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Insert a test row to verify it survives re-migration.
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params!["test.key", "test-value", "term-test", 1],
+        )
+        .unwrap();
+
+        // Re-run migrations — must be idempotent.
+        run(&mut conn).unwrap();
+
+        // Row must still exist.
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM setting_updated WHERE key = 'test.key'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "existing delta row should survive migration re-run"
         );
     }
 }

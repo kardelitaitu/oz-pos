@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import StockCountsScreen from './StockCountsScreen';
 import StockCountForm from './StockCountForm';
 import StockCountDetail from './StockCountDetail';
@@ -29,15 +29,19 @@ export default function StockCountsFlow() {
   // We listen for hash changes.
   const [hash, setHash] = useState(() => window.location.hash);
 
-  const handleHashChange = useCallback(() => {
-    setHash(window.location.hash);
-  }, []);
-
-  // Listen for hash changes
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('hashchange', handleHashChange);
+  // Listen for hash changes in a useEffect with a cleanup so the
+  // listener is removed on unmount (prevents a leak that would leave a
+  // stale setHash closure attached to window forever, causing state
+  // updates on an unmounted component).
+  useEffect(() => {
+    const handleHashChange = () => {
+      setHash(window.location.hash);
+    };
     window.addEventListener('hashchange', handleHashChange);
-  }
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
 
   // Parse hash for routing
   const hashMatch = hash.match(/^#stock-count-(.+)$/);

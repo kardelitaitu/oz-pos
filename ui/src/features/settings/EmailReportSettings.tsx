@@ -13,7 +13,8 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
-import { getSetting, setSetting } from '@/api/settings';
+import { getSetting, setSettingScoped } from '@/api/settings';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface SmtpConfigDto {
   host: string;
@@ -38,6 +39,7 @@ const SMTP_CONFIG_KEY = 'smtp_config';
 export default function EmailReportSettings() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken } = useWorkspace();
 
   const [config, setConfig] = useState<SmtpConfigDto>(DEFAULT_SMTP);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,10 @@ export default function EmailReportSettings() {
   const loadSchedule = useCallback(async () => {
     try {
       const sched = await getReportSchedule();
-      setSchedule(sched);
+      // getReportSchedule returns null when no schedule exists yet
+      // (Tauri IPC resolves with null for unset data). Guard against
+      // overwriting the initial default values with null.
+      if (sched) setSchedule(sched);
     } catch {
       // Use defaults
     } finally {
@@ -104,7 +109,7 @@ export default function EmailReportSettings() {
         return;
       }
 
-      await setSetting(SMTP_CONFIG_KEY, JSON.stringify(config), '');
+      await setSettingScoped(sessionToken, SMTP_CONFIG_KEY, JSON.stringify(config));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addToast({ message: l10n.getString('settings-email-saved'), type: 'success' });
@@ -113,7 +118,7 @@ export default function EmailReportSettings() {
     } finally {
       setSaving(false);
     }
-  }, [config, l10n, addToast]);
+  }, [config, l10n, addToast, sessionToken]);
 
   // ── Schedule event handlers ────────────────────────────────────────
 
@@ -155,7 +160,7 @@ export default function EmailReportSettings() {
     } finally {
       setSending(false);
     }
-  }, [addToast]);
+  }, [addToast, l10n]);
 
   const updateField = useCallback(
     <K extends keyof SmtpConfigDto>(key: K, value: SmtpConfigDto[K]) => {
@@ -556,9 +561,9 @@ export default function EmailReportSettings() {
 
           {/* Recipients */}
           <div className="settings-field settings-field--horizontal" style={{ alignItems: 'flex-start' }}>
-            <label htmlFor="settings-schedule-recipients" className="settings-label">
+            <span className="settings-label">
               {l10n.getString('settings-schedule-recipients')}
-            </label>
+            </span>
             <span className="settings-field-input-wrap">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
                 {schedule.recipients.map((email, i) => (
@@ -618,7 +623,7 @@ export default function EmailReportSettings() {
               <Button
                 variant="primary"
                 onClick={saveSchedule}
-                disabled={scheduleSaving}
+                loading={scheduleSaving}
                 aria-label={l10n.getString('settings-schedule-save-btn')}
               >
                 {scheduleSaving ? (

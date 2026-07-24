@@ -1209,4 +1209,178 @@ mod tests {
             "percentages should sum to 100"
         );
     }
+
+    // ── Weekly revenue boundary / invariant tests ──────────────────
+
+    /// Non-completed sales (Draft, Active, Voided) MUST NOT appear
+    /// in `weekly_revenue`. Same `status='completed'` filter as the
+    /// daily / monthly variants — pins contract parity across.
+    #[test]
+    fn weekly_revenue_excludes_non_completed() {
+        let conn = fresh();
+        let s = store(&conn);
+        let sku = "SKU1";
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product(sku, sku, money, None, None, 100, None)
+            .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new(sku), 1, price(100)))
+            .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        sale.created_at = "2026-07-20T12:00:00.000Z".into();
+        sale.updated_at = sale.created_at.clone();
+        s.create_sale(&sale).unwrap();
+        // Status stays at Draft — never advanced to Active/Completed.
+
+        let rows = s.weekly_revenue("2026-07-01", "2026-07-31").unwrap();
+        assert!(
+            rows.is_empty(),
+            "weekly_revenue must only include completed sales"
+        );
+    }
+
+    /// A range narrower than a full calendar week produces exactly
+    /// 1 row containing the bucket. Pins that single-day queries
+    /// return a single weekly bucket (Sunday-based).
+    #[test]
+    fn weekly_revenue_partial_week_range() {
+        let conn = fresh();
+        seed_completed_sale(&conn, "SKU", 1, 100);
+        // Override the seeded created_at to a known Monday.
+        conn.execute(
+            "UPDATE sales SET created_at = '2026-07-20T10:00:00.000Z'",
+            [],
+        )
+        .unwrap();
+
+        let rows = store(&conn)
+            .weekly_revenue("2026-07-20", "2026-07-20")
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        // 2026-07-20 is a Monday → preceding Sunday = 2026-07-19.
+        assert_eq!(rows[0].week_start, "2026-07-19");
+        assert_eq!(rows[0].total_minor, 100);
+        assert_eq!(rows[0].sale_count, 1);
+    }
+
+    /// Leap days are bucketed to their preceding Sunday by SQLite's
+    /// `'weekday 0', '-7 days'` modifier. Pins: Feb 29, 2024 (Thursday)
+    /// falls into the week that starts Sunday 2024-02-25.
+    #[test]
+    fn weekly_revenue_leap_day_falls_in_week() {
+        let conn = fresh();
+        seed_completed_sale(&conn, "SKU", 1, 100);
+        conn.execute(
+            "UPDATE sales SET created_at = '2024-02-29T10:00:00.000Z'",
+            [],
+        )
+        .unwrap();
+
+        let rows = store(&conn)
+            .weekly_revenue("2024-02-29", "2024-02-29")
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].week_start, "2024-02-25",
+            "Feb 29 2024 (Thursday) -> preceding Sunday 2024-02-25"
+        );
+        assert_eq!(rows[0].total_minor, 100);
+    }
+
+    /// Currency zero-boundary: a sale with `total_minor = 0` MUST
+    /// still increment `sale_count` and contribute 0 to `total_minor`.
+    #[test]
+    fn weekly_revenue_zero_revenue_sale() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 0,
+            currency: usd(),
+        };
+        s.create_product("ZERO", "Zero Item", money, None, None, 100, None)
+            .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("ZERO"), 1, price(0)))
+            .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sale.created_at = now.clone();
+        sale.updated_at = now;
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
+
+        let rows = s.weekly_revenue("2000-01-01", "2099-12-31").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].sale_count, 1, "zero-revenue sale still counted");
+        assert_eq!(rows[0].total_minor, 0);
+    }
+
+    /// Multi-currency week: two sales in different currencies within
+    /// the same calendar week produce TWO rows (GROUP BY week, currency).
+    #[test]
+    fn weekly_revenue_multiple_currencies_separate_rows() {
+        let conn = fresh();
+        let s = store(&conn);
+        let gbp = "GBP".parse().unwrap();
+
+        // USD sale.
+        let usd_money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("USD_A", "USD Item", usd_money, None, None, 100, None)
+            .unwrap();
+        let mut cart_usd = Cart::new(usd());
+        cart_usd
+            .add_line(CartLine::new(Sku::new("USD_A"), 1, price(100)))
+            .unwrap();
+        let mut sale_usd = Sale::from_cart(&cart_usd).unwrap();
+        sale_usd.created_at = "2026-07-20T10:00:00.000Z".into();
+        sale_usd.updated_at = "2026-07-20T10:00:00.000Z".into();
+        s.create_sale(&sale_usd).unwrap();
+        s.update_sale_status(&sale_usd.id, SaleStatus::Active)
+            .unwrap();
+        s.update_sale_status(&sale_usd.id, SaleStatus::Completed)
+            .unwrap();
+
+        // GBP sale (separate currency). Construct GBP Money manually
+        // since the `price()` helper returns USD.
+        let gbp_money = Money {
+            minor_units: 200,
+            currency: gbp,
+        };
+        s.create_product("GBP_A", "GBP Item", gbp_money, None, None, 100, None)
+            .unwrap();
+        let mut cart_gbp = Cart::new(gbp);
+        cart_gbp
+            .add_line(CartLine::new(Sku::new("GBP_A"), 1, gbp_money))
+            .unwrap();
+        let mut sale_gbp = Sale::from_cart(&cart_gbp).unwrap();
+        sale_gbp.created_at = "2026-07-22T10:00:00.000Z".into();
+        sale_gbp.updated_at = "2026-07-22T10:00:00.000Z".into();
+        s.create_sale(&sale_gbp).unwrap();
+        s.update_sale_status(&sale_gbp.id, SaleStatus::Active)
+            .unwrap();
+        s.update_sale_status(&sale_gbp.id, SaleStatus::Completed)
+            .unwrap();
+
+        let rows = s.weekly_revenue("2026-07-01", "2026-07-31").unwrap();
+        // Both sales are in the same week (Sun 2026-07-19 -> Sat 2026-07-25).
+        assert_eq!(
+            rows.len(),
+            2,
+            "two currencies in same week should produce 2 rows"
+        );
+        let currencies: Vec<String> = rows.iter().map(|r| r.currency.clone()).collect();
+        assert!(currencies.contains(&"USD".to_string()));
+        assert!(currencies.contains(&"GBP".to_string()));
+        assert!(rows.iter().all(|r| r.week_start == "2026-07-19"));
+    }
 }

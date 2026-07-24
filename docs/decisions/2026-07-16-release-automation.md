@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: STALE (2 findings) · F1 (MED): ADR status 'Planned' but pipeline SHIPPED — .github/workflows/release.yml EXISTS (tag v* trigger, softprops/action-gh-release) and scripts/generate-latest-json.mjs EXISTS (note: .mjs not .js as both ADRs state). The 'to be created' framing is stale. · F2 (LOW): release.yml does NOT reference generate-latest-json.mjs, and builds 'desktop + tablet + Docker + UI bundle' (header line 7), diverging from the ADR's Windows-NSIS/MSI-only + latest.json-on-every-release design — the manifest-generation step is not wired into the committed workflow. · verified accurate: ADR#13 existing infra (plugin/tauri.conf.json/pubkey/capabilities/UpdateBanner) all present; SettingsPage updater UI live; FTL strings present -->
+
 # ADR #14: Release Automation — GitHub Actions Build & Publish Pipeline
 
 **Status:** Planned (2026-07-16)

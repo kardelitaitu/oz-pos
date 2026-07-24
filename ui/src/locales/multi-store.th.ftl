@@ -20,5 +20,87 @@ multi-store-label-terminals = [TH] Terminals [/TH]
 multi-store-section-stores-overview = [TH] Stores overview [/TH]
 multi-store-section-terminal-status = [TH] Terminal status [/TH]
 topology-builder-title = [TH] Visual Store & Workspace Topology Builder [/TH]
+multi-store-error-load = [TH] Failed to load data [/TH]
 
+# ── Topology Editor ──
 
+topology-sim-start = [TH] Test Order Simulation [/TH]
+topology-sim-stop = [TH] Stop Simulation [/TH]
+topology-preset-retail = [TH] Retail Preset [/TH]
+topology-preset-restaurant = [TH] Resto & KDS Preset [/TH]
+topology-apply-changes = [TH] Apply Topology Changes [/TH]
+topology-palette-title = [TH] Palette Tools [/TH]
+topology-palette-desc = [TH] Drag or click to spawn topology nodes: [/TH]
+topology-tool-store = [TH] + Store Node [/TH]
+topology-tool-store-desc = [TH] Store Branch Profile [/TH]
+topology-tool-workspace = [TH] + Workspace Node [/TH]
+topology-tool-workspace-desc = [TH] POS / Register Instance [/TH]
+topology-tool-warehouse = [TH] + Warehouse Node [/TH]
+topology-tool-warehouse-desc = [TH] Storage Location [/TH]
+topology-tool-hardware = [TH] + Hardware Node [/TH]
+topology-tool-hardware-desc = [TH] Printer / KDS Peripheral [/TH]
+topology-lock-pro = [TH] Pro [/TH]
+topology-delete-selected = [TH] Delete Selected Element [/TH]
+topology-undo = [TH] Undo (Ctrl+Z) [/TH]
+topology-redo = [TH] Redo (Ctrl+Y) [/TH]
+topology-zoom = [TH] Zoom: { $zoom }% [/TH]
+topology-fit-all = [TH] Fit All [/TH]
+topology-reset-view = [TH] Reset View [/TH]
+topology-confirm-delete-node-title = [TH] Delete Node [/TH]
+topology-confirm-delete-wire-title = [TH] Delete Wire [/TH]
+topology-confirm-delete-node-msg = [TH] This node has connected wires. Deleting it will remove all its wires too. This action cannot be undone. [/TH]
+topology-confirm-delete-wire-msg = [TH] Delete this wire connection? This action cannot be undone. [/TH]
+topology-confirm-delete-label = [TH] Delete [/TH]
+topology-confirm-preset-title = [TH] Load Preset [/TH]
+topology-confirm-preset-msg = [TH] Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading. [/TH]
+topology-confirm-preset-label = [TH] Load Preset [/TH]
+topology-inspector-title = [TH] Node Inspector [/TH]
+topology-inspector-node-name = [TH] Node Name [/TH]
+topology-inspector-subtitle = [TH] Subtitle / Location [/TH]
+topology-tier-suffix = [TH] { $tier } TIER [/TH]
+topology-toast-multi-warehouse = [TH] Multi-Warehouse storage locations require a Pro Tier license. [/TH]
+topology-toast-wire-duplicate = [TH] A wire already connects these ports. [/TH]
+topology-toast-fallback-warehouse = [TH] Multi-warehouse stock deduction fallback wires require a Pro Tier license. [/TH]
+topology-toast-load-error = [TH] Failed to load topology [/TH]
+topology-canvas-aria-label = [TH] Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo. [/TH]
+topology-new-store = [TH] New Store [/TH]
+topology-new-store-subtitle = [TH] Branch [/TH]
+topology-new-workspace = [TH] New Workspace [/TH]
+topology-new-workspace-subtitle = [TH] Register [/TH]
+topology-new-warehouse = [TH] New Warehouse [/TH]
+topology-new-warehouse-subtitle = [TH] Storage [/TH]
+topology-new-hardware = [TH] New Hardware [/TH]
+topology-new-hardware-subtitle = [TH] Peripheral [/TH]
+topology-new-ready = [TH] Ready [/TH]
+topology-ws-type-store-pos = [TH] Retail POS [/TH]
+topology-ws-type-restaurant-pos = [TH] Restaurant POS [/TH]
+topology-ws-type-kds = [TH] Kitchen Display (KDS) [/TH]
+topology-ws-type-warehouse = [TH] Warehouse [/TH]
+
+# ── Aria labels & tooltips ──
+topology-node-drag-hint = [TH] Drag to move [/TH]
+topology-wire-toggle-aria = [TH] Toggle wire direction [/TH]
+topology-inspector-close-aria = [TH] Close inspector [/TH]
+topology-ws-type-select-aria = [TH] Select workspace type [/TH]
+# $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
+topology-port-aria = [TH] { $name } { $port } port [/TH]
+
+# ── Toast messages ──
+topology-toast-save-error = [TH] Failed to save topology [/TH]
+topology-toast-no-session = [TH] No active session — cannot save workspaces. [/TH]
+topology-toast-saved = [TH] Topology saved: { $detail }. [/TH]
+
+# ── Canvas HUD (aria-hidden decorative text) ──
+topology-hud-nodes = [TH] { $count } { $count ->
+    [one] node
+   *[other] nodes
+} [/TH]
+topology-hud-wires = [TH] { $count } { $count ->
+    [one] wire
+   *[other] wires
+} [/TH]
+
+# ── Wire labels ──
+topology-wire-label-connected = [TH] Connected [/TH]
+topology-wire-label-stock-deduct = [TH] Stock Deduct (P{ $priority }) [/TH]
+topology-wire-label-fallback = [TH] Fallback (P{ $priority }) [/TH]

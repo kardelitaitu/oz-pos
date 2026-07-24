@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (1 noted finding) · F1: "22 tests" historical snapshot -> current files grown (transport.rs 38, redirect.rs 4, lib.rs 35, daemon.rs 16 = 90+) since 2026-07-15; count is dated, not false · verified accurate: apps/cloud-server/src/redirect.rs (OZ_SYNC_REDIRECT_URL, HTTP 421) + main.rs (OZ_REDIRECT_ONLY); platform/sync/src/lib.rs ServerMigrated variant (:90) + transport.rs parse_server_migrated (:166/:225); Settings::set_sync_server_url at crates/oz-core/src/settings.rs:393; all 8 referenced files exist -->
+
 # ADR #11: Zero-Downtime VPS Migration Strategy
 
 **Status:** Implemented (2026-07-15)

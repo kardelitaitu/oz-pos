@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 minor path note) · frontend/shell, frontend/shared, frontend/themes (tokens.css, components.css, reset.css, responsive.css) all exist; App.tsx uses registerPage/registerNavItem · note: registries actually live at ui/src/platform/ui/{page,menu,widget}-registry, not frontend/shell/ as Section 1 implies (path drift, not a logic error); 15 shared components + 3 registries match the description · Status "Implemented (2026-07-15)" consistent -->
+
 # ADR #3: Frontend Restructure
 
 **Status:** Implemented (2026-07-15)

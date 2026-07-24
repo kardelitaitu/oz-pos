@@ -3,6 +3,8 @@ import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import { checkUsername } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBrand } from '@/contexts/BrandContext';
+import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { checkLicenseStatus } from '@/api/license';
 import { useToast } from '@/frontend/shared/Toast';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
@@ -125,6 +127,35 @@ export default function StaffLoginScreen() {
   // P7-4: Keyboard avoidance — scroll inputs into view on mobile
   const { containerRef: keyboardAvoidRef } = useKeyboardAvoidance();
 
+  const syncStatus = useSyncConnection();
+  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
+  const [authLatency, setAuthLatency] = useState<number | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const start = performance.now();
+        const result = await checkLicenseStatus();
+        if (!mounted) return;
+        if (result.active) {
+          setAuthLatency(Math.round(performance.now() - start));
+          setAuthOnline(true);
+        } else {
+          setAuthLatency(null);
+          setAuthOnline(false);
+        }
+      } catch {
+        if (!mounted) return;
+        setAuthLatency(null);
+        setAuthOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
   const cardRef = useRef<HTMLDivElement>(null);
 
   // ── Shake card + toast + rate-limit on PIN error ──────────────
@@ -142,14 +173,13 @@ export default function StaffLoginScreen() {
     addToast({ type: 'error', message: error, duration: 5000 });
     setPin([]);
 
-    // Parse backend rate limit error to sync lockout timer
-      const lockoutMatch = error.match(/Try again in (\d+)s/);
-      if (lockoutMatch && lockoutMatch[1]) {
-        const seconds = parseInt(lockoutMatch[1], 10);
+    // Parse backend rate limit error to sync lockout timer. (Per-attempt
+    // counting happens in attemptLogin so it survives identical messages.)
+    const lockoutMatch = error.match(/Try again in (\d+)s/);
+    if (lockoutMatch && lockoutMatch[1]) {
+      const seconds = parseInt(lockoutMatch[1], 10);
       setLockedUntil(Date.now() + seconds * 1000);
       setPinAttempts(MAX_PIN_ATTEMPTS);
-    } else {
-      setPinAttempts((prev) => prev + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
@@ -220,6 +250,11 @@ export default function StaffLoginScreen() {
 
   const attemptLogin = useCallback(() => {
     if (pin.length >= 1) {
+      // Count every submitted PIN as an attempt so the client-side
+      // rate-limit/lockout counter advances even when the backend returns
+      // an identical error message on consecutive failures (the error effect
+      // dedupes duplicate toasts but must not freeze the attempt counter).
+      setPinAttempts((prev) => prev + 1);
       login(username.trim(), pin.join(''));
     }
   }, [pin, username, login]);
@@ -590,12 +625,30 @@ export default function StaffLoginScreen() {
         </div>
       </div>
 
-      {/* ── Footer: version + copyright ────────────────────── */}
+      {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
-        <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.19</span>
-        <Localized id="staff-login-copyright">
-          <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
-        </Localized>
+        <div className="staff-login-footer-left">
+          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.19</span>
+          <Localized id="staff-login-copyright">
+            <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
+          </Localized>
+        </div>
+        <div className="staff-login-footer-right">
+          <div className="staff-login-connection-group">
+            {/* Auth status — via checkLicenseStatus IPC */}
+            <div className="connection-status" title={authOnline === null ? 'Checking...' : authOnline ? 'Connected' : 'Disconnected'}>
+              <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
+              <span className="connection-label">Auth</span>
+              {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
+            </div>
+            {/* Sync status — via useSyncConnection IPC */}
+            <div className="connection-status" title={syncStatus.state === 'checking' ? 'Checking...' : syncStatus.state === 'connected' ? 'Connected' : 'Disconnected'}>
+              <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
+              <span className="connection-label">Sync</span>
+              {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

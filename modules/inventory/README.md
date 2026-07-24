@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/products.rs, apps/desktop-client/src/commands/{products,product_variants,categories}.rs, ui/src/features/{products,inventory}, ui/src/api/products.ts, ui/src/locales/{products,inventory}.ftl; modules/inventory/manifest.json deps [] match; Module trait + Kernel::register/load_all/start_all match platform/kernel API · Status "Phase 2.3 POC" consistent with files still in original locations -->
+
 # Inventory Module
 
 **Status:** Active (Phase 2.3 — Proof of Concept)

@@ -1,25 +1,22 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  getReceiptSettings,
   setReceiptSettings,
-  getStoreSettings,
   setStoreSettings,
-  getUserPreferences,
   setUserPreferences,
-  setSetting,
+  setSettingScoped,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
 import { setDecimalSep } from '@/utils/storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import {
-  listCurrencies,
   type CurrencyDto,
 } from '@/api/currency';
 import {
-  getSyncSettings,
   updateSyncSettings,
   syncRun,
   syncPull,
@@ -31,23 +28,18 @@ import {
   type PullResult,
   type PingResult,
 } from '@/api/offline';
-import { getVersion } from '@/api/system';
+
 import {
-  getBrandSettings,
   setBrandPrimaryColour,
   setBrandStoreName as setBrandStoreNameApi,
 } from '@/api/branding';
 import { useBrand } from '@/contexts/BrandContext';
 import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
-import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { LanguageSelector } from '@/i18n/LanguageSelector';
-import SettingsSelect from './SettingsSelect';
 import { useToast } from '@/frontend/shared/Toast';
 import { useTheme } from '@/frontend/shell/ThemeProvider';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
-import { AppearanceSettings } from './AppearanceSettings';
 import FeatureToggleScreen from './FeatureToggleScreen';
 import DataManagementScreen from './DataManagementScreen';
 import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
@@ -61,6 +53,11 @@ import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
 import PromotionManagementScreen from '@/features/promotions/PromotionManagementScreen';
 import LicenseSettings from './LicenseSettings';
 import EmailReportSettings from './EmailReportSettings';
+const GeneralSection = lazy(() => import('./sections/GeneralSection'));
+const AppearanceSection = lazy(() => import('./sections/AppearanceSection'));
+const ReceiptSection = lazy(() => import('./sections/ReceiptSection'));
+const SyncSection = lazy(() => import('./sections/SyncSection'));
+const AboutSection = lazy(() => import('./sections/AboutSection'));
 import { useContextMenu, ContextMenu } from '@/frontend/shared';
 import SettingsNavTree, {
   NAV_ITEMS as NAV_ITEMS_REF,
@@ -68,6 +65,20 @@ import SettingsNavTree, {
   CATEGORY_I18N_KEYS as CATEGORY_I18N_KEYS_REF,
   NAV_L10N_KEYS as NAV_L10N_KEYS_REF,
 } from './SettingsNavTree';
+
+// ── Lazy-loaded workspace settings cards (ADR #22 Phase 3) ──
+const WorkspaceStorePosSettings = lazy(() =>
+  import('./workspace-cards/WorkspaceStorePosSettings').then((m) => ({ default: m.WorkspaceStorePosSettings })),
+);
+const WorkspaceRestaurantPosSettings = lazy(() =>
+  import('./workspace-cards/WorkspaceRestaurantPosSettings').then((m) => ({ default: m.WorkspaceRestaurantPosSettings })),
+);
+const WorkspaceKdsSettings = lazy(() =>
+  import('./workspace-cards/WorkspaceKdsSettings').then((m) => ({ default: m.WorkspaceKdsSettings })),
+);
+const WorkspaceInventorySettings = lazy(() =>
+  import('./workspace-cards/WorkspaceInventorySettings').then((m) => ({ default: m.WorkspaceInventorySettings })),
+);
 import './SettingsPage.css';
 import './SettingsNavTree.css';
 
@@ -131,53 +142,19 @@ function getToday(): string {
 
 // ── Component ─────────────────────────────────────────────────────
 
-// ── Token expiry badge helper ───────────────────────────────────
-
-/** Structured expiry info for a JWT token. The UI uses Fluent keys
- *  to render the badge text, making it localisable. */
-interface ExpiryInfo {
-  /** Fluent key — one of the `settings-sync-expiry-*` keys. */
-  fluentKey: string;
-  /** Argument object passed to `l10n.getString()`. */
-  fluentArgs: Record<string, number | string>;
-  /** Urgency level for the badge colour. */
-  tone: 'good' | 'warn' | 'critical';
-}
-
-/** Compute a localisable expiry label and urgency colour for a JWT token.
- *  Returns `null` when no `expiresAt` is provided. */
-function formatTokenExpiry(expiresAt: string | null): ExpiryInfo | null {
-  if (!expiresAt) return null;
-  const now = Date.now();
-  const expiry = Date.parse(expiresAt);
-  if (Number.isNaN(expiry)) {
-    return { fluentKey: 'settings-sync-expiry-fallback', fluentArgs: { iso: expiresAt }, tone: 'warn' };
-  }
-  const diffMs = expiry - now;
-  if (diffMs <= 0) {
-    return { fluentKey: 'settings-sync-expiry-expired', fluentArgs: {}, tone: 'critical' };
-  }
-  const mins = Math.floor(diffMs / 60_000);
-  const hours = Math.floor(diffMs / 3_600_000);
-  const days = Math.floor(diffMs / 86_400_000);
-  const tone: 'good' | 'warn' | 'critical' =
-    hours < 1 ? 'critical' : hours < 24 ? 'warn' : 'good';
-  if (days >= 1) {
-    return { fluentKey: 'settings-sync-expiry-in-days', fluentArgs: { count: days }, tone };
-  }
-  if (hours >= 1) {
-    return { fluentKey: 'settings-sync-expiry-in-hours', fluentArgs: { count: hours }, tone };
-  }
-  if (mins >= 1) {
-    return { fluentKey: 'settings-sync-expiry-in-minutes', fluentArgs: { count: mins }, tone };
-  }
-  return { fluentKey: 'settings-sync-expiry-less-than-minute', fluentArgs: {}, tone: 'critical' };
-}
-
 /** Settings hub — sidebar-driven navigation across general, appearance, features, data management, staff, terminals, multi-store, audit, offline queue, shifts, tax, currency, and promotions. */
 export default function SettingsPage() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  return (
+    <SettingsProvider>
+      <SettingsPageContent />
+    </SettingsProvider>
+  );
+}
+
+/** Inner component that consumes useSettings() — wrapped by SettingsProvider. */
+function SettingsPageContent() {
+  const settingsCtx = useSettings();
+  const loadError = settingsCtx.error;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -221,13 +198,7 @@ export default function SettingsPage() {
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  // Stable refs so the mount loader can read the latest l10n/addToast
-  // without listing them in its deps (which would re-fire the load effect
-  // on every render). Mirrors LicenseSettings.
-  const l10nRef = useRef(l10n);
-  l10nRef.current = l10n;
-  const addToastRef = useRef(addToast);
-  addToastRef.current = addToast;
+
   const { refreshBrandSettings } = useBrand();
   const { theme, toggleTheme } = useTheme();
 
@@ -278,6 +249,7 @@ export default function SettingsPage() {
   const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const userId = session?.user_id ?? 'default';
 
   const [displayCardSize, setDisplayCardSize] = useState(0);
@@ -391,88 +363,56 @@ export default function SettingsPage() {
     document.documentElement.setAttribute('data-font-smoothing', displayFontSmoothing);
   }, [displayFontSmoothing]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    // Use allSettled so a single failing API doesn't block the entire
-    // settings page — each successful result is applied independently.
-    const results = await Promise.allSettled([
-      getReceiptSettings(),
-      getStoreSettings(),
-      listCurrencies(),
-      getSyncSettings(),
-      getUserPreferences(userId),
-      getBrandSettings(),
-      getVersion(),
-    ]);
-    const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
+  // ── Initialize local draft state from SettingsContext ─────
+  const [initialized, setInitialized] = useState(false);
 
-    // Local variables capture the newly-loaded values for the snapshot
-    // (avoid reading React state, which would add deps and cause loops).
-    let snapReceipt: ReceiptSettingsDto | undefined;
-    let snapCardSize: number | undefined;
-    let snapFontSize: number | undefined;
-    let snapFontSmoothing: string | undefined;
-    let snapBrandColour: string | undefined;
-    let snapStoreName: string | undefined;
+  useEffect(() => {
+    // Once context finishes loading, copy values into local editable state.
+    // Only do this on the initial load — subsequent context refetches
+    // (e.g. from markSettingsUpdated) should NOT overwrite user edits.
+    if (!settingsCtx.loading && !initialized) {
+      const s = settingsCtx.settings;
+      setReceipt(s.receipt);
+      setStore(s.store);
+      setCurrencies(s.currencies);
+      setSync(s.sync);
+      setSyncServerUrl(s.sync.serverUrl ?? '');
+      setDisplayCardSize(s.preferences.cardSize);
+      setDisplayFontSize(s.preferences.fontSize);
+      setDisplayFontSmoothing(s.preferences.fontSmoothing);
+      setBrandColour(s.brand.colour);
+      setBrandStoreName(s.brand.storeName);
+      setAppVersion(s.appVersion);
+      setDecimalSep(s.receipt.decimalSeparator);
 
-    try {
-      if (rR.status === 'fulfilled') { snapReceipt = rR.value; setReceipt(rR.value); setDecimalSep(rR.value.decimalSeparator); }
-      if (sR.status === 'fulfilled') setStore(sR.value);
-      if (cR.status === 'fulfilled') setCurrencies(cR.value);
-      if (syncR.status === 'fulfilled') { setSync(syncR.value); setSyncServerUrl(syncR.value.serverUrl ?? ''); }
-      if (prefsR.status === 'fulfilled') {
-        const p = prefsR.value;
-        const cs = p['cardsize'];
-        if (cs !== undefined) { snapCardSize = Math.min(4, Math.max(0, parseInt(cs, 10) || 0)); setDisplayCardSize(snapCardSize); }
-        const fs = p['fontsize'];
-        if (fs !== undefined) { snapFontSize = Math.min(4, Math.max(0, parseInt(fs, 10) || 0)); setDisplayFontSize(snapFontSize); }
-        if (p['font-smoothing'] !== undefined) { snapFontSmoothing = p['font-smoothing']; setDisplayFontSmoothing(snapFontSmoothing); }
-      }
-      if (brandR.status === 'fulfilled') {
-        snapBrandColour = brandR.value.primary_colour;
-        snapStoreName = brandR.value.store_name;
-        setBrandColour(snapBrandColour);
-        setBrandStoreName(snapStoreName);
-        const palette = deriveAccentPalette(snapBrandColour);
-        applyAccentPalette(palette);
-      }
-      if (verR.status === 'fulfilled') setAppVersion(verR.value.version);
+      const palette = deriveAccentPalette(s.brand.colour);
+      applyAccentPalette(palette);
 
-      // Only surface a full-page error when every single API failed.
-      if (results.every((r) => r.status === 'rejected')) {
-        setLoadError(l10nRef.current.getString('settings-load-failed'));
-      } else if (results.some((r) => r.status === 'rejected')) {
-        // Some APIs failed — page loads partially; warn the user.
-        addToastRef.current({ message: l10nRef.current.getString('settings-load-partial'), type: 'error' });
-      }
-      // Store snapshot of initial loaded values for revert.
-      // Use local variables captured from the try block above (not from
-      // React state) to avoid adding these values to the deps array and
-      // causing an infinite re-load loop.
-      // On retry (initialSnapshotRef.current is set), preserve previous
-      // snapshot values for any API that failed to avoid reverting to
-      // default/empty state for backend data that is still valid.
-      const prev = initialSnapshotRef.current;
+      // Set the initial snapshot for Revert-to-saved
       initialSnapshotRef.current = {
-        receipt: rR.status === 'fulfilled' ? rR.value : (snapReceipt ?? prev?.receipt ?? receipt),
-        store: sR.status === 'fulfilled' ? sR.value : (prev?.store ?? store),
-        defaultCurrency: ctxCurrency,
-        sync: syncR.status === 'fulfilled' ? syncR.value : (prev?.sync ?? sync),
-        syncServerUrl: syncR.status === 'fulfilled' ? (syncR.value.serverUrl ?? '') : (prev?.syncServerUrl ?? syncServerUrl),
-        displayCardSize: snapCardSize ?? prev?.displayCardSize ?? displayCardSize,
-        displayFontSize: snapFontSize ?? prev?.displayFontSize ?? displayFontSize,
-        displayFontSmoothing: snapFontSmoothing ?? prev?.displayFontSmoothing ?? displayFontSmoothing,
-        brandColour: snapBrandColour ?? prev?.brandColour ?? brandColour,
-        brandStoreName: snapStoreName ?? prev?.brandStoreName ?? brandStoreName,
+        receipt: s.receipt,
+        store: s.store,
+        defaultCurrency,
+        sync: s.sync,
+        syncServerUrl: s.sync.serverUrl ?? '',
+        displayCardSize: s.preferences.cardSize,
+        displayFontSize: s.preferences.fontSize,
+        displayFontSmoothing: s.preferences.fontSmoothing,
+        brandColour: s.brand.colour,
+        brandStoreName: s.brand.storeName,
       };
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
 
-  useEffect(() => { load(); }, [load]);
+      // Show toast for partial load failures (regression guard from Phase 0b)
+      if (settingsCtx.hasPartialError) {
+        addToast({ message: l10n.getString('settings-load-partial'), type: 'error' });
+      }
+
+      setInitialized(true);
+    }
+  }, [settingsCtx.loading, settingsCtx.settings, settingsCtx.hasPartialError, initialized, defaultCurrency, addToast, l10n]);
+
+  // Derive loading/error state from context
+  const loading = settingsCtx.loading && !initialized;
 
   // Scroll content to top and focus the first heading when navigating sections.
   useEffect(() => {
@@ -537,7 +477,7 @@ export default function SettingsPage() {
         if (syncApiKey) {
           // Mirror the token to the shared IPC channel so the
           // Retail Options screen (useCloudSync) can load it.
-          setSetting('sync.auth_token', syncApiKey, userId)
+          setSettingScoped(sessionToken, 'sync.auth_token', syncApiKey)
             .catch(() => { /* best-effort */ });
           setSyncApiKey('');
         }
@@ -569,6 +509,19 @@ export default function SettingsPage() {
       addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } else if (failed > 0) {
       addToast({ message: l10n.getString('settings-save-partial'), type: 'error' });
+    }
+
+    // Notify SettingsContext so other components reflect the changes
+    const changedKeys: string[] = [];
+    if (results[0]?.status === 'fulfilled') changedKeys.push('receipt.footer', 'receipt.showCurrency', 'receipt.showTax', 'receipt.paperWidth', 'receipt.showTableNumber', 'receipt.decimalSeparator');
+    if (results[1]?.status === 'fulfilled') changedKeys.push('store.name', 'store.address', 'store.taxId');
+    if (results[2]?.status === 'fulfilled') changedKeys.push('currency.default');
+    if (results[3]?.status === 'fulfilled') changedKeys.push('prefs.cardsize', 'prefs.fontsize', 'prefs.font-smoothing');
+    if (results[4]?.status === 'fulfilled') changedKeys.push('sync.serverUrl', 'sync.apiKey', 'sync.enabled');
+    if (results[5]?.status === 'fulfilled') changedKeys.push('brand.primary_colour');
+    if (results[6]?.status === 'fulfilled') changedKeys.push('brand.store_name');
+    if (changedKeys.length > 0) {
+      settingsCtx.markSettingsUpdated(changedKeys);
     }
 
     setSaving(false);
@@ -660,7 +613,7 @@ export default function SettingsPage() {
       <div className="settings-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="settings-error" role="alert">
           <p>{loadError}</p>
-          <Button variant="secondary" onClick={() => { setLoadError(null); setLoading(true); load(); }}>
+          <Button variant="secondary" onClick={() => { setInitialized(false); settingsCtx.refetch(); }}>
             <Localized id="settings-retry"><span>Retry</span></Localized>
           </Button>
         </div>
@@ -674,708 +627,88 @@ export default function SettingsPage() {
     switch (key) {
       case 'general':
         return (
-          <>
-            {/* ── Store section ──────────────────────── */}
-            <Card
-              shadow="sm"
-              header={<Localized id="settings-section-store"><h2 className="settings-section-title">Store</h2></Localized>}
-            >
-              <div className="settings-form">
-                <div className="settings-field settings-field--horizontal">
-                  <label htmlFor="settings-field-store-name" className="settings-label">
-                    {l10n.getString('settings-field-store-name')}
-                  </label>
-                  <span className="settings-field-input-wrap">
-                    <Localized id="settings-store-name-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className={`settings-input${fieldErrors['store-name'] ? ' settings-input--error' : ''}`} {...cmInput}
-                        type="text"
-                        id="settings-field-store-name"
-                        required
-                        maxLength={100}
-                        placeholder="OZ-POS Store"
-                        value={store.name}
-                        onChange={(e) => { setStore({ ...store, name: e.target.value }); clearFieldError('store-name'); markDirty(); }}
-                        onBlur={() => validateField('store-name', store.name)}
-                      />
-                    </Localized>
-                    {fieldErrors['store-name'] && (
-                      <p className="settings-hint settings-hint--error">{fieldErrors['store-name']}</p>
-                    )}
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <label htmlFor="settings-field-address" className="settings-label">
-                    {l10n.getString('settings-field-address')}
-                  </label>
-                  <span className="settings-field-input-wrap">
-                    <Localized id="settings-address-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className={`settings-input${fieldErrors['address'] ? ' settings-input--error' : ''}`} {...cmInput}
-                        type="text"
-                        id="settings-field-address"
-                        maxLength={200}
-                        placeholder="123 Main Street"
-                        value={store.address}
-                        onChange={(e) => { setStore({ ...store, address: e.target.value }); clearFieldError('address'); markDirty(); }}
-                      />
-                    </Localized>
-                    {fieldErrors['address'] && (
-                      <p className="settings-hint settings-hint--error">{fieldErrors['address']}</p>
-                    )}
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <label htmlFor="settings-field-tax-id" className="settings-label">
-                    {l10n.getString('settings-field-tax-id')}
-                  </label>
-                  <span className="settings-field-input-wrap">
-                    <Localized id="settings-tax-id-placeholder" attrs={{ placeholder: true }}>
-                      <input
-                        className={`settings-input${fieldErrors['tax-id'] ? ' settings-input--error' : ''}`} {...cmInput}
-                        type="text"
-                        id="settings-field-tax-id"
-                        maxLength={20}
-                        pattern="[A-Za-z0-9\-./]*"
-                        placeholder="12-3456789"
-                        title={l10n.getString('settings-tax-id-pattern-hint')}
-                        value={store.taxId}
-                        onChange={(e) => { setStore({ ...store, taxId: e.target.value }); clearFieldError('tax-id'); markDirty(); }}
-                        onBlur={() => validateField('tax-id', store.taxId)}
-                      />
-                    </Localized>
-                    {fieldErrors['tax-id'] && (
-                      <p className="settings-hint settings-hint--error">{fieldErrors['tax-id']}</p>
-                    )}
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- LanguageSelector component */}
-                  <label htmlFor="language-select" className="settings-label">
-                    <Localized id="settings-field-language">
-                      <span>Language</span>
-                    </Localized>
-                  </label>
-                  <span className="settings-field-input-wrap">
-                    <LanguageSelector hideLabel />
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {/* ── Currency section ──────────────────── */}
-            <Card
-              shadow="sm"
-              header={<Localized id="settings-section-currency"><h2 className="settings-section-title">Currency</h2></Localized>}
-            >
-              <div className="settings-form">
-                <div className="settings-field settings-field--horizontal">
-                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component has hidden native select */}
-                  <label htmlFor="settings-field-default-currency" className="settings-label">
-                    <Localized id="settings-field-default-currency">
-                      <span>Default currency</span>
-                    </Localized>
-                  </label>
-                  <span className="settings-field-input-wrap">
-                    <SettingsSelect
-                      id="settings-field-default-currency"
-                      value={currencies.length > 0 ? defaultCurrency : ''}
-                      onChange={(v) => { setDefaultCurrencyState(v); markDirty(); }}
-                      options={currencies.length > 0
-                        ? currencies.map((c) => ({
-                            value: c.code,
-                            label: `${c.code} — ${c.name} (${c.symbol})`,
-                          }))
-                        : []
-                      }
-                      disabled={currencies.length === 0}
-                      ariaLabel={l10n.getString('settings-field-default-currency')}
-                      placeholder={currencies.length === 0 ? l10n.getString('settings-currency-loading') : ''}
-                    />
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </>
+          <GeneralSection
+            store={store}
+            setStore={setStore}
+            markDirty={markDirty}
+            cmInput={cmInput}
+            fieldErrors={fieldErrors}
+            validateField={validateField}
+            clearFieldError={clearFieldError}
+            currencies={currencies}
+            defaultCurrency={defaultCurrency}
+            setDefaultCurrencyState={setDefaultCurrencyState}
+            l10n={l10n}
+          />
         );
 
       case 'appearance':
         return (
-          <>
-            {/* ── Display section ────────────────────── */}
-            <Card
-              shadow="sm"
-              header={<Localized id="settings-section-display"><h2 className="settings-section-title">Display</h2></Localized>}
-            >
-              <div className="settings-form">
-                <div className="settings-field settings-field--horizontal">
-                  <Localized id="settings-field-card-size">
-                    <span className="settings-label">Menu Card Size</span>
-                  </Localized>
-                  <span className="settings-field-input-wrap">
-                    <div className="settings-size-controls">
-                      <Localized id="settings-card-size-decrease-aria" attrs={{ 'aria-label': true }}>
-                        <button
-                          type="button"
-                          className="settings-size-btn"
-                          disabled={displayCardSize <= 0}
-                          onClick={() => { setDisplayCardSize((s) => Math.max(0, s - 1)); markDirty(); }}
-                          aria-label="Decrease card size"
-                        >
-                          &minus;
-                        </button>
-                      </Localized>
-                      <span className="settings-size-value">{displayCardSize}</span>
-                      <Localized id="settings-card-size-increase-aria" attrs={{ 'aria-label': true }}>
-                        <button
-                          type="button"
-                          className="settings-size-btn"
-                          disabled={displayCardSize >= 4}
-                          onClick={() => { setDisplayCardSize((s) => Math.min(4, s + 1)); markDirty(); }}
-                          aria-label="Increase card size"
-                        >
-                          +
-                        </button>
-                      </Localized>
-                    </div>
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <Localized id="settings-field-font-size">
-                    <span className="settings-label">Font Size</span>
-                  </Localized>
-                  <span className="settings-field-input-wrap">
-                    <div className="settings-size-controls">
-                      <Localized id="settings-font-size-decrease-aria" attrs={{ 'aria-label': true }}>
-                        <button
-                          type="button"
-                          className="settings-size-btn"
-                          disabled={displayFontSize <= 0}
-                          onClick={() => { setDisplayFontSize((s) => Math.max(0, s - 1)); markDirty(); }}
-                          aria-label="Decrease font size"
-                        >
-                          &minus;
-                        </button>
-                      </Localized>
-                      <span className="settings-size-value">{displayFontSize}</span>
-                      <Localized id="settings-font-size-increase-aria" attrs={{ 'aria-label': true }}>
-                        <button
-                          type="button"
-                          className="settings-size-btn"
-                          disabled={displayFontSize >= 4}
-                          onClick={() => { setDisplayFontSize((s) => Math.min(4, s + 1)); markDirty(); }}
-                          aria-label="Increase font size"
-                        >
-                          +
-                        </button>
-                      </Localized>
-                    </div>
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component has hidden native select */}
-                  <label htmlFor="settings-field-font-smoothing" className="settings-label">
-                    <Localized id="settings-field-font-smoothing">
-                      <span>Font Smoothing</span>
-                    </Localized>
-                  </label>
-                  <span className="settings-field-input-wrap">
-                    <SettingsSelect
-                      id="settings-field-font-smoothing"
-                      value={displayFontSmoothing}
-                      onChange={(v) => { setDisplayFontSmoothing(v); markDirty(); }}
-                      options={[
-                        { value: 'antialiased', label: l10n.getString('settings-font-smoothing-antialiased') },
-                        { value: 'subpixel', label: l10n.getString('settings-font-smoothing-subpixel') },
-                      ]}
-                      ariaLabel={l10n.getString('settings-field-font-smoothing')}
-                    />
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            {/* ── Appearance section ────────────────── */}
-            <AppearanceSettings
-              embedded
-              colour={brandColour}
-              storeName={brandStoreName}
-              onColourChange={(c) => {
-                setBrandColour(c);
-                const palette = deriveAccentPalette(c);
-                applyAccentPalette(palette);
-                markDirty();
-              }}
-              onStoreNameChange={(name) => { setBrandStoreName(name); markDirty(); }}
-            />
-          </>
+          <AppearanceSection
+            displayCardSize={displayCardSize}
+            setDisplayCardSize={setDisplayCardSize}
+            displayFontSize={displayFontSize}
+            setDisplayFontSize={setDisplayFontSize}
+            displayFontSmoothing={displayFontSmoothing}
+            setDisplayFontSmoothing={setDisplayFontSmoothing}
+            brandColour={brandColour}
+            setBrandColour={setBrandColour}
+            brandStoreName={brandStoreName}
+            setBrandStoreName={setBrandStoreName}
+            markDirty={markDirty}
+            l10n={l10n}
+          />
         );
 
       case 'receipt':
         return (
-          <Card
-            shadow="sm"
-            header={<Localized id="settings-section-receipt"><h2 className="settings-section-title">Receipt</h2></Localized>}
-          >
-            <div className="settings-form">
-              {/* Show currency */}
-              <div className="settings-field settings-field--horizontal">
-                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
-                <label htmlFor="receipt-show-currency" className="settings-label">
-                  <Localized id="settings-toggle-show-currency">
-                    <span>Show currency symbol on amounts</span>
-                  </Localized>
-                </label>
-                <span className="settings-field-input-wrap">
-                  <label className="settings-toggle" htmlFor="receipt-show-currency">
-                    <span className="sr-only">Toggle</span>
-                    <span className="settings-toggle-switch">
-                      <input
-                        id="receipt-show-currency"
-                        type="checkbox"
-                        role="switch"
-                        checked={receipt.showCurrency}
-                        aria-checked={receipt.showCurrency}
-                        onChange={(e) => { setReceipt({ ...receipt, showCurrency: e.target.checked }); markDirty(); }}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </span>
-                  </label>
-                </span>
-              </div>
-
-              {/* Decimal separator */}
-              <div className="settings-field settings-field--horizontal">
-                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component */}
-                <label htmlFor="settings-field-decimal-separator" className="settings-label">
-                  {l10n.getString('settings-field-decimal-separator')}
-                </label>
-                <span className="settings-field-input-wrap">
-                  <SettingsSelect
-                    id="settings-field-decimal-separator"
-                    value={receipt.decimalSeparator}
-                    onChange={(v) => {
-                      setReceipt({ ...receipt, decimalSeparator: v });
-                      setDecimalSep(v);
-                      markDirty();
-                    }}
-                    options={[
-                      { value: 'dot', label: l10n.getString('settings-decimal-separator-dot') },
-                      { value: 'comma', label: l10n.getString('settings-decimal-separator-comma') },
-                      { value: 'none', label: l10n.getString('settings-decimal-separator-none') },
-                    ]}
-                  />
-                </span>
-              </div>
-
-              {/* Show tax */}
-              <div className="settings-field settings-field--horizontal">
-                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
-                <label htmlFor="receipt-show-tax" className="settings-label">
-                  <Localized id="settings-toggle-show-tax">
-                    <span>Show tax line on receipts</span>
-                  </Localized>
-                </label>
-                <span className="settings-field-input-wrap">
-                  <label className="settings-toggle" htmlFor="receipt-show-tax">
-                    <span className="sr-only">Toggle</span>
-                    <span className="settings-toggle-switch">
-                      <input
-                        id="receipt-show-tax"
-                        type="checkbox"
-                        role="switch"
-                        checked={receipt.showTax}
-                        aria-checked={receipt.showTax}
-                        onChange={(e) => { setReceipt({ ...receipt, showTax: e.target.checked }); markDirty(); }}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </span>
-                  </label>
-                </span>
-              </div>
-
-              {/* Paper width */}
-              <div className="settings-field settings-field--horizontal">
-                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- SettingsSelect component */}
-                <label htmlFor="settings-field-paper-width" className="settings-label">
-                  {l10n.getString('settings-field-paper-width')}
-                </label>
-                <span className="settings-field-input-wrap">
-                  <SettingsSelect
-                    id="settings-field-paper-width"
-                    value={receipt.paperWidth}
-                    onChange={(v) => { setReceipt({ ...receipt, paperWidth: v }); markDirty(); }}
-                    options={[
-                      { value: 'standard', label: l10n.getString('settings-paper-width-standard') },
-                      { value: 'narrow', label: l10n.getString('settings-paper-width-narrow') },
-                    ]}
-                  />
-                </span>
-              </div>
-
-              {/* Footer */}
-              <div className="settings-field settings-field--horizontal">
-                <label htmlFor="settings-field-receipt-footer" className="settings-label">
-                  {l10n.getString('settings-field-footer')}
-                </label>
-                <span className="settings-field-input-wrap">
-                  <Localized id="settings-footer-placeholder" attrs={{ placeholder: true }}>
-                    <textarea
-                      className="settings-input settings-textarea"
-                      id="settings-field-receipt-footer"
-                      rows={3}
-                      maxLength={500}
-                      placeholder="Thank you for shopping!"
-                      value={receipt.footer}
-                      onChange={(e) => { setReceipt({ ...receipt, footer: e.target.value }); markDirty(); }}
-                    />
-                  </Localized>
-                  <span className="settings-hint settings-char-count">
-                    {receipt.footer.length}/500
-                  </span>
-                </span>
-              </div>
-
-              {/* Show table number */}
-              <div className="settings-field settings-field--horizontal">
-                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
-                <label htmlFor="receipt-show-table-number" className="settings-label">
-                  <Localized id="settings-toggle-show-table-number">
-                    <span>Show table number on cart and receipts</span>
-                  </Localized>
-                </label>
-                <span className="settings-field-input-wrap">
-                  <label className="settings-toggle" htmlFor="receipt-show-table-number">
-                    <span className="sr-only">Toggle</span>
-                    <span className="settings-toggle-switch">
-                      <input
-                        id="receipt-show-table-number"
-                        type="checkbox"
-                        role="switch"
-                        checked={receipt.showTableNumber}
-                        aria-checked={receipt.showTableNumber}
-                        onChange={(e) => { setReceipt({ ...receipt, showTableNumber: e.target.checked }); markDirty(); }}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </span>
-                  </label>
-                </span>
-              </div>
-            </div>
-          </Card>
+          <ReceiptSection
+            receipt={receipt}
+            setReceipt={setReceipt}
+            setDecimalSep={setDecimalSep}
+            markDirty={markDirty}
+            l10n={l10n}
+          />
         );
 
       case 'sync':
         return (
-          <Card
-            shadow="sm"
-            header={<Localized id="settings-section-sync"><h2 className="settings-section-title">Cloud Sync</h2></Localized>}
-          >
-            <div className="settings-form">
-              {sync.serverUrl === null && !sync.enabled && (
-                <p className="settings-hint">
-                  <Localized id="settings-sync-not-configured">
-                    <span>Sync is not configured. Enter a server URL and enable sync.</span>
-                  </Localized>
-                </p>
-              )}
-
-              <div className="settings-field settings-field--horizontal">
-                <label htmlFor="settings-field-server-url" className="settings-label">
-                  {l10n.getString('settings-sync-server-url')}
-                </label>
-                <span className="settings-field-input-wrap">
-                  <Localized id="settings-server-url-placeholder" attrs={{ placeholder: true }}>
-                    <input
-                      className="settings-input" {...cmInput}
-                      type="url"
-                      id="settings-field-server-url"
-                      placeholder="https://api.example.com"
-                      value={syncServerUrl}
-                      onChange={(e) => { setSyncServerUrl(e.target.value); setPingResult(null); setTokenExpiresAt(null); markDirty(); }}
-                    />
-                  </Localized>
-                </span>
-              </div>
-
-              <div className="settings-field settings-field--horizontal">
-                <label htmlFor="settings-field-api-key" className="settings-label">
-                  {l10n.getString('settings-sync-api-key')}
-                </label>
-                <span className="settings-field-input-wrap">
-                  <div className="settings-input-wrap">
-                    <Localized id={sync.hasApiKey ? 'settings-api-key-masked' : 'settings-api-key-placeholder'} attrs={{ placeholder: true }}>
-                      <input
-                        className="settings-input" {...cmInput}
-                        type={syncApiKeyVisible ? 'text' : 'password'}
-                        id="settings-field-api-key"
-                        placeholder={sync.hasApiKey ? '••••••••' : 'Enter API key'}
-                        value={syncApiKey}
-                        onChange={(e) => { setSyncApiKey(e.target.value); markDirty(); }}
-                      />
-                    </Localized>
-                    {/* Only show the eye toggle when there is text to reveal.
-                        When hasApiKey is true the placeholder shows dots, but the
-                        actual key value is never loaded from the backend — so
-                        toggling visibility on an empty field is misleading. */}
-                    {syncApiKey && (
-                    <button
-                      type="button"
-                      className="settings-input-toggle"
-                      onClick={() => setSyncApiKeyVisible((v) => !v)}
-                      aria-label={l10n.getString(syncApiKeyVisible ? 'settings-api-key-hide-aria' : 'settings-api-key-show-aria')}
-                      tabIndex={-1}
-                    >
-                      {syncApiKeyVisible ? (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                          <line x1="1" y1="1" x2="23" y2="23" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                    )}
-                  </div>
-                  <p className="settings-hint">
-                    <Localized id="settings-sync-token-hint">
-                      <span>Enter a JWT token from the cloud server. Generate one via POST /api/v1/tokens</span>
-                    </Localized>
-                  </p>
-                  <div className="settings-sync-token-actions">
-                    <Button
-                      variant="ghost"
-                      loading={requesting}
-                      onClick={async () => {
-                        setRequesting(true);
-                        try {
-                          const result = await requestSyncToken(syncServerUrl || undefined);
-                          if (result.ok && result.token) {
-                            setSyncApiKey(result.token);
-                            setSyncApiKeyVisible(false);
-                            setTokenExpiresAt(result.expiresAt ?? null);
-                            markDirty();
-                            addToast({ message: result.status, type: 'success' });
-                          } else {
-                            addToast({ message: result.status, type: 'error' });
-                          }
-                        } catch {
-                          addToast({ message: l10n.getString('settings-sync-token-request-failed'), type: 'error' });
-                        } finally {
-                          setRequesting(false);
-                        }
-                      }}
-                    >
-                      <Localized id={requesting ? 'settings-sync-requesting' : 'settings-sync-request-token'}>
-                        <span>{requesting ? 'Requesting…' : 'Request Token'}</span>
-                      </Localized>
-                    </Button>
-                  </div>
-                  {(() => {
-                    const expiry = formatTokenExpiry(tokenExpiresAt);
-                    if (!expiry) return null;
-                    return (
-                      <span className={`settings-sync-expiry-badge settings-sync-expiry-badge--${expiry.tone}`}>
-                        {l10n.getString(expiry.fluentKey, expiry.fluentArgs)}
-                      </span>
-                    );
-                  })()}
-                </span>
-              </div>
-
-              <div className="settings-field settings-field--horizontal">
-                {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
-                <label htmlFor="sync-enabled" className="settings-label">
-                  <Localized id="settings-sync-enabled">
-                    <span>Enable Cloud Sync</span>
-                  </Localized>
-                </label>
-                <span className="settings-field-input-wrap">
-                  <label className="settings-toggle" htmlFor="sync-enabled">
-                    <span className="sr-only">Toggle</span>
-                    <span className="settings-toggle-switch">
-                      <input
-                        id="sync-enabled"
-                        type="checkbox"
-                        role="switch"
-                        checked={sync.enabled}
-                        aria-checked={sync.enabled}
-                        onChange={(e) => { setSync({ ...sync, enabled: e.target.checked }); markDirty(); }}
-                      />
-                      <span className="settings-toggle-slider" />
-                    </span>
-                  </label>
-                </span>
-              </div>
-
-              {(sync.serverUrl !== null || sync.enabled) && (
-                <>
-                  {/* ── Status indicator ──────────────────── */}
-                  <div className="settings-sync-status">
-                    <span
-                      className={`settings-sync-dot${syncResult && !syncResult.error ? ' settings-sync-dot--ok' : ''}${syncResult?.error ? ' settings-sync-dot--err' : ''}`}
-                      aria-hidden="true"
-                    />
-                    <span className="settings-sync-status-text">
-                      {syncResult === null
-                        ? (pingResult
-                          ? pingResult.status
-                          : l10n.getString('settings-sync-status-idle'))
-                        : syncResult.error
-                          ? syncResult.error
-                          : l10n.getString('settings-sync-status-ok')}
-                    </span>
-                    {pendingCount !== null && pendingCount > 0 && (
-                      <span className="settings-sync-pending-badge">
-                        {l10n.getString('settings-sync-pending-count', { count: pendingCount })}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="settings-actions">
-                    <Button
-                      variant="ghost"
-                      loading={testing}
-                      onClick={async () => {
-                        setTesting(true);
-                        setPingResult(null);
-                        try {
-                          const result = await testSyncConnection(syncServerUrl || undefined);
-                          setPingResult(result);
-                          if (result.ok) {
-                            addToast({ message: result.status, type: 'success' });
-                          } else {
-                            addToast({ message: result.status, type: 'error' });
-                          }
-                        } catch {
-                          setPingResult({ ok: false, status: l10n.getString('settings-sync-test-failed'), latencyMs: null });
-                          addToast({ message: l10n.getString('settings-sync-test-failed'), type: 'error' });
-                        } finally {
-                          setTesting(false);
-                        }
-                      }}
-                    >
-                      <Localized id={testing ? 'settings-sync-testing' : 'settings-sync-test-connection'}>
-                        <span>{testing ? 'Testing…' : 'Test Connection'}</span>
-                      </Localized>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      loading={syncing}
-                      onClick={async () => {
-                        setSyncing(true);
-                        setSyncResult(null);
-                        try {
-                          const result = await syncRun();
-                          setSyncResult(result);
-                          refreshPendingCount();
-                          if (result.error) {
-                            addToast({ message: result.error, type: 'error' });
-                          } else if (result.synced > 0 || result.failed > 0) {
-                            addToast({
-                              message: l10n.getString('settings-sync-success', { synced: result.synced, failed: result.failed }),
-                              type: 'success',
-                            });
-                          } else {
-                            addToast({
-                              message: l10n.getString('settings-sync-nothing'),
-                              type: 'info',
-                            });
-                          }
-                        } catch {
-                          const errMsg = l10n.getString('settings-sync-error');
-                          setSyncResult({ synced: 0, failed: 0, error: errMsg });
-                          addToast({ message: errMsg, type: 'error' });
-                        } finally {
-                          setSyncing(false);
-                        }
-                      }}
-                    >
-                      <Localized id={syncing ? 'settings-sync-syncing' : 'settings-sync-sync-now'}>
-                        <span>{syncing ? 'Syncing…' : 'Sync Now'}</span>
-                      </Localized>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      loading={pulling}
-                      onClick={async () => {
-                        setPulling(true);
-                        setPullResult(null);
-                        try {
-                          const result = await syncPull();
-                          setPullResult(result);
-                          if (result.error) {
-                            addToast({ message: result.error, type: 'error' });
-                          } else if (result.productsPulled > 0 || result.taxRatesPulled > 0 || result.usersPulled > 0) {
-                            addToast({
-                              message: l10n.getString('settings-sync-pull-toast-success', { products: result.productsPulled, tax_rates: result.taxRatesPulled, users: result.usersPulled }),
-                              type: 'success',
-                            });
-                          } else {
-                            addToast({
-                              message: l10n.getString('settings-sync-pull-empty'),
-                              type: 'info',
-                            });
-                          }
-                        } catch {
-                          const errMsg = l10n.getString('settings-sync-error');
-                          setPullResult({ productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: errMsg });
-                          addToast({ message: errMsg, type: 'error' });
-                        } finally {
-                          setPulling(false);
-                        }
-                      }}
-                    >
-                      <Localized id={pulling ? 'settings-sync-pulling' : 'settings-sync-pull'}>
-                        <span>{pulling ? 'Pulling…' : 'Pull from Server'}</span>
-                      </Localized>
-                    </Button>
-                  </div>
-
-                  {syncResult && (
-                    <div className="settings-sync-result-block">
-                      <p className="settings-hint">
-                        <Localized
-                          id="settings-sync-result"
-                          vars={{ synced: syncResult.synced, failed: syncResult.failed }}
-                        >
-                          <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
-                        </Localized>
-                      </p>
-                      {syncResult.error && (
-                        <p className="settings-hint settings-hint--error">{syncResult.error}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {pullResult && (
-                    <div className="settings-sync-result-block">
-                      <p className="settings-hint">
-                        <Localized
-                          id="settings-sync-pull-result"
-                          vars={{ products: pullResult.productsPulled, tax_rates: pullResult.taxRatesPulled, users: pullResult.usersPulled }}
-                        >
-                          <span>Last pull: {pullResult.productsPulled} products, {pullResult.taxRatesPulled} tax rates, {pullResult.usersPulled} users</span>
-                        </Localized>
-                      </p>
-                      {pullResult.error && (
-                        <p className="settings-hint settings-hint--error">{pullResult.error}</p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </Card>
+          <SyncSection
+            sync={sync}
+            setSync={setSync}
+            syncServerUrl={syncServerUrl}
+            setSyncServerUrl={setSyncServerUrl}
+            syncApiKey={syncApiKey}
+            setSyncApiKey={setSyncApiKey}
+            syncApiKeyVisible={syncApiKeyVisible}
+            setSyncApiKeyVisible={setSyncApiKeyVisible}
+            syncing={syncing}
+            setSyncing={setSyncing}
+            pulling={pulling}
+            setPulling={setPulling}
+            syncResult={syncResult}
+            setSyncResult={setSyncResult}
+            pullResult={pullResult}
+            setPullResult={setPullResult}
+            pendingCount={pendingCount}
+            testing={testing}
+            setTesting={setTesting}
+            pingResult={pingResult}
+            setPingResult={setPingResult}
+            requesting={requesting}
+            setRequesting={setRequesting}
+            tokenExpiresAt={tokenExpiresAt}
+            setTokenExpiresAt={setTokenExpiresAt}
+            cmInput={cmInput}
+            markDirty={markDirty}
+            refreshPendingCount={refreshPendingCount}
+            testSyncConnection={testSyncConnection}
+            syncRun={syncRun}
+            syncPull={syncPull}
+            requestSyncToken={requestSyncToken}
+            l10n={l10n}
+            addToast={addToast}
+          />
         );
 
       case 'email':
@@ -1383,160 +716,13 @@ export default function SettingsPage() {
 
       case 'about':
         return (
-          <>
-            <Card
-              shadow="sm"
-              header={<Localized id="settings-system-license-header"><h2 className="settings-section-title">System &amp; License Ownership</h2></Localized>}
-            >
-              <div className="settings-form">
-                <div className="settings-field settings-field--horizontal">
-                  <span className="settings-label">
-                    <Localized id="settings-software-edition"><span>Software Edition</span></Localized>
-                  </span>
-                  <span className="settings-field-input-wrap">
-                    <Localized id="settings-app-version" vars={{ version: appVersion }}>
-                      <span className="settings-license-value">OZ-POS Enterprise v{appVersion}</span>
-                    </Localized>
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <span className="settings-label">
-                    <Localized id="settings-license-type"><span>License Type</span></Localized>
-                  </span>
-                  <span className="settings-field-input-wrap">
-                    <Localized id="settings-license-type-value">
-                      <span className="settings-license-value settings-license-value--warning">Proprietary Commercial License</span>
-                    </Localized>
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <span className="settings-label">
-                    <Localized id="settings-copyright-notice"><span>Copyright Notice</span></Localized>
-                  </span>
-                  <span className="settings-field-input-wrap">
-                    <Localized id="settings-copyright-notice-value">
-                      <span className="settings-license-value">&copy; 2024-2026 OZ-POS Contributors. All Rights Reserved.</span>
-                    </Localized>
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <span className="settings-label">
-                    <Localized id="settings-commercial-contact"><span>Commercial Contact</span></Localized>
-                  </span>
-                  <span className="settings-field-input-wrap">
-                    <span className="settings-license-value settings-license-value--mono">adikaradwiatmaja@gmail.com</span>
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            <Card
-              shadow="sm"
-              header={<Localized id="settings-updates-heading"><h2 className="settings-section-title">Updates</h2></Localized>}
-            >
-              <div className="settings-form">
-                <div className="settings-field settings-field--horizontal">
-                  <span className="settings-label">
-                    <Localized id="settings-current-version"><span>Current Version</span></Localized>
-                  </span>
-                  <span className="settings-field-input-wrap">
-                    <span className="settings-license-value">{appVersion}</span>
-                  </span>
-                </div>
-
-                <div className="settings-field settings-field--horizontal">
-                  <span className="settings-label">
-                    <Localized id="settings-update-status-label"><span>Status</span></Localized>
-                  </span>
-                  <span className="settings-field-input-wrap">
-                    {updateState === 'up-to-date' && (
-                      <span className="settings-license-value settings-license-value--active">
-                        <Localized id="settings-up-to-date"><span>Up to date</span></Localized>
-                      </span>
-                    )}
-                    {updateState === 'available' && (
-                      <span className="settings-license-value settings-license-value--active">
-                        <Localized id="settings-update-available" vars={{ version: updateVersion }}>
-                          <span>{updateVersion} available</span>
-                        </Localized>
-                      </span>
-                    )}
-                    {updateState === 'error' && (
-                      <span className="settings-license-value settings-license-value--warning">
-                        <Localized id="settings-update-check-error"><span>Check failed</span></Localized>
-                      </span>
-                    )}
-                    {updateState === 'checking' && (
-                      <span className="settings-license-value">
-                        <Localized id="settings-checking-for-updates"><span>Checking…</span></Localized>
-                      </span>
-                    )}
-                    {updateState === 'idle' && (
-                      <span className="settings-license-value settings-license-value--inactive">
-                        <Localized id="settings-update-not-checked"><span>Not checked</span></Localized>
-                      </span>
-                    )}
-                  </span>
-                </div>
-
-                <div className="settings-actions">
-                  {updateState !== 'installing' && (
-                    <Button
-                      variant="secondary"
-                      onClick={handleCheckUpdates}
-                      loading={updateState === 'checking'}
-                      disabled={updateState === 'checking'}
-                    >
-                      <Localized id={
-                        updateState === 'error'
-                          ? 'settings-update-retry'
-                          : 'settings-check-for-updates'
-                      }>
-                        <span>{updateState === 'error' ? 'Retry' : 'Check for Updates'}</span>
-                      </Localized>
-                    </Button>
-                  )}
-
-                  {updateState === 'available' && (
-                    <Button
-                      variant="primary"
-                      onClick={handleInstallUpdate}
-                    >
-                      <Localized id="settings-install-update">
-                        <span>Install Now</span>
-                      </Localized>
-                    </Button>
-                  )}
-
-                  {updateState === 'installing' && (
-                    <>
-                      <Button
-                        variant="secondary"
-                        loading
-                        disabled
-                      >
-                        <Localized id="settings-checking-for-updates">
-                          <span>Checking…</span>
-                        </Localized>
-                      </Button>
-                      <Button
-                        variant="primary"
-                        loading
-                        disabled
-                      >
-                        <Localized id="settings-installing-update">
-                          <span>Installing…</span>
-                        </Localized>
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </>
+          <AboutSection
+            appVersion={appVersion}
+            updateState={updateState}
+            updateVersion={updateVersion}
+            handleCheckUpdates={handleCheckUpdates}
+            handleInstallUpdate={handleInstallUpdate}
+          />
         );
 
       case 'license':
@@ -1577,6 +763,34 @@ export default function SettingsPage() {
 
       case 'topology':
         return <TopologyScreen />;
+
+      case 'store-pos':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceStorePosSettings variant="full-page" />
+          </Suspense>
+        );
+
+      case 'restaurant-pos':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceRestaurantPosSettings variant="full-page" />
+          </Suspense>
+        );
+
+      case 'kds':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceKdsSettings variant="full-page" />
+          </Suspense>
+        );
+
+      case 'inventory':
+        return (
+          <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            <WorkspaceInventorySettings variant="full-page" />
+          </Suspense>
+        );
 
       default:
         return null;
@@ -1699,8 +913,8 @@ export default function SettingsPage() {
             <Localized id="settings-btn-save-aria" attrs={{ 'aria-label': true }} vars={{ state: saved ? 'saved' : 'save' }}>
               <Button
                 variant="primary"
-                loading={saving}
                 onClick={handleSave}
+                loading={saving}
               >
                 {saved && !saving ? (
                   <span className="settings-saved-checkmark">
@@ -1731,7 +945,8 @@ export default function SettingsPage() {
         />
 
         {/* ── Main content ──────────────────────────────── */}
-        <main className="settings-content" ref={settingsKeyboardRef as React.Ref<HTMLElement>}>
+        <form id="settings-form" className="settings-content" onSubmit={(e) => { e.preventDefault(); handleSave(); }} ref={settingsKeyboardRef as unknown as React.Ref<HTMLFormElement>}>
+          <button type="submit" hidden aria-hidden="true" tabIndex={-1}>Save</button>
           <div className="settings-content-header">
             {/* ── Section breadcrumb header ───────── */}
             {currentNavItem && (
@@ -1760,12 +975,13 @@ export default function SettingsPage() {
               </header>
             )}
           </div>
-          <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}>
-            <div key={activeSection}>
-            {renderSection(activeSection)}
+          <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}><div key={activeSection}>
+              <Suspense fallback={<div className="section-loading">Loading...</div>}>
+                {renderSection(activeSection)}
+              </Suspense>
+            </div>
           </div>
-          </div>
-        </main>
+        </form>
       </div>
 
       {/* ── Footer ──────────────────────────────────────────── */}

@@ -5,13 +5,35 @@ import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import shiftsFtl from '@/locales/shifts.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
+const {
+  mockListShifts,
+  mockGetActiveShift,
+  mockOpenShift,
+  mockCloseShift,
+  mockGetShiftReport,
+  mockCreateCashPayout,
+} = vi.hoisted(() => ({
+  mockListShifts: vi.fn(),
+  mockGetActiveShift: vi.fn(),
+  mockOpenShift: vi.fn(),
+  mockCloseShift: vi.fn(),
+  mockGetShiftReport: vi.fn(),
+  mockCreateCashPayout: vi.fn(),
+}));
+
 vi.mock('@/api/shifts', () => ({
-  listShifts: vi.fn(),
-  getActiveShift: vi.fn(),
-  openShift: vi.fn(),
-  closeShift: vi.fn(),
-  getShiftReport: vi.fn(),
-  createCashPayout: vi.fn(),
+  listShifts: (...args: unknown[]) => mockListShifts(...args),
+  listShiftsScoped: (...args: unknown[]) => mockListShifts(...args),
+  getActiveShift: (...args: unknown[]) => mockGetActiveShift(...args),
+  getActiveShiftScoped: (...args: unknown[]) => mockGetActiveShift(...args),
+  openShift: (...args: unknown[]) => mockOpenShift(...args),
+  openShiftScoped: (...args: unknown[]) => mockOpenShift(...args),
+  closeShift: (...args: unknown[]) => mockCloseShift(...args),
+  closeShiftScoped: (...args: unknown[]) => mockCloseShift(...args),
+  getShiftReport: (...args: unknown[]) => mockGetShiftReport(...args),
+  getShiftReportScoped: (...args: unknown[]) => mockGetShiftReport(...args),
+  createCashPayout: (...args: unknown[]) => mockCreateCashPayout(...args),
+  createCashPayoutScoped: (...args: unknown[]) => mockCreateCashPayout(...args),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -20,12 +42,11 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
-import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
-import { listShifts, getActiveShift, getShiftReport } from '@/api/shifts';
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'IDR', setCurrency: vi.fn(), loading: false }),
+}));
 
-const mockListShifts = listShifts as ReturnType<typeof vi.fn>;
-const mockGetActiveShift = getActiveShift as ReturnType<typeof vi.fn>;
-const mockGetShiftReport = getShiftReport as ReturnType<typeof vi.fn>;
+import ShiftManagementScreen from '@/features/shifts/ShiftManagementScreen';
 
 
 

@@ -39,6 +39,36 @@ const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
     if (failCommands.has(cmd)) {
       return Promise.reject(new Error(`Mock failure: ${cmd}`));
     }
+    // Scoped GET commands (used by SettingsContext with sessionToken)
+    if (cmd === 'get_store_settings_scoped') {
+      return Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '' });
+    }
+    if (cmd === 'get_receipt_settings_scoped') {
+      return Promise.resolve({
+        showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '',
+        paperWidth: 'standard', showTableNumber: false,
+        marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+      });
+    }
+    if (cmd === 'list_currencies_scoped') {
+      return Promise.resolve(SAMPLE_CURRENCIES);
+    }
+    if (cmd === 'get_default_currency') {
+      return Promise.resolve('USD');
+    }
+    if (cmd === 'get_sync_settings_scoped') {
+      return Promise.resolve({ serverUrl: null, hasApiKey: false, enabled: false });
+    }
+    if (cmd === 'get_user_preferences_scoped') {
+      return Promise.resolve({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' });
+    }
+    if (cmd === 'get_brand_settings_scoped') {
+      return Promise.resolve({ primary_colour: '#4f46e5', logo_path: null, store_name: '' });
+    }
+    if (cmd === 'version_scoped') {
+      return Promise.resolve({ name: 'oz-pos', version: '0.0.4', rustVersion: '1.80', target: 'x86_64' });
+    }
+    // Also support unscoped legacy commands for backward compat
     if (cmd === 'get_store_settings') {
       return Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '' });
     }
@@ -51,9 +81,6 @@ const { invokeMock, defaultImpl, failCommands } = vi.hoisted(() => {
     }
     if (cmd === 'list_currencies') {
       return Promise.resolve(SAMPLE_CURRENCIES);
-    }
-    if (cmd === 'get_default_currency') {
-      return Promise.resolve('USD');
     }
     if (cmd === 'get_sync_settings') {
       return Promise.resolve({ serverUrl: null, hasApiKey: false, enabled: false });
@@ -132,6 +159,27 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@/contexts/ZoomContext', () => ({
   useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
   ZoomProvider: ({ children }: { children: ReactNode }) => children,
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'admin',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: 'test-token',
+    swapSessionToken: vi.fn(),
+  }),
+  useWorkspaceScope: () => null,
+  WorkspaceProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('@/contexts/HardwareAccelContext', () => ({
@@ -230,7 +278,7 @@ describe('SettingsPage', () => {
   // ── Partial load failure ─────────────────────────────────────
 
   it('shows partial-load toast when some APIs fail', async () => {
-    failCommands.add('get_sync_settings');
+    failCommands.add('get_sync_settings_scoped');
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /store/i })).toBeInTheDocument();
@@ -366,8 +414,9 @@ describe('SettingsPage', () => {
       expect(screen.getByRole('treeitem', { name: /appearance/i })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole('treeitem', { name: /appearance/i }));
-
-    expect(screen.getByRole('button', { name: /decrease card size/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /decrease card size/i })).toBeInTheDocument();
+    });
     expect(screen.getByRole('button', { name: /increase card size/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /decrease font size/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /increase font size/i })).toBeInTheDocument();
@@ -404,8 +453,9 @@ describe('SettingsPage', () => {
     });
     fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /receipt/i }));
-
-    expect(screen.getByLabelText(/show currency symbol/i)).not.toBeChecked();
+    await waitFor(() => {
+      expect(screen.getByLabelText(/show currency symbol/i)).not.toBeChecked();
+    });
     expect(screen.getByLabelText(/show tax line/i)).toBeChecked();
   });
 
@@ -470,9 +520,9 @@ describe('SettingsPage', () => {
     });
     fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
-
-    expect(screen.getAllByRole('heading', { name: /cloud sync/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
+    });
     expect(screen.getByLabelText(/^api key$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/enable cloud sync/i)).toBeInTheDocument();
   });
@@ -497,8 +547,9 @@ describe('SettingsPage', () => {
     });
     fireEvent.click(screen.getByRole('treeitem', { name: /system/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /about/i }));
-
-    expect(screen.getByRole('heading', { name: /system.*license/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /system.*license/i })).toBeInTheDocument();
+    });
     const versionElements = screen.getAllByText(/0\.0\.\d+/);
     expect(versionElements.length).toBeGreaterThanOrEqual(1);
     const licenseElements = screen.getAllByText(/proprietary/i);

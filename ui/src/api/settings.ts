@@ -22,6 +22,10 @@ export interface ReceiptSettingsDto {
 export const getReceiptSettings = (): Promise<ReceiptSettingsDto> =>
   loggedInvoke<ReceiptSettingsDto>('get_receipt_settings');
 
+/** Get receipt settings resolved from a session token. ADR #7. */
+export const getReceiptSettingsScoped = (sessionToken: string): Promise<ReceiptSettingsDto> =>
+  loggedInvoke<ReceiptSettingsDto>('get_receipt_settings_scoped', { sessionToken });
+
 /** Update the receipt settings. */
 export const setReceiptSettings = (args: ReceiptSettingsDto, userId: string): Promise<void> =>
   loggedInvoke<void>('set_receipt_settings', { args, userId });
@@ -45,6 +49,10 @@ export interface StoreSettingsDto {
 /** Get the store settings. */
 export const getStoreSettings = (): Promise<StoreSettingsDto> =>
   loggedInvoke<StoreSettingsDto>('get_store_settings');
+
+/** Get store settings resolved from a session token. ADR #7. */
+export const getStoreSettingsScoped = (sessionToken: string): Promise<StoreSettingsDto> =>
+  loggedInvoke<StoreSettingsDto>('get_store_settings_scoped', { sessionToken });
 
 /** Update the store settings. */
 export const setStoreSettings = (args: StoreSettingsDto, userId: string): Promise<void> =>
@@ -89,6 +97,10 @@ export const setCreditSettingsScoped = (sessionToken: string, args: CreditSettin
 /** List all credit (tab) sales awaiting settlement. */
 export const listCreditSales = (): Promise<CreditSaleDto[]> =>
   loggedInvoke<CreditSaleDto[]>('list_credit_sales');
+
+/** List all credit sales for the store resolved from a session token. ADR #7. */
+export const listCreditSalesScoped = (sessionToken: string): Promise<CreditSaleDto[]> =>
+  loggedInvoke<CreditSaleDto[]>('list_credit_sales_scoped', { sessionToken });
 
 /** Settle (mark as paid) a credit sale. */
 export const settleCredit = (saleId: string, userId: string): Promise<void> =>
@@ -171,7 +183,14 @@ export interface UserPrefEntry {
   value: string;
 }
 
-/** Get all preferences for a given user. */
+/**
+ * Get all preferences for a given user.
+ *
+ * @deprecated Use `getUserPreferencesScoped(sessionToken)` instead (ADR #7).
+ * The unscoped variant reads from the single-store database and will
+ * be removed in a future release. All callers should migrate to the
+ * scoped variant which resolves the store from the session token.
+ */
 export const getUserPreferences = (userId: string): Promise<Record<string, string>> =>
   loggedInvoke<Record<string, string>>('get_user_preferences', { userId });
 
@@ -198,12 +217,21 @@ export const getSetting = (key: string): Promise<string | null> =>
   loggedInvoke<string | null>('get_setting', { key });
 
 /**
- * Write (or overwrite) a single raw setting value.
+ * Write (or overwrite) a single raw setting value using the scoped variant (ADR #7).
  *
- * **Deprecated backend command — prefer `set_setting_scoped` (ADR #7)** where a
- * session token is available. This wrapper targets the legacy `set_setting`
- * command for call sites that only have a `userId`. Pass an empty string to
- * store an empty value.
+ * Requires a valid `sessionToken` from `useWorkspace()`. When the token is null
+ * the call is rejected — callers should guard or catch accordingly.
+ * Pass an empty string to store an empty value.
  */
-export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
-  loggedInvoke<void>('set_setting', { key, value, userId });
+export const setSettingScoped = (
+  sessionToken: string | null,
+  key: string,
+  value: string,
+): Promise<void> => {
+  if (!sessionToken) {
+    return Promise.reject(new Error('No session token'));
+  }
+  return loggedInvoke<void>('set_setting_scoped', { sessionToken, key, value });
+};
+
+

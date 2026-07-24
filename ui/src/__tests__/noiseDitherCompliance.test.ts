@@ -116,6 +116,8 @@ const KNOWN_NOISE_SELECTORS = [
   '.node-selected',
   '.settings-shortcuts-popover',
   '.canvas-hud',
+  '.panel',
+  ':global(.dark) .panel',
 ];
 
 /** CSS selectors that are exempt from noise-dither even though they use --shadow-* */

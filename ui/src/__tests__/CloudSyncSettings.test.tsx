@@ -41,6 +41,36 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (args && typeof args === 'object') {
       lastCallArgs.set(cmd, args);
     }
+    // Scoped GET commands (used by SettingsContext with sessionToken)
+    if (cmd === 'get_store_settings_scoped') {
+      return Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '' });
+    }
+    if (cmd === 'get_receipt_settings_scoped') {
+      return Promise.resolve({
+        showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '',
+        paperWidth: 'standard', showTableNumber: false,
+        marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+      });
+    }
+    if (cmd === 'list_currencies_scoped') {
+      return Promise.resolve([{ code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' }]);
+    }
+    if (cmd === 'get_default_currency') {
+      return Promise.resolve('USD');
+    }
+    if (cmd === 'get_sync_settings_scoped') {
+      return Promise.resolve({ serverUrl: null, hasApiKey: false, enabled: false });
+    }
+    if (cmd === 'get_user_preferences_scoped') {
+      return Promise.resolve({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' });
+    }
+    if (cmd === 'get_brand_settings_scoped') {
+      return Promise.resolve({ primary_colour: '#4f46e5', logo_path: null, store_name: '' });
+    }
+    if (cmd === 'version_scoped') {
+      return Promise.resolve({ name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' });
+    }
+    // Support unscoped legacy commands for backward compat
     if (cmd === 'get_store_settings') {
       return Promise.resolve({ name: '', address: '', taxId: '', currency: 'IDR', branch: '' });
     }
@@ -54,10 +84,7 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (cmd === 'list_currencies') {
       return Promise.resolve([{ code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' }]);
     }
-    if (cmd === 'get_default_currency') {
-      return Promise.resolve('USD');
-    }
-    if (cmd === 'get_sync_settings') {
+    if (cmd === 'get_sync_settings_scoped') {
       return Promise.resolve({ serverUrl: null, hasApiKey: false, enabled: false });
     }
     if (cmd === 'get_user_preferences') {
@@ -109,6 +136,27 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@/contexts/ZoomContext', () => ({
   useAppZoom: () => ({ zoomLevel: 'auto', setZoomLevel: vi.fn() }),
   ZoomProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'admin',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: 'test-token',
+    swapSessionToken: vi.fn(),
+  }),
+  useWorkspaceScope: () => null,
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('@/contexts/HardwareAccelContext', () => ({
@@ -261,7 +309,7 @@ describe('CloudSyncSettings', () => {
   it('shows masked placeholder when hasApiKey is true', async () => {
     // Override get_sync_settings to return hasApiKey: true
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: null, hasApiKey: true, enabled: false });
       }
       return defaultImpl(cmd);
@@ -441,7 +489,7 @@ describe('CloudSyncSettings', () => {
   it('renders Sync Now button when serverUrl is set', async () => {
     // Override load to return a configured serverUrl
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -454,7 +502,7 @@ describe('CloudSyncSettings', () => {
 
   it('calls sync_run when Sync Now is clicked and displays result', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
       }
       return defaultImpl(cmd);
@@ -558,7 +606,7 @@ describe('CloudSyncSettings', () => {
   it('does not downgrade hasApiKey from true to false on save without key', async () => {
     // Start with a pre-existing key
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://exists.com', hasApiKey: true, enabled: true });
       }
       return defaultImpl(cmd);
@@ -586,7 +634,7 @@ describe('CloudSyncSettings', () => {
 
   it('renders Request Token button when server URL is set', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -600,7 +648,7 @@ describe('CloudSyncSettings', () => {
   it('calls request_sync_token with the in-progress URL on click', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -622,7 +670,7 @@ describe('CloudSyncSettings', () => {
   it('auto-fills API key field on successful token request', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -643,7 +691,7 @@ describe('CloudSyncSettings', () => {
   it('shows visibility toggle after auto-fill since there is text to reveal', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -670,7 +718,7 @@ describe('CloudSyncSettings', () => {
   it('shows expiry badge after successful token request', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -692,7 +740,7 @@ describe('CloudSyncSettings', () => {
   it('clears expiry badge on revert', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -721,7 +769,7 @@ describe('CloudSyncSettings', () => {
   it('clears expiry badge when server URL changes', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);
@@ -807,7 +855,7 @@ describe('CloudSyncSettings', () => {
   it('marks settings as dirty after successful token auto-fill', async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'get_sync_settings') {
+      if (cmd === 'get_sync_settings_scoped') {
         return Promise.resolve({ serverUrl: 'http://localhost:3099', hasApiKey: false, enabled: false });
       }
       return defaultImpl(cmd);

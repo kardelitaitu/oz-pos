@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (2 findings, doc-staleness counts) · F1 (line 17): "156 commands registered" -> 392 #[tauri::command] fns in generate_handler! (apps/desktop-client/src/lib.rs:170) · F2 (line 20): "42 files" in commands/ -> 47 .rs files (apps/desktop-client/src/commands/) · verified accurate: AppState fields (Arc<Mutex<Connection>>, Arc<DriverRegistry>, Option<AppHandle>, Mutex<Option<oneshot::Sender<()>>> scanner_cancel — state.rs:56/59/63/71), barcode:scanned emit via app.emit() (hardware.rs:372), app is Option<AppHandle>, add-command steps match tauri-ipc/SKILL.md -->
+
 # `apps/desktop-client/` — OZ-POS desktop shell
 
 Tauri v2 binary that hosts the React front-end, wires `oz-core` + `oz-hal` behind typed IPC commands, and produces installable bundles.

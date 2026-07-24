@@ -128,7 +128,7 @@ impl PgSyncDaemon {
     async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<PgDaemonStatus>>) {
         // Phase 1: Read PG settings + pending items from local DB (blocking)
         let db_clone = db.clone();
-        let (pg_config, pending) = tokio::task::spawn_blocking(move || {
+        let (pg_config, pending, read_error) = match tokio::task::spawn_blocking(move || {
             let conn = db_clone.blocking_lock();
             let store = Store::new(&conn);
 
@@ -166,7 +166,14 @@ impl PgSyncDaemon {
             (pg_config, pending)
         })
         .await
-        .unwrap_or_default();
+        {
+            Ok((cfg, pending)) => (cfg, pending, None),
+            Err(join_err) => {
+                let msg = format!("pg sync config read panicked: {join_err}");
+                tracing::error!(error = %msg, "pg sync daemon read phase failed");
+                (None, Vec::new(), Some(msg))
+            }
+        };
 
         // Phase 2: Do async PG sync if configured
         let mut pushed = 0usize;
@@ -183,8 +190,7 @@ impl PgSyncDaemon {
         if let Some(ref transport) = pg_transport {
             match transport.push_items(&pending).await {
                 Ok(results) => {
-                    pushed = results.len();
-                    // Phase 3: Apply push results to local DB (blocking)
+                    pushed = results.len(); // Phase 3: Apply push results to local DB (blocking)
                     let db_clone = db.clone();
                     let ids: Vec<String> = pending.iter().map(|i| i.id.clone()).collect();
                     let outcome = tokio::task::spawn_blocking(move || {
@@ -193,14 +199,41 @@ impl PgSyncDaemon {
                         for (i, outcome) in ids.iter().zip(results.iter()) {
                             match outcome {
                                 crate::transport::PushOutcome::Accepted => {
-                                    let _ = store.mark_offline_synced(i);
+                                    if let Err(e) = store.mark_offline_synced(i) {
+                                        tracing::error!(
+                                            item_id = %i,
+                                            error = %e,
+                                            "pg sync daemon: failed to mark item synced"
+                                        );
+                                    }
                                 }
                                 crate::transport::PushOutcome::Rejected { reason } => {
-                                    let _ = store.mark_offline_failed(i, reason);
+                                    if let Err(e) = store.mark_offline_failed(i, reason) {
+                                        tracing::error!(
+                                            item_id = %i,
+                                            error = %e,
+                                            "pg sync daemon: failed to mark item failed"
+                                        );
+                                    }
                                 }
                                 crate::transport::PushOutcome::Conflict(remote) => {
-                                    let _ = store.mark_offline_synced(i);
-                                    let _ = store.enqueue_offline(&remote.action, &remote.payload);
+                                    if let Err(e) = store.mark_offline_synced(i) {
+                                        tracing::error!(
+                                            item_id = %i,
+                                            error = %e,
+                                            "pg sync daemon: failed to mark conflicted item synced"
+                                        );
+                                    }
+                                    if let Err(e) =
+                                        store.enqueue_offline(&remote.action, &remote.payload)
+                                    {
+                                        tracing::error!(
+                                            item_id = %i,
+                                            action = %remote.action,
+                                            error = %e,
+                                            "pg sync daemon: failed to re-enqueue remote winner"
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -269,7 +302,8 @@ impl PgSyncDaemon {
         s.pending_count = pending_count;
         s.last_pushed = pushed;
         s.last_pulled = pulled;
-        s.last_error = sync_error.clone();
+        // If the read phase panicked, surface that error in the status.
+        s.last_error = sync_error.clone().or_else(|| read_error.clone());
 
         if sync_error.is_some() {
             tracing::error!(error = ?sync_error, "pg sync cycle failed");

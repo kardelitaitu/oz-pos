@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { listTerminals, type TerminalDto } from '@/api/terminals';
+import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
 import './TerminalStatusPanel.css';
@@ -28,6 +29,8 @@ interface TerminalStatusPanelProps {
 /** Terminal status panel card — displays live online/offline status of all terminals with auto-refresh every 30 seconds. */
 export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPanelProps) {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPa
 
   const load = useCallback(async () => {
     try {
-      const data = await listTerminals();
+      const data = await listTerminalsScoped(sessionToken);
       setTerminals(data);
       setError(null);
     } catch {
@@ -43,7 +46,7 @@ export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPa
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load, refreshTrigger]);
 

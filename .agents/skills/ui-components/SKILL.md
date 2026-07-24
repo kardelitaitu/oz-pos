@@ -3,6 +3,8 @@ name: ui-components
 description: React + TypeScript UI conventions for the OZ-POS front-end — @fluent/react for all user-visible strings, ARIA labels, eslint-plugin-jsx-a11y, strict TypeScript. Use when adding or reviewing React components, hooks, or screens.
 ---
 
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (3 noted findings, doc-staleness) · F1 (wrong path): doc says ui/src/locales/en-US.ftl + 'en-US.ftl, id-ID.ftl'; no en-US.ftl exists; actual per-feature bundles bundles.ftl/bundles.id.ftl/bundles.th.ftl (English is *.ftl, not en-US.ftl) · F2 (wrong path): doc says ui/src/styles/tokens.css|tokens.ts|reset.css; ui/src/styles/ does not exist; tokens actually defined in ui/src/frontend/themes/tokens.css (no tokens.ts/reset.css) · F3 (stale): doc says state libs 'TanStack Query ... Zustand'; neither present in ui/package.json (no tanstack/zustand/jotai/redux) · verified accurate: formatMoney in ui/src/types/domain.ts, renderInAct at ui/src/test-utils/renderInAct.ts, React 18.3.1, @fluent/react + ARIA + strict TS + pos.ts sole invoke() + domain.ts conventions -->
+
 # React UI & Front-end Conventions
 
 The OZ-POS front-end is a Tauri v2 webview running React 18 + TypeScript. The UI must be **accessible** (a cashier with a screen reader is a real user), **internationalized** (we ship in many locales), and **strictly typed** (a missing `prop` should be a compile error, not a runtime crash).

@@ -181,6 +181,8 @@ pub async fn start_sale(
 ///
 /// ADR-19 §5.1: resolves the primary deduction location from the workspace
 /// instance and locks it on the `active_carts` row at cart-start time.
+///
+/// Requires `SALES_PROCESS` permission from the resolved session (Bug #5).
 #[command]
 pub async fn start_sale_scoped(
     session_token: String,
@@ -204,6 +206,12 @@ pub async fn start_sale_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     // Resolve the primary deduction location for this workspace instance.
     let deduction_location_id =
         oz_core::location_resolver::resolve_primary_location(&db, &session.instance_id, None)
@@ -222,70 +230,6 @@ pub async fn start_sale_scoped(
         cart_id: id,
         deduction_location_id: Some(deduction_location_id.to_string()),
     })
-}
-
-// ── List Active Carts ────────────────────────────────────────────────
-
-/// Return all active cart IDs from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_active_carts_scoped`.
-#[command]
-pub async fn list_active_carts(state: State<'_, AppState>) -> Result<Vec<CartId>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let ids = store.list_active_carts()?;
-    drop(db);
-    Ok(ids)
-}
-
-/// List active carts for the store resolved from a session token. ADR #7.
-#[command]
-pub async fn list_active_carts_scoped(
-    session_token: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<CartId>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
-    let db = conn
-        .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = Store::new(&db);
-    let ids = store.list_active_carts()?;
-    drop(db);
-    Ok(ids)
-}
-
-// ── Get Active Cart ──────────────────────────────────────────────────
-
-/// Load a full cart from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_active_cart_scoped`.
-#[command]
-pub async fn get_active_cart(
-    cart_id: CartId,
-    state: State<'_, AppState>,
-) -> Result<Option<Cart>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let cart = store.load_active_cart(&cart_id)?;
-    drop(db);
-    Ok(cart)
-}
-
-/// Load a cart from the store resolved from a session token. ADR #7.
-#[command]
-pub async fn get_active_cart_scoped(
-    session_token: String,
-    cart_id: CartId,
-    state: State<'_, AppState>,
-) -> Result<Option<Cart>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
-    let db = conn
-        .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = Store::new(&db);
-    let cart = store.load_active_cart(&cart_id)?;
-    drop(db);
-    Ok(cart)
 }
 
 // ── Add Line ─────────────────────────────────────────────────────────
@@ -352,17 +296,29 @@ pub async fn add_line(
 /// ADR-19 §5.1: rejects the command when the cart has no `deduction_location_id`
 /// lock (carts must be created via `start_sale_scoped` which resolves and locks
 /// the deduction location at cart-start time).
+///
+/// Requires `SALES_PROCESS` permission from the resolved session (Bug #6).
 #[command]
 pub async fn add_line_scoped(
     session_token: String,
     args: AddLineArgs,
     state: State<'_, AppState>,
 ) -> Result<AddLineResult, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
 
     // ADR-19 §5.1: reject add_line when the cart has no deduction location lock.
     store
@@ -1294,6 +1250,8 @@ pub async fn compute_cart_tax(
 }
 
 /// Compute cart tax for the store resolved from a session token. ADR #7.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn compute_cart_tax_scoped(
     session_token: String,
@@ -1304,11 +1262,22 @@ pub async fn compute_cart_tax_scoped(
     let parsed: oz_core::Currency = currency
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let tax = store.compute_cart_tax(&lines, parsed)?;
     drop(db);
     Ok(tax.minor_units)
@@ -1378,17 +1347,30 @@ pub async fn hold_cart(
 }
 
 /// Hold a cart in the store resolved from a session token. ADR #7.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn hold_cart_scoped(
     session_token: String,
     args: HoldCartArgs,
     state: State<'_, AppState>,
 ) -> Result<HoldCartResult, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let id = store.hold_cart(
         &args.label,
         &args.cart_data,
@@ -1419,16 +1401,29 @@ pub async fn list_held_carts(
 }
 
 /// List held carts for the store resolved from a session token. ADR #7.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn list_held_carts_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let carts = store.list_held_carts()?;
     drop(db);
     Ok(carts)
@@ -1449,16 +1444,29 @@ pub async fn list_open_bills(
 }
 
 /// List open bills for the store resolved from a session token. ADR #7.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn list_open_bills_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let carts = store.list_open_bills()?;
     drop(db);
     Ok(carts)
@@ -1480,17 +1488,30 @@ pub async fn get_held_cart(
 }
 
 /// Get a held cart from the store resolved from a session token. ADR #7.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn get_held_cart_scoped(
     session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     let cart = store.get_held_cart(&id)?;
     drop(db);
     Ok(cart)
@@ -1510,17 +1531,30 @@ pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<
 }
 
 /// Delete a held cart in the store resolved from a session token. ADR #7.
+///
+/// Requires `SALES_PROCESS` permission.
 #[command]
 pub async fn delete_held_cart_scoped(
     session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let conn = state.resolve_store(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
     store.delete_held_cart(&id)?;
     drop(db);
     tracing::info!(held_cart_id = %id, "held cart deleted (scoped)");

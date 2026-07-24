@@ -97,13 +97,32 @@ pub struct CategoryTaxRateRow {
 
 // ── Tax Rate CRUD ─────────────────────────────────────────────────────
 
-#[command]
 /// List tax rates.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_tax_rates_scoped`.
+#[command]
 pub async fn list_tax_rates(state: State<'_, AppState>) -> Result<Vec<TaxRateDto>, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    run_list_tax_rates(&db)
+}
+
+/// List tax rates for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_tax_rates_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TaxRateDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_list_tax_rates(&db)
+}
+
+/// Business logic for listing tax rates (extracted for testing).
+fn run_list_tax_rates(conn: &rusqlite::Connection) -> Result<Vec<TaxRateDto>, AppError> {
+    let store = Store::new(conn);
     let rates = store.list_tax_rates()?;
-    drop(db);
     Ok(rates.into_iter().map(to_dto).collect())
 }
 

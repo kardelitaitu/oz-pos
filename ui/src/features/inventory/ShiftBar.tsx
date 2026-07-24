@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/Button';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -151,11 +152,11 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
                 <span>Active Shift</span>
               </Localized>
             </span>
-            <button className="shift-btn shift-btn-danger" onClick={handleEndShift}>
+            <Button variant="danger" size="sm" className="shift-btn shift-btn-danger" onClick={handleEndShift}>
               <Localized id="inv-shift-end-btn">
                 <span>End Shift</span>
               </Localized>
-            </button>
+            </Button>
           </div>
         ) : (
           <form className="shift-start-form" onSubmit={handleStartShift}>
@@ -189,11 +190,11 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               />
             </Localized>
 
-            <button type="submit" className="shift-btn shift-btn-primary">
+            <Button type="submit" variant="primary" size="sm" className="shift-btn shift-btn-primary">
               <Localized id="inv-shift-start-btn">
                 <span>Start Shift</span>
               </Localized>
-            </button>
+            </Button>
           </form>
         )}
       </div>
@@ -227,11 +228,11 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               )}
             </ul>
 
-            <button className="shift-btn shift-btn-primary summary-close-btn" onClick={() => setShowSummary(false)}>
+            <Button variant="primary" size="sm" className="shift-btn shift-btn-primary summary-close-btn" onClick={() => setShowSummary(false)}>
               <Localized id="inv-cancel">
                 <span>Close</span>
               </Localized>
-            </button>
+            </Button>
           </div>
         </div>
       )}

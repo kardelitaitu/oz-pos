@@ -44,6 +44,15 @@ fn seed_product_with_inventory(conn: &Connection, sku: &str, name: &str, qty: i6
         rusqlite::params![pid, qty],
     )
     .unwrap();
+    // Also seed stock_summary at the canonical default location so
+    // adjust_stock_at_location_with_reason (which reads current qty from
+    // stock_summary, not the legacy inventory table) sees the correct
+    // initial quantity.
+    conn.execute(
+        "INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES (?1, ?2, ?3, '2025-01-01T00:00:00.000Z')",
+        rusqlite::params![pid, oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID, qty],
+    )
+    .unwrap();
     pid
 }
 

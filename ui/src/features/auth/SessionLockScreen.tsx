@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSyncConnection } from '@/hooks/useSyncConnection';
+import { checkLicenseStatus } from '@/api/license';
+import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -26,6 +29,7 @@ export default function SessionLockScreen({
   onUnlock: () => void;
 }) {
   const { session } = useAuth();
+  const { l10n } = useLocalization();
   const [pin, setPin] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [time, setTime] = useState(new Date());
@@ -33,6 +37,35 @@ export default function SessionLockScreen({
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
+
+  const syncStatus = useSyncConnection();
+  const [authOnline, setAuthOnline] = useState<boolean | null>(null);
+  const [authLatency, setAuthLatency] = useState<number | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const start = performance.now();
+        const result = await checkLicenseStatus();
+        if (!mounted) return;
+        if (result.active) {
+          setAuthLatency(Math.round(performance.now() - start));
+          setAuthOnline(true);
+        } else {
+          setAuthLatency(null);
+          setAuthOnline(false);
+        }
+      } catch {
+        if (!mounted) return;
+        setAuthLatency(null);
+        setAuthOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
 
   // Auto-unlock after lockout period
   useEffect(() => {
@@ -97,7 +130,7 @@ export default function SessionLockScreen({
       try {
         const username = sessionStorage.getItem('current-username');
         if (!username) {
-          setError('Session expired. Please log in again.');
+          setError(l10n.getString('session-lock-expired'));
           setPin([]);
           return;
         }
@@ -108,7 +141,7 @@ export default function SessionLockScreen({
         onUnlock();
       } catch (err) {
         const msg = (err as Record<string, unknown> | null)?.['message'] as string
-          ?? 'Invalid PIN';
+          ?? l10n.getString('session-lock-invalid-pin');
         setError(msg);
         setPin([]);
 
@@ -120,7 +153,7 @@ export default function SessionLockScreen({
       }
     };
     attemptLogin();
-  }, [pin, session, onUnlock]);
+  }, [pin, session, onUnlock, l10n]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -242,6 +275,20 @@ export default function SessionLockScreen({
                 <line x1="12" y1="9" x2="18" y2="15" />
               </svg>
             </button>
+          </div>
+        </div>
+
+        {/* ── Connection status indicators ──────── */}
+        <div className="session-lock-connection-group">
+          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? 'Checking...' : authOnline ? 'Connected' : 'Disconnected'}>
+            <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
+            <span className="connection-label">Auth</span>
+            {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
+          </div>
+          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? 'Checking...' : syncStatus.state === 'connected' ? 'Connected' : 'Disconnected'}>
+            <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
+            <span className="connection-label">Sync</span>
+            {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
           </div>
         </div>
       </div>

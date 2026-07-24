@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (1 finding — status + baseline outdated) · Finding: the Summary/Baseline claim "license.api_key written plaintext via set_batch into SQLite settings" is no longer accurate — apps/desktop-client/src/commands/license.rs now ENCRYPTS the API key (encrypted_api_key with decrypt-with-legacy-plaintext-fallback, lines 78-85/139-145/187-194). SQLCipher (bundled-sqlcipher) and the keyring crate are NOT in desktop-client/oz-core Cargo.toml, and docs/security/LICENSE-ENCRYPTION.md is still MISSING — so full closure (at-rest SQLCipher + OS-credential-store move + 128-bit machine-id + migration guide) is incomplete, but the "plaintext at rest" premise is already addressed. Status "TODO" understates the API-key encryption that exists. Referenced baseline file license.rs exists. -->
+
 # C-5 — License material: encrypt SQLite at rest + move API key to OS credential store
 
 - **Status:** TODO

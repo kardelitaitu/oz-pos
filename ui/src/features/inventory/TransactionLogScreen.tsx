@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/Button';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -202,8 +203,7 @@ export default function TransactionLogScreen() {
               <th>Action</th>
             </tr>
           </thead>
-          <tbody>
-            {filteredTxs.map(tx => {
+          <tbody>{filteredTxs.map(tx => {
               const locationName = locations.find(l => l.id === tx.location_id)?.name || tx.location_id;
               const isExpanded = expandedTxId === tx.id;
               return (
@@ -222,11 +222,11 @@ export default function TransactionLogScreen() {
                     <td>{locationName}</td>
                     <td>{tx.staff_id}</td>
                     <td>
-                      <button className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
+                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
                         <Localized id="inv-log-expand-btn">
                           <span>Details</span>
                         </Localized>
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                   {isExpanded && (
@@ -259,8 +259,7 @@ export default function TransactionLogScreen() {
                                   </Localized>
                                 </tr>
                               </thead>
-                              <tbody>
-                                {expandedLines.map(line => (
+                              <tbody>{expandedLines.map(line => (
                                   <tr key={line.id}>
                                     <td>{line.sku}</td>
                                     <td>{line.product_name}</td>
@@ -270,7 +269,7 @@ export default function TransactionLogScreen() {
                                     <td>{line.barcode_scanned || '-'}</td>
                                   </tr>
                                 ))}
-                              </tbody>
+</tbody>
                             </table>
                           )}
                         </div>
@@ -281,7 +280,7 @@ export default function TransactionLogScreen() {
                 </>
               );
             })}
-          </tbody>
+</tbody>
         </table>
         </div>
       )}

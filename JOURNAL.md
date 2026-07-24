@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings — living 2026-07-02 dev journal) · referenced code entities verified present: ui/src/contexts/BrandContext.tsx, ui/src/hooks/useAnimatedModal.ts; i18n-wrap targets (SalesHistoryScreen/VoidOrdersScreen/PaymentModal/TaxConfigurationScreen/CustomerManagementScreen/LoyaltyManagementScreen) and FTL files (sales/settings/tax/customers/loyalty.ftl) all exist · journal is a dated change-log, not a drift-prone spec; no code-claim contradiction found -->
+
 # OZ-POS Development Journal
 
 ## 2026-07-02 — i18n Migration & Test Fixes

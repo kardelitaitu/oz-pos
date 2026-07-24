@@ -42,9 +42,16 @@ use crate::ValidationError;
 /// let email = Email::new("alice@example.com").unwrap();
 /// assert_eq!(serde_json::to_string(&email).unwrap(), "\"alice@example.com\"");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Email(String);
+
+impl<'de> Deserialize<'de> for Email {
+    fn deserialize<D: serde::Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(de)?;
+        Email::new(s).map_err(|e| serde::de::Error::custom(e.message))
+    }
+}
 
 impl Email {
     /// Construct an `Email`, trimming whitespace and validating the
@@ -156,9 +163,16 @@ impl std::fmt::Display for Email {
 /// let phone = Phone::new("+1-555-0102").unwrap();
 /// assert_eq!(serde_json::to_string(&phone).unwrap(), "\"+1-555-0102\"");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Phone(String);
+
+impl<'de> Deserialize<'de> for Phone {
+    fn deserialize<D: serde::Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(de)?;
+        Phone::new(s).map_err(|e| serde::de::Error::custom(e.message))
+    }
+}
 
 impl Phone {
     /// Construct a `Phone`, trimming whitespace and validating the
@@ -315,6 +329,25 @@ mod tests {
     }
 
     #[test]
+    fn email_serde_rejects_invalid() {
+        // The Deserialize impl MUST validate, not just wrap the inner string.
+        let result: Result<Email, _> = serde_json::from_str("\"not-an-email\"");
+        assert!(
+            result.is_err(),
+            "invalid email should be rejected during deserialization"
+        );
+    }
+
+    #[test]
+    fn email_serde_rejects_empty() {
+        let result: Result<Email, _> = serde_json::from_str("\"\"");
+        assert!(
+            result.is_err(),
+            "empty string should be rejected during deserialization"
+        );
+    }
+
+    #[test]
     fn email_error_implements_std_error() {
         let err = Email::new("").unwrap_err();
         let _: &dyn std::error::Error = &err;
@@ -390,6 +423,25 @@ mod tests {
         assert_eq!(json, "\"+6281234567890\"");
         let back: Phone = serde_json::from_str(&json).unwrap();
         assert_eq!(back, p);
+    }
+
+    #[test]
+    fn phone_serde_rejects_no_digits() {
+        // The Deserialize impl MUST validate, not just wrap the inner string.
+        let result: Result<Phone, _> = serde_json::from_str("\"abc-def-ghij\"");
+        assert!(
+            result.is_err(),
+            "phone with no digits should be rejected during deserialization"
+        );
+    }
+
+    #[test]
+    fn phone_serde_rejects_empty() {
+        let result: Result<Phone, _> = serde_json::from_str("\"\"");
+        assert!(
+            result.is_err(),
+            "empty string should be rejected during deserialization"
+        );
     }
 
     #[test]

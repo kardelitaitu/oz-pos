@@ -26,10 +26,30 @@ pub struct CategoryDto {
 }
 
 /// Fetch all categories, ordered by name.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_categories_scoped`.
 #[command]
 pub async fn list_categories(state: State<'_, AppState>) -> Result<Vec<CategoryDto>, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    run_list_categories(&db)
+}
+
+/// Fetch all categories for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_categories_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_list_categories(&db)
+}
+
+/// Business logic for listing categories (extracted for testing).
+fn run_list_categories(conn: &rusqlite::Connection) -> Result<Vec<CategoryDto>, AppError> {
+    let store = Store::new(conn);
     let categories = store.list_categories()?;
 
     let dtos: Vec<CategoryDto> = categories

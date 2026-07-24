@@ -58,6 +58,7 @@ vi.mock('@/features/sales/useBarcodeScanner', () => ({
 
 vi.mock('@/api/products', () => ({
   lookupByBarcode: vi.fn(() => Promise.resolve(null)),
+  lookupByBarcodeScoped: vi.fn(() => Promise.resolve(null)),
   lookupProductBySku: vi.fn((sku: string) => {
     const products: Record<string, unknown> = {
       'ITEM-001': {
@@ -151,8 +152,8 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
   });
 
   it('cart_panel_renders_locked_deduction_location', async () => {
-    // Override startSale to return a deduction location ID
-    vi.mocked(salesApi.startSale).mockResolvedValue({
+    // Override startSaleScoped to return a deduction location ID
+    vi.mocked(salesApi.startSaleScoped).mockResolvedValue({
       cartId: 'cart-1' as CartId,
       deductionLocationId: 'loc-store-inventory',
     });
@@ -168,8 +169,8 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
     }, FAST_WAIT);
     await screen.findByText('Close');
 
-    // Override lookupByBarcode to find a product
-    vi.mocked(productsApi.lookupByBarcode).mockResolvedValueOnce({
+    // Override lookupByBarcodeScoped to find a product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
       sku: 'ITEM-001',
       name: 'Test Item',
       category: 'Test',
@@ -206,10 +207,10 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
   });
 
   it('cart_panel_unbound_rejects_add_line', async () => {
-    // Override startSale to return NO deduction location ID (unbound)
-    vi.mocked(salesApi.startSale).mockResolvedValue({
+    // Override startSaleScoped to return NO deduction location ID (unbound)
+    vi.mocked(salesApi.startSaleScoped).mockResolvedValue({
       cartId: 'cart-1' as CartId,
-    } as unknown as Awaited<ReturnType<typeof salesApi.startSale>>);
+    } as unknown as Awaited<ReturnType<typeof salesApi.startSaleScoped>>);
     vi.mocked(salesApi.getCartDeductionLocation).mockResolvedValue(null);
 
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
@@ -219,8 +220,8 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
     }, FAST_WAIT);
     await screen.findByText('Close');
 
-    // Override lookupByBarcode to find a product
-    vi.mocked(productsApi.lookupByBarcode).mockResolvedValueOnce({
+    // Override lookupByBarcodeScoped to find a product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
       sku: 'ITEM-001',
       name: 'Test Item',
       category: 'Test',
@@ -255,7 +256,7 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
 
     // Now try adding another product via scan (handleAddProduct checks cartId +
     // deductionLocationIdRef.current and should show an error toast)
-    vi.mocked(productsApi.lookupByBarcode).mockResolvedValueOnce({
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
       sku: 'ITEM-001',
       name: 'Test Item',
       category: 'Test',
@@ -279,8 +280,8 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
   });
 
   it('cart_panel_badge_click_opens_fastpin_overlay', async () => {
-    // Override startSale to return a deduction location ID
-    vi.mocked(salesApi.startSale).mockResolvedValue({
+    // Override startSaleScoped to return a deduction location ID
+    vi.mocked(salesApi.startSaleScoped).mockResolvedValue({
       cartId: 'cart-1' as CartId,
       deductionLocationId: 'loc-store-inventory',
     });
@@ -296,8 +297,8 @@ describe('PosScreen – ADR-19 §17 deduction location', () => {
     }, FAST_WAIT);
     await screen.findByText('Close');
 
-    // Override lookupByBarcode to find a product
-    vi.mocked(productsApi.lookupByBarcode).mockResolvedValueOnce({
+    // Override lookupByBarcodeScoped to find a product
+    vi.mocked(productsApi.lookupByBarcodeScoped).mockResolvedValueOnce({
       sku: 'ITEM-001',
       name: 'Test Item',
       category: 'Test',

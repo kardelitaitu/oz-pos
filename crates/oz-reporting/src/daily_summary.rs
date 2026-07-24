@@ -524,4 +524,127 @@ mod tests {
             "non-completed sales excluded from top products"
         );
     }
+
+    // ── Boundary / invariant tests for daily_summary ──────────────────
+
+    /// Leap-year dates (Feb 29, 2024) are valid ISO dates and MUST
+    /// appear in range queries. Pins SQLite's DATE() handling so any
+    /// future change to a stricter date parser is caught.
+    #[test]
+    fn daily_summary_includes_feb_29_leap_day() {
+        let conn = fresh();
+        seed_product(&conn, "LEAP", "Leap Item");
+        complete_sale_with_date(&conn, "LEAP", 1, 100, "2024-02-29");
+
+        let result = query_daily_summary(&conn, "2024-02-28", "2024-03-01").unwrap();
+        assert_eq!(result.daily.len(), 1);
+        assert_eq!(result.daily[0].date, "2024-02-29");
+        assert_eq!(result.daily[0].total_revenue_minor, 100);
+    }
+
+    /// Sales transitioned to `Voided` MUST be excluded. The SQL filter
+    /// is `status = 'completed'` only, so any non-completed status is
+    /// filtered out. Pins the contract that the engine treats
+    /// cancelled sales the same as drafts.
+    #[test]
+    fn daily_summary_excludes_voided_sales() {
+        let conn = fresh();
+        seed_product(&conn, "EXCLUDE", "Exclude Item");
+        let store = oz_core::db::Store::new(&conn);
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("EXCLUDE"), 1, price(100)))
+            .unwrap();
+
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        sale.created_at = "2026-07-20T10:00:00.000Z".into();
+        sale.updated_at = sale.created_at.clone();
+        store.create_sale(&sale).unwrap();
+        // Advance through Active → void (skip Completed).
+        store
+            .update_sale_status(&sale.id, SaleStatus::Active)
+            .unwrap();
+        store
+            .update_sale_status(&sale.id, SaleStatus::Voided)
+            .unwrap();
+
+        let result = query_daily_summary(&conn, "2026-07-20", "2026-07-20").unwrap();
+        assert!(
+            result.daily.is_empty(),
+            "voided sales must be excluded from daily summary"
+        );
+    }
+
+    /// A sale whose `total_minor` is 0 (currency zero-boundary) MUST
+    /// still be counted in `sale_count` and contribute 0 to revenue.
+    /// Tests the `COALESCE(SUM(...), 0)` SQL contract for promotions
+    /// / 100%-discount /gift card zero-balance sales.
+    #[test]
+    fn daily_summary_zero_revenue_sale_still_counted() {
+        let conn = fresh();
+        seed_product(&conn, "ZERO", "Zero Item");
+        complete_sale_with_date(&conn, "ZERO", 1, 0, "2026-07-20");
+
+        let result = query_daily_summary(&conn, "2026-07-20", "2026-07-20").unwrap();
+        assert_eq!(result.daily.len(), 1);
+        assert_eq!(result.daily[0].sale_count, 1);
+        assert_eq!(result.daily[0].total_revenue_minor, 0);
+        assert_eq!(result.daily[0].avg_ticket_minor, 0);
+        assert_eq!(result.total_sales, 1);
+        assert_eq!(result.total_revenue_minor, 0);
+    }
+
+    /// Top products ties on `total_qty` are NOT deterministically
+    /// ordered because the SQL has no secondary sort. Pins the
+    /// documented contract: ties yield rows in an unspecified order.
+    /// Callers MUST NOT rely on a particular tie-break order.
+    #[test]
+    fn top_products_top_ties_non_deterministic() {
+        let conn = fresh();
+        seed_product(&conn, "A", "Product A");
+        seed_product(&conn, "B", "Product B");
+        complete_sale_with_date(&conn, "A", 1, 100, "2026-07-20");
+        complete_sale_with_date(&conn, "B", 1, 100, "2026-07-20");
+
+        let rows = query_top_products(&conn, "2026-07-20", "2026-07-20", 10).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].total_qty, 1);
+        assert_eq!(rows[1].total_qty, 1);
+        assert!(rows.iter().any(|r| r.sku == "A"));
+        assert!(rows.iter().any(|r| r.sku == "B"));
+    }
+
+    /// LIMIT 0 in SQL returns 0 rows. Pins the contract that callers
+    /// can safely request limit=0 to mean "no top products" without
+    /// hitting the SQL error path.
+    #[test]
+    fn top_products_limit_zero_returns_empty() {
+        let conn = fresh();
+        seed_product(&conn, "A", "Product A");
+        complete_sale_with_date(&conn, "A", 1, 100, "2026-07-20");
+
+        let rows = query_top_products(&conn, "2026-07-20", "2026-07-20", 0).unwrap();
+        assert!(rows.is_empty());
+    }
+
+    /// `avg_ticket_minor` uses integer DIVISION (truncation, not
+    /// rounding). 1000 minor / 3 sales = 333, NOT 333.33 nor 334.
+    /// Pins the truncation behavior for downstream rounding decisions.
+    #[test]
+    fn daily_summary_avg_ticket_truncation() {
+        let conn = fresh();
+        seed_product(&conn, "A", "Product A");
+        complete_sale_with_date(&conn, "A", 1, 334, "2026-07-20");
+        complete_sale_with_date(&conn, "A", 1, 333, "2026-07-20");
+        complete_sale_with_date(&conn, "A", 1, 333, "2026-07-20");
+
+        let result = query_daily_summary(&conn, "2026-07-20", "2026-07-20").unwrap();
+        assert_eq!(result.daily[0].total_revenue_minor, 1000);
+        assert_eq!(result.daily[0].sale_count, 3);
+        // 1000 / 3 = 333.33... → integer truncation yields 333.
+        assert_eq!(
+            result.daily[0].avg_ticket_minor, 333,
+            "avg_ticket_minor must truncate, not round (1000/3=333)"
+        );
+    }
 }

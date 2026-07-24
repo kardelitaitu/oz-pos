@@ -124,6 +124,14 @@ export const lookupByBarcodeScoped = (sessionToken: string, barcode: string): Pr
 export const lookupProductBySku = (sku: string): Promise<ProductDto | null> =>
   loggedInvoke<ProductDto | null>('lookup_product_by_sku', { sku });
 
+/** Check whether a product tracks serial numbers. */
+export const getProductTrackSerial = (sku: string): Promise<boolean> =>
+  loggedInvoke<boolean>('get_product_track_serial', { sku });
+
+/** Check whether a product tracks serial numbers, store-scoped. ADR #7. */
+export const getProductTrackSerialScoped = (sessionToken: string, sku: string): Promise<boolean> =>
+  loggedInvoke<boolean>('get_product_track_serial_scoped', { sessionToken, sku });
+
 /** ADR #7: Scoped SKU lookup using session token. */
 export const lookupProductBySkuScoped = (sessionToken: string, sku: string): Promise<ProductDto | null> =>
   loggedInvoke<ProductDto | null>('lookup_product_by_sku_scoped', { sessionToken, sku });
@@ -239,6 +247,10 @@ export interface UpdateCategoryArgs {
 /** List all product categories. */
 export const listCategories = (): Promise<CategoryDto[]> =>
   loggedInvoke<CategoryDto[]>('list_categories');
+
+/** List all product categories for the store resolved from a session token. ADR #7. */
+export const listCategoriesScoped = (sessionToken: string): Promise<CategoryDto[]> =>
+  loggedInvoke<CategoryDto[]>('list_categories_scoped', { sessionToken });
 
 /** Create a new product category. */
 export const createCategory = (args: CreateCategoryArgs): Promise<{ id: string }> =>

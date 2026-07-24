@@ -66,6 +66,7 @@ impl PgTransport {
                     status TEXT NOT NULL DEFAULT 'pending',
                     retry_count INTEGER NOT NULL DEFAULT 0,
                     last_error TEXT,
+                    tenant_id TEXT NOT NULL DEFAULT 'default',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     synced_at TIMESTAMPTZ
                 )",
@@ -82,11 +83,12 @@ impl PgTransport {
                 &item.payload,
                 &item.retry_count,
                 &item.last_error,
+                &item.tenant_id,
             ];
             let result = client
                 .execute(
-                    "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error)
-                     VALUES ($1, $2, $3, 'pending', $4, $5)
+                    "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, tenant_id)
+                     VALUES ($1, $2, $3, 'pending', $4, $5, $6)
                      ON CONFLICT (id) DO NOTHING",
                     params,
                 )
@@ -120,7 +122,7 @@ impl PgTransport {
             client
                 .query(
                     "SELECT id, action, payload, status, retry_count, last_error,
-                            created_at::TEXT, synced_at::TEXT
+                            tenant_id, created_at::TEXT, synced_at::TEXT
                      FROM offline_queue
                      WHERE synced_at > $1
                      ORDER BY created_at ASC",
@@ -132,7 +134,7 @@ impl PgTransport {
             client
                 .query(
                     "SELECT id, action, payload, status, retry_count, last_error,
-                            created_at::TEXT, synced_at::TEXT
+                            tenant_id, created_at::TEXT, synced_at::TEXT
                      FROM offline_queue
                      ORDER BY created_at ASC",
                     &[],

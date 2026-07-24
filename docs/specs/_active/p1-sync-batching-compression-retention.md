@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (1 finding — status outdated) · Finding: card is marked "PENDING" but the implementation has LANDed. Verified: build_batches() at platform/sync/src/lib.rs:759 with byte-limit + priority-sort tests (build_batches_respects_byte_limit line 141, build_batches_sorts_by_priority line 165); client compression reqwest .gzip(true) at transport.rs:118 + server CompressionLayer::new().gzip(true) at apps/cloud-server/src/main.rs:368; archive_stock_movements + stock_movements_archive migration + apps/cloud-server/src/prune.rs::start_prune_loop + daemon.rs backoff (all present, verified via ADR #6 audit). Status "PENDING" understates reality — only residual items (snapshot endpoint, configurable retention window, possibly the exact incremental_vacuum cadence) remain. Baseline file references accurate. -->
+
 # P-1 — Sync batching, compression, backoff & retention
 
 - **Status:** PENDING

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings, code matches doc) · verified against crates/oz-security/src: all 6 modules present (error.rs, mask.rs, tls.rs, linux.rs, macos.rs, windows.rs); Keyring trait at lib.rs:78; default_keyring() at lib.rs:139 returns platform-native or InMemoryKeyring (lib.rs:166); #![deny(unsafe_code)] at lib.rs:24 (windows.rs uses #![allow(unsafe_code)] for FFI, documented with SAFETY comments) · doc's "scaffold" label at docs/ARCHITECTURE.md:79 is itself stale (this crate is fully implemented) -->
+
 # oz-security
 
 Encryption, secrets, and PCI-DSS helpers for OZ-POS.

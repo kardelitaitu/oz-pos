@@ -165,11 +165,11 @@ export default function DesignSystem() {
         {/* ── Buttons ──────────────────────────── */}
         <Section title="Buttons">
           <div className="ds-button-row">
-            <button className="btn btn--primary">Primary</button>
-            <button className="btn btn--secondary">Secondary</button>
-            <button className="btn btn--danger">Danger</button>
-            <button className="btn btn--ghost">Ghost</button>
-            <button className="btn btn--primary" disabled>Disabled</button>
+            <button type="button" className="btn btn--primary">Primary</button>
+            <button type="button" className="btn btn--secondary">Secondary</button>
+            <button type="button" className="btn btn--danger">Danger</button>
+            <button type="button" className="btn btn--ghost">Ghost</button>
+            <button type="button" className="btn btn--primary" disabled>Disabled</button>
           </div>
         </Section>
 

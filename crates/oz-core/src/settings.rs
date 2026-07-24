@@ -680,6 +680,66 @@ impl Settings {
         }
         Ok(removed)
     }
+
+    // ── Delta ledger (ADR #22) ──────────────────────────────────
+    // These delegate to platform_core::settings::Settings which
+    // manages the `setting_updated` table for versioned change tracking.
+
+    /// Write a setting value AND a delta record atomically.
+    pub fn set_tracked(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_tracked(
+            conn,
+            key,
+            value,
+            terminal_id,
+        )?)
+    }
+
+    /// Get the latest delta version for a (key, terminal_id) pair.
+    pub fn get_version(
+        conn: &Connection,
+        key: &str,
+        terminal_id: &str,
+    ) -> Result<Option<i64>, CoreError> {
+        Ok(platform_core::settings::Settings::get_version(
+            conn,
+            key,
+            terminal_id,
+        )?)
+    }
+
+    /// Write a delta record without updating the settings table.
+    pub fn write_delta(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::write_delta(
+            conn,
+            key,
+            value,
+            terminal_id,
+        )?)
+    }
+
+    /// Batch write settings AND delta records for every row.
+    pub fn set_batch_tracked(
+        conn: &Connection,
+        rows: &[(String, String)],
+        terminal_id: &str,
+    ) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_batch_tracked(
+            conn,
+            rows,
+            terminal_id,
+        )?)
+    }
 }
 
 #[cfg(test)]
@@ -846,6 +906,98 @@ mod tests {
         assert_eq!(
             Settings::get_default_currency(&conn).unwrap(),
             Some("EUR".into())
+        );
+    }
+
+    /// `oz_core::Settings::set()` does NOT touch the `setting_updated`
+    /// delta table. This documents the architectural gap — the Tauri
+    /// command layer calls `Settings::set()` which bypasses the delta
+    /// ledger. When the commands are migrated to use `set_tracked`,
+    /// this test should be updated to assert the opposite.
+    #[test]
+    fn set_does_not_write_delta() {
+        let conn = fresh();
+        // Minimal schema — indexes from migration 100_setting_updated.sql
+        // are omitted since this test only counts rows.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS setting_updated (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT    NOT NULL,
+                value       TEXT    NOT NULL,
+                terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                version     INTEGER NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+
+        Settings::set(&conn, "test.delta.gap", "should-not-appear-in-delta").unwrap();
+
+        // The settings table gets the value.
+        assert_eq!(
+            Settings::get(&conn, "test.delta.gap").unwrap(),
+            Some("should-not-appear-in-delta".into())
+        );
+
+        // But the delta table should have zero rows — set() doesn't write deltas.
+        let delta_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM setting_updated", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            delta_count, 0,
+            "Settings::set() should NOT write to setting_updated"
+        );
+    }
+
+    /// After ADR #22 Phase 0d, `oz_core::Settings` delegates
+    /// `set_tracked` and `get_version` to `platform_core::Settings`.
+    /// Verify the delegation layer works end-to-end.
+    #[test]
+    fn set_tracked_delegation_writes_delta() {
+        let conn = fresh();
+        // Create the delta table inline (matching set_does_not_write_delta pattern).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS setting_updated (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT    NOT NULL,
+                value       TEXT    NOT NULL,
+                terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                version     INTEGER NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+        Settings::set_tracked(&conn, "deleg.k", "deleg-v", "term-del").unwrap();
+        assert_eq!(
+            Settings::get(&conn, "deleg.k").unwrap(),
+            Some("deleg-v".into())
+        );
+        assert_eq!(
+            Settings::get_version(&conn, "deleg.k", "term-del").unwrap(),
+            Some(1)
+        );
+    }
+
+    /// `write_delta` delegation: standalone delta write without
+    /// updating the settings table.
+    #[test]
+    fn write_delta_delegation_works() {
+        let conn = fresh();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS setting_updated (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                key         TEXT    NOT NULL,
+                value       TEXT    NOT NULL,
+                terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                version     INTEGER NOT NULL,
+                created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+        Settings::write_delta(&conn, "w.k", "w-v", "term-w").unwrap();
+        assert_eq!(
+            Settings::get_version(&conn, "w.k", "term-w").unwrap(),
+            Some(1)
         );
     }
 }

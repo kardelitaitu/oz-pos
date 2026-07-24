@@ -21,7 +21,14 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, m
 
 vi.mock('@/api/kds', () => ({
   getKdsQueue: (_userId: string) => mockGetKdsQueue(),
-  updateKdsStatus: (_userId: string, id: string, status: string) => mockUpdateKdsStatus(id, status),
+  getKdsQueueScoped: (_token: string, _userId: string) => mockGetKdsQueue(),
+  updateKdsStatus: (_userId: string, id: string, status: string) =>
+    mockUpdateKdsStatus(id, status),
+  updateKdsStatusScoped: (
+    _token: string,
+    id: string,
+    status: string,
+  ) => mockUpdateKdsStatus(id, status),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -44,6 +51,22 @@ vi.mock('@/frontend/shared/useSound', () => ({
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspaceScope: () => mockUseWorkspaceScope(),
+  useWorkspace: () => ({
+    activeWorkspace: 'kds',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: null,
+    swapSessionToken: vi.fn(),
+  }),
 }));
 
 const bundle = new FluentBundle('en-US');

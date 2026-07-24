@@ -9,7 +9,9 @@ const mockExportSalesByHour = vi.fn();
 
 vi.mock('@/api/sales', () => ({
   exportDailySummary: vi.fn(),
+  exportDailySummaryScoped: vi.fn(),
   exportSalesByHour: (...args: unknown[]) => mockExportSalesByHour(...args),
+  exportSalesByHourScoped: (...args: unknown[]) => mockExportSalesByHour(...args),
 }));
 
 beforeEach(() => {

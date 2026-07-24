@@ -241,8 +241,7 @@ export default function OfflineQueueScreen() {
                   <th aria-label="Actions"> </th>
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 5 }).map((_, i) => (
+              <tbody>{Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
                     <td><Skeleton variant="text" width="6rem" /></td>
                     <td><Skeleton variant="block" width="4.5rem" height="1.25rem" /></td>
@@ -253,7 +252,7 @@ export default function OfflineQueueScreen() {
                     <td><Skeleton variant="block" width="3rem" height="1.5rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -308,8 +307,7 @@ export default function OfflineQueueScreen() {
                 <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
               </tr>
             </thead>
-            <tbody>
-              {items.map((item) => (
+            <tbody>{items.map((item) => (
                 <tr key={item.id}>
                   <td className="offline-queue-cell-action">{item.action}</td>
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label provided via l10n.getString */}
@@ -352,7 +350,7 @@ export default function OfflineQueueScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

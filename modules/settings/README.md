@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings, 1 low-severity observe) · all owned paths verified: crates/oz-core/src/settings.rs + db/settings.rs, commands/{settings,setup,sync}.rs, features/{settings,setup}, api/settings.ts, ui/src/locales/settings.ftl; modules/settings/src/lib.rs has SettingsModule; manifest deps [] match · observe: Overview says settings owns "currency/exchange rate configuration" while modules/currency owns the ISO table + rates — a doc overlap (settings = default-currency config, currency = table/rates), not a false claim · Kernel API matches -->
+
 # Settings Module
 
 **Status:** Active (Phase 2.6 — Proof of Concept)

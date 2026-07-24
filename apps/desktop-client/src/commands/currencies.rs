@@ -58,6 +58,33 @@ pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyD
         .collect())
 }
 
+#[command]
+/// List currencies resolved from a session token. ADR #7.
+pub async fn list_currencies_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CurrencyDto>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = oz_core::db::Store::new(&db);
+    let rows = store.list_currencies()?;
+    Ok(rows
+        .into_iter()
+        .map(|(code, name, minor_exponent, symbol)| CurrencyDto {
+            code,
+            name,
+            minor_exponent,
+            symbol,
+        })
+        .collect())
+}
+
 #[derive(Debug, Deserialize)]
 /// Setdefaultcurrencyargs.
 pub struct SetDefaultCurrencyArgs {

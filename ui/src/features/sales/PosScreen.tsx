@@ -16,9 +16,8 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
-import { AppearanceSettings } from '@/features/settings/AppearanceSettings';
-import FeatureToggleScreen from '@/features/settings/FeatureToggleScreen';
-import DataManagementScreen from '@/features/settings/DataManagementScreen';
+
+import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import { formatMoney, COURSES, type CartId, type CartLine, type LineId, type Product, type Sku } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { triggerInteraction } from '@/utils/interaction';
@@ -26,17 +25,17 @@ import { useSwipe } from '@/hooks/useSwipe';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useAnimatedUndoStack } from '@/hooks/useAnimatedUndoStack';
 import {
-  holdCart,
-  listOpenBills,
-  getHeldCart,
-  deleteHeldCart,
-  startSale,
+  holdCartScoped,
+  listOpenBillsScoped,
+  getHeldCartScoped,
+  deleteHeldCartScoped,
+  startSaleScoped,
   getCartDeductionLocation,
   type HeldCartRow,
 } from '@/api/sales';
-import { getReceiptSettings } from '@/api/settings';
+import { getReceiptSettingsScoped } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
-import { lookupByBarcode, lookupProductBySku } from '@/api/products';
+import { lookupByBarcodeScoped, lookupProductBySku } from '@/api/products';
 import { lookupBundleBySku } from '@/api/bundles';
 import { expandBundleItems } from './bundleExpansion';
 import type { BarcodeScannedPayload } from '@/api/hardware';
@@ -46,11 +45,11 @@ import { useCustomerDisplay } from './useCustomerDisplay';
 import PaymentModal from './PaymentModal';
 import PriceOverrideModal from './PriceOverrideModal';
 import FastPINOverlay from '@/components/FastPINOverlay';
-import { overrideLinePrice, overrideCartDeductionLocation } from '@/api/sales';
+import { overrideLinePriceScoped, overrideCartDeductionLocation } from '@/api/sales';
 import {
-  getActiveShift,
-  openShift,
-  closeShift,
+  getActiveShiftScoped,
+  openShiftScoped,
+  closeShiftScoped,
   type ShiftDto,
 } from '@/api/shifts';
 
@@ -318,78 +317,7 @@ function CartLineItem({
  * desktop client. Rendered as a full-screen overlay above PosScreen;
  * the `onBack` callback returns to the main sales screen.
  */
-function SettingsSubScreen({ onBack }: { onBack: () => void }) {
-  const { l10n } = useLocalization();
-  type Tab = 'appearance' | 'features' | 'data' | 'sync';
-  const [activeTab, setActiveTab] = useState<Tab>('appearance');
-
-  const tabs: { id: Tab; key: string; fallback: string }[] = [
-    { id: 'appearance', key: 'settings-appearance-tab', fallback: 'Appearance' },
-    { id: 'features', key: 'settings-features-tab', fallback: 'Features' },
-    { id: 'data', key: 'settings-data-tab', fallback: 'Data' },
-    { id: 'sync', key: 'settings-sync-tab', fallback: 'Sync' },
-  ];
-
-  return (
-    <div className="pos-screen">
-      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border, #ddd)' }}>
-        <h2 style={{ margin: '0 0 8px', fontSize: 18 }}>
-          {l10n.getString('settings-page-title') || 'Settings'}
-        </h2>
-        <div role="tablist" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === t.id}
-              className={`pos-settings-tab${activeTab === t.id ? ' pos-settings-tab--active' : ''}`}
-              onClick={() => setActiveTab(t.id)}
-              data-testid={`pos-settings-tab-${t.id}`}
-              style={{
-                padding: '6px 12px',
-                fontSize: 13,
-                border: '1px solid var(--color-border, #ccc)',
-                borderRadius: 4,
-                background: activeTab === t.id ? '#1a3a5c' : '#f5f5f5',
-                color: activeTab === t.id ? '#fff' : '#333',
-                cursor: 'pointer',
-              }}
-            >
-              {l10n.getString(t.key) || t.fallback}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto' }} data-testid={`pos-settings-panel-${activeTab}`}>
-        {activeTab === 'appearance' && <AppearanceSettings />}
-        {activeTab === 'features' && <FeatureToggleScreen />}
-        {activeTab === 'data' && <DataManagementScreen />}
-        {activeTab === 'sync' && (
-          <div style={{ padding: 16 }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>
-              {l10n.getString('settings-sync-heading') || 'Cloud Sync'}
-            </h3>
-            <p style={{ color: '#666', fontSize: 12, margin: 0 }}>
-              {l10n.getString('settings-sync-info') ||
-                'Cloud sync is configured via the desktop Settings page. The tablet mirrors the server snapshot on the next sync cycle.'}
-            </p>
-          </div>
-        )}
-      </div>
-      <div style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border, #ddd)' }}>
-        <button
-          type="button"
-          className="pos-cart-pay-btn"
-          onClick={onBack}
-          style={{ width: '100%' }}
-        >
-          &larr; {l10n.getString('back')}
-        </button>
-      </div>
-    </div>
-  );
-}
+// SettingsSubScreen removed in Phase 6 (ADR #22) — replaced by WorkspaceSettingsModal.
 
 /**
  * POS sales screen — product lookup on the left, cart panel on the right.
@@ -436,9 +364,18 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   const { session, logout, isManager } = useAuth();
-  const { activeWorkspace, sessionToken } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const { isEnabled } = useFeatures();
   const userId = session!.user_id;
+
+  const handleOpenSettings = useCallback(() => {
+    if (onNavigate) {
+      onNavigate('settings');
+    } else {
+      setActiveWorkspace('admin');
+    }
+  }, [onNavigate, setActiveWorkspace]);
 
   // ── Restore locked cart on mount ────────────────────────────────
   const LOCKED_CART_KEY = 'pos-locked-cart';
@@ -473,7 +410,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const [showTables, setShowTables] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [discountInput, setDiscountInput] = useState('');
@@ -571,7 +508,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
     if (cartId) return cartId;
     try {
-      const { cartId: newCartId, deductionLocationId: locId } = await startSale({ currency });
+      const { cartId: newCartId, deductionLocationId: locId } = await startSaleScoped(sessionToken, { currency });
       setCartId(newCartId);
       deductionLocationIdRef.current = locId ?? null;
       if (locId) {
@@ -679,7 +616,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       return;
     }
     setShiftLoading(true);
-    getActiveShift(userId)
+    getActiveShiftScoped(sessionToken)
       .then((shift) => { setActiveShift(shift); })
       .catch(() => { setActiveShift(null); })
       .finally(() => setShiftLoading(false));
@@ -695,7 +632,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       try {
         const code = payload.code;
         // 1. Try product barcode lookup first.
-        const dto = await lookupByBarcode(code);
+        const dto = await lookupByBarcodeScoped(sessionToken, code);
         if (dto) {
           const product: Product = {
             sku: dto.sku as Sku,
@@ -778,10 +715,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     () => setShowOpenBills(false),
   );
   const loadOpenBills = useCallback(() => {
-    listOpenBills().then(setOpenBills).catch(() => {
+    listOpenBillsScoped(sessionToken).then(setOpenBills).catch(() => {
       addToast({ message: 'Failed to load open bills', type: 'error' });
     });
-  }, [addToast]);
+  }, [addToast, sessionToken]);
 
   const { handlePaymentComplete: customerDisplayPaymentComplete } = useCustomerDisplay({
     lines,
@@ -802,10 +739,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       qty: l.qty,
       unit_price_minor: l.unit_price.minor_units,
     }));
-    computeCartTax(taxLines, currency)
+    computeCartTax(sessionToken, taxLines, currency)
       .then(setCartTax)
       .catch(() => setCartTax(0));
-  }, [lines, subtotal]);
+  }, [lines, subtotal, sessionToken]);
 
   const handlePaymentComplete = useCallback(() => {
     setShowPayment(false);
@@ -815,7 +752,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     setDeductionOverridden(false);
     // If this was an open bill being paid, delete it from DB.
     if (activeOpenBillId) {
-      deleteHeldCart(activeOpenBillId).catch(() => {
+      deleteHeldCartScoped(sessionToken, activeOpenBillId).catch(() => {
         addToast({ message: 'Failed to delete held cart', type: 'error' });
       });
       setActiveOpenBillId(null);
@@ -912,7 +849,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     updateQty(line.id, line.qty + 1);
   }, [updateQty]);
 
-  const handleOverrideConfirm = useCallback(async (newPriceMinor: number, authorizingUserId: string) => {
+  const handleOverrideConfirm = useCallback(async (newPriceMinor: number, _authorizingUserId: string) => {
     if (!overrideTarget) return;
     const cId = cartId;
     if (!cId) {
@@ -921,12 +858,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       return;
     }
     try {
-      await overrideLinePrice({
-        cartId: cId,
-        lineId: overrideTarget.id,
-        newPriceMinor,
-        userId: authorizingUserId,
-      });
+      await overrideLinePriceScoped(sessionToken, cId, overrideTarget.id, newPriceMinor);
       updateLinePrice(overrideTarget.id, {
         minor_units: newPriceMinor,
         currency: overrideTarget.unit_price.currency,
@@ -1028,7 +960,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   // ── Load receipt settings on mount ────────────────────────────
   useEffect(() => {
-    getReceiptSettings()
+    getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
       .catch(() => addToast({ message: 'Failed to load receipt settings', type: 'error' }));
   }, [addToast]);
@@ -1054,12 +986,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     setClosingShift(true);
     setCloseShiftError(null);
     try {
-      const closed = await closeShift({
-        userId,
-        id: activeShift.id,
-        closingBalanceMinor: balance,
-        notes: shiftNotes.trim() || null,
-      });
+      const closed = await closeShiftScoped(sessionToken, activeShift.id, balance, shiftNotes.trim() || null);
       setClosedShiftSummary(closed);
       setActiveShift(null); // no longer active
     } catch (err) {
@@ -1081,7 +1008,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
     setOpeningShift(true);
     try {
-      const shift = await openShift(userId, safeBalance);
+      const shift = await openShiftScoped(sessionToken, safeBalance);
       setActiveShift(shift);
       openShiftExit.requestClose();
     } catch {
@@ -1129,7 +1056,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         discountPercent,
         discountLabel,
       });
-      await holdCart({
+      await holdCartScoped(sessionToken, {
         label: openBillName.trim() || `Open Bill #${Date.now()}`,
         cart_data: cartData,
         item_count: lines.length,
@@ -1151,7 +1078,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   const handleResumeOpenBill = useCallback(async (id: string) => {
     try {
-      const full = await getHeldCart(id);
+      const full = await getHeldCartScoped(sessionToken, id);
       if (!full) return;
       const data = JSON.parse(full.cart_data);
       if (data.lines && Array.isArray(data.lines)) {
@@ -1245,9 +1172,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   // (Appearance / Features / Data / Sync) that route to the
   // dedicated settings sub-screens. Lets the restaurant tablet
   // cover the same Settings surface as the desktop client.
-  if (showSettings) {
-    return <SettingsSubScreen onBack={() => setShowSettings(false)} />;
-  }
+
 
   if (!session) {
     return (
@@ -1265,6 +1190,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }
 
   return (
+    <>
     <div className="pos-screen" ref={posScreenRef}>
       {/* ── Left: Product lookup ─────────────────── */}
       <div className="pos-products">
@@ -1413,7 +1339,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
             <button
               type="button"
               className="pos-cart-lock-btn"
-              onClick={() => setShowSettings(true)}
+              onClick={handleOpenSettings}
               aria-label={l10n.getString('settings-page-title') || 'Settings'}
               title={l10n.getString('settings-page-title') || 'Settings'}
               style={{ marginRight: 4 }}
@@ -2269,5 +2195,16 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         onVerified={handleDeductionPinVerified}
       />
     </div>
+
+    {/* ── Workspace Settings Modal (ADR #22 Phase 5) ── */}
+    {showWorkspaceSettings && (
+      <WorkspaceSettingsModal
+        open={showWorkspaceSettings}
+        onClose={() => setShowWorkspaceSettings(false)}
+        workspaceType="restaurant-pos"
+        presentation="slideover"
+      />
+    )}
+  </>
   );
 }

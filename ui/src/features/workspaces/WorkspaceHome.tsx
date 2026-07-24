@@ -725,18 +725,20 @@ export default function WorkspaceHome() {
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
                   >
                     <div className="workspace-card-key-hint">{idx + 1}</div>
-                    {/* Pin button */}
-                    <button
-                      type="button"
+                    {/* Pin button — <span> with role="button" to avoid 
+                        nested <button> inside <button> (invalid HTML). */}
+                    <span
+                      role="button"
                       className={`workspace-card-pin-btn${pinnedKeys.has(ws.type_key) ? ' workspace-card-pin-btn--pinned' : ''}`}
                       onClick={(e) => { e.stopPropagation(); togglePin(ws.type_key); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); togglePin(ws.type_key); } }}
                       aria-label={pinnedKeys.has(ws.type_key) ? l10n.getString('workspace-card-unpin-aria', { name: ws.name }) : l10n.getString('workspace-card-pin-aria', { name: ws.name })}
                       tabIndex={-1}
                     >
                       <svg viewBox="0 0 24 24" fill={pinnedKeys.has(ws.type_key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                       </svg>
-                    </button>
+                    </span>
                     {isActive && (
                       <div className="workspace-card-active-dot" aria-label="Active workspace">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">

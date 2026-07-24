@@ -27,12 +27,19 @@ vi.mock('@/api/stockTransfers', () => ({
   createStockTransfer: vi.fn(),
 }));
 
+const { mockListProducts, mockListTerminals } = vi.hoisted(() => ({
+  mockListProducts: vi.fn(),
+  mockListTerminals: vi.fn(),
+}));
+
 vi.mock('@/api/products', () => ({
-  listProducts: vi.fn(),
+  listProducts: () => mockListProducts(),
+  listProductsScoped: () => mockListProducts(),
 }));
 
 vi.mock('@/api/terminals', () => ({
-  listTerminals: vi.fn(),
+  listTerminals: () => mockListTerminals(),
+  listTerminalsScoped: () => mockListTerminals(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -43,13 +50,9 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 import StockTransfersScreen from '@/features/stock-transfers/StockTransfersScreen';
 import { listStockTransfers, getStockTransfer, createStockTransfer } from '@/api/stockTransfers';
-import { listProducts } from '@/api/products';
-import { listTerminals } from '@/api/terminals';
 
 const mockListTransfers = listStockTransfers as ReturnType<typeof vi.fn>;
 const mockGetTransfer = getStockTransfer as ReturnType<typeof vi.fn>;
-const mockListProducts = listProducts as ReturnType<typeof vi.fn>;
-const mockListTerminals = listTerminals as ReturnType<typeof vi.fn>;
 
 const sampleTransfers = [
   {

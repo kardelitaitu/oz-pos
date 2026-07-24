@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings, doc-staleness) · F1: "35 unit tests pass" -> actual 122 #[test]/#[tokio::test] in crates/oz-payment/src · F2: "Next: real adapters (Stripe, Square, EMV terminal)" -> Stripe, Square, AND QRIS adapters already exist (drivers/stripe.rs, square.rs, qris.rs); EMV terminal not present · verified accurate: PaymentProcessor trait in processor.rs:37 with authorize/capture/refund/void/sale lifecycle; MockPaymentProcessor in drivers/mock.rs -->
+
 # oz-payment
 
 Payment processor abstraction for OZ-POS.

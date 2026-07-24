@@ -208,8 +208,7 @@ export default function BundleManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 4 }).map((_, r) => (
+              <tbody>{Array.from({ length: 4 }).map((_, r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="7rem" /></td>
                     <td><Skeleton variant="text" width="5rem" /></td>
@@ -219,7 +218,7 @@ export default function BundleManagementScreen() {
                     <td><Skeleton variant="block" width="5rem" height="1.5rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -249,8 +248,7 @@ export default function BundleManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {bundles.map((b) => (
+            <tbody>{bundles.map((b) => (
                 <tr key={b.bundle.id}>
                   <td>{b.bundle.name}</td>
                   <td className="bundle-mgmt-cell-sku">{b.bundle.bundle_sku}</td>
@@ -303,7 +301,7 @@ export default function BundleManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

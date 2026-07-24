@@ -137,4 +137,8 @@ fastpin-switch-user = Ganti Pengguna
 fastpin-active-user = Aktif: { $name }
 fastpin-enter-pin = Masukkan PIN untuk { $user }
 
+# ── Session Lock Screen (i18n parity fix) ────────────────────────────────
+session-lock-expired = Sesi telah berakhir. Silakan login kembali.
+session-lock-invalid-pin = PIN tidak valid
+
 # ── Product Management ──

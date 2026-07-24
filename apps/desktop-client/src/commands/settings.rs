@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use oz_core::permissions;
 use oz_core::{Settings, UserPreferences};
 
+use platform_core::terminal_profile::TerminalProfile;
+
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -55,6 +57,23 @@ pub async fn get_receipt_settings(
 ) -> Result<ReceiptSettingsDto, AppError> {
     let conn = state.db.lock().await;
     run_get_receipt_settings(&conn)
+}
+
+/// Get receipt settings resolved from a session token. ADR #7.
+#[command]
+pub async fn get_receipt_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<ReceiptSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_receipt_settings(&db)
 }
 
 /// Business logic for `get_receipt_settings` (extracted for testing).
@@ -158,6 +177,23 @@ pub struct StoreSettingsDto {
 pub async fn get_store_settings(state: State<'_, AppState>) -> Result<StoreSettingsDto, AppError> {
     let conn = state.db.lock().await;
     run_get_store_settings(&conn)
+}
+
+/// Get store settings resolved from a session token. ADR #7.
+#[command]
+pub async fn get_store_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<StoreSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_store_settings(&db)
 }
 
 /// Business logic for `get_store_settings` (extracted for testing).
@@ -317,10 +353,30 @@ pub struct CreditSaleDto {
     pub cashier_name: String,
 }
 
-#[command]
 /// List credit sales.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `list_credit_sales_scoped`.
+#[command]
 pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditSaleDto>, AppError> {
     let conn = state.db.lock().await;
+    run_list_credit_sales(&conn)
+}
+
+/// List credit sales for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_credit_sales_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CreditSaleDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_list_credit_sales(&db)
+}
+
+/// Business logic for listing credit sales (extracted for testing).
+fn run_list_credit_sales(conn: &rusqlite::Connection) -> Result<Vec<CreditSaleDto>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT s.id, p.gateway_reference, s.total_minor, s.currency, s.created_at,
                 p.settled_at, COALESCE(u.display_name, '')
@@ -410,42 +466,141 @@ pub struct HardwareSettingsDto {
     pub scanner_input_mode: String,
 }
 
+impl From<TerminalProfile> for HardwareSettingsDto {
+    fn from(p: TerminalProfile) -> Self {
+        Self {
+            printer_connection: p.printer_connection,
+            printer_device_path: p.printer_device_path,
+            printer_paper_size: p.printer_paper_size,
+            scanner_device_id: p.scanner_device_id,
+            scanner_input_mode: p.scanner_input_mode,
+        }
+    }
+}
+
+impl From<HardwareSettingsDto> for TerminalProfile {
+    fn from(dto: HardwareSettingsDto) -> Self {
+        Self {
+            printer_connection: dto.printer_connection,
+            printer_device_path: dto.printer_device_path,
+            printer_paper_size: dto.printer_paper_size,
+            scanner_device_id: dto.scanner_device_id,
+            scanner_input_mode: dto.scanner_input_mode,
+        }
+    }
+}
+
+/// Helper: resolve the app data directory from db_path.
+fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, AppError> {
+    state
+        .db_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| AppError::Internal("db_path has no parent directory".into()))
+}
+
 #[command]
-/// Get hardware settings.
+/// Get hardware settings for the current terminal from `terminal_profiles/<id>.json`.
+///
+/// On first access after upgrading from a version that stored hardware
+/// settings in SQLite, the old values are migrated to JSON automatically.
+/// Returns defaults only when neither JSON nor SQLite has saved values.
 pub async fn get_hardware_settings(
     state: State<'_, AppState>,
 ) -> Result<HardwareSettingsDto, AppError> {
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+    let base_dir = app_data_dir(&state)?;
+    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
+
+    // Fast path: JSON file already exists (post-migration or fresh install).
+    if let Some(profile) = TerminalProfile::load(&path)? {
+        return Ok(HardwareSettingsDto::from(profile));
+    }
+
+    // Migration path: no JSON file yet → read from SQLite, write to JSON.
     let conn = state.db.lock().await;
-    Ok(HardwareSettingsDto {
+    let profile = TerminalProfile {
         printer_connection: Settings::get_printer_connection(&conn)?,
         printer_device_path: Settings::get_printer_device_path(&conn)?,
         printer_paper_size: Settings::get_printer_paper_size(&conn)?,
         scanner_device_id: Settings::get_scanner_device_id(&conn)?,
         scanner_input_mode: Settings::get_scanner_input_mode(&conn)?,
-    })
+    };
+
+    // Persist to JSON so future reads take the fast path.
+    if let Err(e) = profile.save(&path) {
+        tracing::warn!(
+            terminal_id = %terminal_id,
+            error = %e,
+            "failed to migrate hardware settings to JSON — will retry next read"
+        );
+        // Don't clean SQLite keys if the JSON save failed — the
+        // next read will retry the migration.
+        return Ok(HardwareSettingsDto::from(profile));
+    }
+
+    // Migration succeeded — delete the old SQLite keys so they don't
+    // linger as orphans in the settings table.
+    // Keys match the constants in platform_core::settings (PRINTER_CONNECTION, …).
+    let hw_keys = [
+        "printer.connection",
+        "printer.device_path",
+        "printer.paper_size",
+        "scanner.device_id",
+        "scanner.input_mode",
+    ];
+    for key in hw_keys {
+        if let Err(e) = Settings::remove(&conn, key) {
+            tracing::warn!(
+                key,
+                error = %e,
+                "failed to remove orphaned SQLite hardware setting"
+            );
+        }
+    }
+
+    Ok(HardwareSettingsDto::from(profile))
 }
 
 /// **Deprecated — use `set_hardware_settings_scoped` (ADR #7).**
+///
+/// Now writes to `terminal_profiles/<id>.json` instead of SQLite (ADR #22).
 #[command]
 pub async fn set_hardware_settings(
     args: HardwareSettingsDto,
     user_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    let tx = conn.unchecked_transaction()?;
-    Settings::set_printer_connection(&tx, &args.printer_connection)?;
-    Settings::set_printer_device_path(&tx, &args.printer_device_path)?;
-    Settings::set_printer_paper_size(&tx, &args.printer_paper_size)?;
-    Settings::set_scanner_device_id(&tx, &args.scanner_device_id)?;
-    Settings::set_scanner_input_mode(&tx, &args.scanner_input_mode)?;
-    tx.commit()?;
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Permission check still requires DB access.
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+    }
+
+    let base_dir = app_data_dir(&state)?;
+    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
+    let profile = TerminalProfile::from(args);
+    profile.save(&path)?;
     Ok(())
 }
 
 /// Set hardware settings resolved from a session token. ADR #7.
+///
+/// Hardware settings are now per-terminal, stored in
+/// `terminal_profiles/<terminal_id>.json` (ADR #22).
 #[command]
 pub async fn set_hardware_settings_scoped(
     session_token: String,
@@ -453,22 +608,32 @@ pub async fn set_hardware_settings_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
+
+    // Extract terminal_id before locking DB (avoids Send guard across .await).
+    let terminal_id = state
+        .terminal_id
         .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = oz_core::db::Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
-    let tx = db.unchecked_transaction()?;
-    Settings::set_printer_connection(&tx, &args.printer_connection)?;
-    Settings::set_printer_device_path(&tx, &args.printer_device_path)?;
-    Settings::set_printer_paper_size(&tx, &args.printer_paper_size)?;
-    Settings::set_scanner_device_id(&tx, &args.scanner_device_id)?;
-    Settings::set_scanner_input_mode(&tx, &args.scanner_input_mode)?;
-    tx.commit()?;
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Permission check requires the store-scoped DB.
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = oz_core::db::Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+    }
+
+    let base_dir = app_data_dir(&state)?;
+    let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
+    let profile = TerminalProfile::from(args);
+    profile.save(&path)?;
     Ok(())
 }
 
@@ -561,7 +726,6 @@ pub async fn get_setting(
 fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<String>, AppError> {
     Ok(Settings::get(conn, key)?)
 }
-
 /// **Deprecated — use `set_setting_scoped` (ADR #7).**
 ///
 /// Write (or overwrite) a single setting value.
@@ -574,15 +738,40 @@ pub async fn set_setting(
     user_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let conn = state.db.lock().await;
-    let store = oz_core::db::Store::new(&conn);
-    require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
-    run_set_setting(&conn, &key, &value)
+    // Extract terminal_id first.
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Scope block: drop sync guards before .await below.
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+        run_set_setting(&conn, &key, &value, &terminal_id)?;
+    } // conn, store dropped here
+
+    // Publish SettingsUpdated event for cross-terminal reactivity (ADR #22).
+    let kernel = state.kernel.lock().await;
+    let bus = kernel.event_bus();
+    let event = oz_core::events::SettingsUpdated {
+        changed_keys: vec![key.clone()],
+        terminal_id,
+    };
+    if let Err(e) = bus.publish(&event) {
+        tracing::warn!(key = %key, error = %e, "failed to publish SettingsUpdated event");
+    }
+
+    Ok(())
 }
 
 /// Write (or overwrite) a single setting value resolved from a session token. ADR #7.
 ///
 /// Pass an empty string to store an empty value.
+/// Writes a delta record and publishes a `SettingsUpdated` event (ADR #22).
 #[command]
 pub async fn set_setting_scoped(
     session_token: String,
@@ -591,21 +780,55 @@ pub async fn set_setting_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
+
+    // Extract terminal_id before locking the store DB to avoid
+    // holding a non-Send MutexGuard across an .await point.
+    let terminal_id = state
+        .terminal_id
         .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = oz_core::db::Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
-    run_set_setting(&db, &key, &value)
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Scope block: all sync guards (MutexGuard, Store) must be
+    // dropped before any .await below.
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = oz_core::db::Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+        run_set_setting(&db, &key, &value, &terminal_id)?;
+    } // db, store, conn dropped here — safe to .await below
+
+    // Publish SettingsUpdated event for cross-terminal reactivity (ADR #22).
+    let kernel = state.kernel.lock().await;
+    let bus = kernel.event_bus();
+    let event = oz_core::events::SettingsUpdated {
+        changed_keys: vec![key.clone()],
+        terminal_id,
+    };
+    if let Err(e) = bus.publish(&event) {
+        tracing::warn!(key = %key, error = %e, "failed to publish SettingsUpdated event");
+    }
+
+    Ok(())
 }
 
 /// Business logic for `set_setting` (extracted for testing).
-fn run_set_setting(conn: &rusqlite::Connection, key: &str, value: &str) -> Result<(), AppError> {
-    Ok(Settings::set(conn, key, value)?)
+/// Uses `set_tracked` so every settings change writes a delta record
+/// (ADR #22).
+fn run_set_setting(
+    conn: &rusqlite::Connection,
+    key: &str,
+    value: &str,
+    terminal_id: &str,
+) -> Result<(), AppError> {
+    Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
 }
 
 #[cfg(test)]
@@ -919,7 +1142,13 @@ mod tests {
     #[test]
     fn set_setting_persists_and_get_returns_it() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "payment.stripe_key", "sk_test_abc123").unwrap();
+        run_set_setting(
+            &conn,
+            "payment.stripe_key",
+            "sk_test_abc123",
+            "test-terminal",
+        )
+        .unwrap();
         let result = run_get_setting(&conn, "payment.stripe_key").unwrap();
         assert_eq!(result, Some("sk_test_abc123".into()));
     }
@@ -927,8 +1156,8 @@ mod tests {
     #[test]
     fn set_setting_overwrites_previous_value() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "my.key", "v1").unwrap();
-        run_set_setting(&conn, "my.key", "v2").unwrap();
+        run_set_setting(&conn, "my.key", "v1", "test-terminal").unwrap();
+        run_set_setting(&conn, "my.key", "v2", "test-terminal").unwrap();
         let result = run_get_setting(&conn, "my.key").unwrap();
         assert_eq!(result, Some("v2".into()));
     }
@@ -936,18 +1165,37 @@ mod tests {
     #[test]
     fn set_setting_empty_string_clears_value() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "key", "hello").unwrap();
-        run_set_setting(&conn, "key", "").unwrap();
+        run_set_setting(&conn, "key", "hello", "test-terminal").unwrap();
+        run_set_setting(&conn, "key", "", "test-terminal").unwrap();
         let result = run_get_setting(&conn, "key").unwrap();
         assert_eq!(result, Some("".into()));
+    }
+
+    /// After wiring ADR #22, `run_set_setting` writes a delta row
+    /// in addition to updating the settings table. This test verifies
+    /// the Tauri command layer actually produces delta records.
+    #[test]
+    fn run_set_setting_writes_delta_row() {
+        let conn = fresh_conn();
+        run_set_setting(&conn, "delta.test", "delta-val", "term-delta").unwrap();
+        // Settings value must be persisted.
+        assert_eq!(
+            Settings::get(&conn, "delta.test").unwrap(),
+            Some("delta-val".into())
+        );
+        // Delta row must exist at version 1.
+        assert_eq!(
+            Settings::get_version(&conn, "delta.test", "term-delta").unwrap(),
+            Some(1)
+        );
     }
 
     #[test]
     fn get_setting_after_multiple_keys_only_returns_requested() {
         let conn = fresh_conn();
-        run_set_setting(&conn, "a", "1").unwrap();
-        run_set_setting(&conn, "b", "2").unwrap();
-        run_set_setting(&conn, "c", "3").unwrap();
+        run_set_setting(&conn, "a", "1", "test-terminal").unwrap();
+        run_set_setting(&conn, "b", "2", "test-terminal").unwrap();
+        run_set_setting(&conn, "c", "3", "test-terminal").unwrap();
         assert_eq!(run_get_setting(&conn, "b").unwrap(), Some("2".into()));
         assert_eq!(run_get_setting(&conn, "d").unwrap(), None);
     }
@@ -1022,5 +1270,26 @@ mod tests {
         let back: HardwareSettingsDto = serde_json::from_value(json).unwrap();
         assert_eq!(back.printer_connection, "Network");
         assert_eq!(back.scanner_device_id, "scanner-2");
+    }
+
+    /// The orphan-cleanup keys in `get_hardware_settings` must stay
+    /// in sync with the constants in `platform_core::settings::keys`.
+    /// If this test fails, update the `hw_keys` array.
+    #[test]
+    fn hw_orphan_keys_match_platform_core_constants() {
+        use platform_core::settings::keys;
+        let expected = [
+            keys::PRINTER_CONNECTION,
+            keys::PRINTER_DEVICE_PATH,
+            keys::PRINTER_PAPER_SIZE,
+            keys::SCANNER_DEVICE_ID,
+            keys::SCANNER_INPUT_MODE,
+        ];
+        // These must match the hw_keys array in get_hardware_settings.
+        assert_eq!(expected[0], "printer.connection");
+        assert_eq!(expected[1], "printer.device_path");
+        assert_eq!(expected[2], "printer.paper_size");
+        assert_eq!(expected[3], "scanner.device_id");
+        assert_eq!(expected[4], "scanner.input_mode");
     }
 }

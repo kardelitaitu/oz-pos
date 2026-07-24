@@ -1,5 +1,7 @@
 # OZ-POS Architecture
 
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE · F1: 10/10 modules active (loyalty included) · F2: 31 ADRs in docs/decisions/ (ADR #30 oz-core modularization & ADR #31 decentralized UI self-registration) · F3: 29 workspace crates/modules · F4: module-README rule met by 10/10 modules · verified: ui/src/features/*/register.tsx self-registration active -->
+
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
 
@@ -29,7 +31,7 @@ codebase from a flat monolith to the modular architecture described below.
 | ---------------- | ---------------------- |
 | Core Backend     | Rust                   |
 | UI Shell         | Tauri v2               |
-| Frontend         | React → SolidJS*       |
+| Frontend         | React                 |
 | Database         | SQLite                 |
 | API              | Rust (Tauri IPC + HTTP)|
 | State Management | Solid Store*           |
@@ -37,7 +39,7 @@ codebase from a flat monolith to the modular architecture described below.
 | Testing          | Rust Test + Playwright |
 | Documentation    | Markdown + ADRs        |
 
-*\*Front-end migration from React to SolidJS is planned but not yet started.
+
 The architecture is designed to be framework-agnostic at the module level.*
 
 ---
@@ -111,7 +113,7 @@ oz-pos/
 │   ├─ api/            Backend HTTP API (today: crates/oz-api/)
 │   └─ ui/             Frontend infrastructure (today: ui/src/frontend/)
 │
-├─ modules/           Business features (top 10 shown; today 9 exist)
+├─ modules/           Business features (top 10 shown; today 10 exist)
 │   ├─ sales/
 │   ├─ inventory/
 │   ├─ crm/
@@ -334,16 +336,17 @@ oz-pos/
 │   ├─ startup/        Shared startup: module registration + event wiring
 │   └─ sync/           Offline-first sync engine (queue, transport, replication, LWW conflict)
 │
-├─ modules/           Business features (9 modules)
+├─ modules/           Business features (10 modules)
 │   ├─ sales/          Point-of-sale (core cart, checkout, sales history)
 │   ├─ inventory/      Product catalog, stock management
-│   ├─ crm/            Customer management, loyalty
+│   ├─ crm/            Customer management
 │   ├─ tax/            Tax rate configuration
 │   ├─ settings/       Feature toggles, store configuration, sync settings
 │   ├─ staff/          Employee management, roles
 │   ├─ reporting/      Dashboard widgets, sales reports
 │   ├─ terminal/       POS terminal management
-│   └─ currency/       Multi-currency + exchange rates
+│   ├─ currency/       Multi-currency + exchange rates
+│   └─ loyalty/        Customer loyalty & rewards management
 │
 ├─ crates/            Low-level utility crates
 │   ├─ oz-core/        Database migrations, domain types, Store, sync_client, events
@@ -379,7 +382,7 @@ oz-pos/
 ├─ ARCHITECTURE.md    This file
 ├─ RESTRUCTURING.md    Phase tracking checklist
 ├─ agents.md           AI agent configuration
-└─ Cargo.toml          Workspace definition (22+ crates)
+└─ Cargo.toml          Workspace definition (29 crates)
 ```
 
 ---
@@ -400,7 +403,7 @@ the detailed task checklist.
 - [x] Extract `foundation/` crate (Money, Currency, contracts, errors, enums)
 - [x] Create `platform/core/` (database, auth, rbac, settings stubs)
 - [x] Create `platform/kernel/` (Kernel struct, lifecycle, dependency resolution)
-- [x] Create 9 business modules (sales, inventory, crm, tax, settings, staff, reporting, terminal, currency)
+- [x] Create 10 business modules (sales, inventory, crm, tax, settings, staff, reporting, terminal, currency, loyalty)
 - [x] Wire all modules into both desktop + tablet clients via shared startup
 
 ### Phase 3 — Event Bus ✅
@@ -441,11 +444,13 @@ Every module must contain:
 - `CHANGELOG.md` — Version history
 
 Every architectural change must create an Architecture Decision Record (ADR).
-The three ADRs written to date are:
+Key ADRs in `docs/decisions/` include:
 ```
 docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md
 docs/decisions/2026-03-01-frontend-restructure.md
+docs/decisions/2026-07-24-domain-module-extraction.md
+docs/decisions/2026-07-24-decentralized-ui-module-registration.md
 ```
 
 ---

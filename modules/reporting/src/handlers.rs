@@ -7,7 +7,7 @@
 use std::sync::{Arc, Mutex};
 
 use foundation::contracts::{EventHandler, ModuleResult};
-use oz_core::events::SaleCompleted;
+use foundation::events::SaleCompleted;
 use rusqlite::Connection;
 use tracing::info;
 

@@ -63,22 +63,21 @@ impl StoreDatabaseManager {
     ///
     /// If the file doesn't exist, creates it with all migrations applied.
     /// Migrations are always run on open to recover from partial failures.
-    /// Uses `entry().or_insert_with()` to prevent TOCTOU races.
+    /// The Mutex guard is held for the entire check-then-insert span, preventing TOCTOU races.
     pub fn open_store(&self, store_id: &str) -> Result<Arc<Mutex<Connection>>, PlatformError> {
         let mut store_dbs = self
             .store_dbs
             .lock()
             .map_err(|e| PlatformError::Internal(format!("store db lock poisoned: {e}")))?;
-        let conn_arc = store_dbs
-            .entry(store_id.to_owned())
-            .or_insert_with(|| match self.open_or_create_connection(store_id) {
-                Ok(conn) => Arc::new(Mutex::new(conn)),
-                Err(e) => {
-                    tracing::error!(store_id, error = %e, "failed to open store database");
-                    Arc::new(Mutex::new(Connection::open_in_memory().unwrap()))
-                }
-            })
-            .clone();
+        if let Some(conn_arc) = store_dbs.get(store_id) {
+            return Ok(conn_arc.clone());
+        }
+        let conn = self.open_or_create_connection(store_id).map_err(|e| {
+            tracing::error!(store_id, error = %e, "failed to open store database");
+            e
+        })?;
+        let conn_arc = Arc::new(Mutex::new(conn));
+        store_dbs.insert(store_id.to_owned(), conn_arc.clone());
         Ok(conn_arc)
     }
 
@@ -133,7 +132,10 @@ impl StoreDatabaseManager {
     pub fn close_store(&self, store_id: &str) {
         let mut store_dbs = match self.store_dbs.lock() {
             Ok(dbs) => dbs,
-            Err(_) => return,
+            Err(poison) => {
+                tracing::error!(store_id, error = %poison, "store_dbs mutex poisoned during close_store");
+                return;
+            }
         };
         if store_dbs.remove(store_id).is_some() {
             tracing::debug!(store_id, "store database closed");
@@ -144,7 +146,10 @@ impl StoreDatabaseManager {
     pub fn close_all(&self) {
         let mut store_dbs = match self.store_dbs.lock() {
             Ok(dbs) => dbs,
-            Err(_) => return,
+            Err(poison) => {
+                tracing::error!(error = %poison, "store_dbs mutex poisoned during close_all");
+                return;
+            }
         };
         let count = store_dbs.len();
         store_dbs.clear();
@@ -337,5 +342,29 @@ mod tests {
             )
             .unwrap();
         assert_eq!(exists, 1);
+    }
+
+    #[test]
+    fn open_store_propagates_error_not_silent_in_memory_fallback() {
+        // Bug #1: open_store caught errors in or_insert_with and fell back
+        // to an in-memory connection, silently losing all data. After the fix,
+        // errors from open_or_create_connection must propagate to the caller.
+        //
+        // Trigger the error by using a regular file as the data_dir —
+        // create_dir_all inside open_or_create_connection will fail because
+        // the "directory" is actually a file.
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("blocker");
+        std::fs::write(&file_path, b"block").unwrap();
+        // Now file_path is a file, not a directory. When open_or_create_connection
+        // calls create_dir_all on file_path.join("store-X.sqlite").parent(),
+        // it'll fail because the parent exists as a file.
+        let manager = StoreDatabaseManager::new(file_path, make_migrations());
+        let result = manager.open_store("test-store");
+        assert!(
+            result.is_err(),
+            "Bug #1: open_store must propagate errors, \
+             not silently return an in-memory fallback"
+        );
     }
 }

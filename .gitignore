@@ -37,6 +37,8 @@ Thumbs.db
 # Windows reserved device name — git picks it up as untracked even though
 # the file doesn't exist on disk. Keeping it ignored silences the noise.
 nul
+ui/nul
+ui/src/nul
 
 # Rust
 **/*.rs.bk

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · guideline doc; ZoomContext.tsx with useAppZoom verified present (scales root font-size by window.innerWidth, line 31/96) matching the fluid-scaling mechanism; UI/UX guidance (rem units, 14-28px clamp, box-shadow:inset focus ring, var(--color-accent)) is convention, not a code-claim to judge ACCURATE/STALE · dated 2026-07-11 -->
+
 # UX Guidelines: Adaptive Rendering & Fluid Scaling
 
 ## 1. The Scaling Strategy

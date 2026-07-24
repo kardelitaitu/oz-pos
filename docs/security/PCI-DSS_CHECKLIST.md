@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (1 minor path nit) · F1 (line 67): reference "architecture/whitepaper.md" -> actual docs/WHITEPAPER.md (cosmetic) · verified accurate against crates/oz-security/src: mask_pan (mask.rs:34), is_valid_pan (mask.rs:67), Keyring::rotate_key (lib.rs:106/205) all present; RBAC via StaffRoles, immutable audit log (no UPDATE/DELETE), cargo audit weekly, INCIDENT_RESPONSE.md all match the checklist; doc already carries a 2026-07-20 "Last updated" date consistent with current code state -->
+
 # PCI-DSS Compliance Checklist
 
 > **Status:** Planning / Review

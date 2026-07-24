@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (2 findings — aspirational plugin API not fully implemented) · F1 (line 101): lists NfcReader as an available v1.0 HAL driver trait; crates/oz-hal/src/traits/ has BarcodeScanner, ReceiptPrinter, CashDrawer, CustomerDisplay but NO NfcReader trait · F2 (lines 179-182): documents `cargo run -p oz-cli -- run-script` and `-- validate-plugins` subcommands; oz-cli Command enum (cli.rs) has Migrate/InitDb/Product/Backup/... and NO run-script or validate-plugins · verified accurate: crates/oz-hal/examples/custom_barcode_scanner.rs exists; oz.register_hook + oz.apply_discount present in oz-lua; sandbox (no fs/network) matches oz-lua -->
+
 # OZ-POS Plugin System
 
 Plugins extend OZ-POS with custom business logic, hardware drivers,

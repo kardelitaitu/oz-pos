@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getUserPreferences, setUserPreferences } from '@/api/settings';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { getUserPreferencesScoped, setUserPreferences } from '@/api/settings';
 
 export type KdsLayout = 'kanban' | 'focus' | 'metro';
 
@@ -53,6 +54,7 @@ export function useKdsPreferences(): {
   loading: boolean;
 } {
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const userId = session?.user_id ?? '';
 
   // Initialize from localStorage first (instant restore), fall back to defaults.
@@ -67,7 +69,11 @@ export function useKdsPreferences(): {
       return;
     }
     // Fetch from server and merge.
-    getUserPreferences(userId)
+    if (!sessionToken) {
+      setLoading(false);
+      return;
+    }
+    getUserPreferencesScoped(sessionToken)
       .then((raw) => {
         const serverPrefs: KdsPreferences = {
           layout: (raw['kds_layout'] as KdsLayout) || DEFAULTS.layout,

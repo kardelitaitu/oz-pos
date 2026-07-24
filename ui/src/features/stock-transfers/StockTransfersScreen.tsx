@@ -14,8 +14,9 @@ import {
   type StockTransferLine,
   type ReceivedLineInput,
 } from '@/api/stockTransfers';
-import { listProducts, type ProductDto } from '@/api/products';
-import { listTerminals, type TerminalDto } from '@/api/terminals';
+import { listProductsScoped, type ProductDto } from '@/api/products';
+import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Card } from '@/components/Card';
@@ -46,6 +47,8 @@ interface LineFormEntry {
 export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +109,8 @@ export default function StockTransfersScreen() {
     try {
       const [data, prodData, termData] = await Promise.all([
         listStockTransfers(),
-        listProducts().catch(() => []),
-        listTerminals().catch(() => []),
+        listProductsScoped(sessionToken).catch(() => []),
+        listTerminalsScoped(sessionToken).catch(() => []),
       ]);
       setTransfers(data);
       setProducts(prodData);
@@ -117,7 +120,7 @@ export default function StockTransfersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -353,8 +356,7 @@ export default function StockTransfersScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
                     <td><Skeleton variant="block" width="4.5rem" height="1.125rem" style={{ borderRadius: 'var(--radius-full)' }} /></td>
@@ -367,7 +369,7 @@ export default function StockTransfersScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -403,8 +405,7 @@ export default function StockTransfersScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((t) => (
+            <tbody>{filtered.map((t) => (
                 <tr key={t.id}>
                   <td className="stock-transfers-cell-number">
                     <button
@@ -449,7 +450,7 @@ export default function StockTransfersScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}
@@ -482,8 +483,7 @@ export default function StockTransfersScreen() {
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {Array.from({ length: 4 }, (_, r) => (
+                  <tbody>{Array.from({ length: 4 }, (_, r) => (
                       <tr key={r}>
                         <td><Skeleton width="4rem" height="0.875rem" /></td>
                         <td><Skeleton width="6rem" height="0.875rem" /></td>
@@ -491,7 +491,7 @@ export default function StockTransfersScreen() {
                         <td><Skeleton width="2rem" height="0.875rem" /></td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
                 <div className="stock-transfers-detail-actions">
                   <Skeleton variant="block" width="7rem" height="2rem" style={{ borderRadius: 'var(--radius-lg)' }} />
@@ -547,8 +547,7 @@ export default function StockTransfersScreen() {
                       <Localized id="stock-transfers-received"><th>Received</th></Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {detail.lines.map((l) => (
+                  <tbody>{detail.lines.map((l) => (
                       <tr key={l.id}>
                         <td>{l.sku}</td>
                         <td>{l.product_name}</td>
@@ -556,7 +555,7 @@ export default function StockTransfersScreen() {
                         <td>{l.received_qty}</td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
 
                 <div className="stock-transfers-detail-actions">

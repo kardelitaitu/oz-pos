@@ -6,9 +6,9 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::models::ProductType;
 use foundation::contracts::{EventHandler, ModuleResult};
-use oz_core::db::Store;
-use oz_core::events::SaleCompleted;
+use foundation::events::SaleCompleted;
 use rusqlite::Connection;
 use tracing::{error, info};
 
@@ -39,128 +39,155 @@ impl InventoryStockHandler {
 
     /// Deduct stock for a single line item, respecting BOM recipes.
     ///
+    /// If `tx` is provided, all deductions run within that transaction
+    /// (the caller is responsible for commit/rollback). If `tx` is None,
+    /// each adjust_stock call creates its own transaction internally
+    /// (legacy behavior for tests that don't need atomicity).
+    ///
     /// If the product has a recipe, deduct each ingredient by
     /// `qty_sold × quantity_required`. Otherwise, deduct the
     /// product itself.
-    #[allow(deprecated)]
-    fn handle_line(&self, store: &Store<'_>, sku: &str, qty: i64) {
-        // Look up the product ID by SKU.
-        let product_id = match store.product_id_by_sku(sku) {
-            Ok(Some(pid)) => pid,
-            Ok(None) => {
+    ///
+    /// Returns `Ok(())` if the deduction succeeded (or was skipped —
+    /// unknown SKUs and non-inventory products are silently skipped).
+    /// Returns `Err` if a deduction failed (e.g. insufficient stock).
+    fn handle_line(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sku: &str,
+        qty: i64,
+    ) -> Result<(), anyhow::Error> {
+        use rusqlite::params;
+
+        // Look up product ID by SKU.
+        let product_id: Option<String> = tx
+            .query_row(
+                "SELECT id FROM products WHERE sku = ?1",
+                params![sku],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let product_id = match product_id {
+            Some(pid) => pid,
+            None => {
                 error!(sku, "inventory handler: product not found by SKU");
-                return;
-            }
-            Err(e) => {
-                error!(sku, error = %e, "inventory handler: failed to look up product");
-                return;
+                return Ok(());
             }
         };
 
-        // Non-inventory product types (service, etc.) have no stock — skip.
-        if let Ok(Some(ref pt)) = store.product_type_by_id(&product_id)
-            && let Some(product_type) = oz_core::ProductType::parse_str(pt)
+        // Check product type
+        let ptype_str: Option<String> = tx
+            .query_row(
+                "SELECT product_type FROM products WHERE id = ?1",
+                params![product_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(ref pt) = ptype_str
+            && let Some(product_type) = ProductType::parse_str(pt)
             && !product_type.tracks_inventory()
         {
             info!(
                 sku,
                 "inventory handler: skipping non-inventory product — no stock to deduct"
             );
-            return;
+            return Ok(());
         }
 
-        // Check if this product has a recipe (BOM ingredients).
-        let ingredients = match store.get_recipe_ingredients(&product_id) {
-            Ok(ings) => ings,
-            Err(e) => {
-                error!(
-                    sku,
-                    error = %e,
-                    "inventory handler: failed to query recipe ingredients"
-                );
-                return;
-            }
-        };
+        // Query recipe ingredients
+        let mut stmt = tx.prepare("SELECT ingredient_product_id, quantity_required FROM product_recipes WHERE parent_product_id = ?1")?;
+        let ings = stmt.query_map(params![product_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+
+        let mut ingredients = Vec::new();
+        for i in ings.flatten() {
+            ingredients.push(i);
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         if ingredients.is_empty() {
-            // Simple product — deduct directly.
-            match store.adjust_stock(sku, -qty) {
-                Ok(new_qty) => {
+            let mut update_stmt = tx.prepare("UPDATE inventory SET qty = qty - ?1, updated_at = ?2 WHERE product_id = ?3 RETURNING qty")?;
+            let new_qty: Option<i64> = update_stmt
+                .query_row(params![qty, now, &product_id], |r| r.get(0))
+                .ok();
+            match new_qty {
+                Some(q) if q >= 0 => {
+                    tx.execute("UPDATE stock_summary SET qty = qty - ?1, updated_at = ?2 WHERE item_id = ?3", params![qty, now, &product_id]).ok();
                     info!(
                         sku,
                         qty = -qty,
-                        new_qty,
+                        new_qty = q,
                         "inventory handler: stock decremented for simple product"
                     );
                 }
-                Err(e) => {
-                    error!(
-                        sku,
-                        error = %e,
-                        "inventory handler: failed to decrement stock"
-                    );
+                _ => {
+                    return Err(anyhow::anyhow!("insufficient stock for SKU {sku}"));
                 }
             }
         } else {
-            // Composite product — deduct each ingredient by qty × quantity_required.
-            for ingredient in &ingredients {
-                let ingredient_sku =
-                    match store.product_sku_by_id(&ingredient.ingredient_product_id) {
-                        Ok(Some(sku)) => sku,
-                        Ok(None) => {
-                            error!(
-                                ingredient_id = %ingredient.ingredient_product_id,
-                                "inventory handler: ingredient product not found by ID"
-                            );
-                            continue;
-                        }
-                        Err(e) => {
-                            error!(
-                                ingredient_id = %ingredient.ingredient_product_id,
-                                error = %e,
-                                "inventory handler: failed to look up ingredient SKU"
-                            );
-                            continue;
-                        }
-                    };
+            for (ingredient_product_id, quantity_required) in ingredients {
+                let ingredient_sku: Option<String> = tx
+                    .query_row(
+                        "SELECT sku FROM products WHERE id = ?1",
+                        params![&ingredient_product_id],
+                        |r| r.get(0),
+                    )
+                    .ok();
 
-                let deduct_qty = qty * ingredient.quantity_required;
-                match store.adjust_stock(&ingredient_sku, -deduct_qty) {
-                    Ok(new_qty) => {
+                let deduct_qty = qty * quantity_required;
+                let mut update_stmt = tx.prepare("UPDATE inventory SET qty = qty - ?1, updated_at = ?2 WHERE product_id = ?3 RETURNING qty")?;
+                let new_qty: Option<i64> = update_stmt
+                    .query_row(params![deduct_qty, now, &ingredient_product_id], |r| {
+                        r.get(0)
+                    })
+                    .ok();
+                match new_qty {
+                    Some(q) if q >= 0 => {
+                        tx.execute("UPDATE stock_summary SET qty = qty - ?1, updated_at = ?2 WHERE item_id = ?3", params![deduct_qty, now, &ingredient_product_id]).ok();
                         info!(
-                            sku = %ingredient_sku,
+                            sku = ingredient_sku.as_deref().unwrap_or(""),
                             qty = -deduct_qty,
                             recipe_for = sku,
-                            new_qty,
+                            new_qty = q,
                             "inventory handler: BOM ingredient stock decremented"
                         );
                     }
-                    Err(e) => {
-                        error!(
-                            sku = %ingredient_sku,
-                            recipe_for = sku,
-                            error = %e,
-                            "inventory handler: failed to decrement BOM ingredient stock"
-                        );
+                    _ => {
+                        return Err(anyhow::anyhow!(
+                            "insufficient stock for SKU {}",
+                            ingredient_sku.as_deref().unwrap_or(sku)
+                        ));
                     }
                 }
             }
         }
+        Ok(())
     }
 }
 
 impl EventHandler<SaleCompleted> for InventoryStockHandler {
     fn handle(&self, event: &SaleCompleted) -> ModuleResult {
-        let conn = self
+        let mut conn = self
             .db
             .lock()
             .map_err(|e| anyhow::anyhow!("inventory handler: db lock failed: {e}"))?;
-        let store = Store::new(&conn);
+        let tx = conn.transaction()?;
 
         for line in &event.line_items {
-            self.handle_line(&store, &line.sku, line.qty);
+            if let Err(e) = self.handle_line(&tx, &line.sku, line.qty) {
+                return Err(anyhow::anyhow!(
+                    "inventory handler: deduction failed for {}: {e}",
+                    line.sku
+                ));
+            }
         }
 
+        tx.commit()
+            .map_err(|e| anyhow::anyhow!("inventory handler: transaction commit failed: {e}"))?;
         Ok(())
     }
 }
@@ -168,6 +195,7 @@ impl EventHandler<SaleCompleted> for InventoryStockHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::db::Store;
     use oz_core::migrations;
     use platform_kernel::EventBus;
 
@@ -182,7 +210,9 @@ mod tests {
         db.execute_batch(
             "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
              VALUES ('p1', 'COFFEE', 'Coffee', 350, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
-             INSERT INTO inventory (product_id, qty, updated_at) VALUES ('p1', 10, '2025-01-01T00:00:00.000Z');",
+             INSERT INTO inventory (product_id, qty, updated_at) VALUES ('p1', 10, '2025-01-01T00:00:00.000Z');
+             INSERT INTO stock_summary (item_id, location_id, qty, updated_at)
+             VALUES ('p1', '01926b3a-0000-7000-8000-000000000001', 10, '2025-01-01T00:00:00.000Z');",
         )
         .unwrap();
     }
@@ -296,6 +326,10 @@ mod tests {
                 ('bun', 100, '2025-01-01T00:00:00.000Z'),
                 ('patty', 50, '2025-01-01T00:00:00.000Z'),
                 ('cheese', 200, '2025-01-01T00:00:00.000Z');
+             INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES
+                ('bun', '01926b3a-0000-7000-8000-000000000001', 100, '2025-01-01T00:00:00.000Z'),
+                ('patty', '01926b3a-0000-7000-8000-000000000001', 50, '2025-01-01T00:00:00.000Z'),
+                ('cheese', '01926b3a-0000-7000-8000-000000000001', 200, '2025-01-01T00:00:00.000Z');
              INSERT INTO product_recipes (id, parent_product_id, ingredient_product_id, quantity_required, unit) VALUES
                 ('r1', 'burger', 'bun', 1, 'pcs'),
                 ('r2', 'burger', 'patty', 1, 'pcs'),
@@ -495,6 +529,78 @@ mod tests {
     }
 
     #[test]
+    fn handler_partial_deduction_leaves_inconsistent_stock() {
+        // Bug #1: When a sale has multiple line items and one deduction
+        // fails (e.g. insufficient stock), earlier successful deductions
+        // are already committed because each adjust_stock() call creates
+        // its own transaction. This leaves the inventory in an inconsistent
+        // state — some products deducted, others not — for a single sale.
+        let db = fresh_db();
+        {
+            let conn = db.lock().unwrap();
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, created_at, updated_at) VALUES
+                    ('p-coffee', 'COFFEE', 'Coffee', 350, 'USD', 'retail', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                    ('p-tea', 'TEA', 'Tea', 250, 'USD', 'retail', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+                 INSERT INTO inventory (product_id, qty, updated_at) VALUES
+                    ('p-coffee', 5, '2025-01-01T00:00:00.000Z'),
+                    ('p-tea', 1, '2025-01-01T00:00:00.000Z');
+                 INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES
+                    ('p-coffee', '01926b3a-0000-7000-8000-000000000001', 5, '2025-01-01T00:00:00.000Z'),
+                    ('p-tea', '01926b3a-0000-7000-8000-000000000001', 1, '2025-01-01T00:00:00.000Z');",
+            )
+            .unwrap();
+        }
+
+        let handler = InventoryStockHandler::new(db.clone());
+
+        // COFFEE has 5, TEA has 1. Sell 2 coffee (OK) + 3 tea (FAILS — only 1 in stock).
+        let event = SaleCompleted {
+            sale_id: "sale-partial-1".into(),
+            store_id: None,
+            line_items: vec![
+                oz_core::events::SaleCompletedLine {
+                    sku: "COFFEE".into(),
+                    qty: 2,
+                    unit_price_minor: 350,
+                    tax_minor: 0,
+                    tax_rate_id: None,
+                },
+                oz_core::events::SaleCompletedLine {
+                    sku: "TEA".into(),
+                    qty: 3,
+                    unit_price_minor: 250,
+                    tax_minor: 0,
+                    tax_rate_id: None,
+                },
+            ],
+            total_minor: 1450,
+            currency: "USD".into(),
+            customer_id: None,
+        };
+
+        let result = handler.handle(&event);
+        // After the fix, deduction failure propagates as an error and the
+        // transaction rolls back — all deductions are atomic.
+        assert!(
+            result.is_err(),
+            "handler should return error when deduction fails"
+        );
+        assert!(
+            result.unwrap_err().to_string().contains("TEA"),
+            "error should mention the failing SKU"
+        );
+
+        let conn = db.lock().unwrap();
+        let store = Store::new(&conn);
+        let coffee_id = store.product_id_by_sku("COFFEE").unwrap().unwrap();
+        let qty = store.get_stock(&coffee_id).unwrap();
+        // FIX VERIFIED: COFFEE stock is still 5 because the transaction
+        // rolled back — all-or-nothing atomicity.
+        assert_eq!(qty, 5, "COFFEE stock must be 5 (tx rolled back)");
+    }
+
+    #[test]
     fn handler_multiple_line_items() {
         let db = fresh_db();
         {
@@ -503,7 +609,9 @@ mod tests {
             conn.execute_batch(
                 "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
                  VALUES ('p2', 'TEA', 'Tea', 250, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
-                 INSERT INTO inventory (product_id, qty, updated_at) VALUES ('p2', 15, '2025-01-01T00:00:00.000Z');",
+                 INSERT INTO inventory (product_id, qty, updated_at) VALUES ('p2', 15, '2025-01-01T00:00:00.000Z');
+                 INSERT INTO stock_summary (item_id, location_id, qty, updated_at)
+                 VALUES ('p2', '01926b3a-0000-7000-8000-000000000001', 15, '2025-01-01T00:00:00.000Z');",
             )
             .unwrap();
             seed_product(&conn);

@@ -534,10 +534,9 @@
   .app-sidebar.collapsed .role-badge {
     display: flex;
   }
-
-.app-sidebar.collapsed .app-sidebar-section-header,
-.app-sidebar.collapsed .app-sidebar-chevron,
-.app-sidebar.collapsed .app-nav-item span:not(.app-nav-icon) {
+  .app-sidebar.collapsed .app-sidebar-section-header,
+  .app-sidebar.collapsed .app-sidebar-chevron,
+  .app-sidebar.collapsed .app-nav-item span:not(.app-nav-icon) {
     display: revert;
   }
   .app-sidebar.collapsed .app-sidebar-section-items {
@@ -547,7 +546,6 @@
     justify-content: flex-start;
     padding: var(--space-2) var(--space-3);
   }
-
   .sidebar-toggle {
     display: inline-flex;
   }

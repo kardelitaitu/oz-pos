@@ -75,24 +75,6 @@ export default defineConfig({
 
     dangerouslyIgnoreUnhandledErrors: true,
 
-    // Suppress noisy console output during tests. Mirrors the
-    // console.error/console.warn patches in test-setup.ts — both
-    // are kept for defense-in-depth (vitest onConsoleLog intercepts
-    // at the runner level; test-setup patches at the jsdom level).
-    onConsoleLog(log, _type) {
-      if (log.includes('[@fluent/react]') && log.includes('did not match any messages')) {
-        return false;
-      }
-      if (log.includes('was not wrapped in act') || log.includes('flushSync was called from inside')) {
-        return false;
-      }
-      if (log.includes('validateDOMNesting') || log.includes('punycode module is deprecated')) {
-        return false;
-      }
-    },
-
-
-
 
     // ── Coverage ────────────────────────────────────────────────────────
     //

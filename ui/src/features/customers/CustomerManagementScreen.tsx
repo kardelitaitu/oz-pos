@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
-  listCustomers,
+  listCustomersScoped,
   createCustomer,
   updateCustomer,
   deleteCustomer,
@@ -38,6 +39,8 @@ const EMPTY_FORM: FormData = {
 export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const userId = session?.user_id ?? '';
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,14 +57,14 @@ export default function CustomerManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listCustomers();
+      const data = await listCustomersScoped(sessionToken);
       setCustomers(data);
     } catch {
       // IPC unavailable.
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -208,8 +211,7 @@ export default function CustomerManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td>
                       <div className="customer-mgmt-cell-name">
@@ -226,7 +228,7 @@ export default function CustomerManagementScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -278,8 +280,7 @@ export default function CustomerManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {filteredCustomers.map((customer) => (
+            <tbody>{filteredCustomers.map((customer) => (
                 <tr key={customer.id}>
                   {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs */}
                   <td>
@@ -324,7 +325,7 @@ export default function CustomerManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
               </div>
       )}

@@ -1,18 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
-  listProducts,
-  createProduct,
-  updateProduct,
-  deleteProduct,
+  listProductsScoped,
+  createProductScoped,
+  updateProductScoped,
+  deleteProductScoped,
   listCategories,
   type ProductDto,
   type CategoryDto,
 } from '@/api/products';
 import { listTaxRates, type TaxRateDto } from '@/api/tax';
-import { listCurrencies, type CurrencyDto } from '@/api/currency';
+import { listCurrenciesScoped, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -66,9 +65,8 @@ function dtoToProduct(dto: ProductDto): Product {
 
 /** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
-  const { session } = useAuth();
-  const { sessionToken } = useWorkspace();
-  const userId = session?.user_id ?? '';
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);
@@ -81,6 +79,7 @@ export default function ProductManagementScreen() {
   const modalExit = useExitAnimation(showModal, () => setShowModal(false));
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
   const [variantProductName, setVariantProductName] = useState<string>('');
@@ -119,7 +118,7 @@ export default function ProductManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dtos, rates, cats, currencyList] = await Promise.all([listProducts(), listTaxRates(), listCategories(), listCurrencies()]);
+      const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRates(), listCategories(), listCurrenciesScoped(sessionToken)]);
       setProductDtos(dtos);
       setProducts(dtos.map(dtoToProduct));
       setTaxRates(rates);
@@ -137,6 +136,7 @@ export default function ProductManagementScreen() {
   const openCreate = useCallback(() => {
     setForm(EMPTY_FORM);
     setEditingSku(null);
+    setSaveError(null);
     setShowModal(true);
   }, []);
 
@@ -154,18 +154,22 @@ export default function ProductManagementScreen() {
       taxRateIds: dto?.tax_rate_ids ?? [],
     });
     setEditingSku(p.sku);
+    setSaveError(null);
     setShowModal(true);
   }, [productDtos]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const priceMinor = parseInt(form.priceMinor, 10);
-      if (Number.isNaN(priceMinor) || priceMinor < 0) return;
+      if (Number.isNaN(priceMinor) || priceMinor < 0) {
+        setSaveError(l10n.getString('product-mgmt-error-invalid-price'));
+        return;
+      }
 
       if (editingSku) {
-        await updateProduct({
-          userId,
+        await updateProductScoped(sessionToken, {
           sku: editingSku,
           name: form.name,
           priceMinor,
@@ -176,8 +180,7 @@ export default function ProductManagementScreen() {
           taxRateIds: form.taxRateIds,
         });
       } else {
-        await createProduct({
-          userId,
+        await createProductScoped(sessionToken, {
           sku: form.sku,
           name: form.name,
           priceMinor,
@@ -191,23 +194,27 @@ export default function ProductManagementScreen() {
       }
       setShowModal(false);
       await load();
-    } catch {
-      // Error handling.
+    } catch (err) {
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : l10n.getString('product-mgmt-error-save')
+      );
     } finally {
       setSaving(false);
     }
-  }, [form, editingSku, load, userId]);
+  }, [form, editingSku, load, sessionToken, l10n]);
 
   const confirmDelete = useCallback(async (sku: string) => {
     setDeleting(sku);
     try {
-      await deleteProduct({ userId, sku });
+      await deleteProductScoped(sessionToken, sku);
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
     }
-  }, [load, userId]);
+  }, [load, sessionToken]);
 
   return (
     <div className="product-mgmt">
@@ -258,8 +265,7 @@ export default function ProductManagementScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="5rem" height="0.75rem" /></td>
                     <td><Skeleton variant="text" width="8rem" height="0.875rem" /></td>
@@ -275,7 +281,7 @@ export default function ProductManagementScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -306,8 +312,7 @@ export default function ProductManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>
-              {products.map((p) => (
+            <tbody>{products.map((p) => (
                 <tr key={p.sku}>
                   <td className="product-mgmt-cell-sku">{p.sku}</td>
                   <td>{p.name}</td>
@@ -380,7 +385,7 @@ export default function ProductManagementScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}
@@ -567,6 +572,11 @@ export default function ProductManagementScreen() {
             </div>
 
             <div className="product-mgmt-modal-actions">
+              {saveError && (
+                <div className="product-mgmt-modal-error" role="alert">
+                  {saveError}
+                </div>
+              )}
               <Localized id="product-mgmt-btn-cancel">
                 <Button variant="ghost" onClick={modalExit.requestClose} disabled={saving}>Cancel</Button>
               </Localized>

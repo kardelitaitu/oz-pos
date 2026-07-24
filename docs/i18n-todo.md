@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (1 finding — tracked gap now closed) · F1: the doc lists 4 bundles (gift-cards.id.ftl, purchasing.id.ftl, stock-counting.id.ftl, stock-transfers.id.ftl) as EXCLUDED/byte-identical awaiting translation, but all 4 .id.ftl files now EXIST in ui/src/locales/ — the gap it tracks is closed; the table + "Total gap: 4 bundles" is outdated · verified: scripts/translate-stub.py, verify-bundle-parity.py, lint-i18n.sh all exist; fallback-path rationale remains valid · re-audit when the id bundles are confirmed fully translated or the rows are removed -->
+
 # i18n followup: 4 untranslated Indonesian bundles
 
 When `feat(i18n): ...` lands, the survey of `ui/src/locales/*.id.ftl`

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (1 finding — status outdated) · Finding: card is marked "PENDING" but the implementation has LANDed. Verified: SyncPriority enum (Critical=0/Normal=1/Low=2) at crates/oz-core/src/offline.rs:12 with priority field on OfflineQueueItem (offline.rs:61) + default_priority(); per-route ConcurrencyLimitLayer::new(10) API + ::new(40) sync at apps/cloud-server/src/main.rs:343-344; #[tokio::main(flavor="multi_thread", worker_threads=2)] at main.rs:65; event handlers enqueue priorities (platform/startup/src/event_handlers.rs). Status "PENDING" understates reality. Baseline/file references accurate. -->
+
 # P-2 — Sync priority tiers & concurrency limits
 
 - **Status:** PENDING

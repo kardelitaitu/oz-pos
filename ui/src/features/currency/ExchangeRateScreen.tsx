@@ -147,8 +147,7 @@ export default function ExchangeRateScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 4 }).map((_, r) => (
+              <tbody>{Array.from({ length: 4 }).map((_, r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="3rem" /></td>
                     <td><Skeleton variant="text" width="3rem" /></td>
@@ -158,7 +157,7 @@ export default function ExchangeRateScreen() {
                     <td><Skeleton variant="block" width="3.5rem" height="1.5rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -195,8 +194,7 @@ export default function ExchangeRateScreen() {
                 <th aria-label={l10n.getString('currency-table-actions')}> </th>
               </tr>
             </thead>
-            <tbody>
-              {rates.map((r) => (
+            <tbody>{rates.map((r) => (
                 <tr key={r.id}>
                   <td>{r.from_currency}</td>
                   <td>{r.to_currency}</td>
@@ -218,7 +216,7 @@ export default function ExchangeRateScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, claims verified) · MAX_BATCH_BYTES=64KB at platform/sync/src/lib.rs:751; gzip compressed (transport.rs:124 .gzip(true)); AnchorExpired variant present; build_batches present; SyncPriority enum (0=Critical,1=Normal,2=Low) in crates/oz-core/src/offline.rs; migration 073_offline_queue_priority.sql exists; /metrics + /health endpoints in apps/cloud-server/src/main.rs; all 3 phase spec files exist -->
+
 # ADR #10: Sync Performance Strategy
 
 **Status:** Implemented (all 3 phases complete as of 2026-07-15)

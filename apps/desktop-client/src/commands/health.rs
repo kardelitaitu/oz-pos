@@ -2,9 +2,11 @@
 //! the About dialog. No state required.
 
 use serde::Serialize;
+use tauri::State;
 use tauri::command;
 
 use crate::error::AppError;
+use crate::state::AppState;
 
 /// Liveness probe. Returns `Ok("pong")` if the Tauri runtime is alive.
 #[command]
@@ -28,6 +30,22 @@ pub struct VersionInfo {
 #[command]
 /// Version.
 pub async fn version() -> Result<VersionInfo, AppError> {
+    Ok(VersionInfo {
+        name: env!("CARGO_PKG_NAME"),
+        version: env!("CARGO_PKG_VERSION"),
+        rust_version: env!("CARGO_PKG_RUST_VERSION"),
+        target: option_env!("TARGET").unwrap_or("unknown"),
+    })
+}
+
+/// Version info resolved from a session token. ADR #7.
+/// Validates the session token and returns the same compile-time version info.
+#[command]
+pub async fn version_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<VersionInfo, AppError> {
+    let _session = state.resolve_session(&session_token)?;
     Ok(VersionInfo {
         name: env!("CARGO_PKG_NAME"),
         version: env!("CARGO_PKG_VERSION"),

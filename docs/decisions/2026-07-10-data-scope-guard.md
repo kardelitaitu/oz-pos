@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · resolve_scope() verified at apps/desktop-client/src/state.rs:310; scripts/verify-no-raw-params.sh exists; ui/src/contexts/WorkspaceContext.tsx exists; adjust_stock_scoped present with #[deprecated] old variant (commands/products.rs:92) — the _scoped migration pattern matches; the 84-command migration count is internally consistent with the repo's _scoped variants and the grep-based guard returns 0 violations · Status "Implemented (2026-07-10)" consistent · Custom Clippy lint left as future enhancement (doc says so) -->
+
 # ADR #7: Data Scope Guard & Query Enforcement
 
 **Status:** Implemented (2026-07-10)

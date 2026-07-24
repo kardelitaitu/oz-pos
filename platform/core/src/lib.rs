@@ -16,6 +16,7 @@ pub mod database;
 pub mod error;
 pub mod rbac;
 pub mod settings;
+pub mod terminal_profile;
 
 pub use database::StoreDatabaseManager;
 pub use error::PlatformError;

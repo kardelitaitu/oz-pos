@@ -95,6 +95,11 @@ pub use shifts::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 
 /// Typed CRUD facade for the OZ-POS database.
 ///
+/// > **ADR #30 Modularization Note**: New code should prefer invoking dedicated
+/// > domain repositories (e.g. `SalesRepository`, `InventoryRepository`, `CrmRepository`,
+/// > `LoyaltyRepository`, `StaffRepository`, `TerminalRepository`, `SettingsRepository`,
+/// > `TaxRepository`, `ReportingRepository`) directly on `&Connection` / `&Transaction`.
+///
 /// All methods borrow `&self` and operate on the underlying
 /// [`Connection`] directly. The caller is responsible for
 /// synchronisation (e.g. `Mutex<Connection>`) and transaction
@@ -230,7 +235,9 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
     let sku_str: String = row.get("sku")?;
     let cur_str: String = row.get("currency")?;
     let barcode_raw: Option<String> = row.get("barcode")?;
-    let product_type_str: Option<String> = row.get("product_type").ok();
+    // Use Option<String> for nullable column — reads NULL as None
+    // rather than swallowing errors via .ok().
+    let product_type_str: Option<String> = row.get("product_type")?;
     Ok(crate::Product {
         id: row.get("id")?,
         sku: crate::Sku::new(sku_str),

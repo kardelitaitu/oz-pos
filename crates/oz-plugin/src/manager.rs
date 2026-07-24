@@ -140,7 +140,7 @@ impl PluginManager {
                     // A malicious or buggy plugin could otherwise give 1000% discounts
                     // or negative prices.
                     if !(0..=100).contains(&percent) {
-                        return Err(rlua::Error::RuntimeError(format!(
+                        return Err(mlua::Error::RuntimeError(format!(
                             "oz.apply_discount: percent must be between 0 and 100, got {percent}"
                         )));
                     }
@@ -171,11 +171,11 @@ impl PluginManager {
             // oz.on(event, callback) — registers a Lua function callback
             let br = bridge.clone();
             let on_fn = lua
-                .create_function(move |lua, (event, callback): (String, rlua::Function)| {
+                .create_function(move |lua, (event, callback): (String, mlua::Function)| {
                     if let Ok(mut guard) = br.lock() {
                         guard
                             .register(lua, event, callback)
-                            .map_err(|e| rlua::Error::RuntimeError(format!("oz.on error: {e}")))?;
+                            .map_err(|e| mlua::Error::RuntimeError(format!("oz.on error: {e}")))?;
                     }
                     Ok(())
                 })
@@ -310,14 +310,14 @@ impl PluginManager {
         tbl.set("lines", lines_tbl)
             .map_err(|e| LuaError::Script(e.to_string()))?;
 
-        self.fire_event("sale.before_complete", rlua::Value::Table(tbl))
+        self.fire_event("sale.before_complete", mlua::Value::Table(tbl))
     }
 
     /// Fire an event to all Lua callbacks registered via `oz.on()`.
     ///
     /// This calls the `LuaEventBridge` to dispatch the event to all
     /// registered Lua function callbacks.
-    pub fn fire_bridge_event(&self, event: &str, args: rlua::Value) -> Result<(), LuaError> {
+    pub fn fire_bridge_event(&self, event: &str, args: mlua::Value) -> Result<(), LuaError> {
         if let Ok(guard) = self.bridge.lock() {
             guard.fire(self.runtime.inner(), event, args)
         } else {
@@ -326,7 +326,7 @@ impl PluginManager {
     }
 
     /// Fire an event to all registered hook functions by name.
-    pub fn fire_event(&self, event: &str, args: rlua::Value) -> Result<(), LuaError> {
+    pub fn fire_event(&self, event: &str, args: mlua::Value) -> Result<(), LuaError> {
         let func_names = self
             .hook_names
             .lock()
@@ -334,7 +334,7 @@ impl PluginManager {
             .unwrap_or_default();
 
         for func_name in &func_names {
-            let func: rlua::Function = {
+            let func: mlua::Function = {
                 let globals = self.runtime.inner().globals();
                 match globals.get(func_name.as_str()) {
                     Ok(f) => f,
@@ -887,7 +887,7 @@ oz.register_hook("sale.before_complete", "hook_b")
         let mgr = PluginManager::new(dir.path()).unwrap();
 
         let _lua = mgr.runtime.inner();
-        let value = rlua::Value::Nil;
+        let value = mlua::Value::Nil;
         let result = mgr.fire_event("some.event.never_registered", value);
         assert!(result.is_ok());
         assert!(mgr.drain_pending_discounts().is_empty());
@@ -906,7 +906,7 @@ oz.register_hook("custom.event", "custom_hook")
 
         let lua = mgr.runtime.inner();
         let value = lua.create_table().unwrap();
-        mgr.fire_event("custom.event", rlua::Value::Table(value))
+        mgr.fire_event("custom.event", mlua::Value::Table(value))
             .unwrap();
 
         let discounts = mgr.drain_pending_discounts();
@@ -925,7 +925,7 @@ oz.register_hook("missing.event", "no_such_function")
         let mgr = PluginManager::new(&plugins_root).unwrap();
 
         let _lua = mgr.runtime.inner();
-        let value = rlua::Value::Nil;
+        let value = mlua::Value::Nil;
         let result = mgr.fire_event("missing.event", value);
         // Should not panic; the missing function is logged and skipped.
         assert!(result.is_ok());

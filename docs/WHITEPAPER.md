@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (1 key finding — inaccurate HAL description) · F1 (line 77): "Implemented in Rust using the embedded-hal traits" is inaccurate — oz-hal uses #[async_trait] async traits (e.g. crates/oz-hal/src/traits/barcode.rs), NOT embedded-hal; embedded-hal 0.2 is only listed in root Cargo.toml and is referenced by no crate source. Line 78 "unified API (Device::connect/read/write)" partially wrong: connect() exists on some traits but read()/write() are not the universal HAL API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) -->
+
 # Whitepaper: OZ-POS Software Framework
 
 ## Introduction

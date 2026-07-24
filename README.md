@@ -1,6 +1,8 @@
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square) [![Nightly CI](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml/badge.svg)](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml)
 
 
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE · ADR #30 domain modularization complete across modules/* · ADR #31 decentralized UI self-registration active via registerAllFeatures() · F1: 98 .sql migration files · F2: 212 test files (3197+ tests) · F3: 72 .ftl Fluent translation files · F4: payment drivers (Stripe, Mock, QRIS, Square) · F5: 618 #[tauri::command] IPC endpoints -->
+
 # OZ-POS
 
 > **A modular, offline-first Point-of-Sale platform built with Rust and Tauri v2.**

@@ -219,9 +219,24 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // LICENSE
   // ═══════════════════════════════════════════════════════════════
 
+  'list_all_features': () => ({
+    features: [
+      { key: 'sales', name: 'Sales', description: 'Point of sale transactions', group: 'Core', enabled: true, dependencies: [] },
+      { key: 'inventory', name: 'Inventory', description: 'Stock management', group: 'Core', enabled: true, dependencies: ['sales'] },
+      { key: 'reporting', name: 'Reporting', description: 'Sales and inventory reports', group: 'Reporting', enabled: false, dependencies: ['sales'] },
+      { key: 'staff', name: 'Staff', description: 'Staff management', group: 'Staff', enabled: true, dependencies: [] },
+      { key: 'settings', name: 'Settings', description: 'System settings', group: 'Core', enabled: true, dependencies: [] },
+    ],
+  }),
+  'set_feature': () => ({ success: true, features: [], auto_enabled: [] }),
+  'set_features_bulk': () => ({ features: [] }),
+
+  'plugin:updater|check': () => null,
+
   'get_license_status': () => ({ is_valid: true, license_type: 'Pro', expires_at: null, is_active: true, status: 'valid', payload: null, message: null }),
   'check_license_status': () => ({ tenantId: 'tenant-1', status: 'active', tier: 'Pro', active: true, expiresAt: null, graceUntil: null, maxStores: 5 }),
   'get_machine_id': () => 'mock-machine-id-001',
+  'get_device_id': () => 'mock-device-id-001',
   'activate_license': () => true,
   'renew_license': () => true,
 
@@ -241,7 +256,17 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // WORKSPACES (ADR #4 / #7)
   // ═══════════════════════════════════════════════════════════════
 
+  'list_all_workspaces': () => [
+    { key: 'store-pos', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart' },
+    { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant' },
+    { key: 'kds', name: 'Kitchen Display', description: 'Order display', icon: 'utensils' },
+    { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
+    { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
+  ],
+  'list_workspaces': () => MOCK_WORKSPACES,
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
+  'list_workspace_screens': () => [],
+  'list_workspace_screens_scoped': () => [],
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
     return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
@@ -308,10 +333,35 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
   }),
   'set_receipt_settings': () => null,
+  'get_report_schedule': () => ({
+    enabled: false,
+    cadence: 'daily',
+    report_types: ['daily_revenue', 'top_products'],
+    recipients: ['admin@example.com'],
+    send_at_time: '08:00',
+    timezone: 'UTC',
+    lookback_days: 1,
+  }),
+  'save_report_schedule': () => null,
+
+  'load_topology': () => ({
+    nodes: [
+      { id: 'store-1', label: 'TOKO TEST', type: 'store', x: 100, y: 100, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
+      { id: 'ws-1', label: 'Store POS', type: 'workspace', x: 300, y: 50, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
+      { id: 'ws-2', label: 'Restaurant', type: 'workspace', x: 300, y: 180, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
+    ],
+    wires: [
+      { id: 'wire-1', from: 'store-1', fromPort: 'right', to: 'ws-1', toPort: 'left' },
+      { id: 'wire-2', from: 'store-1', fromPort: 'bottom', to: 'ws-2', toPort: 'left' },
+    ],
+  }),
+  'save_topology': () => null,
+
   'set_receipt_settings_scoped': () => null,
 
   'get_enabled_features': () => ({ features: ['sales', 'inventory', 'reporting', 'staff', 'settings'] }),
   'get_setting': () => '',
+  'set_setting_scoped': () => null,
 
   'get_user_preferences': () => ({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' }),
   'get_user_preferences_scoped': () => ({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' }),
@@ -715,6 +765,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'compute_cart_tax': () => 0,
+  'compute_cart_tax_scoped': () => 0,
   'list_tax_rates': () => [],
   'create_tax_rate': () => null,
   'update_tax_rate': () => null,
@@ -822,6 +873,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_sync_settings': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
   'update_sync_settings': () => null,
   'sync_run': () => ({ synced: 0, failed: 0, error: null }),
+  'offline_queue_status_summary': () => ({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 }),
+
   'pending_sync_count': () => 0,
   'sync_pull': () => ({ productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: null }),
   'test_sync_connection': () => ({ ok: true, status: 'connected', latencyMs: 12 }),

@@ -101,6 +101,10 @@ export interface PullResult {
 export const getSyncSettings = (): Promise<SyncSettingsDto> =>
   loggedInvoke<SyncSettingsDto>('get_sync_settings');
 
+/** Get cloud sync settings resolved from a session token. ADR #7. */
+export const getSyncSettingsScoped = (sessionToken: string): Promise<SyncSettingsDto> =>
+  loggedInvoke<SyncSettingsDto>('get_sync_settings_scoped', { sessionToken });
+
 /** Update the cloud sync settings. */
 export const updateSyncSettings = (args: UpdateSyncSettingsArgs): Promise<void> =>
   loggedInvoke<void>('update_sync_settings', { args });

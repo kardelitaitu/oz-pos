@@ -810,14 +810,19 @@ impl Store<'_> {
         // stock_summary.composite-PK via the per-location index from
         // migration 089. Falls back to 0 when no prior movements exist
         // (forward-compatible with pre-079 seed data).
-        let current_qty: i64 = tx
-            .query_row(
-                "SELECT COALESCE(qty, 0) FROM stock_summary \
-                 WHERE item_id = ?1 AND location_id = ?2",
-                rusqlite::params![product_id, location_id.as_str()],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+        //
+        // Explicit match guards against DB errors: QueryReturnedNoRows → 0
+        // (no stock at this location), any other error → propagate.
+        let current_qty: i64 = match tx.query_row(
+            "SELECT COALESCE(qty, 0) FROM stock_summary \
+             WHERE item_id = ?1 AND location_id = ?2",
+            rusqlite::params![product_id, location_id.as_str()],
+            |row| row.get(0),
+        ) {
+            Ok(q) => q,
+            Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+            Err(e) => return Err(CoreError::Db(e)),
+        };
 
         let mut allow_negative = false;
         if let Some(t_id) = terminal_id
@@ -1081,14 +1086,18 @@ impl Store<'_> {
                         id: d.sku.clone(),
                     })?;
 
-            let current_qty: i64 = tx
-                .query_row(
-                    "SELECT COALESCE(qty, 0) FROM stock_summary \
-                     WHERE item_id = ?1 AND location_id = ?2",
-                    rusqlite::params![product_id, d.location_id.as_str()],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+            // Distinguish QueryReturnedNoRows (no stock at this location → 0)
+            // from real DB errors (corruption, lock → propagate).
+            let current_qty: i64 = match tx.query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![product_id, d.location_id.as_str()],
+                |row| row.get(0),
+            ) {
+                Ok(q) => q,
+                Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                Err(e) => return Err(CoreError::Db(e)),
+            };
 
             let mut allow_negative = false;
             if let Some(t_id) = terminal_id

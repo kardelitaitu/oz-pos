@@ -273,8 +273,7 @@ export default function AuditLogScreen() {
                   <th>Details</th>
                 </tr>
               </thead>
-              <tbody>
-                {Array.from({ length: 6 }).map((_, i) => (
+              <tbody>{Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
                     <td><Skeleton variant="text" width="7rem" /></td>
                     <td><Skeleton variant="text" width="9rem" /></td>
@@ -284,7 +283,7 @@ export default function AuditLogScreen() {
                     <td><Skeleton variant="text" width="8rem" /></td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -325,8 +324,7 @@ export default function AuditLogScreen() {
                 <Localized id="audit-log-col-details"><th><span>Details</span></th></Localized>
               </tr>
             </thead>
-            <tbody>
-              {filteredEntries.map((entry) => {
+            <tbody>{filteredEntries.map((entry) => {
                 const isCritical = CRITICAL_ACTIONS.has(entry.action) || entry.outcome === 'failure';
                 return (
                   <tr key={entry.id} className={isCritical ? 'audit-log-row--critical' : ''}>
@@ -370,7 +368,7 @@ export default function AuditLogScreen() {
                   </tr>
                 );
               })}
-            </tbody>
+</tbody>
           </table>
           {hasMore && (
             <div className="audit-log-load-more-wrap">

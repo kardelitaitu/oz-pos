@@ -117,3 +117,7 @@ staff-login-next-aria =
 fastpin-switch-user = Switch User
 fastpin-active-user = Active: { $name }
 fastpin-enter-pin = Enter PIN for { $user }
+
+# ── Session Lock Screen (i18n parity fix) ────────────────────────────────
+session-lock-expired = Session expired. Please log in again.
+session-lock-invalid-pin = Invalid PIN

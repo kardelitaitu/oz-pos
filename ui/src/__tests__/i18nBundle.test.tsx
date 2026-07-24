@@ -20,10 +20,17 @@ import { getBundle, getAvailableLocales } from '@/i18n';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
 import sharedEn from '@/locales/shared.ftl?raw';
+import sharedTh from '@/locales/shared.th.ftl?raw';
 import giftCardsEn from '@/locales/gift-cards.ftl?raw';
 import giftCardsId from '@/locales/gift-cards.id.ftl?raw';
 import purchasingEn from '@/locales/purchasing.ftl?raw';
 import purchasingId from '@/locales/purchasing.id.ftl?raw';
+import salesEn from '@/locales/sales.ftl?raw';
+import salesId from '@/locales/sales.id.ftl?raw';
+import salesTh from '@/locales/sales.th.ftl?raw';
+import multiStoreEn from '@/locales/multi-store.ftl?raw';
+import multiStoreId from '@/locales/multi-store.id.ftl?raw';
+import multiStoreTh from '@/locales/multi-store.th.ftl?raw';
 
 describe('i18n bundle loader', () => {
   it('exposes en, id, and th locales via getAvailableLocales()', () => {
@@ -209,5 +216,63 @@ describe('i18n translation completeness', () => {
         '[i18n] purchasing.id.ftl is byte-identical to purchasing.ftl \u2014 Indonesian translation for purchasing is missing; users with locale="id" see English text.',
       );
     }
+  });
+});
+
+// ── Three-way key parity gate ─────────────────────────────────
+//
+// Every Fluent message key present in the English source bundle must
+// ALSO exist in the Indonesian (.id.ftl) and Thai (.th.ftl) bundles.
+// A key missing from a translation bundle means users in that locale
+// see the raw Fluent message id (e.g. `multi-store-error-load`) or an
+// empty fallback instead of translated text — a silent i18n regression
+// that the existing byte-identical check above cannot catch (a file
+// can differ from English yet still omit keys).
+//
+// This test parses the raw FTL content of every domain bundle the
+// production loader (i18n/index.ts) joins, extracts the message keys,
+// and asserts three-way parity. It is the permanent regression guard
+// against a developer adding a key to the en .ftl and forgetting the
+// id/th siblings.
+describe('i18n three-way key parity (en ↔ id ↔ th)', () => {
+  /**
+   * Extract top-level Fluent message keys from raw FTL text.
+   * Matches lines like `my-key = value` or `my-key = { $count }`,
+   * skipping attribute lines (indented `.attr = …`) and comments.
+   */
+  function extractKeys(ftl: string): Set<string> {
+    const keys = new Set<string>();
+    for (const line of ftl.split('\n')) {
+      // Top-level message: starts at column 0 with an identifier
+      // followed by ` = ` (or `=`). Indented `.attr` lines and
+      // `#`/`//` comments are skipped.
+      const m = line.match(/^([a-zA-Z0-9_-]+)\s*=/);
+      if (m && m[1]) keys.add(m[1]);
+    }
+    return keys;
+  }
+
+  const enBundle = [sharedEn, salesEn, multiStoreEn].join('\n');
+  const idBundle = [sharedId, salesId, multiStoreId].join('\n');
+  const thBundle = [sharedTh, salesTh, multiStoreTh].join('\n');
+
+  const enKeys = extractKeys(enBundle);
+  const idKeys = extractKeys(idBundle);
+  const thKeys = extractKeys(thBundle);
+
+  it('every English key exists in the Indonesian bundle', () => {
+    const missing = [...enKeys].filter((k) => !idKeys.has(k));
+    expect(
+      missing,
+      `Indonesian bundle is missing ${missing.length} key(s) present in English: ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('every English key exists in the Thai bundle', () => {
+    const missing = [...enKeys].filter((k) => !thKeys.has(k));
+    expect(
+      missing,
+      `Thai bundle is missing ${missing.length} key(s) present in English: ${missing.join(', ')}`,
+    ).toEqual([]);
   });
 });

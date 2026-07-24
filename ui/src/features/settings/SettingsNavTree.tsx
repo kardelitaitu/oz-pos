@@ -216,6 +216,50 @@ const NAV_ITEMS: SettingsNavItem[] = [
       </svg>
     ),
   },
+  {
+    key: 'store-pos',
+    label: 'Store POS',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="9" cy="21" r="1" />
+        <circle cx="20" cy="21" r="1" />
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+      </svg>
+    ),
+  },
+  {
+    key: 'restaurant-pos',
+    label: 'Restaurant POS',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+        <path d="M7 2v20" />
+        <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+      </svg>
+    ),
+  },
+  {
+    key: 'kds',
+    label: 'Kitchen Display',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
+    ),
+  },
+  {
+    key: 'inventory',
+    label: 'Inventory',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+    ),
+  },
 ];
 
 // ── Category groupings (accordion) ──────────────────────────────
@@ -234,7 +278,7 @@ const CATEGORY_I18N_KEYS: Record<string, string> = {
 
 const CATEGORIES: SettingsCategory[] = [
   { label: 'Business', keys: ['general', 'appearance'] },
-  { label: 'Operations', keys: ['receipt', 'sync', 'email'] },
+  { label: 'Operations', keys: ['receipt', 'sync', 'email', 'store-pos', 'restaurant-pos', 'kds', 'inventory'] },
   { label: 'System', keys: ['about', 'license', 'features', 'data'] },
   { label: 'Management', keys: ['staff', 'terminals', 'stores', 'topology', 'audit', 'offline', 'shifts', 'tax', 'exchange', 'promotions'] },
 ];
@@ -259,6 +303,10 @@ const NAV_L10N_KEYS: Record<string, string> = {
   promotions: 'settings-nav-promotions',
   email: 'settings-nav-email',
   topology: 'settings-nav-topology',
+  'store-pos': 'settings-nav-store-pos',
+  'restaurant-pos': 'settings-nav-restaurant-pos',
+  kds: 'settings-nav-kds',
+  inventory: 'settings-nav-inventory',
 };
 
 // ── Exported for SettingsPage breadcrumb ────────────────────────

@@ -117,7 +117,7 @@ impl Store<'_> {
     ///    with per-SKU shortfall details and available alternatives.
     /// 5. If ALL lines sufficed: calls [`adjust_stock_batch`](crate::db::Store::adjust_stock_batch)
     ///    atomically, creates the sale + payments, writes `deduction_locations`
-    ///    JSON on the `sales` row, transitions to Active→Completed, COMMIT.
+    ///    JSON on the `sales` row with status = 'pending', COMMIT.
     ///
     /// The `workspace_instance_id` is used to resolve the primary location.
     /// Pass `None` for legacy single-location deployments — the canonical
@@ -151,13 +151,15 @@ impl Store<'_> {
         let mut shortfalls: Vec<Shortfall> = Vec::new();
 
         for line in &sale.lines {
-            let product_info: Option<(String, String)> = tx
-                .query_row(
-                    "SELECT id, product_type FROM products WHERE sku = ?1",
-                    rusqlite::params![line.sku],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .ok();
+            let product_info: Option<(String, String)> = match tx.query_row(
+                "SELECT id, product_type FROM products WHERE sku = ?1",
+                rusqlite::params![line.sku],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            ) {
+                Ok(val) => Some(val),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(CoreError::Db(e)),
+            };
 
             if product_info.is_none() {
                 shortfalls.push(Shortfall {
@@ -229,13 +231,15 @@ impl Store<'_> {
             if has_recipe {
                 for ingredient in recipe {
                     // Load ingredient product details
-                    let ing_info: Option<(String, String, String)> = tx
-                        .query_row(
-                            "SELECT sku, name, product_type FROM products WHERE id = ?1",
-                            rusqlite::params![ingredient.ingredient_product_id],
-                            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-                        )
-                        .ok();
+                    let ing_info: Option<(String, String, String)> = match tx.query_row(
+                        "SELECT sku, name, product_type FROM products WHERE id = ?1",
+                        rusqlite::params![ingredient.ingredient_product_id],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    ) {
+                        Ok(val) => Some(val),
+                        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                        Err(e) => return Err(CoreError::Db(e)),
+                    };
 
                     if let Some((ing_sku, ing_name, ing_ptype_str)) = ing_info {
                         let ing_ptype = crate::product::ProductType::parse_str(&ing_ptype_str)
@@ -501,13 +505,15 @@ impl Store<'_> {
 
         for line in &sale.lines {
             // Check product info to determine if this line tracks inventory
-            let product_info: Option<(String, String)> = tx
-                .query_row(
-                    "SELECT id, product_type FROM products WHERE sku = ?1",
-                    rusqlite::params![line.sku],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .ok();
+            let product_info: Option<(String, String)> = match tx.query_row(
+                "SELECT id, product_type FROM products WHERE sku = ?1",
+                rusqlite::params![line.sku],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            ) {
+                Ok(val) => Some(val),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(CoreError::Db(e)),
+            };
 
             let tracks_inventory = product_info
                 .as_ref()
@@ -618,13 +624,15 @@ impl Store<'_> {
                 // BOM ingredients for non-resolution lines
                 if has_recipe {
                     for ingredient in recipe {
-                        let ing_info: Option<(String, String)> = tx
-                            .query_row(
-                                "SELECT sku, product_type FROM products WHERE id = ?1",
-                                rusqlite::params![ingredient.ingredient_product_id],
-                                |row| Ok((row.get(0)?, row.get(1)?)),
-                            )
-                            .ok();
+                        let ing_info: Option<(String, String)> = match tx.query_row(
+                            "SELECT sku, product_type FROM products WHERE id = ?1",
+                            rusqlite::params![ingredient.ingredient_product_id],
+                            |row| Ok((row.get(0)?, row.get(1)?)),
+                        ) {
+                            Ok(val) => Some(val),
+                            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                            Err(e) => return Err(CoreError::Db(e)),
+                        };
 
                         if let Some((ing_sku, ing_ptype_str)) = ing_info {
                             let ing_ptype = crate::product::ProductType::parse_str(&ing_ptype_str)

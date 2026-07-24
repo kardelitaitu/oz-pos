@@ -50,7 +50,7 @@ function Step {
 
         if ($attempt -lt $RetryMax) {
             Write-Host ""
-            Write-Host "  [$Name] attempt $attempt/$RetryMax failed — killing processes..."
+            Write-Host "  [$Name] attempt $attempt/$RetryMax failed - killing processes..."
             foreach ($proc in $RetryKill) {
                 taskkill /f /im $proc 2>$null
             }
@@ -65,27 +65,24 @@ function Step {
         Write-Host "FAIL" -ForegroundColor Red
         Write-Host "Output/Error from failed command:"
         Write-Host $output
-        Write-Host "run `"$RetryCommand`" for full detailed error messages"
+        Write-Host "run ""$RetryCommand"" for full detailed error messages"
         exit 1
     } else {
         $elapsed = (Get-Date) - $start
+        $elapsedSec = [math]::Round($elapsed.TotalSeconds, 1)
         Write-Host "PASS (" -NoNewline
-        Write-Host ("{0:0.0}s)" -f $elapsed.TotalSeconds)
+        Write-Host $elapsedSec -NoNewline
+        Write-Host "s)"
     }
 }
 
 # --- Phase 1: auto-fix --------------------------------------------------
-# Best-effort fixes so the strict pass below doesn't waste time on
-# trivial issues. `--allow-dirty` handles both clean and dirty trees;
-# `--allow warnings` means non-auto-fixable lints don't kill this pass —
-# they'll be caught by the `-D warnings` check in phase 2.
 Step -Name "clippy auto-fix" -RetryCommand "cargo clippy --fix --allow-dirty -- --allow warnings" -ScriptBlock {
     cargo clippy --fix --allow-dirty -- --allow warnings
 }
 Step -Name "cargo fmt" -RetryCommand "cargo fmt --all" -ScriptBlock { cargo fmt --all }
 
 # --- Phase 2: strict verify (mirrors CI rust job) -----------------------
-# Read-only checks that exit non-zero on any remaining issue.
 Step -Name "cargo fmt (verify)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock {
     cargo fmt --all -- --check
 }
@@ -93,17 +90,9 @@ Step -Name "clippy workspace" -RetryCommand "cargo clippy --workspace --all-targ
     cargo clippy --workspace --all-targets -- -D warnings
 }
 
-# Use explicit --test-threads to match CPU count. Cargo's default is already
-# num_cpus, but making it explicit documents intent and ensures consistent
-# parallelism across CI and local environments.
-#
-# In --Fast mode, only run lib tests (skip integration test compilation).
 $cpuCount = $env:NUMBER_OF_PROCESSORS
 if (-not $cpuCount) { $cpuCount = 4 }
 
-# Workspace-wide test via cargo-nextest for 4.5× faster re-runs. Doctests are
-# run separately because nextest does not execute them. Falls back to cargo
-# test if nextest is not installed.
 $nextestAvailable = $false
 try { & cargo nextest --version | Out-Null; $nextestAvailable = ($LASTEXITCODE -eq 0) } catch {}
 
@@ -123,18 +112,18 @@ if ($nextestAvailable) {
         cargo test --doc --workspace
     }
 } else {
-    Write-Host "⚠ nextest not found — falling back to cargo test (slower)" -ForegroundColor Yellow
+    Write-Host "WARNING nextest not found - falling back to cargo test (slower)" -ForegroundColor Yellow
     Step -Name "test workspace" -RetryCommand "cargo test --workspace --all-features $retryArgs -- --test-threads $cpuCount" -ScriptBlock {
         cargo test --workspace --all-features @testArgs -- --test-threads $cpuCount
     }
 }
 
-# --- Migration (mirrors CI migration job) ---------------------------------
+# --- Migration ----------------------------------------------------------
 Step -Name "migration smoke test" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
 Step -Name "migration idempotency" -RetryCommand "cargo run -p oz-cli -- migrate" -ScriptBlock { cargo run -p oz-cli -- migrate }
 Remove-Item -LiteralPath "oz-pos.db", "oz-pos.db-wal", "oz-pos.db-shm" -ErrorAction Ignore
 
-# --- Skill drift guard (extra local guard; CI doesn't run this) -----------
+# --- Skill drift guard --------------------------------------------------
 $gitBash = if (Test-Path "C:\Program Files\Git\bin\bash.exe") {
     "C:\Program Files\Git\bin\bash.exe"
 } elseif (Get-Command "bash" -ErrorAction SilentlyContinue) {
@@ -150,33 +139,18 @@ if ($gitBash) {
     Write-Host "SKIP skill-drift-guard (bash not available)"
 }
 
-# --- UI (mirrors CI ui job - auto-detected) -------------------------------
+# --- UI checks ----------------------------------------------------------
 if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
     Push-Location ui
 
-    # On Windows, native .node binaries (rollup-win32-x64-msvc, esbuild.exe)
-    # can remain locked by Node worker-thread processes after a previous step
-    # finishes, causing `npm ci` to fail with EPERM -4048.
-    #
-    # Strategy:
-    #   1. Try normally once.
-    #   2. If that fails, kill all node.exe + esbuild.exe processes (they hold
-    #      the file locks), then retry once more via RetryMax=2 + RetryKill.
     Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" `
-         -RetryMax 2 -RetryKill @("node.exe", "esbuild.exe") -ScriptBlock {
+         -RetryMax 2 -RetryKill @("esbuild.exe") -ScriptBlock {
         npm ci --no-audit --no-fund 2>&1
     }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
     Step -Name "ui typecheck" -RetryCommand "cd ui; npm run typecheck" -ScriptBlock { npm run typecheck }
     Step -Name "ui test" -RetryCommand "cd ui; npm run test" -ScriptBlock { npm run test }
-    # Skip `npm run build` in local check: typecheck + vitest already cover
-    # correctness; the Vite production bundle is validated by CI independently.
 
-    # Optional E2E gate: if Playwright is installed and port 1420 is free,
-    # run the E2E test suite. Skip gracefully if the port is already in use
-    # (dev server already running) or Playwright is not installed.
-    # E2E failures are non-blocking — these tests are inherently more
-    # sensitive to timing/environment than unit tests.
     if (Test-Path "node_modules/.bin/playwright.cmd") {
         $portFree = $true
         try {
@@ -194,11 +168,13 @@ if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/packag
                 $e2eResult = npx playwright test --config e2e/playwright.config.ts --project=desktop 2>&1
                 if ($LASTEXITCODE -ne 0) {
                     Write-Host "WARN (some tests failed)" -ForegroundColor Yellow
-                    Write-Host "  E2E failures are non-blocking — check output above for details."
+                    Write-Host "  E2E failures are non-blocking - check output above for details."
                 } else {
                     $elapsed = (Get-Date) - $e2eStart
+                    $elapsedSec = [math]::Round($elapsed.TotalSeconds, 1)
                     Write-Host "PASS (" -NoNewline
-                    Write-Host ("{0:0.0}s)" -f $elapsed.TotalSeconds)
+                    Write-Host $elapsedSec -NoNewline
+                    Write-Host "s)"
                 }
             } catch {
                 Write-Host "WARN (error running E2E)" -ForegroundColor Yellow
@@ -216,17 +192,20 @@ if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/packag
     Write-Host "SKIP UI checks (npm not available or ui/package-lock.json missing)"
 }
 
-# --- Generate stats.json (for shields.io badges) --------------------------
+# --- Generate stats.json -------------------------------------------------
 Step -Name "generate code stats" -RetryCommand "powershell -File scripts\stats.ps1" -ScriptBlock {
     & powershell -File scripts\stats.ps1
 }
 
-# --- Done -----------------------------------------------------------------
+# --- Done ---------------------------------------------------------------
 $totalElapsed = (Get-Date) - $totalStart
 $label = if ($Fast) { "fast" } else { "all" }
-Write-Host ("{0} checks passed ({1:0.0}s)" -f $label, $totalElapsed.TotalSeconds)
+$elapsedSec = [math]::Round($totalElapsed.TotalSeconds, 1)
+Write-Host "$label checks passed (" -NoNewline
+Write-Host $elapsedSec -NoNewline
+Write-Host "s)"
 
-# --- Commit suggestion ----------------------------------------------------
+# --- Commit suggestion --------------------------------------------------
 Write-Host ""
 Write-Host "Now make a local commit:"
 Write-Host ""

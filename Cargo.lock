@@ -2772,15 +2772,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -3338,7 +3329,6 @@ checksum = "d111deb18a9c9bd33e1541309f4742523bfab01d276bfa9a27519f6de9c11dc7"
 dependencies = [
  "bstr",
  "mlua-sys",
- "mlua_derive",
  "num-traits",
  "once_cell",
  "rustc-hash",
@@ -3358,21 +3348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mlua_derive"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09697a6cec88e7f58a02c7ab5c18c611c6907c8654613df9cc0192658a4fb859"
-dependencies = [
- "itertools 0.12.1",
- "once_cell",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "modules-crm"
 version = "0.0.19"
 dependencies = [
@@ -3385,6 +3360,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3412,12 +3388,15 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-loyalty"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
@@ -3425,6 +3404,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3440,65 +3420,87 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-sales"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
- "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-settings"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-staff"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
+ "platform-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
+ "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-tax"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
 name = "modules-terminal"
 version = "0.0.19"
 dependencies = [
+ "anyhow",
+ "chrono",
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4098,6 +4100,15 @@ dependencies = [
  "foundation",
  "hex",
  "mdns-sd",
+ "modules-crm",
+ "modules-inventory",
+ "modules-loyalty",
+ "modules-reporting",
+ "modules-sales",
+ "modules-settings",
+ "modules-staff",
+ "modules-tax",
+ "modules-terminal",
  "platform-core",
  "proptest",
  "rand 0.8.6",
@@ -4107,6 +4118,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "serial_test",
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "tracing",
@@ -4147,8 +4159,8 @@ dependencies = [
 name = "oz-lua"
 version = "0.0.19"
 dependencies = [
+ "mlua",
  "oz-core",
- "rlua",
  "serde",
  "serde_json",
  "tempfile",
@@ -4168,6 +4180,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serial_test",
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
@@ -4201,10 +4214,10 @@ name = "oz-plugin"
 version = "0.0.19"
 dependencies = [
  "chrono",
+ "mlua",
  "oz-core",
  "oz-lua",
  "regex",
- "rlua",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4323,6 +4336,7 @@ dependencies = [
  "rand 0.8.6",
  "security-framework",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "windows-sys 0.59.0",
@@ -4597,6 +4611,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "serial_test",
  "tauri",
  "tempfile",
  "tokio",
@@ -5365,15 +5380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rlua"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d43f01c44a4ea0d2c7faadac231a0fd906a438723aa4ee26599e71fa7b915abd"
-dependencies = [
- "mlua",
-]
-
-[[package]]
 name = "rsa"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5830,6 +5836,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84d57bc0c8b9a17920c178daa6bb924850d54a9c97ab45194bb8c17ad66bb660"
 dependencies = [
  "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "serial_test"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "699f4197115b8a7e7ff19c9a315a4bd6fffec26cc4626ef45ecaea389e081c6d"
+dependencies = [
+ "futures-executor",
+ "futures-util",
+ "log",
+ "once_cell",
+ "parking_lot",
+ "serial_test_derive",
+]
+
+[[package]]
+name = "serial_test_derive"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94e153fc76e1c6a068703d6d29c508a0b15c061c4b7e43da59cc097bc342673c"
+dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",

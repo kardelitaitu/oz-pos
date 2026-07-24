@@ -20,9 +20,13 @@ const { mockListCategories, mockCreateCategory, mockUpdateCategory, mockDeleteCa
 
 vi.mock('@/api/products', () => ({
   listCategories: () => mockListCategories(),
+  listCategoriesScoped: (...args: unknown[]) => mockListCategories(...args),
   createCategory: (args: unknown) => mockCreateCategory(args),
+  createCategoryScoped: (args: unknown) => mockCreateCategory(args),
   updateCategory: (args: unknown) => mockUpdateCategory(args),
+  updateCategoryScoped: (args: unknown) => mockUpdateCategory(args),
   deleteCategory: (id: string) => mockDeleteCategory(id),
+  deleteCategoryScoped: (id: string) => mockDeleteCategory(id),
 }));
 
 const bundle = new FluentBundle('en-US');

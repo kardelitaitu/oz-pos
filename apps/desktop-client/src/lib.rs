@@ -101,7 +101,30 @@ pub fn run() {
             });
 
             // ── LAN event forwarder ────────────────────────────────────
-            let forwarder = crate::lan_server::LanEventForwarder::new();
+            // Read LAN server config from the settings table (C-4).
+            // Default: loopback-only, no PSK. External bind requires
+            // both lan_server.bind="0.0.0.0" AND a non-empty lan_server.psk.
+            let (lan_bind_addr, lan_psk) = {
+                let state = app.state::<AppState>();
+                let db = state.db.blocking_lock();
+                let bind = oz_core::Settings::get(&db, "lan_server.bind")
+                    .unwrap_or(None)
+                    .unwrap_or_else(|| "127.0.0.1".to_string());
+                let psk = oz_core::Settings::get(&db, "lan_server.psk")
+                    .unwrap_or(None)
+                    .filter(|s| !s.is_empty());
+                // Reject external bind without a PSK.
+                let bind = if bind == "0.0.0.0" && psk.is_none() {
+                    tracing::warn!(
+                        "lan_server.bind is 0.0.0.0 but lan_server.psk is empty — falling back to 127.0.0.1"
+                    );
+                    "127.0.0.1".to_string()
+                } else {
+                    bind
+                };
+                (format!("{bind}:9180"), psk)
+            };
+            let forwarder = crate::lan_server::LanEventForwarder::new(lan_bind_addr, lan_psk);
             let handle = forwarder.handle();
             platform_startup::spawn_daemon("LAN event forwarder", forwarder.run());
 
@@ -151,6 +174,7 @@ pub fn run() {
             commands::auth::create_session,
             commands::auth::destroy_session,
             commands::branding::get_brand_settings,
+            commands::branding::get_brand_settings_scoped,
             commands::branding::set_brand_primary_colour,
             commands::branding::set_brand_logo_path,
             commands::branding::set_brand_store_name,
@@ -162,6 +186,7 @@ pub fn run() {
             commands::bundles::delete_bundle,
             commands::bundles::lookup_bundle_by_sku,
             commands::customers::list_customers,
+            commands::customers::list_customers_scoped,
             commands::customers::get_customer,
             commands::customers::create_customer,
             commands::customers::update_customer,
@@ -188,11 +213,13 @@ pub fn run() {
             commands::staff::update_staff,
             commands::staff::bootstrap_owner,
             commands::categories::list_categories,
+            commands::categories::list_categories_scoped,
             commands::categories::create_category,
             commands::categories::update_category,
             commands::categories::delete_category,
             commands::currencies::currency_info,
             commands::currencies::list_currencies,
+            commands::currencies::list_currencies_scoped,
             commands::currencies::get_default_currency,
             commands::currencies::set_default_currency,
             commands::exchange_rates::list_exchange_rates,
@@ -239,6 +266,7 @@ pub fn run() {
             commands::stock_transfers::cancel_stock_transfer,
             commands::health::ping,
             commands::health::version,
+            commands::health::version_scoped,
             commands::health::get_device_id,
             commands::health::get_local_ip,
             commands::pos::start_sale,
@@ -254,10 +282,6 @@ pub fn run() {
             commands::pos::override_line_price_scoped,
             commands::pos::override_cart_deduction_location_scoped,
             commands::pos::get_cart_deduction_location,
-            commands::pos::list_active_carts,
-            commands::pos::list_active_carts_scoped,
-            commands::pos::get_active_cart,
-            commands::pos::get_active_cart_scoped,
             commands::pos::hold_cart,
             commands::pos::hold_cart_scoped,
             commands::pos::list_held_carts,
@@ -290,7 +314,9 @@ pub fn run() {
             commands::inventory::acknowledge_stock_alert_scoped,
             commands::inventory::finalize_sale,
             commands::inventory::void_pending_sale,
-            commands::plugins::reload_plugins,
+            commands::inventory::get_low_stock_alerts_at_location_scoped,
+            commands::inventory::get_workspace_locations_scoped,
+            commands::inventory::invalidate_location_cache_scoped,
             commands::kds::list_kds_orders,
             commands::kds::list_kds_orders_scoped,
             commands::kds::get_kds_queue,
@@ -316,19 +342,23 @@ pub fn run() {
             commands::hardware::open_cash_drawer,
             commands::hardware::print_receipt,
             commands::hardware::print_sales_receipt,
+            commands::hardware::print_sales_receipt_scoped,
             commands::hardware::list_scanners,
             commands::hardware::start_scanner,
             commands::hardware::stop_scanner,
             commands::settings::get_receipt_settings,
+            commands::settings::get_receipt_settings_scoped,
             commands::settings::set_receipt_settings,
             commands::settings::set_receipt_settings_scoped,
             commands::settings::get_store_settings,
+            commands::settings::get_store_settings_scoped,
             commands::settings::set_store_settings,
             commands::settings::set_store_settings_scoped,
             commands::settings::get_credit_settings,
             commands::settings::set_credit_settings,
             commands::settings::set_credit_settings_scoped,
             commands::settings::list_credit_sales,
+            commands::settings::list_credit_sales_scoped,
             commands::settings::settle_credit,
             commands::settings::settle_credit_scoped,
             commands::settings::get_hardware_settings,
@@ -346,8 +376,6 @@ pub fn run() {
             commands::setup::dismiss_setup_wizard,
             commands::products::list_products,
             commands::products::list_products_scoped,
-            commands::products::list_warehouse_products,
-            commands::products::list_warehouse_products_scoped,
             commands::products::create_product,
             commands::products::create_product_scoped,
             commands::products::update_product,
@@ -361,6 +389,7 @@ pub fn run() {
             commands::products::adjust_stock,
             commands::products::adjust_stock_scoped,
             commands::products::get_product_track_serial,
+            commands::products::get_product_track_serial_scoped,
             commands::promotions::list_promotions,
             commands::promotions::list_promotions_scoped,
             commands::promotions::get_promotion,
@@ -380,10 +409,10 @@ pub fn run() {
             commands::product_variants::create_product_variant,
             commands::product_variants::update_product_variant,
             commands::product_variants::delete_product_variant,
-            commands::setup::seed_default_roles,
             commands::setup::seed_default_roles_scoped,
             commands::setup::get_setup_status,
             commands::tax::list_tax_rates,
+            commands::tax::list_tax_rates_scoped,
             commands::tax::create_tax_rate,
             commands::tax::update_tax_rate,
             commands::tax::delete_tax_rate,
@@ -429,6 +458,7 @@ pub fn run() {
             commands::offline::retry_offline_sync,
             commands::offline::delete_offline_item,
             commands::sync::get_sync_settings,
+            commands::sync::get_sync_settings_scoped,
             commands::sync::update_sync_settings,
             commands::sync::sync_run,
             commands::sync::sync_pull,
@@ -459,6 +489,7 @@ pub fn run() {
             commands::shifts::get_active_shift,
             commands::shifts::get_active_shift_scoped,
             commands::shifts::list_shifts,
+            commands::shifts::list_shifts_scoped,
             commands::shifts::get_shift,
             commands::shifts::get_shift_report,
             commands::shifts::create_cash_payout,
@@ -523,6 +554,7 @@ pub fn run() {
             commands::license::check_license_status,
             commands::topology::save_topology,
             commands::topology::load_topology,
+            commands::topology::apply_topology_diff,
         ])
         .run(tauri::generate_context!())
         .map_err(AppError::from);

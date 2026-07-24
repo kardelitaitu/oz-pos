@@ -416,6 +416,11 @@ mod tests {
     fn cart_id_serializes_as_uuid_string() {
         let id = CartId::new();
         let json = serde_json::to_string(&id).unwrap();
+        // CartId is a newtype over Uuid — serializes as bare UUID string.
+        assert!(
+            json.starts_with('"'),
+            "cart ID should serialize as a bare string, got: {json}"
+        );
         let back: CartId = serde_json::from_str(&json).unwrap();
         assert_eq!(id, back);
     }

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listTaxRates,
+  listTaxRatesScoped,
   createTaxRate,
   updateTaxRate,
   deleteTaxRate,
@@ -10,7 +10,8 @@ import {
   type TaxRateDto,
 
 } from '@/api/tax';
-import { listCategories, type CategoryDto } from '@/api/products';
+import { listCategoriesScoped, type CategoryDto } from '@/api/products';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -35,6 +36,8 @@ const EMPTY_TAX_FORM: TaxFormData = {
 /** Tax configuration screen — CRUD for tax rates, inclusive/exclusive toggle, and per-category tax rate assignment. */
 export default function TaxConfigurationScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
   // ── Tax rates state ─────────────────────────────────────────────
   const [rates, setRates] = useState<TaxRateDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,8 +62,8 @@ export default function TaxConfigurationScreen() {
     setLoading(true);
     try {
       const [items, cats, catTax] = await Promise.all([
-        listTaxRates(),
-        listCategories(),
+        listTaxRatesScoped(sessionToken),
+        listCategoriesScoped(sessionToken),
         listCategoryTaxRates(),
       ]);
       setRates(items);
@@ -76,7 +79,7 @@ export default function TaxConfigurationScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -205,8 +208,7 @@ export default function TaxConfigurationScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
                     <td><Skeleton variant="text" width="3rem" height="0.875rem" /></td>
@@ -216,8 +218,7 @@ export default function TaxConfigurationScreen() {
                       <Skeleton variant="block" width="3.5rem" height="1.375rem" />
                     </td>
                   </tr>
-                ))}
-              </tbody>
+                ))}</tbody>
             </table>
           </div>
         </div>
@@ -249,8 +250,7 @@ export default function TaxConfigurationScreen() {
                     </Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {rates.map((r) => (
+                <tbody>{rates.map((r) => (
                     <tr key={r.id}>
                       <td>
                         {r.name}
@@ -301,8 +301,7 @@ export default function TaxConfigurationScreen() {
                         </Localized>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  ))}</tbody>
               </table>
             </div>
           )}
@@ -335,8 +334,7 @@ export default function TaxConfigurationScreen() {
                       </Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {categories.map((cat) => {
+                  <tbody>{categories.map((cat) => {
                       const assignedIds = catTaxRates.get(cat.id) ?? [];
                       const assignedNames = assignedIds
                         .map((id) => rates.find((r) => r.id === id))
@@ -384,7 +382,7 @@ export default function TaxConfigurationScreen() {
                           </td>
                         </tr>
                       );
-                    })}                </tbody>
+                    })}</tbody>
               </table>
               </div>
             )}

@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · pb_schema.json verified to contain all 4 collections (license_keys, tenants, subscriptions, tenant_machines) + the listed fields (key, tier_key, status, expires_at, email, api_key, signed_payload, signature, grace_until, first_seen_at, last_seen_at); the "simplified authenticator" framing is consistent with the field subset vs ADR #9's fuller schema -->
+
 # License Server Schema Documentation
 
 This document describes the PocketBase collections and fields required for the OZ-POS License Server to function correctly. The schema has been simplified to act purely as an authenticator, delegating feature quotas to the client based on the assigned `tier_key`.

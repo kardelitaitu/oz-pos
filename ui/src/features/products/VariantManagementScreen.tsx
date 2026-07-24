@@ -187,8 +187,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    {[0, 1, 2, 3].map((r) => (
+                  <tbody>{[0, 1, 2, 3].map((r) => (
                       <tr key={r}>
                         <td><Skeleton variant="text" width="6rem" height="0.875rem" /></td>
                         <td><Skeleton variant="text" width="6rem" height="0.75rem" /></td>
@@ -201,7 +200,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                         </td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
               </div>
             </div>
@@ -229,8 +228,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                     </Localized>
                   </tr>
                 </thead>
-                <tbody>
-                  {variants.map((v) => (
+                <tbody>{variants.map((v) => (
                     <tr key={v.sku}>
                       <td>{v.name}</td>
                       <td className="product-mgmt-cell-sku">{v.sku}</td>
@@ -284,7 +282,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                       </td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             </div>
           )}

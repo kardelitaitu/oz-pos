@@ -51,6 +51,11 @@ export function ZoomProvider({ children }: { children: ReactNode }) {
 
     // Intercept Ctrl +/- / 0 to handle zooming manually
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Guard: don't handle zoom shortcuts while the user is typing in a text field.
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
       if (e.ctrlKey) {
         if (e.key === '=' || e.key === '+' || e.code === 'NumpadAdd') {
           e.preventDefault();

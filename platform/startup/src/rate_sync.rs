@@ -139,17 +139,32 @@ impl RateSyncDaemon {
         client: &reqwest::Client,
     ) {
         let db_clone = db.clone();
-        let (enabled, base_currency, interval_minutes) = tokio::task::spawn_blocking(move || {
-            let conn = db_clone.lock().unwrap();
-            let enabled = oz_core::settings::Settings::is_rate_sync_enabled(&conn).unwrap_or(false);
-            let base = oz_core::settings::Settings::get_rate_sync_base_currency(&conn)
-                .unwrap_or_else(|_| "USD".into());
-            let interval = oz_core::settings::Settings::get_rate_sync_interval(&conn)
-                .unwrap_or_else(|_| "360".into());
-            (enabled, base, interval)
-        })
-        .await
-        .unwrap_or((false, "USD".into(), "360".into()));
+        let (enabled, base_currency, interval_minutes) =
+            match tokio::task::spawn_blocking(move || {
+                let conn = db_clone.lock().unwrap();
+                let enabled =
+                    oz_core::settings::Settings::is_rate_sync_enabled(&conn).unwrap_or(false);
+                let base = oz_core::settings::Settings::get_rate_sync_base_currency(&conn)
+                    .unwrap_or_else(|_| "USD".into());
+                let interval = oz_core::settings::Settings::get_rate_sync_interval(&conn)
+                    .unwrap_or_else(|_| "360".into());
+                (enabled, base, interval)
+            })
+            .await
+            {
+                Ok(v) => v,
+                Err(join_err) => {
+                    let msg = format!("rate sync settings read panicked: {join_err}");
+                    tracing::error!(error = %msg, "rate sync read phase failed");
+                    let mut s = daemon_status.write().await;
+                    s.last_sync_at = Some(
+                        chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                    );
+                    s.last_error = Some(msg);
+                    s.rates_updated = 0;
+                    return;
+                }
+            };
 
         // Update status with base currency
         {
@@ -238,7 +253,13 @@ impl RateSyncDaemon {
             updated
         })
         .await
-        .unwrap_or(0);
+        .unwrap_or_else(|join_err| {
+            tracing::error!(
+                error = %join_err,
+                "rate sync: rate storage spawn_blocking panicked"
+            );
+            0
+        });
 
         tracing::info!(
             base_currency = %base,

@@ -3,10 +3,13 @@
 # Generates cargo doc for the entire workspace and deploys to GitHub
 # Pages. Runs on every push to main + manual trigger.
 #
-# Excludes Tauri app crates (oz-pos-app, oz-pos-tablet) to avoid
-# requiring the heavy webkit2gtk dependency stack in CI. Core library
-# documentation for oz-core, oz-hal, oz-payment, platform-* etc. is
-# generated with `--document-private-items` for internal developer use.
+# Excludes the two Tauri app binaries (oz-pos-app, oz-pos-tablet) since
+# their docs are not useful to library consumers. `platform-startup`
+# (a workspace member that depends on tauri) IS documented, so the
+# install step pulls in the gtk3/webkit2gtk system libraries that
+# tauri's gdk-sys build script requires. Core library documentation for
+# oz-core, oz-hal, oz-payment, platform-* etc. is generated with
+# `--document-private-items` for internal developer use.
 
 name: Docs
 
@@ -56,9 +59,21 @@ jobs:
       - uses: mozilla/sccache-action@v0.0.10
 
       - name: Install system dependencies
+        # `platform-startup` is a workspace member that depends on `tauri`,
+        # which on Linux pulls in `gdk-sys` (via gtk3). `gdk-sys` requires
+        # `gdk-3.0.pc`, provided by `libgtk-3-dev`. Without these packages
+        # `cargo doc --workspace` fails the `gdk-sys` build script even
+        # with `--no-deps` (the workspace member itself must still compile
+        # to generate its docs). This mirrors the install step in
+        # .github/workflows/nightly.yml.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libglib2.0-dev pkg-config
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev
 
       - name: Generate cargo doc
         run: |

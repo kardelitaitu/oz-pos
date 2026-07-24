@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Localized } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
@@ -14,6 +16,7 @@ const TRANSIT_EXPIRY_HOURS = 24;
 export default function TransitAuditScreen() {
   const [transfers, setTransfers] = useState<TransferWithLines[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reverseConfirmId, setReverseConfirmId] = useState<string | null>(null);
   const { addToast } = useToast();
 
   const loadTransfers = async () => {
@@ -41,10 +44,15 @@ export default function TransitAuditScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only load
   }, []);
 
-  const handleReverseTransfer = async (id: string) => {
-    if (!confirm('Are you sure you want to reverse this stock transfer? Stock will be returned to the source location.')) return;
+  const handleReverseClick = (id: string) => {
+    setReverseConfirmId(id);
+  };
+
+  const handleReverseConfirm = async () => {
+    if (!reverseConfirmId) return;
     try {
-      await cancelStockTransfer(id);
+      await cancelStockTransfer(reverseConfirmId);
+      setReverseConfirmId(null);
       await loadTransfers();
       addToast({ message: 'Stock transfer reversed successfully', type: 'success' });
     } catch (err) {
@@ -131,29 +139,38 @@ export default function TransitAuditScreen() {
                       </Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {lines.map(line => (
+                  <tbody>{lines.map(line => (
                       <tr key={line.id}>
                         <td>{line.sku}</td>
                         <td>{line.product_name}</td>
                         <td>{line.qty}</td>
                       </tr>
                     ))}
-                  </tbody>
+</tbody>
                 </table>
 
                 <div className="transit-actions">
-                  <button className="reverse-btn" onClick={() => handleReverseTransfer(transfer.id)}>
+                  <Button variant="danger" size="sm" className="reverse-btn" onClick={() => handleReverseClick(transfer.id)}>
                     <Localized id="inv-transit-reverse-btn">
                       <span>Reverse Transfer</span>
                     </Localized>
-                  </button>
+                  </Button>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={reverseConfirmId !== null}
+        onCancel={() => setReverseConfirmId(null)}
+        onConfirm={handleReverseConfirm}
+        title="Reverse Transfer?"
+        message="Are you sure you want to reverse this stock transfer? Stock will be returned to the source location. This action cannot be undone."
+        variant="danger"
+        confirmLabel="Reverse"
+      />
     </div>
   );
 }

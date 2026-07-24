@@ -11,7 +11,7 @@ chrono = { workspace = true }
 oz-core = { workspace = true }
 oz-lua = { workspace = true }
 serde_json = { workspace = true }
-rlua = { workspace = true }
+mlua = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }

@@ -13,6 +13,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Voidsaleargs.
 pub struct VoidSaleArgs {
     /// ID of the associated sale.
@@ -26,6 +27,7 @@ pub struct VoidSaleArgs {
 /// Args for `void_sale_scoped` — identical to `VoidSaleArgs` but without
 /// `user_id` (read from the session token instead).
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VoidSaleScopedArgs {
     /// ID of the associated sale.
     pub sale_id: String,
@@ -94,7 +96,9 @@ mod tests {
 
     #[test]
     fn void_sale_args_deserialize() {
-        let json = r##"{"sale_id":"s1","user_id":"u1","reason":"Wrong item"}"##;
+        // Uses camelCase — the exact format the frontend sends
+        // (ui/src/api/sales.ts VoidSaleArgs: { saleId, userId, reason }).
+        let json = r##"{"saleId":"s1","userId":"u1","reason":"Wrong item"}"##;
         let args: VoidSaleArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sale_id, "s1");
         assert_eq!(args.user_id, "u1");
@@ -115,7 +119,9 @@ mod tests {
 
     #[test]
     fn void_sale_scoped_args_deserialize() {
-        let json = r##"{"sale_id":"s1","reason":"Wrong item"}"##;
+        // camelCase — the exact format the frontend sends for the
+        // scoped variant ({ saleId, reason }).
+        let json = r##"{"saleId":"s1","reason":"Wrong item"}"##;
         let args: VoidSaleScopedArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sale_id, "s1");
         assert_eq!(args.reason, "Wrong item");
@@ -130,9 +136,45 @@ mod tests {
 
     #[test]
     fn void_sale_args_deserialize_empty_reason() {
-        let json = r##"{"sale_id":"s3","user_id":"u3","reason":""}"##;
+        // camelCase — the exact format the frontend sends.
+        let json = r##"{"saleId":"s3","userId":"u3","reason":""}"##;
         let args: VoidSaleArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sale_id, "s3");
         assert_eq!(args.reason, "");
+    }
+
+    // ── Frontend camelCase parity (Bug #13) ──────────────────────────────
+    //
+    // The frontend (ui/src/api/sales.ts VoidSaleArgs) sends camelCase keys:
+    //   { saleId, userId, reason }
+    // The frontend VoidSaleScopedArgs + the scoped invoke send:
+    //   { saleId, reason }
+    // wrapped in { args: { ... } }. Tauri auto-converts bare command
+    // params (sessionToken) but does NOT rename struct fields — serde
+    // uses the exact field names. Without #[serde(rename_all =
+    // "camelCase")], serde looks for "sale_id"/"user_id" and fails on
+    // the real frontend payload. The tests above only pass because
+    // they use snake_case — a false-positive coverage gap.
+
+    #[test]
+    fn void_sale_args_deserialize_frontend_camelcase() {
+        // Exact payload shape the frontend sends (ui/src/api/sales.ts:332).
+        let json = r##"{"saleId":"s1","userId":"u1","reason":"Wrong item"}"##;
+        let args: VoidSaleArgs = serde_json::from_str(json)
+            .expect("VoidSaleArgs must accept the frontend's camelCase payload");
+        assert_eq!(args.sale_id, "s1");
+        assert_eq!(args.user_id, "u1");
+        assert_eq!(args.reason, "Wrong item");
+    }
+
+    #[test]
+    fn void_sale_scoped_args_deserialize_frontend_camelcase() {
+        // Exact payload shape the frontend sends for the scoped variant
+        // (ui/src/api/sales.ts:337 -> { args: { saleId, reason } }).
+        let json = r##"{"saleId":"s1","reason":"Wrong item"}"##;
+        let args: VoidSaleScopedArgs = serde_json::from_str(json)
+            .expect("VoidSaleScopedArgs must accept the frontend's camelCase payload");
+        assert_eq!(args.sale_id, "s1");
+        assert_eq!(args.reason, "Wrong item");
     }
 }

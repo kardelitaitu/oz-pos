@@ -32,21 +32,16 @@ next: Migrate cart/sales logic into this module | perf: N/A.
 //!
 //! See `modules/sales/manifest.json` for the module metadata.
 
-//! # Re-exports
-//!
-//! This module re-exports key sales domain types from `oz-core` so that
-//! consumers can access all sales-related types through a single crate:
-//!
-//! ```
-//! # use modules_sales::{SalesModule, Sale, Cart, SaleStatus};
-//! ```
+pub mod models;
+pub mod repository;
+pub mod service;
 
-// Re-export key sales domain types from oz-core so consumers can
-// access sales types through this module without importing oz-core.
-pub use oz_core::db::{DailySummaryRow, HeldCartFull, HeldCartRow, SalesByHourRow};
-pub use oz_core::{
-    Cart, CartError, CartId, CartLine, LineId, Money, Sale, SaleLine, SaleStatus, Sku,
+pub use foundation::{Cart, CartError, CartId, CartLine, LineId, Money, SaleStatus, Sku};
+pub use models::{
+    DailySummaryRow, HeldCartFull, HeldCartRow, Refund, RefundLine, Sale, SaleLine, SalesByHourRow,
 };
+pub use repository::SalesRepository;
+pub use service::SalesService;
 
 use std::fmt::Debug;
 

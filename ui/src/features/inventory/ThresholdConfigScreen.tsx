@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Button } from '@/components/Button';
 import { Localized } from '@fluent/react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listProductsScoped, type ProductDto } from '@/api/products';
@@ -32,6 +34,7 @@ export default function ThresholdConfigScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
   const [thresholdVal, setThresholdVal] = useState('5');
   const [enabled, setEnabled] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!sessionToken) return;
@@ -97,12 +100,16 @@ export default function ThresholdConfigScreen() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteClick = (id: string) => {
     if (!sessionToken) return;
-    if (!confirm('Are you sure you want to delete this threshold alert boundary?')) return;
+    setDeleteConfirmId(id);
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!sessionToken || !deleteConfirmId) return;
     try {
-      await deleteStockThreshold(sessionToken, id);
+      await deleteStockThreshold(sessionToken, deleteConfirmId);
+      setDeleteConfirmId(null);
       await loadData();
     } catch (err) {
       addToast({ message: err instanceof Error ? err.message : 'Failed to delete threshold', type: 'error' });
@@ -121,11 +128,11 @@ export default function ThresholdConfigScreen() {
         <Localized id="inv-threshold-title">
           <h2 className="threshold-title">Stock Threshold Configuration</h2>
         </Localized>
-        <button className="shift-btn shift-btn-primary" onClick={handleOpenAddDialog}>
+        <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" onClick={handleOpenAddDialog}>
           <Localized id="inv-threshold-add-btn">
             <span>+ Add Threshold</span>
           </Localized>
-        </button>
+        </Button>
       </div>
 
       <div className="log-filters">
@@ -184,8 +191,7 @@ export default function ThresholdConfigScreen() {
               </Localized>
             </tr>
           </thead>
-          <tbody>
-            {filteredThresholds.map(t => {
+          <tbody>{filteredThresholds.map(t => {
               // The backend stored product_id is actually the product's SKU or DB ID.
               // Let's resolve the product name by matching product_id with product.sku.
               const prod = products.find(p => p.sku === t.product_id);
@@ -205,22 +211,32 @@ export default function ThresholdConfigScreen() {
                   </td>
                   <td className="threshold-actions">
                     <Localized id="edit">
-                      <button className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
+                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }} onClick={() => handleOpenEditDialog(t)}>
                         <span>Edit</span>
-                      </button>
+                      </Button>
                     </Localized>
                     <Localized id="delete">
-                      <button className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDelete(t.id)}>
+                      <Button variant="danger" size="sm" className="shift-btn shift-btn-danger" style={{ padding: '4px 10px' }} onClick={() => handleDeleteClick(t.id)}>
                         <span>Delete</span>
-                      </button>
+                      </Button>
                     </Localized>
                   </td>
                 </tr>
               );
             })}
-          </tbody>
+</tbody>
         </table>
       )}
+
+      <ConfirmDialog
+        open={deleteConfirmId !== null}
+        onCancel={() => setDeleteConfirmId(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Threshold?"
+        message="Are you sure you want to delete this threshold alert boundary? This action cannot be undone."
+        variant="danger"
+        confirmLabel="Delete"
+      />
 
       {isDialogOpen && (
         <div className="threshold-dialog-overlay">
@@ -296,15 +312,15 @@ export default function ThresholdConfigScreen() {
             </label>
 
             <div className="dialog-actions">
-              <button type="button" className="shift-btn shift-btn-danger" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="danger" size="sm" className="shift-btn shift-btn-danger" onClick={() => setIsDialogOpen(false)}>
                 <Localized id="inv-cancel">
                   <span>Cancel</span>
                 </Localized>
-              </button>
+              </Button>
               <Localized id="save">
-                <button type="submit" className="shift-btn shift-btn-primary">
+                <Button type="submit" variant="primary" size="sm" className="shift-btn shift-btn-primary">
                   <span>Save</span>
-                </button>
+                </Button>
               </Localized>
             </div>
           </form>

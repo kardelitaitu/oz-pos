@@ -6,6 +6,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -14,7 +16,7 @@ import { NoShiftsIcon } from '@/components/EmptyStateIllustrations';
 import { Skeleton } from '@/components/Skeleton';
 import { formatMoney } from '@/types/domain';
 import {
-  listShifts,
+  listShiftsScoped,
   openShift,
   closeShift,
   getActiveShift,
@@ -37,11 +39,13 @@ const fmt = (minor: number, currency = 'USD') =>
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken!;
+  const { currency } = useCurrency();
   const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const currency = 'USD';
 
   // ── Modals ────────────────────────────────────────────────────────
   const [showOpenModal, setShowOpenModal] = useState(false);
@@ -67,7 +71,7 @@ export default function ShiftManagementScreen() {
     setLoading(true);
     try {
       const [allShifts, active] = await Promise.all([
-        listShifts(),
+        listShiftsScoped(sessionToken),
         userId ? getActiveShift(userId) : Promise.resolve(null),
       ]);
       setShifts(allShifts);
@@ -77,7 +81,7 @@ export default function ShiftManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -238,8 +242,7 @@ export default function ShiftManagementScreen() {
                     <th>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {Array.from({ length: 4 }).map((_, i) => (
+                <tbody>{Array.from({ length: 4 }).map((_, i) => (
                     <tr key={i}>
                       <td><Skeleton variant="block" width="3.5rem" height="1.25rem" /></td>
                       <td><Skeleton variant="text" width="7rem" /></td>
@@ -252,7 +255,7 @@ export default function ShiftManagementScreen() {
                       <td><Skeleton variant="block" width="2.5rem" height="1.25rem" /></td>
                     </tr>
                   ))}
-                </tbody>
+</tbody>
               </table>
             </div>
           </Card>
@@ -414,8 +417,7 @@ export default function ShiftManagementScreen() {
                       <Localized id="shift-table-actions"><th>Actions</th></Localized>
                     </tr>
                   </thead>
-                  <tbody>
-                    {shifts.map((s) => {
+                  <tbody>{shifts.map((s) => {
                       const diff = s.cashDifferenceMinor;
                       const diffClass =
                         diff !== null && diff < 0
@@ -470,7 +472,7 @@ export default function ShiftManagementScreen() {
                         </tr>
                       );
                     })}
-                  </tbody>
+</tbody>
                 </table>
               </div>
             )}

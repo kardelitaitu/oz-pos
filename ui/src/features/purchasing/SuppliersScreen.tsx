@@ -203,8 +203,7 @@ export default function SuppliersScreen() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {[0, 1, 2, 3].map((r) => (
+              <tbody>{[0, 1, 2, 3].map((r) => (
                   <tr key={r}>
                     <td><Skeleton variant="text" width="5rem" height="0.875rem" /></td>
                     <td><Skeleton variant="text" width="7rem" height="0.875rem" /></td>
@@ -217,7 +216,7 @@ export default function SuppliersScreen() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
+</tbody>
             </table>
           </div>
         </div>
@@ -257,8 +256,7 @@ export default function SuppliersScreen() {
                 <th aria-label="Actions"> </th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((s) => (
+            <tbody>{filtered.map((s) => (
                 <tr key={s.id}>
                   <td className="suppliers-cell-code">{s.code}</td>
                   <td className="suppliers-cell-name">{s.name}</td>
@@ -275,7 +273,7 @@ export default function SuppliersScreen() {
                   </td>
                 </tr>
               ))}
-            </tbody>
+</tbody>
           </table>
         </div>
       )}
