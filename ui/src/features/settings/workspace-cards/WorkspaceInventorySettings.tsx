@@ -108,7 +108,7 @@ export function WorkspaceInventorySettings({
           <label htmlFor="inv-deduction-wh" className="settings-label">
             <Localized id="workspace-inv-deduction-warehouse">Prefer Warehouse First</Localized>
           </label>
-              <label className="settings-toggle" htmlFor="inv-deduction-wh">
+              <span className="settings-toggle">
                 <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
                 <span className="settings-toggle-switch">
                   <input
@@ -121,7 +121,7 @@ export function WorkspaceInventorySettings({
                   />
                   <span className="settings-toggle-slider" />
                 </span>
-              </label>
+              </span>
             </div>
             {!isCompact && (
               <p className="settings-hint">

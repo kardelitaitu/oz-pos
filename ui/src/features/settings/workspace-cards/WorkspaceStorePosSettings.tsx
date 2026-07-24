@@ -117,7 +117,7 @@ export function WorkspaceStorePosSettings({
           <label htmlFor="pos-show-currency" className="settings-label">
             <Localized id="workspace-pos-show-currency">Show Currency</Localized>
           </label>
-          <label className="settings-toggle" htmlFor="pos-show-currency">
+          <span className="settings-toggle">
             <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
             <span className="settings-toggle-switch">
               <input
@@ -130,7 +130,7 @@ export function WorkspaceStorePosSettings({
               />
               <span className="settings-toggle-slider" />
             </span>
-          </label>
+          </span>
         </div>
 
         {/* Show tax */}
@@ -138,7 +138,7 @@ export function WorkspaceStorePosSettings({
           <label htmlFor="pos-show-tax" className="settings-label">
             <Localized id="workspace-pos-show-tax">Show Tax</Localized>
           </label>
-          <label className="settings-toggle" htmlFor="pos-show-tax">
+          <span className="settings-toggle">
             <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
             <span className="settings-toggle-switch">
               <input
@@ -151,7 +151,7 @@ export function WorkspaceStorePosSettings({
               />
               <span className="settings-toggle-slider" />
             </span>
-          </label>
+          </span>
         </div>
 
         {/* Show table number */}
@@ -159,7 +159,7 @@ export function WorkspaceStorePosSettings({
           <label htmlFor="pos-show-table" className="settings-label">
             <Localized id="workspace-pos-show-table">Show Table Number</Localized>
           </label>
-          <label className="settings-toggle" htmlFor="pos-show-table">
+          <span className="settings-toggle">
             <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
             <span className="settings-toggle-switch">
               <input
@@ -172,7 +172,7 @@ export function WorkspaceStorePosSettings({
               />
               <span className="settings-toggle-slider" />
             </span>
-          </label>
+          </span>
         </div>
 
         {!isCompact && (

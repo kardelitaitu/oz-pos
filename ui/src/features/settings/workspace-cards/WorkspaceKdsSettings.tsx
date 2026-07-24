@@ -100,7 +100,7 @@ export function WorkspaceKdsSettings({
           <label htmlFor="kds-sound" className="settings-label">
             <Localized id="workspace-kds-sound">New Order Sound</Localized>
           </label>
-            <label className="settings-toggle" htmlFor="kds-sound">
+            <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
@@ -113,7 +113,7 @@ export function WorkspaceKdsSettings({
                 />
                 <span className="settings-toggle-slider" />
               </span>
-            </label>
+            </span>
           </div>
 
           {/* Yellow threshold */}
@@ -175,7 +175,7 @@ export function WorkspaceKdsSettings({
           <label htmlFor="kds-auto-ack" className="settings-label">
             <Localized id="workspace-kds-auto-ack">Auto-Acknowledge</Localized>
           </label>
-            <label className="settings-toggle" htmlFor="kds-auto-ack">
+            <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
@@ -188,7 +188,7 @@ export function WorkspaceKdsSettings({
                 />
                 <span className="settings-toggle-slider" />
               </span>
-            </label>
+            </span>
           </div>
 
           {/* Density */}

@@ -86,7 +86,7 @@ export function WorkspaceRestaurantPosSettings({
           <label htmlFor="resto-table-mgmt" className="settings-label">
             <Localized id="workspace-resto-table-enable">Enable Table Layout</Localized>
           </label>
-            <label className="settings-toggle" htmlFor="resto-table-mgmt">
+            <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
@@ -99,7 +99,7 @@ export function WorkspaceRestaurantPosSettings({
                 />
                 <span className="settings-toggle-slider" />
               </span>
-            </label>
+            </span>
           </div>
           {!isCompact && tableManagement && (
             <p className="settings-hint">
@@ -125,7 +125,7 @@ export function WorkspaceRestaurantPosSettings({
           <label htmlFor="resto-course-firing" className="settings-label">
             <Localized id="workspace-resto-courses-enable">Enable Course Firing</Localized>
           </label>
-            <label className="settings-toggle" htmlFor="resto-course-firing">
+            <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
@@ -138,7 +138,7 @@ export function WorkspaceRestaurantPosSettings({
                 />
                 <span className="settings-toggle-slider" />
               </span>
-            </label>
+            </span>
           </div>
           {!isCompact && courseFiring && (
             <p className="settings-hint">

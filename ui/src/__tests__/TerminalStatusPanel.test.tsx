@@ -32,6 +32,7 @@ const { stableL10n } = vi.hoisted(() => ({
 
 vi.mock('@/api/terminals', () => ({
   listTerminals: () => mockListTerminals(),
+  listTerminalsScoped: () => mockListTerminals(),
 }));
 
 // Mock @fluent/react to bypass Fluent variable interpolation issues in JSDOM.

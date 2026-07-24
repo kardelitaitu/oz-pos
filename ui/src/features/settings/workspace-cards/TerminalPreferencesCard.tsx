@@ -123,7 +123,7 @@ export function TerminalPreferencesCard({
           <label htmlFor="term-dark-mode" className="settings-label">
             <Localized id="workspace-terminal-dark-mode">Dark Mode</Localized>
           </label>
-            <label className="settings-toggle" htmlFor="term-dark-mode">
+            <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
@@ -136,7 +136,7 @@ export function TerminalPreferencesCard({
                 />
                 <span className="settings-toggle-slider" />
               </span>
-            </label>
+            </span>
           </div>
 
           {/* Scale auto-zero */}
@@ -144,7 +144,7 @@ export function TerminalPreferencesCard({
           <label htmlFor="term-scale-zero" className="settings-label">
             <Localized id="workspace-terminal-scale-zero">Auto-Zero Scale on Boot</Localized>
           </label>
-            <label className="settings-toggle" htmlFor="term-scale-zero">
+            <span className="settings-toggle">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
@@ -157,7 +157,7 @@ export function TerminalPreferencesCard({
                 />
                 <span className="settings-toggle-slider" />
               </span>
-            </label>
+            </span>
           </div>
         </div>
       </Card>

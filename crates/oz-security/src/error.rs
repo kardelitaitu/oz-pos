@@ -109,7 +109,6 @@ mod tests {
                 SecurityError::DecryptionFailed => "decryption-failed",
                 SecurityError::PermissionDenied(_) => "permission-denied",
                 SecurityError::KeyGenerationFailed(_) => "key-generation-failed",
-                _ => "future-variant",
             }
         };
         assert_eq!(

@@ -9,7 +9,7 @@ import { useAppZoom } from '@/contexts/ZoomContext';
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockImplementation((cmd: string) => {
     if (cmd === 'get_brand_settings') {
-      return Promise.resolve({ company_name: 'Test Store' });
+      return Promise.resolve({ primary_colour: '#10b981', logo_path: null, store_name: 'Test Store' });
     }
     return Promise.resolve(null);
   }),
@@ -22,7 +22,7 @@ function ConsumerComponent() {
 
   return (
     <div>
-      <span data-testid="brand">{brand.loading ? 'loading' : brand.settings?.company_name || 'none'}</span>
+      <span data-testid="brand">{brand.loading ? 'loading' : brand.settings?.store_name || 'none'}</span>
       <span data-testid="hw">{hw.enabled ? 'hw-on' : 'hw-off'}</span>
       <span data-testid="zoom">{zoom.zoomLevel}</span>
     </div>

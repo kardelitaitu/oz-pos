@@ -144,7 +144,7 @@ if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/packag
     Push-Location ui
 
     Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" `
-         -RetryMax 2 -RetryKill @("node.exe", "esbuild.exe") -ScriptBlock {
+         -RetryMax 2 -RetryKill @("esbuild.exe") -ScriptBlock {
         npm ci --no-audit --no-fund 2>&1
     }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
