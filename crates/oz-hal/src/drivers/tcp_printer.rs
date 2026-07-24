@@ -58,13 +58,42 @@ impl TcpReceiptPrinter {
         Ok(())
     }
 
+    /// Write `data` to the cached stream. If the write fails — which is
+    /// the symptom of a stale/dropped connection (printer rebooted,
+    /// network blip, idle TCP timeout) — the cached stream is discarded
+    /// and a fresh connection is established for a single retry. Without
+    /// this the driver is permanently stuck on a dead socket: the next
+    /// `ensure_connected` still sees `guard.is_some()` and never
+    /// reconnects, so every subsequent print silently fails or errors.
     async fn write_to_stream(&self, data: &[u8]) -> Result<(), HalError> {
         let mut guard = self.stream.lock().await;
-        let stream = guard
-            .as_mut()
-            .ok_or(HalError::NotFound("not connected".into()))?;
 
-        tcp::write_all(stream, data).await
+        // First attempt: write to the cached stream (if any).
+        if let Some(stream) = guard.as_mut() {
+            match tcp::write_all(stream, data).await {
+                Ok(()) => return Ok(()),
+                // A write error likely means the cached connection is
+                // dead. Drop it and fall through to reconnect + retry.
+                Err(_e) => {
+                    *guard = None;
+                }
+            }
+        }
+
+        // Reconnect and retry once. This also covers the first-ever
+        // write when no stream is cached (though ensure_connected
+        // normally handles that in the caller).
+        let mut stream = tcp::connect(&self.addr).await?;
+        match tcp::write_all(&mut stream, data).await {
+            Ok(()) => {
+                // Cache the healthy stream for future writes.
+                *guard = Some(stream);
+                Ok(())
+            }
+            // If the retry also failed, `guard` stays None so the next
+            // call tries a fresh connect rather than reusing a bad stream.
+            Err(e) => Err(e),
+        }
     }
 }
 
