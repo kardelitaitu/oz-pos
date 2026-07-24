@@ -449,6 +449,7 @@ docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md
 docs/decisions/2026-03-01-frontend-restructure.md
 docs/decisions/2026-07-24-domain-module-extraction.md
+docs/decisions/2026-07-24-decentralized-ui-module-registration.md
 ```
 
 ---
