@@ -323,37 +323,36 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
     it('shows rate-limit countdown after 2 failed PIN attempts', async () => {
       await advanceToPin();
 
-      // Auto-submit fires when 4 digits are entered (MAX_PIN_LENGTH).
-      // The rate-limit warning appears when pinAttempts >= 2.
-      // Each failed attempt must use a unique error message because
-      // toastShownForError skips re-processing the same error string.
-
-      // 1st failure: enter 4 digits → auto-submit → pinAttempts = 1
-      mockAuthError.mockReturnValue('Error 1');
+      // ── 1st attempt ──────────────────────────────────────────────
+      // Enter 3 digits with error=null, then set error JUST before 4th
+      // so auto-submit fires before the error effect clears pin.
       fireEvent.click(screen.getByLabelText('1'));
       fireEvent.click(screen.getByLabelText('2'));
       fireEvent.click(screen.getByLabelText('3'));
+      mockAuthError.mockReturnValue('Wrong PIN');
       fireEvent.click(screen.getByLabelText('4'));
+
       await waitFor(() => {
-        const inline = document.querySelector('.staff-login-error');
-        expect(inline).toHaveTextContent('Error 1');
+        expect(document.querySelector('.staff-login-error')).toHaveTextContent('Wrong PIN');
       });
 
-      // Clear PIN for next attempt
-      fireEvent.click(screen.getByLabelText('Clear'));
-
-      // 2nd failure: enter 4 digits → auto-submit → pinAttempts = 2 → rate-limit warning
-      mockAuthError.mockReturnValue('Error 2');
-      fireEvent.click(screen.getByLabelText('1'));
-      fireEvent.click(screen.getByLabelText('2'));
-      fireEvent.click(screen.getByLabelText('3'));
-      fireEvent.click(screen.getByLabelText('4'));
-      await waitFor(() => {
-        const inline = document.querySelector('.staff-login-error');
-        expect(inline).toHaveTextContent(/attempts? remaining/i);
-      });
-
+      // ── 2nd attempt ──────────────────────────────────────────────
       mockAuthError.mockReturnValue(null);
+      fireEvent.click(screen.getByLabelText('Clear'));
+      await waitFor(() => {
+        expect(document.querySelectorAll('.staff-login-pin-dot--filled').length).toBe(0);
+      });
+
+      fireEvent.click(screen.getByLabelText('1'));
+      fireEvent.click(screen.getByLabelText('2'));
+      fireEvent.click(screen.getByLabelText('3'));
+      mockAuthError.mockReturnValue('Wrong PIN again');
+      fireEvent.click(screen.getByLabelText('4'));
+
+      await waitFor(() => {
+        const el = document.querySelector('.staff-login-error');
+        expect(el).toHaveTextContent(/attempts? remaining/i);
+      });
     });
 
     it('shows lockout message after lockout error and disables keypad', async () => {
