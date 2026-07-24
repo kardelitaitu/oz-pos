@@ -151,47 +151,67 @@ fn encode_utf16_null(s: &str) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
     fn test_keyring() -> WindowsCredentialManager {
         WindowsCredentialManager::new().expect("failed to create keyring")
     }
 
+    fn unique_test_name(prefix: &str) -> String {
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        format!("{prefix}-{}-{n}", std::process::id())
+    }
+
     #[test]
     fn windows_roundtrip() {
         let k = test_keyring();
-        let name = "oz-pos-test-windows-roundtrip";
-        let _ = k.delete_secret(name);
+        let name = unique_test_name("oz-pos-test-windows-roundtrip");
+        let _ = k.delete_secret(&name);
 
-        assert_eq!(k.get_secret(name).unwrap(), None);
+        assert_eq!(k.get_secret(&name).unwrap(), None);
 
-        k.set_secret(name, "test-value-123").unwrap();
-        assert_eq!(k.get_secret(name).unwrap(), Some("test-value-123".into()));
+        k.set_secret(&name, "test-value-123").unwrap();
+        assert_eq!(k.get_secret(&name).unwrap(), Some("test-value-123".into()));
 
-        assert!(k.delete_secret(name).unwrap());
-        assert_eq!(k.get_secret(name).unwrap(), None);
+        assert!(k.delete_secret(&name).unwrap());
+        assert_eq!(k.get_secret(&name).unwrap(), None);
     }
 
     #[test]
     fn windows_delete_nonexistent_returns_false() {
         let k = test_keyring();
-        assert!(!k.delete_secret("oz-pos-test-nonexistent-delete").unwrap());
+        let name = unique_test_name("oz-pos-test-nonexistent-delete");
+        assert!(!k.delete_secret(&name).unwrap());
     }
 
     #[test]
     fn windows_overwrite_existing() {
         let k = test_keyring();
-        // Use a unique name to avoid race with parallel test runs.
-        let name = &format!("oz-pos-test-overwrite-{}", std::process::id());
-        let _ = k.delete_secret(name);
+        // Use a truly unique name so parallel threads under nextest
+        // do not race on the same Windows credential.
+        let name = unique_test_name("oz-pos-test-overwrite");
+        let _ = k.delete_secret(&name);
 
-        k.set_secret(name, "v1").unwrap();
-        // Windows Credential Manager may need a brief pause between
-        // rapid writes on the same key. A short sleep avoids a race
-        // where the second write arrives before the first is committed.
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        k.set_secret(name, "v2").unwrap();
-        assert_eq!(k.get_secret(name).unwrap(), Some("v2".into()));
+        k.set_secret(&name, "v1").unwrap();
 
-        k.delete_secret(name).unwrap();
+        // Retry the overwrite until the new value is observed. Windows
+        // Credential Manager can be asynchronous about the second write,
+        // so polling is more robust than a fixed sleep.
+        let mut attempts = 20;
+        loop {
+            k.set_secret(&name, "v2").unwrap();
+            if k.get_secret(&name).unwrap().as_deref() == Some("v2") {
+                break;
+            }
+            attempts -= 1;
+            if attempts == 0 {
+                panic!("failed to overwrite credential in Windows Credential Manager");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        k.delete_secret(&name).unwrap();
     }
 }
