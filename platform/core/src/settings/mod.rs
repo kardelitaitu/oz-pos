@@ -15,5 +15,10 @@ pub mod keys;
 
 #[cfg(test)]
 mod split_tests;
+
+/// Test-only helpers shared across `settings` test modules.
+#[cfg(test)]
+mod test_helpers;
+
 #[cfg(test)]
 mod tests;

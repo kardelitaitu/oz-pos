@@ -1,19 +1,6 @@
+use super::test_helpers::fresh;
 use super::*;
 use rusqlite::{Connection, params};
-
-fn fresh() -> Connection {
-    let conn = Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        )",
-    )
-    .unwrap();
-    conn
-}
 
 // â”€â”€ Raw get / set / remove â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

@@ -3,22 +3,8 @@
 //! These tests do not re-prove business logic; they verify that the
 //! module split preserved the public API surface and re-exports.
 
-use crate::settings::{Settings, keys};
-use rusqlite::Connection;
-
-fn fresh() -> Connection {
-    let conn = Connection::open_in_memory().unwrap();
-    conn.pragma_update(None, "foreign_keys", "ON").unwrap();
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        )",
-    )
-    .unwrap();
-    conn
-}
+use super::test_helpers::fresh;
+use super::{Settings, keys};
 
 /// Verifies that the public re-export paths for `Settings` and `keys`
 /// are still reachable from outside the crate after the split.
