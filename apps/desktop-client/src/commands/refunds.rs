@@ -12,6 +12,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Refundlinearg.
 pub struct RefundLineArg {
     /// ID of the associated sale line.
@@ -29,6 +30,7 @@ pub struct RefundLineArg {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 /// Processrefundargs.
 pub struct ProcessRefundArgs {
     /// ID of the original completed sale.
@@ -46,6 +48,7 @@ pub struct ProcessRefundArgs {
 /// Args for `process_refund_scoped` — identical to `ProcessRefundArgs`
 /// but without `user_id` (read from the session token instead).
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessRefundScopedArgs {
     /// ID of the associated sale.
     pub sale_id: String,
@@ -467,7 +470,9 @@ mod tests {
 
     #[test]
     fn process_refund_scoped_args_deserialize() {
-        let json = r##"{"sale_id":"sale-1","reason":"Changed mind","note":null,"lines":[]}"##;
+        // camelCase — the exact format the frontend sends
+        // (ui/src/api/sales.ts ProcessRefundScopedArgs: { saleId, reason, note, lines }).
+        let json = r##"{"saleId":"sale-1","reason":"Changed mind","note":null,"lines":[]}"##;
         let args: ProcessRefundScopedArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.sale_id, "sale-1");
         assert_eq!(args.reason, "Changed mind");
@@ -560,5 +565,48 @@ mod tests {
         );
         let r = result.unwrap();
         assert_eq!(r.total_minor, 700);
+    }
+
+    // ── Frontend camelCase parity (Bug #13) ──────────────────────────────
+    //
+    // The frontend (ui/src/api/sales.ts) sends camelCase keys:
+    //   RefundLineArg:      { saleLineId, sku, qty, unitPriceMinor, currency, lineTotalMinor }
+    //   ProcessRefundArgs:  { saleId, reason, note, userId, lines }
+    //   ProcessRefundScopedArgs: { saleId, reason, note, lines }
+    // wrapped in { args: { ... } }. Tauri does NOT rename struct fields
+    // — serde uses the exact field names. Without #[serde(rename_all =
+    // "camelCase")], serde looks for "sale_line_id"/"unit_price_minor"/
+    // "line_total_minor"/"sale_id"/"user_id" and fails on the real
+    // frontend payload, breaking every refund call.
+
+    #[test]
+    fn refund_line_arg_deserialize_frontend_camelcase() {
+        let json = r##"{"saleLineId":"sl-1","sku":"COFFEE","qty":2,"unitPriceMinor":350,"currency":"USD","lineTotalMinor":700}"##;
+        let line: RefundLineArg = serde_json::from_str(json)
+            .expect("RefundLineArg must accept the frontend's camelCase payload");
+        assert_eq!(line.sale_line_id, "sl-1");
+        assert_eq!(line.unit_price_minor, 350);
+        assert_eq!(line.line_total_minor, 700);
+    }
+
+    #[test]
+    fn process_refund_args_deserialize_frontend_camelcase() {
+        let json = r##"{"saleId":"sale-1","reason":"Customer return","note":"damaged","userId":"u1","lines":[{"saleLineId":"sl-1","sku":"COFFEE","qty":2,"unitPriceMinor":350,"currency":"USD","lineTotalMinor":700}]}"##;
+        let args: ProcessRefundArgs = serde_json::from_str(json)
+            .expect("ProcessRefundArgs must accept the frontend's camelCase payload");
+        assert_eq!(args.sale_id, "sale-1");
+        assert_eq!(args.user_id, "u1");
+        assert_eq!(args.lines.len(), 1);
+        assert_eq!(args.lines[0].sale_line_id, "sl-1");
+    }
+
+    #[test]
+    fn process_refund_scoped_args_deserialize_frontend_camelcase() {
+        let json = r##"{"saleId":"sale-1","reason":"Customer return","note":null,"lines":[]}"##;
+        let args: ProcessRefundScopedArgs = serde_json::from_str(json)
+            .expect("ProcessRefundScopedArgs must accept the frontend's camelCase payload");
+        assert_eq!(args.sale_id, "sale-1");
+        assert_eq!(args.reason, "Customer return");
+        assert!(args.lines.is_empty());
     }
 }
