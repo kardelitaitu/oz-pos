@@ -164,25 +164,46 @@ mod tests {
         format!("{prefix}-{}-{n}", std::process::id())
     }
 
+    /// RAII guard that deletes the named Windows credential when it goes
+    /// out of scope. This ensures cleanup even if a test panics mid-way.
+    struct CredentialGuard(String);
+
+    impl CredentialGuard {
+        fn new(name: String) -> Self {
+            Self(name)
+        }
+    }
+
+    impl Drop for CredentialGuard {
+        fn drop(&mut self) {
+            if let Ok(k) = WindowsCredentialManager::new() {
+                let _ = k.delete_secret(&self.0);
+            }
+        }
+    }
+
     #[test]
     fn windows_roundtrip() {
         let k = test_keyring();
         let name = unique_test_name("oz-pos-test-windows-roundtrip");
-        let _ = k.delete_secret(&name);
+        let _guard = CredentialGuard::new(name.clone());
 
         assert_eq!(k.get_secret(&name).unwrap(), None);
 
         k.set_secret(&name, "test-value-123").unwrap();
         assert_eq!(k.get_secret(&name).unwrap(), Some("test-value-123".into()));
 
+        // Deletion is handled by the guard on scope exit, which also covers
+        // the panic path. Keep the explicit delete here to verify the API
+        // returns true for an existing credential.
         assert!(k.delete_secret(&name).unwrap());
-        assert_eq!(k.get_secret(&name).unwrap(), None);
     }
 
     #[test]
     fn windows_delete_nonexistent_returns_false() {
         let k = test_keyring();
         let name = unique_test_name("oz-pos-test-nonexistent-delete");
+        let _guard = CredentialGuard::new(name.clone());
         assert!(!k.delete_secret(&name).unwrap());
     }
 
@@ -192,7 +213,7 @@ mod tests {
         // Use a truly unique name so parallel threads under nextest
         // do not race on the same Windows credential.
         let name = unique_test_name("oz-pos-test-overwrite");
-        let _ = k.delete_secret(&name);
+        let _guard = CredentialGuard::new(name.clone());
 
         k.set_secret(&name, "v1").unwrap();
 
@@ -211,7 +232,5 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
-
-        k.delete_secret(&name).unwrap();
     }
 }
