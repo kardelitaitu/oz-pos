@@ -32,6 +32,7 @@ pub mod contracts;
 pub mod dto;
 pub mod enums;
 pub mod errors;
+pub mod events;
 pub mod money;
 pub mod percentage;
 pub mod sku;

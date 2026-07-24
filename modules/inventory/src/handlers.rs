@@ -6,10 +6,9 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::models::ProductType;
 use foundation::contracts::{EventHandler, ModuleResult};
-use oz_core::db::Store;
-use oz_core::events::SaleCompleted;
-use oz_core::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
+use foundation::events::SaleCompleted;
 use rusqlite::Connection;
 use tracing::{error, info};
 
@@ -52,30 +51,42 @@ impl InventoryStockHandler {
     /// Returns `Ok(())` if the deduction succeeded (or was skipped —
     /// unknown SKUs and non-inventory products are silently skipped).
     /// Returns `Err` if a deduction failed (e.g. insufficient stock).
-    #[allow(deprecated)]
     fn handle_line(
         &self,
-        store: &Store<'_>,
-        tx: Option<&rusqlite::Transaction<'_>>,
+        tx: &rusqlite::Transaction<'_>,
         sku: &str,
         qty: i64,
     ) -> Result<(), anyhow::Error> {
-        // Look up the product ID by SKU.
-        let product_id = match store.product_id_by_sku(sku) {
-            Ok(Some(pid)) => pid,
-            Ok(None) => {
+        use rusqlite::params;
+
+        // Look up product ID by SKU.
+        let product_id: Option<String> = tx
+            .query_row(
+                "SELECT id FROM products WHERE sku = ?1",
+                params![sku],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let product_id = match product_id {
+            Some(pid) => pid,
+            None => {
                 error!(sku, "inventory handler: product not found by SKU");
-                return Ok(());
-            }
-            Err(e) => {
-                error!(sku, error = %e, "inventory handler: failed to look up product");
                 return Ok(());
             }
         };
 
-        // Non-inventory product types (service, etc.) have no stock — skip.
-        if let Ok(Some(ref pt)) = store.product_type_by_id(&product_id)
-            && let Some(product_type) = oz_core::ProductType::parse_str(pt)
+        // Check product type
+        let ptype_str: Option<String> = tx
+            .query_row(
+                "SELECT product_type FROM products WHERE id = ?1",
+                params![product_id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(ref pt) = ptype_str
+            && let Some(product_type) = ProductType::parse_str(pt)
             && !product_type.tracks_inventory()
         {
             info!(
@@ -85,81 +96,75 @@ impl InventoryStockHandler {
             return Ok(());
         }
 
-        // Check if this product has a recipe (BOM ingredients).
-        let ingredients = match store.get_recipe_ingredients(&product_id) {
-            Ok(ings) => ings,
-            Err(e) => {
-                error!(
-                    sku,
-                    error = %e,
-                    "inventory handler: failed to query recipe ingredients"
-                );
-                return Ok(());
+        // Query recipe ingredients
+        let mut stmt = tx.prepare("SELECT ingredient_product_id, quantity_required FROM product_recipes WHERE parent_product_id = ?1")?;
+        let ings = stmt.query_map(params![product_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+
+        let mut ingredients = Vec::new();
+        for ing in ings {
+            if let Ok(i) = ing {
+                ingredients.push(i);
             }
-        };
+        }
+
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
         if ingredients.is_empty() {
-            // Simple product — deduct directly.
-            let new_qty = if let Some(tx) = tx {
-                let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
-                store.adjust_stock_at_location_with_reason(
-                    tx, sku, -qty, &loc, None, None, None, None,
-                )?
-            } else {
-                store.adjust_stock(sku, -qty)?
-            };
-            info!(
-                sku,
-                qty = -qty,
-                new_qty,
-                "inventory handler: stock decremented for simple product"
-            );
+            let mut update_stmt = tx.prepare("UPDATE inventory SET qty = qty - ?1, updated_at = ?2 WHERE product_id = ?3 RETURNING qty")?;
+            let new_qty: Option<i64> = update_stmt
+                .query_row(params![qty, now, &product_id], |r| r.get(0))
+                .ok();
+            match new_qty {
+                Some(q) if q >= 0 => {
+                    tx.execute("UPDATE stock_summary SET qty = qty - ?1, updated_at = ?2 WHERE item_id = ?3", params![qty, now, &product_id]).ok();
+                    info!(
+                        sku,
+                        qty = -qty,
+                        new_qty = q,
+                        "inventory handler: stock decremented for simple product"
+                    );
+                }
+                _ => {
+                    return Err(anyhow::anyhow!("insufficient stock for SKU {sku}"));
+                }
+            }
         } else {
-            // Composite product — deduct each ingredient by qty × quantity_required.
-            for ingredient in &ingredients {
-                let ingredient_sku =
-                    match store.product_sku_by_id(&ingredient.ingredient_product_id) {
-                        Ok(Some(sku)) => sku,
-                        Ok(None) => {
-                            error!(
-                                ingredient_id = %ingredient.ingredient_product_id,
-                                "inventory handler: ingredient product not found by ID"
-                            );
-                            continue;
-                        }
-                        Err(e) => {
-                            error!(
-                                ingredient_id = %ingredient.ingredient_product_id,
-                                error = %e,
-                                "inventory handler: failed to look up ingredient SKU"
-                            );
-                            continue;
-                        }
-                    };
+            for (ingredient_product_id, quantity_required) in ingredients {
+                let ingredient_sku: Option<String> = tx
+                    .query_row(
+                        "SELECT sku FROM products WHERE id = ?1",
+                        params![&ingredient_product_id],
+                        |r| r.get(0),
+                    )
+                    .ok();
 
-                let deduct_qty = qty * ingredient.quantity_required;
-                let new_qty = if let Some(tx) = tx {
-                    let loc = LocationId::from(CANONICAL_DEFAULT_LOCATION_UUID);
-                    store.adjust_stock_at_location_with_reason(
-                        tx,
-                        &ingredient_sku,
-                        -deduct_qty,
-                        &loc,
-                        None,
-                        None,
-                        None,
-                        None,
-                    )?
-                } else {
-                    store.adjust_stock(&ingredient_sku, -deduct_qty)?
-                };
-                info!(
-                    sku = %ingredient_sku,
-                    qty = -deduct_qty,
-                    recipe_for = sku,
-                    new_qty,
-                    "inventory handler: BOM ingredient stock decremented"
-                );
+                let deduct_qty = qty * quantity_required;
+                let mut update_stmt = tx.prepare("UPDATE inventory SET qty = qty - ?1, updated_at = ?2 WHERE product_id = ?3 RETURNING qty")?;
+                let new_qty: Option<i64> = update_stmt
+                    .query_row(params![deduct_qty, now, &ingredient_product_id], |r| {
+                        r.get(0)
+                    })
+                    .ok();
+                match new_qty {
+                    Some(q) if q >= 0 => {
+                        tx.execute("UPDATE stock_summary SET qty = qty - ?1, updated_at = ?2 WHERE item_id = ?3", params![deduct_qty, now, &ingredient_product_id]).ok();
+                        info!(
+                            sku = ingredient_sku.as_deref().unwrap_or(""),
+                            qty = -deduct_qty,
+                            recipe_for = sku,
+                            new_qty = q,
+                            "inventory handler: BOM ingredient stock decremented"
+                        );
+                    }
+                    _ => {
+                        return Err(anyhow::anyhow!(
+                            "insufficient stock for SKU {}",
+                            ingredient_sku.as_deref().unwrap_or(sku)
+                        ));
+                    }
+                }
             }
         }
         Ok(())
@@ -168,15 +173,14 @@ impl InventoryStockHandler {
 
 impl EventHandler<SaleCompleted> for InventoryStockHandler {
     fn handle(&self, event: &SaleCompleted) -> ModuleResult {
-        let conn = self
+        let mut conn = self
             .db
             .lock()
             .map_err(|e| anyhow::anyhow!("inventory handler: db lock failed: {e}"))?;
-        let tx = conn.unchecked_transaction()?;
-        let store = Store::new(&tx);
+        let tx = conn.transaction()?;
 
         for line in &event.line_items {
-            if let Err(e) = self.handle_line(&store, Some(&tx), &line.sku, line.qty) {
+            if let Err(e) = self.handle_line(&tx, &line.sku, line.qty) {
                 return Err(anyhow::anyhow!(
                     "inventory handler: deduction failed for {}: {e}",
                     line.sku
@@ -193,6 +197,7 @@ impl EventHandler<SaleCompleted> for InventoryStockHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::db::Store;
     use oz_core::migrations;
     use platform_kernel::EventBus;
 

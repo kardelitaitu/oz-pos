@@ -10,6 +10,7 @@ description = "Domain types for OZ-POS: money, currency, cart, sale, inventory."
 foundation = { workspace = true }
 platform-core = { workspace = true }
 modules-sales = { workspace = true }
+modules-inventory = { workspace = true }
 serde = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }

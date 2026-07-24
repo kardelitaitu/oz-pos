@@ -3412,6 +3412,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4101,6 +4102,7 @@ dependencies = [
  "foundation",
  "hex",
  "mdns-sd",
+ "modules-inventory",
  "modules-sales",
  "platform-core",
  "proptest",

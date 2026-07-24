@@ -42,11 +42,18 @@ next: Migrate DB CRUD + commands into this module | perf: N/A.
 //! ```
 
 pub mod handlers;
+pub mod models;
+pub mod repository;
+pub mod service;
 
-// Re-export key inventory domain types from oz-core so consumers can
-// access inventory types through this module without importing oz-core.
-pub use oz_core::db::ProductWithDetails;
-pub use oz_core::{Category, Inventory, Money, Product, ProductVariant, Sku};
+pub use foundation::{Money, Sku};
+pub use models::{
+    CANONICAL_DEFAULT_LOCATION_UUID, Category, Inventory, InventoryLocation, InventoryShift,
+    LocationId, Product, ProductType, ProductWithDetails, StockThreshold,
+    WorkspaceInventoryLocation,
+};
+pub use repository::InventoryRepository;
+pub use service::InventoryService;
 
 use std::fmt::Debug;
 
