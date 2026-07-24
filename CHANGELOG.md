@@ -1,10 +1,42 @@
 # Changelog
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE · post-merge structure verified: top header is [0.0.18] (2026-07-22), headers descend 0.0.18→0.0.11 in order, no stray 0.0.19+ section headers, version-numbering note removed · known cross-repo divergence (see AGENTS.md stamp A1): CHANGELOG documents 0.0.18 as current release while Cargo.toml/tauri.conf.json/package.json read 0.0.19 — user-owned, not auto-corrected -->
-
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.0.19] — 2026-07-25
+
+### Added
+
+- **P1 Domain Modularization**: Extracted Sales, Inventory, CRM, Loyalty, Staff, Terminal, Settings, Tax, and Reporting into standalone `modules/*` crates with model/repository/service layers. Core kernel footprint reduced ~40%.
+- **P2 Decentralized UI Registration**: Replaced monolithic App.tsx with `register.tsx` per feature module — 27 modules self-register via `modules/index.ts` (ADR #31).
+- **P3 Sync Conflict Strategy**: Entity-specific conflict resolution with CRDT-inspired delta merge, priority-based resolution, and tombstone GC.
+- **P8 AppProviders**: Composed all root context providers into `<AppProviders>` wrapper.
+- **ADR #22 Unified Workspace Settings**: 6-phase implementation — SettingsContext provider, `terminal_profile.json` schema, delta ledger IPC, async event bus, 6 workspace setting cards (StoreInfoCard, TerminalPreferencesCard, StorePos/KDS/RestaurantPos/Inventory settings), Tier 2 WorkspaceSettingsModal, topology inspector integration, deprecation cleanup (RetailOptionsScreen removed, 1,224 lines).
+- **ADR #7 Scoped-Command Migration**: All sales, inventory, product, refund, shift, category, customer, terminal, tax, topology, workspace, and hardware commands migrated to scoped (`_token`) variants. UI `@/api/*` domain files updated with `*Scoped()` wrappers.
+- **Security hardening**: LAN server loopback-only bind + PSK handshake (c4). CSP directives on both Tauri clients (c3). PCI-DSS 3.3 fix for `mask_pan`. `SALES_PROCESS` permission checks on 33+ commands.
+- **Topology audit & rewrite**: 20 TOPOLOGY_AUDIT items resolved. NodeTopologyEditor rewrite with drag-to-reorder, keyboard guard, undo. New TopologyScreen. 17→247 passing tests.
+- **UI components**: Button `iconOnly`/`unstyled` props. Connection status indicators on login/lock screens with tooltips. Stock Alert Bell. ErrorBoundary Try Again. ZoomContext input guard.
+- **Backend**: `mlua` migration (replaced `rlua`). `oz-notification` crate (WhatsApp integration). `oz-security` error + TLS modules. `oz-reporting` daily_summary and menu engineering. Cloud server OpenAPI 3.1 docs + graceful shutdown. Database rollback support. Criterion benchmark suites (barcode_lookup, cart_bench, money_bench, transaction_commit).
+- **Test infrastructure**: 42 IPC contract tests, 28 terminals/inventory contract tests. 5 jest-axe a11y regression tests. 730-line API client SDK test. Scoped-API mock migration (Sales 16, Settings 7+3, Shifts 4, Products 8 mock handlers).
+- **CI/CD**: Nightly full-matrix CI. Android CI (3 arch targets). iOS CI (TestFlight). Docker DevEx (`dev-up.ps1`/`.sh`). sccache fix (`SCCACHE_GHA_ENABLED`).
+- **i18n**: 13 missing id/th locale keys. 13 topology Thai keys. 8 new/updated FTL bundles (multi-store, products, purchasing, reports, settings, shared, staff, terminals).
+
+### Fixed
+
+- **TDD Bug Hunting Audit — 87+ bugs across 7 rounds**: Error swallowing (`.unwrap_or(0)`/`.ok()`) in stock/adjust/transfer APIs. Missing `SALES_PROCESS`/`SALES_OVERRIDE_PRICE` permission checks. Silent fallback in sync daemon. PG daemon panic swallow. Missing `tenant_id` in PG transport schema. Module system bugs (stop_all, load_all idempotency, on_load restart, handler unsubscribe). Event bus concurrency bugs. Hashchange listener leak in StockCountsFlow. Atomic purchase order creation. Localized 10 hardcoded 'Toggle' sr-only strings.
+- **Rate-limit test**: `mockAuthError.mockReturnValue` timing fixed — error must be injected right before 4th digit, not before 1st.
+- **vite.config.ts**: Removed `onConsoleLog` suppression block (now in test-setup.ts).
+- **6 typecheck errors**: Resolved across PosScreen, RetailPosScreen, StockCountDetail test files.
+
+### Changed
+
+- **P7 formalized**: React-only UI architecture decision.
+- **P9/P10**: ARCHITECTURE.md updated. Windows reserved `nul` devices ignored.
+- **oz-lua**: Replaced `rlua` with `mlua` (v0.9 lua54 vendored). Enabled `Send + Sync`.
+- **Settings engine**: `terminal_profile.rs` (341 lines). Settings page extraction (1,099 lines in platform-core).
+- **RetailPosScreen**: Scoped-API migration, connection indicators, currency context fix.
+- **100+ .md files audited** across 30+ rounds against current codebase.
 
 ## [0.0.18] — 2026-07-22
 
