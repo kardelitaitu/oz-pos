@@ -2772,15 +2772,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -3338,7 +3329,6 @@ checksum = "d111deb18a9c9bd33e1541309f4742523bfab01d276bfa9a27519f6de9c11dc7"
 dependencies = [
  "bstr",
  "mlua-sys",
- "mlua_derive",
  "num-traits",
  "once_cell",
  "rustc-hash",
@@ -3355,21 +3345,6 @@ dependencies = [
  "lua-src",
  "luajit-src",
  "pkg-config",
-]
-
-[[package]]
-name = "mlua_derive"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09697a6cec88e7f58a02c7ab5c18c611c6907c8654613df9cc0192658a4fb859"
-dependencies = [
- "itertools 0.12.1",
- "once_cell",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.118",
 ]
 
 [[package]]
@@ -4184,8 +4159,8 @@ dependencies = [
 name = "oz-lua"
 version = "0.0.19"
 dependencies = [
+ "mlua",
  "oz-core",
- "rlua",
  "serde",
  "serde_json",
  "tempfile",
@@ -4239,10 +4214,10 @@ name = "oz-plugin"
 version = "0.0.19"
 dependencies = [
  "chrono",
+ "mlua",
  "oz-core",
  "oz-lua",
  "regex",
- "rlua",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4361,6 +4336,7 @@ dependencies = [
  "rand 0.8.6",
  "security-framework",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "windows-sys 0.59.0",
@@ -5401,15 +5377,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rlua"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d43f01c44a4ea0d2c7faadac231a0fd906a438723aa4ee26599e71fa7b915abd"
-dependencies = [
- "mlua",
 ]
 
 [[package]]

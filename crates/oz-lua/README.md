@@ -1,14 +1,14 @@
 # oz-lua
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (3 noted findings, doc-staleness) · F1 (API contract): README shows hooks taking Lua tables (apply_discount(lines_table)); actual lib.rs:34-36 uses lines_json (JSON) e.g. apply_discount(lines_json) -> {percent,label}|nil — signatures outdated table->JSON · F2 (minor): README says `os` fully removed; actual lib.rs:19-22 only nils os.execute/remove/rename/exit (partial restriction), os partially present · F3 (stale): "18 passed" tests — tree now has 62+ test fns (count stale) · verified accurate: rlua 0.20, 3 hooks (apply_discount/calc_line_tax/validate_order) exist, load_dir() exists, safe libs (math/string/table/etc.) preserved -->
+<!-- Audit stamp: 2026-07-24 · Antigravity · status: ACCURATE · Migrated to mlua 0.9 (Lua 5.4 vendored). Memory limit (10 MiB) natively enforced via set_memory_limit. -->
 
 Embedded Lua scripting runtime for OZ-POS — lets merchants customize business
 rules, promotions, and order validation at runtime without recompiling the core.
 
 ## Status
 
-**Stable.** The runtime is built on `rlua` with a sandboxed environment that
-strips dangerous globals (`os`, `io`, `loadfile`, etc.) and exposes three hooks:
+**Stable.** The runtime is built on `mlua` (Lua 5.4 vendored) with a sandboxed environment that
+strips dangerous globals (`io`, `loadfile`, process `os` functions, etc.) and exposes three hooks:
 
 | Hook | Signature | Purpose |
 |------|-----------|---------|
@@ -33,18 +33,16 @@ function apply_discount(lines)
 end
 ```
 
-## Sandboxing
+## Sandboxing & Limits
 
-- `os`, `io`, `loadfile`, `dofile`, `require`, `package`, `debug`, `rawget`,
-  `rawset`, `collectgarbage`, `module`, `load` are **removed**.
-- Safe libraries preserved: `math`, `string`, `table`, `pairs`, `ipairs`,
-  `tonumber`, `tostring`, `type`, `pcall`, `xpcall`, `error`.
+- Native memory limit enforced at **10 MiB** via `lua.set_memory_limit`.
+- Instruction limit enforced at **100,000 instructions** via `lua.set_hook`.
+- Dangerous globals (`io`, `loadfile`, `dofile`, `require`, `package`, `debug`, `rawget`, `rawset`, `collectgarbage`, `module`, `load`) are **nil**.
+- Restricted `os` table retains read-only time access (`os.date`, `os.time`, `os.clock`) while stripping execution capabilities.
+- Safe libraries preserved: `math`, `string`, `table`, `pairs`, `ipairs`, `tonumber`, `tostring`, `type`, `pcall`, `xpcall`, `error`.
 
 ## Tests
 
+```bash
+cargo test -p oz-lua
 ```
-cargo test --package oz-lua
-> 18 passed, 0 failed
-```
-
-> last audited 29-06-26 by docs-auditor

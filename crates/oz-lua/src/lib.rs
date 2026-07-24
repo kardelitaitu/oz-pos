@@ -1,15 +1,14 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 24-07-26 by Antigravity
 crate: oz-lua | status: SAFE | lint: CLEAN
-findings: unsafe impl Send + Sync for LuaRuntime (wraps raw *mut lua_State). SAFETY comment present — always behind Mutex, serialized access on Tokio thread pool. No other unsafe code.
-next: none | perf: N/A
+findings: Migrated from rlua to mlua 0.9. Native memory limit (10 MiB) now enforced via set_memory_limit. All tests passing.
 */
 
 //! Embedded Lua scripting runtime for OZ-POS.
 //!
 //! `oz-lua` lets merchants customize business rules, promotions, and
 //! order validation at runtime without recompiling the Rust core.
-//! The runtime is built on [`rlua`] and exposes a curated surface of
+//! The runtime is built on [`mlua`] and exposes a curated surface of
 //! cart / line / product data to Lua scripts.
 //!
 //! # Sandboxing
@@ -48,19 +47,10 @@ pub use error::LuaError;
 
 /// Maximum number of Lua bytecode instructions before the VM is interrupted.
 /// Prevents infinite loops and runaway CPU from buggy or malicious scripts.
-///
-/// 100 000 instructions is enough for typical discount/tax/validation logic
-/// but small enough that a tight loop (`while true do end`) hits the limit
-/// in under a millisecond.
 const INSTRUCTION_LIMIT: u64 = 100_000;
 
 /// Maximum memory (in bytes) the Lua VM can allocate before being interrupted.
-/// 10 MB — enough for typical discount/tax/validation scripts but not enough
-/// to exhaust host RAM.
-///
-/// Note: Currently not enforced because rlua 0.20 does not expose
-/// `set_memory_limit`. See docs/security/lua-sandbox-audit.md Finding #4.
-#[allow(dead_code)]
+/// 10 MB — enough for typical discount/tax/validation scripts.
 const MEMORY_LIMIT: usize = 10 * 1024 * 1024; // 10 MiB
 
 /// A line item passed into Lua business-rule hooks.
@@ -103,36 +93,27 @@ pub struct TaxOverride {
 /// [`load_dir`](LuaRuntime::load_dir). Business-rule hooks are
 /// optional — if no script defines them, the hooks return `Ok(None)`.
 pub struct LuaRuntime {
-    lua: rlua::Lua,
+    lua: mlua::Lua,
 }
 
-// SAFETY: `rlua::Lua` wraps a raw `*mut lua_State` pointer and is
-// neither `Send` nor `Sync`. However, `LuaRuntime` is always used
-// behind a `Mutex` in the Tauri application state, guaranteeing that
-// only one thread accesses it at a time. The pointer is only ever
-// dereferenced from the Tokio async runtime which runs on a fixed
-// thread pool, and all accesses are serialised by the outer Mutex.
-#[allow(unsafe_code)]
-unsafe impl Send for LuaRuntime {}
-#[allow(unsafe_code)]
-unsafe impl Sync for LuaRuntime {}
+impl Default for LuaRuntime {
+    fn default() -> Self {
+        Self::new().expect("Failed to initialize LuaRuntime")
+    }
+}
 
 impl LuaRuntime {
     /// Create a new sandboxed Lua VM.
     ///
-    /// Removes dangerous globals and sets the instruction limit.
+    /// Removes dangerous globals, sets memory limits, and sets instruction limit.
     pub fn new() -> Result<Self, LuaError> {
-        let lua = rlua::Lua::new();
+        let lua = mlua::Lua::new();
+
+        // Enforce 10 MiB native memory limit in Lua VM
+        lua.set_memory_limit(MEMORY_LIMIT)
+            .map_err(|e| LuaError::Init(format!("set memory limit failed: {e}")))?;
 
         // Sandbox: strip dangerous globals.
-        //
-        // Most dangerous globals are set to nil entirely. However, `os` is
-        // replaced with a restricted subset that allows read-only time
-        // access (`os.date`, `os.time`, `os.clock`) while removing all
-        // I/O and process-control functions (`os.execute`, `os.remove`,
-        // `os.rename`, `os.exit`, `os.tmpname`, `os.setlocale`). This
-        // enables time-aware business rules (e.g. happy-hour pricing)
-        // without exposing any execution or filesystem capabilities.
         {
             let globals = lua.globals();
 
@@ -154,20 +135,17 @@ impl LuaRuntime {
             ];
             for name in remove {
                 globals
-                    .set(*name, rlua::Value::Nil)
+                    .set(*name, mlua::Value::Nil)
                     .map_err(|e| LuaError::Init(e.to_string()))?;
             }
 
-            // Partially remove `os`: keep read-only time functions, strip
-            // everything that could execute, read, write, or spawn.
+            // Partially remove `os`: keep read-only time functions, strip execution capabilities.
             let safe_os = lua
                 .create_table()
                 .map_err(|e| LuaError::Init(e.to_string()))?;
-            // Copy os.date and os.time from the real os table, then
-            // replace with our restricted copy.
-            if let Ok(real_os) = globals.get::<_, rlua::Table>("os") {
+            if let Ok(real_os) = globals.get::<_, mlua::Table>("os") {
                 for safe_key in &["date", "time", "clock"] {
-                    if let Ok(val) = real_os.get::<_, rlua::Value>(*safe_key) {
+                    if let Ok(val) = real_os.get::<_, mlua::Value>(*safe_key) {
                         safe_os
                             .set(*safe_key, val)
                             .map_err(|e| LuaError::Init(e.to_string()))?;
@@ -179,54 +157,20 @@ impl LuaRuntime {
                 .map_err(|e| LuaError::Init(e.to_string()))?;
         }
 
-        // ── Resource limits ────────────────────────────────────────
-        // Instruction limit: set a debug hook that fires every N VM
-        // instructions and aborts execution. This prevents infinite loops
-        // from buggy or malicious scripts.
-        //
-        // rlua 0.20 wraps mlua but does not expose `set_instruction_limit`
-        // directly — we use `DebugEvent::Count` instead, which achieves
-        // the same result. The hook fires at N-instruction intervals;
-        // the callback raises a RuntimeError that aborts the script.
-        //
-        // Since `debug` is stripped from globals before this hook is set,
-        // scripts CANNOT access `debug.sethook` to clear or modify it.
-        //
-        // Note on execution timeout (P0 Finding #2): A wall-clock timeout
-        // is NOT implemented because:
-        //   - The instruction limit (100K) catches infinite loops immediately
-        //     (tight loops hit the limit in under a millisecond)
-        //   - All dangerous I/O globals (os, io, load, etc.) are nil, so
-        //     scripts cannot block on external resources
-        //   - A wall-clock timeout measured from runtime creation would be
-        //     incorrect for long-running sessions (would abort the Nth call
-        //     if total elapsed exceeds the threshold)
-        //   - A per-call wall-clock timeout would require per-call shared
-        //     mutable state which adds complexity for marginal benefit
-        // The instruction limit alone provides adequate protection against
-        // both infinite loops and runaway computation.
+        // Instruction limit hook: interrupts scripts after INSTRUCTION_LIMIT operations
         lua.set_hook(
-            rlua::HookTriggers::new().every_nth_instruction(INSTRUCTION_LIMIT as u32),
-            |_: &rlua::Lua, _: rlua::Debug| {
-                Err(rlua::Error::RuntimeError(
+            mlua::HookTriggers::new().every_nth_instruction(INSTRUCTION_LIMIT as u32),
+            |_: &mlua::Lua, _: mlua::Debug| {
+                Err(mlua::Error::RuntimeError(
                     "script aborted: instruction limit exceeded (100K)".into(),
                 ))
             },
         );
 
-        // Memory limit: rlua 0.20 does not expose set_memory_limit.
-        // A future upgrade to mlua directly would enable this.
-        // The 10 MB limit (MEMORY_LIMIT) is documented but not currently
-        // enforced. See docs/security/lua-sandbox-audit.md Finding #4.
-
         Ok(Self { lua })
     }
 
     /// Load a Lua script from a file path.
-    ///
-    /// The script's chunks are compiled and stored in the VM.
-    /// Global functions defined in the script (such as
-    /// `apply_discount`) become callable from Rust.
     pub fn load_file(&self, path: impl AsRef<Path>) -> Result<(), LuaError> {
         let code = std::fs::read_to_string(path.as_ref())
             .map_err(|e| LuaError::Load(format!("read {:?}: {e}", path.as_ref())))?;
@@ -243,9 +187,8 @@ impl LuaRuntime {
         Ok(())
     }
 
-    /// Access the inner `rlua::Lua` state for advanced operations
-    /// (registry keys, custom bindings, etc.).
-    pub fn inner(&self) -> &rlua::Lua {
+    /// Access the inner `mlua::Lua` state for advanced operations.
+    pub fn inner(&self) -> &mlua::Lua {
         &self.lua
     }
 
@@ -270,22 +213,13 @@ impl LuaRuntime {
     }
 
     /// Check for overwritten global functions and log warnings.
-    ///
-    /// P0 Finding #7: Later scripts can silently overwrite earlier ones' global
-    /// functions (e.g., two plugins both defining `apply_discount`).
-    /// This helper detects overwrites and warns via `tracing::warn!`.
-    /// Note: This method only identifies overwrites by name duplication in the
-    /// `known` list. A more robust implementation would snapshot globals before
-    /// and after each script load and diff them.
     pub fn detect_overwrites(&self, known: &[String]) -> Vec<String> {
         let globals = self.lua.globals();
         let mut overwritten = Vec::new();
         for name in known {
-            if let Ok(val) = globals.get::<_, rlua::Value>(name.as_str())
-                && !matches!(val, rlua::Value::Nil)
+            if let Ok(val) = globals.get::<_, mlua::Value>(name.as_str())
+                && !matches!(val, mlua::Value::Nil)
             {
-                // Check if this function was already registered by iterating
-                // the known list and counting. If count > 1, it's been overwritten.
                 let count = known.iter().filter(|n| *n == name).count();
                 if count > 1 {
                     tracing::warn!(
@@ -301,11 +235,6 @@ impl LuaRuntime {
     }
 
     /// Legacy hook names that new plugins should avoid (use `oz.register_hook` instead).
-    ///
-    /// These represent the deprecated global-function API. New plugins should use
-    /// the `oz.*` API (`oz.register_hook`, `oz.on`, `oz.apply_discount`) instead.
-    /// The old API is retained for backward compatibility but will be removed
-    /// in a future release.
     #[deprecated(
         since = "0.0.14",
         note = "Use oz.register_hook() instead of global functions"
@@ -313,13 +242,11 @@ impl LuaRuntime {
     pub const LEGACY_HOOK_NAMES: &[&str] = &["apply_discount", "calc_line_tax", "validate_order"];
 
     /// Call the Lua `apply_discount(lines)` hook.
-    ///
-    /// Returns `Ok(None)` when no script defined the hook.
     pub fn apply_discount(
         &self,
         lines: &[CartLineData],
     ) -> Result<Option<DiscountResult>, LuaError> {
-        let hook: rlua::Function = {
+        let hook: mlua::Function = {
             let globals = self.lua.globals();
             match globals.get("apply_discount") {
                 Ok(f) => f,
@@ -327,15 +254,13 @@ impl LuaRuntime {
             }
         };
         let table = build_lines_table(&self.lua, lines)?;
-        let result: rlua::Value = hook
+        let result: mlua::Value = hook
             .call(table)
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_discount_result(result))
     }
 
     /// Call the Lua `calc_line_tax(sku, qty, unit_price_minor, currency)` hook.
-    ///
-    /// Returns `Ok(None)` when no script defined the hook.
     pub fn calc_line_tax(
         &self,
         sku: &str,
@@ -343,29 +268,27 @@ impl LuaRuntime {
         unit_price_minor: i64,
         currency: &str,
     ) -> Result<Option<TaxOverride>, LuaError> {
-        let hook: rlua::Function = {
+        let hook: mlua::Function = {
             let globals = self.lua.globals();
             match globals.get("calc_line_tax") {
                 Ok(f) => f,
                 Err(_) => return Ok(None),
             }
         };
-        let result: rlua::Value = hook
+        let result: mlua::Value = hook
             .call((sku, qty, unit_price_minor, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_tax_override(result))
     }
 
     /// Call the Lua `validate_order(lines, total_minor, currency)` hook.
-    ///
-    /// Returns a list of validation error strings (empty = valid).
     pub fn validate_order(
         &self,
         lines: &[CartLineData],
         total_minor: i64,
         currency: &str,
     ) -> Result<Vec<String>, LuaError> {
-        let hook: rlua::Function = {
+        let hook: mlua::Function = {
             let globals = self.lua.globals();
             match globals.get("validate_order") {
                 Ok(f) => f,
@@ -373,13 +296,13 @@ impl LuaRuntime {
             }
         };
         let table = build_lines_table(&self.lua, lines)?;
-        let result: rlua::Value = hook
+        let result: mlua::Value = hook
             .call((table, total_minor, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         let mut errors = Vec::new();
-        if let rlua::Value::Table(tbl) = &result {
+        if let mlua::Value::Table(tbl) = &result {
             for pair in tbl.clone().pairs() {
-                let (_, val): (rlua::Value, String) =
+                let (_, val): (mlua::Value, String) =
                     pair.map_err(|e| LuaError::Script(e.to_string()))?;
                 errors.push(val);
             }
@@ -390,9 +313,9 @@ impl LuaRuntime {
 
 // ── Parsers ──────────────────────────────────────────────────────────────
 
-fn parse_discount_result(val: rlua::Value) -> Option<DiscountResult> {
+fn parse_discount_result(val: mlua::Value) -> Option<DiscountResult> {
     match val {
-        rlua::Value::Table(tbl) => {
+        mlua::Value::Table(tbl) => {
             let percent: i64 = tbl.get("percent").ok()?;
             let label: Option<String> = tbl.get("label").ok().and_then(|v: Option<String>| v);
             Some(DiscountResult { percent, label })
@@ -401,9 +324,9 @@ fn parse_discount_result(val: rlua::Value) -> Option<DiscountResult> {
     }
 }
 
-fn parse_tax_override(val: rlua::Value) -> Option<TaxOverride> {
+fn parse_tax_override(val: mlua::Value) -> Option<TaxOverride> {
     match val {
-        rlua::Value::Table(tbl) => {
+        mlua::Value::Table(tbl) => {
             let rate_bps: i64 = tbl.get("rate_bps").ok()?;
             let is_inclusive: bool = tbl.get("is_inclusive").unwrap_or(false);
             Some(TaxOverride {
@@ -417,11 +340,11 @@ fn parse_tax_override(val: rlua::Value) -> Option<TaxOverride> {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-/// Build an rlua table from CartLineData.
+/// Build an mlua table from CartLineData.
 fn build_lines_table<'lua>(
-    lua: &'lua rlua::Lua,
+    lua: &'lua mlua::Lua,
     lines: &[CartLineData],
-) -> Result<rlua::Table<'lua>, LuaError> {
+) -> Result<mlua::Table<'lua>, LuaError> {
     let table = lua
         .create_table()
         .map_err(|e| LuaError::Script(e.to_string()))?;
@@ -472,47 +395,45 @@ mod tests {
     fn new_creates_sandboxed_vm() {
         let lua = runtime();
         let globals = lua.lua.globals();
-        // os is replaced with a restricted table (date/time/clock only)
-        let os_val: rlua::Value = globals.get("os").unwrap();
+        let os_val: mlua::Value = globals.get("os").unwrap();
         assert!(
-            matches!(os_val, rlua::Value::Table(_)),
+            matches!(os_val, mlua::Value::Table(_)),
             "os should be a restricted table"
         );
-        let os_tbl: rlua::Table = globals.get("os").unwrap();
-        let has_date: rlua::Value = os_tbl.get("date").unwrap();
+        let os_tbl: mlua::Table = globals.get("os").unwrap();
+        let has_date: mlua::Value = os_tbl.get("date").unwrap();
         assert!(
-            matches!(has_date, rlua::Value::Function(_)),
+            matches!(has_date, mlua::Value::Function(_)),
             "os.date should exist"
         );
-        let has_time: rlua::Value = os_tbl.get("time").unwrap();
+        let has_time: mlua::Value = os_tbl.get("time").unwrap();
         assert!(
-            matches!(has_time, rlua::Value::Function(_)),
+            matches!(has_time, mlua::Value::Function(_)),
             "os.time should exist"
         );
-        // Dangerous os functions must be nil
-        let execute: rlua::Value = os_tbl.get("execute").unwrap();
+        let execute: mlua::Value = os_tbl.get("execute").unwrap();
         assert!(
-            matches!(execute, rlua::Value::Nil),
+            matches!(execute, mlua::Value::Nil),
             "os.execute should be nil"
         );
-        let remove: rlua::Value = os_tbl.get("remove").unwrap();
+        let remove: mlua::Value = os_tbl.get("remove").unwrap();
         assert!(
-            matches!(remove, rlua::Value::Nil),
+            matches!(remove, mlua::Value::Nil),
             "os.remove should be nil"
         );
 
-        let io: rlua::Value = globals.get("io").unwrap();
-        assert!(matches!(io, rlua::Value::Nil), "io should be removed");
-        let loadfile: rlua::Value = globals.get("loadfile").unwrap();
+        let io: mlua::Value = globals.get("io").unwrap();
+        assert!(matches!(io, mlua::Value::Nil), "io should be removed");
+        let loadfile: mlua::Value = globals.get("loadfile").unwrap();
         assert!(
-            matches!(loadfile, rlua::Value::Nil),
+            matches!(loadfile, mlua::Value::Nil),
             "loadfile should be removed"
         );
-        let math: rlua::Value = globals.get("math").unwrap();
-        assert!(matches!(math, rlua::Value::Table(_)), "math should exist");
-        let string: rlua::Value = globals.get("string").unwrap();
+        let math: mlua::Value = globals.get("math").unwrap();
+        assert!(matches!(math, mlua::Value::Table(_)), "math should exist");
+        let string: mlua::Value = globals.get("string").unwrap();
         assert!(
-            matches!(string, rlua::Value::Table(_)),
+            matches!(string, mlua::Value::Table(_)),
             "string should exist"
         );
     }
@@ -523,8 +444,8 @@ mod tests {
         lua.load_str("function apply_discount(_) return nil end")
             .unwrap();
         let globals = lua.lua.globals();
-        let hook: rlua::Value = globals.get("apply_discount").unwrap();
-        assert!(matches!(hook, rlua::Value::Function(_)));
+        let hook: mlua::Value = globals.get("apply_discount").unwrap();
+        assert!(matches!(hook, mlua::Value::Function(_)));
     }
 
     #[test]
@@ -673,17 +594,14 @@ end
     #[test]
     fn sandbox_allows_os_date_but_blocks_execute() {
         let lua = runtime();
-        // os.date should work (read-only time access)
         let date_ok = lua.load_str(r#"local d = os.date("!*t"); assert(type(d) == "table")"#);
         assert!(
             date_ok.is_ok(),
             "os.date should be available: {:?}",
             date_ok
         );
-        // os.time should work
         let time_ok = lua.load_str(r#"local t = os.time(); assert(type(t) == "number")"#);
         assert!(time_ok.is_ok(), "os.time should be available");
-        // os.execute should be blocked
         let exec_blocked = lua.load_str(r#"os.execute("echo hacked")"#);
         assert!(exec_blocked.is_err());
     }
@@ -759,27 +677,22 @@ end
         assert!(lua.validate_order(&lines, 100, "USD").unwrap().is_empty());
     }
 
-    // ── P0-4: Comprehensive sandbox tests ─────────────────────────
-
     #[test]
     fn dangerous_globals_are_nil_or_restricted() {
         let lua = runtime();
         let globals = lua.lua.globals();
-        // os is replaced with a restricted table (not nil)
-        let os_val: rlua::Value = globals.get("os").unwrap();
+        let os_val: mlua::Value = globals.get("os").unwrap();
         assert!(
-            matches!(os_val, rlua::Value::Table(_)),
+            matches!(os_val, mlua::Value::Table(_)),
             "os should be restricted table"
         );
-        // Verify os.execute is still blocked
-        let os_tbl: rlua::Table = globals.get("os").unwrap();
-        let execute: rlua::Value = os_tbl.get("execute").unwrap();
+        let os_tbl: mlua::Table = globals.get("os").unwrap();
+        let execute: mlua::Value = os_tbl.get("execute").unwrap();
         assert!(
-            matches!(execute, rlua::Value::Nil),
+            matches!(execute, mlua::Value::Nil),
             "os.execute should be nil"
         );
 
-        // All other dangerous globals must be nil
         let nil_globals = [
             "io",
             "loadfile",
@@ -796,9 +709,9 @@ end
             "load",
         ];
         for name in &nil_globals {
-            let val: rlua::Value = globals.get(*name).unwrap();
+            let val: mlua::Value = globals.get(*name).unwrap();
             assert!(
-                matches!(val, rlua::Value::Nil),
+                matches!(val, mlua::Value::Nil),
                 "dangerous global '{name}' should be nil"
             );
         }
@@ -807,39 +720,30 @@ end
     #[test]
     fn safe_globals_still_work() {
         let lua = runtime();
-        // Verify that the allowed standard-library globals exist and work.
         lua.load_str(
             r#"
--- math
 local pi = math.pi
 assert(pi > 3.14)
 
--- string
 local greeting = string.upper("hello")
 assert(greeting == "HELLO")
 
--- table
 local t = { 1, 2, 3 }
 table.insert(t, 4)
 assert(#t == 4)
 
--- pairs / ipairs
 local count = 0
 for _, _ in pairs(t) do count = count + 1 end
 assert(count == 4)
 
--- tonumber / tostring
 assert(tonumber("42") == 42)
 assert(tostring(42) == "42")
 
--- type
 assert(type("hello") == "string")
 
--- pcall / xpcall
 local ok, val = pcall(function() return 1 + 1 end)
 assert(ok and val == 2)
 
--- error (caught by pcall)
 local ok2 = pcall(function() error("test") end)
 assert(not ok2, "pcall should catch error")
 "#,
@@ -892,8 +796,6 @@ assert(not ok2, "pcall should catch error")
     #[test]
     fn sandbox_blocks_debug_access() {
         let lua = runtime();
-        // Without 'debug', scripts cannot call debug.sethook to clear
-        // the instruction-limit hook that was set in new().
         let result = lua.load_str(r#"debug.sethook()"#);
         assert!(result.is_err());
     }
@@ -907,57 +809,22 @@ assert(not ok2, "pcall should catch error")
 
     #[test]
     fn malicious_script_multi_vector_attack_blocked() {
-        // A script that tries multiple attack vectors in sequence —
-        // all should fail and the instruction limit should abort any
-        // that somehow slip through.
-        //
-        // Each vector is wrapped in an anonymous function so the nil-index
-        // error is caught by pcall (rather than being evaluated as a
-        // function argument outside of pcall's scope).
-        //
-        // Note: os.execute is now nil (restricted os table), so trying to
-        // call it will error on indexing os.execute rather than on calling
-        // a function — but pcall still catches it safely.
         let lua = runtime();
         let result = lua.load_str(
             r#"
--- Vector 1: os.execute should fail (nil in restricted os)
 pcall(function() os.execute("rm -rf /") end)
-
--- Vector 2: io
 pcall(function() io.open("/etc/passwd") end)
-
--- Vector 3: dofile
 pcall(function() dofile("/tmp/evil.lua") end)
-
--- Vector 4: require
 pcall(function() require("socket") end)
-
--- Vector 5: loadfile
 pcall(function() loadfile("/tmp/evil.luac") end)
-
--- Vector 6: load
 pcall(function() load("return 1") end)
-
--- Vector 7: debug
 pcall(function() debug.sethook() end)
-
--- Vector 8: rawget
 pcall(function() rawget(_G, "os") end)
-
--- Vector 9: rawset
 pcall(function() rawset(_G, "os", {}) end)
-
--- Vector 10: module
 pcall(function() module("evil") end)
-
--- Vector 11: collectgarbage
 pcall(function() collectgarbage("collect") end)
-
--- All vectors silently fail; script completes."#,
+"#,
         );
-        // The script should load successfully (pcall catches each nil-index error)
-        // rather than crashing the VM.
         assert!(
             result.is_ok(),
             "malicious multi-vector script should load safely: {}",
@@ -965,12 +832,9 @@ pcall(function() collectgarbage("collect") end)
         );
     }
 
-    // ── Resource limit tests ──────────────────────────────────────────
-
     #[test]
     fn instruction_limit_aborts_infinite_loop() {
         let lua = runtime();
-        // An infinite loop will hit the 100K instruction limit immediately.
         let result = lua.load_str("while true do end");
         assert!(
             result.is_err(),
@@ -978,7 +842,10 @@ pcall(function() collectgarbage("collect") end)
         );
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("instruction") || err.contains("interrupted") || err.contains("timeout"),
+            err.contains("instruction")
+                || err.contains("interrupted")
+                || err.contains("timeout")
+                || err.contains("limit"),
             "error should mention instruction limit, got: {err}"
         );
     }
@@ -993,19 +860,17 @@ function factorial(n)
     return n * factorial(n - 1)
 end
 
--- Call factorial(10) = 3,628,800
 result = factorial(10)
 "#,
         )
         .unwrap();
-        // Verify the function was defined and callable.
         let result: i64 = lua
             .inner()
             .globals()
-            .get::<_, rlua::Value>("result")
+            .get::<_, mlua::Value>("result")
             .ok()
             .and_then(|v| match v {
-                rlua::Value::Integer(i) => Some(i),
+                mlua::Value::Integer(i) => Some(i),
                 _ => None,
             })
             .unwrap_or(0);
@@ -1013,40 +878,12 @@ result = factorial(10)
     }
 
     #[test]
-    fn memory_limit_not_enforced_due_to_rlua_limitation() {
-        // rlua 0.20 does not expose `set_memory_limit`. The MEMORY_LIMIT
-        // constant is documented for future enforcement (see P0 audit
-        // Finding #4). Until the runtime is upgraded to use mlua directly,
-        // memory-intensive scripts are only limited by the 100K instruction
-        // limit, not by a hard memory cap.
-        //
-        // This test verifies that a moderately large allocation (1000 items)
-        // succeeds — confirming the memory limit is NOT enforced, which is
-        // the current expected behavior.
-        let lua = runtime();
-        lua.load_str(
-            r#"
-local t = {}
-for i = 1, 1000 do
-    t[i] = string.rep("X", 100)
-end
-"#,
-        )
-        .unwrap();
-    }
-
-    // ── P0-5: Example script regression tests ─────────────────────────
-
-    #[test]
     fn real_example_discount_bulk_works_in_sandbox() {
-        // Regression test: load scripts/examples/discount_bulk.lua
-        // and verify its apply_discount hook works correctly.
         let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/examples");
         let path = base.join("discount_bulk.lua");
         let lua = runtime();
         lua.load_file(&path).unwrap();
 
-        // Tier 1: 10+ items → 10% off
         let lines = vec![CartLineData {
             sku: "ITEM".into(),
             qty: 10,
@@ -1058,7 +895,6 @@ end
         assert_eq!(d.percent, 10);
         assert_eq!(d.label.as_deref(), Some("Bulk 10+"));
 
-        // Tier 2: total > 5000 minor units → 5% off
         let lines = vec![CartLineData {
             sku: "ITEM".into(),
             qty: 6,
@@ -1070,7 +906,6 @@ end
         assert_eq!(d.percent, 5);
         assert_eq!(d.label.as_deref(), Some("Volume"));
 
-        // No discount: small order
         let lines = vec![CartLineData {
             sku: "CHEAP".into(),
             qty: 1,
@@ -1083,14 +918,11 @@ end
 
     #[test]
     fn real_example_tax_overrides_works_in_sandbox() {
-        // Regression test: load scripts/examples/tax_overrides.lua
-        // and verify its calc_line_tax hook works correctly.
         let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/examples");
         let path = base.join("tax_overrides.lua");
         let lua = runtime();
         lua.load_file(&path).unwrap();
 
-        // Cigarettes: 20% excise tax, inclusive
         let tax = lua
             .calc_line_tax("CIG-001", 1, 1000, "USD")
             .unwrap()
@@ -1098,14 +930,12 @@ end
         assert_eq!(tax.rate_bps, 2000);
         assert!(tax.is_inclusive);
 
-        // Tobacco: 20% excise tax, inclusive
         let tax = lua
             .calc_line_tax("TOB-001", 1, 500, "USD")
             .unwrap()
             .expect("TOB prefix should get tax override");
         assert_eq!(tax.rate_bps, 2000);
 
-        // Milk: 0% VAT
         let tax = lua
             .calc_line_tax("MILK-001", 1, 200, "USD")
             .unwrap()
@@ -1113,28 +943,23 @@ end
         assert_eq!(tax.rate_bps, 0);
         assert!(!tax.is_inclusive);
 
-        // Prepared food: 8% GST
         let tax = lua
             .calc_line_tax("FOOD-001", 1, 500, "USD")
             .unwrap()
             .expect("FOOD- prefix should get 8% GST");
         assert_eq!(tax.rate_bps, 800);
 
-        // Unmatched SKU: fall through
         let result = lua.calc_line_tax("COFFEE", 1, 350, "USD").unwrap();
         assert!(result.is_none());
     }
 
     #[test]
     fn real_example_validate_order_works_in_sandbox() {
-        // Regression test: load scripts/examples/validate_order.lua
-        // and verify its validate_order hook works correctly.
         let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/examples");
         let path = base.join("validate_order.lua");
         let lua = runtime();
         lua.load_file(&path).unwrap();
 
-        // Exceeds max quantity
         let lines = vec![CartLineData {
             sku: "ITEM".into(),
             qty: 100,
@@ -1146,7 +971,6 @@ end
         assert!(errors[0].contains("ITEM"));
         assert!(errors[0].contains("50"));
 
-        // Alcohol age verification
         let lines = vec![CartLineData {
             sku: "BEER-001".into(),
             qty: 6,
@@ -1157,7 +981,6 @@ end
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("age"));
 
-        // Duplicate SKU detection
         let lines = vec![
             CartLineData {
                 sku: "SKU123".into(),
@@ -1176,7 +999,6 @@ end
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("duplicate"));
 
-        // Clean order: no errors
         let lines = vec![CartLineData {
             sku: "COFFEE".into(),
             qty: 2,

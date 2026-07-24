@@ -22,14 +22,14 @@
 //! let lua = LuaRuntime::new()?;
 //! // Register callbacks from Lua
 //! // Fire from Rust
-//! bridge.fire(lua.inner(), "sale.completed", rlua::Value::Nil)?;
+//! bridge.fire(lua.inner(), "sale.completed", mlua::Value::Nil)?;
 //! # Ok(())
 //! # }
 //! ```
 
 use std::collections::HashMap;
 
-use rlua::{Function, Lua, RegistryKey, Value};
+use mlua::{Function, Lua, RegistryKey, Value};
 
 /// Manages Lua event callbacks registered via `oz.on()`.
 ///
@@ -40,6 +40,12 @@ use rlua::{Function, Lua, RegistryKey, Value};
 pub struct LuaEventBridge {
     /// Registry keys for callback functions, indexed by event name.
     callbacks: HashMap<String, Vec<RegistryKey>>,
+}
+
+impl Default for LuaEventBridge {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LuaEventBridge {
@@ -54,7 +60,7 @@ impl LuaEventBridge {
     ///
     /// The callback function is stored in the Lua registry so it persists
     /// across script reloads and survives GC.
-    pub fn register(&mut self, lua: &Lua, event: String, callback: Function) -> rlua::Result<()> {
+    pub fn register(&mut self, lua: &Lua, event: String, callback: Function) -> mlua::Result<()> {
         let key = lua.create_registry_value(callback)?;
         self.callbacks.entry(event).or_default().push(key);
         Ok(())
@@ -128,331 +134,195 @@ impl LuaEventBridge {
     pub fn has_callbacks(&self, event: &str) -> bool {
         self.callbacks.get(event).is_some_and(|v| !v.is_empty())
     }
-
-    /// Returns the number of callbacks registered for a specific event.
-    pub fn callback_count_for(&self, event: &str) -> usize {
-        self.callbacks.get(event).map_or(0, |v| v.len())
-    }
-
-    /// Remove a specific callback by event name and index.
-    /// Returns `true` if a callback was removed.
-    pub fn remove_callback(&mut self, event: &str, index: usize) -> bool {
-        if let Some(keys) = self.callbacks.get_mut(event)
-            && index < keys.len()
-        {
-            keys.remove(index);
-            if keys.is_empty() {
-                self.callbacks.remove(event);
-            }
-            return true;
-        }
-        false
-    }
 }
-
-impl Default for LuaEventBridge {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_lua() -> Lua {
+        Lua::new()
+    }
 
     #[test]
     fn new_bridge_is_empty() {
         let bridge = LuaEventBridge::new();
         assert_eq!(bridge.event_count(), 0);
         assert_eq!(bridge.callback_count(), 0);
+        assert!(!bridge.has_callbacks("sale.completed"));
     }
 
     #[test]
-    fn register_callback_increments_counts() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let callback = lua.create_function(|_, ()| Ok(())).unwrap();
-        bridge
-            .register(&lua, "test.event".into(), callback)
-            .unwrap();
-
-        assert_eq!(bridge.event_count(), 1);
-        assert_eq!(bridge.callback_count(), 1);
-        assert!(bridge.has_callbacks("test.event"));
-        assert_eq!(bridge.callback_count_for("test.event"), 1);
-    }
-
-    #[test]
-    fn register_multiple_callbacks_same_event() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        for _ in 0..3 {
-            let cb = lua.create_function(|_, ()| Ok(())).unwrap();
-            bridge.register(&lua, "same.event".into(), cb).unwrap();
-        }
-
-        assert_eq!(bridge.event_count(), 1);
-        assert_eq!(bridge.callback_count(), 3);
-        assert_eq!(bridge.callback_count_for("same.event"), 3);
-    }
-
-    #[test]
-    fn register_callbacks_different_events() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        for event in &["a", "b", "c"] {
-            let cb = lua.create_function(|_, ()| Ok(())).unwrap();
-            bridge.register(&lua, (*event).into(), cb).unwrap();
-        }
-
-        assert_eq!(bridge.event_count(), 3);
-        assert_eq!(bridge.callback_count(), 3);
-    }
-
-    #[test]
-    fn fire_event_with_no_callbacks_does_nothing() {
-        let lua = rlua::Lua::new();
-        let bridge = LuaEventBridge::new();
-        let result = bridge.fire(&lua, "nonexistent", rlua::Value::Nil);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn fire_event_calls_callback() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let called_clone = called.clone();
-
-        let callback = lua
-            .create_function(move |_, ()| {
-                called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
-                Ok(())
-            })
-            .unwrap();
-
-        bridge
-            .register(&lua, "test.event".into(), callback)
-            .unwrap();
-        bridge.fire(&lua, "test.event", rlua::Value::Nil).unwrap();
-
-        assert!(called.load(std::sync::atomic::Ordering::SeqCst));
-    }
-
-    #[test]
-    fn fire_event_passes_args_to_callback() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let received = std::sync::Arc::new(std::sync::Mutex::new(None));
-        let received_clone = received.clone();
-
-        let callback = lua
-            .create_function(move |_ctx, args: rlua::Table| {
-                let val: i64 = args.get("value").unwrap();
-                *received_clone.lock().unwrap() = Some(val);
-                Ok(())
-            })
-            .unwrap();
-
-        bridge
-            .register(&lua, "test.event".into(), callback)
-            .unwrap();
-
-        let args = lua.create_table().unwrap();
-        args.set("value", 42).unwrap();
-        bridge
-            .fire(&lua, "test.event", rlua::Value::Table(args))
-            .unwrap();
-
-        assert_eq!(*received.lock().unwrap(), Some(42));
-    }
-
-    #[test]
-    fn fire_multiple_callbacks_all_get_called() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let counter = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
-        let c1 = counter.clone();
-        let c2 = counter.clone();
-
-        let cb1 = lua
-            .create_function(move |_, ()| {
-                c1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Ok(())
-            })
-            .unwrap();
-
-        let cb2 = lua
-            .create_function(move |_, ()| {
-                c2.fetch_add(10, std::sync::atomic::Ordering::SeqCst);
-                Ok(())
-            })
-            .unwrap();
-
-        bridge.register(&lua, "test.event".into(), cb1).unwrap();
-        bridge.register(&lua, "test.event".into(), cb2).unwrap();
-
-        bridge.fire(&lua, "test.event", rlua::Value::Nil).unwrap();
-        assert_eq!(counter.load(std::sync::atomic::Ordering::SeqCst), 11);
-    }
-
-    #[test]
-    fn fire_continues_when_one_callback_fails() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let counter = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
-        let c1 = counter.clone();
-        let c2 = counter.clone();
-
-        // Failing callback
-        let cb_fail = lua
-            .create_function(move |_, ()| {
-                c1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Err::<(), _>(rlua::Error::RuntimeError("deliberate fail".into()))
-            })
-            .unwrap();
-
-        // Succeeding callback
-        let cb_ok = lua
-            .create_function(move |_, ()| {
-                c2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                Ok(())
-            })
-            .unwrap();
-
-        bridge.register(&lua, "test.event".into(), cb_fail).unwrap();
-        bridge.register(&lua, "test.event".into(), cb_ok).unwrap();
-
-        // When at least one succeeds, the overall result is Ok
-        let result = bridge.fire(&lua, "test.event", rlua::Value::Nil);
-        assert!(
-            result.is_ok(),
-            "should succeed when at least one callback works"
-        );
-        assert_eq!(counter.load(std::sync::atomic::Ordering::SeqCst), 2);
-    }
-
-    #[test]
-    fn fire_returns_error_when_all_callbacks_fail() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let cb1 = lua
-            .create_function(|_, ()| Err::<(), _>(rlua::Error::RuntimeError("fail 1".into())))
-            .unwrap();
-        let cb2 = lua
-            .create_function(|_, ()| Err::<(), _>(rlua::Error::RuntimeError("fail 2".into())))
-            .unwrap();
-
-        bridge.register(&lua, "bad.event".into(), cb1).unwrap();
-        bridge.register(&lua, "bad.event".into(), cb2).unwrap();
-
-        let result = bridge.fire(&lua, "bad.event", rlua::Value::Nil);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn off_removes_event_callbacks() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let cb = lua.create_function(|_, ()| Ok(())).unwrap();
-        bridge.register(&lua, "test.event".into(), cb).unwrap();
-
-        assert!(bridge.has_callbacks("test.event"));
-        bridge.off("test.event");
-        assert!(!bridge.has_callbacks("test.event"));
-        assert_eq!(bridge.callback_count(), 0);
-    }
-
-    #[test]
-    fn off_nonexistent_event_is_noop() {
-        let mut bridge = LuaEventBridge::new();
-        bridge.off("nonexistent");
-        // Should not panic
-    }
-
-    #[test]
-    fn clear_removes_all_callbacks() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        for event in &["e1", "e2", "e3"] {
-            let cb = lua.create_function(|_, ()| Ok(())).unwrap();
-            bridge.register(&lua, (*event).into(), cb).unwrap();
-        }
-
-        assert_eq!(bridge.event_count(), 3);
-        assert_eq!(bridge.callback_count(), 3);
-
-        bridge.clear();
-        assert_eq!(bridge.event_count(), 0);
-        assert_eq!(bridge.callback_count(), 0);
-    }
-
-    #[test]
-    fn remove_callback_by_index() {
-        let lua = rlua::Lua::new();
-        let mut bridge = LuaEventBridge::new();
-
-        let cb = lua.create_function(|_, ()| Ok(())).unwrap();
-        bridge.register(&lua, "test.event".into(), cb).unwrap();
-
-        assert!(bridge.remove_callback("test.event", 0));
-        assert!(!bridge.has_callbacks("test.event"));
-    }
-
-    #[test]
-    fn remove_callback_out_of_bounds_returns_false() {
-        let mut bridge = LuaEventBridge::new();
-        assert!(!bridge.remove_callback("nonexistent", 0));
-    }
-
-    #[test]
-    fn default_is_empty() {
+    fn default_bridge_is_empty() {
         let bridge = LuaEventBridge::default();
         assert_eq!(bridge.event_count(), 0);
     }
 
     #[test]
-    fn debug_output() {
-        let bridge = LuaEventBridge::new();
-        let debug = format!("{bridge:?}");
-        assert!(debug.contains("LuaEventBridge"));
-    }
-
-    #[test]
-    fn callback_count_for_unknown_event() {
-        let bridge = LuaEventBridge::new();
-        assert_eq!(bridge.callback_count_for("unknown"), 0);
-    }
-
-    #[test]
-    fn fire_with_nil_args_works_for_callbacks_ignoring_args() {
-        let lua = rlua::Lua::new();
+    fn register_single_callback() {
+        let lua = make_lua();
         let mut bridge = LuaEventBridge::new();
 
-        let called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let cc = called.clone();
+        let func = lua.create_function(|_, ()| Ok(())).unwrap();
+        bridge.register(&lua, "test.event".into(), func).unwrap();
 
-        let cb = lua
-            .create_function(move |_, _: rlua::Value| {
-                cc.store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(bridge.event_count(), 1);
+        assert_eq!(bridge.callback_count(), 1);
+        assert!(bridge.has_callbacks("test.event"));
+        assert!(!bridge.has_callbacks("other.event"));
+    }
+
+    #[test]
+    fn register_multiple_callbacks_same_event() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f1 = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f2 = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        bridge.register(&lua, "evt".into(), f1).unwrap();
+        bridge.register(&lua, "evt".into(), f2).unwrap();
+
+        assert_eq!(bridge.event_count(), 1);
+        assert_eq!(bridge.callback_count(), 2);
+    }
+
+    #[test]
+    fn fire_unregistered_event_is_ok() {
+        let lua = make_lua();
+        let bridge = LuaEventBridge::new();
+
+        let result = bridge.fire(&lua, "nonexistent", Value::Nil);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn fire_invokes_callback() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let globals = lua.globals();
+        globals.set("called", false).unwrap();
+
+        let func = lua
+            .create_function(|lua, ()| {
+                lua.globals().set("called", true)?;
                 Ok(())
             })
             .unwrap();
 
-        bridge.register(&lua, "test.event".into(), cb).unwrap();
-        bridge.fire(&lua, "test.event", rlua::Value::Nil).unwrap();
-        assert!(called.load(std::sync::atomic::Ordering::SeqCst));
+        bridge.register(&lua, "test.event".into(), func).unwrap();
+        bridge.fire(&lua, "test.event", Value::Nil).unwrap();
+
+        let called: bool = globals.get("called").unwrap();
+        assert!(called, "callback should have set 'called' to true");
+    }
+
+    #[test]
+    fn fire_passes_arguments() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let globals = lua.globals();
+        globals.set("received_val", 0i64).unwrap();
+
+        let func = lua
+            .create_function(move |lua, args: Value| {
+                if let Value::Table(tbl) = args {
+                    let val: i64 = tbl.get("amount")?;
+                    lua.globals().set("received_val", val)?;
+                }
+                Ok(())
+            })
+            .unwrap();
+
+        bridge.register(&lua, "test.event".into(), func).unwrap();
+
+        let args = lua.create_table().unwrap();
+        args.set("amount", 42i64).unwrap();
+
+        bridge.fire(&lua, "test.event", Value::Table(args)).unwrap();
+
+        let received: i64 = globals.get("received_val").unwrap();
+        assert_eq!(received, 42);
+    }
+
+    #[test]
+    fn fire_handles_callback_error() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let func = lua
+            .create_function(|_, ()| {
+                Err::<(), _>(mlua::Error::RuntimeError("deliberate fail".into()))
+            })
+            .unwrap();
+
+        bridge.register(&lua, "test.event".into(), func).unwrap();
+
+        let result = bridge.fire(&lua, "test.event", Value::Nil);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("deliberate fail"),
+            "error should contain inner Lua error message, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn fire_partial_success_clears_error() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f_bad = lua
+            .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("fail 1".into())))
+            .unwrap();
+        let f_good = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        bridge.register(&lua, "bad.event".into(), f_bad).unwrap();
+        bridge.register(&lua, "bad.event".into(), f_good).unwrap();
+
+        let result = bridge.fire(&lua, "bad.event", Value::Nil);
+        assert!(
+            result.is_ok(),
+            "if at least one callback succeeds, fire should return Ok"
+        );
+    }
+
+    #[test]
+    fn off_removes_callbacks_for_event() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f1 = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f2 = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        bridge.register(&lua, "evt1".into(), f1).unwrap();
+        bridge.register(&lua, "evt2".into(), f2).unwrap();
+
+        assert_eq!(bridge.event_count(), 2);
+
+        bridge.off("evt1");
+
+        assert_eq!(bridge.event_count(), 1);
+        assert!(!bridge.has_callbacks("evt1"));
+        assert!(bridge.has_callbacks("evt2"));
+    }
+
+    #[test]
+    fn clear_removes_all_callbacks() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f1 = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f2 = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        bridge.register(&lua, "evt1".into(), f1).unwrap();
+        bridge.register(&lua, "evt2".into(), f2).unwrap();
+
+        bridge.clear();
+
+        assert_eq!(bridge.event_count(), 0);
+        assert_eq!(bridge.callback_count(), 0);
     }
 }

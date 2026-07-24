@@ -17,7 +17,7 @@
 
 ### 🟠 Medium (Do This Sprint)
 
-- [ ] **P4 — Replace `rlua` with `mlua`** — Drop-in swap. `rlua` has been unmaintained since 2021. *(1 day)*
+- [x] **P4 — Replace `rlua` with `mlua`** — Drop-in swap. `rlua` has been unmaintained since 2021. *(1 day)*
 - [ ] **P5 — Complete the 45-page manual QA walkthrough** — Run the full `TODO.md` checklist on the actual Tauri binary. Only 8/45 pages checked after 6 sprints. *(2 days)*
 - [ ] **P6 — Clean repository noise** — Add `vitest-profile.json`, `vitest-output.log`, `test-baseline.log`, `test-nextest-baseline.log`, `ui/nul`, `nul` to `.gitignore` and `git rm --cached`. *(1 day)*
 
