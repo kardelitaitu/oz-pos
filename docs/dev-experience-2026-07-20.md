@@ -51,7 +51,7 @@
 |----------|---------|--------|
 | Build/Dev | `setup-dev.ps1`, `setup-cache.ps1`, `setup-cache.sh`, `check.ps1`, `check.sh`, `build-docs.ps1`, `build-docs.sh`, `build-exe-release.ps1` | ✅ All verified |
 | Testing | `coverage.ps1`, `coverage.sh`, `coverage_top.py`, `report-flaky.sh`, `test-changed.sh`, `test-tdd.sh`, `test-ui-changed.sh`, `run-e2e.sh` | ✅ All present |
-| i18n | `lint-i18n.sh`, `dedupe-ftl.py`, `verify-bundle-parity.py`, `generate-thai-ftl.py`, `translate-stub.py` | ✅ All functional |
+| i18n | `lint-i18n.sh`, `dedupe-ftl.py`, `verify-bundle-parity.py`, `translate-stub.py` | ✅ All functional |
 | CI/Release | `bump-version.ps1`, `release.sh`, `stats.json`, `stats.ps1` | ✅ Verified |
 | Backup | `backup-db.sh`, `restore-db.sh` | ✅ Updated with integrity_check + VACUUM |
 | Security/Keys | `generate-license-keys.ps1`, `generate-license-keys.sh`, `generate-tenant-keys.ps1`, `generate-tenant-keys.sh` | ✅ Dev-only |

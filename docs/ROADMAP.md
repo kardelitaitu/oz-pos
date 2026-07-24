@@ -461,7 +461,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] `docs/a11y.md` — accessibility compliance checklist
 - [x] Lighthouse a11y score ≥ 90 on all pages (CI gate via `.lighthouserc.json`, 0.90 threshold)
 - [x] UI fully translated in English + Bahasa Indonesia (48 Fluent bundles, lint-i18n.sh clean)
-- [ ] UI fully translated in Thai (48 bundles pending — P22)
+- [x] Thai locale removed — not a target market
 
 ### oz-reporting — Performance & Profiling
 - [ ] `tokio-console` integration macros
@@ -584,4 +584,4 @@ On-Features can be activated at any phase once the core infrastructure is in pla
 
 ---
 
-*Last updated: 2026-07-20.* (Phases 1–3 ✓. Phase 4 ~95% — mobile build CI exists but physical device testing needs infra. Phase 5 ~95% — analytics export + scheduled report delivery config done; Thai i18n + custom report builder + cloud warehouse remain. Phase 6 ~98% — all features implemented and verified; voice-controlled checkout research deferred. P0–P20 complete across v0.0.13 + v0.0.14.)
+*Last updated: 2026-07-25.* (Phases 1–3 ✓. Phase 4 ~95% — mobile build CI exists but physical device testing needs infra. Phase 5 ~95% — analytics export + scheduled report delivery config done; Thai locale removed (not a target market); custom report builder + cloud warehouse remain. Phase 6 ~98% — all features implemented and verified; voice-controlled checkout research deferred. P0–P20 complete across v0.0.13 + v0.0.14.)

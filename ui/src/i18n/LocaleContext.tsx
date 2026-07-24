@@ -30,7 +30,7 @@ interface LocaleProviderProps {
 const STORAGE_KEY = 'oz-pos-locale';
 
 /** Supported locale codes, ordered for lookup. */
-const SUPPORTED_LOCALES: LocaleCode[] = ['en', 'id', 'th'];
+const SUPPORTED_LOCALES: LocaleCode[] = ['en', 'id'];
 
 /**
  * Resolve the initial locale for this session.
@@ -43,7 +43,7 @@ const SUPPORTED_LOCALES: LocaleCode[] = ['en', 'id', 'th'];
  */
 function resolveInitialLocale(): LocaleCode {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'en' || stored === 'id' || stored === 'th') return stored;
+  if (stored === 'en' || stored === 'id') return stored;
 
   if (typeof navigator !== 'undefined') {
     const languages = [navigator.language, ...(navigator.languages ?? [])];

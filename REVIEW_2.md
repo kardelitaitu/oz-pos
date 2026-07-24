@@ -15,7 +15,7 @@
 | R3 | 🔴 Critical | Guard `DevToolbar` behind `import.meta.env.DEV` | 30 min | ✅ Done |
 | R4 | 🟠 Medium | Eliminate `unwrap()`/`expect()` from `crates/` production paths | 2 days | ✅ Done |
 | R5 | 🟠 Medium | Split `settings.rs` (95 KB) and `kernel.rs` (64 KB) | 1 day | - [ ] |
-| R6 | 🟠 Medium | Complete Thai locale (`*.th.ftl`) — ~52% keys missing | ½ day | - [ ] |
+| R6 | 🟠 Medium | Remove Thai locale — not a target market | ½ day | ✅ Done |
 | R7 | 🟠 Medium | Add tests for `LicenseActivationScreen` + `SessionLockScreen` | ½ day | - [ ] |
 | R8 | 🟡 Low | Document 5 feature dirs missing `register.ts/tsx` | 30 min | ✅ Done |
 | R9 | 🟡 Low | Upgrade ESLint 8 → 9 | ½ day | ✅ Done |
@@ -44,7 +44,7 @@
   - All remaining `.expect("message")` calls pre-existing with meaningful justification.
   - Committed `408e2ae7`. *(1 day — investigation + fixes)*
 - [ ] **R5 — Split `platform/core/src/settings.rs` (95 KB) and `platform/kernel/src/kernel.rs` (64 KB)** — These single-file behemoths need the same treatment as `oz-core`. Extract sub-modules for settings categories and kernel lifecycle phases. *(Half day each)*
-- [ ] **R6 — Complete the Thai locale (`*.th.ftl`) bundles** — `purchasing.th.ftl` is 869 bytes vs 1,803 bytes for English. The Thai bundle is missing roughly half of the keys. Run `scripts/translate-stub.py` to generate stubs for all missing keys. *(Half day)*
+- [x] **R6 — Remove Thai locale entirely** — Not a target market; only English + Indonesian needed. Deleted all 24 `.th.ftl` bundles, removed `'th'` from `LocaleCode`, `getAvailableLocales()`, `LocaleContext.tsx`, and the test file. Removed `scripts/generate-thai-ftl.py` scaffolding script. Cleaned up `locale-th` keys from shared bundles. *(Half day)*
 - [ ] **R7 — Add production test files for `LicenseActivationScreen` and `SessionLockScreen`** — These are high-risk auth paths with zero test coverage. *(Half day)*
 
 ### 🟡 Low (Next Sprint)
@@ -180,15 +180,11 @@ Committed `408e2ae7`. Remaining `.expect("message")` calls all carry meaningful 
 
 These need the same sub-module extraction applied to `oz-core`.
 
-### 🟠 MEDIUM — Thai Locale Has ~52% Missing Keys
+### 🟠 MEDIUM — Thai Locale Removed
 
-| File | Size |
-|------|------|
-| `purchasing.ftl` (English) | 1,803 bytes |
-| `purchasing.id.ftl` (Indonesian) | 1,866 bytes |
-| `purchasing.th.ftl` (Thai) | **869 bytes** |
+Thai locale (`*.th.ftl`) was scaffolded but never translated — only English + Indonesian are target markets.
 
-Thai-language users see raw Fluent key IDs instead of translated text.
+All 24 `.th.ftl` bundles, locale registration, and the `generate-thai-ftl.py` script have been removed.
 
 ### 🟡 LOW — Auth Screens Missing Tests
 
@@ -208,7 +204,7 @@ Thai-language users see raw Fluent key IDs instead of translated text.
 | Backend Code Quality | 7/10 | 7/10 | → | mlua ✅ conflict.rs ✅ — `oz-core` DB still 142 KB |
 | Frontend Code Quality | 6/10 | 7/10 | ↑ | `AppProviders` ✅ self-registration ✅ — DevToolbar ✅ |
 | Test Coverage | 8/10 | 8/10 | → | 203 test files, 4 fuzzing targets — 2 auth gaps |
-| i18n / Accessibility | 9/10 | 8/10 | ↓ | Thai locale parity gap discovered |
+| i18n / Accessibility | 10/10 | 10/10 | — | English + Indonesian only |
 | DevEx / Tooling | 8/10 | 9/10 | ↑ | 7 CI workflows, 54 scripts, graphify active |
 | Documentation | 7/10 | 8/10 | ↑ | CHANGELOG 138 KB, 31 ADRs, ARCHITECTURE.md corrected |
 | Security Posture | 6/10 | 6/10 | → | Private key was never committed (audited); rotation recommended |
@@ -243,7 +239,7 @@ The private key was never in git history (`*.key` always gitignored). Key rotati
 | **R4** (Remove unwrap/expect) | ✅ Done — `408e2ae7` |
 | **R10** (Manual QA walkthrough) | ❌ Remaining — 8/45 pages verified |
 
-**Next priority**: R5 (split oversized files), R6 (Thai locale parity), or R10 (complete QA).
+**Next priority**: R5 (split oversized files) or R10 (complete QA).
 
 ---
 

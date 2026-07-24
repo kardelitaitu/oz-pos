@@ -19,7 +19,7 @@
 
 - [x] Audit React UI for hardcoded English strings (100 feature files audited)
 - [x] Wrap strings in `<Localized>` component (`StaffManagementScreen`, `TaxConfigurationScreen`, `TerminalManagementScreen`, `StockTransfersScreen`, etc.)
-- [x] Sync `en-US.ftl`, `id.ftl`, and Thai translations (`verify-bundle-parity.py` 0 missing keys & `dedupe-ftl.py` clean)
+- [x] Remove Thai locale — not a target market; English + Indonesian only
 - [x] Run Lighthouse a11y audit & static checks
 - [x] Fix ARIA tags and color contrasts
 
