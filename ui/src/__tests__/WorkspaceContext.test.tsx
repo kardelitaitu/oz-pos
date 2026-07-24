@@ -11,6 +11,14 @@ import {
 import type { LoginSessionDto, CreateSessionResult } from '@/api/staff';
 import type { WorkspaceDto } from '@/api/workspaces';
 
+// ── Opt out of the global WorkspaceContext stub ──────────────────────
+// The setupFile installs a safe-default mock for useWorkspace and
+// useWorkspaceScope so screens render without an explicit provider.
+// This file exercises the real provider so it must NOT receive the
+// stub. `vi.unmock` is hoisted to the top of the file and removes
+// the mocking for this test file's module resolution.
+vi.unmock('@/contexts/WorkspaceContext');
+
 // ── Hoisted mock state ────────────────────────────────────────────────
 
 const mocks = vi.hoisted(() => ({

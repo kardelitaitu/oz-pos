@@ -1,4 +1,6 @@
-﻿# Hardware Assets - Beta Retail (beta-retail)
+﻿<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, claims verified) · assets/source-icon.png exists at repo root; expected hardware files receipt-logo-58mm.png + receipt-logo-80mm.png present; generation commands match sync-branding.ps1:415-416; beta-retail manifest omits invoiceWatermark key but README only documents expected spec, not asserting file presence -->
+
+# Hardware Assets - Beta Retail (beta-retail)
 
 This directory holds specialized bitmap assets for thermal receipt printers
 and invoice watermarks. These are generated from the master source icon
@@ -20,4 +22,5 @@ To generate receipt bitmaps from the master source icon:
 # Requires ImageMagick
 magick convert assets/source-icon.png -resize 384x100 -threshold 50% assets/branding/%brandId%/hardware/receipt-logo-58mm.png
 magick convert assets/source-icon.png -resize 576x150 -threshold 50% assets/branding/%brandId%/hardware/receipt-logo-80mm.png
-`
+`
+

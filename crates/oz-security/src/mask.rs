@@ -11,7 +11,7 @@
 //!
 //! assert_eq!(mask_pan("4111111111111111"), "411111******1111");
 //! assert_eq!(mask_pan("4111-1111-1111-1111"), "411111******1111");
-//! assert_eq!(mask_pan("411111111111"), "411111****1111");
+//! assert_eq!(mask_pan("411111111111"), "411111**1111");
 //! assert_eq!(mask_pan("123"), "****");
 //! ```
 
@@ -174,6 +174,12 @@ mod tests {
         // 10-digit PAN: first_six + last_four would cover the entire
         // PAN, so only last 4 is shown (PCI-DSS 3.3 compliant).
         assert_eq!(mask_pan("1234567890"), "******7890");
+    }
+
+    #[test]
+    fn mask_pan_12_digits() {
+        // 12-digit PAN: first 6 + last 4 cover 10 digits, leaving 2 masked.
+        assert_eq!(mask_pan("411111111111"), "411111**1111");
     }
 
     #[test]

@@ -14,6 +14,57 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
 }));
 
+// ── Global mock: @/contexts/WorkspaceContext ──────────────────────
+// Many component tests render screens that call `useWorkspace()`
+// or `useWorkspaceScope()` without wrapping the tree in a real
+// `<WorkspaceProvider>`. To avoid wrapping every test we keep the
+// real exports (`WorkspaceProvider`, `WorkspaceContext`,
+// `WorkspaceScopeContext`, `WorkspaceScope`, types) and override
+// only the hooks to return a safe no-op default.
+//
+// Rationale for always returning the safe default from the hooks:
+//   * Any value passed via `renderWithWorkspace({ workspace })` or
+//     an explicit `<WorkspaceContext.Provider value=...>` is
+//     ignored by hooks in this fallback. Tests that need custom
+//     workspace values can override per-test via
+//     `vi.mocked(useWorkspace).mockReturnValue(...)`.
+//   * This keeps the mock robust against problems detected in the
+//     React.useContext path (e.g. `React.useContext is not a
+//     function` when `importOriginal('react')` returns a proxy
+//     object without the real hooks).
+//
+// Tests that intentionally exercise the real provider
+// (currently `WorkspaceContext.test.tsx`) opt out with
+// `vi.unmock('@/contexts/WorkspaceContext')` at the top.
+vi.mock('@/contexts/WorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('@/contexts/WorkspaceContext')
+  >();
+
+  const safeWorkspaceDefault = {
+    activeWorkspace: null,
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: 'mock-session-token',
+    swapSessionToken: vi.fn(() => Promise.resolve()),
+  };
+
+  return {
+    ...actual,
+    useWorkspace: vi.fn().mockImplementation(() => safeWorkspaceDefault),
+    useWorkspaceScope: vi.fn().mockImplementation(() => null),
+  };
+});
+
 // ── Global beforeEach: clean mocks and localStorage ─────────────
 // Every test starts with a clean slate. Individual test files that
 // need additional setup (e.g. mockImplementation overrides) add
