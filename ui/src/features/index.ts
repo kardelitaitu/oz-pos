@@ -25,6 +25,21 @@ import { registerStockTransfersFeature } from './stock-transfers/register';
 
 /**
  * Register all UI features, pages, navigation items, and widgets.
+ *
+ * Five feature directories intentionally have NO register.ts/tsx because
+ * they are NOT navigable pages — they are rendered directly by AppShell
+ * as gate screens, workspace-specific layouts, or pre-condition flows:
+ *
+ *   auth/       — StaffLoginScreen, SessionLockScreen, LicenseActivationScreen,
+ *                 CreatePinScreen: gate screens rendered before page routing.
+ *   restaurant/ — RestaurantMenu: sub-component used inside PosScreen,
+ *                 not a standalone navigable page.
+ *   retail/     — RetailPosScreen: rendered by AppShell for store-pos
+ *                 workspace, not through the page registry.
+ *   setup/      — SetupWizard: rendered by AppShell before setup is
+ *                 completed, never a navigable route.
+ *   workspaces/ — WorkspaceHome: rendered by AppShell when no workspace
+ *                 is selected; it is the workspace picker, not a page.
  */
 export function registerAllFeatures() {
   registerSalesFeature();

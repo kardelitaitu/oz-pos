@@ -17,8 +17,8 @@
 | R5 | 🟠 Medium | Split `settings.rs` (95 KB) and `kernel.rs` (64 KB) | 1 day | - [ ] |
 | R6 | 🟠 Medium | Complete Thai locale (`*.th.ftl`) — ~52% keys missing | ½ day | - [ ] |
 | R7 | 🟠 Medium | Add tests for `LicenseActivationScreen` + `SessionLockScreen` | ½ day | - [ ] |
-| R8 | 🟡 Low | Document 5 feature dirs missing `register.ts/tsx` | 30 min | - [ ] |
-| R9 | 🟡 Low | Upgrade ESLint 8 → 9 | ½ day | - [ ] |
+| R8 | 🟡 Low | Document 5 feature dirs missing `register.ts/tsx` | 30 min | ✅ Done |
+| R9 | 🟡 Low | Upgrade ESLint 8 → 9 | ½ day | ✅ Done |
 | R10 | 🟡 Low | Complete P5: 45-page Manual QA Walkthrough | 2 days | - [ ] |
 
 ---
@@ -49,8 +49,14 @@
 
 ### 🟡 Low (Next Sprint)
 
-- [ ] **R8 — Document why 5 feature directories have no `register.ts/tsx`** — `auth`, `restaurant`, `retail`, `setup`, `workspaces` don't self-register. If intentional, document it. If unintentional, add registration files. *(30 min)*
-- [ ] **R9 — Upgrade ESLint from 8.57.0 to 9.x** — ESLint 8 is in maintenance mode. *(Half day)*
+- [x] **R8 — Document why 5 feature directories have no `register.ts/tsx`** — All five are intentionally unregistered:
+  - `auth/`: gate screens (login, license, session lock) rendered by `AppShell` before page routing
+  - `restaurant/`: `RestaurantMenu` is a sub-component used inside `PosScreen`, not a page
+  - `retail/`: `RetailPosScreen` is rendered by `AppShell` directly for `store-pos` workspace
+  - `setup/`: `SetupWizard` is rendered before setup is completed, never a navigable route
+  - `workspaces/`: `WorkspaceHome` is the workspace picker, rendered when no workspace active
+  - Documented via comment in `ui/src/features/index.ts` near `registerAllFeatures`. *(30 min)*
+- [x] **R9 — Upgrade ESLint from 8.57.0 to 9.39.5** — Migrated from `.eslintrc.cjs` to flat config (`eslint.config.js`). Replaced `@typescript-eslint/parser` + `@typescript-eslint/eslint-plugin` with unified `typescript-eslint` v8. Updated `eslint-plugin-react` (7.37), `react-hooks` (7.1), `jsx-a11y` (6.10), `react-refresh` (0.5). New `react-hooks` v7 strict rules suppressed. Committed `4dfc59af`. *(½ day)*
 - [ ] **R10 — Complete P5: 45-page Manual QA Walkthrough** — Still the only item outstanding from the original review. Only 8/45 pages verified after 6+ sprints. *(2 focused days)*
 
 ---
