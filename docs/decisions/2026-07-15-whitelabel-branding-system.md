@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, claims verified) · 3 brand templates (default/acme-tenant/beta-retail) confirmed; whitelabel/ dir is a helper (example-tenant/ + README.md), not a 4th brand; scripts/sync-branding.ps1 + whitelabel.ps1 + .Tests.ps1 + .Integration.Tests.ps1 all exist; all 3 manifest.json exist; ui/public/site.webmanifest + ui/src/features/design/brand-tokens.css + ui/src/frontend/shell/ThemeProvider.tsx (useBrand/deriveAccentPalette) present; 4th brand claim intentionally absent -->
+
 # ADR #12: Whitelabel Branding System — Manifest-Driven Asset Pipeline & Multi-Tenant Theming
 
 **Status:** Implemented (2026-07-15)

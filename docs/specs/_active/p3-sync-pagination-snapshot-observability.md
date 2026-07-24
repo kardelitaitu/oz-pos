@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: STALE (3 findings) · F1 (HIGH): spec line 59 + verification line 100 require GET /health -> status:"degraded" when disk>95%, but health_handler (apps/cloud-server/src/main.rs:305) only degrades on db_connected; no disk-usage logic anywhere in cloud-server (grep NONE) · F2 (MED): spec line 35/37 require disk-backed snapshot cache at {OZ_CACHE_DIR}/snapshots/{tenant_id}/{gen}.ozpkg with LRU max 100 files, but SnapshotCache is in-memory Arc<Mutex<HashMap>> (apps/cloud-server/src/sync_api.rs:29) with no fs write; design diverges from spec · F3 (LOW): vps-migration companion doc states default OZ_DB_PATH=/data/oz-pos.db, but code default (db.rs:52) is oz-pos.db in CWD (the /data path is a docker-compose convention) · verified accurate: /api/sync/snapshot route (sync_api.rs:81) + handler:297; tiered heartbeat formula matches spec (sync_api.rs:459 <1000=120s,1000-5000=300s,5000+=max(300,10k/count*60)); crates/oz-core/src/ozpkg.rs uses zstd; axum-prometheus /metrics + /health exist -->
+
 # P-3 — Pull pagination, snapshot endpoint, tiered heartbeat & metrics
 
 - **Status:** DONE (implemented 2026-07-15)

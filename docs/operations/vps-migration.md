@@ -1,3 +1,5 @@
+<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (0 findings, operational-doc verified) · references ADR#11 (zero-downtime-vps-migration); claims verified against apps/cloud-server/src/db.rs: deadpool_postgres::Pool with .max_size(8) (line 90), tokio_postgres::NoTls (line 87), OZ_DB_PATH defaults to oz-pos.db (line 52), DATABASE_URL postgres://|postgresql:// detection; /health + /metrics endpoints exist; doc is ops guidance, not a code-claim audit of sync internals -->
+
 # VPS Migration Guide — Zero-Downtime Server Migration
 
 **ADR:** [#11](../decisions/2026-07-13-zero-downtime-vps-migration.md)
