@@ -58,6 +58,27 @@ vi.mock('@/contexts/ZoomContext', () => ({
   ZoomProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'admin',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: null,
+    swapSessionToken: vi.fn(),
+  }),
+  useWorkspaceScope: () => null,
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock('@/contexts/HardwareAccelContext', () => ({
   useHardwareAccel: () => ({ enabled: true, setEnabled: (val: boolean) => mockSetHwAccelEnabled(val) }),
   HardwareAccelProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -109,29 +130,29 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
 
   const defaultImpl = async (cmd: string) => {
     switch (cmd) {
-      case 'get_store_settings':
+      case 'get_store_settings_scoped':
         return { name: 'Store', address: 'Address', taxId: 'TAX-1', currency: 'IDR', branch: '' };
-      case 'get_receipt_settings':
+      case 'get_receipt_settings_scoped':
         return {
           showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '',
           paperWidth: 'standard', showTableNumber: false, showCustomerName: true, showOrderNotes: true,
           marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
         };
       case 'get_display_settings':
-      case 'get_user_preferences':
+      case 'get_user_preferences_scoped':
         return { cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' };
       case 'get_cloud_sync_settings':
-      case 'get_sync_settings':
+      case 'get_sync_settings_scoped':
         return { serverUrl: null, hasApiKey: false, enabled: false };
       case 'get_all_currencies':
-      case 'list_currencies':
+      case 'list_currencies_scoped':
         return SAMPLE_CURRENCIES;
       case 'get_default_currency':
         return 'USD';
-      case 'get_brand_settings':
+      case 'get_brand_settings_scoped':
         return { primary_colour: '#10b981', logo_path: null, store_name: '' };
       case 'get_app_version':
-      case 'version':
+      case 'version_scoped':
         return { name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' };
       case 'check_license_status':
         return { tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 };
@@ -174,6 +195,9 @@ describe('Settings Toggle Buttons Regression Suite', () => {
     // Navigate to Receipt section where show-currency, show-tax, show-table-number live
     await user.click(screen.getByRole('treeitem', { name: /operations/i }));
     await user.click(screen.getByRole('treeitem', { name: /receipt/i }));
+    await waitFor(() => {
+      expect(document.getElementById('receipt-show-currency')).not.toBeNull();
+    });
 
     const expectedToggleIds = [
       'receipt-show-currency',

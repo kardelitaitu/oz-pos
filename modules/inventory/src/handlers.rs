@@ -173,7 +173,7 @@ impl EventHandler<SaleCompleted> for InventoryStockHandler {
             .lock()
             .map_err(|e| anyhow::anyhow!("inventory handler: db lock failed: {e}"))?;
         let tx = conn.unchecked_transaction()?;
-        let store = Store::new(&*tx);
+        let store = Store::new(&tx);
 
         for line in &event.line_items {
             if let Err(e) = self.handle_line(&store, Some(&tx), &line.sku, line.qty) {

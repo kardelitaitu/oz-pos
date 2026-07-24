@@ -22,6 +22,10 @@ export const ping = (): Promise<string> => loggedInvoke<string>('ping');
 export const getVersion = (): Promise<VersionInfo> =>
   loggedInvoke<VersionInfo>('version');
 
+/** Get application version resolved from a session token. ADR #7. */
+export const getVersionScoped = (sessionToken: string): Promise<VersionInfo> =>
+  loggedInvoke<VersionInfo>('version_scoped', { sessionToken });
+
 /** Get the local IP address of the device. */
 export const getLocalIp = (): Promise<string> =>
   loggedInvoke<string>('get_local_ip');

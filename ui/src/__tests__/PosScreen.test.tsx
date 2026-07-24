@@ -191,22 +191,29 @@ vi.mock('@/contexts/AuthContext', async () => {
   };
 });
 
-vi.mock('@/contexts/WorkspaceContext', async () => {
-  const { createWorkspaceContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
-  return createWorkspaceContextMock();
-});
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'store-pos',
+    setActiveWorkspace: mockSetActiveWorkspace,
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: null,
+    swapSessionToken: vi.fn(),
+  }),
+  WorkspaceProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
-// Sub-screen stubs for the Settings 4-tab-routing pattern.
-// Kept minimal so the parent-only assertions stay focused.
-vi.mock('@/features/settings/AppearanceSettings', () => ({
-  AppearanceSettings: () => <div data-testid="mock-appearance">Appearance Settings Stub</div>,
-}));
-vi.mock('@/features/settings/FeatureToggleScreen', () => ({
-  default: () => <div data-testid="mock-features">Feature Toggles Stub</div>,
-}));
-vi.mock('@/features/settings/DataManagementScreen', () => ({
-  default: () => <div data-testid="mock-data">Data Management Stub</div>,
-}));
+// Tracked mock for setActiveWorkspace — hoisted so the WorkspaceContext
+// mock closure captures a reference we can assert on in tests.
+const mockSetActiveWorkspace = vi.hoisted(() => vi.fn());
 
 // ── Tests ─────────────────────────────────────────────────────────
 
@@ -646,13 +653,12 @@ describe('PosScreen – bundle scanning toast', () => {
     expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
   });
 
-  // ── Settings sub-screen (4-tab-routing) ────────────────────────
+  // ── Settings button → workspace navigation (ADR #22 Phase 5) ──
   //
-  // The Settings sub-screen has four tabs (Appearance / Features /
-  // Data / Sync) that route to dedicated settings sub-screens.
-  // (RetailOptionsScreen removed in Phase 6, ADR #22.)
+  // The Settings button was a 4-tab sub-screen in earlier versions.
+  // Since Phase 6 (ADR #22) it navigates to the admin workspace.
 
-  it('opens the Settings sub-screen and renders the Appearance tab by default', async () => {
+  it('navigates to admin workspace when Settings button is clicked', async () => {
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
@@ -660,23 +666,12 @@ describe('PosScreen – bundle scanning toast', () => {
     }, FAST_WAIT);
     await screen.findByText('Close');
 
-    // Open the Settings sub-screen via the gear button in the header.
     fireEvent.click(screen.getByTitle('Settings'));
 
-    // AppearanceSettings is the default tab — the Appearance sub-screen
-    // stub should mount immediately.
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    }, FAST_WAIT);
-
-    // The 4 tab buttons are all present and addressable by role=tab.
-    expect(screen.getByRole('tab', { name: 'Appearance' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Features' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Data' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Sync' })).toBeInTheDocument();
+    expect(mockSetActiveWorkspace).toHaveBeenCalledWith('admin');
   });
 
-  it('routes the Features tab to FeatureToggleScreen', async () => {
+  it('does not break the main POS screen when Settings button is clicked', async () => {
     await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
 
     await waitFor(() => {
@@ -684,90 +679,11 @@ describe('PosScreen – bundle scanning toast', () => {
     }, FAST_WAIT);
     await screen.findByText('Close');
 
+    // Click Settings — should not crash or unmount the main screen.
     fireEvent.click(screen.getByTitle('Settings'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    }, FAST_WAIT);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Features' }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-features')).toBeInTheDocument();
-    }, FAST_WAIT);
-    // The Appearance sub-screen is unmounted when the Features tab is active.
-    expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
-  });
-
-  it('routes the Data tab to DataManagementScreen', async () => {
-    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
-
-    await waitFor(() => {
-      expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    }, FAST_WAIT);
-    await screen.findByText('Close');
-
-    fireEvent.click(screen.getByTitle('Settings'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    }, FAST_WAIT);
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Data' }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-data')).toBeInTheDocument();
-    }, FAST_WAIT);
-    expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
-  });
-
-  it('routes the Sync tab to the Cloud Sync placeholder', async () => {
-    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
-
-    await waitFor(() => {
-      expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    }, FAST_WAIT);
-    await screen.findByText('Close');
-
-    fireEvent.click(screen.getByTitle('Settings'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    }, FAST_WAIT);
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Sync' }));
-
-    // The Sync tab renders the "Cloud Sync" heading and an info
-    // paragraph. The settings FTL key is `settings-sync-heading` →
-    // "Cloud Sync". We match on the heading + the "snapshot" or
-    // "sync cycle" sentence to verify the placeholder rendered.
-    await waitFor(() => {
-      expect(screen.getByText(/Cloud Sync/)).toBeInTheDocument();
-    }, FAST_WAIT);
-    // None of the other tab stubs should be mounted.
-    expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('mock-features')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('mock-data')).not.toBeInTheDocument();
-  });
-
-  it('returns to the main PosScreen when the Settings back button is clicked', async () => {
-    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
-
-    await waitFor(() => {
-      expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled();
-    }, FAST_WAIT);
-    await screen.findByText('Close');
-
-    // Open Settings, then close it.
-    fireEvent.click(screen.getByTitle('Settings'));
-    await waitFor(() => {
-      expect(screen.getByTestId('mock-appearance')).toBeInTheDocument();
-    }, FAST_WAIT);
-
-    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
-
-    // The Appearance sub-screen is gone and the main cart is back.
-    await waitFor(() => {
-      expect(screen.queryByTestId('mock-appearance')).not.toBeInTheDocument();
-    }, FAST_WAIT);
-    expect(screen.getByText(/Cart is empty/)).toBeInTheDocument();
+    // The main POS screen elements remain.
+    expect(screen.getByText(/Cart is empty/i)).toBeInTheDocument();
   });
 
 });

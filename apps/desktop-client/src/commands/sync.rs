@@ -43,6 +43,31 @@ pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSetting
     })
 }
 
+/// Get sync settings resolved from a session token. ADR #7.
+#[command]
+pub async fn get_sync_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<SyncSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let server_url = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
+    let api_key = Settings::get_sync_api_key(&db)?.filter(|k| !k.is_empty());
+    let enabled = Settings::is_sync_enabled(&db)?;
+    drop(db);
+    Ok(SyncSettingsDto {
+        server_url,
+        has_api_key: api_key.is_some(),
+        enabled,
+    })
+}
+
 /// Update sync settings.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

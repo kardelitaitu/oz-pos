@@ -44,6 +44,22 @@ vi.mock('@/frontend/shared/useSound', () => ({
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspaceScope: () => mockUseWorkspaceScope(),
+  useWorkspace: () => ({
+    activeWorkspace: 'kds',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: null,
+    swapSessionToken: vi.fn(),
+  }),
 }));
 
 const bundle = new FluentBundle('en-US');

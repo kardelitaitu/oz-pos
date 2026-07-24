@@ -59,6 +59,23 @@ pub async fn get_receipt_settings(
     run_get_receipt_settings(&conn)
 }
 
+/// Get receipt settings resolved from a session token. ADR #7.
+#[command]
+pub async fn get_receipt_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<ReceiptSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_receipt_settings(&db)
+}
+
 /// Business logic for `get_receipt_settings` (extracted for testing).
 fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettingsDto, AppError> {
     Ok(ReceiptSettingsDto {
@@ -160,6 +177,23 @@ pub struct StoreSettingsDto {
 pub async fn get_store_settings(state: State<'_, AppState>) -> Result<StoreSettingsDto, AppError> {
     let conn = state.db.lock().await;
     run_get_store_settings(&conn)
+}
+
+/// Get store settings resolved from a session token. ADR #7.
+#[command]
+pub async fn get_store_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<StoreSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    run_get_store_settings(&db)
 }
 
 /// Business logic for `get_store_settings` (extracted for testing).

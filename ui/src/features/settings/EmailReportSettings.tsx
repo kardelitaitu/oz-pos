@@ -13,7 +13,8 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
-import { getSetting, setSetting } from '@/api/settings';
+import { getSetting, setSettingScoped } from '@/api/settings';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 interface SmtpConfigDto {
   host: string;
@@ -38,6 +39,7 @@ const SMTP_CONFIG_KEY = 'smtp_config';
 export default function EmailReportSettings() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { sessionToken } = useWorkspace();
 
   const [config, setConfig] = useState<SmtpConfigDto>(DEFAULT_SMTP);
   const [loading, setLoading] = useState(true);
@@ -107,7 +109,7 @@ export default function EmailReportSettings() {
         return;
       }
 
-      await setSetting(SMTP_CONFIG_KEY, JSON.stringify(config), '');
+      await setSettingScoped(sessionToken, SMTP_CONFIG_KEY, JSON.stringify(config));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addToast({ message: l10n.getString('settings-email-saved'), type: 'success' });
@@ -116,7 +118,7 @@ export default function EmailReportSettings() {
     } finally {
       setSaving(false);
     }
-  }, [config, l10n, addToast]);
+  }, [config, l10n, addToast, sessionToken]);
 
   // ── Schedule event handlers ────────────────────────────────────────
 

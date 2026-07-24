@@ -32,6 +32,25 @@ vi.mock('@/features/products/useProducts', () => ({
   useProducts: (...args: unknown[]) => mockUseProducts(...args),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'restaurant-pos',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: null,
+    swapSessionToken: vi.fn(),
+  }),
+}));
+
 vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToWorkspacePicker }),
 }));
@@ -60,6 +79,7 @@ vi.mock('@/hooks/useFullscreen', () => ({
 
 vi.mock('@/api/settings', () => ({
   getUserPreferences: (...args: unknown[]) => mockGetUserPreferences(...args),
+  getUserPreferencesScoped: (...args: unknown[]) => mockGetUserPreferences(...args),
   setUserPreferences: (...args: unknown[]) => mockSetUserPreferences(...args),
 }));
 

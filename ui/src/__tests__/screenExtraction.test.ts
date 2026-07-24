@@ -511,6 +511,7 @@ const SCREENS: ScreenEntry[] = [
       'collapsed',
       'mobile-open',
       'visible',
+      'section-loading',
     ],
   },
 ];

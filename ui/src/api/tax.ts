@@ -50,12 +50,15 @@ export interface CartLineTaxInput {
   unit_price_minor: number;
 }
 
-/** Compute total tax for a set of cart lines (live preview). */
+/** Compute total tax for a set of cart lines (live preview) using the scoped variant (ADR #7). */
 export const computeCartTax = (
+  sessionToken: string | null,
   lines: CartLineTaxInput[],
   currency: string,
 ): Promise<number> =>
-  loggedInvoke<number>('compute_cart_tax', { lines, currency });
+  sessionToken
+    ? loggedInvoke<number>('compute_cart_tax_scoped', { sessionToken, lines, currency })
+    : Promise.resolve(0);
 
 /** List all tax rates. */
 export const listTaxRates = (): Promise<TaxRateDto[]> =>

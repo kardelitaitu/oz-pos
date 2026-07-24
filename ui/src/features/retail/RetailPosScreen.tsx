@@ -555,10 +555,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       qty: l.qty,
       unit_price_minor: l.unit_price.minor_units,
     }));
-    computeCartTax(taxLines, currency)
+    computeCartTax(sessionToken, taxLines, currency)
       .then(setCartTax)
       .catch(() => setCartTax(0));
-  }, [lines, subtotal]);
+  }, [lines, subtotal, sessionToken]);
 
   // ── Discount modal ───────────────────────────────────────────
 

@@ -4,12 +4,13 @@ import {
   setReceiptSettings,
   setStoreSettings,
   setUserPreferences,
-  setSetting,
+  setSettingScoped,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
 import { setDecimalSep } from '@/utils/storage';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import {
@@ -248,6 +249,7 @@ function SettingsPageContent() {
   const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const userId = session?.user_id ?? 'default';
 
   const [displayCardSize, setDisplayCardSize] = useState(0);
@@ -475,7 +477,7 @@ function SettingsPageContent() {
         if (syncApiKey) {
           // Mirror the token to the shared IPC channel so the
           // Retail Options screen (useCloudSync) can load it.
-          setSetting('sync.auth_token', syncApiKey, userId)
+          setSettingScoped(sessionToken, 'sync.auth_token', syncApiKey)
             .catch(() => { /* best-effort */ });
           setSyncApiKey('');
         }

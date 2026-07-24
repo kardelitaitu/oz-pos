@@ -13,6 +13,10 @@ export interface BrandSettings {
 export const getBrandSettings = (): Promise<BrandSettings> =>
   loggedInvoke<BrandSettings>('get_brand_settings');
 
+/** Get brand settings resolved from a session token. ADR #7. */
+export const getBrandSettingsScoped = (sessionToken: string): Promise<BrandSettings> =>
+  loggedInvoke<BrandSettings>('get_brand_settings_scoped', { sessionToken });
+
 /** Set the brand primary colour. */
 export const setBrandPrimaryColour = (colour: string): Promise<void> =>
   loggedInvoke<void>('set_brand_primary_colour', { colour });

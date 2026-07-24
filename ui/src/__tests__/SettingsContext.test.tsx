@@ -49,37 +49,37 @@ const mocks = vi.hoisted(() => ({
 // Object.assign(mocks.receiptSettings, { footer: 'new' }) pattern.
 
 vi.mock('@/api/settings', () => ({
-  getReceiptSettings: vi.fn(() =>
+  getReceiptSettingsScoped: vi.fn(() =>
     mocks.failReceipt ? Promise.reject(new Error('Receipt fail')) : Promise.resolve({ ...mocks.receiptSettings }),
   ),
-  getStoreSettings: vi.fn(() =>
+  getStoreSettingsScoped: vi.fn(() =>
     mocks.failStore ? Promise.reject(new Error('Store fail')) : Promise.resolve({ ...mocks.storeSettings }),
   ),
-  getUserPreferences: vi.fn(() =>
+  getUserPreferencesScoped: vi.fn(() =>
     mocks.failPrefs ? Promise.reject(new Error('Prefs fail')) : Promise.resolve({ ...mocks.userPreferences }),
   ),
 }));
 
 vi.mock('@/api/offline', () => ({
-  getSyncSettings: vi.fn(() =>
+  getSyncSettingsScoped: vi.fn(() =>
     mocks.failSync ? Promise.reject(new Error('Sync fail')) : Promise.resolve({ ...mocks.syncSettings }),
   ),
 }));
 
 vi.mock('@/api/currency', () => ({
-  listCurrencies: vi.fn(() =>
+  listCurrenciesScoped: vi.fn(() =>
     mocks.failCurrencies ? Promise.reject(new Error('Currencies fail')) : Promise.resolve([...mocks.currencies]),
   ),
 }));
 
 vi.mock('@/api/branding', () => ({
-  getBrandSettings: vi.fn(() =>
+  getBrandSettingsScoped: vi.fn(() =>
     mocks.failBrand ? Promise.reject(new Error('Brand fail')) : Promise.resolve({ ...mocks.brandSettings }),
   ),
 }));
 
 vi.mock('@/api/system', () => ({
-  getVersion: vi.fn(() =>
+  getVersionScoped: vi.fn(() =>
     mocks.failVersion ? Promise.reject(new Error('Version fail')) : Promise.resolve({ ...mocks.versionInfo }),
   ),
 }));
@@ -94,6 +94,27 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn((_event: string, handler: (event: unknown) => void) => {
     tauriListenHandler.fn = handler;
     return Promise.resolve(() => { tauriListenHandler.fn = null; });
+  }),
+}));
+
+// ── WorkspaceContext mock ────────────────────────────────────────
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: 'test-token-123',
+    activeWorkspace: 'admin',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    swapSessionToken: vi.fn(),
   }),
 }));
 
@@ -348,7 +369,7 @@ describe('SettingsContext', () => {
     let resolveHang: (v: unknown) => void;
     const hangPromise = new Promise((resolve) => { resolveHang = resolve; });
 
-    const mock = (await import('@/api/settings')).getReceiptSettings as ReturnType<typeof vi.fn>;
+    const mock = (await import('@/api/settings')).getReceiptSettingsScoped as ReturnType<typeof vi.fn>;
     mock.mockReturnValueOnce(hangPromise as Promise<unknown>);
 
     const { unmount } = renderHook(() => useSettings(), { wrapper });
@@ -371,13 +392,13 @@ describe('SettingsContext', () => {
     // Override ALL 7 API mocks ONCE so they hang instead of resolving.
     type MockedFn = ReturnType<typeof vi.fn>;
     const mocksToHang: MockedFn[] = [
-      (await import('@/api/settings')).getReceiptSettings,
-      (await import('@/api/settings')).getStoreSettings,
-      (await import('@/api/settings')).getUserPreferences,
-      (await import('@/api/offline')).getSyncSettings,
-      (await import('@/api/currency')).listCurrencies,
-      (await import('@/api/branding')).getBrandSettings,
-      (await import('@/api/system')).getVersion,
+      (await import('@/api/settings')).getReceiptSettingsScoped,
+      (await import('@/api/settings')).getStoreSettingsScoped,
+      (await import('@/api/settings')).getUserPreferencesScoped,
+      (await import('@/api/offline')).getSyncSettingsScoped,
+      (await import('@/api/currency')).listCurrenciesScoped,
+      (await import('@/api/branding')).getBrandSettingsScoped,
+      (await import('@/api/system')).getVersionScoped,
     ] as MockedFn[];
     for (const m of mocksToHang) {
       m.mockReturnValueOnce(hangPromise);

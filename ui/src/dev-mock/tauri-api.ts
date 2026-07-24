@@ -361,6 +361,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'get_enabled_features': () => ({ features: ['sales', 'inventory', 'reporting', 'staff', 'settings'] }),
   'get_setting': () => '',
+  'set_setting_scoped': () => null,
 
   'get_user_preferences': () => ({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' }),
   'get_user_preferences_scoped': () => ({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' }),
@@ -764,6 +765,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'compute_cart_tax': () => 0,
+  'compute_cart_tax_scoped': () => 0,
   'list_tax_rates': () => [],
   'create_tax_rate': () => null,
   'update_tax_rate': () => null,

@@ -29,6 +29,10 @@ export const getCurrencyInfo = (code: string): Promise<CurrencyInfo> =>
 export const listCurrencies = (): Promise<CurrencyDto[]> =>
   loggedInvoke<CurrencyDto[]>('list_currencies');
 
+/** List all available currencies resolved from a session token. ADR #7. */
+export const listCurrenciesScoped = (sessionToken: string): Promise<CurrencyDto[]> =>
+  loggedInvoke<CurrencyDto[]>('list_currencies_scoped', { sessionToken });
+
 /** Get the store's default currency code. */
 export const getDefaultCurrency = (): Promise<string | null> =>
   loggedInvoke<string | null>('get_default_currency');

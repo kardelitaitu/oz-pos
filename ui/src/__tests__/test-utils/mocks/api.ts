@@ -84,6 +84,9 @@ export function createSettingsApiMock(overrides: SettingsApiOverrides = {}) {
     getSetupStatus: vi.fn(),
     getEnabledFeatures: vi.fn(),
     getUserPreferences: vi.fn(),
+    getUserPreferencesScoped: vi.fn(),
+    getStoreSettingsScoped: vi.fn(),
+    getReceiptSettingsScoped: vi.fn(),
     setUserPreferences: vi.fn(),
     ...overrides,
   };

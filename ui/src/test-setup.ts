@@ -4,6 +4,16 @@
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
 
+// ── Global mock: @tauri-apps/api/event ─────────────────────────
+// SettingsContext uses a dynamic import('@tauri-apps/api/event')
+// which per-file vi.mock() cannot intercept.  This global mock
+// ensures the dynamic import resolves to a stub rather than the
+// real Tauri module (which calls transformCallback, undefined in
+// jsdom, and throws "Cannot read properties of undefined").
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+
 // ── Global beforeEach: clean mocks and localStorage ─────────────
 // Every test starts with a clean slate. Individual test files that
 // need additional setup (e.g. mockImplementation overrides) add

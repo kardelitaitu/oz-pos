@@ -39,6 +39,14 @@
   border: 1px solid var(--color-border);
 }
 
+/* ── Section Suspense fallback ────────────────────────────── */
+
+.section-loading {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--color-fg-muted);
+}
+
 /* ── Top bar ──────────────────────────────────────────────── */
 
 .settings-topbar {

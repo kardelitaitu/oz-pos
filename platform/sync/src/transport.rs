@@ -713,7 +713,9 @@ mod tests {
     fn classify_transport_error_connection_refused() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let err = rt.block_on(async {
-            let client = reqwest::Client::new();
+            // Disable system proxy so it doesn't intercept 127.0.0.1:1 and
+            // return HTTP 403 instead of the raw TCP connection refused error.
+            let client = reqwest::Client::builder().no_proxy().build().unwrap();
             client
                 .get("http://127.0.0.1:1/refused")
                 .send()

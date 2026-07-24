@@ -5,9 +5,10 @@ import { useLocalization } from '@fluent/react';
 import { useProducts } from '@/features/products/useProducts';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTheme } from '@/frontend/shell/ThemeProvider';
 import { useFullscreen } from '@/hooks/useFullscreen';
-import { getUserPreferences, setUserPreferences } from '@/api/settings';
+import { getUserPreferencesScoped, setUserPreferences } from '@/api/settings';
 import './RestaurantMenu.css';
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -217,6 +218,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const { products, categories, categoryMeta, loading } = useProducts();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session, logout } = useAuth();
+  const { sessionToken } = useWorkspace();
   const userId = session?.user_id ?? 'default';
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -278,7 +280,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
 
   // Load preferences from backend on mount, syncing to localStorage
   useEffect(() => {
-    getUserPreferences(userId).then((prefs) => {
+    if (!sessionToken) return;
+    getUserPreferencesScoped(sessionToken).then((prefs) => {
       const cs = prefs['cardsize'];
       if (cs !== undefined) {
         const v = Math.min(4, Math.max(0, parseInt(cs, 10) || 0));

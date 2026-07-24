@@ -147,28 +147,6 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> Result<SetupStatus,
     Ok(SetupStatus { completed, preset })
 }
 
-/// **Deprecated — use `seed_default_roles_scoped` (ADR #7).**
-///
-/// Seed the three built-in roles (Owner, Manager, Cashier) with their
-/// preset permission sets. Idempotent — existing roles are left unchanged.
-///
-/// Requires the `staff:manage_roles` permission.
-#[command]
-pub async fn seed_default_roles(
-    user_id: String,
-    state: State<'_, AppState>,
-) -> Result<usize, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, oz_core::permissions::STAFF_MANAGE_ROLES)?;
-    let count = store.seed_default_roles()?;
-    drop(db);
-    tracing::info!(count, "default roles seeded");
-    Ok(count)
-}
-
-/// Seed default roles resolved from a session token. ADR #7.
-///
 /// Requires the `staff:manage_roles` permission.
 #[command]
 pub async fn seed_default_roles_scoped(

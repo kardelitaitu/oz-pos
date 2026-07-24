@@ -35,6 +35,27 @@ pub async fn get_brand_settings(state: State<'_, AppState>) -> Result<BrandSetti
     })
 }
 
+/// Load all brand settings resolved from a session token. ADR #7.
+#[command]
+pub async fn get_brand_settings_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<BrandSettingsDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(BrandSettingsDto {
+        primary_colour: Settings::get_brand_primary_colour(&db)?,
+        logo_path: Settings::get_brand_logo_path(&db)?,
+        store_name: Settings::get_brand_store_name(&db)?,
+    })
+}
+
 /// Set the primary brand colour.
 #[command]
 pub async fn set_brand_primary_colour(

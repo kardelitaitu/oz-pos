@@ -10,23 +10,23 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  getReceiptSettings,
-  getStoreSettings,
-  getUserPreferences,
+  getReceiptSettingsScoped,
+  getStoreSettingsScoped,
+  getUserPreferencesScoped,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
 import {
-  getSyncSettings,
+  getSyncSettingsScoped,
   type SyncSettingsDto,
 } from '@/api/offline';
 import {
-  listCurrencies,
+  listCurrenciesScoped,
   type CurrencyDto,
 } from '@/api/currency';
-import { getBrandSettings } from '@/api/branding';
-import { getVersion, type VersionInfo } from '@/api/system';
-import { useAuth } from './AuthContext';
+import { getBrandSettingsScoped } from '@/api/branding';
+import { getVersionScoped, type VersionInfo } from '@/api/system';
+import { useWorkspace } from './WorkspaceContext';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -167,24 +167,29 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
   const pendingKeysRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
 
-  // Read userId for preferences API
-  const { session } = useAuth();
-  const userId = session?.user_id ?? 'default';
+  // Read sessionToken for scoped settings APIs
+  const { sessionToken } = useWorkspace();
 
   // ── Full load (all APIs) ────────────────────────────────────
 
   const loadAll = useCallback(async () => {
+    if (!sessionToken) {
+      setSettings(DEFAULT_SETTINGS);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     const results = await Promise.allSettled([
-      getReceiptSettings(),
-      getStoreSettings(),
-      listCurrencies(),
-      getSyncSettings(),
-      getUserPreferences(userId),
-      getBrandSettings(),
-      getVersion(),
+      getReceiptSettingsScoped(sessionToken),
+      getStoreSettingsScoped(sessionToken),
+      listCurrenciesScoped(sessionToken),
+      getSyncSettingsScoped(sessionToken),
+      getUserPreferencesScoped(sessionToken),
+      getBrandSettingsScoped(sessionToken),
+      getVersionScoped(sessionToken),
     ]);
     const [rR, sR, cR, syncR, prefsR, brandR, verR] = results;
 
@@ -252,11 +257,16 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [userId]);
+  }, [sessionToken]);
 
   // ── Scoped refetch (key-prefix based) ───────────────────────
 
   const loadScoped = useCallback(async (keys: string[]) => {
+    if (!sessionToken) {
+      setLoading(false);
+      return;
+    }
+
     const scopes = keysToScopes(keys);
 
     // If full refetch requested, delegate to loadAll
@@ -270,35 +280,35 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
 
     if (scopes.has('receipt')) {
       tasks.push(
-        getReceiptSettings().then((v) =>
+        getReceiptSettingsScoped(sessionToken).then((v) =>
           setSettings((prev) => ({ ...prev, receipt: v })),
         ),
       );
     }
     if (scopes.has('store')) {
       tasks.push(
-        getStoreSettings().then((v) =>
+        getStoreSettingsScoped(sessionToken).then((v) =>
           setSettings((prev) => ({ ...prev, store: v })),
         ),
       );
     }
     if (scopes.has('currencies')) {
       tasks.push(
-        listCurrencies().then((v) =>
+        listCurrenciesScoped(sessionToken).then((v) =>
           setSettings((prev) => ({ ...prev, currencies: v })),
         ),
       );
     }
     if (scopes.has('sync')) {
       tasks.push(
-        getSyncSettings().then((v) =>
+        getSyncSettingsScoped(sessionToken).then((v) =>
           setSettings((prev) => ({ ...prev, sync: v })),
         ),
       );
     }
     if (scopes.has('preferences')) {
       tasks.push(
-        getUserPreferences(userId).then((p) => {
+        getUserPreferencesScoped(sessionToken).then((p) => {
           const cardSize = p['cardsize'] !== undefined
             ? Math.min(4, Math.max(0, parseInt(p['cardsize'], 10) || 0))
             : 0;
@@ -315,7 +325,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     }
     if (scopes.has('brand')) {
       tasks.push(
-        getBrandSettings().then((v) =>
+        getBrandSettingsScoped(sessionToken).then((v) =>
           setSettings((prev) => ({
             ...prev,
             brand: { colour: v.primary_colour, storeName: v.store_name },
@@ -325,7 +335,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     }
     if (scopes.has('version')) {
       tasks.push(
-        getVersion().then((v: VersionInfo) =>
+        getVersionScoped(sessionToken).then((v: VersionInfo) =>
           setSettings((prev) => ({ ...prev, appVersion: v.version })),
         ),
       );
@@ -333,7 +343,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
 
     await Promise.allSettled(tasks);
     if (mountedRef.current) setLoading(false);
-  }, [userId, loadAll]);
+  }, [sessionToken, loadAll]);
 
   // ── Debounced update handler ────────────────────────────────
 

@@ -6,6 +6,26 @@ import { describe, it, vi } from 'vitest';
 import { renderWithProviders, checkA11y } from './axe-helper';
 import SettingsPage from '@/features/settings/SettingsPage';
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    activeWorkspace: 'admin',
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: 'test-token-123',
+    swapSessionToken: vi.fn(),
+  }),
+  useWorkspaceScope: () => null,
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: { username: 'test', role: 'owner', displayName: 'Test' },
@@ -26,13 +46,18 @@ vi.mock('@/api/branding', () => ({
       logo_path: null,
       store_name: 'OZ-POS',
     }),
+  getBrandSettingsScoped: () =>
+    Promise.resolve({
+      primary_colour: '#10b981',
+      logo_path: null,
+      store_name: 'OZ-POS',
+    }),
 }));
 
 vi.mock('@/api/settings', () => ({
-  getReceiptSettings: vi.fn(() => Promise.resolve({ showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '', paperWidth: 'standard', showTableNumber: false, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 })),
-  getStoreSettings: vi.fn(() => Promise.resolve({ name: 'Test Store', address: '', taxId: '', currency: 'IDR', branch: '' })),
-  getUserPreferences: vi.fn(() => Promise.resolve({})),
-  setSetting: vi.fn(),
+  getReceiptSettingsScoped: vi.fn(() => Promise.resolve({ showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '', paperWidth: 'standard', showTableNumber: false, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 })),
+  getStoreSettingsScoped: vi.fn(() => Promise.resolve({ name: 'Test Store', address: '', taxId: '', currency: 'IDR', branch: '' })),
+  getUserPreferencesScoped: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('@/api/license', () => ({
@@ -40,15 +65,15 @@ vi.mock('@/api/license', () => ({
 }));
 
 vi.mock('@/api/system', () => ({
-  getVersion: vi.fn(() => Promise.resolve({ version: '0.0.19' })),
+  getVersionScoped: vi.fn(() => Promise.resolve({ version: '0.0.19' })),
 }));
 
 vi.mock('@/api/currency', () => ({
-  listCurrencies: vi.fn(() => Promise.resolve([{ code: 'IDR', name: 'Rupiah', symbol: 'Rp' }])),
+  listCurrenciesScoped: vi.fn(() => Promise.resolve([{ code: 'IDR', name: 'Rupiah', symbol: 'Rp' }])),
 }));
 
 vi.mock('@/api/offline', () => ({
-  getSyncSettings: vi.fn(() => Promise.resolve({ serverUrl: null, hasApiKey: false, enabled: false })),
+  getSyncSettingsScoped: vi.fn(() => Promise.resolve({ serverUrl: null, hasApiKey: false, enabled: false })),
   updateSyncSettings: vi.fn(),
   syncRun: vi.fn(),
   syncPull: vi.fn(),

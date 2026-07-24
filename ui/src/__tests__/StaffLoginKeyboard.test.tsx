@@ -323,31 +323,31 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
     it('shows rate-limit countdown after 2 failed PIN attempts', async () => {
       await advanceToPin();
 
-      // The rate-limit warning appears when pinAttempts >= RATE_LIMIT_WARN_AFTER (2)
-      // and pinAttempts < MAX_PIN_ATTEMPTS (3), i.e. on the 2nd failed attempt.
-      // The 3rd attempt does NOT show the warning (3 < 3 is false).
-      //
-      // toastShownForError ref skips re-processing the same error string,
-      // so each attempt must use a unique error message.
+      // Auto-submit fires when 4 digits are entered (MAX_PIN_LENGTH).
+      // The rate-limit warning appears when pinAttempts >= 2.
+      // Each failed attempt must use a unique error message because
+      // toastShownForError skips re-processing the same error string.
 
-      // 1st failure: pinAttempts = 1, no warning
+      // 1st failure: enter 4 digits → auto-submit → pinAttempts = 1
       mockAuthError.mockReturnValue('Error 1');
       fireEvent.click(screen.getByLabelText('1'));
+      fireEvent.click(screen.getByLabelText('2'));
+      fireEvent.click(screen.getByLabelText('3'));
+      fireEvent.click(screen.getByLabelText('4'));
       await waitFor(() => {
         const inline = document.querySelector('.staff-login-error');
         expect(inline).toHaveTextContent('Error 1');
       });
 
-      // Reset error
-      mockAuthError.mockReturnValue(null);
-      fireEvent.click(screen.getByLabelText('2'));
-      await waitFor(() => {
-        expect(document.querySelector('.staff-login-error')).not.toBeInTheDocument();
-      });
+      // Clear PIN for next attempt
+      fireEvent.click(screen.getByLabelText('Clear'));
 
-      // 2nd failure: pinAttempts = 2, shows rate-limit warning
+      // 2nd failure: enter 4 digits → auto-submit → pinAttempts = 2 → rate-limit warning
       mockAuthError.mockReturnValue('Error 2');
+      fireEvent.click(screen.getByLabelText('1'));
+      fireEvent.click(screen.getByLabelText('2'));
       fireEvent.click(screen.getByLabelText('3'));
+      fireEvent.click(screen.getByLabelText('4'));
       await waitFor(() => {
         const inline = document.querySelector('.staff-login-error');
         expect(inline).toHaveTextContent(/attempts? remaining/i);

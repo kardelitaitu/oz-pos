@@ -227,43 +227,10 @@ pub async fn list_products_scoped(
     run_list_products(&db)
 }
 
-/// Fetch warehouse-tracked products only (excludes services).
-/// Used by the warehouse workspace to avoid showing non-inventory
-/// items like "car wash".
-#[command]
-pub async fn list_warehouse_products(
-    state: State<'_, AppState>,
-) -> Result<Vec<ProductDto>, AppError> {
-    let db = state.db.lock().await;
-    run_list_warehouse_products(&db)
-}
-
-/// Scoped variant: fetch warehouse-tracked products for the store
-/// resolved from a session token.
-#[command]
-pub async fn list_warehouse_products_scoped(
-    state: State<'_, AppState>,
-    session_token: String,
-) -> Result<Vec<ProductDto>, AppError> {
-    let (_session, conn) = state.resolve_scope(&session_token)?;
-    let db = conn
-        .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_list_warehouse_products(&db)
-}
-
 /// Business logic for listing products (extracted for testing).
 fn run_list_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, AppError> {
     let store = Store::new(conn);
     let products = store.list_products()?;
-    map_products_to_dtos(&store, products)
-}
-
-/// Business logic for listing warehouse-tracked products only
-/// (excludes services like "car wash").
-fn run_list_warehouse_products(conn: &rusqlite::Connection) -> Result<Vec<ProductDto>, AppError> {
-    let store = Store::new(conn);
-    let products = store.list_warehouse_products()?;
     map_products_to_dtos(&store, products)
 }
 
