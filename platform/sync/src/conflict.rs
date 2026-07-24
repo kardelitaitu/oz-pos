@@ -205,6 +205,9 @@ pub fn resolve_conflict(local: &OfflineQueueItem, remote: &OfflineQueueItem) -> 
         || action.starts_with("tax.")
         || action.starts_with("user.")
         || action.starts_with("staff.")
+        || action.starts_with("setting.")
+        || action.starts_with("settings.")
+        || action.starts_with("preference.")
     {
         resolve_version_lww(local, remote)
     } else {
@@ -798,5 +801,81 @@ mod tests {
         assert_eq!(sale_status_rank("voided"), 3);
         assert_eq!(sale_status_rank("refunded"), 4);
         assert_eq!(sale_status_rank("unknown"), 0);
+    }
+
+    #[test]
+    fn p3_completed_sale_immutable_over_active_mutation() {
+        let completed_sale =
+            make_sale_item("2026-07-24T10:00:00.000Z", "complete_sale", "completed", 1);
+        let active_mutation =
+            make_sale_item("2026-07-24T12:00:00.000Z", "sale.update", "active", 2);
+
+        let resolved = resolve_conflict(&completed_sale, &active_mutation);
+        assert_eq!(
+            resolved.winner.id, completed_sale.id,
+            "Completed sale must stand immutable over non-terminal active edit"
+        );
+    }
+
+    #[test]
+    fn p3_void_sale_wins_over_completed_sale() {
+        let completed_sale =
+            make_sale_item("2026-07-24T10:00:00.000Z", "complete_sale", "completed", 1);
+        let void_sale = make_sale_item("2026-07-24T10:05:00.000Z", "void_sale", "voided", 1);
+
+        let resolved = resolve_conflict(&completed_sale, &void_sale);
+        assert_eq!(
+            resolved.winner.id, void_sale.id,
+            "Voided status (rank 3) must take precedence over completed status (rank 2)"
+        );
+    }
+
+    #[test]
+    fn p3_refund_sale_wins_over_completed_sale() {
+        let completed_sale =
+            make_sale_item("2026-07-24T10:00:00.000Z", "complete_sale", "completed", 1);
+        let refund_sale = make_sale_item("2026-07-24T10:10:00.000Z", "refund_sale", "refunded", 1);
+
+        let resolved = resolve_conflict(&completed_sale, &refund_sale);
+        assert_eq!(
+            resolved.winner.id, refund_sale.id,
+            "Refunded status (rank 4) must take precedence over completed status (rank 2)"
+        );
+    }
+
+    #[test]
+    fn p3_settings_dispatch_version_lww() {
+        let local_setting = make_item_with_version(
+            "2026-07-24T10:00:00.000Z",
+            "settings.update",
+            5,
+            r#""store_name":"OZ Store Main""#,
+        );
+        let remote_setting = make_item_with_version(
+            "2026-07-24T12:00:00.000Z",
+            "settings.update",
+            3,
+            r#""store_name":"OZ Store Stale""#,
+        );
+
+        let resolved = resolve_conflict(&local_setting, &remote_setting);
+        assert_eq!(
+            resolved.winner.id, local_setting.id,
+            "Settings conflict must use Version LWW (v5 > v3)"
+        );
+    }
+
+    #[test]
+    fn p3_stock_crdt_delta_merge_preserves_both() {
+        let local_stock =
+            make_stock_item("2026-07-24T10:00:00.000Z", "stock.adjusted", -5, "SKU-100");
+        let remote_stock =
+            make_stock_item("2026-07-24T10:01:00.000Z", "stock.adjusted", -2, "SKU-100");
+
+        let resolved = resolve_conflict(&local_stock, &remote_stock);
+        let winner_payload: Value = serde_json::from_str(&resolved.winner.payload).unwrap();
+        assert_eq!(winner_payload["merge_type"], "crdt_delta");
+        assert_eq!(winner_payload["local"]["delta"], -5);
+        assert_eq!(winner_payload["remote"]["delta"], -2);
     }
 }

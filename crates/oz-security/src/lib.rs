@@ -429,13 +429,13 @@ mod tests {
     #[test]
     fn in_memory_three_rotations_chain_prev_correctly() {
         let k = InMemoryKeyring::new();
-        let k1 = k.rotate_key("chain").map(|_| ()).unwrap();
+        _ = k.rotate_key("chain").unwrap();
         let k1 = k.get_secret("chain").unwrap().unwrap();
 
-        let k2 = k.rotate_key("chain").map(|_| ()).unwrap();
+        _ = k.rotate_key("chain").unwrap();
         let k2 = k.get_secret("chain").unwrap().unwrap();
 
-        let k3 = k.rotate_key("chain").map(|_| ()).unwrap();
+        _ = k.rotate_key("chain").unwrap();
         let k3 = k.get_secret("chain").unwrap().unwrap();
 
         // All three keys are distinct (256-bit random — collision ~ 2^-128).
