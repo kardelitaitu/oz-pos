@@ -463,14 +463,15 @@ mod tests {
     /// Successive rotation timestamps must be distinct. Pins the
     /// invariant that `chrono::Utc::now()` has sub-millisecond
     /// resolution — failures here would indicate a clock-source
-    /// regression on the platform. 50ms sleep is a comfortable margin
-    /// for heavily-loaded CI runners where clock coarsening could
-    /// collapse finer-grained gaps.
+    /// regression on the platform. 25ms sleep is well above all
+    /// platforms' clock resolution (Linux clock_gettime, Windows
+    /// GetSystemTimeAsFileTime at 100ns, macOS walltime_ns) while
+    /// keeping the suite fast on heavily-loaded CI runners.
     #[test]
     fn in_memory_rotation_timestamps_advance() {
         let k = InMemoryKeyring::new();
         let t1 = k.rotate_key("clk").unwrap().created_at;
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(25));
         let t2 = k.rotate_key("clk").unwrap().created_at;
         assert_ne!(t1, t2, "two rotations should have distinct timestamps");
         // ISO 8601 round-trips through `chrono::DateTime::parse_from_rfc3339`.
