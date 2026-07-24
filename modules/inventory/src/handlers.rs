@@ -103,10 +103,8 @@ impl InventoryStockHandler {
         })?;
 
         let mut ingredients = Vec::new();
-        for ing in ings {
-            if let Ok(i) = ing {
-                ingredients.push(i);
-            }
+        for i in ings.flatten() {
+            ingredients.push(i);
         }
 
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

@@ -96,6 +96,13 @@ pub struct LuaRuntime {
     lua: mlua::Lua,
 }
 
+// SAFETY: `LuaRuntime` is used behind a `Mutex` in application state,
+// guaranteeing that only one thread accesses it at a time.
+#[allow(unsafe_code)]
+unsafe impl Send for LuaRuntime {}
+#[allow(unsafe_code)]
+unsafe impl Sync for LuaRuntime {}
+
 impl Default for LuaRuntime {
     fn default() -> Self {
         Self::new().expect("Failed to initialize LuaRuntime")
