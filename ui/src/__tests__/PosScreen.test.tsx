@@ -71,7 +71,7 @@ vi.mock('@/features/sales/useBarcodeScanner', () => ({
 
 // Shared lookupByBarcode — used by both the unscoped export (for test
 // assertions) and lookupByBarcodeScoped (which the component actually calls).
-const mockLookupByBarcode = vi.hoisted(() => vi.fn(() => Promise.resolve(null)));
+const mockLookupByBarcode = vi.hoisted(() => vi.fn((_code: string) => Promise.resolve(null)));
 
 vi.mock('@/api/products', () => ({
   lookupByBarcode: mockLookupByBarcode,

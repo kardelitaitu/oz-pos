@@ -86,6 +86,7 @@ export interface SettingsApiOverrides {
   getReceiptSettings?: ReturnType<typeof vi.fn>;
   getCreditSettings?: ReturnType<typeof vi.fn>;
   getEnabledFeatures?: ReturnType<typeof vi.fn>;
+  getStoreSettingsScoped?: ReturnType<typeof vi.fn>;
   setReceiptSettingsScoped?: ReturnType<typeof vi.fn>;
   setStoreSettingsScoped?: ReturnType<typeof vi.fn>;
   setCreditSettingsScoped?: ReturnType<typeof vi.fn>;
