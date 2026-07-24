@@ -30,6 +30,8 @@ pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod mask;
+#[cfg(test)]
+pub mod test_helpers;
 pub mod tls;
 #[cfg(target_os = "windows")]
 pub mod windows;

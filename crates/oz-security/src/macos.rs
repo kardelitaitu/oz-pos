@@ -80,6 +80,7 @@ impl Keyring for MacOsKeychain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helpers::unique_test_name;
 
     fn test_keyring() -> MacOsKeychain {
         MacOsKeychain::new().expect("failed to create keyring")
@@ -88,34 +89,35 @@ mod tests {
     #[test]
     fn macos_roundtrip() {
         let k = test_keyring();
-        let name = "oz-pos-test-macos-roundtrip";
-        let _ = k.delete_secret(name);
+        let name = unique_test_name("oz-pos-test-macos-roundtrip");
+        let _ = k.delete_secret(&name);
 
-        assert_eq!(k.get_secret(name).unwrap(), None);
+        assert_eq!(k.get_secret(&name).unwrap(), None);
 
-        k.set_secret(name, "s3kr3t!").unwrap();
-        assert_eq!(k.get_secret(name).unwrap(), Some("s3kr3t!".into()));
+        k.set_secret(&name, "s3kr3t!").unwrap();
+        assert_eq!(k.get_secret(&name).unwrap(), Some("s3kr3t!".into()));
 
-        assert!(k.delete_secret(name).unwrap());
-        assert_eq!(k.get_secret(name).unwrap(), None);
+        assert!(k.delete_secret(&name).unwrap());
+        assert_eq!(k.get_secret(&name).unwrap(), None);
     }
 
     #[test]
     fn macos_delete_nonexistent_returns_false() {
         let k = test_keyring();
-        assert!(!k.delete_secret("oz-pos-test-nonexistent-del-mac").unwrap());
+        let name = unique_test_name("oz-pos-test-nonexistent-del-mac");
+        assert!(!k.delete_secret(&name).unwrap());
     }
 
     #[test]
     fn macos_overwrite_existing() {
         let k = test_keyring();
-        let name = "oz-pos-test-overwrite-mac";
-        let _ = k.delete_secret(name);
+        let name = unique_test_name("oz-pos-test-overwrite-mac");
+        let _ = k.delete_secret(&name);
 
-        k.set_secret(name, "first").unwrap();
-        k.set_secret(name, "second").unwrap();
-        assert_eq!(k.get_secret(name).unwrap(), Some("second".into()));
+        k.set_secret(&name, "first").unwrap();
+        k.set_secret(&name, "second").unwrap();
+        assert_eq!(k.get_secret(&name).unwrap(), Some("second".into()));
 
-        k.delete_secret(name).unwrap();
+        k.delete_secret(&name).unwrap();
     }
 }

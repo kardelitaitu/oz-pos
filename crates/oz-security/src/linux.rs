@@ -221,6 +221,7 @@ fn attributes(name: &str) -> HashMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helpers::unique_test_name;
 
     fn test_keyring() -> LibSecretKeyring {
         LibSecretKeyring::new().expect("failed to create keyring")
@@ -230,36 +231,37 @@ mod tests {
     #[ignore = "requires org.freedesktop.secrets D-Bus service"]
     fn linux_roundtrip() {
         let k = test_keyring();
-        let name = "oz-pos-test-linux-roundtrip";
-        let _ = k.delete_secret(name);
+        let name = unique_test_name("oz-pos-test-linux-roundtrip");
+        let _ = k.delete_secret(&name);
 
-        assert_eq!(k.get_secret(name).unwrap(), None);
+        assert_eq!(k.get_secret(&name).unwrap(), None);
 
-        k.set_secret(name, "linux-secret-42").unwrap();
-        assert_eq!(k.get_secret(name).unwrap(), Some("linux-secret-42".into()));
+        k.set_secret(&name, "linux-secret-42").unwrap();
+        assert_eq!(k.get_secret(&name).unwrap(), Some("linux-secret-42".into()));
 
-        assert!(k.delete_secret(name).unwrap());
-        assert_eq!(k.get_secret(name).unwrap(), None);
+        assert!(k.delete_secret(&name).unwrap());
+        assert_eq!(k.get_secret(&name).unwrap(), None);
     }
 
     #[test]
     #[ignore = "requires org.freedesktop.secrets D-Bus service"]
     fn linux_delete_nonexistent_returns_false() {
         let k = test_keyring();
-        assert!(!k.delete_secret("oz-pos-test-nonexistent-linux").unwrap());
+        let name = unique_test_name("oz-pos-test-nonexistent-del-linux");
+        assert!(!k.delete_secret(&name).unwrap());
     }
 
     #[test]
     #[ignore = "requires org.freedesktop.secrets D-Bus service"]
     fn linux_overwrite_existing() {
         let k = test_keyring();
-        let name = "oz-pos-test-overwrite-linux";
-        let _ = k.delete_secret(name);
+        let name = unique_test_name("oz-pos-test-overwrite-linux");
+        let _ = k.delete_secret(&name);
 
-        k.set_secret(name, "original").unwrap();
-        k.set_secret(name, "replacement").unwrap();
-        assert_eq!(k.get_secret(name).unwrap(), Some("replacement".into()));
+        k.set_secret(&name, "original").unwrap();
+        k.set_secret(&name, "replacement").unwrap();
+        assert_eq!(k.get_secret(&name).unwrap(), Some("replacement".into()));
 
-        k.delete_secret(name).unwrap();
+        k.delete_secret(&name).unwrap();
     }
 }

@@ -151,17 +151,10 @@ fn encode_utf16_null(s: &str) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    use crate::test_helpers::unique_test_name;
 
     fn test_keyring() -> WindowsCredentialManager {
         WindowsCredentialManager::new().expect("failed to create keyring")
-    }
-
-    fn unique_test_name(prefix: &str) -> String {
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        format!("{prefix}-{}-{n}", std::process::id())
     }
 
     /// RAII guard that deletes the named Windows credential when it goes
