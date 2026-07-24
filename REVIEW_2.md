@@ -6,6 +6,23 @@
 
 ---
 
+## Quick Checklist
+
+| # | Priority | Item | Effort | Status |
+|---|----------|------|--------|--------|
+| R1 | 🔴 Critical | Remove committed private updater key from git history | 2 h | - [ ] |
+| R2 | 🔴 Critical | Extract `oz-core/src/db/` into module repositories | Month 1 | - [ ] |
+| R3 | 🔴 Critical | Guard `DevToolbar` behind `import.meta.env.DEV` | 30 min | - [ ] |
+| R4 | 🟠 Medium | Eliminate `unwrap()`/`expect()` from `crates/` production paths | 2 days | - [ ] |
+| R5 | 🟠 Medium | Split `settings.rs` (95 KB) and `kernel.rs` (64 KB) | 1 day | - [ ] |
+| R6 | 🟠 Medium | Complete Thai locale (`*.th.ftl`) — ~52% keys missing | ½ day | - [ ] |
+| R7 | 🟠 Medium | Add tests for `LicenseActivationScreen` + `SessionLockScreen` | ½ day | - [ ] |
+| R8 | 🟡 Low | Document 5 feature dirs missing `register.ts/tsx` | 30 min | - [ ] |
+| R9 | 🟡 Low | Upgrade ESLint 8 → 9 | ½ day | - [ ] |
+| R10 | 🟡 Low | Complete P5: 45-page Manual QA Walkthrough | 2 days | - [ ] |
+
+---
+
 ## Action Checklist
 
 > Work through these in priority order. Items marked 🔴 are blockers before any merchant goes live.
