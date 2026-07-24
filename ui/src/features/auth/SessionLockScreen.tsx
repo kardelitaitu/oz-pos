@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { checkLicenseStatus } from '@/api/license';
+import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
@@ -28,6 +29,7 @@ export default function SessionLockScreen({
   onUnlock: () => void;
 }) {
   const { session } = useAuth();
+  const { l10n } = useLocalization();
   const [pin, setPin] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [time, setTime] = useState(new Date());
@@ -128,7 +130,7 @@ export default function SessionLockScreen({
       try {
         const username = sessionStorage.getItem('current-username');
         if (!username) {
-          setError('Session expired. Please log in again.');
+          setError(l10n.getString('session-lock-expired'));
           setPin([]);
           return;
         }
@@ -139,7 +141,7 @@ export default function SessionLockScreen({
         onUnlock();
       } catch (err) {
         const msg = (err as Record<string, unknown> | null)?.['message'] as string
-          ?? 'Invalid PIN';
+          ?? l10n.getString('session-lock-invalid-pin');
         setError(msg);
         setPin([]);
 
@@ -151,7 +153,7 @@ export default function SessionLockScreen({
       }
     };
     attemptLogin();
-  }, [pin, session, onUnlock]);
+  }, [pin, session, onUnlock, l10n]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

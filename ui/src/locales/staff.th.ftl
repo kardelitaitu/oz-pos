@@ -118,3 +118,7 @@ fastpin-switch-user = [TH] Switch User [/TH]
 fastpin-active-user = [TH] Active: { $name } [/TH]
 fastpin-enter-pin = [TH] Enter PIN for { $user } [/TH]
 
+# ── Session Lock Screen (i18n parity fix) ────────────────────────────────
+session-lock-expired = [TH] Session expired. Please log in again. [/TH]
+session-lock-invalid-pin = [TH] Invalid PIN [/TH]
+

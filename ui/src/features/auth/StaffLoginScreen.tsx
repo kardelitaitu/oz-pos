@@ -173,14 +173,13 @@ export default function StaffLoginScreen() {
     addToast({ type: 'error', message: error, duration: 5000 });
     setPin([]);
 
-    // Parse backend rate limit error to sync lockout timer
-      const lockoutMatch = error.match(/Try again in (\d+)s/);
-      if (lockoutMatch && lockoutMatch[1]) {
-        const seconds = parseInt(lockoutMatch[1], 10);
+    // Parse backend rate limit error to sync lockout timer. (Per-attempt
+    // counting happens in attemptLogin so it survives identical messages.)
+    const lockoutMatch = error.match(/Try again in (\d+)s/);
+    if (lockoutMatch && lockoutMatch[1]) {
+      const seconds = parseInt(lockoutMatch[1], 10);
       setLockedUntil(Date.now() + seconds * 1000);
       setPinAttempts(MAX_PIN_ATTEMPTS);
-    } else {
-      setPinAttempts((prev) => prev + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
@@ -251,6 +250,11 @@ export default function StaffLoginScreen() {
 
   const attemptLogin = useCallback(() => {
     if (pin.length >= 1) {
+      // Count every submitted PIN as an attempt so the client-side
+      // rate-limit/lockout counter advances even when the backend returns
+      // an identical error message on consecutive failures (the error effect
+      // dedupes duplicate toasts but must not freeze the attempt counter).
+      setPinAttempts((prev) => prev + 1);
       login(username.trim(), pin.join(''));
     }
   }, [pin, username, login]);
