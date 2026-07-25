@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: STALE (3 findings) · resolved F1: test counts updated to 214 files / 3230+ tests · F2: ui/src/locales/en-US.ftl ("1900+ IDs across 25 .ftl files") -> no en-US.ftl; 72 .ftl, per-feature bundles.ftl/bundles.id.ftl/bundles.th.ftl · F3: ui/src/styles/ (reset.css/tokens.css/components.css) -> no ui/src/styles/; tokens in ui/src/frontend/themes/tokens.css · F4: "29 per-domain files" in api/ -> 34 .ts files · resolved F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: test counts updated to 214 files / 3230+ tests · resolved F2: ui/src/locales/en-US.ftl -> per-feature .ftl bundles in ui/src/locales (48 files: en + id variants) · resolved F3: ui/src/styles/ -> ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css) · resolved F4: "29 per-domain files" in api/ -> 34 .ts files · resolved F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
 
 # `ui/` — OZ-POS Frontend
 
@@ -51,7 +51,7 @@ CI skips postinstall scripts entirely via `npm ci --ignore-scripts`, so these lo
 ```
 ui/src/
 ├── api/
-│   └── (29 per-domain files)  # Typed invoke() wrappers — no invoke() in components
+│   └── (34 per-domain files)  # Typed invoke() wrappers — no invoke() in components
 ├── components/
 │   ├── AppLayout.tsx    # Sidebar navigation, route definitions, feature gates
 │   ├── Badge.tsx        # status/role badges
@@ -82,12 +82,19 @@ ui/src/
 │   └── tax/             # TaxConfigurationScreen
 ├── hooks/
 │   └── useFeatures.ts   # Feature flag hook for route gating
+├── frontend/
+│   └── themes/
+│       ├── reset.css
+│       ├── tokens.css   # CSS custom properties (colors, spacing, typography)
+│       ├── components.css # Shared component styles
+│       └── responsive.css
 ├── locales/
-│   └── en-US.ftl        # Primary locale (1900+ IDs across 25 .ftl files)
-├── styles/
-│   ├── reset.css
-│   ├── tokens.css       # CSS custom properties (colors, spacing, typography)
-│   └── components.css   # Shared component styles
+│   ├── shared.ftl       # Shared UI strings
+│   ├── sales.ftl        # POS, cart, sales history
+│   ├── products.ftl     # Product management
+│   ├── settings.ftl     # Settings, setup wizard, sync
+│   ├── ...              # Per-feature Fluent bundles (en + id variants; 48 files total)
+│   └── index.ts         # Bundle loader
 ├── types/
 │   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
 ├── __tests__/           # Per-screen test files (214 files, 3230+ tests)
@@ -103,10 +110,11 @@ ui/src/
 
 ## i18n
 
-- All user-visible strings live in `src/locales/en-US.ftl`
+- User-visible strings live in per-feature Fluent bundles under `src/locales/` (e.g. `shared.ftl`, `sales.ftl`, `sales.id.ftl`)
+- Bundles are loaded and merged by `src/locales/index.ts`
 - Referenced via `<Localized id="...">` from `@fluent/react`
 - Hardcoded English in JSX is a build failure (enforced by code review)
-- Add a new locale: copy `en-US.ftl`, translate, register in `main.tsx`
+- Add a new locale: create the matching `.<code>.ftl` files for each bundle, then register the locale in `src/i18n/` and `src/main.tsx`
 
 ## Testing
 
