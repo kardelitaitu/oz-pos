@@ -113,24 +113,16 @@ impl Store<'_> {
         Settings::set_currency_thousands_separator(self.conn, sep)
     }
 
-    /// List all currencies from the ISO-4217 table.
+    /// List all currencies from the ISO-4217 table, ordered by code.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn list_currencies(&self) -> Result<Vec<(String, String, u32, String)>, CoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, u32>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r?);
-        }
-        Ok(out)
+        let repo = CurrencyRepository::new(self.conn);
+        let rows = repo.list_currencies()?;
+        Ok(rows
+            .into_iter()
+            .map(|dto| (dto.code, dto.name, dto.minor_exponent, dto.symbol))
+            .collect())
     }
 
     /// List all exchange rates.
