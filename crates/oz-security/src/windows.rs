@@ -151,35 +151,17 @@ fn encode_utf16_null(s: &str) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::{set_and_verify, unique_test_name};
+    use crate::test_helpers::{CredentialGuard, set_and_verify, unique_test_name};
 
     fn test_keyring() -> WindowsCredentialManager {
         WindowsCredentialManager::new().expect("failed to create keyring")
-    }
-
-    /// RAII guard that deletes the named Windows credential when it goes
-    /// out of scope. This ensures cleanup even if a test panics mid-way.
-    struct CredentialGuard(String);
-
-    impl CredentialGuard {
-        fn new(name: String) -> Self {
-            Self(name)
-        }
-    }
-
-    impl Drop for CredentialGuard {
-        fn drop(&mut self) {
-            if let Ok(k) = WindowsCredentialManager::new() {
-                let _ = k.delete_secret(&self.0);
-            }
-        }
     }
 
     #[test]
     fn windows_roundtrip() {
         let k = test_keyring();
         let name = unique_test_name("oz-pos-test-windows-roundtrip");
-        let _guard = CredentialGuard::new(name.clone());
+        let _guard = CredentialGuard::new(name.clone(), &k);
 
         assert_eq!(k.get_secret(&name).unwrap(), None);
 
@@ -196,7 +178,7 @@ mod tests {
     fn windows_delete_nonexistent_returns_false() {
         let k = test_keyring();
         let name = unique_test_name("oz-pos-test-nonexistent-delete");
-        let _guard = CredentialGuard::new(name.clone());
+        let _guard = CredentialGuard::new(name.clone(), &k);
         assert!(!k.delete_secret(&name).unwrap());
     }
 
@@ -206,7 +188,7 @@ mod tests {
         // Use a truly unique name so parallel threads under nextest
         // do not race on the same Windows credential.
         let name = unique_test_name("oz-pos-test-overwrite");
-        let _guard = CredentialGuard::new(name.clone());
+        let _guard = CredentialGuard::new(name.clone(), &k);
 
         // Retry the writes until each value is observed. Windows
         // Credential Manager can be asynchronous about writes, so polling

@@ -38,3 +38,35 @@ pub fn set_and_verify<K: Keyring>(keyring: &K, name: &str, value: &str) {
     }
     panic!("failed to set credential '{name}'; expected '{value}', last observed: {last:?}");
 }
+
+/// RAII guard that deletes the named credential when it goes out of
+/// scope.
+///
+/// This ensures cleanup even if a test panics mid-way. The guard is
+/// generic over any [`Keyring`] implementation, so it can be shared by
+/// the Windows, macOS, and Linux tests.
+pub struct CredentialGuard<'a, K: Keyring> {
+    name: String,
+    keyring: &'a K,
+}
+
+impl<'a, K: Keyring> CredentialGuard<'a, K> {
+    /// Create a new guard that will delete `name` via `keyring` on drop.
+    pub fn new(name: String, keyring: &'a K) -> Self {
+        Self { name, keyring }
+    }
+}
+
+impl<'a, K: Keyring> Drop for CredentialGuard<'a, K> {
+    fn drop(&mut self) {
+        let _ = self.keyring.delete_secret(&self.name);
+    }
+}
+
+impl<'a, K: Keyring> std::fmt::Debug for CredentialGuard<'a, K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CredentialGuard")
+            .field("name", &self.name)
+            .finish()
+    }
+}
