@@ -70,5 +70,3 @@ impl<'a, K: Keyring> std::fmt::Debug for CredentialGuard<'a, K> {
             .finish()
     }
 }
-
-// Pre-commit hook test marker (will be reverted).
