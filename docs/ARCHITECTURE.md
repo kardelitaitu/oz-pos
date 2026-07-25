@@ -223,6 +223,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 9 modules wired via the event bus in `platform-startup`:
 - **sales**, **inventory**, **crm**, **tax**, **settings**, **staff**, **reporting**, **terminal**, **currency**
 - Each module registers event handlers (e.g. `SaleCompleted` → stock decrement, audit log, report update).
+- **Currency module** (`modules/currency`): Manages exchange rates, currency listings, and currency-format settings via `CurrencyRepository`. Provides `ExchangeRateRow`, `CurrencyDto`, `CurrencyError` (with `Platform`, `Db`, `Validation`, `NotFound` variants), and 15+ typed DB methods. All settings delegate to `platform_core::settings::Settings`. The original 15 `oz-core` Store wrappers are `#[deprecated]` in favour of direct `CurrencyRepository` calls.
 
 ### ui/ (React Frontend)
 - **Stack**: React 18 + TypeScript + Vite 6 + `@fluent/react` (i18n) + Vitest (testing).

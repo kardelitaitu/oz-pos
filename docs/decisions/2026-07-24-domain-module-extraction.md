@@ -2,7 +2,7 @@
 
 # ADR #30: Domain Module Extraction & oz-core Decomposition
 
-**Status:** Accepted (2026-07-24)  
+**Status:** Accepted — Phase 4 (Currency) Complete (2026-07-25)  
 **Date:** 2026-07-24  
 **Author:** Architecture Team  
 **Tags:** architecture, module-system, oz-core, refactoring, database  
@@ -80,6 +80,7 @@ To maintain 100% test suite pass rates (`cargo test --workspace`) and non-breaki
 - **Phase 2 (Inventory & Products)**: Extract `Product`, `Variant`, `Bundle`, `Category`, `Recipe`, `StockCount`, `StockTransfer` + `crates/oz-core/src/db/{products,inventory,product_bundles,recipes,stock_counts,stock_transfers}.rs` → `modules/inventory`.
 - **Phase 3 (CRM & Loyalty)**: Extract `Customer`, `GiftCard`, `Loyalty` models + `db/{customers,gift_cards,loyalty}.rs` → `modules/crm` & `modules/loyalty`.
 - **Phase 4 (Finance, Staff, Terminal & Reports)**: Extract `tax`, `staff`, `shifts`, `terminals`, `currency`, `reports` → `modules/{tax,staff,terminal,currency,reporting}`.
+  - **R2 Complete (2026-07-25)** — Currency extraction done: `ExchangeRateRow`, `CurrencyRepository`, `CurrencyError` moved to `modules/currency`; 6-phase extraction including exchange rates, currency listings, currency-format settings, and deprecation of 15 oz-core Store methods.
 - **Phase 5 (oz-core Cleanup)**: Strip all domain entities from `oz-core`, leaving only shared DB connection management, crypto/auth, cache, feature flags, and sync client adapters.
 
 ---
