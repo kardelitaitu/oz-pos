@@ -475,8 +475,8 @@ jobs:
         run: |
           # Pre-pull Redis to mitigate transient Docker Hub/rate-limit timeouts
           for i in 1 2 3; do
-            echo "Pulling redis:7-alpine (attempt $i/3)..."
-            docker pull redis:7-alpine && break
+            echo "Pulling public.ecr.aws/docker/library/redis:7-alpine (attempt $i/3)..."
+            docker pull public.ecr.aws/docker/library/redis:7-alpine && break
             echo "Redis pull failed (attempt $i/3), retrying..."
             sleep 15
           done

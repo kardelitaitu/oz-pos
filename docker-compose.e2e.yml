@@ -63,7 +63,7 @@ services:
 
   # ── Redis Cache ──────────────────────────────────────────────────
   e2e-redis:
-    image: redis:7-alpine
+    image: public.ecr.aws/docker/library/redis:7-alpine
     ports:
       - "6379:6379"
     healthcheck:
