@@ -249,4 +249,91 @@ mod tests {
         let result = repo.delete_exchange_rate("bad-id");
         assert!(matches!(result, Err(CurrencyError::NotFound { .. })));
     }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_zero_rate() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let result = repo.upsert_exchange_rate("USD", "EUR", 0, "manual", "2026-01-01");
+        assert!(result.is_err(), "upsert zero rate must be rejected");
+    }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_negative_rate() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let result = repo.upsert_exchange_rate("USD", "EUR", -1, "manual", "2026-01-01");
+        assert!(result.is_err(), "upsert negative rate must be rejected");
+    }
+
+    #[test]
+    fn list_exchange_rates_orders_by_from_then_to_currency() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        seed_currency(&conn, "GBP", "826", "Pound", 2, "\u{a3}");
+        let repo = CurrencyRepository::new(&conn);
+
+        // Insert out of alphabetical order.
+        repo.create_exchange_rate("USD", "GBP", 790_000, "ecb", "2026-06-28")
+            .unwrap();
+        repo.create_exchange_rate("EUR", "USD", 1_080_000, "ecb", "2026-06-28")
+            .unwrap();
+        repo.create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+        repo.create_exchange_rate("GBP", "USD", 1_260_000, "ecb", "2026-06-28")
+            .unwrap();
+
+        let rates = repo.list_exchange_rates().unwrap();
+        assert_eq!(rates.len(), 4);
+        assert_eq!(rates[0].from_currency, "EUR");
+        assert_eq!(rates[1].from_currency, "GBP");
+        assert_eq!(rates[2].from_currency, "USD");
+        assert_eq!(rates[3].from_currency, "USD");
+        assert_eq!(rates[2].to_currency, "EUR");
+        assert_eq!(rates[3].to_currency, "GBP");
+    }
+
+    #[test]
+    fn upsert_creates_separate_rows_for_different_dates() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+
+        let first = repo
+            .upsert_exchange_rate("USD", "EUR", 900_000, "ecb", "2026-01-15")
+            .unwrap();
+        let second = repo
+            .upsert_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+
+        assert_ne!(first.id, second.id);
+        let rates = repo.list_exchange_rates().unwrap();
+        assert_eq!(rates.len(), 2);
+    }
+
+    #[test]
+    fn create_and_repository_return_equivalent_rows() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "IDR", "360", "Indonesian Rupiah", 2, "Rp");
+        let repo = CurrencyRepository::new(&conn);
+
+        // Use a large but realistic cross-rate value (USD→IDR) to confirm
+        // i64 fixed-point rates round-trip unchanged.
+        let created = repo
+            .create_exchange_rate("USD", "IDR", 15_600_000_000i64, "manual", "2026-07-25")
+            .unwrap();
+        let listed = repo.list_exchange_rates().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0], created);
+        assert_eq!(created.from_currency, "USD");
+        assert_eq!(created.to_currency, "IDR");
+        assert_eq!(created.rate_millionths, 15_600_000_000i64);
+    }
 }
