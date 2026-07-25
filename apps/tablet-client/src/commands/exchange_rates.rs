@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::db::Store;
+use modules_currency::repository::CurrencyRepository;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -27,8 +27,8 @@ pub struct ExchangeRateDto {
     pub created_at: String,
 }
 
-impl From<oz_core::exchange_rate::ExchangeRateRow> for ExchangeRateDto {
-    fn from(r: oz_core::exchange_rate::ExchangeRateRow) -> Self {
+impl From<modules_currency::ExchangeRateRow> for ExchangeRateDto {
+    fn from(r: modules_currency::ExchangeRateRow) -> Self {
         Self {
             id: r.id,
             from_currency: r.from_currency,
@@ -62,8 +62,8 @@ pub async fn list_exchange_rates(
     state: State<'_, AppState>,
 ) -> Result<Vec<ExchangeRateDto>, AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.list_exchange_rates()?;
+    let repo = CurrencyRepository::new(&db);
+    let rows = repo.list_exchange_rates()?;
     Ok(rows.into_iter().map(ExchangeRateDto::from).collect())
 }
 
@@ -83,12 +83,12 @@ pub async fn create_exchange_rate(
         ));
     }
     let db = state.db.lock().await;
-    let store = Store::new(&db);
+    let repo = CurrencyRepository::new(&db);
     let date = args
         .effective_date
         .unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
     let source = args.source.unwrap_or_else(|| "manual".to_string());
-    let row = store.create_exchange_rate(
+    let row = repo.create_exchange_rate(
         &args.from_currency,
         &args.to_currency,
         args.rate_millionths,
@@ -102,8 +102,8 @@ pub async fn create_exchange_rate(
 /// Delete exchange rate.
 pub async fn delete_exchange_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    let store = Store::new(&db);
-    store.delete_exchange_rate(&id)?;
+    let repo = CurrencyRepository::new(&db);
+    repo.delete_exchange_rate(&id)?;
     Ok(())
 }
 

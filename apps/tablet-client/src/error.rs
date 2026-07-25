@@ -55,6 +55,13 @@ pub enum AppError {
     Internal(String),
 }
 
+impl From<modules_currency::CurrencyError> for AppError {
+    fn from(e: modules_currency::CurrencyError) -> Self {
+        let core: oz_core::CoreError = e.into();
+        core.into()
+    }
+}
+
 impl From<oz_core::CoreError> for AppError {
     fn from(e: oz_core::CoreError) -> Self {
         Self::Core {
