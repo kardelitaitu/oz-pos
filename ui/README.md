@@ -25,6 +25,25 @@ npm run test           # vitest run (164 files, 2533+ tests)
 npm run build          # tsc -b && vite build
 ```
 
+## Install script approvals
+
+The UI pins install-script approvals in `package.json` (`allowScripts`) so that `npm ci` does not prompt for every package with a postinstall script. This requires **npm 11+**; upgrade if `npm approve-scripts` is not recognised. When you add or update a dependency that has a postinstall script (for example, a new native-binary package), you must explicitly approve it before `npm ci` will run its install script locally:
+
+```bash
+# Approve the package for the currently installed version (recommended)
+npm approve-scripts <package>
+
+# Approve without version pinning (allows updates, less secure)
+npm approve-scripts --no-allow-scripts-pin <package>
+```
+
+Only approve packages you trust and understand. The approval is written to `package.json` (`allowScripts`) and must be committed with the dependency change. The authoritative list is always in [`package.json`](./package.json); the examples below may become stale:
+
+- `esbuild@0.25.12`
+- `msw@2.15.0`
+
+CI skips postinstall scripts entirely via `npm ci --ignore-scripts`, so these local approvals only affect development environments.
+
 `npm run dev` is what `cargo tauri dev` (from `apps/desktop-client/`) launches.
 
 ## Structure

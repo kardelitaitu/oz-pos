@@ -123,6 +123,8 @@ For UI changes:
 cd ui && npm run lint && npm run typecheck && npm run test && npm run build
 ```
 
+> If `npm ci` warns about unapproved install scripts when adding or updating UI dependencies, see [`ui/README.md#install-script-approvals`](./ui/README.md#install-script-approvals) for how to approve them.
+
 For coverage spot-checks (optional, not part of the PR gate yet):
 
 ```bash
