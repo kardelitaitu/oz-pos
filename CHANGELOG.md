@@ -8,8 +8,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Version bump from 0.0.20 to 0.0.21.
-
 #### 🏗️ R2 — Currency / Exchange-Rate DB Extraction (ADR #30 Phase 4)
 
 6-phase extraction of currency, exchange-rate, and currency-format settings from the monolithic `oz-core` Store facade into a dedicated `modules/currency` crate with its own `CurrencyRepository`, domain types, and error handling.
@@ -20,6 +18,11 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - **Phase 4**: Removed `oz_core::exchange_rate` shim file and inline module; all callers use `modules_currency` directly.
 - **Phase 5**: Currency-format settings (`default_currency`, `currency_format`, `symbol_position`, `decimal_separator`, `thousands_separator`) added to `CurrencyRepository` with proper `Platform` error variant on `CurrencyError`.
 - **Phase 6**: Deprecation sweep — all 15 delegated Store methods marked `#[deprecated]`; tests annotated `#[allow(deprecated)]` for backward-compatible coverage.
+
+### Changed
+
+#### 📚 Documentation
+- Updated `CHANGELOG.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `modules/currency/README.md`, and ADR #30 with R2 completion status.
 
 ## [0.0.20] — 2026-07-25
 
