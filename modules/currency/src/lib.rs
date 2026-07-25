@@ -1,9 +1,9 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 25-07-26 by RSA-Agent
 crate: modules-currency | status: SAFE | lint: CLEAN
-findings: Transitional module implementing Module trait. No unsafe code. Re-exports Currency
-  from foundation and ExchangeRateRow from oz-core. 0 tests yet.
-next: Add unit tests; migrate commands into this module | perf: N/A.
+findings: Implements Module trait, exchange-rate domain model, repository, and error type.
+  Re-exports Currency from foundation and ExchangeRateRow from models. No unsafe code.
+next: Migrate currency/exchange-rate callers from oz-core Store to CurrencyRepository.
 */
 #![warn(missing_docs)]
 
@@ -24,16 +24,27 @@ next: Add unit tests; migrate commands into this module | perf: N/A.
 //! - Frontend: `ui/src/features/currency/`
 //! - API: `ui/src/api/currency.ts`
 //!
-//! In subsequent phases, these files will be physically moved into
-//! `modules/currency/` as the module system matures.
+//! The exchange-rate model and repository have now been moved into
+//! `modules/currency/`. The Tauri command handlers still live in
+//! `apps/desktop-client/src/commands/exchange_rates.rs` and will be
+//! migrated in a later phase.
 //!
 //! ## Module manifest
 //!
 //! See `modules/currency/manifest.json` for the module metadata.
 
-// Re-export key currency/exchange domain types from oz-core.
+pub mod commands;
+pub mod error;
+pub mod models;
+pub mod repository;
+
+pub use commands::{CreateExchangeRateArgs, CurrencyDto, ExchangeRateDto};
+pub use error::CurrencyError;
+pub use models::ExchangeRateRow;
+pub use repository::CurrencyRepository;
+
+// Re-export key currency/exchange domain type from foundation.
 pub use foundation::money::Currency;
-pub use oz_core::exchange_rate::ExchangeRateRow;
 
 use std::fmt::Debug;
 

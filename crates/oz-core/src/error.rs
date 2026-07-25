@@ -136,6 +136,21 @@ pub enum CoreError {
     },
 }
 
+impl From<modules_currency::CurrencyError> for CoreError {
+    fn from(e: modules_currency::CurrencyError) -> Self {
+        match e {
+            modules_currency::CurrencyError::Db(err) => Self::Db(err),
+            modules_currency::CurrencyError::Platform(err) => Self::Platform(err),
+            modules_currency::CurrencyError::Validation { field, message } => {
+                Self::Validation { field, message }
+            }
+            modules_currency::CurrencyError::NotFound { entity, id } => {
+                Self::NotFound { entity, id }
+            }
+        }
+    }
+}
+
 impl CoreError {
     /// Map a `CoreError` to its [`CoreErrorKind`] discriminator.
     pub fn kind(&self) -> CoreErrorKind {
@@ -339,5 +354,61 @@ mod tests {
             debug.contains("cust-99"),
             "debug should contain id: {debug}"
         );
+    }
+
+    // ── From<CurrencyError> conversions (R2 Phase 1) ──
+
+    #[test]
+    fn from_currency_error_validation_to_core_validation() {
+        let currency_err =
+            modules_currency::CurrencyError::validation("rate_millionths", "rate must be positive");
+        let core_err: CoreError = currency_err.into();
+        assert!(matches!(
+            core_err,
+            CoreError::Validation {
+                field: "rate_millionths",
+                ..
+            }
+        ));
+        let msg = core_err.to_string();
+        assert!(msg.contains("validation error"));
+        assert!(msg.contains("rate_millionths"));
+    }
+
+    #[test]
+    fn from_currency_error_not_found_to_core_not_found() {
+        let currency_err = modules_currency::CurrencyError::NotFound {
+            entity: "exchange_rate",
+            id: "bad-id".into(),
+        };
+        let core_err: CoreError = currency_err.into();
+        assert!(matches!(
+            core_err,
+            CoreError::NotFound {
+                entity: "exchange_rate",
+                ..
+            }
+        ));
+        let msg = core_err.to_string();
+        assert!(msg.contains("not found"));
+        assert!(msg.contains("bad-id"));
+    }
+
+    #[test]
+    fn from_currency_error_db_to_core_db() {
+        let currency_err =
+            modules_currency::CurrencyError::Db(rusqlite::Error::QueryReturnedNoRows);
+        let core_err: CoreError = currency_err.into();
+        match core_err {
+            CoreError::Db(ref e) => {
+                assert!(
+                    matches!(e, rusqlite::Error::QueryReturnedNoRows),
+                    "inner rusqlite error should be preserved"
+                );
+            }
+            other => panic!("expected CoreError::Db, got {other:?}"),
+        }
+        let msg = core_err.to_string();
+        assert!(msg.contains("database error"));
     }
 }

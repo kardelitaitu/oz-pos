@@ -91,6 +91,16 @@ update-banner-installing = Installing…
 update-banner-install-aria = Download and install update
 update-banner-installing-aria = Installing update…
 update-banner-dismiss-aria = Dismiss update notification
+update-banner-dismiss = Dismiss
+update-banner-backing-up = Backing up…
+update-banner-backing-up-aria = Backing up database before update
+update-banner-backup-error = Backup failed
+update-banner-version-blocked-title = Update not available
+update-banner-version-blocked-desc = Your version { $current } is below the minimum { $minimum } required. Please reinstall from the website.
+update-banner-rollback-title = Update may have failed
+update-banner-rollback-desc = Previous version { $version } available for download. Click to restore.
+update-banner-rollback = Restore Previous Version
+update-banner-rollback-aria = Download previous version from GitHub
 
 # Toast
 toast-dismiss-aria = Dismiss notification

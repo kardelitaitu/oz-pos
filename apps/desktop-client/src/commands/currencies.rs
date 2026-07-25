@@ -1,8 +1,14 @@
 //! Currency-lookup command for the front-end.
+//!
+//! R2 Phase 3: `list_currencies` migrated to use [`modules_currency::repository::CurrencyRepository`]
+//! directly. `CurrencyDto` now comes from [`modules_currency::commands`].
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tauri::command;
+
+use modules_currency::commands::CurrencyDto;
+use modules_currency::repository::CurrencyRepository;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -28,34 +34,12 @@ pub async fn currency_info(code: String) -> Result<CurrencyInfo, AppError> {
     })
 }
 
-/// A currency DTO for the front-end.
-#[derive(Debug, Serialize)]
-pub struct CurrencyDto {
-    /// Code.
-    pub code: String,
-    /// Display name.
-    pub name: String,
-    /// Minor Exponent.
-    pub minor_exponent: u32,
-    /// Symbol.
-    pub symbol: String,
-}
-
 #[command]
 /// List currencies.
 pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyDto>, AppError> {
     let db = state.db.lock().await;
-    let store = oz_core::db::Store::new(&db);
-    let rows = store.list_currencies()?;
-    Ok(rows
-        .into_iter()
-        .map(|(code, name, minor_exponent, symbol)| CurrencyDto {
-            code,
-            name,
-            minor_exponent,
-            symbol,
-        })
-        .collect())
+    let repo = CurrencyRepository::new(&db);
+    Ok(repo.list_currencies()?)
 }
 
 #[command]
@@ -72,17 +56,8 @@ pub async fn list_currencies_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = oz_core::db::Store::new(&db);
-    let rows = store.list_currencies()?;
-    Ok(rows
-        .into_iter()
-        .map(|(code, name, minor_exponent, symbol)| CurrencyDto {
-            code,
-            name,
-            minor_exponent,
-            symbol,
-        })
-        .collect())
+    let repo = CurrencyRepository::new(&db);
+    Ok(repo.list_currencies()?)
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,8 +71,8 @@ pub struct SetDefaultCurrencyArgs {
 /// Get default currency.
 pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<String>, AppError> {
     let db = state.db.lock().await;
-    let store = oz_core::db::Store::new(&db);
-    Ok(store.get_default_currency()?)
+    let repo = CurrencyRepository::new(&db);
+    Ok(repo.get_default_currency()?)
 }
 
 #[command]
@@ -107,8 +82,8 @@ pub async fn set_default_currency(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    let store = oz_core::db::Store::new(&db);
-    store.set_default_currency(&args.code)?;
+    let repo = CurrencyRepository::new(&db);
+    repo.set_default_currency(&args.code)?;
     Ok(())
 }
 

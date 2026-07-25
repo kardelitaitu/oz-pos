@@ -2,19 +2,19 @@
 //!
 //! A background task that periodically fetches exchange rates from the
 //! Frankfurter public API (`https://api.frankfurter.app`) and stores them
-//! in the `exchange_rates` table using [`oz_core::db::Store::upsert_exchange_rate`].
+//! in the `exchange_rates` table using [`modules_currency::repository::CurrencyRepository::upsert_exchange_rate`].
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use oz_core::db::Store;
+use modules_currency::repository::CurrencyRepository;
 use serde::Deserialize;
 use tokio::sync::{Mutex, RwLock, watch};
 use tracing;
 
 /// A reference to a shared DB connection, used by the daemon to create
-/// temporary [`Store`] instances inside `spawn_blocking` closures.
+/// temporary [`CurrencyRepository`] instances inside `spawn_blocking` closures.
 pub type DbConnection = Arc<std::sync::Mutex<rusqlite::Connection>>;
 
 /// Fixed-point scale from `f64` API rate to `i64` millionths for the
@@ -222,7 +222,7 @@ impl RateSyncDaemon {
         let date_inner = effective_date.clone();
         let result = tokio::task::spawn_blocking(move || {
             let conn = db_clone.lock().unwrap();
-            let store = Store::new(&conn);
+            let repo = CurrencyRepository::new(&conn);
             let mut updated = 0usize;
             for (to_currency, rate) in &rates {
                 // The Frankfurter API returns `f64` rates. Convert to
@@ -233,7 +233,7 @@ impl RateSyncDaemon {
                 // dollars-per-base), well inside `i64`.
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
                 let rate_millionths = (rate * RATE_SCALE).round() as i64;
-                if let Err(e) = store.upsert_exchange_rate(
+                if let Err(e) = repo.upsert_exchange_rate(
                     &base_inner,
                     to_currency,
                     rate_millionths,

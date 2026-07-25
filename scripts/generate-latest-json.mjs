@@ -6,10 +6,10 @@
 // to attach a signed manifest to every GitHub Release.
 //
 // Usage:
-//   node scripts/generate-latest-json.mjs <version> <notes> <platform> <installer-path>
+//   node scripts/generate-latest-json.mjs <version> <notes> <platform> <installer-path> [--min-version <version>]
 //
 // Example:
-//   node scripts/generate-latest-json.mjs 0.1.0 "Bug fixes" windows-x86_64 ./bundle/nsis/OZ-POS_0.1.0_x64-setup.exe
+//   node scripts/generate-latest-json.mjs 0.1.0 "Bug fixes" windows-x86_64 ./bundle/nsis/OZ-POS_0.1.0_x64-setup.exe --min-version 0.0.18
 //
 // Environment:
 //   UPDATER_PRIVATE_KEY — Ed25519 private key (64 hex chars or base64)
@@ -26,11 +26,23 @@ import { readFileSync } from "node:fs";
 // subtle is under webcrypto in Node.js
 const { subtle } = globalThis.crypto;
 
-const [_node, _script, version, notes, platform, installerPath] = process.argv;
+// Parse optional --min-version flag
+let minVersion = undefined;
+const positionalArgs = [];
+for (let i = 2; i < process.argv.length; i++) {
+  const arg = process.argv[i];
+  if (arg === "--min-version" && i + 1 < process.argv.length) {
+    minVersion = process.argv[++i];
+  } else {
+    positionalArgs.push(arg);
+  }
+}
+
+const [version, notes, platform, installerPath] = positionalArgs;
 
 if (!version || !notes || !platform || !installerPath) {
   console.error(
-    "Usage: node generate-latest-json.mjs <version> <notes> <platform> <installer-path>"
+    "Usage: node generate-latest-json.mjs <version> <notes> <platform> <installer-path> [--min-version <version>]"
   );
   process.exit(1);
 }
@@ -93,6 +105,7 @@ const manifest = {
   version,
   notes,
   pub_date: new Date().toISOString(),
+  min_version: minVersion,
   platforms: {
     [platform]: {
       signature: signatureBase64,

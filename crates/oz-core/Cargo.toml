@@ -15,6 +15,7 @@ modules-crm = { workspace = true }
 modules-loyalty = { workspace = true }
 modules-staff = { workspace = true }
 modules-terminal = { workspace = true }
+modules-currency = { workspace = true }
 modules-settings = { workspace = true }
 modules-tax = { workspace = true }
 modules-reporting = { workspace = true }

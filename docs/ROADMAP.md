@@ -395,6 +395,13 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] `exchange_rate` table populated by background sync from external API (`RateSyncDaemon` — Frankfurter API via `platform/startup/src/rate_sync.rs`)
 - [x] Currency selector in checkout UI (when `MultiCurrency` flag enabled)
 - [x] Receipts show both charge currency and base currency
+- [x] **R2 — Currency DB Extraction (ADR #30)**: 6-phase extraction of currency, exchange-rate, and currency-format settings from the monolithic `oz-core` Store facade into a dedicated `modules/currency` crate:
+  - Phase 1: `ExchangeRateRow`, `CurrencyRepository`, `CurrencyError` moved into `modules/currency`; `oz-core` Store methods became thin delegating wrappers
+  - Phase 2: Shared DTOs (`ExchangeRateDto`, `CreateExchangeRateArgs`) in `modules/currency/src/commands.rs`
+  - Phase 3: `list_currencies` moved into `CurrencyRepository` with `CurrencyDto` shared type
+  - Phase 4: Removed `oz_core::exchange_rate` shim file and inline module
+  - Phase 5: Currency-format settings added to `CurrencyRepository` with `Platform` error variant on `CurrencyError`
+  - Phase 6: All 15 delegated Store methods marked `#[deprecated]`; tests annotated `#[allow(deprecated)]`
 
 ### Mobile Builds
 - [ ] Android tablet build (Tauri mobile → APK, signed)
@@ -584,4 +591,4 @@ On-Features can be activated at any phase once the core infrastructure is in pla
 
 ---
 
-*Last updated: 2026-07-25.* (Phases 1–3 ✓. Phase 4 ~95% — mobile build CI exists but physical device testing needs infra. Phase 5 ~95% — analytics export + scheduled report delivery config done; Thai locale removed (not a target market); custom report builder + cloud warehouse remain. Phase 6 ~98% — all features implemented and verified; voice-controlled checkout research deferred. P0–P20 complete across v0.0.13 + v0.0.14.)
+*Last updated: 2026-07-25.* (Phases 1–3 ✓. Phase 4 ~96% — R2 currency module extraction complete; mobile build CI exists but physical device testing needs infra. Phase 5 ~95% — analytics export + scheduled report delivery config done; Thai locale removed (not a target market); custom report builder + cloud warehouse remain. Phase 6 ~98% — all features implemented and verified; voice-controlled checkout research deferred.)

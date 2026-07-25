@@ -1,5 +1,7 @@
 //! Integration tests for the currency/exchange rate module —
 //! conversion rates, multi-currency edge cases, and Money operations.
+
+#![allow(deprecated)]
 //!
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API and [`oz_core::Money`] / [`oz_core::Currency`]
@@ -550,7 +552,7 @@ fn display_rate_two_decimals() {
         .unwrap();
     assert_eq!(row.display_rate(), "0.92");
     assert_eq!(
-        oz_core::exchange_rate::ExchangeRateRow::display_rate(&row),
+        modules_currency::ExchangeRateRow::display_rate(&row),
         "0.92"
     );
 }

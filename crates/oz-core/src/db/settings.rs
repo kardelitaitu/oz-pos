@@ -1,5 +1,7 @@
 //! Settings delegation — store settings, currencies, exchange rates.
 
+use modules_currency::repository::CurrencyRepository;
+
 use crate::Settings;
 use crate::error::CoreError;
 
@@ -62,99 +64,127 @@ impl Store<'_> {
     }
 
     /// Get the default currency.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_default_currency`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_default_currency directly")]
     pub fn get_default_currency(&self) -> Result<Option<String>, CoreError> {
-        Settings::get_default_currency(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_default_currency()?)
     }
 
     /// Set the default currency.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_default_currency`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_default_currency directly")]
     pub fn set_default_currency(&self, code: &str) -> Result<(), CoreError> {
-        Settings::set_default_currency(self.conn, code)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_default_currency(code)?)
     }
 
     /// Get the currency display format: `"symbol"` or `"code"`.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_format`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_format directly")]
     pub fn get_currency_format(&self) -> Result<String, CoreError> {
-        Settings::get_currency_format(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_format()?)
     }
 
     /// Set the currency display format.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_format`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_format directly")]
     pub fn set_currency_format(&self, fmt: &str) -> Result<(), CoreError> {
-        Settings::set_currency_format(self.conn, fmt)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_format(fmt)?)
     }
 
     /// Get the currency symbol position: `"prefix"` or `"suffix"`.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_symbol_position`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_symbol_position directly")]
     pub fn get_currency_symbol_position(&self) -> Result<String, CoreError> {
-        Settings::get_currency_symbol_position(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_symbol_position()?)
     }
 
     /// Set the currency symbol position.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_symbol_position`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_symbol_position directly")]
     pub fn set_currency_symbol_position(&self, pos: &str) -> Result<(), CoreError> {
-        Settings::set_currency_symbol_position(self.conn, pos)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_symbol_position(pos)?)
     }
 
     /// Get the decimal separator: `"dot"` or `"comma"`.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_decimal_separator`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_decimal_separator directly")]
     pub fn get_currency_decimal_separator(&self) -> Result<String, CoreError> {
-        Settings::get_currency_decimal_separator(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_decimal_separator()?)
     }
 
     /// Set the decimal separator.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_decimal_separator`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_decimal_separator directly")]
     pub fn set_currency_decimal_separator(&self, sep: &str) -> Result<(), CoreError> {
-        Settings::set_currency_decimal_separator(self.conn, sep)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_decimal_separator(sep)?)
     }
 
     /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_thousands_separator`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_thousands_separator directly")]
     pub fn get_currency_thousands_separator(&self) -> Result<String, CoreError> {
-        Settings::get_currency_thousands_separator(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_thousands_separator()?)
     }
 
     /// Set the thousands separator.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_thousands_separator`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_thousands_separator directly")]
     pub fn set_currency_thousands_separator(&self, sep: &str) -> Result<(), CoreError> {
-        Settings::set_currency_thousands_separator(self.conn, sep)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_thousands_separator(sep)?)
     }
 
-    /// List all currencies from the ISO-4217 table.
+    /// List all currencies from the ISO-4217 table, ordered by code.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::list_currencies`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::list_currencies directly")]
     pub fn list_currencies(&self) -> Result<Vec<(String, String, u32, String)>, CoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, u32>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r?);
-        }
-        Ok(out)
+        let repo = CurrencyRepository::new(self.conn);
+        let rows = repo.list_currencies()?;
+        Ok(rows
+            .into_iter()
+            .map(|dto| (dto.code, dto.name, dto.minor_exponent, dto.symbol))
+            .collect())
     }
 
     /// List all exchange rates.
-    pub fn list_exchange_rates(
-        &self,
-    ) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
-             FROM exchange_rates ORDER BY from_currency, to_currency",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?,
-                from_currency: row.get(1)?,
-                to_currency: row.get(2)?,
-                rate_millionths: row.get(3)?,
-                source: row.get(4)?,
-                effective_date: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r?);
-        }
-        Ok(out)
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::list_exchange_rates`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::list_exchange_rates directly")]
+    pub fn list_exchange_rates(&self) -> Result<Vec<modules_currency::ExchangeRateRow>, CoreError> {
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.list_exchange_rates()?)
     }
 
     /// Create a new exchange rate entry.
@@ -163,6 +193,10 @@ impl Store<'_> {
     /// scale (e.g. `0.92` → `920_000`). Strictly positive — zero and
     /// negative rates are rejected at this layer (defence in depth; the
     /// Tauri command layer also rejects them).
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::create_exchange_rate`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::create_exchange_rate directly")]
     pub fn create_exchange_rate(
         &self,
         from_currency: &str,
@@ -170,35 +204,15 @@ impl Store<'_> {
         rate_millionths: i64,
         source: &str,
         effective_date: &str,
-    ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
-        if rate_millionths <= 0 {
-            return Err(CoreError::Validation {
-                field: "rate_millionths",
-                message:
-                    "rate must be strictly positive; zero and negative exchange rates are not valid"
-                        .into(),
-            });
-        }
-        let id = uuid::Uuid::now_v7().to_string();
-        self.conn.execute(
-            "INSERT INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
-        )?;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
-        )?;
-        let row = stmt.query_row(rusqlite::params![id], |row| {
-            Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?,
-                from_currency: row.get(1)?,
-                to_currency: row.get(2)?,
-                rate_millionths: row.get(3)?,
-                source: row.get(4)?,
-                effective_date: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })?;
-        Ok(row)
+    ) -> Result<modules_currency::ExchangeRateRow, CoreError> {
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.create_exchange_rate(
+            from_currency,
+            to_currency,
+            rate_millionths,
+            source,
+            effective_date,
+        )?)
     }
 
     /// Insert or replace an exchange rate.
@@ -206,8 +220,12 @@ impl Store<'_> {
     /// Uses `INSERT OR REPLACE` so that a rate with the same
     /// `(from_currency, to_currency, effective_date)` is replaced
     /// with a new row and a fresh id. `rate_millionths` is at the 6-decimal
-    /// scale (see [`crate::exchange_rate::ExchangeRateRow`]). Zero and
+    /// scale (see [`modules_currency::ExchangeRateRow`]). Zero and
     /// negative rates are rejected (matching [`Self::create_exchange_rate`]).
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::upsert_exchange_rate`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::upsert_exchange_rate directly")]
     pub fn upsert_exchange_rate(
         &self,
         from_currency: &str,
@@ -215,56 +233,32 @@ impl Store<'_> {
         rate_millionths: i64,
         source: &str,
         effective_date: &str,
-    ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
-        if rate_millionths <= 0 {
-            return Err(CoreError::Validation {
-                field: "rate_millionths",
-                message:
-                    "rate must be strictly positive; zero and negative exchange rates are not valid"
-                        .into(),
-            });
-        }
-        let id = uuid::Uuid::now_v7().to_string();
-        self.conn.execute(
-            "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
-        )?;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
-        )?;
-        let row = stmt.query_row(rusqlite::params![id], |row| {
-            Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?,
-                from_currency: row.get(1)?,
-                to_currency: row.get(2)?,
-                rate_millionths: row.get(3)?,
-                source: row.get(4)?,
-                effective_date: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })?;
-        Ok(row)
+    ) -> Result<modules_currency::ExchangeRateRow, CoreError> {
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.upsert_exchange_rate(
+            from_currency,
+            to_currency,
+            rate_millionths,
+            source,
+            effective_date,
+        )?)
     }
 
     /// Delete an exchange rate by ID.
+    ///
+    /// **Deprecated:** Use [`CurrencyRepository::delete_exchange_rate`] directly.
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::delete_exchange_rate directly")]
     pub fn delete_exchange_rate(&self, id: &str) -> Result<(), CoreError> {
-        let affected = self.conn.execute(
-            "DELETE FROM exchange_rates WHERE id = ?1",
-            rusqlite::params![id],
-        )?;
-        if affected == 0 {
-            return Err(CoreError::NotFound {
-                entity: "exchange_rate",
-                id: id.to_string(),
-            });
-        }
-        Ok(())
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.delete_exchange_rate(id)?)
     }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::migrations;
@@ -512,6 +506,60 @@ mod tests {
         let s = store(&conn);
         let result = s.delete_exchange_rate("bad-id");
         assert!(matches!(result, Err(CoreError::NotFound { .. })));
+    }
+
+    // ── Delegation parity with CurrencyRepository ────────────────────────
+
+    #[test]
+    fn store_create_and_repository_list_have_same_row() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+
+        let row = s
+            .create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+
+        let repo = modules_currency::repository::CurrencyRepository::new(&conn);
+        let repo_rates = repo.list_exchange_rates().unwrap();
+        assert_eq!(repo_rates.len(), 1);
+        assert_eq!(repo_rates[0], row);
+    }
+
+    #[test]
+    fn repository_create_and_store_list_have_same_row() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = modules_currency::repository::CurrencyRepository::new(&conn);
+
+        let row = repo
+            .create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+
+        let s = store(&conn);
+        let store_rates = s.list_exchange_rates().unwrap();
+        assert_eq!(store_rates.len(), 1);
+        assert_eq!(store_rates[0], row);
+    }
+
+    #[test]
+    fn store_upsert_and_repository_list_have_same_row() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+
+        let row = s
+            .upsert_exchange_rate("USD", "EUR", 920_000, "auto-sync", "2026-06-28")
+            .unwrap();
+
+        let repo = modules_currency::repository::CurrencyRepository::new(&conn);
+        let repo_rates = repo.list_exchange_rates().unwrap();
+        assert_eq!(repo_rates.len(), 1);
+        assert_eq!(repo_rates[0], row);
+        assert_eq!(repo_rates[0].source, "auto-sync");
     }
 
     // ── Store Address ─────────────────────────────────────────────────

@@ -71,7 +71,8 @@ function Update-File {
 # 2. Update version strings in all codebase files
 Write-Host "`nUpdating version strings..." -ForegroundColor Cyan
 
-Update-File "AGENTS.md" "- **Version is locked at `$currentVersion`.**" "- **Version is locked at `$TargetVersion`.**"
+Update-File "AGENTS.md" "- **Version is locked at `$currentVersion`.** Never change the version number" "- **Version is locked at `$TargetVersion`.** Never change the version number"
+Update-File ".agents/AGENTS.md" "- **Version is locked at `$currentVersion`.** Never change the version number" "- **Version is locked at `$TargetVersion`.** Never change the version number"
 Update-File "Cargo.toml" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "Dockerfile.server" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "apps/desktop-client/tauri.conf.json" "`"version`": `"$currentVersion`"," "`"version`": `"$TargetVersion`","
@@ -87,13 +88,10 @@ Update-File "apps/desktop-client/src/commands/health.rs" "assert_eq!(v.version, 
 Update-File "apps/tablet-client/src/commands/health.rs" "version: `"$currentVersion`"," "version: `"$TargetVersion`","
 Update-File "apps/tablet-client/src/commands/health.rs" "assert_eq!(v.version, `"$currentVersion`");" "assert_eq!(v.version, `"$TargetVersion`");"
 
-Update-File "ui/src/__tests__/RetailOptionsScreen.test.tsx" ('expect(screen.getByDisplayValue("{0}"))' -f $currentVersion) ('expect(screen.getByDisplayValue("{0}"))' -f $TargetVersion)
-
 Update-File "ui/src/features/auth/LicenseActivationScreen.tsx" ("useState<string>('{0}')" -f $currentVersion) ("useState<string>('{0}')" -f $TargetVersion)
 Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
 Update-File "ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx" "Version $currentVersion" "Version $TargetVersion"
 Update-File "ui/src/features/design/TooltipPreview.tsx" "OZ-POS v$currentVersion" "OZ-POS v$TargetVersion"
-Update-File "ui/src/features/retail/RetailOptionsScreen.tsx" "value=`"$currentVersion`"" "value=`"$TargetVersion`""
 Update-File "ui/src/frontend/shell/StatusBar.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
 
 # 3. Refresh Lockfiles

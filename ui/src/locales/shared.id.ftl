@@ -136,6 +136,17 @@ update-banner-installing-aria =
     .aria-label = Memasang pembaruan…
 update-banner-dismiss-aria =
     .aria-label = Tutup notifikasi pembaruan
+update-banner-dismiss = Tutup
+update-banner-backing-up = Mencadangkan…
+update-banner-backing-up-aria =
+    .aria-label = Mencadangkan basis data sebelum pembaruan
+update-banner-backup-error = Cadangan gagal
+update-banner-version-blocked-title = Pembaruan tidak tersedia
+update-banner-version-blocked-desc = Versi Anda { $current } di bawah minimum { $minimum } yang diperlukan. Silakan instal ulang dari situs web.
+update-banner-rollback-title = Pembaruan mungkin gagal
+update-banner-rollback-desc = Versi sebelumnya { $version } tersedia untuk diunduh. Klik untuk memulihkan.
+update-banner-rollback = Pulihkan Versi Sebelumnya
+update-banner-rollback-aria = Unduh versi sebelumnya dari GitHub
 
 # Accessibility
 a11y-skip-to-content = Lewati ke konten utama
