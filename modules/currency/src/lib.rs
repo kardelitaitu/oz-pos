@@ -38,7 +38,7 @@ pub mod error;
 pub mod models;
 pub mod repository;
 
-pub use commands::{CreateExchangeRateArgs, ExchangeRateDto};
+pub use commands::{CreateExchangeRateArgs, CurrencyDto, ExchangeRateDto};
 pub use error::CurrencyError;
 pub use models::ExchangeRateRow;
 pub use repository::CurrencyRepository;

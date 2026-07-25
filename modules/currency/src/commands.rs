@@ -7,6 +7,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::ExchangeRateRow;
 
+/// A currency DTO returned by the `list_currencies` command.
+#[derive(Debug, Clone, Serialize)]
+pub struct CurrencyDto {
+    /// ISO-4217 alpha-3 code, e.g. "USD".
+    pub code: String,
+    /// Display name, e.g. "US Dollar".
+    pub name: String,
+    /// Minor-unit exponent (decimal places), e.g. 2 for USD, 0 for JPY.
+    pub minor_exponent: u32,
+    /// Symbol, e.g. "$", "€", "¥".
+    pub symbol: String,
+}
+
 /// A serializable exchange-rate DTO returned by Tauri commands.
 #[derive(Debug, Clone, Serialize)]
 pub struct ExchangeRateDto {
@@ -109,6 +122,33 @@ mod tests {
         let dto = ExchangeRateDto::from(row);
         assert_eq!(dto.from_currency, "JPY");
         assert_eq!(dto.rate_millionths, 7_000);
+    }
+
+    // ── CurrencyDto ─────────────────────────────────────────────────────
+
+    #[test]
+    fn currency_dto_debug() {
+        let dto = CurrencyDto {
+            code: "EUR".into(),
+            name: "Euro".into(),
+            minor_exponent: 2,
+            symbol: "\u{20ac}".into(),
+        };
+        let d = format!("{dto:?}");
+        assert!(d.contains("Euro"));
+    }
+
+    #[test]
+    fn currency_dto_serialize() {
+        let dto = CurrencyDto {
+            code: "JPY".into(),
+            name: "Yen".into(),
+            minor_exponent: 0,
+            symbol: "\u{a5}".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["code"], "JPY");
+        assert_eq!(json["minor_exponent"], 0);
     }
 
     // ── CreateExchangeRateArgs ──────────────────────────────────────────

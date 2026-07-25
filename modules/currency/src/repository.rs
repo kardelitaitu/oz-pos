@@ -2,6 +2,7 @@
 
 use rusqlite::Connection;
 
+use crate::commands::CurrencyDto;
 use crate::error::CurrencyError;
 use crate::models::ExchangeRateRow;
 
@@ -14,6 +15,26 @@ impl<'a> CurrencyRepository<'a> {
     /// Create a new `CurrencyRepository` borrowing a SQLite connection.
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
+    }
+
+    /// List all currencies from the ISO-4217 table, ordered by code.
+    pub fn list_currencies(&self) -> Result<Vec<CurrencyDto>, CurrencyError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(CurrencyDto {
+                code: row.get(0)?,
+                name: row.get(1)?,
+                minor_exponent: row.get(2)?,
+                symbol: row.get(3)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
     }
 
     /// List all exchange rates ordered by `(from_currency, to_currency)`.
@@ -335,5 +356,43 @@ mod tests {
         assert_eq!(created.from_currency, "USD");
         assert_eq!(created.to_currency, "IDR");
         assert_eq!(created.rate_millionths, 15_600_000_000i64);
+    }
+
+    #[test]
+    fn list_currencies_empty_db() {
+        let conn = fresh();
+        conn.execute("DELETE FROM currencies", []).unwrap();
+        let repo = CurrencyRepository::new(&conn);
+        let currencies = repo.list_currencies().unwrap();
+        assert!(currencies.is_empty());
+    }
+
+    #[test]
+    fn list_currencies_returns_all_fields() {
+        let conn = fresh();
+        conn.execute("DELETE FROM currencies", []).unwrap();
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let currencies = repo.list_currencies().unwrap();
+        assert_eq!(currencies.len(), 1);
+        assert_eq!(currencies[0].code, "EUR");
+        assert_eq!(currencies[0].name, "Euro");
+        assert_eq!(currencies[0].minor_exponent, 2);
+        assert_eq!(currencies[0].symbol, "\u{20ac}");
+    }
+
+    #[test]
+    fn list_currencies_ordered_by_code() {
+        let conn = fresh();
+        conn.execute("DELETE FROM currencies", []).unwrap();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        seed_currency(&conn, "CAD", "124", "Canadian Dollar", 2, "CA$");
+        let repo = CurrencyRepository::new(&conn);
+        let currencies = repo.list_currencies().unwrap();
+        assert_eq!(currencies.len(), 3);
+        assert_eq!(currencies[0].code, "CAD");
+        assert_eq!(currencies[1].code, "EUR");
+        assert_eq!(currencies[2].code, "USD");
     }
 }
