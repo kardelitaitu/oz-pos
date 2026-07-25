@@ -1,13 +1,13 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (5 findings, doc-staleness counts/paths) · F1: "164 test files, 2533+ tests" -> 205 .test.ts* files in tree (count stale) · F2: ui/src/locales/en-US.ftl ("1900+ IDs across 25 .ftl files") -> no en-US.ftl; 72 .ftl, per-feature bundles.ftl/bundles.id.ftl/bundles.th.ftl · F3: ui/src/styles/ (reset.css/tokens.css/components.css) -> no ui/src/styles/; tokens in ui/src/frontend/themes/tokens.css · F4: "29 per-domain files" in api/ -> 34 .ts files · F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: STALE (3 findings) · resolved F1: test counts updated to 214 files / 3230+ tests · F2: ui/src/locales/en-US.ftl ("1900+ IDs across 25 .ftl files") -> no en-US.ftl; 72 .ftl, per-feature bundles.ftl/bundles.id.ftl/bundles.th.ftl · F3: ui/src/styles/ (reset.css/tokens.css/components.css) -> no ui/src/styles/; tokens in ui/src/frontend/themes/tokens.css · F4: "29 per-domain files" in api/ -> 34 .ts files · resolved F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
 
 # `ui/` — OZ-POS Frontend
 
-React 18 + TypeScript + Vite 5 + Tauri v2 webview.
+React 18 + TypeScript + Vite 6 + Tauri v2 webview.
 
 ## Stack
 
 - **React 18** + react-dom
-- **Vite 5** (dev server + bundler)
+- **Vite 6** (dev server + bundler)
 - **TypeScript 5** (strict: `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`)
 - **@fluent/react** (i18n via `.ftl` files)
 - **@tauri-apps/api 2** (IPC bridge)
@@ -21,7 +21,7 @@ npm install            # one-time
 npm run dev            # vite dev server on http://localhost:1420
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest run (164 files, 2533+ tests)
+npm run test           # vitest run (214 files, 3230+ tests)
 npm run build          # tsc -b && vite build
 ```
 
@@ -90,7 +90,7 @@ ui/src/
 │   └── components.css   # Shared component styles
 ├── types/
 │   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
-├── __tests__/           # Per-screen test files (164 files, 2533+ tests)
+├── __tests__/           # Per-screen test files (214 files, 3230+ tests)
 ├── App.tsx              # Root: setup guard → auth guard → AppLayout
 └── main.tsx             # Entry: Fluent bundle registration + StrictMode
 ```
@@ -114,7 +114,7 @@ ui/src/
 - Each feature screen has a `__tests__/<Screen>.test.tsx` file
 - IPC is mocked via `vi.hoisted()` → `vi.mock('@tauri-apps/api/core')`
 - Fluent strings are provided inline via `FluentBundle` + `FluentResource`
-- Run: `npm run test` (164 test files, 2533+ tests, ~14s)
+- Run: `npm run test` (214 test files, 3230+ tests, ~14s)
 
 ## Conventions
 
@@ -127,4 +127,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 17-07-26 by docs-auditor
+> last audited 2026-07-25 by Hermes-Agent (F1 test counts and F5 Vite version backfilled)
