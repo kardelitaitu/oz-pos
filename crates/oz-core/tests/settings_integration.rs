@@ -6,6 +6,8 @@
 //! (which wraps `platform_core::settings::Settings`) and the Store API
 //! against an in-memory SQLite database.
 
+#![allow(deprecated)]
+
 use oz_core::{Feature, FeatureRegistry, Settings, Store, migrations};
 use rusqlite::Connection;
 

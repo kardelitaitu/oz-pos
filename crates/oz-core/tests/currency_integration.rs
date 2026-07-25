@@ -1,5 +1,7 @@
 //! Integration tests for the currency/exchange rate module —
 //! conversion rates, multi-currency edge cases, and Money operations.
+
+#![allow(deprecated)]
 //!
 //! Tests exercise the full persistence layer via the public
 //! [`oz_core::Store`] API and [`oz_core::Money`] / [`oz_core::Currency`]

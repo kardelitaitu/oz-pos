@@ -65,7 +65,9 @@ impl Store<'_> {
 
     /// Get the default currency.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_default_currency`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_default_currency directly")]
     pub fn get_default_currency(&self) -> Result<Option<String>, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.get_default_currency()?)
@@ -73,7 +75,9 @@ impl Store<'_> {
 
     /// Set the default currency.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_default_currency`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_default_currency directly")]
     pub fn set_default_currency(&self, code: &str) -> Result<(), CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.set_default_currency(code)?)
@@ -81,7 +85,9 @@ impl Store<'_> {
 
     /// Get the currency display format: `"symbol"` or `"code"`.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_format`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_format directly")]
     pub fn get_currency_format(&self) -> Result<String, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.get_currency_format()?)
@@ -89,7 +95,9 @@ impl Store<'_> {
 
     /// Set the currency display format.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_format`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_format directly")]
     pub fn set_currency_format(&self, fmt: &str) -> Result<(), CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.set_currency_format(fmt)?)
@@ -97,7 +105,9 @@ impl Store<'_> {
 
     /// Get the currency symbol position: `"prefix"` or `"suffix"`.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_symbol_position`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_symbol_position directly")]
     pub fn get_currency_symbol_position(&self) -> Result<String, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.get_currency_symbol_position()?)
@@ -105,7 +115,9 @@ impl Store<'_> {
 
     /// Set the currency symbol position.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_symbol_position`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_symbol_position directly")]
     pub fn set_currency_symbol_position(&self, pos: &str) -> Result<(), CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.set_currency_symbol_position(pos)?)
@@ -113,7 +125,9 @@ impl Store<'_> {
 
     /// Get the decimal separator: `"dot"` or `"comma"`.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_decimal_separator`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_decimal_separator directly")]
     pub fn get_currency_decimal_separator(&self) -> Result<String, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.get_currency_decimal_separator()?)
@@ -121,7 +135,9 @@ impl Store<'_> {
 
     /// Set the decimal separator.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_decimal_separator`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_decimal_separator directly")]
     pub fn set_currency_decimal_separator(&self, sep: &str) -> Result<(), CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.set_currency_decimal_separator(sep)?)
@@ -129,7 +145,9 @@ impl Store<'_> {
 
     /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::get_currency_thousands_separator`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::get_currency_thousands_separator directly")]
     pub fn get_currency_thousands_separator(&self) -> Result<String, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.get_currency_thousands_separator()?)
@@ -137,7 +155,9 @@ impl Store<'_> {
 
     /// Set the thousands separator.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::set_currency_thousands_separator`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::set_currency_thousands_separator directly")]
     pub fn set_currency_thousands_separator(&self, sep: &str) -> Result<(), CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.set_currency_thousands_separator(sep)?)
@@ -145,7 +165,9 @@ impl Store<'_> {
 
     /// List all currencies from the ISO-4217 table, ordered by code.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::list_currencies`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::list_currencies directly")]
     pub fn list_currencies(&self) -> Result<Vec<(String, String, u32, String)>, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         let rows = repo.list_currencies()?;
@@ -157,7 +179,9 @@ impl Store<'_> {
 
     /// List all exchange rates.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::list_exchange_rates`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::list_exchange_rates directly")]
     pub fn list_exchange_rates(
         &self,
     ) -> Result<Vec<modules_currency::ExchangeRateRow>, CoreError> {
@@ -172,7 +196,9 @@ impl Store<'_> {
     /// negative rates are rejected at this layer (defence in depth; the
     /// Tauri command layer also rejects them).
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::create_exchange_rate`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::create_exchange_rate directly")]
     pub fn create_exchange_rate(
         &self,
         from_currency: &str,
@@ -199,7 +225,9 @@ impl Store<'_> {
     /// scale (see [`modules_currency::ExchangeRateRow`]). Zero and
     /// negative rates are rejected (matching [`Self::create_exchange_rate`]).
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::upsert_exchange_rate`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::upsert_exchange_rate directly")]
     pub fn upsert_exchange_rate(
         &self,
         from_currency: &str,
@@ -220,7 +248,9 @@ impl Store<'_> {
 
     /// Delete an exchange rate by ID.
     ///
+    /// **Deprecated:** Use [`CurrencyRepository::delete_exchange_rate`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
+    #[deprecated(note = "use CurrencyRepository::delete_exchange_rate directly")]
     pub fn delete_exchange_rate(&self, id: &str) -> Result<(), CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.delete_exchange_rate(id)?)
@@ -230,6 +260,7 @@ impl Store<'_> {
 // ── Tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use crate::migrations;
