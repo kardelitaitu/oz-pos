@@ -140,6 +140,9 @@ impl From<modules_currency::CurrencyError> for CoreError {
     fn from(e: modules_currency::CurrencyError) -> Self {
         match e {
             modules_currency::CurrencyError::Db(err) => Self::Db(err),
+            modules_currency::CurrencyError::Platform(err) => {
+                Self::Platform(err)
+            }
             modules_currency::CurrencyError::Validation { field, message } => {
                 Self::Validation { field, message }
             }

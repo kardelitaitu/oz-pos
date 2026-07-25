@@ -64,53 +64,83 @@ impl Store<'_> {
     }
 
     /// Get the default currency.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn get_default_currency(&self) -> Result<Option<String>, CoreError> {
-        Settings::get_default_currency(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_default_currency()?)
     }
 
     /// Set the default currency.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn set_default_currency(&self, code: &str) -> Result<(), CoreError> {
-        Settings::set_default_currency(self.conn, code)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_default_currency(code)?)
     }
 
     /// Get the currency display format: `"symbol"` or `"code"`.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn get_currency_format(&self) -> Result<String, CoreError> {
-        Settings::get_currency_format(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_format()?)
     }
 
     /// Set the currency display format.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn set_currency_format(&self, fmt: &str) -> Result<(), CoreError> {
-        Settings::set_currency_format(self.conn, fmt)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_format(fmt)?)
     }
 
     /// Get the currency symbol position: `"prefix"` or `"suffix"`.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn get_currency_symbol_position(&self) -> Result<String, CoreError> {
-        Settings::get_currency_symbol_position(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_symbol_position()?)
     }
 
     /// Set the currency symbol position.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn set_currency_symbol_position(&self, pos: &str) -> Result<(), CoreError> {
-        Settings::set_currency_symbol_position(self.conn, pos)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_symbol_position(pos)?)
     }
 
     /// Get the decimal separator: `"dot"` or `"comma"`.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn get_currency_decimal_separator(&self) -> Result<String, CoreError> {
-        Settings::get_currency_decimal_separator(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_decimal_separator()?)
     }
 
     /// Set the decimal separator.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn set_currency_decimal_separator(&self, sep: &str) -> Result<(), CoreError> {
-        Settings::set_currency_decimal_separator(self.conn, sep)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_decimal_separator(sep)?)
     }
 
     /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn get_currency_thousands_separator(&self) -> Result<String, CoreError> {
-        Settings::get_currency_thousands_separator(self.conn)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.get_currency_thousands_separator()?)
     }
 
     /// Set the thousands separator.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn set_currency_thousands_separator(&self, sep: &str) -> Result<(), CoreError> {
-        Settings::set_currency_thousands_separator(self.conn, sep)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.set_currency_thousands_separator(sep)?)
     }
 
     /// List all currencies from the ISO-4217 table, ordered by code.
