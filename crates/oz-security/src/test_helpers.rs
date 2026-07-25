@@ -4,6 +4,8 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::Keyring;
+
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Generate a unique test credential name.
@@ -14,4 +16,25 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 pub fn unique_test_name(prefix: &str) -> String {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{prefix}-{}-{n}", std::process::id())
+}
+
+/// Set a credential and poll until the value is observed.
+///
+/// Some OS credential stores (Windows Credential Manager, macOS
+/// Keychain, libsecret) can be asynchronous about writes. This helper
+/// retries the write/poll cycle up to 50 times, which is more robust
+/// than a fixed sleep.
+pub fn set_and_verify<K: Keyring>(keyring: &K, name: &str, value: &str) {
+    let mut last: Result<Option<String>, crate::error::SecurityError> = Ok(None);
+    for attempt in 1..=50 {
+        if let Err(e) = keyring.set_secret(name, value) {
+            panic!("set_secret failed for '{name}' on attempt {attempt}: {e}");
+        }
+        last = keyring.get_secret(name);
+        if matches!(&last, Ok(Some(v)) if v == value) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("failed to set credential '{name}'; expected '{value}', last observed: {last:?}");
 }

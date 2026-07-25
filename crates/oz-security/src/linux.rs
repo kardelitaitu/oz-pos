@@ -221,7 +221,7 @@ fn attributes(name: &str) -> HashMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::unique_test_name;
+    use crate::test_helpers::{set_and_verify, unique_test_name};
 
     fn test_keyring() -> LibSecretKeyring {
         LibSecretKeyring::new().expect("failed to create keyring")
@@ -236,8 +236,7 @@ mod tests {
 
         assert_eq!(k.get_secret(&name).unwrap(), None);
 
-        k.set_secret(&name, "linux-secret-42").unwrap();
-        assert_eq!(k.get_secret(&name).unwrap(), Some("linux-secret-42".into()));
+        set_and_verify(&k, &name, "linux-secret-42");
 
         assert!(k.delete_secret(&name).unwrap());
         assert_eq!(k.get_secret(&name).unwrap(), None);
@@ -258,9 +257,11 @@ mod tests {
         let name = unique_test_name("oz-pos-test-overwrite-linux");
         let _ = k.delete_secret(&name);
 
-        k.set_secret(&name, "original").unwrap();
-        k.set_secret(&name, "replacement").unwrap();
-        assert_eq!(k.get_secret(&name).unwrap(), Some("replacement".into()));
+        // Retry the writes until each value is observed. The Linux
+        // Secret Service can be asynchronous about writes, so polling is
+        // more robust than a single write/read.
+        set_and_verify(&k, &name, "original");
+        set_and_verify(&k, &name, "replacement");
 
         k.delete_secret(&name).unwrap();
     }

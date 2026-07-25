@@ -151,7 +151,7 @@ fn encode_utf16_null(s: &str) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_helpers::unique_test_name;
+    use crate::test_helpers::{set_and_verify, unique_test_name};
 
     fn test_keyring() -> WindowsCredentialManager {
         WindowsCredentialManager::new().expect("failed to create keyring")
@@ -183,13 +183,13 @@ mod tests {
 
         assert_eq!(k.get_secret(&name).unwrap(), None);
 
-        k.set_secret(&name, "test-value-123").unwrap();
-        assert_eq!(k.get_secret(&name).unwrap(), Some("test-value-123".into()));
+        set_and_verify(&k, &name, "test-value-123");
 
         // Deletion is handled by the guard on scope exit, which also covers
         // the panic path. Keep the explicit delete here to verify the API
-        // returns true for an existing credential.
+        // returns true for an existing credential and that the secret is gone.
         assert!(k.delete_secret(&name).unwrap());
+        assert_eq!(k.get_secret(&name).unwrap(), None);
     }
 
     #[test]
@@ -208,22 +208,10 @@ mod tests {
         let name = unique_test_name("oz-pos-test-overwrite");
         let _guard = CredentialGuard::new(name.clone());
 
-        k.set_secret(&name, "v1").unwrap();
-
-        // Retry the overwrite until the new value is observed. Windows
-        // Credential Manager can be asynchronous about the second write,
-        // so polling is more robust than a fixed sleep.
-        let mut attempts = 20;
-        loop {
-            k.set_secret(&name, "v2").unwrap();
-            if k.get_secret(&name).unwrap().as_deref() == Some("v2") {
-                break;
-            }
-            attempts -= 1;
-            if attempts == 0 {
-                panic!("failed to overwrite credential in Windows Credential Manager");
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+        // Retry the writes until each value is observed. Windows
+        // Credential Manager can be asynchronous about writes, so polling
+        // is more robust than a single write/read.
+        set_and_verify(&k, &name, "v1");
+        set_and_verify(&k, &name, "v2");
     }
 }
