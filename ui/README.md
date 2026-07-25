@@ -127,4 +127,4 @@ ui/src/
 | Every screen has a test file | `__tests__/` audit |
 | Money displayed via `formatMoney()` | Import from `types/domain.ts` |
 
-> last audited 2026-07-25 by Hermes-Agent (F1 test counts and F5 Vite version backfilled)
+> last audited 25-07-26 by Hermes-Agent
