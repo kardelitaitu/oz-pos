@@ -144,7 +144,7 @@ oz-pos/
 git clone https://github.com/kardelitaitu/oz-pos.git
 cd oz-pos
 cargo build --workspace
-cd ui && npm install && cd ..
+cd ui && npm ci --no-audit --no-fund && cd ..  # see ui/README.md#install-script-approvals
 cd apps/desktop-client && cargo tauri dev
 ```
 

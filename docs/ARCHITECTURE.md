@@ -236,9 +236,9 @@ Each app crate has an identical command surface, wired through `platform-startup
 3. **Install Tauri prerequisites** — see [Tauri docs](https://tauri.app/v2/guides/) for platform‑specific SDKs.
 4. **Bootstrap workspace**:
    ```bash
-   cargo build --workspace
-   cd ui && npm install && cd ..
-   cargo tauri dev          # launches Tauri dev window
+cargo build --workspace
+cd ui && npm ci --no-audit --no-fund && cd ..  # uses pinned install-script approvals
+cargo tauri dev          # launches Tauri dev window
    ```
 5. **Run on Android/iPad** — Use Tauri's mobile targets (requires Android SDK / Xcode).
 
