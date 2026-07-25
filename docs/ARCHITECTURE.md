@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (multiple findings — superseded early-architecture snapshot) · F1: "15+ members" -> 28 workspace members · F2: "oz-core migrations 20 embedded" -> 98 .sql files (crates/oz-core/migrations/) · F3: scaffold crates (oz-lua/oz-security/oz-reporting) are now IMPLEMENTED — oz-lua has apply_discount/calc_line_tax/validate_order/load_dir; oz-security has full keyring/TLS/mask; oz-reporting has daily_summary/menu_engineering/metrics engines (contradicts "Scaffold Crates" section) · F4: Node ">=18" -> ui/package.json engines >=22 · F5: i18n paths wrong (en-US.ftl, styles/) -> per-feature bundles.ftl + ui/src/frontend/themes/tokens.css · F6: "LICENSE: MIT" -> proprietary (All Rights Reserved) · F7: commands "62+" -> 47 desktop modules, 618 total IPC (README audit) · accurate: 9 modules, Feature 32 flags, React18+@fluent/react+pos.ts rule, oz-hal DriverRegistry/traits, oz-api port 3099 -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: STALE (3 findings) · resolved F1: "15+ members" -> 29 workspace members · resolved F2: "oz-core migrations 20 embedded" -> 98 .sql files (crates/oz-core/migrations/) · F3: scaffold crates (oz-lua/oz-security/oz-reporting) are now IMPLEMENTED — oz-lua has apply_discount/calc_line_tax/validate_order/load_dir; oz-security has full keyring/TLS/mask; oz-reporting has daily_summary/menu_engineering/metrics engines (contradicts "Scaffold Crates" section) · resolved F4: Node ">=18" -> ui/package.json engines >=22 · resolved F5: i18n paths wrong (en-US.ftl, styles/) -> per-feature bundles (48 .ftl files) + ui/src/frontend/themes/ · F6: "LICENSE: MIT" -> proprietary (All Rights Reserved) · F7: commands "62+" -> 47 desktop modules, 618 total IPC (README audit) · accurate: 9 modules, Feature 32 flags, React18+@fluent/react+pos.ts rule, oz-hal DriverRegistry/traits, oz-api port 3099 -->
 
 # OZ-POS – Codebase Architecture
 
@@ -16,7 +16,7 @@ This document describes the directory layout and module responsibilities for **O
 ## Directory Layout
 ```
 oz-pos/
-├─ Cargo.toml                # Workspace definition (15+ members)
+├─ Cargo.toml                # Workspace definition (29 members)
 ├─ rust-toolchain.toml       # Rust toolchain (stable)
 ├─ package.json              # Front‑end package manager (React/TS)
 ├─ crates/                   # Rust workspace crates
@@ -120,8 +120,8 @@ oz-pos/
 │       ├─ features/         # Feature-scoped screens (sales/)
 │       ├─ components/       # Reusable React components
 │       ├─ hooks/            # Custom React hooks
-│       ├─ locales/          # Fluent localisation files (en-US.ftl)
-│       ├─ styles/           # CSS design tokens and styles
+│       ├─ locales/          # Per-feature Fluent bundles (48 `.ftl` files, en + id variants)
+│       ├─ frontend/themes/  # CSS design tokens and shared component styles
 │       └─ __tests__/        # Vitest + Testing Library tests
 ├─ scripts/                  # Build helpers, pre-push checks
 │   ├─ check.sh              # Pre-push gate: fmt + clippy + test + drift-guard
@@ -155,7 +155,7 @@ oz-pos/
   - `Product`, `Category`, `Inventory`, `Sku` — domain types with serde.
   - `Feature` — 32 toggleable feature flags with dependency resolution and 4 store presets.
   - `Store<'a>` — typed CRUD facade over `&Connection`. All writes inside transactions.
-- **Migrations**: 20 embedded SQL files in `crates/oz-core/migrations/`. Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
+- **Migrations**: 98 embedded SQL files in `crates/oz-core/migrations/`. Registered and run by `migrations.rs`; executed on startup by `platform-startup`.
 - **Rules**: `#![deny(unsafe_code)]`, `#![warn(missing_docs)]`.
 
 ### oz-hal
@@ -224,7 +224,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 - Each module registers event handlers (e.g. `SaleCompleted` → stock decrement, audit log, report update).
 
 ### ui/ (React Frontend)
-- **Stack**: React 18 + TypeScript + Vite + `@fluent/react` (i18n) + Vitest (testing).
+- **Stack**: React 18 + TypeScript + Vite 6 + `@fluent/react` (i18n) + Vitest (testing).
 - **Architecture rule**: Components never call `invoke()` directly — they go through `ui/src/api/pos.ts`.
 - **i18n rule**: All user-visible strings use `@fluent/react`. No hardcoded English in JSX.
 - **Types**: `ui/src/types/domain.ts` mirrors Rust types with branded TypeScript (CartId, LineId, Sku, Money).
@@ -232,7 +232,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 ---
 ## Build & Run Instructions
 1. **Install Rust toolchain** (stable) and `cargo`.
-2. **Install Node.js** (≥ 18) for the front‑end.
+2. **Install Node.js** (≥ 22) for the front‑end.
 3. **Install Tauri prerequisites** — see [Tauri docs](https://tauri.app/v2/guides/) for platform‑specific SDKs.
 4. **Bootstrap workspace**:
    ```bash

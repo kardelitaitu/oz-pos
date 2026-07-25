@@ -25,7 +25,7 @@
 
 ### `scripts/setup-dev.ps1`
 
-✅ Contains: Chocolate detection, Rust toolchain install, Tauri system deps, npm install, githooks setup.
+✅ Contains: Chocolate detection, Rust toolchain install, Tauri system deps, npm ci, githooks setup.
 
 ### `scripts/setup-cache.ps1`
 

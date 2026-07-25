@@ -1,7 +1,7 @@
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/kardelitaitu/oz-pos?style=flat-square) ![GitHub repo size](https://img.shields.io/github/repo-size/kardelitaitu/oz-pos?style=flat-square) [![Nightly CI](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml/badge.svg)](https://github.com/kardelitaitu/oz-pos/actions/workflows/nightly.yml)
 
 
-<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE · ADR #30 domain modularization complete across modules/* · ADR #31 decentralized UI self-registration active via registerAllFeatures() · F1: 98 .sql migration files · F2: 212 test files (3197+ tests) · F3: 72 .ftl Fluent translation files · F4: payment drivers (Stripe, Mock, QRIS, Square) · F5: 618 #[tauri::command] IPC endpoints -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE · ADR #30 domain modularization complete across modules/* · ADR #31 decentralized UI self-registration active via registerAllFeatures() · F1: 98 .sql migration files · F2: 5,221+ Rust tests; 214 UI test files (3,230+ tests) · F3: 48 .ftl Fluent translation files (5,700+ IDs) · F4: payment drivers (Stripe, Mock, QRIS, Square) · F5: 618 #[tauri::command] IPC endpoints -->
 
 # OZ-POS
 
@@ -32,7 +32,7 @@ Modern POS systems often suffer from vendor lock-in, expensive subscriptions, cl
 - **Modular by design** — Independent modules for inventory, CRM, reporting, etc.
 - **Secure by default** — Encrypted backups, PAN masking, platform keychains
 - **Hardware abstraction** — Vendor-independent drivers for printers, scanners, displays
-- **Enterprise-grade code quality** — 1900+ Rust tests, 2533+ frontend tests (164 files), strict Clippy, typed Money, transactional DB
+- **Enterprise-grade code quality** — 5,200+ Rust tests, 3,230+ frontend tests (214 files), strict Clippy, typed Money, transactional DB
 
 ---
 
@@ -113,8 +113,8 @@ oz-pos/
 │       ├── api/            # Per-domain invoke() wrappers — no invoke() in components
 │       ├── frontend/       # Shared components, shell layout, design tokens
 │       ├── features/       # 55+ audited screen components by domain
-│       ├── locales/        # Fluent (.ftl) files — 1900+ IDs across 25 files
-│       └── __tests__/      # Vitest + testing-library (164 files, 2533+ tests)
+│       ├── locales/        # Fluent (.ftl) files — 5,700+ IDs across 48 files
+│       └── __tests__/      # Vitest + testing-library (214 files, 3,230+ tests)
 ├── docs/                   # ROADMAP.md, ADRs, specs, whitepaper
 ├── scripts/                # Example Lua business rule scripts, coverage scripts
 └── packaging/              # MSI, .deb, .AppImage build configs
@@ -128,8 +128,8 @@ oz-pos/
 |---|---|---|
 | Backend | Rust | Domain logic, DB access, hardware control |
 | Desktop Shell | Tauri v2 | Native window, IPC bridge, updater |
-| Frontend | React 18 + TypeScript + Vite | POS UI |
-| Database | SQLite (rusqlite) | On-device persistence, 51 migrations |
+| Frontend | React 18 + TypeScript + Vite 6 | POS UI |
+| Database | SQLite (rusqlite) | On-device persistence, 98 migrations |
 | Localization | @fluent/react | All UI strings in `.ftl` files |
 | Hardware | oz-hal traits | USB/TCP/BT/serial/mock drivers |
 | Money | `i64` minor units | Never `f32`/`f64` — `Currency`, `Money` structs |
@@ -162,7 +162,7 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
 | `npm run build` | Production build |
 | `npm run typecheck` | TypeScript validation |
 | `npm run lint` | ESLint + jsx-a11y |
-| `npm run test` | Vitest (164 files, 2533+ tests) |
+| `npm run test` | Vitest (214 files, 3,230+ tests) |
 
 ### Backend (root)
 
@@ -170,7 +170,7 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
 |---|---|
 | `cargo fmt --all` | Format Rust code |
 | `cargo clippy --all-targets -- -D warnings` | Lint |
-| `cargo test --workspace` | Run tests (1900+) |
+| `cargo test --workspace` | Run tests (5,200+) |
 | `bash scripts/coverage.sh` | Rust + UI coverage reports |
 
 ---
@@ -189,7 +189,7 @@ Every PR must pass `cargo fmt`, Clippy, `tsc --noEmit`, and all tests before mer
 
 ## Status
 
-**Phase 4 (CRM, Restaurant, Accounting) in progress.** 51 migrations, 200+ IPC commands, 55 audited screen components, 164 front-end test files (2533+ tests), 1900+ Rust tests.
+**Phase 4 (CRM, Restaurant, Accounting) in progress.** 98 migrations, 200+ IPC commands, 55 audited screen components, 214 front-end test files (3,230+ tests), 5,200+ Rust tests.
 
 | Phase | Status | Focus |
 |---|---|---|
