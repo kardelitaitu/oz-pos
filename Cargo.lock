@@ -3370,9 +3370,12 @@ dependencies = [
  "foundation",
  "oz-core",
  "platform-kernel",
+ "rusqlite",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -4101,6 +4104,7 @@ dependencies = [
  "hex",
  "mdns-sd",
  "modules-crm",
+ "modules-currency",
  "modules-inventory",
  "modules-loyalty",
  "modules-reporting",
