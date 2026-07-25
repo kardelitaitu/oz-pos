@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Version is locked at 0.0.9" -> aligned with root AGENTS.md at 0.0.18 · verified accurate: 4 pre-commit gates; scripts lint-i18n.sh/verify-bundle-parity.py/dedupe-ftl.py/check.sh exist; onboarding-guide SKILL.md exists; crates/oz-hal/src/drivers/mock.rs exists; command dirs + ui/src/api + ui/src/__tests__ present -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Version is locked at 0.0.9" -> aligned with root AGENTS.md at 0.0.21 · verified accurate: 4 pre-commit gates; scripts lint-i18n.sh/verify-bundle-parity.py/dedupe-ftl.py/check.sh exist; onboarding-guide SKILL.md exists; crates/oz-hal/src/drivers/mock.rs exists; command dirs + ui/src/api + ui/src/__tests__ present -->
 
 # Agents Configuration
 
@@ -82,7 +82,7 @@ npm ci --no-audit --no-fund
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.18`.** Never change the version number
+- **Version is locked at `0.0.21`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
