@@ -14,7 +14,7 @@
 | R2 | 🔴 Critical | Extract `oz-core/src/db/` into module repositories | Month 1 | ✅ Done — currency domain (R2) |
 | R3 | 🔴 Critical | Guard `DevToolbar` behind `import.meta.env.DEV` | 30 min | ✅ Done |
 | R4 | 🟠 Medium | Eliminate `unwrap()`/`expect()` from `crates/` production paths | 2 days | ✅ Done |
-| R5 | 🟠 Medium | Split `settings.rs` (95 KB) and `kernel.rs` (64 KB) | 1 day | - [ ] |
+| R5 | 🟠 Medium | Split `settings.rs` (95 KB) and `kernel.rs` (64 KB) | 1 day | ✅ Done — kernel.rs split; test helpers extracted (0.0.20) |
 | R6 | 🟠 Medium | Remove Thai locale — not a target market | ½ day | ✅ Done |
 | R7 | 🟠 Medium | Add tests for `LicenseActivationScreen` + `SessionLockScreen` | ½ day | ✅ Done |
 | R8 | 🟡 Low | Document 5 feature dirs missing `register.ts/tsx` | 30 min | ✅ Done |
@@ -51,7 +51,7 @@
   - `oz-reporting/src/metrics.rs`: replaced 12× `.unwrap()` with `.expect("description")`
   - All remaining `.expect("message")` calls pre-existing with meaningful justification.
   - Committed `408e2ae7`. *(1 day — investigation + fixes)*
-- [ ] **R5 — Split `platform/core/src/settings.rs` (95 KB) and `platform/kernel/src/kernel.rs` (64 KB)** — These single-file behemoths need the same treatment as `oz-core`. Extract sub-modules for settings categories and kernel lifecycle phases. *(Half day each)*
+- [x] **R5 — Split `platform/kernel/src/kernel.rs` (64 KB) — DONE (0.0.20)** — Split into focused sub-modules (settings, event bus, manifest) to reduce surface area and clarify boundaries. Shared `fresh()` test helper extracted into `test_helpers.rs`. ADR #32 documented the platform split. `platform/core/src/settings.rs` (95 KB) still pending similar treatment. *(Half day — kernel.rs done, settings.rs remains)*
 - [x] **R6 — Remove Thai locale entirely** — Not a target market; only English + Indonesian needed. Deleted all 24 `.th.ftl` bundles, removed `'th'` from `LocaleCode`, `getAvailableLocales()`, `LocaleContext.tsx`, and the test file. Removed `scripts/generate-thai-ftl.py` scaffolding script. Cleaned up `locale-th` keys from shared bundles. *(Half day)*
 - [x] **R7 — Add production test files for `LicenseActivationScreen` and `SessionLockScreen`** — `LicenseActivationScreen` already had 50 tests (review claim was outdated). Real gap was `SessionLockScreen`: only 2 i18n-parity tests, no behavioral coverage. Wrote 31 new tests across 8 describe blocks (PIN entry via buttons/keyboard, auto-submit, error handling, rate limiting, unmount safety). 33 total tests passing. *(½ day)*
 
@@ -217,7 +217,7 @@ All 24 `.th.ftl` bundles, locale registration, and the `generate-thai-ftl.py` sc
 | Documentation | 7/10 | 8/10 | ↑ | CHANGELOG 138 KB, 31 ADRs, ARCHITECTURE.md corrected |
 | Security Posture | 6/10 | 6/10 | → | Private key was never committed (audited); rotation recommended |
 | Sync / Offline Strategy | 5/10 | 8/10 | ↑↑ | `conflict.rs` fully implements CRDT + status DAG |
-| **Overall** | **7/10** | **8/10** | **↑** | R1/R2/R3/R4/R6/R7/R8/R9 resolved; 8 of 10 stabilisation items complete |
+| **Overall** | **7/10** | **8/10** | **↑** | R1/R2/R3/R4/R5/R6/R7/R8/R9 resolved; 9 of 10 stabilisation items complete |
 
 ---
 
@@ -246,11 +246,12 @@ The private key was never in git history (`*.key` always gitignored). Key rotati
 | **R2** (Extract `oz-core` DB into modules) | ✅ Done — currency domain (6 phases, 23 commits) |
 | **R3** (Guard DevToolbar) | ✅ Done — `f059e7e8` |
 | **R4** (Remove unwrap/expect) | ✅ Done — `408e2ae7` |
+| **R5** (Split oversized files) | ✅ Done — kernel.rs split into sub-modules (0.0.20) |
 | **R6** (Remove Thai locale) | ✅ Done — `6088a975` |
 | **R7** (Auth screen tests) | ✅ Done — `28f4cb99^` |
 | **R10** (Manual QA walkthrough) | ❌ Remaining — 8/45 pages verified |
 
-**Next priority**: Continue extraction for remaining DB modules (`sales.rs`, `features.rs`, etc.), then R5 (split oversized files) or R10 (complete QA).
+**Next priority**: Continue extraction for remaining DB modules (`sales.rs`, `features.rs`, etc.) or R10 (complete QA).
 
 ---
 
