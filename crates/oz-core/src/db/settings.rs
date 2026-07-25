@@ -457,6 +457,60 @@ mod tests {
         assert!(matches!(result, Err(CoreError::NotFound { .. })));
     }
 
+    // ── Delegation parity with CurrencyRepository ────────────────────────
+
+    #[test]
+    fn store_create_and_repository_list_have_same_row() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+
+        let row = s
+            .create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+
+        let repo = modules_currency::repository::CurrencyRepository::new(&conn);
+        let repo_rates = repo.list_exchange_rates().unwrap();
+        assert_eq!(repo_rates.len(), 1);
+        assert_eq!(repo_rates[0], row);
+    }
+
+    #[test]
+    fn repository_create_and_store_list_have_same_row() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = modules_currency::repository::CurrencyRepository::new(&conn);
+
+        let row = repo
+            .create_exchange_rate("USD", "EUR", 920_000, "ecb", "2026-06-28")
+            .unwrap();
+
+        let s = store(&conn);
+        let store_rates = s.list_exchange_rates().unwrap();
+        assert_eq!(store_rates.len(), 1);
+        assert_eq!(store_rates[0], row);
+    }
+
+    #[test]
+    fn store_upsert_and_repository_list_have_same_row() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let s = store(&conn);
+
+        let row = s
+            .upsert_exchange_rate("USD", "EUR", 920_000, "auto-sync", "2026-06-28")
+            .unwrap();
+
+        let repo = modules_currency::repository::CurrencyRepository::new(&conn);
+        let repo_rates = repo.list_exchange_rates().unwrap();
+        assert_eq!(repo_rates.len(), 1);
+        assert_eq!(repo_rates[0], row);
+        assert_eq!(repo_rates[0].source, "auto-sync");
+    }
+
     // ── Store Address ─────────────────────────────────────────────────
 
     #[test]
