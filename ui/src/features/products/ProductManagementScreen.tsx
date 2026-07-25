@@ -129,7 +129,7 @@ export default function ProductManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

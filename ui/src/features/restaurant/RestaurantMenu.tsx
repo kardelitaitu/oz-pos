@@ -299,7 +299,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         document.documentElement.setAttribute('data-font-smoothing', fsm);
       }
     }).catch(() => { /* offline — keep localStorage values */ });
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   // ── Context menu state ──────────────────────────────
   const [contextMenu, setContextMenu] = useState<{

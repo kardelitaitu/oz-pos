@@ -50,7 +50,7 @@ export function WorkspaceKdsSettings({
   const dirty = useMemo(() => hasChanges(
     draft as unknown as Record<string, unknown>,
     originalsRef.current as unknown as Record<string, unknown>,
-  ), [draft, originalsLoaded]);
+  ), [draft, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise from settings ─────────────────────────────────
 
@@ -59,7 +59,7 @@ export function WorkspaceKdsSettings({
       originalsRef.current = { ...draft };
       setOriginalsLoaded(true);
     }
-  }, [originalsLoaded]);
+  }, [originalsLoaded, draft]);
 
   // ── Update helpers ───────────────────────────────────────────
 

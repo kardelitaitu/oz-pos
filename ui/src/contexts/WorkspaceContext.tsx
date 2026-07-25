@@ -99,6 +99,7 @@ export interface WorkspaceScope {
 }
 
 /** Exported for test helpers only — always use `useWorkspaceScope` in production code. */
+// eslint-disable-next-line react-refresh/only-export-components
 export const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
 
 /** Access the current workspace scope (storeId, instanceId, typeKey), or null. */
@@ -145,6 +146,7 @@ export interface WorkspaceContextValue {
 }
 
 /** Exported for test helpers only — always use `useWorkspace` in production code. */
+// eslint-disable-next-line react-refresh/only-export-components
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 /** Default store ID for Phase 1 (single-store mode).

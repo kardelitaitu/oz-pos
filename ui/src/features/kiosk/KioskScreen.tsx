@@ -45,7 +45,7 @@ export default function KioskScreen() {
     listCategories().then(setCategories);
     idleTimer.current = setTimeout(() => setIdle(true), IDLE_TIMEOUT_MS);
     return () => clearTimeout(idleTimer.current);
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => {
     const handler = () => resetIdle();

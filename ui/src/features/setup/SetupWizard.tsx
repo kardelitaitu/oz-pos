@@ -41,6 +41,7 @@ const STEPS = [
 ] as const;
 
 /** Total number of steps in the setup wizard. */
+// eslint-disable-next-line react-refresh/only-export-components
 export const TOTAL_STEPS = STEPS.length;
 
 /** Suffixes used to build the FTL id for each step (e.g. `setup-step-store-type`). */
