@@ -1,19 +1,19 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "367.1k lines",
+    "message":  "367.7k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  367059,
-                  "totalFiles":  1686,
+                  "totalLines":  367712,
+                  "totalFiles":  1689,
                   "languages":  {
                                     "sql":  {
                                                 "lines":  3067,
                                                 "files":  98
                                             },
                                     "rust":  {
-                                                 "lines":  169049,
-                                                 "files":  419
+                                                 "lines":  169702,
+                                                 "files":  422
                                              },
                                     "go":  {
                                                "lines":  6745,

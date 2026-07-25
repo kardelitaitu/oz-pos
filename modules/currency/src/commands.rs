@@ -155,8 +155,7 @@ mod tests {
 
     #[test]
     fn create_exchange_rate_args_deserialize_minimal() {
-        let json =
-            r#"{"from_currency":"USD","to_currency":"IDR","rate_millionths":16200000000}"#;
+        let json = r#"{"from_currency":"USD","to_currency":"IDR","rate_millionths":16200000000}"#;
         let args: CreateExchangeRateArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.from_currency, "USD");
         assert_eq!(args.rate_millionths, 16_200_000_000);

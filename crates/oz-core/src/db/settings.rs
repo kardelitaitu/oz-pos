@@ -182,9 +182,7 @@ impl Store<'_> {
     /// **Deprecated:** Use [`CurrencyRepository::list_exchange_rates`] directly.
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     #[deprecated(note = "use CurrencyRepository::list_exchange_rates directly")]
-    pub fn list_exchange_rates(
-        &self,
-    ) -> Result<Vec<modules_currency::ExchangeRateRow>, CoreError> {
+    pub fn list_exchange_rates(&self) -> Result<Vec<modules_currency::ExchangeRateRow>, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.list_exchange_rates()?)
     }

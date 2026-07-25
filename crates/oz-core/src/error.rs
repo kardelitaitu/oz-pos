@@ -140,9 +140,7 @@ impl From<modules_currency::CurrencyError> for CoreError {
     fn from(e: modules_currency::CurrencyError) -> Self {
         match e {
             modules_currency::CurrencyError::Db(err) => Self::Db(err),
-            modules_currency::CurrencyError::Platform(err) => {
-                Self::Platform(err)
-            }
+            modules_currency::CurrencyError::Platform(err) => Self::Platform(err),
             modules_currency::CurrencyError::Validation { field, message } => {
                 Self::Validation { field, message }
             }
@@ -362,10 +360,8 @@ mod tests {
 
     #[test]
     fn from_currency_error_validation_to_core_validation() {
-        let currency_err = modules_currency::CurrencyError::validation(
-            "rate_millionths",
-            "rate must be positive",
-        );
+        let currency_err =
+            modules_currency::CurrencyError::validation("rate_millionths", "rate must be positive");
         let core_err: CoreError = currency_err.into();
         assert!(matches!(
             core_err,
@@ -400,9 +396,8 @@ mod tests {
 
     #[test]
     fn from_currency_error_db_to_core_db() {
-        let currency_err = modules_currency::CurrencyError::Db(
-            rusqlite::Error::QueryReturnedNoRows,
-        );
+        let currency_err =
+            modules_currency::CurrencyError::Db(rusqlite::Error::QueryReturnedNoRows);
         let core_err: CoreError = currency_err.into();
         match core_err {
             CoreError::Db(ref e) => {

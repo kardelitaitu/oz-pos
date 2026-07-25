@@ -80,7 +80,10 @@ mod tests {
         let err = CurrencyError::Platform(platform_core::PlatformError::Internal(
             "settings read failed".into(),
         ));
-        assert_eq!(format!("{err}"), "platform error: internal error: settings read failed");
+        assert_eq!(
+            format!("{err}"),
+            "platform error: internal error: settings read failed"
+        );
     }
 
     #[test]

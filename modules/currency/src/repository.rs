@@ -19,9 +19,9 @@ impl<'a> CurrencyRepository<'a> {
 
     /// List all currencies from the ISO-4217 table, ordered by code.
     pub fn list_currencies(&self) -> Result<Vec<CurrencyDto>, CurrencyError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT code, name, minor_exponent, symbol FROM currencies ORDER BY code")?;
         let rows = stmt.query_map([], |row| {
             Ok(CurrencyDto {
                 code: row.get(0)?,
@@ -221,8 +221,6 @@ impl<'a> CurrencyRepository<'a> {
         Ok(())
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -3369,6 +3369,7 @@ version = "0.0.21"
 dependencies = [
  "foundation",
  "oz-core",
+ "platform-core",
  "platform-kernel",
  "rusqlite",
  "serde",
