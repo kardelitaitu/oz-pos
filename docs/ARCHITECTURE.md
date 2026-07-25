@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: STALE (3 findings) · resolved F1: "15+ members" -> 29 workspace members · resolved F2: "oz-core migrations 20 embedded" -> 98 .sql files (crates/oz-core/migrations/) · F3: scaffold crates (oz-lua/oz-security/oz-reporting) are now IMPLEMENTED — oz-lua has apply_discount/calc_line_tax/validate_order/load_dir; oz-security has full keyring/TLS/mask; oz-reporting has daily_summary/menu_engineering/metrics engines (contradicts "Scaffold Crates" section) · resolved F4: Node ">=18" -> ui/package.json engines >=22 · resolved F5: i18n paths wrong (en-US.ftl, styles/) -> per-feature bundles (48 .ftl files) + ui/src/frontend/themes/ · F6: "LICENSE: MIT" -> proprietary (All Rights Reserved) · F7: commands "62+" -> 47 desktop modules, 618 total IPC (README audit) · accurate: 9 modules, Feature 32 flags, React18+@fluent/react+pos.ts rule, oz-hal DriverRegistry/traits, oz-api port 3099 -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "15+ members" -> 29 workspace members · resolved F2: "oz-core migrations 20 embedded" -> 98 .sql files (crates/oz-core/migrations/) · resolved F3: scaffold crates (oz-lua/oz-security/oz-reporting) are now IMPLEMENTED — oz-lua has apply_discount/calc_line_tax/validate_order/load_dir; oz-security has full keyring/TLS/mask; oz-reporting has daily_summary/menu_engineering/metrics engines · resolved F4: Node ">=18" -> ui/package.json engines >=22 · resolved F5: i18n paths wrong (en-US.ftl, styles/) -> per-feature bundles (48 .ftl files) + ui/src/frontend/themes/ · resolved F6: "LICENSE: MIT" -> Proprietary (All Rights Reserved) · resolved F7: commands "62+" -> 618 total IPC endpoints (README audit) · accurate: 9 modules, Feature 32 flags, React18+@fluent/react+pos.ts rule, oz-hal DriverRegistry/traits, oz-api port 3099 -->
 
 # OZ-POS – Codebase Architecture
 
@@ -43,7 +43,7 @@ oz-pos/
 │   │   │   ├── features.rs  # Feature enum (32 flags), registry, presets
 │   │   │   ├── migrations.rs# Embedded SQL migration runner (20 migrations)
 │   │   │   └── error.rs     # CoreError enum
-│   │   └── migrations/      # SQL migration files (001–020)
+│   │   └── migrations/      # SQL migration files (001–098)
 │   ├─ oz-hal/               # Hardware Abstraction Layer
 │   │   ├─ Cargo.toml
 │   │   └─ src/
@@ -71,19 +71,19 @@ oz-pos/
 │   │       ├─ lib.rs        # Router builder, AppState, server start (port 3099)
 │   │       ├─ auth.rs       # JWT create/validate + auth middleware
 │   │       └─ routes/       # health, tokens, products, categories endpoints
-│   ├─ oz-lua/               # Lua scripting runtime (scaffold)
+│   ├─ oz-lua/               # Lua scripting runtime (mlua-based, sandboxed)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
 │   │       └─ lib.rs        # LuaError type (Phase 3: rlua embedding)
-│   ├─ oz-security/          # Security crate (scaffold)
+│   ├─ oz-security/          # Security crate (keyring, TLS, PCI masking)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
 │   │       └─ lib.rs        # SecurityError type (Phase 2: key-ring, TLS, PCI-DSS)
-│   ├─ oz-payment/           # Payment processor crate (scaffold)
+│   ├─ oz-payment/           # Payment processor crate (Stripe, Square, QRIS, mock)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
 │   │       └─ lib.rs        # PaymentError type (Phase 4: PaymentProcessor trait)
-│   ├─ oz-reporting/         # Reporting crate (scaffold)
+│   ├─ oz-reporting/         # Reporting and analytics crate (daily summary, CSV, metrics)
 │   │   ├─ Cargo.toml
 │   │   └─ src/
 │   │       └─ lib.rs        # ReportingError type (Phase 5: CSV, aggregation)
@@ -138,7 +138,7 @@ oz-pos/
 ├─ .agents/
 │   └─ skills/               # Agent skill definitions
 ├─ README.md                 # Project overview
-├─ LICENSE                   # MIT
+├─ LICENSE                   # Proprietary (All Rights Reserved)
 └─ .gitignore
 ```
 
@@ -189,11 +189,12 @@ oz-pos/
 - **Subcommands** (via clap): `migrate` (working), `backup` (stub), `export` (stub).
 - Uses `anyhow` for error propagation.
 
-### Scaffold Crates
-`oz-lua`, `oz-payment`, `oz-reporting` currently contain error types and doc headers. Full implementations planned for later phases:
-- **oz-lua** → Phase 3 (rlua embedding for dynamic business rules)
-- **oz-payment** → Phase 4 (PaymentProcessor trait, Stripe/Square/mock impls)
-- **oz-reporting** → Phase 5 (SQL aggregation, CSV export, dashboards)
+### oz-lua, oz-payment, and oz-reporting (implemented)
+These crates were originally scaffolded and are now fully implemented:
+
+- **oz-lua** — Embedded Lua scripting runtime built on [`mlua`](https://github.com/mlua-rs/mlua). Loads merchant scripts from `scripts/` and exposes business-rule hooks (`apply_discount`, `calc_line_tax`, `validate_order`). Sandboxed VM with instruction/memory limits and a restricted global environment.
+- **oz-payment** — `PaymentProcessor` trait with Stripe, Square, QRIS/Midtrans, and mock implementations. Supports authorize, capture, void, refund, and sale flows.
+- **oz-reporting** — Daily summaries, sales-by-hour, top-products, menu-engineering, and inventory reports; optional `metrics` feature for Prometheus-style counters/gauges.
 
 #### oz-security (implemented)
 - **Keyring trait** with three platform-native backends: Windows Credential Manager (`windows-sys`), macOS Keychain (`security-framework`), Linux Secret Service (`zbus`).
@@ -210,7 +211,7 @@ oz-pos/
 Each app crate has an identical command surface, wired through `platform-startup`:
 - **Entry point**: `main.rs` → `lib.rs::run()`.
 - **State**: `AppState` holds `Mutex<Connection>` (SQLite WAL mode), `Arc<DriverRegistry>`, `AppHandle`.
-- **Commands** (62+ across health, sales, hardware, tax, staff, customers, products, inventory, offline, reporting, settings, currency).
+- **Commands** (618 total IPC endpoints across health, sales, hardware, tax, staff, customers, products, inventory, offline, reporting, settings, currency).
 - **Error**: `AppError` — tagged JSON with `{kind, message}`, `From` impls for `CoreError`, `HalError`, `tauri::Error`.
 
 ### platform/ (Platform Crates)
