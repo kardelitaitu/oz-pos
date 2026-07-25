@@ -4,6 +4,54 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.20] — 2026-07-25
+
+### Added
+
+#### 🏗️ R5 — Database Extraction & Platform Split
+- **ADR #32**: Added `docs/decisions/2026-07-25-db-extraction-and-platform-split.md` documenting the split of database responsibilities out of the monolithic kernel into a dedicated `platform/core` layer plus a lightweight `platform/kernel` event-bus module.
+- **Kernel refactor**: Split `platform/kernel/src/kernel.rs` into focused sub-modules (settings, event bus, manifest) to reduce surface area and clarify boundaries.
+- **Shared test helpers**: Extracted duplicated `fresh()` helper in `platform/core/src/settings` into a shared `test_helpers.rs` module used by both `settings.rs` and `kernel.rs` tests.
+- **Settings test coverage**: Backfilled tests for the new typed-store configuration helpers and edge cases in `platform/core/src/settings.rs`.
+- **Split-sanity tests**: Added sanity tests for the `platform/core` settings module and `platform/kernel` kernel module after the file splits.
+
+#### 🔧 Build, Packaging & Dependency Hygiene
+- **npm install-script approval policy**: Pinned `allowScripts` approvals in `ui/package.json` for `esbuild` and `msw`, eliminating repeated interactive prompts during `npm ci`.
+- **npm engine requirement**: Added `engines.npm: ">=11"` in `ui/package.json` so contributors get a clear error on older npm versions.
+- **CI hardening**: Updated CI and local scripts to run `npm ci --no-audit --no-fund --ignore-scripts`, matching the new install-script approval policy.
+- **Policy propagation**: Documented the install-script approval workflow in `ui/README.md`, `AGENTS.md`, `.agents/skills/project-scaffold/SKILL.md`, and updated `scripts/build-exe-release.ps1`, `scripts/coverage.sh`/`coverage.ps1`, and launch-test docs to use the hardened `npm ci` invocation.
+- **Root lockfile cleanup**: Deleted an accidental empty `package-lock.json` at the workspace root and added `/package-lock.json` to `.gitignore` so future root-level npm runs don't recreate it.
+
+#### 🧪 Test Reliability & Tooling
+- **Keyring/credential tests**: Added RAII cleanup guards and unique naming patterns for Windows, macOS, and Linux tests that touch OS keyring/credential state, ensuring credentials are deleted even if an assertion panics.
+- **Retry/poll loops**: Added retry/poll loops to macOS and Linux overwrite tests in `oz-security` to deflake slow keyring writes.
+- **Test helpers extraction**: Moved Windows `CredentialGuard` into `test_helpers` and reused it for macOS/Linux cleanup.
+- **Receipt DTO serde casing**: Aligned receipt DTO serde casing with frontend camelCase expectations.
+
+### Fixed
+
+#### 🖥️ UI Quality Gates
+- **37 ESLint warnings**: Resolved `react-hooks/exhaustive-deps`, `react-refresh/only-export-components`, and `consistent-type-imports` warnings across the UI codebase.
+- **Pre-existing UI failures**: Fixed `TS6133` in `SessionLockScreen.test.tsx`, resolved 9 ESLint errors, and repaired 3 failing unit tests.
+- **ESLint formatter issue**: Reinstalled `ui/node_modules` and resolved a missing ESLint formatter module that caused `npm run lint` to fail locally.
+
+#### 🔒 Security & Dependencies
+- **npm vulnerabilities**: Addressed 7 high-severity npm security vulnerabilities (primarily `brace-expansion`).
+- **allow-scripts warnings**: Pinned install-script approvals for `esbuild` and `msw` so `npm ci` no longer warns about uncovered postinstall scripts.
+
+#### Rust Tooling
+- **Clippy clean**: Fixed `clippy::clone_on_copy` for `ModuleStatus` and resolved other workspace clippy warnings under `cargo clippy --workspace --all-targets -- -D warnings`.
+
+### Changed
+
+#### 📚 Documentation Refresh
+- **Top-level docs**: Updated `README.md`, `docs/ARCHITECTURE.md`, `docs/QUICKSTART.md`, and `docs/dev-experience-2026-07-20.md` with current counts (5,221+ Rust tests, 214 UI test files / 3,230+ tests, 48 .ftl files, 98 migrations), Node.js ≥22 / npm ≥11 prerequisites, Vite 6, and corrected locale/theme paths.
+- **Architecture doc**: Resolved remaining stale findings (F3 scaffold crates now implemented, F6 LICENSE note, F7 618 IPC endpoints) so the audit stamp reaches zero findings.
+- **Roadmap & whitepaper**: Updated `docs/ROADMAP.md` with per-feature Fluent bundles (24 bundles × 2 locales = 48 files), removed Thai locale references, updated test counts, corrected ESLint config path, and refreshed the HAL description in `docs/WHITEPAPER.md` to the async-trait + `DriverRegistry` model.
+- **Agent config**: Aligned `.agents/AGENTS.md` version lock with root `AGENTS.md` (`0.0.9` → `0.0.18`).
+
+---
+
 ## [0.0.19] — 2026-07-25
 
 ### Added
