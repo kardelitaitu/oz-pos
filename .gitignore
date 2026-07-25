@@ -46,6 +46,7 @@ ui/src/nul
 # Coverage
 /coverage/
 /ui/coverage/
+/apps/license-server/coverage.html
 
 # Test artifacts
 *.profraw
