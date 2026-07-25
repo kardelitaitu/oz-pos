@@ -33,10 +33,12 @@ next: Migrate currency/exchange-rate callers from oz-core Store to CurrencyRepos
 //!
 //! See `modules/currency/manifest.json` for the module metadata.
 
+pub mod commands;
 pub mod error;
 pub mod models;
 pub mod repository;
 
+pub use commands::{CreateExchangeRateArgs, ExchangeRateDto};
 pub use error::CurrencyError;
 pub use models::ExchangeRateRow;
 pub use repository::CurrencyRepository;
