@@ -945,7 +945,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { isDirtyRef.current ? setConfirmPreset('retail') : loadPreset('retail'); }}
+            onClick={() => { if (isDirtyRef.current) setConfirmPreset('retail'); else loadPreset('retail'); }}
             icon={<CartIcon size={16} />}
           >
             <Localized id="topology-preset-retail">Retail Preset</Localized>
@@ -953,7 +953,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { isDirtyRef.current ? setConfirmPreset('restaurant') : loadPreset('restaurant'); }}
+            onClick={() => { if (isDirtyRef.current) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}
             icon={<UtensilsIcon size={16} />}
           >
             <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>

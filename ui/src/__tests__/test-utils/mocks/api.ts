@@ -19,6 +19,8 @@ export interface SalesApiOverrides {
   holdCart?: ReturnType<typeof vi.fn>;
   printSalesReceipt?: ReturnType<typeof vi.fn>;
   getSale?: ReturnType<typeof vi.fn>;
+  finalizeSale?: ReturnType<typeof vi.fn>;
+  voidPendingSale?: ReturnType<typeof vi.fn>;
   holdCartScoped?: ReturnType<typeof vi.fn>;
   listHeldCartsScoped?: ReturnType<typeof vi.fn>;
   getHeldCartScoped?: ReturnType<typeof vi.fn>;
@@ -29,6 +31,8 @@ export interface SalesApiOverrides {
   completeSaleScoped?: ReturnType<typeof vi.fn>;
   listSalesScoped?: ReturnType<typeof vi.fn>;
   getSaleScoped?: ReturnType<typeof vi.fn>;
+  finalizeSaleScoped?: ReturnType<typeof vi.fn>;
+  voidPendingSaleScoped?: ReturnType<typeof vi.fn>;
   voidSaleScoped?: ReturnType<typeof vi.fn>;
   processRefundScoped?: ReturnType<typeof vi.fn>;
   listRefundsScoped?: ReturnType<typeof vi.fn>;
@@ -50,6 +54,8 @@ export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
     completeSale: vi.fn(() => Promise.resolve({ saleId: 'sale-1', total: { minor_units: 3500, currency: 'IDR' }, lineCount: 1 })),
     listSales: vi.fn(() => Promise.resolve([])),
     getSale: vi.fn(() => Promise.resolve(null)),
+    finalizeSale: vi.fn(() => Promise.resolve()),
+    voidPendingSale: vi.fn(() => Promise.resolve()),
     voidSale: vi.fn(),
     processRefund: vi.fn(() => Promise.resolve({ refundId: 'refund-1', totalMinor: 0 })),
     listRefunds: vi.fn(() => Promise.resolve([])),
@@ -69,6 +75,8 @@ export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
     completeSaleScoped: vi.fn((_token: string) => Promise.resolve({ saleId: 'sale-1', total: { minor_units: 3500, currency: 'IDR' }, lineCount: 1 })),
     listSalesScoped: vi.fn((_token: string) => Promise.resolve([])),
     getSaleScoped: vi.fn((_token: string, _id: string) => Promise.resolve(null)),
+    finalizeSaleScoped: vi.fn((_token: string, _saleId: string) => Promise.resolve()),
+    voidPendingSaleScoped: vi.fn((_token: string, _saleId: string) => Promise.resolve()),
     voidSaleScoped: vi.fn((_token: string, _saleId: string, _reason: string) => Promise.resolve()),
     processRefundScoped: vi.fn((_token: string) => Promise.resolve({ refundId: 'refund-1', totalMinor: 0 })),
     listRefundsScoped: vi.fn((_token: string, _saleId: string) => Promise.resolve([])),

@@ -278,7 +278,7 @@ export default function CategoryManagementScreen() {
     try {
       await deleteCategory(deleteTarget.id);
       await load();
-    } catch (err) {
+    } catch {
       addToast({ message: l10n.getString('category-delete-failed'), type: 'error' });
     } finally {
       setDeleting(null);

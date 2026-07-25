@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import SessionLockScreen from '../SessionLockScreen';
 
@@ -120,7 +120,7 @@ describe('SessionLockScreen', () => {
 
     it('does not allow more than 4 digits', () => {
       sessionStorage.setItem('current-username', 'alice');
-      let neverResolve: (v: unknown) => void = () => {};
+      const neverResolve: (v: unknown) => void = () => {};
       mockStaffLogin.mockReturnValue(new Promise(neverResolve));
       render(<SessionLockScreen onUnlock={mockOnUnlock} />);
       enterPinViaButtons('12345');

@@ -860,12 +860,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
         case 'F3': if (lines.length > 0) setShowDiscount(true); break;
-        case 'F4': heldCartId ? handleResume() : handleHold(); break;
+        case 'F4': if (heldCartId) handleResume(); else handleHold(); break;
         case 'F5': skuInputRef.current?.focus(); break;
         case 'F6': setShowSalesHistory(true); break;
         case 'F7': setShowCustomerSearch(true); break;
         case 'F8': setShowStockInquiry(true); break;
-        case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
+        case 'F9': if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
         case 'F10': handleOpenSettings(); break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': onNavigate?.('kds'); break;

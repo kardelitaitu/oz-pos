@@ -296,7 +296,8 @@ describe('RetailPosScreen — checkout & navigation', () => {
     // ReceiptPreview shows after sale completes — verify it rendered
     await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument(), { timeout: 5000 });
     await userEvent.click(screen.getByText('Print Receipt'));
-    expect(salesApi.completeSale).toHaveBeenCalledWith(
+    expect(salesApi.completeSaleScoped).toHaveBeenCalledWith(
+      expect.any(String),
       expect.objectContaining({ paymentMethod: 'CASH', tenderedMinor: 3500 }),
     );
     expect(salesApi.printSalesReceipt).toHaveBeenCalled();

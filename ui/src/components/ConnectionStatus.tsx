@@ -56,7 +56,7 @@ export default function ConnectionStatus({
           setLatency(null);
           return false;
         }
-      } catch (err) {
+      } catch {
         if (mounted) {
           setStatus('offline');
           setLatency(null);
