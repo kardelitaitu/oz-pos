@@ -265,4 +265,39 @@ mod tests {
             _ => panic!("expected Core variant"),
         }
     }
+
+    // ── From<modules_currency::CurrencyError> (R2 Phase 1) ──────
+
+    #[test]
+    fn from_currency_error_to_app_error() {
+        let currency_err = modules_currency::CurrencyError::validation(
+            "rate_millionths",
+            "rate must be positive",
+        );
+        let app_err: AppError = currency_err.into();
+        match app_err {
+            AppError::Core { sub_kind, message } => {
+                assert_eq!(format!("{sub_kind:?}"), "Validation");
+                assert!(message.contains("rate_millionths"));
+                assert!(message.contains("rate must be positive"));
+            }
+            other => panic!("expected Core variant, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_currency_error_not_found_to_app_error() {
+        let currency_err = modules_currency::CurrencyError::NotFound {
+            entity: "exchange_rate",
+            id: "missing-id".into(),
+        };
+        let app_err: AppError = currency_err.into();
+        match app_err {
+            AppError::Core { sub_kind, message } => {
+                assert_eq!(format!("{sub_kind:?}"), "NotFound");
+                assert!(message.contains("missing-id"));
+            }
+            other => panic!("expected Core variant, got {other:?}"),
+        }
+    }
 }
