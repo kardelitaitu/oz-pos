@@ -13,6 +13,8 @@ const DevToolbar = import.meta.env.DEV
 /**
  * Root app component. Wraps the app shell with consolidated AppProviders.
  * DevToolbar renders only in development mode.
+ *
+ * Pre-commit hook test marker (will be reverted).
  */
 export default function App() {
   return (
