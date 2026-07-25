@@ -45,8 +45,13 @@ mod tests {
     #[test]
     fn currency_error_validation_message() {
         let err = CurrencyError::validation("rate_millionths", "rate must be positive");
-        assert!(matches!(err, CurrencyError::Validation { field, .. } if field == "rate_millionths"));
-        assert_eq!(format!("{err}"), "validation error on rate_millionths: rate must be positive");
+        assert!(
+            matches!(err, CurrencyError::Validation { field, .. } if field == "rate_millionths")
+        );
+        assert_eq!(
+            format!("{err}"),
+            "validation error on rate_millionths: rate must be positive"
+        );
     }
 
     #[test]
