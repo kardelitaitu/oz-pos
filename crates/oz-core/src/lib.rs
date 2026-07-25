@@ -47,7 +47,7 @@ pub mod db;
 pub mod error;
 /// Domain event types for cross-crate communication.
 pub mod events;
-/// Currency exchange-rate store and conversion.
+/// Currency exchange-rate types (re-exported from `modules-currency`).
 pub mod exchange_rate;
 /// Unified analytics export — JSON bundle of all report types.
 pub mod export;

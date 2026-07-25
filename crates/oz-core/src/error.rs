@@ -136,6 +136,20 @@ pub enum CoreError {
     },
 }
 
+impl From<modules_currency::CurrencyError> for CoreError {
+    fn from(e: modules_currency::CurrencyError) -> Self {
+        match e {
+            modules_currency::CurrencyError::Db(err) => Self::Db(err),
+            modules_currency::CurrencyError::Validation { field, message } => {
+                Self::Validation { field, message }
+            }
+            modules_currency::CurrencyError::NotFound { entity, id } => {
+                Self::NotFound { entity, id }
+            }
+        }
+    }
+}
+
 impl CoreError {
     /// Map a `CoreError` to its [`CoreErrorKind`] discriminator.
     pub fn kind(&self) -> CoreErrorKind {

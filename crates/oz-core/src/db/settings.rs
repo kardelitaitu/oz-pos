@@ -1,5 +1,7 @@
 //! Settings delegation — store settings, currencies, exchange rates.
 
+use modules_currency::repository::CurrencyRepository;
+
 use crate::Settings;
 use crate::error::CoreError;
 
@@ -132,29 +134,13 @@ impl Store<'_> {
     }
 
     /// List all exchange rates.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn list_exchange_rates(
         &self,
     ) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at
-             FROM exchange_rates ORDER BY from_currency, to_currency",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?,
-                from_currency: row.get(1)?,
-                to_currency: row.get(2)?,
-                rate_millionths: row.get(3)?,
-                source: row.get(4)?,
-                effective_date: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r?);
-        }
-        Ok(out)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.list_exchange_rates()?)
     }
 
     /// Create a new exchange rate entry.
@@ -163,6 +149,8 @@ impl Store<'_> {
     /// scale (e.g. `0.92` → `920_000`). Strictly positive — zero and
     /// negative rates are rejected at this layer (defence in depth; the
     /// Tauri command layer also rejects them).
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn create_exchange_rate(
         &self,
         from_currency: &str,
@@ -171,34 +159,14 @@ impl Store<'_> {
         source: &str,
         effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
-        if rate_millionths <= 0 {
-            return Err(CoreError::Validation {
-                field: "rate_millionths",
-                message:
-                    "rate must be strictly positive; zero and negative exchange rates are not valid"
-                        .into(),
-            });
-        }
-        let id = uuid::Uuid::now_v7().to_string();
-        self.conn.execute(
-            "INSERT INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
-        )?;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
-        )?;
-        let row = stmt.query_row(rusqlite::params![id], |row| {
-            Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?,
-                from_currency: row.get(1)?,
-                to_currency: row.get(2)?,
-                rate_millionths: row.get(3)?,
-                source: row.get(4)?,
-                effective_date: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })?;
-        Ok(row)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.create_exchange_rate(
+            from_currency,
+            to_currency,
+            rate_millionths,
+            source,
+            effective_date,
+        )?)
     }
 
     /// Insert or replace an exchange rate.
@@ -208,6 +176,8 @@ impl Store<'_> {
     /// with a new row and a fresh id. `rate_millionths` is at the 6-decimal
     /// scale (see [`crate::exchange_rate::ExchangeRateRow`]). Zero and
     /// negative rates are rejected (matching [`Self::create_exchange_rate`]).
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn upsert_exchange_rate(
         &self,
         from_currency: &str,
@@ -216,49 +186,22 @@ impl Store<'_> {
         source: &str,
         effective_date: &str,
     ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
-        if rate_millionths <= 0 {
-            return Err(CoreError::Validation {
-                field: "rate_millionths",
-                message:
-                    "rate must be strictly positive; zero and negative exchange rates are not valid"
-                        .into(),
-            });
-        }
-        let id = uuid::Uuid::now_v7().to_string();
-        self.conn.execute(
-            "INSERT OR REPLACE INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            rusqlite::params![id, from_currency, to_currency, rate_millionths, source, effective_date],
-        )?;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, from_currency, to_currency, rate_millionths, source, effective_date, created_at FROM exchange_rates WHERE id = ?1"
-        )?;
-        let row = stmt.query_row(rusqlite::params![id], |row| {
-            Ok(crate::exchange_rate::ExchangeRateRow {
-                id: row.get(0)?,
-                from_currency: row.get(1)?,
-                to_currency: row.get(2)?,
-                rate_millionths: row.get(3)?,
-                source: row.get(4)?,
-                effective_date: row.get(5)?,
-                created_at: row.get(6)?,
-            })
-        })?;
-        Ok(row)
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.upsert_exchange_rate(
+            from_currency,
+            to_currency,
+            rate_millionths,
+            source,
+            effective_date,
+        )?)
     }
 
     /// Delete an exchange rate by ID.
+    ///
+    /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn delete_exchange_rate(&self, id: &str) -> Result<(), CoreError> {
-        let affected = self.conn.execute(
-            "DELETE FROM exchange_rates WHERE id = ?1",
-            rusqlite::params![id],
-        )?;
-        if affected == 0 {
-            return Err(CoreError::NotFound {
-                entity: "exchange_rate",
-                id: id.to_string(),
-            });
-        }
-        Ok(())
+        let repo = CurrencyRepository::new(self.conn);
+        Ok(repo.delete_exchange_rate(id)?)
     }
 }
 
