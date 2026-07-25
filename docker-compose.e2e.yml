@@ -18,6 +18,7 @@ services:
 
   # ── Cloud Server ──────────────────────────────────────────────────
   e2e-cloud-server:
+    image: e2e-cloud-server:latest
     build:
       context: .
       dockerfile: Dockerfile.server

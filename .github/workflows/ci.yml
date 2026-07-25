@@ -460,14 +460,19 @@ jobs:
         run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
-      # P28-1: Docker layer caching — pull pre-built GHCR image then
-      # build with BuildKit inline cache to reuse layers from the pulled image
-      - name: Docker layer cache (GHCR)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
-          docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
-          export DOCKER_BUILDKIT=1
-          docker compose -f docker-compose.e2e.yml build --build-arg BUILDKIT_INLINE_CACHE=1 2>&1 | tail -3
+      # P28-1: Docker layer caching via BuildKit GHA cache
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build E2E cloud-server image with GHA cache
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.server
+          load: true
+          tags: e2e-cloud-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       # P28-2: Parallel server startup — Docker + Vite concurrently
       - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
