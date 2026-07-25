@@ -113,7 +113,7 @@ export default function EmailReportSettings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addToast({ message: l10n.getString('settings-email-saved'), type: 'success' });
-    } catch (err) {
+    } catch {
       addToast({ message: l10n.getString('settings-email-save-error'), type: 'error' });
     } finally {
       setSaving(false);

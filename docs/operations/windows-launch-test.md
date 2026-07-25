@@ -15,8 +15,8 @@ running the core POS flow end-to-end on a physical Windows machine.
 |-------------|---------|-------|
 | Windows 10 or 11 | 22H2+ (10.0.19045+) | `winver` |
 | Rust toolchain | stable (1.85+) | `rustc --version` |
-| Node.js | 20+ LTS | `node --version` |
-| npm | 10+ | `npm --version` |
+| Node.js | >=22 LTS | `node --version` |
+| npm | >=11 | `npm --version` |
 | Visual Studio Build Tools | 2022+ | `cl.exe` on PATH (from "Developer Command Prompt") |
 | WebView2 Runtime | Included with Windows 11 / Edge | `winget list Microsoft.EdgeWebView2Runtime` or check `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00FB3A96A4B7}` in Registry Editor |
 
@@ -98,7 +98,7 @@ apps\desktop-client\target\release\bundle\nsis\OZ-POS_0.0.X_x64-setup.exe   # In
 ```powershell
 # Step 1: Build frontend
 cd ui
-npm install
+npm ci --no-audit --no-fund --ignore-scripts
 npm run build
 cd ..
 

@@ -113,7 +113,7 @@ jobs:
           path: ui/node_modules/.cache/vitest
           key: vitest-cache-nighty-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: vitest-cache-nighty-${{ runner.os }}-
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
       - name: Gate on act() / flushSync warnings
@@ -162,20 +162,35 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
-      - name: Docker layer cache (GHCR)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
-          docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
-          export DOCKER_BUILDKIT=1
-          docker compose -f docker-compose.e2e.yml build --build-arg BUILDKIT_INLINE_CACHE=1 2>&1 | tail -3
+      # P28-1: Docker layer caching via BuildKit GHA cache
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build E2E cloud-server image with GHA cache
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.server
+          load: true
+          tags: e2e-cloud-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
           OZ_API_SECRET: ci-test-secret
         run: |
-          docker compose -f docker-compose.e2e.yml up -d
+          # Pre-pull Redis to mitigate transient Docker Hub/rate-limit timeouts
+          for i in 1 2 3; do
+            echo "Pulling public.ecr.aws/docker/library/redis:7-alpine (attempt $i/3)..."
+            docker pull public.ecr.aws/docker/library/redis:7-alpine && break
+            echo "Redis pull failed (attempt $i/3), retrying..."
+            sleep 15
+          done
+          # Start Docker Compose (use pre-pulled image, don't re-pull)
+          docker compose -f docker-compose.e2e.yml up -d --pull=missing
           cd ui && npm run dev &
           VITE_PID=$!
           echo "VITE_PID=$VITE_PID" >> $GITHUB_ENV
@@ -244,7 +259,7 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build desktop (Linux)
         run: cd apps/desktop-client && cargo tauri build --bundles appimage
       - name: Upload desktop (Linux)
@@ -271,7 +286,7 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build desktop (Windows)
         run: cd apps/desktop-client && cargo tauri build --bundles msi
       - name: Upload desktop (Windows)
@@ -301,7 +316,7 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build desktop (macOS)
         run: cd apps/desktop-client && cargo tauri build --bundles dmg
       - name: Upload desktop (macOS)
@@ -345,7 +360,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build UI (tablet)
         run: cd ui && npx vite build --config vite.tablet.config.ts
       - name: Install cargo-ndk

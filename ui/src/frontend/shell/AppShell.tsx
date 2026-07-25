@@ -159,7 +159,7 @@ export default function AppShell() {
       }
     })();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []); // run once on mount — addToastRef keeps the callback current
 
   // Navigate to workspace-appropriate route on selection.
@@ -315,7 +315,7 @@ export default function AppShell() {
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
             <div className="kds-workspace-header">
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+              { }
               <button
                 className="kds-workspace-back"
                 onClick={() => handleNavigate('sales')}
@@ -345,7 +345,7 @@ export default function AppShell() {
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
             <div className="kds-workspace-header">
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+              { }
               <button
                 className="kds-workspace-back"
                 onClick={() => handleNavigate('products')}

@@ -11,7 +11,7 @@
 #   rust: cargo install cargo-llvm-cov
 #         # Install LLVM tools so llvm-cov + llvm-profdata are on PATH.
 #         # Easiest on Windows: choco install llvm
-#   ui:   npm install (handled by the test:coverage npm script)
+#   ui:   npm ci --no-audit --no-fund --ignore-scripts (handled by the test:coverage npm script)
 
 [CmdletBinding()]
 param(
@@ -70,11 +70,11 @@ try {
     if ($Target -in "all", "ui") {
         Write-Step "UI coverage via vitest -> coverage/ui/"
         if (-not (Test-Path "ui/node_modules")) {
-            Write-Err "ui/node_modules missing. Run: cd ui; npm install"
+            Write-Err "ui/node_modules missing. Run: cd ui; npm ci --no-audit --no-fund --ignore-scripts"
             $errors += "ui: ui/node_modules missing"
         }
         elseif (-not (Test-Path "ui/node_modules/.bin/vitest")) {
-            Write-Err "ui/node_modules/.bin/vitest missing. Run: cd ui; npm install"
+            Write-Err "ui/node_modules/.bin/vitest missing. Run: cd ui; npm ci --no-audit --no-fund --ignore-scripts"
             $errors += "ui: vitest not installed"
         }
         else {

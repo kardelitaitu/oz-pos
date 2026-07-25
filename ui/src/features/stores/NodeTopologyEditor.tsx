@@ -884,7 +884,7 @@ export default function NodeTopologyEditor({
       : null;
   }, [settings]);
 
-  /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
+  /* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions -- interactive drag/pan canvas requires these */
   return (
     <div className="node-topology-editor">
       {/* ── Confirm delete dialog ── */}
@@ -945,7 +945,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { isDirtyRef.current ? setConfirmPreset('retail') : loadPreset('retail'); }}
+            onClick={() => { if (isDirtyRef.current) setConfirmPreset('retail'); else loadPreset('retail'); }}
             icon={<CartIcon size={16} />}
           >
             <Localized id="topology-preset-retail">Retail Preset</Localized>
@@ -953,7 +953,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { isDirtyRef.current ? setConfirmPreset('restaurant') : loadPreset('restaurant'); }}
+            onClick={() => { if (isDirtyRef.current) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}
             icon={<UtensilsIcon size={16} />}
           >
             <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
@@ -1352,4 +1352,4 @@ export default function NodeTopologyEditor({
     </div>
   );
 }
-/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */
+/* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */

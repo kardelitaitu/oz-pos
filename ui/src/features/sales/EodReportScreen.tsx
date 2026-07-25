@@ -404,7 +404,7 @@ export default function EodReportScreen() {
     } finally {
       setLoading(false);
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

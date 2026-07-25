@@ -20,7 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 // ── Fallback workspaces for development (ADR #4 shape) ──────────────
 
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 const FALLBACK_WORKSPACES: WorkspaceDto[] = [
   {
     instance_id: "default-restaurant-pos",
@@ -99,6 +99,7 @@ export interface WorkspaceScope {
 }
 
 /** Exported for test helpers only — always use `useWorkspaceScope` in production code. */
+// eslint-disable-next-line react-refresh/only-export-components
 export const WorkspaceScopeContext = createContext<WorkspaceScope | null>(null);
 
 /** Access the current workspace scope (storeId, instanceId, typeKey), or null. */
@@ -109,9 +110,9 @@ export function useWorkspaceScope(): WorkspaceScope | null {
 
 // ── Main workspace context ──────────────────────────────────────────
 
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 /** Full workspace context value exposed to consumers. */
-// eslint-disable-next-line react-refresh/only-export-components
+ 
 export interface WorkspaceContextValue {
   /** Workspace type key (backward compat). Same as activeInstance?.type_key. */
   activeWorkspace: string | null;
@@ -145,6 +146,7 @@ export interface WorkspaceContextValue {
 }
 
 /** Exported for test helpers only — always use `useWorkspace` in production code. */
+// eslint-disable-next-line react-refresh/only-export-components
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 /** Default store ID for Phase 1 (single-store mode).

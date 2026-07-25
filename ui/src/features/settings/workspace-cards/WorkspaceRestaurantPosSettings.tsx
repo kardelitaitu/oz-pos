@@ -40,7 +40,7 @@ export function WorkspaceRestaurantPosSettings({
   const dirty = useMemo(() => hasChanges(
     { tableManagement, courseFiring } as Record<string, unknown>,
     originalsRef.current,
-  ), [tableManagement, courseFiring, originalsLoaded]);
+  ), [tableManagement, courseFiring, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise ───────────────────────────────────────────────
 

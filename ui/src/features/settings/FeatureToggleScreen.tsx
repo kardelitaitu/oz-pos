@@ -188,7 +188,7 @@ export default function FeatureToggleScreen() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => { load(); }, [load]);

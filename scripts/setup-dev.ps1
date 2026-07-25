@@ -6,7 +6,8 @@
     Automates the common onboarding steps:
     1. Verify prerequisites (Rust, Node.js, Git)
     2. Enable Git hooks (pre-commit fmt + lint)
-    3. Install npm dependencies
+    3. Install npm dependencies (respects the pinned install-script approvals in ui/package.json;
+       see ui/README.md#install-script-approvals)
     4. Run database migration
     5. Seed demo data (if available)
     6. Quick verify with cargo check

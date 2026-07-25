@@ -93,7 +93,7 @@ export function useTicketSla(createdAt: string): TicketSlaResult {
     const tick = () => setResult(compute());
     const interval = setInterval(tick, TICK_MS);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [createdAt]);
 
   return result;

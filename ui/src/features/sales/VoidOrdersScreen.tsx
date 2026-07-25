@@ -384,7 +384,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                     <tr key={sale.id} className={sale.status === 'Active' ? 'void-orders-row--active' : ''}>
                       <td className="void-orders-cell-id">{sale.id.slice(0, 8)}&hellip;</td>
                       <td>{formatDate(sale.createdAt)}</td>
-                      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- label has htmlFor above */}
+                      { }
                       <td>
                         <Badge variant={statusBadgeVariant(sale.status)}>
                           <Localized id={statusLabelFluentId(sale.status)}>
@@ -663,7 +663,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                 </select>
 
                 {voidReason === 'other' && (
-                  /* eslint-disable-next-line jsx-a11y/control-has-associated-label -- aria-label set via Localized attrs above */
+                   
                   <Localized id="void-orders-reason-aria" attrs={{ 'aria-label': true }}>
                   <Localized id="void-orders-reason-placeholder" attrs={{ placeholder: true }}>
                     <input

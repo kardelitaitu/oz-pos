@@ -9,6 +9,7 @@ param(
     [switch]$SkipTauriBuild = $false,
     [switch]$SkipSign = $false,
     [switch]$NoInstaller = $false,
+    [switch]$SkipNpmInstall = $false,
 
     [string]$TauriTarget = 'x86_64-pc-windows-msvc'
 )
@@ -45,6 +46,14 @@ if (-not $SkipFrontendBuild) {
     Write-Host "`n[1/4] Building Frontend (React/TypeScript)..." -ForegroundColor Yellow
     Push-Location (Join-Path $WorkspaceRoot "ui")
     try {
+        if (-not $SkipNpmInstall) {
+            Write-Host "  Running: npm ci --no-audit --no-fund --ignore-scripts" -ForegroundColor Cyan
+            npm ci --no-audit --no-fund --ignore-scripts
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "npm ci failed"
+                exit 1
+            }
+        }
         Write-Host "  Running: npm run build" -ForegroundColor Cyan
         npm run build
         if ($LASTEXITCODE -ne 0) {

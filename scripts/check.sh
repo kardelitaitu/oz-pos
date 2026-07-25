@@ -74,7 +74,7 @@ fi
 # ── UI (mirrors CI `ui` job — auto-detected) ──────────────────────────────
 if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     cd ui
-    step "npm ci" "cd ui; npm ci --no-audit --no-fund" npm ci --no-audit --no-fund
+    step "npm ci" "cd ui; npm ci --no-audit --no-fund --ignore-scripts" npm ci --no-audit --no-fund --ignore-scripts
     step "ui lint" "cd ui; npm run lint" npm run lint
     step "ui typecheck" "cd ui; npm run typecheck" npm run typecheck
     step "ui test" "cd ui; npm run test" npm run test

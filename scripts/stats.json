@@ -1,35 +1,35 @@
 ﻿{
     "schemaVersion":  1,
     "label":  "code size",
-    "message":  "352.1k lines",
+    "message":  "367.1k lines",
     "color":  "blue",
     "stats":  {
-                  "totalLines":  352123,
-                  "totalFiles":  1577,
+                  "totalLines":  367059,
+                  "totalFiles":  1686,
                   "languages":  {
                                     "sql":  {
-                                                "lines":  3041,
-                                                "files":  97
+                                                "lines":  3067,
+                                                "files":  98
                                             },
                                     "rust":  {
-                                                 "lines":  162431,
-                                                 "files":  378
+                                                 "lines":  169049,
+                                                 "files":  419
                                              },
                                     "go":  {
                                                "lines":  6745,
                                                "files":  11
                                            },
                                     "css":  {
-                                                "lines":  36342,
-                                                "files":  117
+                                                "lines":  36366,
+                                                "files":  118
                                             },
                                     "html":  {
                                                  "lines":  29491,
                                                  "files":  492
                                              },
                                     "typescript":  {
-                                                       "lines":  114073,
-                                                       "files":  482
+                                                       "lines":  122341,
+                                                       "files":  548
                                                    }
                                 }
               }

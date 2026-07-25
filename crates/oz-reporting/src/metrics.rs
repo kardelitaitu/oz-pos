@@ -28,8 +28,10 @@ pub fn sales_completed() -> &'static IntCounter {
         )
         .namespace("oz_pos")
         .subsystem("sales");
-        let counter = IntCounter::with_opts(opts).unwrap();
-        registry().register(Box::new(counter.clone())).unwrap();
+        let counter = IntCounter::with_opts(opts).expect("invalid sales_completed counter opts");
+        registry()
+            .register(Box::new(counter.clone()))
+            .expect("register sales_completed counter");
         counter
     })
 }
@@ -41,8 +43,10 @@ pub fn inventory_level() -> &'static IntGauge {
         let opts = Opts::new("oz_pos_inventory_level", "Current inventory level")
             .namespace("oz_pos")
             .subsystem("inventory");
-        let gauge = IntGauge::with_opts(opts).unwrap();
-        registry().register(Box::new(gauge.clone())).unwrap();
+        let gauge = IntGauge::with_opts(opts).expect("invalid inventory_level gauge opts");
+        registry()
+            .register(Box::new(gauge.clone()))
+            .expect("register inventory_level gauge");
         gauge
     })
 }
@@ -57,8 +61,10 @@ pub fn cash_session_amount() -> &'static IntGauge {
         )
         .namespace("oz_pos")
         .subsystem("cash");
-        let gauge = IntGauge::with_opts(opts).unwrap();
-        registry().register(Box::new(gauge.clone())).unwrap();
+        let gauge = IntGauge::with_opts(opts).expect("invalid cash_session_amount gauge opts");
+        registry()
+            .register(Box::new(gauge.clone()))
+            .expect("register cash_session_amount gauge");
         gauge
     })
 }
@@ -73,8 +79,10 @@ pub fn sync_queue_depth() -> &'static IntGauge {
         )
         .namespace("oz_pos")
         .subsystem("sync");
-        let gauge = IntGauge::with_opts(opts).unwrap();
-        registry().register(Box::new(gauge.clone())).unwrap();
+        let gauge = IntGauge::with_opts(opts).expect("invalid sync_queue_depth gauge opts");
+        registry()
+            .register(Box::new(gauge.clone()))
+            .expect("register sync_queue_depth gauge");
         gauge
     })
 }
@@ -90,8 +98,11 @@ pub fn barcode_lookup_duration() -> &'static Histogram {
         .namespace("oz_pos")
         .subsystem("db")
         .buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1]);
-        let histogram = Histogram::with_opts(opts).unwrap();
-        registry().register(Box::new(histogram.clone())).unwrap();
+        let histogram =
+            Histogram::with_opts(opts).expect("invalid barcode_lookup_duration histogram opts");
+        registry()
+            .register(Box::new(histogram.clone()))
+            .expect("register barcode_lookup_duration histogram");
         histogram
     })
 }
@@ -107,8 +118,11 @@ pub fn transaction_commit_duration() -> &'static Histogram {
         .namespace("oz_pos")
         .subsystem("db")
         .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]);
-        let histogram = Histogram::with_opts(opts).unwrap();
-        registry().register(Box::new(histogram.clone())).unwrap();
+        let histogram =
+            Histogram::with_opts(opts).expect("invalid transaction_commit_duration histogram opts");
+        registry()
+            .register(Box::new(histogram.clone()))
+            .expect("register transaction_commit_duration histogram");
         histogram
     })
 }

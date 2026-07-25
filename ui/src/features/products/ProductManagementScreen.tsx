@@ -129,7 +129,7 @@ export default function ProductManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -602,7 +602,7 @@ export default function ProductManagementScreen() {
             <Localized id="product-mgmt-alerts-title">
               <span className="product-mgmt-alert-drawer-title">Stock Alerts</span>
             </Localized>
-            {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+            { }
             <button
               type="button"
               className="product-mgmt-alert-drawer-close"

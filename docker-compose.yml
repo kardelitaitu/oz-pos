@@ -111,7 +111,7 @@ services:
   # In-memory cache for product lookups, inventory pub/sub, and
   # rate-limiting token buckets. Always starts with the default profile.
   redis:
-    image: redis:7-alpine
+    image: public.ecr.aws/docker/library/redis:7-alpine
     ports:
       - "6379:6379"
     volumes:

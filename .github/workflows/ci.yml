@@ -166,7 +166,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run lint
 
   # ── UI: TypeCheck ─────────────────────────────────────────────────
@@ -180,7 +180,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run typecheck
 
   # ── UI: Tests + quality gates (4-way sharded) ────────────────────
@@ -205,7 +205,7 @@ jobs:
           path: ui/node_modules/.cache/vitest
           key: vitest-cache-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: vitest-cache-${{ runner.os }}-
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
 
@@ -253,7 +253,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run build
       - name: Run Lighthouse CI
         run: npx -p @lhci/cli@0.14.x -- lhci autorun
@@ -457,24 +457,36 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
-      # P28-1: Docker layer caching — pull pre-built GHCR image then
-      # build with BuildKit inline cache to reuse layers from the pulled image
-      - name: Docker layer cache (GHCR)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin 2>/dev/null || true
-          docker pull ghcr.io/${{ github.repository }}/oz-pos-cloud:e2e 2>/dev/null || true
-          export DOCKER_BUILDKIT=1
-          docker compose -f docker-compose.e2e.yml build --build-arg BUILDKIT_INLINE_CACHE=1 2>&1 | tail -3
+      # P28-1: Docker layer caching via BuildKit GHA cache
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build E2E cloud-server image with GHA cache
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.server
+          load: true
+          tags: e2e-cloud-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       # P28-2: Parallel server startup — Docker + Vite concurrently
       - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
           OZ_API_SECRET: ci-test-secret
         run: |
-          # Start Docker Compose
-          docker compose -f docker-compose.e2e.yml up -d
+          # Pre-pull Redis to mitigate transient Docker Hub/rate-limit timeouts
+          for i in 1 2 3; do
+            echo "Pulling public.ecr.aws/docker/library/redis:7-alpine (attempt $i/3)..."
+            docker pull public.ecr.aws/docker/library/redis:7-alpine && break
+            echo "Redis pull failed (attempt $i/3), retrying..."
+            sleep 15
+          done
+          # Start Docker Compose (use pre-pulled image, don't re-pull)
+          docker compose -f docker-compose.e2e.yml up -d --pull=missing
           # Start Vite dev server in background
           cd ui && npm run dev &
           VITE_PID=$!

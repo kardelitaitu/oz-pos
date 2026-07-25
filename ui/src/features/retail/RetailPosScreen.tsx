@@ -159,7 +159,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setQuickReturnLoading(false);
     }
-  }, [quickReturnBarcode, addToast, l10n, playError]);
+  }, [quickReturnBarcode, addToast, l10n, playError, sessionToken]);
 
   const handleQuickReturnRefundDone = useCallback(() => {
     setShowQuickReturnRefund(false);
@@ -327,7 +327,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       if (first) setActiveCategory(first.id);
     }).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-categories') || 'Failed to load categories', type: 'error' }); playError(); } });
     return () => { controller.abort(); };
-  }, [addToast, l10n, playError]);
+  }, [addToast, l10n, playError, sessionToken]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -445,7 +445,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       if (found) { handleAdd(found); return; }
     } catch { /* unreachable */ }
     addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
-  }, [skuInput, handleAdd, addToast, l10n]);
+  }, [skuInput, handleAdd, addToast, l10n, sessionToken]);
 
   const handleBarcode = useCallback(async (payload: { code: string }) => {
     const list = productsRef.current;
@@ -457,7 +457,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch { /* unreachable */ }
     playError();
     addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
-  }, [handleAdd, addToast, l10n, playBeep, playError]);
+  }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken]);
 
   useBarcodeScanner({ onProductFound: handleBarcode });
 
@@ -468,7 +468,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     let mounted = true;
     getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
     return () => { mounted = false; };
-  }, [addToast, l10n]);
+  }, [addToast, l10n, sessionToken]);
 
   // ── Shift management ─────────────────────────────────────────
 
@@ -522,7 +522,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setOpeningShift(false);
     }
-  }, [openingBalance, userId, addToast, l10n]);
+  }, [openingBalance, addToast, l10n, sessionToken]);
 
   const handleCloseShift = useCallback(async () => {
     if (!activeShift) return;
@@ -539,7 +539,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, l10n, userId]);
+  }, [activeShift, closingBalance, shiftNotes, l10n, sessionToken]);
 
   // ── Live tax preview ────────────────────────────────────────
 
@@ -607,7 +607,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       addToast({ message: 'Failed to create sale cart', type: 'error' });
       return null;
     }
-  }, [cartId, addToast]);
+  }, [cartId, addToast, sessionToken]);
 
   const handleOverrideConfirm = useCallback(async (newPriceMinor: number) => {
     if (!overrideTarget) return;
@@ -629,7 +629,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setOverrideTarget(null);
     }
-  }, [overrideTarget, cartId, addToast, updateLinePrice]);
+  }, [overrideTarget, cartId, addToast, updateLinePrice, sessionToken]);
 
   const allCustomersRef = useRef<CustomerDto[]>([]);
 
@@ -715,7 +715,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch {
       addToast({ message: l10n.getString('retail-toast-failed-hold') || 'Failed to hold order', type: 'error' });
     }
-  }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast, l10n]);
+  }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast, l10n, sessionToken]);
 
   const handleResumeCart = useCallback(async (cartId: string) => {
     try {
@@ -734,7 +734,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch {
       addToast({ message: l10n.getString('retail-toast-failed-resume') || 'Failed to resume order', type: 'error' });
     }
-  }, [addProduct, setDiscount, addToast, l10n]);
+  }, [addProduct, setDiscount, addToast, l10n, sessionToken]);
 
   const handleResume = useCallback(async () => {
     const carts = await listHeldCartsScoped(sessionToken);
@@ -746,7 +746,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     }
     setHeldCartsList(held);
     setShowHeldCartsList(true);
-  }, [handleResumeCart]);
+  }, [handleResumeCart, sessionToken]);
 
   const handleDeleteHeldCart = useCallback(async (cartId: string) => {
     try {
@@ -808,7 +808,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setSettlingId(null);
     }
-  }, [userId, addToast, l10n]);
+  }, [addToast, l10n, sessionToken]);
 
   // ── Retail modal exit animations ───────────────────────────────
   const retailCustomerExit = useExitAnimation(showCustomerSearch, () => setShowCustomerSearch(false));
@@ -860,12 +860,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
         case 'F3': if (lines.length > 0) setShowDiscount(true); break;
-        case 'F4': heldCartId ? handleResume() : handleHold(); break;
+        case 'F4': if (heldCartId) handleResume(); else handleHold(); break;
         case 'F5': skuInputRef.current?.focus(); break;
         case 'F6': setShowSalesHistory(true); break;
         case 'F7': setShowCustomerSearch(true); break;
         case 'F8': setShowStockInquiry(true); break;
-        case 'F9': activeShift ? setShowCloseShift(true) : setShowOpenShift(true); break;
+        case 'F9': if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
         case 'F10': handleOpenSettings(); break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': onNavigate?.('kds'); break;
@@ -873,7 +873,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
+  }, [showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, handleOpenSettings]);
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -1201,7 +1201,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                       <th style={{ width: 56 }}>{l10n.getString('retail-cart-header-qty')}</th>
                       <th style={{ width: 72 }}>{l10n.getString('retail-cart-header-price')}</th>
                       <th style={{ width: 80 }}>{l10n.getString('retail-cart-header-subtotal')}</th>
-                      {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+                      { }
                       <th style={{ width: 24 }}></th>
                     </tr>
                   </thead>
@@ -1530,7 +1530,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                     <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
                     <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
                     <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
-                    {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+                    { }
                     <th style={{ padding: 4 }}></th>
                   </tr>
                 </thead>

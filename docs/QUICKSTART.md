@@ -1,6 +1,6 @@
 # Quickstart
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (2 noted findings) · F1 (actionable stale): "Node.js 18 or 20 LTS" (lines 12, 203) but ui/package.json engines requires ">=22" — a contributor on Node 20 following the doc would fail to build · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (1 finding) · resolved F1: prerequisites table and troubleshooting updated to Node.js >=22 and npm >=11 · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present -->
 
 This guide gets OZ-POS building and running on your machine in under 15 minutes. It's aimed at first-time contributors — for the deeper project conventions, see [`CONTRIBUTING.md`](../CONTRIBUTING.md), [`AGENTS.md`](../AGENTS.md), and the skills under `.agents/skills/`.
 
@@ -11,7 +11,8 @@ This guide gets OZ-POS building and running on your machine in under 15 minutes.
 | Tool | Version | Why |
 |------|---------|-----|
 | **Rust** | 1.88+ stable (`rustup install stable`) | The workspace uses edition 2024 and axum/tower-http deps that require rustc ≥ 1.88 |
-| **Node.js** | 18 or 20 LTS | Tauri v2 webview (React 18 + TypeScript) |
+| **Node.js** | >=22 LTS | Tauri v2 webview (React 18 + TypeScript) |
+| **npm** | >=11 | Required by `ui/package.json` `engines`; needed for `allowScripts`/`npm approve-scripts` |
 | **Tauri v2 prerequisites** | Per [Tauri docs](https://tauri.app/v2/guides/) | WebView2 on Windows, webkit2gtk on Linux, etc. |
 | **SQLite** | 3.x (bundled via `rusqlite`) | Local persistence — no separate install needed |
 | **Git** | any recent | Source control |
@@ -54,7 +55,9 @@ cd oz-pos
 cargo build --workspace
 
 # 3. Install front-end dependencies
-cd ui && npm install
+#    Uses the pinned install-script approvals in ui/package.json.
+#    See ui/README.md#install-script-approvals for details.
+cd ui && npm ci --no-audit --no-fund
 cd ..
 
 # 4. Run the Tauri app in development mode
@@ -200,9 +203,11 @@ Install the Tauri Linux prerequisites (see the table at the top of this file). T
 
 The CI matrix runs on Linux, Windows, and macOS. If you see a failure on a platform you didn't test locally, install the platform's deps and re-run. Don't disable platform-specific tests — fix them.
 
-### `npm install` fails in `ui/`
+### `npm install` / `npm ci` fails in `ui/`
 
-Make sure you're on Node 18 or 20 LTS (`node --version`). Older versions miss the `fetch` types and `--no-warnings` flag that the build expects.
+Make sure you're on Node.js >=22 and npm >=11 (`node --version && npm --version`). The UI pins install-script approvals in `ui/package.json` (`allowScripts`) and requires npm 11+ for `npm approve-scripts`.
+
+If `npm ci` warns about unapproved install scripts, see [`ui/README.md#install-script-approvals`](../ui/README.md#install-script-approvals).
 
 ### "permission denied" running `scripts/check.sh`
 
@@ -228,4 +233,4 @@ Welcome to OZ-POS. Keep the curtain closed, the merchant happy, and the money in
 
 ---
 
-> last audited 08-07-26 by docs-auditor
+> last audited 25-07-26 by Hermes-Agent

@@ -1156,7 +1156,7 @@ export default function PaymentModal({
                 {(method === 'open_bill' || method === 'credit') && (
                   <div className="payment-open-bill-section">
                     <>
-                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      { }
                       <label className="payment-customer-label" htmlFor="payment-customer-input">
                         <Localized id="payment-customer-name">
                           <span>Customer Name</span>
@@ -1515,7 +1515,7 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-              /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape key provides keyboard dismissal, role=button for AT */
+               
               <div
                 className="payment-customer-search-overlay"
                 onClick={() => setShowCustomerSearch(false)}

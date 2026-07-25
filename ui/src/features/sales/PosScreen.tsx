@@ -524,7 +524,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       addToast({ message: 'Failed to create sale cart', type: 'error' });
       return null;
     }
-  }, [cartId, addToast]);
+  }, [cartId, addToast, sessionToken]);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [showOpenShift, setShowOpenShift] = useState(false);
   // Fade the open-shift modal out before the parent setter flips
@@ -620,7 +620,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       .then((shift) => { setActiveShift(shift); })
       .catch(() => { setActiveShift(null); })
       .finally(() => setShiftLoading(false));
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   // ── Barcode scanner integration ─────────────────────────────
   useBarcodeScanner({
@@ -670,7 +670,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       } catch {
         // Silently ignore — the scanner will beep, user retries.
       }
-    }, [handleAddProduct, addToast, l10n]),
+    }, [handleAddProduct, addToast, l10n, sessionToken]),
     onError: useCallback(
       (error: string) => {
         addToast({
@@ -761,7 +761,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     resetCart();
     // Also clear the customer-facing pole display.
     customerDisplayPaymentComplete();
-  }, [resetCart, customerDisplayPaymentComplete, activeOpenBillId, loadOpenBills, addToast]);
+  }, [resetCart, customerDisplayPaymentComplete, activeOpenBillId, loadOpenBills, addToast, sessionToken]);
 
   const handleApplyDiscount = useCallback(() => {
     const pct = parseInt(discountInput, 10);
@@ -869,7 +869,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } finally {
       setOverrideTarget(null);
     }
-  }, [overrideTarget, cartId, addToast, updateLinePrice]);
+  }, [overrideTarget, cartId, addToast, updateLinePrice, sessionToken]);
 
   // ── Keyboard navigation (↑ / ↓ / + / − / Del / Enter) ────────
   // The cart panel handles keys when its focus, or any descendant
@@ -963,7 +963,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
       .catch(() => addToast({ message: 'Failed to load receipt settings', type: 'error' }));
-  }, [addToast]);
+  }, [addToast, sessionToken]);
 
   const handleCloseShiftClick = useCallback(() => {
     setCloseShiftError(null);
@@ -995,7 +995,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, userId, l10n]);
+  }, [activeShift, closingBalance, shiftNotes, l10n, sessionToken]);
 
   const handleOpenShiftClick = useCallback(() => {
     setOpeningBalance('');
@@ -1016,7 +1016,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } finally {
       setOpeningShift(false);
     }
-  }, [openingBalance, userId, openShiftExit]);
+  }, [openingBalance, openShiftExit, sessionToken]);
 
 
 
@@ -1074,7 +1074,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } finally {
       setOpeningBill(false);
     }
-  }, [activeShift, lines, subtotal, openBillName, discountPercent, discountLabel, resetCart, loadOpenBills, addToast, openBillInputExit]);
+  }, [activeShift, lines, subtotal, openBillName, discountPercent, discountLabel, resetCart, loadOpenBills, addToast, openBillInputExit, sessionToken]);
 
   const handleResumeOpenBill = useCallback(async (id: string) => {
     try {
@@ -1102,7 +1102,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     } catch {
       addToast({ message: 'Failed to resume open bill', type: 'error' });
     }
-  }, [setLines, setDiscount, setTableNumber, addToast, openBillsExit]);
+  }, [setLines, setDiscount, setTableNumber, addToast, openBillsExit, sessionToken]);
 
   // ── Sub-screen: Table Management ─────────────────────────────
   if (showTables) {
@@ -1998,7 +1998,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   Cancel
                 </button>
               </Localized>
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+              { }
               <button
                 type="button"
                 className="pos-close-shift-confirm-btn"
@@ -2172,7 +2172,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   Cancel
                 </button>
               </Localized>
-              {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- visible text inside Localized */}
+              { }
               <button
                 type="button"
                 className="pos-close-shift-confirm-btn"

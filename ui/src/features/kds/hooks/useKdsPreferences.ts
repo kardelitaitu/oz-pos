@@ -88,7 +88,7 @@ export function useKdsPreferences(): {
         // Server unavailable — keep localStorage defaults (already set).
       })
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, sessionToken]);
 
   const persist = useCallback(
     (patch: Partial<Record<string, string>>) => {

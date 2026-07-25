@@ -1,10 +1,90 @@
 # Changelog
 
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE · post-merge structure verified: top header is [0.0.18] (2026-07-22), headers descend 0.0.18→0.0.11 in order, no stray 0.0.19+ section headers, version-numbering note removed · known cross-repo divergence (see AGENTS.md stamp A1): CHANGELOG documents 0.0.18 as current release while Cargo.toml/tauri.conf.json/package.json read 0.0.19 — user-owned, not auto-corrected -->
-
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.0.20] — 2026-07-25
+
+### Added
+
+#### 🏗️ R5 — Database Extraction & Platform Split
+- **ADR #32**: Added `docs/decisions/2026-07-25-db-extraction-and-platform-split.md` documenting the split of database responsibilities out of the monolithic kernel into a dedicated `platform/core` layer plus a lightweight `platform/kernel` event-bus module.
+- **Kernel refactor**: Split `platform/kernel/src/kernel.rs` into focused sub-modules (settings, event bus, manifest) to reduce surface area and clarify boundaries.
+- **Shared test helpers**: Extracted duplicated `fresh()` helper in `platform/core/src/settings` into a shared `test_helpers.rs` module used by both `settings.rs` and `kernel.rs` tests.
+- **Settings test coverage**: Backfilled tests for the new typed-store configuration helpers and edge cases in `platform/core/src/settings.rs`.
+- **Split-sanity tests**: Added sanity tests for the `platform/core` settings module and `platform/kernel` kernel module after the file splits.
+
+#### 🔧 Build, Packaging & Dependency Hygiene
+- **npm install-script approval policy**: Pinned `allowScripts` approvals in `ui/package.json` for `esbuild` and `msw`, eliminating repeated interactive prompts during `npm ci`.
+- **npm engine requirement**: Added `engines.npm: ">=11"` in `ui/package.json` so contributors get a clear error on older npm versions.
+- **CI hardening**: Updated CI and local scripts to run `npm ci --no-audit --no-fund --ignore-scripts`, matching the new install-script approval policy.
+- **Policy propagation**: Documented the install-script approval workflow in `ui/README.md`, `AGENTS.md`, `.agents/skills/project-scaffold/SKILL.md`, and updated `scripts/build-exe-release.ps1`, `scripts/coverage.sh`/`coverage.ps1`, and launch-test docs to use the hardened `npm ci` invocation.
+- **Root lockfile cleanup**: Deleted an accidental empty `package-lock.json` at the workspace root and added `/package-lock.json` to `.gitignore` so future root-level npm runs don't recreate it.
+
+#### 🧪 Test Reliability & Tooling
+- **Keyring/credential tests**: Added RAII cleanup guards and unique naming patterns for Windows, macOS, and Linux tests that touch OS keyring/credential state, ensuring credentials are deleted even if an assertion panics.
+- **Retry/poll loops**: Added retry/poll loops to macOS and Linux overwrite tests in `oz-security` to deflake slow keyring writes.
+- **Test helpers extraction**: Moved Windows `CredentialGuard` into `test_helpers` and reused it for macOS/Linux cleanup.
+- **Receipt DTO serde casing**: Aligned receipt DTO serde casing with frontend camelCase expectations.
+
+### Fixed
+
+#### 🖥️ UI Quality Gates
+- **37 ESLint warnings**: Resolved `react-hooks/exhaustive-deps`, `react-refresh/only-export-components`, and `consistent-type-imports` warnings across the UI codebase.
+- **Pre-existing UI failures**: Fixed `TS6133` in `SessionLockScreen.test.tsx`, resolved 9 ESLint errors, and repaired 3 failing unit tests.
+- **ESLint formatter issue**: Reinstalled `ui/node_modules` and resolved a missing ESLint formatter module that caused `npm run lint` to fail locally.
+
+#### 🔒 Security & Dependencies
+- **npm vulnerabilities**: Addressed 7 high-severity npm security vulnerabilities (primarily `brace-expansion`).
+- **allow-scripts warnings**: Pinned install-script approvals for `esbuild` and `msw` so `npm ci` no longer warns about uncovered postinstall scripts.
+
+#### Rust Tooling
+- **Clippy clean**: Fixed `clippy::clone_on_copy` for `ModuleStatus` and resolved other workspace clippy warnings under `cargo clippy --workspace --all-targets -- -D warnings`.
+
+### Changed
+
+#### 📚 Documentation Refresh
+- **Top-level docs**: Updated `README.md`, `docs/ARCHITECTURE.md`, `docs/QUICKSTART.md`, and `docs/dev-experience-2026-07-20.md` with current counts (5,221+ Rust tests, 214 UI test files / 3,230+ tests, 48 .ftl files, 98 migrations), Node.js ≥22 / npm ≥11 prerequisites, Vite 6, and corrected locale/theme paths.
+- **Architecture doc**: Resolved remaining stale findings (F3 scaffold crates now implemented, F6 LICENSE note, F7 618 IPC endpoints) so the audit stamp reaches zero findings.
+- **Roadmap & whitepaper**: Updated `docs/ROADMAP.md` with per-feature Fluent bundles (24 bundles × 2 locales = 48 files), removed Thai locale references, updated test counts, corrected ESLint config path, and refreshed the HAL description in `docs/WHITEPAPER.md` to the async-trait + `DriverRegistry` model.
+- **Agent config**: Aligned `.agents/AGENTS.md` version lock with root `AGENTS.md` (`0.0.9` → `0.0.18`).
+
+---
+
+## [0.0.19] — 2026-07-25
+
+### Added
+
+- **P1 Domain Modularization**: Extracted Sales, Inventory, CRM, Loyalty, Staff, Terminal, Settings, Tax, and Reporting into standalone `modules/*` crates with model/repository/service layers. Core kernel footprint reduced ~40%.
+- **P2 Decentralized UI Registration**: Replaced monolithic App.tsx with `register.tsx` per feature module — 27 modules self-register via `modules/index.ts` (ADR #31).
+- **P3 Sync Conflict Strategy**: Entity-specific conflict resolution with CRDT-inspired delta merge, priority-based resolution, and tombstone GC.
+- **P8 AppProviders**: Composed all root context providers into `<AppProviders>` wrapper.
+- **ADR #22 Unified Workspace Settings**: 6-phase implementation — SettingsContext provider, `terminal_profile.json` schema, delta ledger IPC, async event bus, 6 workspace setting cards (StoreInfoCard, TerminalPreferencesCard, StorePos/KDS/RestaurantPos/Inventory settings), Tier 2 WorkspaceSettingsModal, topology inspector integration, deprecation cleanup (RetailOptionsScreen removed, 1,224 lines).
+- **ADR #7 Scoped-Command Migration**: All sales, inventory, product, refund, shift, category, customer, terminal, tax, topology, workspace, and hardware commands migrated to scoped (`_token`) variants. UI `@/api/*` domain files updated with `*Scoped()` wrappers.
+- **Security hardening**: LAN server loopback-only bind + PSK handshake (c4). CSP directives on both Tauri clients (c3). PCI-DSS 3.3 fix for `mask_pan`. `SALES_PROCESS` permission checks on 33+ commands.
+- **Topology audit & rewrite**: 20 TOPOLOGY_AUDIT items resolved. NodeTopologyEditor rewrite with drag-to-reorder, keyboard guard, undo. New TopologyScreen. 17→247 passing tests.
+- **UI components**: Button `iconOnly`/`unstyled` props. Connection status indicators on login/lock screens with tooltips. Stock Alert Bell. ErrorBoundary Try Again. ZoomContext input guard.
+- **Backend**: `mlua` migration (replaced `rlua`). `oz-notification` crate (WhatsApp integration). `oz-security` error + TLS modules. `oz-reporting` daily_summary and menu engineering. Cloud server OpenAPI 3.1 docs + graceful shutdown. Database rollback support. Criterion benchmark suites (barcode_lookup, cart_bench, money_bench, transaction_commit).
+- **Test infrastructure**: 42 IPC contract tests, 28 terminals/inventory contract tests. 5 jest-axe a11y regression tests. 730-line API client SDK test. Scoped-API mock migration (Sales 16, Settings 7+3, Shifts 4, Products 8 mock handlers).
+- **CI/CD**: Nightly full-matrix CI. Android CI (3 arch targets). iOS CI (TestFlight). Docker DevEx (`dev-up.ps1`/`.sh`). sccache fix (`SCCACHE_GHA_ENABLED`).
+- **i18n**: 13 missing id/th locale keys. 13 topology Thai keys. 8 new/updated FTL bundles (multi-store, products, purchasing, reports, settings, shared, staff, terminals).
+
+### Fixed
+
+- **TDD Bug Hunting Audit — 87+ bugs across 7 rounds**: Error swallowing (`.unwrap_or(0)`/`.ok()`) in stock/adjust/transfer APIs. Missing `SALES_PROCESS`/`SALES_OVERRIDE_PRICE` permission checks. Silent fallback in sync daemon. PG daemon panic swallow. Missing `tenant_id` in PG transport schema. Module system bugs (stop_all, load_all idempotency, on_load restart, handler unsubscribe). Event bus concurrency bugs. Hashchange listener leak in StockCountsFlow. Atomic purchase order creation. Localized 10 hardcoded 'Toggle' sr-only strings.
+- **Rate-limit test**: `mockAuthError.mockReturnValue` timing fixed — error must be injected right before 4th digit, not before 1st.
+- **vite.config.ts**: Removed `onConsoleLog` suppression block (now in test-setup.ts).
+- **6 typecheck errors**: Resolved across PosScreen, RetailPosScreen, StockCountDetail test files.
+
+### Changed
+
+- **P7 formalized**: React-only UI architecture decision.
+- **P9/P10**: ARCHITECTURE.md updated. Windows reserved `nul` devices ignored.
+- **oz-lua**: Replaced `rlua` with `mlua` (v0.9 lua54 vendored). Enabled `Send + Sync`.
+- **Settings engine**: `terminal_profile.rs` (341 lines). Settings page extraction (1,099 lines in platform-core).
+- **RetailPosScreen**: Scoped-API migration, connection indicators, currency context fix.
+- **100+ .md files audited** across 30+ rounds against current codebase.
 
 ## [0.0.18] — 2026-07-22
 

@@ -10,7 +10,7 @@ export interface GeneralSectionProps {
   store: StoreSettingsDto;
   setStore: (s: StoreSettingsDto) => void;
   markDirty: () => void;
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- spread onto <input> elements
+   
   cmInput: React.HTMLAttributes<HTMLInputElement>;
   fieldErrors: Record<string, string>;
   validateField: (field: string, value: string) => void;

@@ -19,7 +19,7 @@
 #         # On Debian/Ubuntu: apt install llvm-tools (for llvm-cov + llvm-profdata)
 #         # On macOS:        brew install llvm  (then add to PATH: export PATH="$(brew --prefix llvm)/bin:$PATH")
 #         # On Windows:      choco install llvm  (llvm-cov ships in the llvm package)
-#   ui:   npm install (handled by the test:coverage npm script)
+#   ui:   npm ci --no-audit --no-fund --ignore-scripts (handled by the test:coverage npm script)
 #
 # Why llvm-cov and not tarpaulin:
 #   - tarpaulin is Linux-only (uses ptrace); llvm-cov works on every OS the project targets.
@@ -79,10 +79,10 @@ fi
 if [[ "$target" == "all" || "$target" == "ui" ]]; then
     step "UI coverage via vitest → coverage/ui/"
     if [[ ! -d ui/node_modules ]]; then
-        err "ui/node_modules missing. Run: cd ui && npm install"
+        err "ui/node_modules missing. Run: cd ui && npm ci --no-audit --no-fund --ignore-scripts"
         ERRORS+=("ui: ui/node_modules missing")
     elif [[ ! -f ui/node_modules/.bin/vitest ]]; then
-        err "ui/node_modules/.bin/vitest missing. Run: cd ui && npm install"
+        err "ui/node_modules/.bin/vitest missing. Run: cd ui && npm ci --no-audit --no-fund --ignore-scripts"
         ERRORS+=("ui: vitest not installed")
     else
         (cd ui && npm run test:coverage)

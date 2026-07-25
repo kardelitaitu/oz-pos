@@ -143,9 +143,9 @@ if ($gitBash) {
 if ((Get-Command "npm" -ErrorAction SilentlyContinue) -and (Test-Path "ui/package-lock.json")) {
     Push-Location ui
 
-    Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund" `
+    Step -Name "npm ci" -RetryCommand "cd ui; npm ci --no-audit --no-fund --ignore-scripts" `
          -RetryMax 2 -RetryKill @("esbuild.exe") -ScriptBlock {
-        npm ci --no-audit --no-fund 2>&1
+        npm ci --no-audit --no-fund --ignore-scripts 2>&1
     }
     Step -Name "ui lint" -RetryCommand "cd ui; npm run lint" -ScriptBlock { npm run lint }
     Step -Name "ui typecheck" -RetryCommand "cd ui; npm run typecheck" -ScriptBlock { npm run typecheck }

@@ -3,6 +3,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
+import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
 
 // ── Global mock: @tauri-apps/api/event ─────────────────────────
 // SettingsContext uses a dynamic import('@tauri-apps/api/event')
@@ -37,9 +38,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 // (currently `WorkspaceContext.test.tsx`) opt out with
 // `vi.unmock('@/contexts/WorkspaceContext')` at the top.
 vi.mock('@/contexts/WorkspaceContext', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('@/contexts/WorkspaceContext')
-  >();
+  const actual = await importOriginal<typeof WorkspaceContextModule>();
 
   const safeWorkspaceDefault = {
     activeWorkspace: null,

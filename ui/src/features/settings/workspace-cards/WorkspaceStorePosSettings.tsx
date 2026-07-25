@@ -40,7 +40,7 @@ export function WorkspaceStorePosSettings({
   const dirty = useMemo(() => hasChanges(
     { paperWidth, showCurrency, showTax, showTableNumber, footer } as Record<string, unknown>,
     originalsRef.current,
-  ), [paperWidth, showCurrency, showTax, showTableNumber, footer, originalsLoaded]);
+  ), [paperWidth, showCurrency, showTax, showTableNumber, footer, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise from context ──────────────────────────────────
 

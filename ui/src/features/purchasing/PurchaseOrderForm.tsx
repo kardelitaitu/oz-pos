@@ -113,7 +113,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                 <input className="po-form-input" type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-001" />
               </Localized>
             </label>
-            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- select is nested inside label */}
+            { }
             <label className="po-form-field">
               <Localized id="po-form-supplier-label">
                 <span className="po-form-label">Supplier *</span>
@@ -227,7 +227,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                     <Localized id="po-form-subtotal"><span>Subtotal</span></Localized>
                   </td>
                   <td className="po-form-total-value">{(subtotal / 100).toFixed(2)}</td>
-                  {/* eslint-disable-next-line jsx-a11y/control-has-associated-label -- role=alert with text content */}
+                  { }
                   <td />
                 </tr>
               </tfoot>

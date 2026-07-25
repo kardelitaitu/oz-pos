@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE (1 noted finding) · F1: "Version is locked at 0.0.9" -> branch 0.0.19 + Cargo.toml version = 0.0.19 (user-owned divergence, do not "fix"; same class as root AGENTS.md version claim) · verified accurate: 4 pre-commit gates; scripts lint-i18n.sh/verify-bundle-parity.py/dedupe-ftl.py/check.sh exist; onboarding-guide SKILL.md exists; crates/oz-hal/src/drivers/mock.rs exists; command dirs + ui/src/api + ui/src/__tests__ present -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Version is locked at 0.0.9" -> aligned with root AGENTS.md at 0.0.18 · verified accurate: 4 pre-commit gates; scripts lint-i18n.sh/verify-bundle-parity.py/dedupe-ftl.py/check.sh exist; onboarding-guide SKILL.md exists; crates/oz-hal/src/drivers/mock.rs exists; command dirs + ui/src/api + ui/src/__tests__ present -->
 
 # Agents Configuration
 
@@ -69,11 +69,11 @@ npm run lint
 
 ### If node_modules is missing
 
-Run `npm install` inside `ui/` before any of the above:
+Run `npm ci` inside `ui/` before any of the above (it uses the pinned install-script approvals in `ui/package.json`; see `ui/README.md#install-script-approvals`):
 
 ```powershell
 cd ui
-npm install
+npm ci --no-audit --no-fund
 ```
 
 ---
@@ -82,7 +82,7 @@ npm install
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.9`.** Never change the version number
+- **Version is locked at `0.0.18`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
