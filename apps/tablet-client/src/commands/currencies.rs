@@ -53,8 +53,8 @@ pub struct SetDefaultCurrencyArgs {
 /// Get default currency.
 pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<String>, AppError> {
     let db = state.db.lock().await;
-    let store = oz_core::db::Store::new(&db);
-    Ok(store.get_default_currency()?)
+    let repo = CurrencyRepository::new(&db);
+    Ok(repo.get_default_currency()?)
 }
 
 #[command]
@@ -64,8 +64,8 @@ pub async fn set_default_currency(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
-    let store = oz_core::db::Store::new(&db);
-    store.set_default_currency(&args.code)?;
+    let repo = CurrencyRepository::new(&db);
+    repo.set_default_currency(&args.code)?;
     Ok(())
 }
 
