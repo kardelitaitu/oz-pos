@@ -158,7 +158,71 @@ impl<'a> CurrencyRepository<'a> {
         }
         Ok(())
     }
+
+    // ── Currency-format settings (R2 Phase 5) ────────────────────────────
+
+    /// Get the default currency code (ISO-4217), if set.
+    pub fn get_default_currency(&self) -> Result<Option<String>, CurrencyError> {
+        let val = platform_core::settings::Settings::get_default_currency(self.conn)?;
+        Ok(val)
+    }
+
+    /// Set the default currency code.
+    pub fn set_default_currency(&self, code: &str) -> Result<(), CurrencyError> {
+        platform_core::settings::Settings::set_default_currency(self.conn, code)?;
+        Ok(())
+    }
+
+    /// Get the currency display format: `"symbol"` or `"code"`.
+    pub fn get_currency_format(&self) -> Result<String, CurrencyError> {
+        let val = platform_core::settings::Settings::get_currency_format(self.conn)?;
+        Ok(val)
+    }
+
+    /// Set the currency display format.
+    pub fn set_currency_format(&self, fmt: &str) -> Result<(), CurrencyError> {
+        platform_core::settings::Settings::set_currency_format(self.conn, fmt)?;
+        Ok(())
+    }
+
+    /// Get the currency symbol position: `"prefix"` or `"suffix"`.
+    pub fn get_currency_symbol_position(&self) -> Result<String, CurrencyError> {
+        let val = platform_core::settings::Settings::get_currency_symbol_position(self.conn)?;
+        Ok(val)
+    }
+
+    /// Set the currency symbol position.
+    pub fn set_currency_symbol_position(&self, pos: &str) -> Result<(), CurrencyError> {
+        platform_core::settings::Settings::set_currency_symbol_position(self.conn, pos)?;
+        Ok(())
+    }
+
+    /// Get the decimal separator: `"dot"` or `"comma"`.
+    pub fn get_currency_decimal_separator(&self) -> Result<String, CurrencyError> {
+        let val = platform_core::settings::Settings::get_currency_decimal_separator(self.conn)?;
+        Ok(val)
+    }
+
+    /// Set the decimal separator.
+    pub fn set_currency_decimal_separator(&self, sep: &str) -> Result<(), CurrencyError> {
+        platform_core::settings::Settings::set_currency_decimal_separator(self.conn, sep)?;
+        Ok(())
+    }
+
+    /// Get the thousands separator: `"comma"`, `"dot"`, `"space"`, or `"none"`.
+    pub fn get_currency_thousands_separator(&self) -> Result<String, CurrencyError> {
+        let val = platform_core::settings::Settings::get_currency_thousands_separator(self.conn)?;
+        Ok(val)
+    }
+
+    /// Set the thousands separator.
+    pub fn set_currency_thousands_separator(&self, sep: &str) -> Result<(), CurrencyError> {
+        platform_core::settings::Settings::set_currency_thousands_separator(self.conn, sep)?;
+        Ok(())
+    }
 }
+
+
 
 #[cfg(test)]
 mod tests {

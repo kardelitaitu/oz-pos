@@ -9,6 +9,10 @@ pub enum CurrencyError {
     #[error("database error: {0}")]
     Db(#[from] rusqlite::Error),
 
+    /// A platform infrastructure error.
+    #[error("platform error: {0}")]
+    Platform(#[from] platform_core::PlatformError),
+
     /// Input validation failure.
     #[error("validation error on {field}: {message}")]
     Validation {
@@ -69,5 +73,20 @@ mod tests {
         let rusqlite_err = rusqlite::Error::QueryReturnedNoRows;
         let err = CurrencyError::from(rusqlite_err);
         assert!(matches!(err, CurrencyError::Db(_)));
+    }
+
+    #[test]
+    fn currency_error_platform_message() {
+        let err = CurrencyError::Platform(platform_core::PlatformError::Internal(
+            "settings read failed".into(),
+        ));
+        assert_eq!(format!("{err}"), "platform error: internal error: settings read failed");
+    }
+
+    #[test]
+    fn currency_error_from_platform_error() {
+        let platform_err = platform_core::PlatformError::Internal("test".into());
+        let err = CurrencyError::from(platform_err);
+        assert!(matches!(err, CurrencyError::Platform(_)));
     }
 }
