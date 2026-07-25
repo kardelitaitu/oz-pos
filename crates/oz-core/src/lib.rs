@@ -47,8 +47,9 @@ pub mod db;
 pub mod error;
 /// Domain event types for cross-crate communication.
 pub mod events;
-/// Currency exchange-rate types (re-exported from `modules-currency`).
-pub mod exchange_rate;
+// Note: ExchangeRateRow re-exported from `modules-currency`.
+// The old `pub mod exchange_rate` shim was removed in R2 Phase 4.
+// Import directly from `modules_currency::ExchangeRateRow`.
 /// Unified analytics export — JSON bundle of all report types.
 pub mod export;
 /// Feature-gate registry and runtime guards.

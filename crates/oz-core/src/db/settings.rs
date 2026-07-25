@@ -130,7 +130,7 @@ impl Store<'_> {
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
     pub fn list_exchange_rates(
         &self,
-    ) -> Result<Vec<crate::exchange_rate::ExchangeRateRow>, CoreError> {
+    ) -> Result<Vec<modules_currency::ExchangeRateRow>, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.list_exchange_rates()?)
     }
@@ -150,7 +150,7 @@ impl Store<'_> {
         rate_millionths: i64,
         source: &str,
         effective_date: &str,
-    ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
+    ) -> Result<modules_currency::ExchangeRateRow, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.create_exchange_rate(
             from_currency,
@@ -166,7 +166,7 @@ impl Store<'_> {
     /// Uses `INSERT OR REPLACE` so that a rate with the same
     /// `(from_currency, to_currency, effective_date)` is replaced
     /// with a new row and a fresh id. `rate_millionths` is at the 6-decimal
-    /// scale (see [`crate::exchange_rate::ExchangeRateRow`]). Zero and
+    /// scale (see [`modules_currency::ExchangeRateRow`]). Zero and
     /// negative rates are rejected (matching [`Self::create_exchange_rate`]).
     ///
     /// Delegates to [`modules_currency::repository::CurrencyRepository`].
@@ -177,7 +177,7 @@ impl Store<'_> {
         rate_millionths: i64,
         source: &str,
         effective_date: &str,
-    ) -> Result<crate::exchange_rate::ExchangeRateRow, CoreError> {
+    ) -> Result<modules_currency::ExchangeRateRow, CoreError> {
         let repo = CurrencyRepository::new(self.conn);
         Ok(repo.upsert_exchange_rate(
             from_currency,

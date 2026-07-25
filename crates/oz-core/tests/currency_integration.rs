@@ -550,7 +550,7 @@ fn display_rate_two_decimals() {
         .unwrap();
     assert_eq!(row.display_rate(), "0.92");
     assert_eq!(
-        oz_core::exchange_rate::ExchangeRateRow::display_rate(&row),
+        modules_currency::ExchangeRateRow::display_rate(&row),
         "0.92"
     );
 }
