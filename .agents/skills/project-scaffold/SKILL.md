@@ -252,7 +252,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: cd ui && npm ci
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run lint
       - run: cd ui && npm run typecheck
       - run: cd ui && npm run test

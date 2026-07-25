@@ -15,8 +15,8 @@ running the core POS flow end-to-end on a physical Linux machine.
 |-------------|---------|-------|
 | Ubuntu 22.04+ / Debian 12+ | LTS recommended | `lsb_release -a` or `cat /etc/os-release` |
 | Rust toolchain | stable (1.85+) | `rustc --version` |
-| Node.js | 20+ LTS | `node --version` |
-| npm | 10+ | `npm --version` |
+| Node.js | >=22 LTS | `node --version` |
+| npm | >=11 | `npm --version` |
 | WebKitGTK | 4.1+ | `pkg-config --modversion webkit2gtk-4.1` |
 | GTK+ 3 | 3.24+ | `pkg-config --modversion gtk+-3.0` |
 | OpenSSL | 3.0+ | `openssl version` |
@@ -123,7 +123,7 @@ target/release/bundle/appimage/oz-pos_0.0.X_amd64.AppImage  # Portable AppImage
 ```bash
 # Step 1: Build frontend
 cd ui
-npm install
+npm ci --no-audit --no-fund --ignore-scripts
 npm run build
 cd ..
 

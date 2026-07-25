@@ -84,11 +84,11 @@ npm run lint
 
 ### If node_modules is missing
 
-Run `npm install` inside `ui/` before any of the above:
+Run `npm ci` inside `ui/` before any of the above (it uses the pinned install-script approvals in `ui/package.json`; see `ui/README.md#install-script-approvals`):
 
 ```powershell
 cd ui
-npm install
+npm ci --no-audit --no-fund
 ```
 
 ## Project Specific Rules
