@@ -113,7 +113,7 @@ jobs:
           path: ui/node_modules/.cache/vitest
           key: vitest-cache-nighty-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: vitest-cache-nighty-${{ runner.os }}-
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
       - name: Gate on act() / flushSync warnings
@@ -162,7 +162,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
       - name: Docker layer cache (GHCR)
@@ -244,7 +244,7 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build desktop (Linux)
         run: cd apps/desktop-client && cargo tauri build --bundles appimage
       - name: Upload desktop (Linux)
@@ -271,7 +271,7 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build desktop (Windows)
         run: cd apps/desktop-client && cargo tauri build --bundles msi
       - name: Upload desktop (Windows)
@@ -301,7 +301,7 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build desktop (macOS)
         run: cd apps/desktop-client && cargo tauri build --bundles dmg
       - name: Upload desktop (macOS)
@@ -345,7 +345,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Build UI (tablet)
         run: cd ui && npx vite build --config vite.tablet.config.ts
       - name: Install cargo-ndk

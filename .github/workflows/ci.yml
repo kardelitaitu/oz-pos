@@ -166,7 +166,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run lint
 
   # ── UI: TypeCheck ─────────────────────────────────────────────────
@@ -180,7 +180,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run typecheck
 
   # ── UI: Tests + quality gates (4-way sharded) ────────────────────
@@ -205,7 +205,7 @@ jobs:
           path: ui/node_modules/.cache/vitest
           key: vitest-cache-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: vitest-cache-${{ runner.os }}-
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
 
@@ -253,7 +253,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: 'ui/package-lock.json'
-      - run: cd ui && npm ci --no-audit --no-fund
+      - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - run: cd ui && npm run build
       - name: Run Lighthouse CI
         run: npx -p @lhci/cli@0.14.x -- lhci autorun
@@ -457,7 +457,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: mozilla/sccache-action@v0.0.10
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
       # P28-1: Docker layer caching — pull pre-built GHCR image then

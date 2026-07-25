@@ -71,7 +71,7 @@ jobs:
           cache-dependency-path: 'ui/package-lock.json'
 
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund
+        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
 
       - name: Build UI (tablet)
         run: cd ui && npx vite build --config vite.tablet.config.ts
