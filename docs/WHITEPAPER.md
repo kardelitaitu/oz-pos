@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (1 key finding — inaccurate HAL description) · F1 (line 77): "Implemented in Rust using the embedded-hal traits" is inaccurate — oz-hal uses #[async_trait] async traits (e.g. crates/oz-hal/src/traits/barcode.rs), NOT embedded-hal; embedded-hal 0.2 is only listed in root Cargo.toml and is referenced by no crate source. Line 78 "unified API (Device::connect/read/write)" partially wrong: connect() exists on some traits but read()/write() are not the universal HAL API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: "Implemented in Rust using the embedded-hal traits" -> oz-hal uses #[async_trait] async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`) and a `DriverRegistry`; no universal `Device::connect/read/write` API · otherwise architectural prose holds (Rust + Tauri v2 + Lua via rlua + SQLite + optional PostgreSQL sync) -->
 
 # Whitepaper: OZ-POS Software Framework
 
@@ -76,8 +76,8 @@ The `oz-` prefix is short, memorable, and signals: *this is part of the wizard's
 | **iPad** | iPadOS (ARM) | Premium touch UI, Apple Pay integration, high‑resolution display. |
 
 **Hardware Abstraction Layer (HAL):**
-- Implemented in Rust using the **`embedded-hal`** traits, allowing drivers for barcode scanners, receipt printers, NFC readers, and payment terminals to be swapped seamlessly.
-- Provides a unified API (`Device::connect()`, `Device::read()`, `Device::write()`) that abstracts away platform specifics.
+- Implemented in Rust using `#[async_trait]` async traits (`BarcodeScanner`, `ReceiptPrinter`, `CashDrawer`), allowing drivers for barcode scanners, receipt printers, NFC readers, and payment terminals to be swapped seamlessly.
+- Provides a `DriverRegistry` for lookup/injection per device category, plus programmable mock drivers for testing.
 
 ---
 

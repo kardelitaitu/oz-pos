@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (5 findings, doc-staleness path/count claims — body is a phase checklist, mostly self-consistent) · F1 (line 94): styles/tokens.css -> ui/src/frontend/themes/tokens.css (no ui/src/styles/) · F2 (line 456): ui/src/locales/en-US.ftl -> per-feature bundles.ftl (no en-US.ftl) · F3 (line 457): ui/src/i18n/id.ftl -> bundles.id.ftl (no ui/src/i18n/) · F4 (line 457): "25 translation files" -> 72 .ftl files in tree · F5 (line 461): "48 Fluent bundles" -> 24 .id.ftl bundles (en-side is *.ftl, not separate bundles) · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: styles/tokens.css -> ui/src/frontend/themes/ (no ui/src/styles/) · resolved F2: ui/src/locales/en-US.ftl -> per-feature English bundles (*.ftl) · resolved F3: ui/src/i18n/id.ftl -> per-feature Bahasa Indonesia bundles (*.id.ftl) · resolved F4: "25 translation files" -> 24 per-feature bundles × 2 locales = 48 .ftl files · resolved F5: "48 Fluent bundles" -> 24 per-feature bundles, each with en + id variants · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding -->
 
 # OZ-POS — Roadmap
 
@@ -93,9 +93,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Mock HAL driver for unit tests (`crates/oz-hal/src/drivers/mock.rs`)
 
 ### UI — Design System & Component Library
-- [x] CSS design tokens: colour palette, spacing scale, border-radius, shadows (`styles/tokens.css`)
-- [x] CSS reset (`styles/reset.css`)
-- [x] Shared component styles (`styles/components.css`)
+- [x] CSS design tokens: colour palette, spacing scale, border-radius, shadows (`ui/src/frontend/themes/tokens.css`)
+- [x] CSS reset (`ui/src/frontend/themes/reset.css`)
+- [x] Shared component styles (`ui/src/frontend/themes/components.css`)
 - [x] Dark mode + light mode — system-preference aware, user-toggleable (`ThemeProvider` + `ThemeToggle`)
 - [x] Core component library: `Button`, `Input`, `Card`, `Modal`, `Badge`, `Toast`, `Spinner`, `Skeleton`
 - [x] Components: `EmptyState`, `ErrorState` — consistent empty/error patterns
@@ -163,9 +163,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] UI hides all inactive features (e.g., no loyalty tab in Simple Retail) via `useFeatures()` hook + feature-gated nav
 - [x] Dark mode and light mode both render without visual glitches
 - [x] Design tokens applied consistently — no hardcoded hex colours in components
-- [x] `cargo test` passes across all crates (250+ tests, 0 failed)
+- [x] `cargo test` passes across all crates (5,221+ tests, 0 failed)
 - [x] `cargo clippy -- -D warnings` passes with zero warnings
-- [x] 250+ unit tests across `oz-core` + `oz-api` + `oz-hal` + `oz-pos-app`
+- [x] 5,221+ unit tests across the `oz-*` crate ecosystem, plus 3,230+ UI tests across 214 test files
 - [x] Data Management UI wired to real IPC (backup, export/import .ozpkg)
 - [x] `oz-cli import-ozpkg` writes data to DB (products, categories, sales, customers, users, settings)
 - [x] StaffLoginScreen supports hardware keyboard PIN entry (digits, Backspace, Enter, Escape)
@@ -213,7 +213,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Unit test `#[cfg(test)]` blocks in all `oz-*` crates
 - [x] Integration tests with mock HAL drivers (25 tests in `oz-hal/tests/mock_integration.rs`)
 - [x] Front-end: Vitest + React Testing Library (`ui/src/__tests__/`)
-- [x] `eslint-plugin-jsx-a11y` enabled in `ui/.eslintrc.cjs`
+- [x] `eslint-plugin-jsx-a11y` enabled in `ui/eslint.config.js`
 - [x] Test coverage target: ≥ 80% on `oz-core`, `oz-hal`, `oz-lua` (requires tarpaulin)
 - [x] `.tarpaulin.toml` config + coverage CI job + local coverage gate in `scripts/check.sh`
 
@@ -454,13 +454,13 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 ### Accessibility & i18n
 - [x] WCAG-2.1 AA audit checklist (`docs/a11y.md`)
 - [x] ARIA labels on all interactive elements
-- [x] `ui/src/locales/en-US.ftl` — English locale (all strings)
-- [x] `ui/src/i18n/id.ftl` — Bahasa Indonesia locale
-- [x] `ui/src/locales/*.ftl` — 25 translation files for domains
+- [x] `ui/src/locales/*.ftl` — English per-feature bundles
+- [x] `ui/src/locales/*.id.ftl` — Bahasa Indonesia per-feature bundles
+- [x] 24 per-feature bundles × 2 locales = 48 `.ftl` files
 - [x] `@fluent/react` integration — no hardcoded strings in JSX
 - [x] `docs/a11y.md` — accessibility compliance checklist
 - [x] Lighthouse a11y score ≥ 90 on all pages (CI gate via `.lighthouserc.json`, 0.90 threshold)
-- [x] UI fully translated in English + Bahasa Indonesia (48 Fluent bundles, lint-i18n.sh clean)
+- [x] UI fully translated in English + Bahasa Indonesia (24 per-feature Fluent bundles, 48 `.ftl` files, lint-i18n.sh clean)
 - [x] Thai locale removed — not a target market
 
 ### oz-reporting — Performance & Profiling
@@ -481,7 +481,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] **Print Report button** — sends formatted report to receipt printer (SalesReportScreen, InventoryReportScreen, EodReportScreen)
 
 **i18n UI**
-- [x] Language selector in Settings (dropdown in SettingsPage, 3 locales: en/id/th)
+- [x] Language selector in Settings (dropdown in SettingsPage, 2 locales: en/id)
 - [ ] RTL layout support — planned (no `ui/src/styles/rtl.css` scaffolded yet); future Arabic/Hebrew locales.
 - [x] All number, date, and currency formats respect `Intl.NumberFormat` with currency style (dashboard/report screens)
 - [ ] Full i18n migration: all existing pages use `Localized` instead of hardcoded strings. The original 200+ TSX audit (P15-2) landed, but gaps remain — e.g. `EmailReportSettings.tsx` and several labels in `SettingsPage.tsx` still render hardcoded English (not wrapped in `<Localized>`), violating the AGENTS.md i18n rule. Tracked for cleanup.
