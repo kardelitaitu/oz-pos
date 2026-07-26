@@ -1,10 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import {
   useTerminalHardware,
   createDefaultProfile,
   type TerminalHardwareProfile,
 } from '@/hooks/useTerminalHardware';
+
+// ── Mock the IPC bridge: reject getHardwareSettings so tests use localStorage only ──
+vi.mock('@/api/settings', () => ({
+  getHardwareSettings: vi.fn(() => Promise.reject(new Error('IPC unavailable'))),
+  setHardwareSettings: vi.fn(() => Promise.resolve()),
+}));
 
 // ── Helpers ───────────────────────────────────────────────────────
 

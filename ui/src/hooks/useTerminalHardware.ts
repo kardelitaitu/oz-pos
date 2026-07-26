@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getHardwareSettings, setHardwareSettingsScoped, type HardwareSettingsDto } from '@/api/settings';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -229,6 +230,49 @@ function mergeWithDefaults(partial: TerminalHardwareProfile): TerminalHardwarePr
   return result;
 }
 
+// ── Bridge: sync printer/scanner subset to Tauri IPC (filesystem backend) ──
+
+/** Extract the IPC-compatible DTO subset from a full profile. */
+function toHardwareSettingsDto(profile: TerminalHardwareProfile): HardwareSettingsDto {
+  return {
+    printerConnection: profile.hardware.printer.connection,
+    printerDevicePath: profile.hardware.printer.devicePath,
+    printerPaperSize: profile.hardware.printer.paperSize,
+    scannerDeviceId: profile.hardware.scanner.deviceId,
+    scannerInputMode: profile.hardware.scanner.mode,
+  };
+}
+
+/** Merge IPC DTO fields into a profile — IPC values take precedence when present. */
+function mergeIpcSettings(
+  profile: TerminalHardwareProfile,
+  dto: HardwareSettingsDto,
+): TerminalHardwareProfile {
+  return {
+    ...profile,
+    hardware: {
+      ...profile.hardware,
+      printer: {
+        ...profile.hardware.printer,
+        connection: dto.printerConnection
+          ? (dto.printerConnection as PrinterConnection)
+          : profile.hardware.printer.connection,
+        devicePath: dto.printerDevicePath ?? profile.hardware.printer.devicePath,
+        paperSize: dto.printerPaperSize
+          ? (dto.printerPaperSize as PaperSize)
+          : profile.hardware.printer.paperSize,
+      },
+      scanner: {
+        ...profile.hardware.scanner,
+        deviceId: dto.scannerDeviceId ?? profile.hardware.scanner.deviceId,
+        mode: dto.scannerInputMode
+          ? (dto.scannerInputMode as ScannerMode)
+          : profile.hardware.scanner.mode,
+      },
+    },
+  };
+}
+
 // ── Read from storage ───────────────────────────────────────────────
 
 function readFromStorage(terminalId: string): string | null {
@@ -261,7 +305,7 @@ export interface UseTerminalHardwareResult {
   /** Update local preferences. */
   updateLocalPrefs: (partial: Partial<LocalPrefs>) => void;
   /** Persist the current profile to storage (three-phase commit). */
-  save: () => Promise<void>;
+  save: (sessionToken?: string) => Promise<void>;
   /** Re-read profile from storage. */
   reload: () => void;
 }
@@ -287,7 +331,7 @@ export function useTerminalHardware(
 
   // ── Load profile on mount ──────────────────────────────────
 
-  const loadProfile = useCallback(() => {
+  const loadProfile = useCallback(async () => {
     if (!terminalId) {
       setProfile(null);
       setIsLoading(false);
@@ -299,43 +343,43 @@ export function useTerminalHardware(
 
     try {
       const raw = readFromStorage(terminalId);
+      let profileData: TerminalHardwareProfile;
 
       if (!raw) {
-        // New terminal — create default profile
-        const defaults = createDefaultProfile(terminalId, storeId);
-        setProfile(defaults);
-        setIsLoading(false);
-        return;
-      }
-
-      // Parse and validate
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        // Corrupted JSON — rename and create fresh
-        handleCorruptedFile(terminalId, raw);
-        const defaults = createDefaultProfile(terminalId, storeId);
-        setProfile(defaults);
-        setIsLoading(false);
-        setError('Hardware profile was corrupted — reset to defaults.');
-        return;
-      }
-
-      const validation = validateProfile(parsed);
-      if (!validation.valid) {
-        // Schema validation failed — merge valid fields, reset invalid
-        const merged = mergeWithDefaults(parsed as TerminalHardwareProfile);
-        setProfile(merged);
-        setIsLoading(false);
-        // Save the corrected profile
+        profileData = createDefaultProfile(terminalId, storeId);
+      } else {
+        let parsed: unknown;
         try {
-          writeToStorage(terminalId, JSON.stringify(merged, null, 2));
-        } catch { /* best-effort */ }
-        return;
+          parsed = JSON.parse(raw);
+        } catch {
+          handleCorruptedFile(terminalId, raw);
+          profileData = createDefaultProfile(terminalId, storeId);
+          setProfile(profileData);
+          setIsLoading(false);
+          setError('Hardware profile was corrupted — reset to defaults.');
+          return;
+        }
+
+        const validation = validateProfile(parsed);
+        if (!validation.valid) {
+          profileData = mergeWithDefaults(parsed as TerminalHardwareProfile);
+          try {
+            writeToStorage(terminalId, JSON.stringify(profileData, null, 2));
+          } catch { /* best-effort */ }
+        } else {
+          profileData = parsed as TerminalHardwareProfile;
+        }
       }
 
-      setProfile(parsed as TerminalHardwareProfile);
+      // Bridge: merge IPC (filesystem) printer/scanner values on top of localStorage
+      try {
+        const ipcSettings = await getHardwareSettings();
+        profileData = mergeIpcSettings(profileData, ipcSettings);
+      } catch {
+        // IPC unavailable (dev mock, non-Tauri env) — use localStorage only
+      }
+
+      setProfile(profileData);
       setIsLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load terminal hardware profile');
@@ -401,40 +445,38 @@ export function useTerminalHardware(
     });
   }, []);
 
-  // ── Three-phase commit save ─────────────────────────────────
+  // ── Three-phase commit save (localStorage + IPC bridge) ─────
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (sessionToken?: string) => {
     if (!profile || !terminalId) return;
 
     setIsLoading(true);
     setError(null);
 
     const newData = JSON.stringify(profile, null, 2);
-
-    // Phase 1: Backup existing data
     const oldData = readFromStorage(terminalId);
 
     try {
-      // Phase 2: Write new data
+      // Phase 1: Write to localStorage (backward compatible)
       writeToStorage(terminalId, newData);
 
-      // Phase 3: Success — cleanup (old backup not needed since
-      // localStorage is atomic per-key)
-
-      // For filesystem-based storage (future Tauri fs plugin),
-      // this is where we'd delete the .bak file.
+      // Phase 2: Bridge printer/scanner subset to IPC (filesystem backend)
+      if (sessionToken) {
+        try {
+          await setHardwareSettingsScoped(sessionToken, toHardwareSettingsDto(profile));
+        } catch {
+          // IPC unavailable — localStorage-only is fine
+        }
+      }
 
       setIsLoading(false);
     } catch (err) {
-      // Phase 3 (failure): Restore from old data
+      // Failure: Restore from old data
       if (oldData !== null) {
-        try {
-          writeToStorage(terminalId, oldData);
-        } catch { /* desperate */ }
+        try { writeToStorage(terminalId, oldData); } catch { /* desperate */ }
       } else {
         removeFromStorage(terminalId);
       }
-
       const msg = err instanceof Error ? err.message : 'Failed to save hardware profile';
       setError(msg);
       setIsLoading(false);

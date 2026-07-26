@@ -1,35 +1,35 @@
-fix(settings): wire workspace cards to IPC — terminalId, receipt, KDS, inventory persistence
+fix(settings): wire workspace cards to IPC + hardware IPC bridge + i18n fix
 
-Store POS (WorkspaceStorePosSettings):
-- SettingsPage now resolves deviceId via getDeviceId() on mount and passes
-  terminalId to all workspace cards, making Printer & Scanner sections visible.
-- handleSave calls setReceiptSettingsScoped(sessionToken, receiptDto) to
-  persist paper width, show currency, show tax, show table number, and footer
-  to the backend. Previously these were local-state-only and lost on reload.
-- originalsRef updated after save so dirty tracking resets correctly.
+Workspace cards (store-pos, restaurant-pos, kds, inventory):
+- SettingsPage now resolves terminalId via getDeviceId() on mount and passes
+  it with sessionToken to all 4 workspace cards, fixing hidden printer/scanner
+  sections and enabling hardware config visibility.
+- Store POS: handleSave calls setReceiptSettingsScoped to persist receipt
+  settings; hw.save(sessionToken) bridges to filesystem IPC.
+- Restaurant POS: handleSave persists showTableNumber via setReceiptSettingsScoped
+  and courseFiring via setSettingScoped; hw.save(sessionToken) bridges hardware.
+- KDS: handleSave persists 5 settings (soundEnabled, yellow/red thresholds,
+  autoAcknowledge, density) via setSettingScoped with 'kds.'-prefixed keys.
+- Inventory: handleSave persists lowStockThreshold + deductionPreferWarehouse
+  via setSettingScoped with 'inventory.'-prefixed keys.
 
-Restaurant POS (WorkspaceRestaurantPosSettings):
-- Same pattern: passes terminalId + sessionToken from SettingsPage.
-- handleSave persists showTableNumber (table management toggle) via
-  setReceiptSettingsScoped and courseFiring via setSettingScoped.
-- Kitchen printer hardware also saved via hw.save().
+Hardware IPC bridge (useTerminalHardware.ts):
+- Added toHardwareSettingsDto() and mergeIpcSettings() helpers to extract/merge
+  the 5-field printer+scanner DTO subset from/to the full TerminalHardwareProfile.
+- loadProfile is now async: after loading from localStorage, calls
+  getHardwareSettings() IPC and merges printer/scanner values on top.
+- save() now accepts optional sessionToken param; when provided, calls
+  setHardwareSettingsScoped to bridge the printer+scanner subset to
+  terminal_profiles/{id}.json on disk. Falls back to localStorage-only
+  when IPC is unavailable (dev mock, non-Tauri env).
+- Fixed corrupted JSON recovery path to call setProfile before early return.
 
-KDS (WorkspaceKdsSettings):
-- handleSave persists all 5 KDS settings (soundEnabled, yellowThresholdMin,
-  redThresholdMin, autoAcknowledge, density) to the settings table via
-  setSettingScoped with 'kds.'-prefixed keys.
-- originalsRef updated after save.
+i18n (SyncSection.tsx):
+- Wrapped hardcoded "Toggle" sr-only text in Localized to match project standard.
 
-Inventory (WorkspaceInventorySettings):
-- handleSave persists lowStockThreshold + deductionPreferWarehouse via
-  setSettingScoped with 'inventory.'-prefixed keys.
-
-SettingsPage.tsx:
-- Added getDeviceId import from @/api/system with async resolution on mount.
-- Passes terminalId and sessionToken (conditional spread for
-  exactOptionalPropertyTypes) to all 4 workspace cards.
-
-Verification:
-- npm run typecheck: clean, no errors
-- WorkspaceStorePosSettings.test.tsx: 20 tests pass
-- WorkspaceRestaurantPosSettings.test.tsx: 11 tests pass
+Tests:
+- useTerminalHardware.test.ts: added vi.mock for @/api/settings that rejects
+  getHardwareSettings so existing tests use localStorage-only path. 14 tests pass.
+- WorkspaceStorePosSettings.test.tsx: 20 tests pass.
+- WorkspaceRestaurantPosSettings.test.tsx: 11 tests pass.
+- npm run typecheck: clean.

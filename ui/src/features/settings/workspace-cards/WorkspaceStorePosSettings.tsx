@@ -89,9 +89,9 @@ export function WorkspaceStorePosSettings({
         );
       }
 
-      // Save terminal hardware if available
+      // Save terminal hardware if available (bridge to IPC when sessionToken available)
       if (terminalId && hw.profile) {
-        tasks.push(hw.save());
+        tasks.push(hw.save(sessionToken));
       }
 
       await Promise.all(tasks);

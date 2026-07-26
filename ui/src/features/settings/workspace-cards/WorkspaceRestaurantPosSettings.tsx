@@ -83,7 +83,7 @@ export function WorkspaceRestaurantPosSettings({
       }
 
       if (terminalId && hw.profile) {
-        tasks.push(hw.save());
+        tasks.push(hw.save(sessionToken));
       }
 
       await Promise.all(tasks);

@@ -247,7 +247,7 @@ export default function SyncSection({
           </label>
           <span className="settings-field-input-wrap">
             <label className="settings-toggle" htmlFor="sync-enabled">
-              <span className="sr-only">Toggle</span>
+              <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input
                   id="sync-enabled"
