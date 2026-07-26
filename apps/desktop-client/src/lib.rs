@@ -379,6 +379,7 @@ pub fn run() {
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::set_setting_scoped,
+            commands::settings::set_settings,
             commands::setup::get_enabled_features,
             commands::setup::complete_setup,
             commands::setup::dismiss_setup_wizard,

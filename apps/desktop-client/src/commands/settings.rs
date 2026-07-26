@@ -831,6 +831,57 @@ fn run_set_setting(
     Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
 }
 
+// ── Batch key-value settings (single transaction) ───────────────
+
+/// Write (or overwrite) multiple settings in a single transaction.
+///
+/// All entries are written atomically — either all succeed or none
+/// do. A single `SettingsUpdated` event is published with all changed
+/// keys after the transaction commits.
+#[command]
+pub async fn set_settings(
+    entries: HashMap<String, String>,
+    user_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let keys: Vec<String> = entries.keys().cloned().collect();
+
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
+        let tx = conn.unchecked_transaction()?;
+        for (key, value) in &entries {
+            Settings::set_tracked(&tx, key, value, &terminal_id)?;
+        }
+        tx.commit()?;
+    }
+
+    // Publish a single SettingsUpdated event for all changed keys.
+    let kernel = state.kernel.lock().await;
+    let bus = kernel.event_bus();
+    let event = oz_core::events::SettingsUpdated {
+        changed_keys: keys,
+        terminal_id,
+    };
+    if let Err(e) = bus.publish(&event) {
+        tracing::warn!(
+            key_count = entries.len(),
+            error = %e,
+            "failed to publish SettingsUpdated event"
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

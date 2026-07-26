@@ -3,7 +3,7 @@ import { Localized } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { getSetting, setSetting } from '@/api/settings';
+import { getSetting, setSettings } from '@/api/settings';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
 
@@ -66,15 +66,10 @@ export function WorkspaceInventorySettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const entries: Record<string, string> = {
+      await setSettings({
         'inventory.low_stock_threshold': String(lowStockThreshold),
         'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
-      };
-      await Promise.all(
-        Object.entries(entries).map(([key, value]) =>
-          setSetting(key, value, userId ?? 'default'),
-        ),
-      );
+      }, userId ?? 'default');
       originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
       onSaved?.();
     } catch {

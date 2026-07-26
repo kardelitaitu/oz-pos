@@ -3,7 +3,7 @@ import { Localized } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { getSetting, setSetting } from '@/api/settings';
+import { getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -99,18 +99,13 @@ export function WorkspaceKdsSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const entries: Record<string, string> = {
+      await setSettings({
         'kds.sound_enabled': String(draft.soundEnabled),
         'kds.yellow_threshold_min': String(draft.yellowThresholdMin),
         'kds.red_threshold_min': String(draft.redThresholdMin),
         'kds.auto_acknowledge': String(draft.autoAcknowledge),
         'kds.density': draft.density,
-      };
-      await Promise.all(
-        Object.entries(entries).map(([key, value]) =>
-          setSetting(key, value, userId ?? 'default'),
-        ),
-      );
+      }, userId ?? 'default');
       originalsRef.current = { ...draft };
       onSaved?.();
     } catch {

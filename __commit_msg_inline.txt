@@ -1,37 +1,18 @@
-fix(settings): use workspace context for terminalId, unscoped IPC, remove localStorage
+feat(settings): batch setSettings API — atomic multi-key write in one IPC call
 
-terminalId from workspace context:
-- WorkspaceContextValue now exposes terminalId: string, resolved once on mount
-  via getDeviceId(). SettingsPage uses this instead of calling getDeviceId
-  directly. WorkspaceProvider, useWorkspace, test-utils all updated.
+Replaces N parallel setSetting calls with a single setSettings(entries, userId)
+in KDS (5 keys) and Inventory (2 keys) workspace cards.
 
-Unscoped receipt API (WorkspaceStorePosSettings):
-- Switched from setReceiptSettingsScoped to setReceiptSettings(args, userId).
-  Takes userId from new WorkspaceCardProps.userId field instead of sessionToken.
-- SettingsPage passes userId={session?.user_id ?? 'default'} to workspace cards.
+Rust (desktop-client):
+- New set_settings command: accepts HashMap<String, String> + user_id. Opens
+  single transaction, calls Settings::set_tracked for each entry, commits,
+  publishes one SettingsUpdated event with all changed keys.
+- Registered in invoke_handler.
 
-Hardware: IPC replaces localStorage (useTerminalHardware.ts):
-- Complete rewrite: removed ALL localStorage read/write/validation/corruption
-  handlers. Now uses getHardwareSettings() IPC on load (maps 5-field DTO to
-  full TerminalHardwareProfile via fromHardwareSettingsDto) and
-  setHardwareSettings(dto, userId) IPC on save (extracts 5-field DTO subset
-  via toHardwareSettingsDto).
-- save() now accepts userId instead of sessionToken.
-- Load failures fall back to defaults. Scale/localPrefs fields get defaults
-  since the IPC DTO doesn't support them yet (future phase).
+Front-end:
+- setSettings(entries: Record<string, string>, userId: string) in settings.ts
+- WorkspaceKdsSettings: 5 parallel setSetting → 1 setSettings call
+- WorkspaceInventorySettings: 2 parallel setSetting → 1 setSettings call
+- Existing setSetting preserved for single-key callers.
 
-Updated callers:
-- TerminalPreferencesCard: destructures userId, passes to hw.save(userId).
-- WorkspaceRestaurantPosSettings: hw.save(userId) instead of hw.save(sessionToken).
-- WorkspaceCardProps.types: added userId?: string field.
-
-Tests:
-- useTerminalHardware.test.ts: complete rewrite (11 tests) — mocks
-  getHardwareSettings/setHardwareSettings IPC instead of localStorage.
-- WorkspaceRestaurantPosSettings.test.tsx: added @/api/settings mock.
-- test-utils.tsx + mocks/contexts.tsx: added terminalId to workspace mocks.
-
-Verification:
-- npm run typecheck: clean
-- 56 tests pass (useTerminalHardware 11, Store POS 20, Restaurant POS 11,
-  TerminalPreferences 14)
+Future: scoped set_settings_scoped variant + empty-entries guard.

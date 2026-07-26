@@ -221,12 +221,21 @@ export const getSetting = (key: string): Promise<string | null> =>
  * reads/writes to the primary store database. Requires a valid
  * `userId` for the SETTINGS_EDIT permission check.
  *
- * Prefer `setSettingScoped` for multi-store (ADR #7). This variant
- * exists for callers that need to stay consistent with `getSetting`
- * (which has no scoped equivalent).
+ * Prefer `setSettings` (batch) for multiple keys to reduce IPC
+ * round-trips. This variant exists for single-key callers.
  */
 export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
   loggedInvoke<void>('set_setting', { key, value, userId });
+
+/**
+ * Write multiple settings atomically in a single IPC call + DB
+ * transaction. All entries succeed or fail together.
+ *
+ * Prefer this over multiple `setSetting` calls when persisting
+ * more than one key (e.g. the KDS or Inventory workspace cards).
+ */
+export const setSettings = (entries: Record<string, string>, userId: string): Promise<void> =>
+  loggedInvoke<void>('set_settings', { entries, userId });
 
 /**
  * Write (or overwrite) a single raw setting value using the scoped variant (ADR #7).
@@ -245,5 +254,3 @@ export const setSettingScoped = (
   }
   return loggedInvoke<void>('set_setting_scoped', { sessionToken, key, value });
 };
-
-
