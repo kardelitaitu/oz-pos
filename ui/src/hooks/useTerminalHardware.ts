@@ -101,6 +101,13 @@ function toHardwareSettingsDto(profile: TerminalHardwareProfile): HardwareSettin
     printerPaperSize: profile.hardware.printer.paperSize,
     scannerDeviceId: profile.hardware.scanner.deviceId,
     scannerInputMode: profile.hardware.scanner.mode,
+    scaleConnection: profile.hardware.scale.connection,
+    scaleDevicePath: profile.hardware.scale.devicePath,
+    scaleBaudRate: profile.hardware.scale.baudRate,
+    scaleZeroOnBoot: profile.hardware.scale.zeroOnBoot,
+    soundVolume: profile.localPrefs.soundVolume,
+    darkMode: profile.localPrefs.darkMode,
+    scaleAutoZero: profile.localPrefs.scaleAutoZero,
   };
 }
 
@@ -126,6 +133,19 @@ function fromHardwareSettingsDto(
         deviceId: dto.scannerDeviceId ?? defaults.hardware.scanner.deviceId,
         mode: (dto.scannerInputMode as ScannerMode) || defaults.hardware.scanner.mode,
       },
+      scale: {
+        ...defaults.hardware.scale,
+        connection: (dto.scaleConnection as ScaleConnection) || defaults.hardware.scale.connection,
+        devicePath: dto.scaleDevicePath ?? defaults.hardware.scale.devicePath,
+        baudRate: dto.scaleBaudRate ?? defaults.hardware.scale.baudRate,
+        zeroOnBoot: dto.scaleZeroOnBoot ?? defaults.hardware.scale.zeroOnBoot,
+      },
+    },
+    localPrefs: {
+      ...defaults.localPrefs,
+      soundVolume: dto.soundVolume ?? defaults.localPrefs.soundVolume,
+      darkMode: dto.darkMode ?? defaults.localPrefs.darkMode,
+      scaleAutoZero: dto.scaleAutoZero ?? defaults.localPrefs.scaleAutoZero,
     },
   };
 }
@@ -147,7 +167,7 @@ export interface UseTerminalHardwareResult {
   updateScanner: (partial: Partial<ScannerConfig>) => void;
   /** Update local preferences. */
   updateLocalPrefs: (partial: Partial<LocalPrefs>) => void;
-  /** Persist printer+scanner subset to filesystem via IPC. */
+  /** Persist full hardware + localPrefs to filesystem via IPC. */
   save: (userId?: string) => Promise<void>;
   /** Re-read profile from IPC. */
   reload: () => void;
@@ -159,10 +179,8 @@ export interface UseTerminalHardwareResult {
  * Hook to manage terminal hardware bindings (printer, scale, scanner)
  * stored in the filesystem via Tauri IPC (terminal_profiles/{id}.json).
  *
- * Printer and scanner config are persisted via getHardwareSettings /
- * setHardwareSettings. Scale and local preferences are maintained in
- * local state with defaults — IPC DTO extensions for these fields are
- * planned for a future phase.
+ * Full terminal profile (printer, scanner, scale, localPrefs) is
+ * persisted via getHardwareSettings / setHardwareSettings IPC.
  *
  * @param terminalId - Unique terminal identifier
  * @param storeId - Optional store identifier for the profile

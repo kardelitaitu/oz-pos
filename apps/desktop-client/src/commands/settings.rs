@@ -448,9 +448,9 @@ pub async fn settle_credit_scoped(
     Ok(())
 }
 
-// ── Hardware settings (printer + scanner) ───────────────────────
+// ── Hardware settings (printer + scanner + scale + localPrefs) ───
 
-/// Printer and scanner configuration.
+/// Full terminal hardware and local-preference configuration.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HardwareSettingsDto {
@@ -464,6 +464,40 @@ pub struct HardwareSettingsDto {
     pub scanner_device_id: String,
     /// Scanner Input Mode.
     pub scanner_input_mode: String,
+    /// Scale connection type: "serial", "usb", "none".
+    #[serde(default = "default_scale_connection")]
+    pub scale_connection: String,
+    /// Scale device path.
+    #[serde(default)]
+    pub scale_device_path: String,
+    /// Scale baud rate (default 9600).
+    #[serde(default = "default_scale_baud_rate")]
+    pub scale_baud_rate: i64,
+    /// Zero the scale automatically on boot.
+    #[serde(default)]
+    pub scale_zero_on_boot: bool,
+    /// Sound volume percentage (0–100).
+    #[serde(default = "default_sound_volume")]
+    pub sound_volume: i64,
+    /// Dark mode enabled.
+    #[serde(default)]
+    pub dark_mode: bool,
+    /// Scale auto-zero after each transaction.
+    #[serde(default = "default_scale_auto_zero")]
+    pub scale_auto_zero: bool,
+}
+
+fn default_scale_connection() -> String {
+    "none".into()
+}
+fn default_scale_baud_rate() -> i64 {
+    9600
+}
+fn default_sound_volume() -> i64 {
+    80
+}
+fn default_scale_auto_zero() -> bool {
+    true
 }
 
 impl From<TerminalProfile> for HardwareSettingsDto {
@@ -474,6 +508,13 @@ impl From<TerminalProfile> for HardwareSettingsDto {
             printer_paper_size: p.printer_paper_size,
             scanner_device_id: p.scanner_device_id,
             scanner_input_mode: p.scanner_input_mode,
+            scale_connection: p.scale_connection,
+            scale_device_path: p.scale_device_path,
+            scale_baud_rate: p.scale_baud_rate as i64,
+            scale_zero_on_boot: p.scale_zero_on_boot,
+            sound_volume: p.sound_volume as i64,
+            dark_mode: p.dark_mode,
+            scale_auto_zero: p.scale_auto_zero,
         }
     }
 }
@@ -486,11 +527,17 @@ impl From<HardwareSettingsDto> for TerminalProfile {
             printer_paper_size: dto.printer_paper_size,
             scanner_device_id: dto.scanner_device_id,
             scanner_input_mode: dto.scanner_input_mode,
+            scale_connection: dto.scale_connection,
+            scale_device_path: dto.scale_device_path,
+            scale_baud_rate: dto.scale_baud_rate as u32,
+            scale_zero_on_boot: dto.scale_zero_on_boot,
+            sound_volume: dto.sound_volume as u32,
+            dark_mode: dto.dark_mode,
+            scale_auto_zero: dto.scale_auto_zero,
         }
     }
 }
 
-/// Helper: resolve the app data directory from db_path.
 fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, AppError> {
     state
         .db_path
@@ -530,6 +577,7 @@ pub async fn get_hardware_settings(
         printer_paper_size: Settings::get_printer_paper_size(&conn)?,
         scanner_device_id: Settings::get_scanner_device_id(&conn)?,
         scanner_input_mode: Settings::get_scanner_input_mode(&conn)?,
+        ..Default::default()
     };
 
     // Persist to JSON so future reads take the fast path.
@@ -1168,9 +1216,18 @@ mod tests {
             printer_paper_size: "80mm".into(),
             scanner_device_id: "scanner-1".into(),
             scanner_input_mode: "keyboard".into(),
+            scale_connection: "serial".into(),
+            scale_device_path: "COM3".into(),
+            scale_baud_rate: 115200,
+            scale_zero_on_boot: true,
+            sound_volume: 60,
+            dark_mode: true,
+            scale_auto_zero: false,
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["printerConnection"], "USB");
+        assert_eq!(json["scaleConnection"], "serial");
+        assert_eq!(json["soundVolume"], 60);
     }
 
     #[test]
@@ -1316,11 +1373,21 @@ mod tests {
             printer_paper_size: "58mm".into(),
             scanner_device_id: "scanner-2".into(),
             scanner_input_mode: "serial".into(),
+            scale_connection: "usb".into(),
+            scale_device_path: "/dev/hidraw0".into(),
+            scale_baud_rate: 9600,
+            scale_zero_on_boot: false,
+            sound_volume: 80,
+            dark_mode: false,
+            scale_auto_zero: true,
         };
         let json = serde_json::to_value(&dto).unwrap();
         let back: HardwareSettingsDto = serde_json::from_value(json).unwrap();
         assert_eq!(back.printer_connection, "Network");
         assert_eq!(back.scanner_device_id, "scanner-2");
+        assert_eq!(back.scale_connection, "usb");
+        assert_eq!(back.sound_volume, 80);
+        assert!(back.scale_auto_zero);
     }
 
     /// The orphan-cleanup keys in `get_hardware_settings` must stay

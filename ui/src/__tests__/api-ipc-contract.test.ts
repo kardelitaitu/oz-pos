@@ -346,6 +346,13 @@ describe('settings.ts IPC contract', () => {
       printerPaperSize: '80',
       scannerDeviceId: '',
       scannerInputMode: 'auto',
+      scaleConnection: 'none',
+      scaleDevicePath: '',
+      scaleBaudRate: 9600,
+      scaleZeroOnBoot: false,
+      soundVolume: 80,
+      darkMode: false,
+      scaleAutoZero: true,
     });
     await getHardwareSettings();
     expect(mockInvoke).toHaveBeenCalledWith('get_hardware_settings', undefined);
@@ -359,6 +366,13 @@ describe('settings.ts IPC contract', () => {
       printerPaperSize: '58',
       scannerDeviceId: 'scanner-1',
       scannerInputMode: 'keyboard',
+      scaleConnection: 'serial',
+      scaleDevicePath: 'COM3',
+      scaleBaudRate: 115200,
+      scaleZeroOnBoot: true,
+      soundVolume: 60,
+      darkMode: true,
+      scaleAutoZero: false,
     };
     await setHardwareSettings(args, 'u1');
     expect(mockInvoke).toHaveBeenCalledWith('set_hardware_settings', { args, userId: 'u1' });

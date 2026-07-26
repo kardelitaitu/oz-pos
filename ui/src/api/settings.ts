@@ -110,18 +110,25 @@ export const settleCredit = (saleId: string, userId: string): Promise<void> =>
 export const settleCreditScoped = (sessionToken: string, saleId: string): Promise<void> =>
   loggedInvoke<void>('settle_credit_scoped', { sessionToken, saleId });
 
-// ── Hardware Settings (printer + scanner) ─────────────────────
+// ── Hardware Settings (printer + scanner + scale + localPrefs) ──
 
-/** Hardware configuration for printer and scanner devices. */
+/** Full terminal hardware and local-preference configuration. */
 export interface HardwareSettingsDto {
   printerConnection: string;
   printerDevicePath: string;
   printerPaperSize: string;
   scannerDeviceId: string;
   scannerInputMode: string;
+  scaleConnection: string;
+  scaleDevicePath: string;
+  scaleBaudRate: number;
+  scaleZeroOnBoot: boolean;
+  soundVolume: number;
+  darkMode: boolean;
+  scaleAutoZero: boolean;
 }
 
-/** Get the hardware settings (printer, scanner). */
+/** Get the hardware settings (printer, scanner, scale, localPrefs). */
 export const getHardwareSettings = (): Promise<HardwareSettingsDto> =>
   loggedInvoke<HardwareSettingsDto>('get_hardware_settings');
 

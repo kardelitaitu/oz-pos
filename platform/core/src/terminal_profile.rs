@@ -1,5 +1,6 @@
-//! Per-terminal hardware profile — stores printer and scanner configuration
-//! in per-terminal JSON files under `terminal_profiles/`.
+//! Per-terminal hardware profile — stores printer, scanner, scale, and
+//! local preference configuration in per-terminal JSON files under
+//! `terminal_profiles/`.
 //!
 //! ## File layout
 //!
@@ -27,7 +28,11 @@ use std::path::{Path, PathBuf};
 
 use crate::error::PlatformError;
 
-/// Per-terminal hardware configuration stored in `terminal_profile.json`.
+/// Per-terminal hardware and local-preference configuration stored in
+/// `terminal_profiles/<id>.json`.
+///
+/// Missing fields in existing (pre-expansion) JSON files fall back to
+/// serde defaults so old profiles are forward-compatible.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TerminalProfile {
     /// Printer connection type: `"network"`, `"usb"`, `"serial"`, `"auto"`.
@@ -49,6 +54,36 @@ pub struct TerminalProfile {
     /// Scanner input mode: `"auto"`, `"keyboard"`, `"serial"`.
     #[serde(default = "default_scanner_input_mode")]
     pub scanner_input_mode: String,
+
+    // ── Scale (ADR #22 Phase 2) ──────────────────────────────
+    /// Scale connection type: `"serial"`, `"usb"`, `"none"`.
+    #[serde(default = "default_scale_connection")]
+    pub scale_connection: String,
+
+    /// Scale device path (e.g. `/dev/ttyUSB0`, `COM3`).
+    #[serde(default)]
+    pub scale_device_path: String,
+
+    /// Scale baud rate (default 9600).
+    #[serde(default = "default_scale_baud_rate")]
+    pub scale_baud_rate: u32,
+
+    /// Zero the scale automatically on boot.
+    #[serde(default = "default_scale_zero_on_boot")]
+    pub scale_zero_on_boot: bool,
+
+    // ── Local preferences ────────────────────────────────────
+    /// Sound volume percentage (0–100, default 80).
+    #[serde(default = "default_sound_volume")]
+    pub sound_volume: u32,
+
+    /// Dark mode enabled.
+    #[serde(default)]
+    pub dark_mode: bool,
+
+    /// Scale auto-zero after each transaction.
+    #[serde(default = "default_scale_auto_zero")]
+    pub scale_auto_zero: bool,
 }
 
 fn default_printer_connection() -> String {
@@ -63,6 +98,26 @@ fn default_scanner_input_mode() -> String {
     "auto".into()
 }
 
+fn default_scale_connection() -> String {
+    "none".into()
+}
+
+fn default_scale_baud_rate() -> u32 {
+    9600
+}
+
+fn default_scale_zero_on_boot() -> bool {
+    false
+}
+
+fn default_sound_volume() -> u32 {
+    80
+}
+
+fn default_scale_auto_zero() -> bool {
+    true
+}
+
 impl Default for TerminalProfile {
     fn default() -> Self {
         Self {
@@ -71,6 +126,13 @@ impl Default for TerminalProfile {
             printer_paper_size: default_printer_paper_size(),
             scanner_device_id: String::new(),
             scanner_input_mode: default_scanner_input_mode(),
+            scale_connection: default_scale_connection(),
+            scale_device_path: String::new(),
+            scale_baud_rate: default_scale_baud_rate(),
+            scale_zero_on_boot: default_scale_zero_on_boot(),
+            sound_volume: default_sound_volume(),
+            dark_mode: false,
+            scale_auto_zero: default_scale_auto_zero(),
         }
     }
 }
@@ -145,8 +207,6 @@ impl TerminalProfile {
 
         // Phase 3: Rename temp → final.
         fs::rename(&tmp_path, path).map_err(|e| {
-            // Best-effort recovery: restore from backup if it exists.
-            // fs::rename returns Err if source doesn't exist; let it fail silently.
             let _ = fs::rename(&bak_path, path);
             PlatformError::Internal(format!(
                 "failed to commit terminal profile {}: {e}",
@@ -189,6 +249,15 @@ mod tests {
         assert_eq!(p.printer_paper_size, "80");
         assert_eq!(p.scanner_device_id, "");
         assert_eq!(p.scanner_input_mode, "auto");
+        // Scale defaults
+        assert_eq!(p.scale_connection, "none");
+        assert_eq!(p.scale_device_path, "");
+        assert_eq!(p.scale_baud_rate, 9600);
+        assert!(!p.scale_zero_on_boot);
+        // Local-prefs defaults
+        assert_eq!(p.sound_volume, 80);
+        assert!(!p.dark_mode);
+        assert!(p.scale_auto_zero);
     }
 
     #[test]
@@ -202,6 +271,13 @@ mod tests {
             printer_paper_size: "58".into(),
             scanner_device_id: "scanner-001".into(),
             scanner_input_mode: "serial".into(),
+            scale_connection: "serial".into(),
+            scale_device_path: "COM3".into(),
+            scale_baud_rate: 115200,
+            scale_zero_on_boot: true,
+            sound_volume: 60,
+            dark_mode: true,
+            scale_auto_zero: false,
         };
 
         profile.save(&path).unwrap();
@@ -273,7 +349,6 @@ mod tests {
         let profile = TerminalProfile::default();
         profile.save(&path).unwrap();
 
-        // No tmp or bak files should remain.
         assert!(!path.with_extension("tmp").exists());
         assert!(!path.with_extension("bak").exists());
         assert!(path.exists());
@@ -295,6 +370,9 @@ mod tests {
         assert_eq!(profile.printer_paper_size, "a4");
         assert_eq!(profile.scanner_device_id, "scan-42");
         assert_eq!(profile.scanner_input_mode, "keyboard");
+        // New fields get defaults (backward compatible)
+        assert_eq!(profile.scale_connection, "none");
+        assert_eq!(profile.sound_volume, 80);
 
         let out = serde_json::to_string_pretty(&profile).unwrap();
         let roundtrip: TerminalProfile = serde_json::from_str(&out).unwrap();
@@ -308,6 +386,8 @@ mod tests {
         assert_eq!(profile.printer_connection, "usb");
         assert_eq!(profile.printer_paper_size, "80"); // default
         assert_eq!(profile.scanner_input_mode, "auto"); // default
+        assert_eq!(profile.scale_connection, "none"); // new default
+        assert!(!profile.dark_mode); // new default
     }
 
     #[test]
