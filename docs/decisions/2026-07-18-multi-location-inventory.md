@@ -1,5 +1,7 @@
 # ADR #18: Multi-Location Inventory — Workspace-Bound Stock Locations for Wholesale & Retail
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 finding) · F1: §13 cites "079_workspace_types_rename.sql" / "Migration 079 adds a per-location index" but 079 is actually 079_inventory_location_id.sql; the workspace rename cascade shipped as 091_workspace_types_rename.sql and the per-location index as 080_stock_movements_location_id.sql (migration numbers off-by-actual in the doc) · verified accurate: migrations 078-091 present (078 inventory_locations, 080 stock_movements.location_id, 082 bound_location_id, 083 workspace_inventory_locations, 084 inventory_transactions, 085 inventory_transaction_id FK, 087 stock_thresholds, 089 stock_summary composite PK, 090 purchase_orders.location_id, 091 workspace rename); 035_workspaces + 060_workspace_instances + 072 archive present; adjust_stock_at_location_with_reason at crates/oz-core/src/db/products.rs:791; InventoryStockHandler at modules/inventory/src/handlers.rs; rebuild_stock_summary in products.rs; Status "Implemented" matches on-disk schema -->
+
 **Status:** Implemented (2026-07-19)
 **Date:** 2026-07-18
 **Decision Record:** Reviewed and audited against current codebase (see §13)

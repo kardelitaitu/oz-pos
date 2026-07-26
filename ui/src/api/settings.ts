@@ -217,6 +217,18 @@ export const getSetting = (key: string): Promise<string | null> =>
   loggedInvoke<string | null>('get_setting', { key });
 
 /**
+ * Write (or overwrite) a single raw setting value. Unscoped —
+ * reads/writes to the primary store database. Requires a valid
+ * `userId` for the SETTINGS_EDIT permission check.
+ *
+ * Prefer `setSettingScoped` for multi-store (ADR #7). This variant
+ * exists for callers that need to stay consistent with `getSetting`
+ * (which has no scoped equivalent).
+ */
+export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
+  loggedInvoke<void>('set_setting', { key, value, userId });
+
+/**
  * Write (or overwrite) a single raw setting value using the scoped variant (ADR #7).
  *
  * Requires a valid `sessionToken` from `useWorkspace()`. When the token is null

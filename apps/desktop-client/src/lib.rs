@@ -15,6 +15,8 @@
 
 /// All `#[tauri::command]` handlers, organised by domain.
 pub mod commands;
+/// Background email report scheduler.
+pub mod email_scheduler;
 /// Single error type for every Tauri command.
 pub mod error;
 /// LAN event forwarding for multi-terminal setups.
@@ -98,6 +100,12 @@ pub fn run() {
             let prune_db = app.state::<AppState>().db.clone();
             platform_startup::spawn_daemon("prune daemon", async move {
                 platform_sync::daemon::SyncDaemon::start_prune_task(prune_db);
+            });
+
+            // ── Background email report scheduler ──────────────────
+            let email_db = app.state::<AppState>().db.clone();
+            platform_startup::spawn_daemon("email report scheduler", async move {
+                crate::email_scheduler::run_scheduler_loop(email_db).await;
             });
 
             // ── LAN event forwarder ────────────────────────────────────

@@ -134,3 +134,11 @@ export function useTheme(): ThemeContextValue {
   }
   return ctx;
 }
+
+/**
+ * Access the current theme and toggle function safely outside a ThemeProvider.
+ * Returns `null` when no ThemeProvider wraps the calling tree.
+ */
+export function useOptionalTheme(): ThemeContextValue | null {
+  return useContext(ThemeContext);
+}

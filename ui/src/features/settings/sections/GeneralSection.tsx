@@ -1,10 +1,14 @@
+import { useEffect, useRef, useContext } from 'react';
 import { Localized } from '@fluent/react';
 import type { ReactLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { LanguageSelector } from '@/i18n/LanguageSelector';
+import { LocaleContext } from '@/i18n/LocaleContext';
 import SettingsSelect from '../SettingsSelect';
 import type { StoreSettingsDto } from '@/api/settings';
+import { setSettingScoped } from '@/api/settings';
 import type { CurrencyDto } from '@/api/currency';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 
 export interface GeneralSectionProps {
   store: StoreSettingsDto;
@@ -34,6 +38,20 @@ export default function GeneralSection({
   setDefaultCurrencyState,
   l10n,
 }: GeneralSectionProps) {
+  // Persist locale to DB alongside localStorage so language
+  // preference survives localStorage clears.
+  const { locale } = useContext(LocaleContext);
+  const { sessionToken } = useWorkspace();
+  const lastLocaleRef = useRef(locale);
+
+  useEffect(() => {
+    if (!sessionToken || locale === lastLocaleRef.current) return;
+    lastLocaleRef.current = locale;
+    setSettingScoped(sessionToken, 'ui.locale', locale).catch(() => {
+      /* best-effort: localStorage still has the value */
+    });
+  }, [locale, sessionToken]);
+
   return (
     <>
       {/* ── Store section ──────────────────────── */}
@@ -114,6 +132,28 @@ export default function GeneralSection({
           </div>
 
           <div className="settings-field settings-field--horizontal">
+            <label htmlFor="settings-field-branch" className="settings-label">
+              {l10n.getString('settings-field-branch')}
+            </label>
+            <span className="settings-field-input-wrap">
+              <Localized id="settings-branch-placeholder" attrs={{ placeholder: true }}>
+                <input
+                  className={`settings-input${fieldErrors['branch'] ? ' settings-input--error' : ''}`} {...cmInput}
+                  type="text"
+                  id="settings-field-branch"
+                  maxLength={100}
+                  placeholder="Main Branch"
+                  value={store.branch}
+                  onChange={(e) => { setStore({ ...store, branch: e.target.value }); clearFieldError('branch'); markDirty(); }}
+                />
+              </Localized>
+              {fieldErrors['branch'] && (
+                <p className="settings-hint settings-hint--error">{fieldErrors['branch']}</p>
+              )}
+            </span>
+          </div>
+
+          <div className="settings-field settings-field--horizontal">
             {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- LanguageSelector component */}
             <label htmlFor="language-select" className="settings-label">
               <Localized id="settings-field-language">
@@ -144,7 +184,7 @@ export default function GeneralSection({
               <SettingsSelect
                 id="settings-field-default-currency"
                 value={currencies.length > 0 ? defaultCurrency : ''}
-                onChange={(v) => { setDefaultCurrencyState(v); markDirty(); }}
+                onChange={(v) => { setDefaultCurrencyState(v); setStore({ ...store, currency: v }); markDirty(); }}
                 options={currencies.length > 0
                   ? currencies.map((c) => ({
                       value: c.code,

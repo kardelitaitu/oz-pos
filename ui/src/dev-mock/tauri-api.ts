@@ -213,6 +213,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'ping': () => 'pong',
   'version': () => ({ name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' }),
+  'version_scoped': () => ({ name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' }),
   'get_local_ip': () => '192.168.1.100',
 
   // ═══════════════════════════════════════════════════════════════
@@ -267,18 +268,42 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
   'list_workspace_screens': () => [],
   'list_workspace_screens_scoped': () => [],
+  'get_workspace_instance': (args) => {
+    const { instanceId } = args as { instanceId: string };
+    return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
+  },
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
     return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
   },
+  'create_workspace_instance': (args) => ({
+    instance_id: `ws-${Date.now()}`,
+    ...(args as Record<string, unknown>),
+  }),
   'create_workspace_instance_scoped': (args) => {
     const req = (args as { req: Record<string, unknown> }).req;
     return { instance_id: `ws-${Date.now()}`, ...req };
   },
   'update_workspace_instance_scoped': (args) => args,
   'delete_workspace_instance_scoped': () => null,
+  'archive_workspace_instance_scoped': () => null,
   'set_default_instance_scoped': () => null,
   'list_screens_scoped': () => [],
+  'list_all_workspaces_scoped': () => [
+    { key: 'store-pos', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart' },
+    { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant' },
+    { key: 'kds', name: 'Kitchen Display', description: 'Order display', icon: 'utensils' },
+    { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
+    { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
+  ],
+  'get_user_workspace_instances': () => [],
+  'get_user_workspace_instances_scoped': () => [],
+  'set_user_workspace_instances': () => null,
+  'set_user_workspace_instances_scoped': () => null,
+  'get_user_workspaces': () => [],
+  'get_user_workspaces_scoped': () => [],
+  'set_user_workspaces': () => null,
+  'set_user_workspaces_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // TERMINALS
@@ -324,10 +349,18 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_store_settings': () => ({
     name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: 'TAX-001', currency: 'IDR', branch: 'Cabang A', logo: '',
   }),
+  'get_store_settings_scoped': () => ({
+    name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: 'TAX-001', currency: 'IDR', branch: 'Cabang A', logo: '',
+  }),
   'set_store_settings': () => null,
   'set_store_settings_scoped': () => null,
 
   'get_receipt_settings': () => ({
+    showCurrency: true, decimalSeparator: 'dot', showTax: true, footer: 'Terima kasih',
+    paperWidth: 'standard', showTableNumber: false,
+    marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+  }),
+  'get_receipt_settings_scoped': () => ({
     showCurrency: true, decimalSeparator: 'dot', showTax: true, footer: 'Terima kasih',
     paperWidth: 'standard', showTableNumber: false,
     marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
@@ -343,6 +376,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     lookback_days: 1,
   }),
   'save_report_schedule': () => null,
+  'send_test_report': () => 'Email sent',
 
   'load_topology': () => ({
     nodes: [
@@ -356,6 +390,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     ],
   }),
   'save_topology': () => null,
+  'apply_topology_diff': () => null,
 
   'set_receipt_settings_scoped': () => null,
 
@@ -379,16 +414,39 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'set_credit_settings': () => null,
   'set_credit_settings_scoped': () => null,
   'list_credit_sales': () => [],
+  'list_credit_sales_scoped': () => [],
   'settle_credit': () => null,
   'settle_credit_scoped': () => null,
 
   'seed_default_roles_scoped': () => 3,
 
   // ═══════════════════════════════════════════════════════════════
+  // SECURITY / ENCRYPTION
+  // ═══════════════════════════════════════════════════════════════
+
+  'get_key_rotation_info': () => ({
+    last_rotated_at: null,
+    rotation_due: false,
+    key_algorithm: 'aes-256-gcm',
+    can_rotate: true,
+  }),
+  'rotate_encryption_key': () => ({
+    success: true,
+    rotated_at: new Date().toISOString(),
+    key_algorithm: 'aes-256-gcm',
+  }),
+
+  // ═══════════════════════════════════════════════════════════════
   // BRANDING
   // ═══════════════════════════════════════════════════════════════
 
   'get_brand_settings': () => ({
+    primary_colour: '#10b981',
+    logo_path: null,
+    store_name: 'OZ-POS Demo',
+    colour_hover: null,
+  }),
+  'get_brand_settings_scoped': () => ({
     primary_colour: '#10b981',
     logo_path: null,
     store_name: 'OZ-POS Demo',
@@ -432,6 +490,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   },
 
   'get_product_track_serial': () => false,
+  'get_product_track_serial_scoped': () => false,
   'get_product_stock': () => ({ quantity: 50 }),
 
   'adjust_stock': () => 50,
@@ -448,6 +507,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_categories': () => MOCK_CATEGORIES,
+  'list_categories_scoped': () => MOCK_CATEGORIES,
   'create_category': () => ({ id: 'cat-new' }),
   'update_category': () => ({ id: 'cat-upd' }),
   'delete_category': () => null,
@@ -550,6 +610,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'export_eod_report_scoped': () => null,
 
   'print_sales_receipt': () => ({ printed: true }),
+  'print_sales_receipt_scoped': () => ({ printed: true }),
 
   'get_cart_deduction_location': () => ({ locationId: 'loc-1', locationName: 'Main Store' }),
   'override_cart_deduction_location_scoped': () => null,
@@ -560,6 +621,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'currency_info': () => ({ code: 'IDR', exponent: 0 }),
   'list_currencies': () => MOCK_CURRENCIES,
+  'list_currencies_scoped': () => MOCK_CURRENCIES,
   'get_default_currency': () => 'IDR',
   'set_default_currency': () => null,
   'list_exchange_rates': () => [],
@@ -571,6 +633,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_customers': () => MOCK_CUSTOMERS,
+  'list_customers_scoped': () => MOCK_CUSTOMERS,
   'get_customer': (args) => {
     const { id } = args as { id: string };
     return MOCK_CUSTOMERS.find(c => c.id === id) ?? null;
@@ -635,6 +698,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     };
   },
   'list_shifts': () => [],
+  'list_shifts_scoped': () => [],
   'get_shift': () => null,
   'get_shift_report': () => null,
   'create_cash_payout': () => null,
@@ -650,6 +714,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'set_workspace_inventory_locations': () => null,
   'get_workspace_inventory_locations': () => [],
+  'get_workspace_locations_scoped': () => [],
+  'invalidate_location_cache_scoped': () => null,
+  'get_low_stock_alerts_at_location_scoped': () => [],
+  'active_stock_alerts_scoped': () => [],
+  'acknowledge_stock_alert_scoped': () => null,
 
   'start_inventory_shift': () => ({
     id: 'inv-shift-1', user_id: 'user-1', location_id: 'loc-1', terminal_id: null,
@@ -759,6 +828,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_low_stock_alerts': () => [],
   'get_category_breakdown': () => [],
   'get_menu_engineering': () => ({ rows: [], median_volume: 0, median_margin: 0 }),
+  'build_custom_report': () => ({
+    rows: [], columns: [], total: 0, page: 1, pageSize: 50, totalPages: 1,
+  }),
 
   // ═══════════════════════════════════════════════════════════════
   // TAX
@@ -767,6 +839,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'compute_cart_tax': () => 0,
   'compute_cart_tax_scoped': () => 0,
   'list_tax_rates': () => [],
+  'list_tax_rates_scoped': () => [],
   'create_tax_rate': () => null,
   'update_tax_rate': () => null,
   'delete_tax_rate': () => null,
@@ -840,6 +913,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'open_cash_drawer': () => ({ opened: true }),
   'print_receipt': () => ({ printedLines: 3 }),
   'list_scanners': () => [{ id: 'scanner-1' }],
+  'list_displays': () => ['display-1', 'display-2'],
+  'display_show': () => null,
+  'display_clear': () => null,
+  'read_scale_weight': () => ({ grams: 150, stable: true }),
+  'discover_hardware': () => [],
   'start_scanner': () => null,
   'stop_scanner': () => null,
 
@@ -871,6 +949,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'delete_offline_item': () => null,
 
   'get_sync_settings': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
+  'get_sync_settings_scoped': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
   'update_sync_settings': () => null,
   'sync_run': () => ({ synced: 0, failed: 0, error: null }),
   'offline_queue_status_summary': () => ({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 }),

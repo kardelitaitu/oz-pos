@@ -13,8 +13,8 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
-import { getSetting, setSettingScoped } from '@/api/settings';
-import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { getSetting, setSetting } from '@/api/settings';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SmtpConfigDto {
   host: string;
@@ -39,7 +39,7 @@ const SMTP_CONFIG_KEY = 'smtp_config';
 export default function EmailReportSettings() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { sessionToken } = useWorkspace();
+  const userId = useAuth().session?.user_id ?? 'default';
 
   const [config, setConfig] = useState<SmtpConfigDto>(DEFAULT_SMTP);
   const [loading, setLoading] = useState(true);
@@ -109,7 +109,7 @@ export default function EmailReportSettings() {
         return;
       }
 
-      await setSettingScoped(sessionToken, SMTP_CONFIG_KEY, JSON.stringify(config));
+      await setSetting(SMTP_CONFIG_KEY, JSON.stringify(config), userId);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addToast({ message: l10n.getString('settings-email-saved'), type: 'success' });
@@ -118,14 +118,17 @@ export default function EmailReportSettings() {
     } finally {
       setSaving(false);
     }
-  }, [config, l10n, addToast, sessionToken]);
+  }, [config, l10n, addToast, userId]);
 
   // ── Schedule event handlers ────────────────────────────────────────
 
   const saveSchedule = useCallback(async () => {
     setScheduleSaving(true);
     try {
-      await saveReportSchedule(schedule);
+      // Strip empty recipient entries before persisting.
+      const cleaned = { ...schedule, recipients: schedule.recipients.filter((r) => r.trim() !== '') };
+      setSchedule(cleaned);
+      await saveReportSchedule(cleaned);
       addToast({
         message: l10n.getString('settings-email-schedule-saved'),
         type: 'success',
@@ -232,7 +235,7 @@ export default function EmailReportSettings() {
               min={1}
               max={65535}
               value={config.port}
-              onChange={(e) => updateField('port', parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => updateField('port', parseInt(e.target.value, 10) || 587)}
               style={{ maxWidth: '120px' }}
             />
           </span>

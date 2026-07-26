@@ -1,5 +1,7 @@
 # Shadow Banding Audit — Task List
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (0 findings) · verified accurate: noise overlay covers .card::after/.modal-panel::after/.staff-login-card::after/.noise-dither::after in components.css:270-275 (matters §1 Phase 1 list matches those 4 base selectors); cited working-state commit 9a5696b exists ("fix(shadows): eliminate 8-bit GPU banding with single-layer uniform blur + noise dither"); files referenced (WorkspaceHome.css/RetailPosScreen.css/TableManagementScreen.css/SettingsPopup.css) exist; this is a living task list, not a code-claim doc -->
+
 ## Noise overlay coverage gaps
 
 The SVG feTurbulence noise overlay at 10% opacity currently targets:

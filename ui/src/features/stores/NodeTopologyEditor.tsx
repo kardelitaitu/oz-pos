@@ -926,7 +926,7 @@ export default function NodeTopologyEditor({
           </Localized>
           <span className={`topology-tier-badge tier-${currentTier}`}>
             <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
-              {currentTier.toUpperCase()} TIER
+              <span>{currentTier.toUpperCase()} TIER</span>
             </Localized>
           </span>
         </div>

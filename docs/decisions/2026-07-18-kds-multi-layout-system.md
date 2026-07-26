@@ -1,5 +1,7 @@
 # ADR #17: KDS Multi-Layout System — Switchable Kitchen Display Layouts with Per-User Preferences
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 observation) · O1: File Organisation (S6) omits KdsSettingsPanel.tsx which exists in ui/src/features/kds/; migration 038_user_preferences.sql is cited as the historical table origin (the feature adds no new migrations, per S2) · verified accurate: KdsLayoutKanban/Focus/Metro.tsx + KdsLayoutSwitcher.tsx + components/KdsTicketCard.tsx + hooks/useKdsPreferences.ts present; getUserPreferences/setUserPreferences in ui/src/api/settings.ts; getKdsQueue in ui/src/api/kds.ts; crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql exist; Status "Implemented" matches on-disk code -->
+
 **Status:** Implemented (2026-07-26)
 **Date:** 2026-07-18
 **Author:** Architecture Team & OZ-POS Contributors

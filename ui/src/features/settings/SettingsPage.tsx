@@ -38,7 +38,7 @@ import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/frontend/shared/Toast';
-import { useTheme } from '@/frontend/shell/ThemeProvider';
+import { useOptionalTheme, type Theme } from '@/frontend/shell/ThemeProvider';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import FeatureToggleScreen from './FeatureToggleScreen';
 import DataManagementScreen from './DataManagementScreen';
@@ -200,7 +200,9 @@ function SettingsPageContent() {
   const { addToast } = useToast();
 
   const { refreshBrandSettings } = useBrand();
-  const { theme, toggleTheme } = useTheme();
+  const themeCtx = useOptionalTheme();
+  const theme: Theme = themeCtx?.theme ?? 'default';
+  const toggleTheme = themeCtx?.toggleTheme ?? (() => {});
 
   const [receipt, setReceipt] = useState<ReceiptSettingsDto>({
     showCurrency: false,
@@ -350,6 +352,9 @@ function SettingsPageContent() {
     setDisplayFontSmoothing(snap.displayFontSmoothing);
     setBrandColour(snap.brandColour);
     setBrandStoreName(snap.brandStoreName);
+    // Re-apply accent palette so CSS reflects the reverted colour.
+    const revertedPalette = deriveAccentPalette(snap.brandColour);
+    applyAccentPalette(revertedPalette);
     setIsDirty(false);
     setFieldErrors({});
     setSyncResult(null);
@@ -442,9 +447,14 @@ function SettingsPageContent() {
     setSaved(false);
     // Use allSettled so a single failing save doesn't silently block
     // the others — the user gets a warning about partial failures.
+    // Sync store.currency with defaultCurrency so both parallel writes
+    // below target the same value (prevents a race where setStoreSettings
+    // overwrites the user's currency selection with the initial value).
+    const syncedStore = { ...store, currency: defaultCurrency };
+
     const results = await Promise.allSettled([
       setReceiptSettings(receipt, session?.user_id ?? ''),
-      setStoreSettings(store, session?.user_id ?? ''),
+      setStoreSettings(syncedStore, session?.user_id ?? ''),
       setCtxCurrency(defaultCurrency),
       setUserPreferences(userId, [
         { key: 'cardsize', value: String(displayCardSize) },
@@ -467,6 +477,8 @@ function SettingsPageContent() {
       setIsDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      // Sync the React store state to match what was persisted (currency).
+      setStore(syncedStore);
       // Persist the sync DTO in React state so the UI immediately
       // reflects the just-saved values (server URL, API key presence,
       // enabled flag). Without this the loaded snapshot stays stale
@@ -491,9 +503,10 @@ function SettingsPageContent() {
       refreshBrandSettings();
 
       // Update the snapshot so Revert goes to the *saved* state.
+      // Use syncedStore so store.currency matches what was actually persisted.
       initialSnapshotRef.current = {
         receipt,
-        store,
+        store: syncedStore,
         defaultCurrency,
         sync,
         syncServerUrl,
@@ -514,7 +527,7 @@ function SettingsPageContent() {
     // Notify SettingsContext so other components reflect the changes
     const changedKeys: string[] = [];
     if (results[0]?.status === 'fulfilled') changedKeys.push('receipt.footer', 'receipt.showCurrency', 'receipt.showTax', 'receipt.paperWidth', 'receipt.showTableNumber', 'receipt.decimalSeparator');
-    if (results[1]?.status === 'fulfilled') changedKeys.push('store.name', 'store.address', 'store.taxId');
+    if (results[1]?.status === 'fulfilled') changedKeys.push('store.name', 'store.address', 'store.taxId', 'store.branch', 'store.currency');
     if (results[2]?.status === 'fulfilled') changedKeys.push('currency.default');
     if (results[3]?.status === 'fulfilled') changedKeys.push('prefs.cardsize', 'prefs.fontsize', 'prefs.font-smoothing');
     if (results[4]?.status === 'fulfilled') changedKeys.push('sync.serverUrl', 'sync.apiKey', 'sync.enabled');
@@ -987,56 +1000,58 @@ function SettingsPageContent() {
       {/* ── Footer ──────────────────────────────────────────── */}
       <footer className="settings-footer">
         <span className="settings-footer-left">
-          <button
-            type="button"
-            className="settings-footer-theme-toggle"
-            onClick={toggleTheme}
-            aria-label={
-              theme === 'light'
-                ? l10n.getString('settings-theme-toggle-dark-aria')
-                : l10n.getString('settings-theme-toggle-light-aria')
-            }
-          >
-            {theme === 'light' ? (
-              /* Moon icon (click to go dark) */
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            ) : (
-              /* Sun icon (click to go light) */
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="5" />
-                <line x1="12" y1="1" x2="12" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="23" />
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                <line x1="1" y1="12" x2="3" y2="12" />
-                <line x1="21" y1="12" x2="23" y2="12" />
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-              </svg>
-            )}
-          </button>
+          {themeCtx && (
+            <button
+              type="button"
+              className="settings-footer-theme-toggle"
+              onClick={toggleTheme}
+              aria-label={
+                theme === 'light'
+                  ? l10n.getString('settings-theme-toggle-dark-aria')
+                  : l10n.getString('settings-theme-toggle-light-aria')
+              }
+            >
+              {theme === 'light' ? (
+                /* Moon icon (click to go dark) */
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              ) : (
+                /* Sun icon (click to go light) */
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              )}
+            </button>
+          )}
           <Localized id="settings-app-version" vars={{ version: appVersion }}>
             <span>OZ-POS Enterprise v{appVersion}</span>
           </Localized>

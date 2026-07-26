@@ -1,5 +1,7 @@
 # CI Pipeline Dashboard — OZ-POS
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 observation) · O1: doc lists 14 jobs (rust-fmt, rust-clippy, rust-test-fast, rust-test-full, ui-lint, ui-typecheck, ui-test, lighthouse, docker, coverage, audit, skill-drift-tests, e2e-docker-image, e2e) but omits the `fuzz` job present in .github/workflows/ci.yml:354 · verified accurate: all 14 listed jobs exist in ci.yml (rust-fmt:28, rust-clippy:37, rust-test-fast:64, rust-test-full:126, ui-lint:159, ui-typecheck:173, ui-test:187, lighthouse:244, docker:262, coverage:297, audit:334, skill-drift-tests:384, e2e-docker-image:397, e2e:428); caching strategy (rust-cache v2 + sccache v0.0.10, npm cache v4, vitest cache, BuildKit inline + GHCR) matches ci.yml; SLO targets and pre-merge gates (main branch protection) consistent with workflow; other workflows android.yml/ios.yml/docs.yml/nightly.yml/release.yml/security.yml exist -->
+
 > Last updated: 2026-07-20
 
 ## Job Matrix

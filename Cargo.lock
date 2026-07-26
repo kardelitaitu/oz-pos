@@ -4103,6 +4103,7 @@ dependencies = [
  "criterion",
  "foundation",
  "hex",
+ "lettre",
  "mdns-sd",
  "modules-crm",
  "modules-currency",

@@ -20,11 +20,9 @@ use crate::error::CoreError;
 ///
 /// The key is deterministic for the same machine ID — this is by design:
 /// encryption binds the ciphertext to the hardware that owns it.
-fn derive_key(machine_id: &str) -> [u8; 32] {
+fn derive_key(domain: &[u8], machine_id: &str) -> [u8; 32] {
     let mut hasher = Sha256::new();
-    // Domain-separation prefix prevents key reuse across different
-    // encryption purposes within the same codebase.
-    hasher.update(b"oz-pos.api-key.v1:");
+    hasher.update(domain);
     hasher.update(machine_id.as_bytes());
     let hash = hasher.finalize();
     let mut key = [0u8; 32];
@@ -32,13 +30,85 @@ fn derive_key(machine_id: &str) -> [u8; 32] {
     key
 }
 
+/// SMTP password domain-separation prefix.
+const SMTP_DOMAIN: &[u8] = b"oz-pos.smtp-password.v1:";
+
+/// API key domain-separation prefix.
+const API_KEY_DOMAIN: &[u8] = b"oz-pos.api-key.v1:";
+
 /// Encrypt `plaintext` with a key derived from `machine_id`.
 ///
 /// Returns a base64-encoded ciphertext containing the nonce,
 /// encrypted data, and GCM authentication tag.
 pub fn encrypt_api_key(plaintext: &str, machine_id: &str) -> Result<String, CoreError> {
-    let key = derive_key(machine_id);
-    let cipher = Aes256Gcm::new(GenericArray::from_slice(&key));
+    let key = derive_key(API_KEY_DOMAIN, machine_id);
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt a ciphertext previously produced by [`encrypt_api_key`].
+pub fn decrypt_api_key(encrypted_b64: &str, machine_id: &str) -> Result<String, CoreError> {
+    let key = derive_key(API_KEY_DOMAIN, machine_id);
+    decrypt(encrypted_b64, &key)
+}
+
+/// Encrypt an SMTP password with a machine-bound key.
+///
+/// Uses a different domain-separation prefix than API keys so that
+/// ciphertexts cannot be confused across purposes.
+pub fn encrypt_smtp_password(plaintext: &str, machine_id: &str) -> Result<String, CoreError> {
+    let key = derive_key(SMTP_DOMAIN, machine_id);
+    encrypt(plaintext, &key)
+}
+
+/// Decrypt an SMTP password previously encrypted with [`encrypt_smtp_password`].
+///
+/// If decryption fails (e.g. because the stored value is legacy plaintext),
+/// returns the original string unchanged so that existing configurations
+/// continue to work.
+pub fn decrypt_smtp_password(encrypted_b64: &str, machine_id: &str) -> Result<String, CoreError> {
+    let key = derive_key(SMTP_DOMAIN, machine_id);
+    match decrypt(encrypted_b64, &key) {
+        Ok(plaintext) => Ok(plaintext),
+        Err(_) => {
+            // Legacy plaintext — return as-is so existing configs aren't broken.
+            Ok(encrypted_b64.to_string())
+        }
+    }
+}
+
+/// Encrypt an SMTP password for at-rest storage using a static app-level key.
+///
+/// Unlike [`encrypt_smtp_password`], this does NOT bind to the machine
+/// fingerprint — it uses a hardcoded domain key so that the database can
+/// be copied between machines without losing access to the SMTP password.
+/// Provides defence against casual database inspection.
+pub fn encrypt_smtp_at_rest(password: &str) -> String {
+    let key = derive_static_key();
+    encrypt(password, &key).unwrap_or_else(|_| password.to_string())
+}
+
+/// Decrypt an SMTP password stored with [`encrypt_smtp_at_rest`].
+///
+/// If the value is legacy plaintext (decryption fails), returns it unchanged.
+pub fn decrypt_smtp_at_rest(encrypted: &str) -> String {
+    let key = derive_static_key();
+    decrypt(encrypted, &key).unwrap_or_else(|_| encrypted.to_string())
+}
+
+/// Derive a static 256-bit key for SMTP at-rest encryption.
+fn derive_static_key() -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"oz-pos.smtp-at-rest.v1:");
+    let hash = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&hash);
+    key
+}
+
+/// Internal: encrypt plaintext with a pre-derived key.
+fn encrypt(plaintext: &str, key: &[u8; 32]) -> Result<String, CoreError> {
+    let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
 
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
@@ -56,14 +126,9 @@ pub fn encrypt_api_key(plaintext: &str, machine_id: &str) -> Result<String, Core
     Ok(base64_encode(&combined))
 }
 
-/// Decrypt a ciphertext previously produced by [`encrypt_api_key`].
-///
-/// Returns the original plaintext, or an error if the ciphertext is
-/// malformed, the key is wrong, or the authentication tag doesn't
-/// verify.
-pub fn decrypt_api_key(encrypted_b64: &str, machine_id: &str) -> Result<String, CoreError> {
-    let key = derive_key(machine_id);
-    let cipher = Aes256Gcm::new(GenericArray::from_slice(&key));
+/// Internal: decrypt a base64-encoded ciphertext with a pre-derived key.
+fn decrypt(encrypted_b64: &str, key: &[u8; 32]) -> Result<String, CoreError> {
+    let cipher = Aes256Gcm::new(GenericArray::from_slice(key));
 
     let combined = base64_decode(encrypted_b64)?;
 
@@ -176,15 +241,52 @@ mod tests {
 
     #[test]
     fn key_is_deterministic() {
-        let k1 = derive_key("machine-1");
-        let k2 = derive_key("machine-1");
+        let k1 = derive_key(API_KEY_DOMAIN, "machine-1");
+        let k2 = derive_key(API_KEY_DOMAIN, "machine-1");
         assert_eq!(k1, k2);
     }
 
     #[test]
     fn different_machine_ids_produce_different_keys() {
-        let k1 = derive_key("machine-a");
-        let k2 = derive_key("machine-b");
+        let k1 = derive_key(API_KEY_DOMAIN, "machine-a");
+        let k2 = derive_key(API_KEY_DOMAIN, "machine-b");
         assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn smtp_password_roundtrip() {
+        let machine_id = "test-machine-123";
+        let original = "my-smtp-password";
+
+        let encrypted = encrypt_smtp_password(original, machine_id).unwrap();
+        let decrypted = decrypt_smtp_password(&encrypted, machine_id).unwrap();
+
+        assert_eq!(decrypted, original);
+    }
+
+    #[test]
+    fn smtp_legacy_plaintext_passthrough() {
+        // Legacy plaintext passwords are returned unchanged.
+        let result = decrypt_smtp_password("plaintext-password", "machine-1").unwrap();
+        assert_eq!(result, "plaintext-password");
+    }
+
+    #[test]
+    fn api_and_smtp_domains_are_isolated() {
+        let machine_id = "machine-1";
+        let plaintext = "shared-secret";
+
+        let api_encrypted = encrypt_api_key(plaintext, machine_id).unwrap();
+        let smtp_encrypted = encrypt_smtp_password(plaintext, machine_id).unwrap();
+
+        // Same plaintext, same machine → different ciphertext (due to nonce),
+        // but more importantly: API-key ciphertext should NOT decrypt as SMTP.
+        let smtp_decrypt_of_api = decrypt_smtp_password(&api_encrypted, machine_id).unwrap();
+        // Since smtp_decrypt falls back to plaintext on failure, a corrupted
+        // decrypt returns the ciphertext itself — NOT the original plaintext.
+        assert_ne!(
+            smtp_decrypt_of_api, plaintext,
+            "API-key ciphertext should not decrypt with SMTP domain key"
+        );
     }
 }

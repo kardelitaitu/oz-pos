@@ -1,5 +1,7 @@
 # ADR #20 Implementation Status
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (2 observations) · O1: lines 45-48 list finalize_sale_scoped / void_pending_sale_scoped IPC commands in pos.rs for both clients — actual IPC is finalize_sale + void_pending_sale (unscoped) in apps/desktop-client/src/commands/inventory.rs:676, registered in lib.rs:315-316; complete_sale_scoped / complete_sale_with_resolved_shortfalls_scoped live in pos.rs — the scoped suffixes are mis-attributed (see ADR#20 F1) · O2: line 43 "pending_expires_at column | Migration 095" — actual migration is 096_pending_sale_status.sql (095 is held_carts_deduction_location); minor number off-by-one · verified accurate: commit 439a7937 exists ("feat: complete ADR-20 Payment-Capture Ordering"); PendingSale interface at ui/src/api/sales.ts:200; completeSaleScoped/finalizeSale/voidPendingSale/overrideCartDeductionLocation wrappers present; sales.rs fns at 438/798/867/910 (doc cited 429/779/867/891 — close); init_pending_sale_reaper at platform/startup/src/lib.rs:251 (doc cited :186 — line drift); 20-1 sale_data_hash dedup correctly marked Not implemented; 20-2..20-6 Implemented with named tests -->
+
 **Date:** 2026-07-19 (updated)
 **Based on:** [2026-07-19-payment-capture-ordering.md](./2026-07-19-payment-capture-ordering.md)
 **Status:** ✅ Implemented

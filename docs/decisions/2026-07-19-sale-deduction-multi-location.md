@@ -1,5 +1,7 @@
 # ADR #19: Sale-Deduction Flow for Multi-Location Inventory
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 observation) · O1: doc references "branch 0.0.10" / "v0.0.10 (current)" (lines 13, 297) — historical development-era refs; current release branch is 0.0.22 (user-owned version divergence, not a doc bug) · verified accurate: commit ef87dac exists ("feat(inventory): implement ADR-18 Phase 1+2 schema foundation"); crates/oz-core/src/location_resolver.rs present with resolve_primary_location:300 / resolve_all_locations:387 / resolve_location_chain_for_sku:476 / get_default_location_id:103; adjust_stock_at_location_with_reason at crates/oz-core/src/db/products.rs:791; migrations 092_rebuild_stock_summary_group_by_location + 093_sales_deduction_locations + 094_active_carts_location_lock all present; Status "Implemented" matches on-disk code -->
+
 **Status:** Implemented (2026-07-19)
 **Date:** 2026-07-19
 **Decision Record:** Implements §6 sale-deduction section of ADR-18 against the schema foundation shipped in commit `ef87dac` (migrations 078–091).

@@ -3,6 +3,8 @@ name: multi-agent-orchestrator
 description: Guidelines and prompt templates for orchestrating 4 parallel coding agents (A, B, C, D) using Git Worktrees.
 ---
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 finding) · F1: branch prefixes use `feat/freebuff-A-db-layer` / `test/freebuff-D-specs-qa` (lines 35-38, 51, 56, 61, 66, 76-79) which deviate from the project's documented Branch naming policy (`feat/<name>`, `test/<name>` — no `freebuff-` segment) in AGENTS.md:122; also the merge flow targets `main` directly while CI only triggers on `main` per AGENTS.md:129 (works, but note the policy) · verified accurate: worktree-add/merge/remove workflow is valid git; scope assignments (crates/oz-core, apps/desktop-client/src/commands/ + ui/src/api/, ui/src/frontend/, ui/src/__tests__) match real repo paths; "last audited 19-07-26 by skill-drift-guard" line present (separate from this stamp) · note: the `freebuff` naming is a generic template example, harmless but inconsistent with the repo's own branch convention -->
+
 # Multi-Agent Orchestrator (Git Worktrees)
 
 This skill outlines the workflow to partition a feature implementation into 4 parallel coding tasks, set up isolated workspaces using Git Worktrees, generate target prompts for each coding agent, and merge the branches back to main once completed.
