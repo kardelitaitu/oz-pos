@@ -801,7 +801,7 @@ function SettingsPageContent() {
       case 'inventory':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceInventorySettings variant="full-page" {...(sessionToken ? { sessionToken } : {})} />
+            <WorkspaceInventorySettings variant="full-page" userId={userId} />
           </Suspense>
         );
 

@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { setSettingScoped } from '@/api/settings';
+import { getSetting, setSetting } from '@/api/settings';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
 
@@ -16,7 +16,7 @@ import { hasChanges } from './helpers';
  * Consumes `useSettings()` for store-level inventory configuration.
  */
 export function WorkspaceInventorySettings({
-  sessionToken,
+  userId,
   locationId,
   variant = 'full-page',
   onSaved,
@@ -26,6 +26,7 @@ export function WorkspaceInventorySettings({
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const [deductionPreferWarehouse, setDeductionPreferWarehouse] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const originalsRef = useRef<Record<string, unknown>>({
     lowStockThreshold, deductionPreferWarehouse,
@@ -34,24 +35,46 @@ export function WorkspaceInventorySettings({
   const dirty = useMemo(() => hasChanges(
     { lowStockThreshold, deductionPreferWarehouse } as Record<string, unknown>,
     originalsRef.current,
-  ), [lowStockThreshold, deductionPreferWarehouse]);
+  ), [lowStockThreshold, deductionPreferWarehouse, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load from backend ───────────────────────────────────────
+
+  useEffect(() => {
+    if (loaded) return;
+
+    Promise.all([
+      getSetting('inventory.low_stock_threshold'),
+      getSetting('inventory.deduction_prefer_warehouse'),
+    ]).then(([thresholdRaw, preferWhRaw]) => {
+      const t = parseInt(thresholdRaw ?? '', 10);
+      if (!isNaN(t) && t >= 0) setLowStockThreshold(t);
+      setDeductionPreferWarehouse(preferWhRaw === 'true');
+      originalsRef.current = {
+        lowStockThreshold: !isNaN(t) && t >= 0 ? t : 10,
+        deductionPreferWarehouse: preferWhRaw === 'true',
+      };
+    }).catch(() => {
+      originalsRef.current = { lowStockThreshold: 10, deductionPreferWarehouse: false };
+    }).finally(() => {
+      setLoaded(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // ── Save ─────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      if (sessionToken) {
-        const entries: Record<string, string> = {
-          'inventory.low_stock_threshold': String(lowStockThreshold),
-          'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
-        };
-        await Promise.all(
-          Object.entries(entries).map(([key, value]) =>
-            setSettingScoped(sessionToken, key, value),
-          ),
-        );
-      }
+      const entries: Record<string, string> = {
+        'inventory.low_stock_threshold': String(lowStockThreshold),
+        'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
+      };
+      await Promise.all(
+        Object.entries(entries).map(([key, value]) =>
+          setSetting(key, value, userId ?? 'default'),
+        ),
+      );
       originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
       onSaved?.();
     } catch {
@@ -59,7 +82,7 @@ export function WorkspaceInventorySettings({
     } finally {
       setSaving(false);
     }
-  }, [sessionToken, lowStockThreshold, deductionPreferWarehouse, onSaved]);
+  }, [userId, lowStockThreshold, deductionPreferWarehouse, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 
