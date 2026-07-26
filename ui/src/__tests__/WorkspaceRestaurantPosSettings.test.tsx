@@ -78,6 +78,17 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
   },
 }));
 
+vi.mock('@/api/settings', () => ({
+  setReceiptSettingsScoped: vi.fn().mockResolvedValue(undefined),
+  setSettingScoped: vi.fn().mockResolvedValue(undefined),
+  setReceiptSettings: vi.fn().mockResolvedValue(undefined),
+  setHardwareSettings: vi.fn().mockResolvedValue(undefined),
+  getHardwareSettings: vi.fn().mockResolvedValue({
+    printerConnection: 'auto', printerDevicePath: '', printerPaperSize: '80',
+    scannerDeviceId: '', scannerInputMode: 'auto',
+  }),
+}));
+
 vi.mock('../features/settings/SettingsSelect', () => ({
   default: ({ id, value, onChange, options }: {
     id: string; value: string; onChange: (v: string) => void;

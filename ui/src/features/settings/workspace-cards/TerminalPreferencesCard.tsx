@@ -18,6 +18,7 @@ import { hasChanges } from './helpers';
  */
 export function TerminalPreferencesCard({
   terminalId,
+  userId,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
@@ -74,7 +75,7 @@ export function TerminalPreferencesCard({
     setSaving(true);
     try {
       if (terminalId && hw.profile) {
-        await hw.save();
+        await hw.save(userId);
       }
       onSaved?.();
     } catch {

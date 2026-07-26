@@ -5,6 +5,8 @@ export type WorkspaceCardVariant = 'full-page' | 'modal' | 'inspector-drawer';
 export interface WorkspaceCardProps {
   /** Session token for authenticated API calls. */
   sessionToken?: string;
+  /** User ID for unscoped API calls (e.g. setReceiptSettings, setHardwareSettings). */
+  userId?: string;
   /** Inventory location ID scoping deduction rules. */
   locationId?: string;
   /**

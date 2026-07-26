@@ -8,7 +8,6 @@ import {
   type ReceiptSettingsDto,
   type StoreSettingsDto,
 } from '@/api/settings';
-import { getDeviceId } from '@/api/system';
 import { setDecimalSep } from '@/utils/storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -252,14 +251,8 @@ function SettingsPageContent() {
   const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   const { session } = useAuth();
-  const { sessionToken } = useWorkspace();
+  const { sessionToken, terminalId } = useWorkspace();
   const userId = session?.user_id ?? 'default';
-
-  // ── Terminal ID for hardware-scoped workspace cards ──────────
-  const [deviceId, setDeviceId] = useState('');
-  useEffect(() => {
-    getDeviceId().then(setDeviceId).catch(() => setDeviceId(''));
-  }, []);
 
   const [displayCardSize, setDisplayCardSize] = useState(0);
   const [displayFontSize, setDisplayFontSize] = useState(0);
@@ -787,14 +780,14 @@ function SettingsPageContent() {
       case 'store-pos':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceStorePosSettings variant="full-page" terminalId={deviceId} {...(sessionToken ? { sessionToken } : {})} />
+            <WorkspaceStorePosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
           </Suspense>
         );
 
       case 'restaurant-pos':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={deviceId} {...(sessionToken ? { sessionToken } : {})} />
+            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
           </Suspense>
         );
 

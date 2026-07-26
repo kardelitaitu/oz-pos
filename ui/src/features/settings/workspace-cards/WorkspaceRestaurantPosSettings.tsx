@@ -22,6 +22,7 @@ import { hasChanges } from './helpers';
 export function WorkspaceRestaurantPosSettings({
   terminalId,
   sessionToken,
+  userId,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
@@ -83,7 +84,7 @@ export function WorkspaceRestaurantPosSettings({
       }
 
       if (terminalId && hw.profile) {
-        tasks.push(hw.save(sessionToken));
+        tasks.push(hw.save(userId));
       }
 
       await Promise.all(tasks);

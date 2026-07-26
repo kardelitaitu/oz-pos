@@ -1,35 +1,37 @@
-fix(settings): wire workspace cards to IPC + hardware IPC bridge + i18n fix
+fix(settings): use workspace context for terminalId, unscoped IPC, remove localStorage
 
-Workspace cards (store-pos, restaurant-pos, kds, inventory):
-- SettingsPage now resolves terminalId via getDeviceId() on mount and passes
-  it with sessionToken to all 4 workspace cards, fixing hidden printer/scanner
-  sections and enabling hardware config visibility.
-- Store POS: handleSave calls setReceiptSettingsScoped to persist receipt
-  settings; hw.save(sessionToken) bridges to filesystem IPC.
-- Restaurant POS: handleSave persists showTableNumber via setReceiptSettingsScoped
-  and courseFiring via setSettingScoped; hw.save(sessionToken) bridges hardware.
-- KDS: handleSave persists 5 settings (soundEnabled, yellow/red thresholds,
-  autoAcknowledge, density) via setSettingScoped with 'kds.'-prefixed keys.
-- Inventory: handleSave persists lowStockThreshold + deductionPreferWarehouse
-  via setSettingScoped with 'inventory.'-prefixed keys.
+terminalId from workspace context:
+- WorkspaceContextValue now exposes terminalId: string, resolved once on mount
+  via getDeviceId(). SettingsPage uses this instead of calling getDeviceId
+  directly. WorkspaceProvider, useWorkspace, test-utils all updated.
 
-Hardware IPC bridge (useTerminalHardware.ts):
-- Added toHardwareSettingsDto() and mergeIpcSettings() helpers to extract/merge
-  the 5-field printer+scanner DTO subset from/to the full TerminalHardwareProfile.
-- loadProfile is now async: after loading from localStorage, calls
-  getHardwareSettings() IPC and merges printer/scanner values on top.
-- save() now accepts optional sessionToken param; when provided, calls
-  setHardwareSettingsScoped to bridge the printer+scanner subset to
-  terminal_profiles/{id}.json on disk. Falls back to localStorage-only
-  when IPC is unavailable (dev mock, non-Tauri env).
-- Fixed corrupted JSON recovery path to call setProfile before early return.
+Unscoped receipt API (WorkspaceStorePosSettings):
+- Switched from setReceiptSettingsScoped to setReceiptSettings(args, userId).
+  Takes userId from new WorkspaceCardProps.userId field instead of sessionToken.
+- SettingsPage passes userId={session?.user_id ?? 'default'} to workspace cards.
 
-i18n (SyncSection.tsx):
-- Wrapped hardcoded "Toggle" sr-only text in Localized to match project standard.
+Hardware: IPC replaces localStorage (useTerminalHardware.ts):
+- Complete rewrite: removed ALL localStorage read/write/validation/corruption
+  handlers. Now uses getHardwareSettings() IPC on load (maps 5-field DTO to
+  full TerminalHardwareProfile via fromHardwareSettingsDto) and
+  setHardwareSettings(dto, userId) IPC on save (extracts 5-field DTO subset
+  via toHardwareSettingsDto).
+- save() now accepts userId instead of sessionToken.
+- Load failures fall back to defaults. Scale/localPrefs fields get defaults
+  since the IPC DTO doesn't support them yet (future phase).
+
+Updated callers:
+- TerminalPreferencesCard: destructures userId, passes to hw.save(userId).
+- WorkspaceRestaurantPosSettings: hw.save(userId) instead of hw.save(sessionToken).
+- WorkspaceCardProps.types: added userId?: string field.
 
 Tests:
-- useTerminalHardware.test.ts: added vi.mock for @/api/settings that rejects
-  getHardwareSettings so existing tests use localStorage-only path. 14 tests pass.
-- WorkspaceStorePosSettings.test.tsx: 20 tests pass.
-- WorkspaceRestaurantPosSettings.test.tsx: 11 tests pass.
-- npm run typecheck: clean.
+- useTerminalHardware.test.ts: complete rewrite (11 tests) — mocks
+  getHardwareSettings/setHardwareSettings IPC instead of localStorage.
+- WorkspaceRestaurantPosSettings.test.tsx: added @/api/settings mock.
+- test-utils.tsx + mocks/contexts.tsx: added terminalId to workspace mocks.
+
+Verification:
+- npm run typecheck: clean
+- 56 tests pass (useTerminalHardware 11, Store POS 20, Restaurant POS 11,
+  TerminalPreferences 14)
