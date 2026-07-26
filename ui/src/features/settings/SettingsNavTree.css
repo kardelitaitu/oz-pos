@@ -326,11 +326,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .settings-sidebar-section-items {
+  .settings-sidebar-section-items,
+  .settings-sidebar-section-items--expanded {
     transition: none;
-    max-height: 31.25rem;
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
