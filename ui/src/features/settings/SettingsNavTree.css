@@ -30,6 +30,7 @@
 .settings-sidebar.collapsed {
   width: 3.5rem;
   min-width: 3.5rem;
+  overflow: visible;
 }
 
 .settings-sidebar.collapsed .settings-sidebar-section-header,
@@ -513,6 +514,19 @@
    via .settings-sidebar:not(.collapsed) .tooltip-content). */
 .settings-sidebar.collapsed .tooltip-content {
   display: block !important;
+}
+
+/* Tooltips overflow to the right — parent overflow:visible unblocks them.
+   On desktop only: mobile .collapsed keeps labels visible, so scrolling is needed. */
+.settings-sidebar.collapsed .settings-sidebar-nav {
+  overflow: visible;
+}
+
+@media (max-width: 768px) {
+  .settings-sidebar.collapsed .settings-sidebar-nav {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }
 
 .settings-nav-icon {
