@@ -30,6 +30,7 @@ export function TerminalPreferencesCard({
   const [darkMode, setDarkMode] = useState(false);
   const [scaleAutoZero, setScaleAutoZero] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const originalsRef = useRef<Record<string, unknown>>({
     soundVolume, darkMode, scaleAutoZero,
@@ -38,19 +39,19 @@ export function TerminalPreferencesCard({
   const dirty = useMemo(() => hasChanges(
     { soundVolume, darkMode, scaleAutoZero } as Record<string, unknown>,
     originalsRef.current,
-  ), [soundVolume, darkMode, scaleAutoZero]);
+  ), [soundVolume, darkMode, scaleAutoZero, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Sync state with hardware profile on load ─────────────────
+  // ── Sync state with hardware profile on initial load only ───
 
   useEffect(() => {
-    if (hw.profile) {
-      const lp = hw.profile.localPrefs;
-      setSoundVolume(lp.soundVolume);
-      setDarkMode(lp.darkMode);
-      setScaleAutoZero(lp.scaleAutoZero);
-      originalsRef.current = { soundVolume: lp.soundVolume, darkMode: lp.darkMode, scaleAutoZero: lp.scaleAutoZero };
-    }
-  }, [hw.profile]);
+    if (loaded || !hw.profile) return;
+    const lp = hw.profile.localPrefs;
+    setSoundVolume(lp.soundVolume);
+    setDarkMode(lp.darkMode);
+    setScaleAutoZero(lp.scaleAutoZero);
+    originalsRef.current = { soundVolume: lp.soundVolume, darkMode: lp.darkMode, scaleAutoZero: lp.scaleAutoZero };
+    setLoaded(true);
+  }, [hw.profile, loaded]);
 
   // Update helpers call both local state and hw.updateLocalPrefs.
 
@@ -83,7 +84,7 @@ export function TerminalPreferencesCard({
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, onSaved]);
+  }, [terminalId, hw, userId, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 
