@@ -384,7 +384,7 @@ export default function AppShell() {
         requiredRole={pageRegistration!.requiredRole!}
       />
     ) : PageComponent ? (
-      <PageComponent />
+      <PageComponent {...({ onNavigate: handleNavigate } as Record<string, unknown>)} />
     ) : null;
   }
 
