@@ -438,13 +438,13 @@
 }
 
 .settings-sidebar-nav::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-fg-tertiary) 22%, transparent);
+  background: color-mix(in srgb, var(--color-fg-tertiary) 35%, transparent);
   border-radius: var(--radius-full);
   transition: background var(--duration-300) var(--ease-out);
 }
 
 .settings-sidebar-nav:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-fg-tertiary) 50%, transparent);
+  background: color-mix(in srgb, var(--color-fg-tertiary) 60%, transparent);
 }
 
 .settings-sidebar-nav::-webkit-scrollbar-thumb:hover {
