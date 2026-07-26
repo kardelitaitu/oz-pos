@@ -845,8 +845,8 @@ function SettingsPageContent() {
             onClick={() => window.history.back()}
             aria-label={l10n.getString('settings-back-aria')}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <polyline points="15 18 9 12 15 6" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <polyline points="16 5 8 12 16 19" />
             </svg>
           </button>
         </div>
