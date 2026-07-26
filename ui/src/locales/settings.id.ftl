@@ -27,6 +27,7 @@ settings-category-management = Manajemen
 settings-sidebar-nav-aria = Navigasi pengaturan
 settings-sidebar-expand-aria = Buka bilah sisi pengaturan
 settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
+settings-back-aria = Kembali
 settings-sidebar-collapse-all-aria = Tutup semua kategori
 settings-sidebar-search-aria = Cari pengaturan
 settings-sidebar-search-clear-aria =

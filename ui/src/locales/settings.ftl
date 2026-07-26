@@ -207,6 +207,7 @@ settings-category-management = Management
 settings-sidebar-nav-aria = Settings navigation
 settings-sidebar-expand-aria = Expand settings sidebar
 settings-sidebar-collapse-aria = Collapse settings sidebar
+settings-back-aria = Go back
 settings-sidebar-collapse-all-aria = Collapse all categories
 settings-sidebar-search-aria = Search settings
 settings-sidebar-search-clear-aria =

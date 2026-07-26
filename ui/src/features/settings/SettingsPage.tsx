@@ -837,27 +837,16 @@ function SettingsPageContent() {
       )}
       {/* ── Top bar ────────────────────────────────────── */}
       <header className="settings-topbar">
-        {/* COL 1: mobile menu */}
+        {/* COL 1: back button */}
         <div className="settings-topbar__col">
           <button
             type="button"
             className="settings-mobile-menu-btn"
-            onClick={() => setMobileSidebarOpen((p) => !p)}
-            aria-label={mobileSidebarOpen ? l10n.getString('settings-sidebar-collapse-aria') : l10n.getString('settings-sidebar-expand-aria')}
+            onClick={() => window.history.back()}
+            aria-label={l10n.getString('settings-back-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              {mobileSidebarOpen ? (
-                <>
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </>
-              ) : (
-                <>
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
-                </>
-              )}
+              <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
         </div>
