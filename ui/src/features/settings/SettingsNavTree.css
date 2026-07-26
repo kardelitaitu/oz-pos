@@ -73,6 +73,7 @@
 }
 
 .settings-sidebar.collapsed .settings-sidebar-header {
+  justify-content: center;
   padding: var(--space-1_5) var(--space-0_5);
 }
 
