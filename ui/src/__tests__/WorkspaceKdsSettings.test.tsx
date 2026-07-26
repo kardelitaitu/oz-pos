@@ -88,10 +88,10 @@ describe('WorkspaceKdsSettings', () => {
     expect(screen.getByText('SLA Escalation')).toBeInTheDocument();
   });
 
-  it('renders sound toggle (initially checked from antialiased prefs)', () => {
+    it('renders sound toggle (initially checked — default)', () => {
     renderCard();
     const t = document.getElementById('kds-sound') as HTMLInputElement;
-    // fontSmoothing === 'antialiased' → soundEnabled = true
+    // DEFAULT_KDS.soundEnabled = true
     expect(t.checked).toBe(true);
   });
 
@@ -141,11 +141,15 @@ describe('WorkspaceKdsSettings', () => {
   it('calls onSaved after successful save', async () => {
     const onSaved = vi.fn();
     renderCard({ onSaved });
+
+    // Wait for getSetting calls to resolve
+    await new Promise((r) => setTimeout(r, 10));
+
     const t = document.getElementById('kds-auto-ack') as HTMLInputElement;
     fireEvent.click(t);
     await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
   });
 
   it('hides Save button in inspector-drawer variant', () => {

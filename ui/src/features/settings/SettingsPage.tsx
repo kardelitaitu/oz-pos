@@ -794,7 +794,7 @@ function SettingsPageContent() {
       case 'kds':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceKdsSettings variant="full-page" {...(sessionToken ? { sessionToken } : {})} />
+            <WorkspaceKdsSettings variant="full-page" userId={userId} />
           </Suspense>
         );
 
