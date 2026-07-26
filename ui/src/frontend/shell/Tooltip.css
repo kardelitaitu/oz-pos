@@ -144,3 +144,61 @@
     transition: none;
   }
 }
+
+/* ── Portal mode: position: fixed via CSS custom properties ────
+   Used when the trigger is inside an overflow:hidden/scroll
+   container. The Tooltip component passes --trigger-* vars
+   captured from getBoundingClientRect(). */
+
+.tooltip-content--portal {
+  position: fixed;
+}
+
+/* right (portal) */
+.tooltip-content--portal.tooltip-content--right {
+  left: calc(var(--trigger-right, 0px) + 10px);
+  top: calc(var(--trigger-top, 0px) + var(--trigger-height, 0px) / 2);
+  transform: translateY(-50%) scale(0.95);
+  --tooltip-origin: left center;
+}
+
+.tooltip-content--portal.tooltip-content--right.tooltip-content--visible {
+  transform: translateY(-50%) scale(1);
+}
+
+/* left (portal) */
+.tooltip-content--portal.tooltip-content--left {
+  left: auto;
+  right: calc(100vw - var(--trigger-left, 0px) + 10px);
+  top: calc(var(--trigger-top, 0px) + var(--trigger-height, 0px) / 2);
+  transform: translateY(-50%) scale(0.95);
+  --tooltip-origin: right center;
+}
+
+.tooltip-content--portal.tooltip-content--left.tooltip-content--visible {
+  transform: translateY(-50%) scale(1);
+}
+
+/* top (portal) */
+.tooltip-content--portal.tooltip-content--top {
+  bottom: calc(100vh - var(--trigger-top, 0px) + 10px);
+  left: calc(var(--trigger-left, 0px) + var(--trigger-width, 0px) / 2);
+  transform: translateX(-50%) scale(0.95);
+  --tooltip-origin: bottom center;
+}
+
+.tooltip-content--portal.tooltip-content--top.tooltip-content--visible {
+  transform: translateX(-50%) scale(1);
+}
+
+/* bottom (portal) */
+.tooltip-content--portal.tooltip-content--bottom {
+  top: calc(var(--trigger-bottom, 0px) + 10px);
+  left: calc(var(--trigger-left, 0px) + var(--trigger-width, 0px) / 2);
+  transform: translateX(-50%) scale(0.95);
+  --tooltip-origin: top center;
+}
+
+.tooltip-content--portal.tooltip-content--bottom.tooltip-content--visible {
+  transform: translateX(-50%) scale(1);
+}

@@ -896,7 +896,7 @@ export default function SettingsNavTree({
                       {cat.keys.map((key, itemIdx) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
-                          <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
+                          <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800} portal>
                             <div className="settings-nav-item-wrapper">
                               <button
                                 type="button"

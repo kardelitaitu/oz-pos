@@ -31,6 +31,7 @@
   width: 3.5rem;
   min-width: 3.5rem;
   overflow: visible;
+  z-index: 1;
 }
 
 .settings-sidebar.collapsed .settings-sidebar-section-header,
@@ -511,22 +512,10 @@
 }
 
 /* Ensure tooltips appear in collapsed sidebar (hidden in expanded mode
-   via .settings-sidebar:not(.collapsed) .tooltip-content). */
+   via .settings-sidebar:not(.collapsed) .tooltip-content).
+   Tooltips use a portal to document.body so they escape overflow clipping. */
 .settings-sidebar.collapsed .tooltip-content {
   display: block !important;
-}
-
-/* Tooltips overflow to the right — parent overflow:visible unblocks them.
-   On desktop only: mobile .collapsed keeps labels visible, so scrolling is needed. */
-.settings-sidebar.collapsed .settings-sidebar-nav {
-  overflow: visible;
-}
-
-@media (max-width: 768px) {
-  .settings-sidebar.collapsed .settings-sidebar-nav {
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
 }
 
 .settings-nav-icon {

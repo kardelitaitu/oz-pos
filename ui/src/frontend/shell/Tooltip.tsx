@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useId, type ReactNode, type ReactElement, cloneElement } from 'react';
+import { createPortal } from 'react-dom';
 import './Tooltip.css';
 
 /** Props for the Tooltip component. */
@@ -13,6 +14,10 @@ export interface TooltipProps {
   hideDelay?: number;
   /** Maximum width of the tooltip bubble (CSS value). Default '280px'. */
   maxWidth?: string;
+  /** Render the tooltip to document.body via a portal so it escapes
+   *  overflow:hidden/scroll clipping. Use when the trigger is inside
+   *  a scrollable or clipped container. */
+  portal?: boolean;
   /** The element that triggers the tooltip on hover/focus. */
   children: ReactElement;
 }
@@ -26,6 +31,8 @@ export interface TooltipProps {
  * - Handles keyboard focus via `:focus-visible` on the trigger
  * - Includes a small arrow pointing toward the trigger
  * - Uses `role="tooltip"` for accessibility
+ * - Optional `portal` mode renders to document.body via createPortal with
+ *   position:fixed, escaping parent overflow clipping
  */
 export default function Tooltip({
   content,
@@ -33,6 +40,7 @@ export default function Tooltip({
   showDelay = 400,
   hideDelay = 100,
   maxWidth = '280px',
+  portal = false,
   children,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
@@ -42,11 +50,16 @@ export default function Tooltip({
   const hideTimer = useRef<ReturnType<typeof setTimeout>>();
   const triggerRef = useRef<HTMLElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
 
   const startShow = useCallback(() => {
+    // Capture trigger position before showing (portal needs viewport coords)
+    if (portal && triggerRef.current) {
+      setTriggerRect(triggerRef.current.getBoundingClientRect());
+    }
     clearTimeout(hideTimer.current);
     showTimer.current = setTimeout(() => setVisible(true), showDelay);
-  }, [showDelay]);
+  }, [showDelay, portal]);
 
   const startHide = useCallback(() => {
     clearTimeout(showTimer.current);
@@ -62,6 +75,40 @@ export default function Tooltip({
     [startHide],
   );
 
+  // Portal: pass viewport coordinates as CSS custom properties for
+  // position:fixed layout. Fall back gracefully when rect is null.
+  const portalStyle: React.CSSProperties | undefined =
+    portal && triggerRect
+      ? ({
+          '--trigger-top': `${triggerRect.top}px`,
+          '--trigger-left': `${triggerRect.left}px`,
+          '--trigger-width': `${triggerRect.width}px`,
+          '--trigger-height': `${triggerRect.height}px`,
+          '--trigger-bottom': `${triggerRect.bottom}px`,
+          '--trigger-right': `${triggerRect.right}px`,
+          maxWidth,
+        } as React.CSSProperties)
+      : undefined;
+
+  const tooltipNode = (
+    <div
+      ref={tooltipRef}
+      id={tooltipId}
+      className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}${portal ? ' tooltip-content--portal' : ''}`}
+      style={portal ? portalStyle : (maxWidth ? { maxWidth } : undefined)}
+      role="tooltip"
+      onMouseEnter={() => {
+        clearTimeout(hideTimer.current);
+        clearTimeout(showTimer.current);
+        setVisible(true);
+      }}
+      onMouseLeave={startHide}
+      aria-hidden={!visible}
+    >
+      {content}
+    </div>
+  );
+
   return (
     <div
       className="tooltip-wrapper"
@@ -74,22 +121,9 @@ export default function Tooltip({
         ref: triggerRef,
         'aria-describedby': visible ? tooltipId : undefined,
       } as Record<string, unknown>)}
-      <div
-        ref={tooltipRef}
-        id={tooltipId}
-        className={`tooltip-content tooltip-content--${position}${visible ? ' tooltip-content--visible' : ''}`}
-        style={maxWidth ? { maxWidth } : undefined}
-        role="tooltip"
-        onMouseEnter={() => {
-          clearTimeout(hideTimer.current);
-          clearTimeout(showTimer.current);
-          setVisible(true);
-        }}
-        onMouseLeave={startHide}
-        aria-hidden={!visible}
-      >
-        {content}
-      </div>
+      {portal && typeof document !== 'undefined'
+        ? createPortal(tooltipNode, document.body)
+        : tooltipNode}
     </div>
   );
 }
