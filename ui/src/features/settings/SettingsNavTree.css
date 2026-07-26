@@ -422,6 +422,37 @@
   gap: 0.125rem;
   padding: var(--space-2);
   overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* ── Scrollbar: subtle when idle, visible on hover ────── */
+
+.settings-sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-sidebar-nav::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-fg-tertiary) 22%, transparent);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-300) var(--ease-out);
+}
+
+.settings-sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-fg-tertiary) 50%, transparent);
+}
+
+.settings-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--color-fg-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-sidebar-nav::-webkit-scrollbar-thumb {
+    transition: none;
+  }
 }
 
 .settings-nav-item {
