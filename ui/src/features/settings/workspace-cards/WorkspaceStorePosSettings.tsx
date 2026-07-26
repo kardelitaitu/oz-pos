@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
+import { setReceiptSettingsScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -18,6 +19,7 @@ import { hasChanges } from './helpers';
  */
 export function WorkspaceStorePosSettings({
   terminalId,
+  sessionToken,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
@@ -67,18 +69,43 @@ export function WorkspaceStorePosSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
+      const tasks: Promise<unknown>[] = [];
+
+      // Persist receipt settings to the backend
+      if (sessionToken) {
+        tasks.push(
+          setReceiptSettingsScoped(sessionToken, {
+            showCurrency,
+            decimalSeparator: settings.receipt.decimalSeparator,
+            showTax,
+            footer,
+            paperWidth,
+            showTableNumber,
+            marginTop: settings.receipt.marginTop,
+            marginBottom: settings.receipt.marginBottom,
+            marginLeft: settings.receipt.marginLeft,
+            marginRight: settings.receipt.marginRight,
+          }),
+        );
+      }
+
       // Save terminal hardware if available
       if (terminalId && hw.profile) {
-        await hw.save();
+        tasks.push(hw.save());
       }
-      // TODO (Phase 2): Call IPC to save store-level receipt settings
+
+      await Promise.all(tasks);
+
+      // Update originals so dirty tracking resets
+      originalsRef.current = { paperWidth, showCurrency, showTax, showTableNumber, footer };
+
       onSaved?.();
     } catch {
       // Error handled by hook's error state
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, onSaved]);
+  }, [terminalId, hw, sessionToken, showCurrency, showTax, paperWidth, showTableNumber, footer, settings.receipt, onSaved]);
 
   // ── Variant classes ──────────────────────────────────────────
 

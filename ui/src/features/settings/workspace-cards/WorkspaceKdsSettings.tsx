@@ -3,6 +3,7 @@ import { Localized } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { setSettingScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -36,6 +37,7 @@ const DEFAULT_KDS: KdsDraftState = {
  * Consumes `useSettings()` for shared KDS configuration.
  */
 export function WorkspaceKdsSettings({
+  sessionToken,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
@@ -72,14 +74,28 @@ export function WorkspaceKdsSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // TODO (Phase 3): Call dedicated KDS settings IPC
+      if (sessionToken) {
+        const entries: Record<string, string> = {
+          'kds.sound_enabled': String(draft.soundEnabled),
+          'kds.yellow_threshold_min': String(draft.yellowThresholdMin),
+          'kds.red_threshold_min': String(draft.redThresholdMin),
+          'kds.auto_acknowledge': String(draft.autoAcknowledge),
+          'kds.density': draft.density,
+        };
+        await Promise.all(
+          Object.entries(entries).map(([key, value]) =>
+            setSettingScoped(sessionToken, key, value),
+          ),
+        );
+      }
+      originalsRef.current = { ...draft };
       onSaved?.();
     } catch {
       // Hook handles error
     } finally {
       setSaving(false);
     }
-  }, [onSaved]);
+  }, [sessionToken, draft, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 

@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
+import { setReceiptSettingsScoped, setSettingScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -20,6 +21,7 @@ import { hasChanges } from './helpers';
  */
 export function WorkspaceRestaurantPosSettings({
   terminalId,
+  sessionToken,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
@@ -57,16 +59,44 @@ export function WorkspaceRestaurantPosSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      if (terminalId && hw.profile) {
-        await hw.save();
+      const tasks: Promise<unknown>[] = [];
+
+      // Persist table management setting to the backend
+      if (sessionToken) {
+        tasks.push(
+          setReceiptSettingsScoped(sessionToken, {
+            showCurrency: settings.receipt.showCurrency,
+            decimalSeparator: settings.receipt.decimalSeparator,
+            showTax: settings.receipt.showTax,
+            footer: settings.receipt.footer,
+            paperWidth: settings.receipt.paperWidth,
+            showTableNumber: tableManagement,
+            marginTop: settings.receipt.marginTop,
+            marginBottom: settings.receipt.marginBottom,
+            marginLeft: settings.receipt.marginLeft,
+            marginRight: settings.receipt.marginRight,
+          }),
+        );
+        tasks.push(
+          setSettingScoped(sessionToken, 'restaurant.course_firing', String(courseFiring)),
+        );
       }
+
+      if (terminalId && hw.profile) {
+        tasks.push(hw.save());
+      }
+
+      await Promise.all(tasks);
+
+      originalsRef.current = { tableManagement, courseFiring };
+
       onSaved?.();
     } catch {
       // Hook handles error state
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, onSaved]);
+  }, [terminalId, hw, sessionToken, tableManagement, courseFiring, settings.receipt, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 

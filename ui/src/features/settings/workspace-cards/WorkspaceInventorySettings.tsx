@@ -3,6 +3,7 @@ import { Localized } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { setSettingScoped } from '@/api/settings';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
 
@@ -15,6 +16,7 @@ import { hasChanges } from './helpers';
  * Consumes `useSettings()` for store-level inventory configuration.
  */
 export function WorkspaceInventorySettings({
+  sessionToken,
   locationId,
   variant = 'full-page',
   onSaved,
@@ -39,14 +41,25 @@ export function WorkspaceInventorySettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // TODO (Phase 2): Call inventory settings IPC
+      if (sessionToken) {
+        const entries: Record<string, string> = {
+          'inventory.low_stock_threshold': String(lowStockThreshold),
+          'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
+        };
+        await Promise.all(
+          Object.entries(entries).map(([key, value]) =>
+            setSettingScoped(sessionToken, key, value),
+          ),
+        );
+      }
+      originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
       onSaved?.();
     } catch {
       // Hook handles error
     } finally {
       setSaving(false);
     }
-  }, [onSaved]);
+  }, [sessionToken, lowStockThreshold, deductionPreferWarehouse, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 

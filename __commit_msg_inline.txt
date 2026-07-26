@@ -1,0 +1,35 @@
+fix(settings): wire workspace cards to IPC — terminalId, receipt, KDS, inventory persistence
+
+Store POS (WorkspaceStorePosSettings):
+- SettingsPage now resolves deviceId via getDeviceId() on mount and passes
+  terminalId to all workspace cards, making Printer & Scanner sections visible.
+- handleSave calls setReceiptSettingsScoped(sessionToken, receiptDto) to
+  persist paper width, show currency, show tax, show table number, and footer
+  to the backend. Previously these were local-state-only and lost on reload.
+- originalsRef updated after save so dirty tracking resets correctly.
+
+Restaurant POS (WorkspaceRestaurantPosSettings):
+- Same pattern: passes terminalId + sessionToken from SettingsPage.
+- handleSave persists showTableNumber (table management toggle) via
+  setReceiptSettingsScoped and courseFiring via setSettingScoped.
+- Kitchen printer hardware also saved via hw.save().
+
+KDS (WorkspaceKdsSettings):
+- handleSave persists all 5 KDS settings (soundEnabled, yellowThresholdMin,
+  redThresholdMin, autoAcknowledge, density) to the settings table via
+  setSettingScoped with 'kds.'-prefixed keys.
+- originalsRef updated after save.
+
+Inventory (WorkspaceInventorySettings):
+- handleSave persists lowStockThreshold + deductionPreferWarehouse via
+  setSettingScoped with 'inventory.'-prefixed keys.
+
+SettingsPage.tsx:
+- Added getDeviceId import from @/api/system with async resolution on mount.
+- Passes terminalId and sessionToken (conditional spread for
+  exactOptionalPropertyTypes) to all 4 workspace cards.
+
+Verification:
+- npm run typecheck: clean, no errors
+- WorkspaceStorePosSettings.test.tsx: 20 tests pass
+- WorkspaceRestaurantPosSettings.test.tsx: 11 tests pass
