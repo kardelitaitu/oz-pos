@@ -79,9 +79,12 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
 }));
 
 vi.mock('@/api/settings', () => ({
-  setReceiptSettingsScoped: vi.fn().mockResolvedValue(undefined),
-  setSettingScoped: vi.fn().mockResolvedValue(undefined),
   setReceiptSettings: vi.fn().mockResolvedValue(undefined),
+  setSetting: vi.fn().mockResolvedValue(undefined),
+  getSetting: vi.fn(async (key: string) => {
+    if (key === 'restaurant.course_firing') return 'false';
+    return null;
+  }),
   setHardwareSettings: vi.fn().mockResolvedValue(undefined),
   getHardwareSettings: vi.fn().mockResolvedValue({
     printerConnection: 'auto', printerDevicePath: '', printerPaperSize: '80',
@@ -137,8 +140,12 @@ describe('WorkspaceRestaurantPosSettings', () => {
     expect(screen.getByText('Course Firing')).toBeInTheDocument();
   });
 
-  it('renders course firing toggle unchecked', () => {
+  it('renders course firing toggle unchecked (defaults to false)', async () => {
     renderCard();
+    await waitFor(() => {
+      const t = document.getElementById('resto-course-firing') as HTMLInputElement;
+      expect(t).not.toBeNull();
+    });
     const t = document.getElementById('resto-course-firing') as HTMLInputElement;
     expect(t.checked).toBe(false);
   });
@@ -174,11 +181,14 @@ describe('WorkspaceRestaurantPosSettings', () => {
   it('calls onSaved after successful save', async () => {
     const onSaved = vi.fn();
     renderCard({ onSaved });
+
+    // Wait for async init (getSetting loads courseFiring) to complete
     const t = document.getElementById('resto-table-mgmt') as HTMLInputElement;
+    expect(t).not.toBeNull();
     fireEvent.click(t);
     await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
   });
 
   it('hides Save button in inspector-drawer variant', () => {

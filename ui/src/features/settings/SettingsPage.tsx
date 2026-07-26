@@ -787,7 +787,7 @@ function SettingsPageContent() {
       case 'restaurant-pos':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
+            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} />
           </Suspense>
         );
 

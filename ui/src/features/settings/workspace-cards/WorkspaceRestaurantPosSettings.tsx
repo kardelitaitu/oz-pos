@@ -5,7 +5,7 @@ import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
-import { setReceiptSettingsScoped, setSettingScoped } from '@/api/settings';
+import { setReceiptSettings, getSetting, setSetting } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -21,7 +21,6 @@ import { hasChanges } from './helpers';
  */
 export function WorkspaceRestaurantPosSettings({
   terminalId,
-  sessionToken,
   userId,
   variant = 'full-page',
   onSaved,
@@ -48,12 +47,26 @@ export function WorkspaceRestaurantPosSettings({
   // ── Initialise ───────────────────────────────────────────────
 
   useEffect(() => {
+    // Only seed initial values once; subsequent re-runs must not
+    // overwrite user edits (e.g. when settings.receipt changes).
+    if (originalsLoaded) return;
+
     setTableManagement(settings.receipt.showTableNumber);
-    if (!originalsLoaded) {
-      originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring };
+
+    // Load courseFiring from the backend settings table.
+    let cancelled = false;
+    getSetting('restaurant.course_firing').then((raw) => {
+      if (cancelled) return;
+      const loaded = raw === 'true';
+      setCourseFiring(loaded);
+      originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring: loaded };
       setOriginalsLoaded(true);
-    }
-  }, [settings.receipt, originalsLoaded, courseFiring]);
+    }).catch(() => {
+      originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring: false };
+      setOriginalsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [settings.receipt, originalsLoaded]);
 
   // ── Save ─────────────────────────────────────────────────────
 
@@ -62,26 +75,24 @@ export function WorkspaceRestaurantPosSettings({
     try {
       const tasks: Promise<unknown>[] = [];
 
-      // Persist table management setting to the backend
-      if (sessionToken) {
-        tasks.push(
-          setReceiptSettingsScoped(sessionToken, {
-            showCurrency: settings.receipt.showCurrency,
-            decimalSeparator: settings.receipt.decimalSeparator,
-            showTax: settings.receipt.showTax,
-            footer: settings.receipt.footer,
-            paperWidth: settings.receipt.paperWidth,
-            showTableNumber: tableManagement,
-            marginTop: settings.receipt.marginTop,
-            marginBottom: settings.receipt.marginBottom,
-            marginLeft: settings.receipt.marginLeft,
-            marginRight: settings.receipt.marginRight,
-          }),
-        );
-        tasks.push(
-          setSettingScoped(sessionToken, 'restaurant.course_firing', String(courseFiring)),
-        );
-      }
+      // Persist table management + course firing to the backend
+      tasks.push(
+        setReceiptSettings({
+          showCurrency: settings.receipt.showCurrency,
+          decimalSeparator: settings.receipt.decimalSeparator,
+          showTax: settings.receipt.showTax,
+          footer: settings.receipt.footer,
+          paperWidth: settings.receipt.paperWidth,
+          showTableNumber: tableManagement,
+          marginTop: settings.receipt.marginTop,
+          marginBottom: settings.receipt.marginBottom,
+          marginLeft: settings.receipt.marginLeft,
+          marginRight: settings.receipt.marginRight,
+        }, userId ?? 'default'),
+      );
+      tasks.push(
+        setSetting('restaurant.course_firing', String(courseFiring), userId ?? 'default'),
+      );
 
       if (terminalId && hw.profile) {
         tasks.push(hw.save(userId));
@@ -97,7 +108,7 @@ export function WorkspaceRestaurantPosSettings({
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, sessionToken, tableManagement, courseFiring, settings.receipt, onSaved]);
+  }, [terminalId, hw, userId, tableManagement, courseFiring, settings.receipt, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 
