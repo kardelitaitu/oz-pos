@@ -587,7 +587,10 @@ function SettingsPageContent() {
     return (
       <div className="settings-page">
         <header className="settings-topbar">
-          <div className="settings-topbar-left">
+          {/* COL 1: mobile menu — empty in skeleton */}
+          <div className="settings-topbar__col" />
+          {/* COL 2: branding */}
+          <div className="settings-topbar__col settings-topbar__col--brand">
             <div className="settings-topbar-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3" />
@@ -596,6 +599,10 @@ function SettingsPageContent() {
             </div>
             <span className="settings-topbar-name"><Localized id="settings-title">Settings</Localized></span>
           </div>
+          {/* COL 3–5: empty in skeleton */}
+          <div className="settings-topbar__col settings-topbar__col--search" />
+          <div className="settings-topbar__col settings-topbar__col--clock" />
+          <div className="settings-topbar__col settings-topbar__col--actions" />
         </header>
         <div className="settings-body">
           <div className="settings-loading">
@@ -830,7 +837,8 @@ function SettingsPageContent() {
       )}
       {/* ── Top bar ────────────────────────────────────── */}
       <header className="settings-topbar">
-        <div className="settings-topbar-left">
+        {/* COL 1: mobile menu */}
+        <div className="settings-topbar__col">
           <button
             type="button"
             className="settings-mobile-menu-btn"
@@ -852,6 +860,9 @@ function SettingsPageContent() {
               )}
             </svg>
           </button>
+        </div>
+        {/* COL 2: branding */}
+        <div className="settings-topbar__col settings-topbar__col--brand">
           <div className="settings-topbar-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -862,7 +873,8 @@ function SettingsPageContent() {
             <Localized id="settings-title">Settings</Localized>
           </span>
         </div>
-        <div className="settings-topbar-center">
+        {/* COL 3: search */}
+        <div className="settings-topbar__col settings-topbar__col--search">
           <div className="settings-topbar-search">
             <svg className="settings-topbar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8" />
@@ -894,10 +906,14 @@ function SettingsPageContent() {
             )}
           </div>
         </div>
-        <div className="settings-topbar-right">
+        {/* COL 4: clock */}
+        <div className="settings-topbar__col settings-topbar__col--clock">
           <span className="settings-topbar-clock" aria-label={`${today}, ${clock}`}>
             {today} {clock}
           </span>
+        </div>
+        {/* COL 5: actions */}
+        <div className="settings-topbar__col settings-topbar__col--actions">
           <div className="settings-save-bar">
             {/* Revert button is always rendered but invisible when not dirty.
                 This reserves layout space and prevents the clock and save
