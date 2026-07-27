@@ -21,4 +21,15 @@ kds-urgent-badge = URGENT
 kds-pull-to-refresh = Tarik ke bawah untuk memperbarui
 kds-release-to-refresh = Lepaskan untuk memperbarui
 
+# Layout switcher
+kds-layout-label = Tampilan
+kds-layout-display-label = Opsi
+kds-layout-options-aria = Opsi tampilan
+kds-layout-popover-aria = Opsi tampilan dan tata letak KDS
+kds-layout-order-id = ID Pesanan
+kds-layout-table-number = Nomor Meja
+kds-layout-kanban = Kanban
+kds-layout-focus = Fokus
+kds-layout-metro = Metro
+
 # ── Kiosk (remaining) ──

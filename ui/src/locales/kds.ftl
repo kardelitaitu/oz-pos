@@ -18,3 +18,14 @@ kds-time-ago = { $minutes }m
 kds-urgent-badge = URGENT
 kds-pull-to-refresh = Pull down to refresh
 kds-release-to-refresh = Release to refresh
+
+# Layout switcher
+kds-layout-label = Layout
+kds-layout-display-label = Display
+kds-layout-options-aria = Layout options
+kds-layout-popover-aria = KDS layout and display options
+kds-layout-order-id = Order ID
+kds-layout-table-number = Table Number
+kds-layout-kanban = Kanban
+kds-layout-focus = Focus
+kds-layout-metro = Metro
