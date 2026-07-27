@@ -37,7 +37,7 @@ const EMPTY_TAX_FORM: TaxFormData = {
 export default function TaxConfigurationScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   // ── Tax rates state ─────────────────────────────────────────────
   const [rates, setRates] = useState<TaxRateDto[]>([]);
   const [loading, setLoading] = useState(true);
