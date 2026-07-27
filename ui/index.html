@@ -71,6 +71,18 @@
     <script type="module">
       import { mockIPC, mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 
+      // Tauri v2 guards __TAURI_INTERNALS__ as read-only; make it writable
+      // so the mocks module can install the stub IPC layer.
+      try {
+        Object.defineProperty(window, '__TAURI_INTERNALS__', {
+          value: window.__TAURI_INTERNALS__ || {},
+          writable: true,
+          configurable: true,
+        });
+      } catch {
+        // already configurable or not present — mocks will handle it
+      }
+
       mockWindows('main');
       mockConvertFileSrc('windows');
 
