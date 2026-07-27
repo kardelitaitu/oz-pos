@@ -61,3 +61,5 @@ tax-config-cat-modal-desc = Select the tax rates that apply to all products in t
 tax-config-no-rates = No tax rates available. Create one first.
 tax-config-modal-close =
     .aria-label = Close
+tax-config-save-error = Failed to save tax rate
+tax-config-delete-error = Failed to delete tax rate

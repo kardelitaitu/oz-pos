@@ -28,4 +28,6 @@ currency-select-placeholder = Select currency…
 currency-rate-placeholder = 1.25
 currency-source-placeholder = e.g. ECB
 currency-load-error = Failed to load exchange rates
+currency-save-error = Failed to save exchange rate
+currency-delete-error = Failed to delete exchange rate
 currency-table-label = Exchange rates

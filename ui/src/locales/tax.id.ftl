@@ -59,5 +59,7 @@ tax-config-cat-modal-desc = Pilih tarif pajak yang berlaku untuk semua produk da
 tax-config-no-rates = Belum ada tarif pajak. Buat satu terlebih dahulu.
 tax-config-modal-close =
     .aria-label = Tutup
+tax-config-save-error = Gagal menyimpan tarif pajak
+tax-config-delete-error = Gagal menghapus tarif pajak
 
 # ── Multi-Store ──

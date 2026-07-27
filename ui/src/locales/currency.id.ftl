@@ -29,6 +29,8 @@ currency-rate-placeholder =
 currency-source-placeholder =
     .placeholder = mis. BI
 currency-load-error = Gagal memuat nilai tukar
+currency-save-error = Gagal menyimpan nilai tukar
+currency-delete-error = Gagal menghapus nilai tukar
 currency-table-label = Nilai tukar
 
 # ── KDS (remaining) ──
