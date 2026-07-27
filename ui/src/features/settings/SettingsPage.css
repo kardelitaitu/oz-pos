@@ -184,6 +184,7 @@
 .settings-topbar-search-input {
   width: 20rem;
   max-width: 100%;
+  box-sizing: border-box;
   padding: var(--space-2) var(--space-2) var(--space-2) 2rem;
   font-size: var(--text-base);
   font-family: inherit;
@@ -357,8 +358,19 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+/* ── Responsive: search input widths ────────────────────── */
+@media (max-width: 1024px) {
+  .settings-topbar-search-input {
+    width: 14rem;
+  }
+}
+
 /* ── Responsive: mobile layout adjustments ──────────────────── */
 @media (max-width: 768px) {
+  .settings-topbar-search-input {
+    width: 10rem;
+  }
+
   .settings-topbar {
     padding: var(--space-2) var(--space-4);
   }
