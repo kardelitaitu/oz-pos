@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import purchasingFtl from '@/locales/purchasing.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -68,14 +69,14 @@ describe('PurchaseOrdersScreen', () => {
   // ── List rendering ───────────────────────────────────────────
   it('renders the title and New Purchase Order button', async () => {
     mockListPOs.mockResolvedValue([]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
     expect(screen.getByText('Purchase Orders')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new purchase order/i })).toBeInTheDocument();
   });
 
   it('loads and displays purchase orders in the table', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -88,14 +89,14 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows loading skeleton while fetching purchase orders', async () => {
     mockListPOs.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
     expect(document.querySelector('.po-loading-skeleton')).toBeInTheDocument();
     expect(screen.queryByText(/loading purchase orders/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no orders exist', async () => {
     mockListPOs.mockResolvedValue([]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText(/no purchase orders yet/i)).toBeInTheDocument();
     });
@@ -103,7 +104,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('displays supplier_id when supplier_name is null', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows the line count for each PO', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -126,7 +127,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('renders status badges with correct class', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -145,7 +146,7 @@ describe('PurchaseOrdersScreen', () => {
   // ── Status filters ───────────────────────────────────────────
   it('renders status filter buttons', async () => {
     mockListPOs.mockResolvedValue(sampleOrders);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     expect(screen.getByText('All')).toBeInTheDocument();
     expect(screen.getByText('Draft')).toBeInTheDocument();
@@ -156,7 +157,7 @@ describe('PurchaseOrdersScreen', () => {
   it('filters orders by status when a filter is clicked', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue(sampleOrders);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -173,7 +174,7 @@ describe('PurchaseOrdersScreen', () => {
   it('shows filtered empty message when status filter matches nothing', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -189,7 +190,7 @@ describe('PurchaseOrdersScreen', () => {
   // ── Action buttons ───────────────────────────────────────────
   it('shows Submit button for draft orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -201,7 +202,7 @@ describe('PurchaseOrdersScreen', () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[0]!]);
     mockUpdateStatus.mockResolvedValue({});
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
@@ -218,7 +219,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows Approve and Cancel buttons for pending orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[1]!]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-002')).toBeInTheDocument();
@@ -230,7 +231,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows Receive button for approved orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -243,7 +244,7 @@ describe('PurchaseOrdersScreen', () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([sampleOrders[2]!]);
     mockReceivePO.mockResolvedValue({});
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -258,7 +259,7 @@ describe('PurchaseOrdersScreen', () => {
 
   it('shows no action buttons for cancelled orders', async () => {
     mockListPOs.mockResolvedValue([sampleOrders[3]!]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('PO-004')).toBeInTheDocument();
@@ -272,7 +273,7 @@ describe('PurchaseOrdersScreen', () => {
   it('opens PurchaseOrderForm when New Purchase Order is clicked', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await user.click(screen.getByRole('button', { name: /new purchase order/i }));
 
@@ -284,7 +285,7 @@ describe('PurchaseOrdersScreen', () => {
   it('refreshes list when form onSaved is called', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await user.click(screen.getByRole('button', { name: /new purchase order/i }));
     await waitFor(() => {
@@ -301,7 +302,7 @@ describe('PurchaseOrdersScreen', () => {
   it('closes form when form onClose is called', async () => {
     const user = userEvent.setup();
     mockListPOs.mockResolvedValue([]);
-    renderWithFluentSync(<PurchaseOrdersScreen />, purchasingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><PurchaseOrdersScreen /></ToastProvider>, purchasingFtl, sharedFtl);
 
     await user.click(screen.getByRole('button', { name: /new purchase order/i }));
     await waitFor(() => {

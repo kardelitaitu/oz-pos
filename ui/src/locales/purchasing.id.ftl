@@ -47,6 +47,40 @@ po-form-error-supplier-required = Pemasok wajib diisi
 po-form-error-sku-required = Setiap baris harus memiliki SKU
 po-form-error-generic = Gagal membuat pesanan pembelian
 
+# Status labels
+po-status-all = Semua
+po-status-draft = Draf
+po-status-pending = Tertunda
+po-status-approved = Disetujui
+po-status-received = Diterima
+po-status-cancelled = Dibatalkan
+
+# Table columns
+po-col-number = No. PO
+po-col-supplier = Pemasok
+po-col-status = Status
+po-col-order-date = Tanggal Pesan
+po-col-expected = Diharapkan
+po-col-total = Total
+po-col-items = Item
+po-col-actions =
+    .aria-label = Tindakan
+
+# Action buttons
+po-action-submit = Kirim
+po-action-approve = Setujui
+po-action-receive = Terima
+po-action-cancel = Batal
+
+# Empty states
+po-empty = Belum ada pesanan pembelian.
+po-empty-filtered = Tidak ada pesanan pembelian dengan status "{ $status }".
+
+# Error messages
+po-error-load = Gagal memuat pesanan pembelian
+po-error-update = Gagal memperbarui pesanan pembelian
+po-error-receive = Gagal menerima pesanan pembelian
+
 suppliers-no-results = Tidak ada pemasok yang cocok dengan pencarian Anda.
 suppliers-clear-search = Hapus pencarian
 suppliers-no-data = Belum ada pemasok.

@@ -113,7 +113,6 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                 <input className="po-form-input" type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-001" />
               </Localized>
             </label>
-            { }
             <label className="po-form-field">
               <Localized id="po-form-supplier-label">
                 <span className="po-form-label">Supplier *</span>
