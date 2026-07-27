@@ -6,7 +6,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
-import { setReceiptSettings, getSetting, setSetting } from '@/api/settings';
+import { setReceiptSettings, getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -94,7 +94,7 @@ export function WorkspaceRestaurantPosSettings({
         }, userId ?? 'default'),
       );
       tasks.push(
-        setSetting('restaurant.course_firing', String(courseFiring), userId ?? 'default'),
+        setSettings({ 'restaurant.course_firing': String(courseFiring) }, userId ?? 'default'),
       );
 
       if (terminalId && hw.profile) {

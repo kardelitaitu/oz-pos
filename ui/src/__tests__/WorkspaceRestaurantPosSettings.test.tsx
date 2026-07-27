@@ -82,7 +82,7 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
 
 vi.mock('@/api/settings', () => ({
   setReceiptSettings: vi.fn().mockResolvedValue(undefined),
-  setSetting: vi.fn().mockResolvedValue(undefined),
+  setSettings: vi.fn().mockResolvedValue(undefined),
   getSetting: vi.fn(async (key: string) => {
     if (key === 'restaurant.course_firing') return 'false';
     return null;
