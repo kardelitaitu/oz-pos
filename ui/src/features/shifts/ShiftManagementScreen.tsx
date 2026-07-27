@@ -114,11 +114,11 @@ export default function ShiftManagementScreen() {
       setOpeningBalance('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open shift');
+      setError(err instanceof Error ? err.message : l10n.getString('shift-open-error') || 'Failed to open shift');
     } finally {
       setSaving(false);
     }
-  }, [openingBalance, userId, load]);
+  }, [openingBalance, userId, load, l10n]);
 
   // ── Close shift ───────────────────────────────────────────────────
 
@@ -139,11 +139,11 @@ export default function ShiftManagementScreen() {
       setClosedShiftSummary(closed);
       setActiveShift(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to close shift');
+      setError(err instanceof Error ? err.message : l10n.getString('shift-close-error') || 'Failed to close shift');
     } finally {
       setSaving(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, userId]);
+  }, [activeShift, closingBalance, shiftNotes, userId, l10n]);
 
 
   const dismissCloseSummary = useCallback(async () => {
@@ -172,11 +172,11 @@ export default function ShiftManagementScreen() {
       setPayoutReason('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to record payout');
+      setError(err instanceof Error ? err.message : l10n.getString('shift-payout-error') || 'Failed to record payout');
     } finally {
       setSaving(false);
     }
-  }, [activeShift, payoutAmount, payoutReason, load]);
+  }, [activeShift, payoutAmount, payoutReason, load, l10n]);
 
   // ── Format time/date helpers ───────────────────────────────────────
 
