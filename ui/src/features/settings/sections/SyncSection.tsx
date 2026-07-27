@@ -239,13 +239,13 @@ export default function SyncSection({
         </div>
 
         <div className="settings-field settings-field--horizontal">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
-          <label htmlFor="sync-enabled" className="settings-label">
+          <span className="settings-label">
             <Localized id="settings-sync-enabled">
               <span>Enable Cloud Sync</span>
             </Localized>
-          </label>
+          </span>
           <span className="settings-field-input-wrap">
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label className="settings-toggle" htmlFor="sync-enabled">
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">

@@ -137,6 +137,7 @@ export default function ThresholdConfigScreen() {
 
       <div className="log-filters">
         <div className="log-filter-group">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <Localized id="inv-threshold-filter-label">
             <label htmlFor="filter-location">Filter by Location</label>
           </Localized>
@@ -246,6 +247,7 @@ export default function ThresholdConfigScreen() {
             </Localized>
 
             <div className="form-group">
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <Localized id="inv-transit-col-product">
                 <label htmlFor="dialog-product">Product</label>
               </Localized>
@@ -266,6 +268,7 @@ export default function ThresholdConfigScreen() {
             </div>
 
             <div className="form-group">
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <Localized id="inv-threshold-col-location">
                 <label htmlFor="dialog-location">Location</label>
               </Localized>
@@ -288,6 +291,7 @@ export default function ThresholdConfigScreen() {
             </div>
 
             <div className="form-group">
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <Localized id="inv-threshold-col-threshold">
                 <label htmlFor="dialog-qty">Threshold Limit</label>
               </Localized>
@@ -302,6 +306,7 @@ export default function ThresholdConfigScreen() {
               />
             </div>
 
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label className="threshold-checkbox-label">
               <input
                 type="checkbox"

@@ -211,7 +211,7 @@ export function useTerminalHardware(
       const resolved = fromHardwareSettingsDto(terminalId, storeId, dto);
       setProfile(resolved);
       setIsLoading(false);
-    } catch (err) {
+    } catch {
       // IPC unavailable (non-Tauri env, dev mock) — use defaults
       setProfile(createDefaultProfile(terminalId, storeId));
       setIsLoading(false);

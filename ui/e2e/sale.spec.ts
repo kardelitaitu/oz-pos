@@ -362,8 +362,8 @@ test.describe('Payment Methods', () => {
     const afterText = await page.locator('.retail-total-row--grand').textContent();
     expect(afterText).toBeTruthy();
     // Compare numeric values: after-discount total should be less than before.
-    const afterClean = (afterText ?? '').replace(/[^0-9.,\-]/g, '');
-    const beforeClean = (beforeText ?? '').replace(/[^0-9.,\-]/g, '');
+    const afterClean = (afterText ?? '').replace(/[^0-9.,-]/g, '');
+    const beforeClean = (beforeText ?? '').replace(/[^0-9.,-]/g, '');
     const beforeNum = parseFloat(beforeClean);
     const afterNum = parseFloat(afterClean);
     if (!isNaN(beforeNum) && !isNaN(afterNum)) {
@@ -459,7 +459,7 @@ test.describe('Payment Methods', () => {
     // Fill row 0 (cash) and row 1 (card) with amounts that sum to the total.
     // Read the total from the modal to compute split amounts dynamically.
     const totalText = await page.locator('.payment-total-amount').first().textContent();
-    const totalCleaned = (totalText ?? '0').replace(/[^0-9.,\-]/g, '');
+    const totalCleaned = (totalText ?? '0').replace(/[^0-9.,-]/g, '');
     const totalNum = parseFloat(totalCleaned) || 0;
     // Split approximately 40/60: 40% cash, 60% card.
     const cashAmount = (totalNum * 0.4).toFixed(2);
@@ -481,7 +481,7 @@ test.describe('Payment Methods', () => {
     // Remaining must be 0 — the split fully allocates the total.
     const remText = await remainingAmount.textContent();
     expect(remText).toBeTruthy();
-    const remCleaned = (remText ?? '').replace(/[^0-9.,\-]/g, '');
+    const remCleaned = (remText ?? '').replace(/[^0-9.,-]/g, '');
     const remNum = parseFloat(remCleaned) || 0;
     expect(remNum).toBe(0);
 

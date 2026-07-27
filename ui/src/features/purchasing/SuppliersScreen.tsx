@@ -293,6 +293,7 @@ export default function SuppliersScreen() {
         saveDisabled={!form.name.trim() || !form.code.trim()}
         cancelLabel={l10n.getString('suppliers-btn-cancel')}
       >
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="suppliers-field" htmlFor="supplier-field-code">
           <Localized id="suppliers-field-code"><span className="suppliers-label">Code *</span></Localized>
           <input
@@ -304,6 +305,7 @@ export default function SuppliersScreen() {
             autoComplete="off"
           />
         </label>
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="suppliers-field" htmlFor="supplier-field-name">
           <Localized id="suppliers-field-name"><span className="suppliers-label">Name *</span></Localized>
           <input
@@ -316,6 +318,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <div className="suppliers-row">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="suppliers-field" htmlFor="supplier-field-contact">
             <Localized id="suppliers-field-contact"><span className="suppliers-label">Contact Person</span></Localized>
             <input
@@ -327,6 +330,7 @@ export default function SuppliersScreen() {
               autoComplete="off"
             />
           </label>
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="suppliers-field" htmlFor="supplier-field-phone">
             <Localized id="suppliers-field-phone"><span className="suppliers-label">Phone</span></Localized>
             <input
@@ -339,6 +343,7 @@ export default function SuppliersScreen() {
             />
           </label>
         </div>
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="suppliers-field" htmlFor="supplier-field-email">
           <Localized id="suppliers-field-email"><span className="suppliers-label">Email</span></Localized>
           <input
@@ -350,6 +355,7 @@ export default function SuppliersScreen() {
             autoComplete="off"
           />
         </label>
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="suppliers-field" htmlFor="supplier-field-address">
           <Localized id="suppliers-field-address"><span className="suppliers-label">Address</span></Localized>
           <input
@@ -362,6 +368,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <div className="suppliers-row">
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="suppliers-field" htmlFor="supplier-field-tax-id">
             <Localized id="suppliers-field-tax-id"><span className="suppliers-label">Tax ID</span></Localized>
             <input
@@ -373,6 +380,7 @@ export default function SuppliersScreen() {
               autoComplete="off"
             />
           </label>
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="suppliers-field" htmlFor="supplier-field-payment-terms">
             <Localized id="suppliers-field-payment-terms"><span className="suppliers-label">Payment Terms</span></Localized>
             <input
@@ -385,6 +393,7 @@ export default function SuppliersScreen() {
             />
           </label>
         </div>
+        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
         <label className="suppliers-field" htmlFor="supplier-field-notes">
           <Localized id="suppliers-field-notes"><span className="suppliers-label">Notes</span></Localized>
           <textarea

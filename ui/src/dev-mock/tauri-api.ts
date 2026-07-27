@@ -129,8 +129,16 @@ interface CartLine {
 let cartState: { lines: CartLine[] } = { lines: [] };
 
 // ── Completed sales (persisted so sales history + refund e2e work) ─
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const completedSales: any[] = [
+interface MockCompletedSale {
+  id: string;
+  total: { minor_units: number; currency: string };
+  lineCount: number;
+  status: string;
+  paymentMethod: string;
+  userId: string;
+  createdAt: string;
+}
+const completedSales: MockCompletedSale[] = [
   // Pre-seeded sale so sales history always has at least one row.
   {
     id: 'seed-sale-001',
@@ -142,7 +150,7 @@ const completedSales: any[] = [
     createdAt: new Date(Date.now() - 3600000).toISOString(),
   },
 ];
-const saleDetails: Record<string, any> = {
+const saleDetails: Record<string, MockCompletedSale & { subtotal: { minor_units: number; currency: string }; taxTotal: { minor_units: number; currency: string }; tenderedMinor: number; lines: Array<{ id: string; sku: string; name: string; qty: number; unit_price: { minor_units: number; currency: string }; total_minor: number; tax_amount: null; tax_rate_id: null }> }> = {
   'seed-sale-001': {
     id: 'seed-sale-001',
     total: { minor_units: 1250, currency: 'USD' },

@@ -186,35 +186,40 @@ export default function MenuEngineeringScreen() {
     return counts;
   }, [rowsWithMeta]);
 
-  // ── Custom tooltip for the scatter chart (inner function so l10n is in scope) ──
-  function ScatterTooltip({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload?: Array<{ payload: MenuEngineeringRow }>;
-  }) {
-    if (!active || !payload || payload.length === 0) return null;
-    const row = payload[0]!.payload;
+  // ── Custom tooltip for the scatter chart ──
+  const renderScatterTooltip = useCallback(
+    ({
+      active,
+      payload,
+    }: {
+      active?: boolean;
+      payload?: ReadonlyArray<{ payload?: MenuEngineeringRow }>;
+    }) => {
+      if (!active || !payload || payload.length === 0) return null;
+      const entry = payload[0];
+      if (!entry?.payload) return null;
+      const row = entry.payload;
 
-    return (
-      <div className="menu-eng-tooltip">
-        <strong className="menu-eng-tooltip-name">{row.name}</strong>
-        <div className="menu-eng-tooltip-grid">
-          <span>{l10n.getString('menu-eng-tooltip-volume') || 'Volume'}:</span>
-          <span>{row.total_volume}</span>
-          <span>{l10n.getString('menu-eng-tooltip-revenue') || 'Revenue'}:</span>
-          <span>{fmtCurrency(row.total_revenue_minor)}</span>
-          <span>{l10n.getString('menu-eng-tooltip-margin') || 'Margin'}:</span>
-          <span>{fmtCurrency(row.total_margin_minor)}</span>
-          <span>{l10n.getString('menu-eng-tooltip-price') || 'Price'}:</span>
-          <span>{fmtCurrency(row.unit_price_minor)}</span>
-          <span>{l10n.getString('menu-eng-tooltip-cost') || 'Cost'}:</span>
-          <span>{fmtCurrency(row.unit_cost_minor)}</span>
+      return (
+        <div className="menu-eng-tooltip">
+          <strong className="menu-eng-tooltip-name">{row.name}</strong>
+          <div className="menu-eng-tooltip-grid">
+            <span>{l10n.getString('menu-eng-tooltip-volume') || 'Volume'}:</span>
+            <span>{row.total_volume}</span>
+            <span>{l10n.getString('menu-eng-tooltip-revenue') || 'Revenue'}:</span>
+            <span>{fmtCurrency(row.total_revenue_minor)}</span>
+            <span>{l10n.getString('menu-eng-tooltip-margin') || 'Margin'}:</span>
+            <span>{fmtCurrency(row.total_margin_minor)}</span>
+            <span>{l10n.getString('menu-eng-tooltip-price') || 'Price'}:</span>
+            <span>{fmtCurrency(row.unit_price_minor)}</span>
+            <span>{l10n.getString('menu-eng-tooltip-cost') || 'Cost'}:</span>
+            <span>{fmtCurrency(row.unit_cost_minor)}</span>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    },
+    [l10n],
+  );
 
   // Compute max axis values for scatter plot (avoids Infinity issues).
   const maxVolume = useMemo(() => {
@@ -494,7 +499,7 @@ export default function MenuEngineeringScreen() {
                   style: { fontSize: 12, fill: '#64748b' },
                 }}
               />
-              <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+              <Tooltip content={renderScatterTooltip} cursor={{ strokeDasharray: '3 3' }} />
               <Legend
                 formatter={(value: string) => (
                   <span style={{ color: QUADRANT_META[value as MenuQuadrant]?.color }}>
