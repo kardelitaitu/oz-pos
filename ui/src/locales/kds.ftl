@@ -29,3 +29,15 @@ kds-layout-table-number = Table Number
 kds-layout-kanban = Kanban
 kds-layout-focus = Focus
 kds-layout-metro = Metro
+
+# Settings panel
+kds-settings-aria = KDS settings
+kds-settings-sound = Sound
+kds-settings-yellow = Yellow at { $min } min
+kds-settings-yellow-aria = Yellow escalation threshold in minutes
+kds-settings-red = Red at { $min } min
+kds-settings-red-aria = Red escalation threshold in minutes
+kds-settings-auto-ack = Auto-acknowledge
+kds-settings-density = Density
+kds-settings-density-comfortable = Comfortable
+kds-settings-density-compact = Compact

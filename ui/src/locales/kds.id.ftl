@@ -32,4 +32,16 @@ kds-layout-kanban = Kanban
 kds-layout-focus = Fokus
 kds-layout-metro = Metro
 
+# Settings panel
+kds-settings-aria = Pengaturan KDS
+kds-settings-sound = Suara
+kds-settings-yellow = Kuning pada { $min } mnt
+kds-settings-yellow-aria = Ambang eskalasi kuning dalam menit
+kds-settings-red = Merah pada { $min } mnt
+kds-settings-red-aria = Ambang eskalasi merah dalam menit
+kds-settings-auto-ack = Konfirmasi otomatis
+kds-settings-density = Kepadatan
+kds-settings-density-comfortable = Nyaman
+kds-settings-density-compact = Padat
+
 # ── Kiosk (remaining) ──
