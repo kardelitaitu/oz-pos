@@ -50,7 +50,7 @@ export default function ThresholdConfigScreen() {
       setLocations(locs);
       setThresholds(thresh);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to load threshold data', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-threshold-error-load') || 'Failed to load threshold data'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -96,7 +96,7 @@ export default function ThresholdConfigScreen() {
       setIsDialogOpen(false);
       await loadData();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to save threshold', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-threshold-error-save') || 'Failed to save threshold'), type: 'error' });
     }
   };
 
@@ -112,7 +112,7 @@ export default function ThresholdConfigScreen() {
       setDeleteConfirmId(null);
       await loadData();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to delete threshold', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-threshold-error-delete') || 'Failed to delete threshold'), type: 'error' });
     }
   };
 

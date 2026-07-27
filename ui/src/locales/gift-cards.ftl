@@ -38,3 +38,14 @@ gift-cards-payment-apply-btn = Apply Gift Card
 gift-cards-payment-processing = Processing...
 gift-cards-payment-lookup-failed = Lookup failed
 gift-cards-payment-redemption-failed = Redemption failed
+
+# Gift Cards — error toasts
+gift-cards-error-freeze = Failed to toggle freeze
+gift-cards-error-topup = Top-up failed
+gift-cards-error-issue = Failed to issue gift card
+
+# Gift Cards — placeholders & aria
+gift-cards-topup-placeholder = Amount (minor units)
+gift-cards-topup-aria = Top-up amount
+gift-cards-issue-to-placeholder = Customer name
+gift-cards-issue-pin-placeholder = For balance checks

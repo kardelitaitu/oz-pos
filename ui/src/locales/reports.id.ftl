@@ -79,6 +79,17 @@ menu-eng-rec-plowhorse = Naikkan Harga Kuda Beban — volume tinggi tapi margin 
 menu-eng-rec-puzzle = Reposisi Teka-teki — volume rendah tapi margin tinggi. Tingkatkan visibilitas atau bundel.
 menu-eng-rec-dog = Hapus Anjing — volume & margin rendah. Pertimbangkan untuk menghapus.
 
+# Sales Report — a11y labels
+sales-report-region-aria = Laporan Penjualan
+sales-report-start-aria = Tanggal mulai
+sales-report-end-aria = Tanggal akhir
+sales-report-view-aria = Mode tampilan
+sales-report-compare-off-aria = Nonaktifkan perbandingan periode
+sales-report-compare-on-aria = Bandingkan dengan periode sebelumnya
+sales-report-print-aria = Cetak laporan
+sales-report-export-aria = Ekspor CSV
+sales-report-heatmap-aria = Peta panas per jam
+
 # Period comparison
 sales-report-compare = Bandingkan
 

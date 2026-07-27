@@ -143,6 +143,9 @@ inv-threshold-delete-title = Delete Threshold?
 inv-threshold-delete-message = Are you sure you want to delete this threshold alert boundary? This action cannot be undone.
 inv-threshold-delete-confirm = Delete
 inv-threshold-error-qty = Threshold must be a valid non-negative integer
+inv-threshold-error-load = Failed to load threshold data
+inv-threshold-error-save = Failed to save threshold
+inv-threshold-error-delete = Failed to delete threshold
 
 # Stock Alert Panel
 inv-alert-title = Stock Alert Panel

@@ -62,7 +62,7 @@ export default function GiftCardsScreen() {
       }
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to toggle freeze', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('gift-cards-error-freeze') || 'Failed to toggle freeze'), type: 'error' });
     }
   }, [load, addToast]);
 
@@ -79,7 +79,7 @@ export default function GiftCardsScreen() {
       setTopUpAmount('');
       await load();
     } catch (err) {
-      setTopUpError(err instanceof Error ? err.message : 'Top-up failed');
+      setTopUpError(err instanceof Error ? err.message : (l10n.getString('gift-cards-error-topup') || 'Top-up failed'));
     }
   }, [topUpAmount, load, l10n]);
 
@@ -238,10 +238,10 @@ export default function GiftCardsScreen() {
                         className="gift-card-topup-input"
                         id="gift-card-topup-amount"
                         name="gift-card-topup-amount"
-                        placeholder="Amount (minor units)"
+                        placeholder={l10n.getString('gift-cards-topup-placeholder') || 'Amount (minor units)'}
                         value={topUpAmount}
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}
-                        aria-label="Top-up amount"
+                        aria-label={l10n.getString('gift-cards-topup-aria') || 'Top-up amount'}
                       />
                       <Localized id="gift-cards-confirm-topup">
                         <Button variant="primary" onClick={() => handleTopUp(gc.card.card_number)}>

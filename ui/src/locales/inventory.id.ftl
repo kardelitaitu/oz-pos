@@ -165,6 +165,9 @@ inv-threshold-delete-title = Hapus Batas?
 inv-threshold-delete-message = Apakah Anda yakin ingin menghapus batas peringatan stok ini? Tindakan ini tidak dapat dibatalkan.
 inv-threshold-delete-confirm = Hapus
 inv-threshold-error-qty = Batas harus berupa bilangan bulat non-negatif yang valid
+inv-threshold-error-load = Gagal memuat data batas
+inv-threshold-error-save = Gagal menyimpan batas
+inv-threshold-error-delete = Gagal menghapus batas
 
 # Stock Alert Panel
 inv-alert-title = Panel Peringatan Stok

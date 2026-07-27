@@ -36,6 +36,17 @@ top-products-quantity = Qty
 top-products-revenue = Revenue
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
+
+# Sales Report — a11y labels
+sales-report-region-aria = Sales Report
+sales-report-start-aria = Start date
+sales-report-end-aria = End date
+sales-report-view-aria = View mode
+sales-report-compare-off-aria = Disable period comparison
+sales-report-compare-on-aria = Compare to previous period
+sales-report-print-aria = Print report
+sales-report-export-aria = Export CSV
+sales-report-heatmap-aria = Hourly heatmap
 `;
 
 // ── Mock recharts ─────────────────────────────────────────────────

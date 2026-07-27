@@ -77,6 +77,17 @@ menu-eng-rec-plowhorse = Increase Price on Plowhorse — high volume but low mar
 menu-eng-rec-puzzle = Reposition Puzzle — low volume but high margin. Improve visibility or bundle.
 menu-eng-rec-dog = Remove Dog — low volume & low margin. Consider delisting.
 
+# Sales Report — a11y labels
+sales-report-region-aria = Sales Report
+sales-report-start-aria = Start date
+sales-report-end-aria = End date
+sales-report-view-aria = View mode
+sales-report-compare-off-aria = Disable period comparison
+sales-report-compare-on-aria = Compare to previous period
+sales-report-print-aria = Print report
+sales-report-export-aria = Export CSV
+sales-report-heatmap-aria = Hourly heatmap
+
 # Period comparison
 sales-report-compare = Compare
 
