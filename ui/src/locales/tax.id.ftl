@@ -61,5 +61,6 @@ tax-config-modal-close =
     .aria-label = Tutup
 tax-config-save-error = Gagal menyimpan tarif pajak
 tax-config-delete-error = Gagal menghapus tarif pajak
+tax-config-cat-save-error = Gagal menyimpan tarif pajak kategori
 
 # ── Multi-Store ──

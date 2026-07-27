@@ -63,3 +63,4 @@ tax-config-modal-close =
     .aria-label = Close
 tax-config-save-error = Failed to save tax rate
 tax-config-delete-error = Failed to delete tax rate
+tax-config-cat-save-error = Failed to save category tax rates
