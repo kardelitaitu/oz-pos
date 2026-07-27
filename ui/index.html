@@ -74,22 +74,37 @@
     <script type="module">
       import { mockWindows, mockConvertFileSrc } from '@tauri-apps/api/mocks';
 
+      // ── Robust Tauri v2 mock bootstrap ──────────────────────────
+      //
+      // Tauri v2 defines __TAURI_INTERNALS__ as read-only. The mocks lib
+      // needs it to be writable so it can install ipc / convertFileSrc stubs.
+      // It also expects a transformCallback stub so channel-based IPC
+      // (event listeners, streaming) doesn't crash before the mock is installed.
+      //
+      // The Vite alias (dev-mock/tauri-api.ts) handles invoke() directly,
+      // so the window-level stubs are a best-effort complement.
+
+      const MOCK_INTERNALS_STUB = {
+        // Stub transformCallback so code that accesses it before mockWindows
+        // runs doesn't throw. Returns a unique ID — unused since invoke() is
+        // handled by the Vite alias.
+        transformCallback(callback, _once) {
+          const id = window.crypto?.randomUUID?.()
+            ?? `cb-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          return id;
+        },
+      };
+
       let mocksReady = false;
       try {
-        // Tauri v2 defines __TAURI_INTERNALS__ as non-writable and may
-        // also mark it non-configurable.  Try to delete first, then
-        // redefine as a writable empty object so the mocks lib can
-        // install its stubs.
         delete window.__TAURI_INTERNALS__;
         Object.defineProperty(window, '__TAURI_INTERNALS__', {
-          value: {},
+          value: MOCK_INTERNALS_STUB,
           writable: true,
           configurable: true,
         });
         mocksReady = true;
       } catch {
-        // Property is locked down — the Vite alias (dev-mock/tauri-api.ts)
-        // handles all invoke() calls; window APIs are best-effort in dev.
         console.warn('[DEV] __TAURI_INTERNALS__ is locked — window mocks skipped');
       }
 

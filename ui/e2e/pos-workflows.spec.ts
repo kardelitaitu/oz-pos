@@ -42,7 +42,7 @@ test.describe('POS Workflows', () => {
 
   test('customer section renders in payment modal', async ({ page }) => {
     // Add product to cart and open payment modal.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -71,7 +71,7 @@ test.describe('POS Workflows', () => {
 
   test('void button clears cart and disables pay', async ({ page }) => {
     // Add a product to cart.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -94,7 +94,7 @@ test.describe('POS Workflows', () => {
   // ── Function Bar Keys ─────────────────────────────────────
 
   test('function bar renders with F1-F6 keys', async ({ page }) => {
-    await expect(page.locator('.product-card-btn').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: 5_000 });
 
     // Function bar must be visible.
     await expect(page.locator('.retail-fn-bar')).toBeVisible({ timeout: 5_000 });

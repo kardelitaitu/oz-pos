@@ -8,7 +8,7 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  * removed — tests hard-fail on regressions.
  *
  * CSS contract:
- *   .product-card-btn            — clickable product card (ProductLookupScreen)
+ *   .retail-product-btn           — clickable product card (RetailPosScreen product grid)
  *   .retail-cart-action-btn--pay — Pay button in cart panel
  *   [data-testid="cart-panel"]   — Cart panel container
  *   [data-testid="cart-panel-line-item"] — Single cart line
@@ -30,7 +30,7 @@ test.describe('Complete Sale Flow', () => {
 
   test('product grid renders with at least 3 products', async ({ page }) => {
     // Product cards must be visible within 5s. Dev-mock returns 18 products.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     const count = await productCards.count();
@@ -41,7 +41,7 @@ test.describe('Complete Sale Flow', () => {
 
   test('adds product to cart and shows non-zero total', async ({ page }) => {
     // Wait for product grid.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     // Click first product.
@@ -61,7 +61,7 @@ test.describe('Complete Sale Flow', () => {
   // ── E2E-11: Quantity increment ───────────────────────────────
 
   test('double-clicking same product increments quantity', async ({ page }) => {
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     // Click the same product twice.
@@ -84,11 +84,11 @@ test.describe('Complete Sale Flow', () => {
   // ── E2E-12: Open payment modal ──────────────────────────────
 
   test('opens payment modal with correct total', async ({ page }) => {
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     // Get the product price.
-    const _priceText = await page.locator('.product-card-price').first().textContent() ?? '0';
+    const _priceText = await page.locator('.retail-product-price').first().textContent() ?? '0';
 
     // Add product.
     await productCards.first().click();
@@ -116,7 +116,7 @@ test.describe('Complete Sale Flow', () => {
 
   test('cash payment with exact tender shows receipt preview', async ({ page }) => {
     // Add product.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -178,7 +178,7 @@ test.describe('Complete Sale Flow', () => {
 
   test('over-tender cash payment shows change amount', async ({ page }) => {
     // Add product.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -222,7 +222,7 @@ test.describe('Complete Sale Flow', () => {
   // ── Bonus: Pay button disabled when cart is empty ────────────
 
   test('pay button is disabled when cart is empty', async ({ page }) => {
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     // With no items in cart, pay button must be disabled.
@@ -233,7 +233,7 @@ test.describe('Complete Sale Flow', () => {
   // ── Bonus: Hold cart button is visible when cart has items ───
 
   test('hold cart button is enabled when cart has items', async ({ page }) => {
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
     // Add a product.
@@ -250,7 +250,7 @@ test.describe('Complete Sale Flow', () => {
 
   test('removing item empties cart and disables pay button', async ({ page }) => {
     // Add product.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -305,7 +305,7 @@ test.describe('Payment Methods', () => {
 
   test('applies 10% discount and verifies discount row appears in totals', async ({ page }) => {
     // Add a product to the cart.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -375,7 +375,7 @@ test.describe('Payment Methods', () => {
 
   test('QRIS payment generates QR code overlay', async ({ page }) => {
     // Add a product to the cart.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -420,7 +420,7 @@ test.describe('Payment Methods', () => {
 
   test('split tender shows remaining balance and split-evenly fills amounts', async ({ page }) => {
     // Add a product to the cart.
-    const productCards = page.locator('.product-card-btn');
+    const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
     await productCards.first().click();
     await page.waitForTimeout(500);
