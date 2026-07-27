@@ -141,6 +141,10 @@ fastpin-enter-pin = Masukkan PIN untuk { $user }
 # ── Session Lock Screen (i18n parity fix) ────────────────────────────────
 session-lock-expired = Sesi telah berakhir. Silakan login kembali.
 session-lock-invalid-pin = PIN tidak valid
+session-lock-enter-pin = Masukkan PIN untuk membuka
+session-lock-pin-aria = PIN: { $length } dari { $max } digit dimasukkan
+session-lock-pad-aria = Papan PIN
+session-lock-lockout = Tunggu { $seconds } dtk.
 
 # ── Connection Status (shared between StaffLoginScreen + SessionLockScreen) ──
 staff-login-connection-checking = Memeriksa…

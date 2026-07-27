@@ -122,6 +122,10 @@ fastpin-enter-pin = Enter PIN for { $user }
 # ── Session Lock Screen (i18n parity fix) ────────────────────────────────
 session-lock-expired = Session expired. Please log in again.
 session-lock-invalid-pin = Invalid PIN
+session-lock-enter-pin = Enter PIN to unlock
+session-lock-pin-aria = PIN: { $length } of { $max } digits entered
+session-lock-pad-aria = PIN pad
+session-lock-lockout = Wait { $seconds }s.
 
 # ── Connection Status (shared between StaffLoginScreen + SessionLockScreen) ──
 staff-login-connection-checking = Checking…
