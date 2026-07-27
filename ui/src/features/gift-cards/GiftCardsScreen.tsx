@@ -45,11 +45,11 @@ export default function GiftCardsScreen() {
       const result = await listGiftCards(filter);
       setCards(result);
     } catch {
-      // IPC unavailable.
+      addToast({ message: l10n.getString('gift-cards-error-load') || 'Failed to load gift cards', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter]);
+  }, [search, statusFilter, addToast, l10n]);
 
   useEffect(() => { load(); }, [load]);
 

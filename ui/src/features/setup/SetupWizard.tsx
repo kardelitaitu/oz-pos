@@ -423,12 +423,16 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
             <Localized id="setup-complete-title">
               <h1 className="setup-complete-title">All Set!</h1>
             </Localized>
-            <p className="setup-complete-desc">
-              {PRESET_NAMES[preset ?? 'custom']} &mdash; ready to go.
-            </p>
-            <p className="setup-complete-features">
-              {enabledCount} feature{enabledCount !== 1 ? 's' : ''} enabled.
-            </p>
+            <Localized id="setup-complete-desc" vars={{ preset: l10n.getString(`setup-preset-${preset ?? 'custom'}`) || PRESET_NAMES[preset ?? 'custom'] }}>
+              <p className="setup-complete-desc">
+                {PRESET_NAMES[preset ?? 'custom']} &mdash; ready to go.
+              </p>
+            </Localized>
+            <Localized id="setup-complete-features" vars={{ count: String(enabledCount) }}>
+              <p className="setup-complete-features">
+                {enabledCount} feature{enabledCount !== 1 ? 's' : ''} enabled.
+              </p>
+            </Localized>
             <Button size="lg" onClick={() => onLaunch?.()}>
               <Localized id="setup-launch">Launch OZ-POS</Localized>
             </Button>

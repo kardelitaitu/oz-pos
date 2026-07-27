@@ -40,6 +40,7 @@ gift-cards-payment-lookup-failed = Lookup failed
 gift-cards-payment-redemption-failed = Redemption failed
 
 # Gift Cards — error toasts
+gift-cards-error-load = Failed to load gift cards
 gift-cards-error-freeze = Failed to toggle freeze
 gift-cards-error-topup = Top-up failed
 gift-cards-error-issue = Failed to issue gift card
