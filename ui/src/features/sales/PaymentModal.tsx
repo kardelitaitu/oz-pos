@@ -489,11 +489,13 @@ export default function PaymentModal({
 
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
-          await redeemLoyaltyPoints(
-            selectedCustomer!.id,
-            Number(loyaltyDiscount),
-            saleResult.saleId,
-          );
+          if (selectedCustomer?.id) {
+            await redeemLoyaltyPoints(
+              selectedCustomer.id,
+              Number(loyaltyDiscount),
+              saleResult.saleId,
+            );
+          }
         } catch {
           // non-blocking
         }
@@ -793,11 +795,13 @@ export default function PaymentModal({
 
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
-          await redeemLoyaltyPoints(
-            selectedCustomer!.id,
-            Number(loyaltyDiscount),
-            saleResult.saleId,
-          );
+          if (selectedCustomer?.id) {
+            await redeemLoyaltyPoints(
+              selectedCustomer.id,
+              Number(loyaltyDiscount),
+              saleResult.saleId,
+            );
+          }
         } catch {
           // Loyalty redemption failure is non-blocking
         }
@@ -925,7 +929,7 @@ export default function PaymentModal({
           }}
           onCancel={() => {
             setShortfallResult(null);
-            addToast({ message: 'Sale cancelled due to insufficient stock.', type: 'info' });
+            addToast({ message: l10n.getString('payment-shortfall-cancelled') || 'Sale cancelled due to insufficient stock.', type: 'info' });
             animateLeave(onClose);
           }}
         />
@@ -1109,7 +1113,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : 'Credit'}
+                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : l10n.getString('payment-method-credit') || 'Credit'}
                         </span>
                       </label>
                     ))}
@@ -1425,7 +1429,7 @@ export default function PaymentModal({
               <div className="payment-loyalty-section">
                 <div className="payment-loyalty-balance">
                   <span className="payment-loyalty-label">
-                    Points: {loyaltyAccount.account.points}
+                    {l10n.getString('payment-loyalty-points-label') || 'Points'}: {loyaltyAccount.account.points}
                   </span>
                   <span className="payment-loyalty-value">
                     {pointsWorthMinor !== null
@@ -1465,10 +1469,12 @@ export default function PaymentModal({
                       </span>
                     </div>
                     <span className="payment-loyalty-discount-label">
-                      Discount: -{formatMoney({
+                      <Localized id="payment-loyalty-discount-label" vars={{ amount: formatMoney({
                         minor_units: Number(loyaltyDiscount),
                         currency: total.currency,
-                      } as Money)}
+                      } as Money) }}>
+                        <span>{'Discount: -{ $amount }'}</span>
+                      </Localized>
                     </span>
                     <Localized id="payment-cancel">
                       <button
