@@ -164,7 +164,7 @@ export default function SalesReportScreen() {
 
     revenuePromise
       .then(setPrevRevenueData)
-      .catch(() => setPrevRevenueData([]))
+      .catch(() => { /* period comparison is best-effort; silently clear on failure */ setPrevRevenueData([]); })
 
   }, [comparePeriod, view, calcPrevRange]);
 
