@@ -128,6 +128,39 @@ interface CartLine {
 }
 let cartState: { lines: CartLine[] } = { lines: [] };
 
+// ── Completed sales (persisted so sales history + refund e2e work) ─
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const completedSales: any[] = [
+  // Pre-seeded sale so sales history always has at least one row.
+  {
+    id: 'seed-sale-001',
+    total: { minor_units: 1250, currency: 'USD' },
+    lineCount: 2,
+    status: 'Completed',
+    paymentMethod: 'cash',
+    userId: 'admin-1',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+];
+const saleDetails: Record<string, any> = {
+  'seed-sale-001': {
+    id: 'seed-sale-001',
+    total: { minor_units: 1250, currency: 'USD' },
+    subtotal: { minor_units: 1250, currency: 'USD' },
+    taxTotal: { minor_units: 0, currency: 'USD' },
+    lineCount: 2,
+    status: 'Completed',
+    paymentMethod: 'cash',
+    tenderedMinor: 2000,
+    userId: 'admin-1',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    lines: [
+      { id: 'seed-line-1', sku: 'LATTE', name: 'Caffè Latte', qty: 1, unit_price: { minor_units: 450, currency: 'USD' }, total_minor: 450, tax_amount: null, tax_rate_id: null },
+      { id: 'seed-line-2', sku: 'CROISS', name: 'Butter Croissant', qty: 2, unit_price: { minor_units: 320, currency: 'USD' }, total_minor: 640, tax_amount: null, tax_rate_id: null },
+    ],
+  },
+};
+
 // ── Active shift state (for pay-btn-enabled E2E test) ──────────
 let mockActiveShift: Record<string, unknown> | null = {
   id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
@@ -551,24 +584,82 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'complete_sale': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const saleId = `mock-sale-${Date.now()}`;
+    // Persist into completed sales so sales history / refund e2e work.
+    const now = new Date().toISOString();
+    completedSales.push({
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
+    });
+    saleDetails[saleId] = {
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
+      subtotal: { minor_units: minorTotal, currency: 'USD' },
+      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
+      lines: cartState.lines.map((l, i) => ({
+        id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
+        unit_price: l.price, total_minor: l.price.minor_units * l.qty,
+        tax_amount: null, tax_rate_id: null,
+      })),
+    };
     cartState = { lines: [] };
-    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
   'complete_sale_scoped': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const saleId = `mock-sale-${Date.now()}`;
+    const now = new Date().toISOString();
+    completedSales.push({
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
+    });
+    saleDetails[saleId] = {
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
+      subtotal: { minor_units: minorTotal, currency: 'USD' },
+      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
+      lines: cartState.lines.map((l, i) => ({
+        id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
+        unit_price: l.price, total_minor: l.price.minor_units * l.qty,
+        tax_amount: null, tax_rate_id: null,
+      })),
+    };
     cartState = { lines: [] };
-    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
   'complete_sale_with_resolved_shortfalls_scoped': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const saleId = `mock-sale-${Date.now()}`;
+    const now = new Date().toISOString();
+    completedSales.push({
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
+    });
+    saleDetails[saleId] = {
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
+      subtotal: { minor_units: minorTotal, currency: 'USD' },
+      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
+      lines: cartState.lines.map((l, i) => ({
+        id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
+        unit_price: l.price, total_minor: l.price.minor_units * l.qty,
+        tax_amount: null, tax_rate_id: null,
+      })),
+    };
     cartState = { lines: [] };
-    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
 
-  'get_sale': () => null,
-  'get_sale_scoped': () => null,
+  'get_sale': (args) => {
+    const { id } = (args as { id?: string }) ?? {};
+    return id ? (saleDetails[id] ?? null) : null;
+  },
+  'get_sale_scoped': (args) => {
+    const { id } = (args as { id?: string }) ?? {};
+    return id ? (saleDetails[id] ?? null) : null;
+  },
 
   'set_cart_discount': () => null,
   'set_cart_discount_scoped': () => null,
@@ -589,16 +680,26 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'delete_held_cart': () => null,
   'delete_held_cart_scoped': () => null,
 
-  'list_sales': () => [],
-  'list_sales_scoped': () => [],
+  'list_sales': () => [...completedSales],
+  'list_sales_scoped': () => [...completedSales],
   'void_sale': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
   'void_sale_scoped': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
 
   'lookup_sale_by_receipt_barcode': () => null,
   'lookup_sale_by_receipt_barcode_scoped': () => null,
 
-  'process_refund': () => ({ refundId: 'refund-1', totalMinor: 0 }),
-  'process_refund_scoped': () => ({ refundId: 'refund-1', totalMinor: 0 }),
+  'process_refund': (args) => {
+    const a = (args as { args?: { lines?: Array<{ lineTotalMinor: number }> } })?.args ?? (args as { lines?: Array<{ lineTotalMinor: number }> }) ?? {};
+    const lines = a.lines ?? [];
+    const totalMinor = lines.reduce((sum, l) => sum + (l.lineTotalMinor ?? 0), 0);
+    return { refundId: `refund-${Date.now()}`, totalMinor };
+  },
+  'process_refund_scoped': (args) => {
+    const a = (args as { args?: { lines?: Array<{ lineTotalMinor: number }> } })?.args ?? (args as { lines?: Array<{ lineTotalMinor: number }> }) ?? {};
+    const lines = a.lines ?? [];
+    const totalMinor = lines.reduce((sum, l) => sum + (l.lineTotalMinor ?? 0), 0);
+    return { refundId: `refund-${Date.now()}`, totalMinor };
+  },
   'list_refunds': () => [],
   'list_refunds_scoped': () => [],
 
