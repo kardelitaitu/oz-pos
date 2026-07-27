@@ -133,6 +133,9 @@ payment-retry-aria =
     .aria-label = Retry payment
 payment-retry = Retry
 payment-toast-currency-failed = Failed to load currency data
+payment-toast-customers-failed = Failed to load customers
+payment-toast-loyalty-failed = Failed to load loyalty account
+payment-toast-points-value-failed = Failed to load points value
 payment-customer-placeholder =
     .placeholder = e.g. John Doe
 payment-loyalty-points-aria =
@@ -761,6 +764,7 @@ retail-cart-qty-decrease-aria = Decrease quantity
 retail-cart-qty-increase-aria = Increase quantity
 retail-cart-remove-aria = Remove from cart
 retail-toast-insufficient-stock = Insufficient stock
+retail-toast-customers-failed = Failed to load customers
 retail-low-stock-banner =
     { $count ->
         [one] { $count } product low on stock

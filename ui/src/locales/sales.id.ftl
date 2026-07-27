@@ -592,6 +592,9 @@ payment-qris-btn-aria =
     .aria-label = Hasilkan kode QR QRIS
 payment-qris-pay = Bayar dengan QR
 payment-toast-currency-failed = Gagal memuat data mata uang
+payment-toast-customers-failed = Gagal memuat pelanggan
+payment-toast-loyalty-failed = Gagal memuat akun loyalitas
+payment-toast-points-value-failed = Gagal memuat nilai poin
 payment-customer-placeholder =
     .placeholder = mis. John Doe
 payment-loyalty-points-aria =
@@ -761,6 +764,7 @@ retail-cart-qty-decrease-aria = Kurangi jumlah
 retail-cart-qty-increase-aria = Tambah jumlah
 retail-cart-remove-aria = Hapus dari keranjang
 retail-toast-insufficient-stock = Stok tidak mencukupi
+retail-toast-customers-failed = Gagal memuat pelanggan
 retail-low-stock-banner =
     { $count ->
         [one] { $count } produk stok menipis
