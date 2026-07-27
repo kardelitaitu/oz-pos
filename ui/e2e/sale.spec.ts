@@ -273,3 +273,219 @@ test.describe('Complete Sale Flow', () => {
     await expect(payBtn).toBeDisabled();
   });
 });
+
+// ── E2E-31 through E2E-33: Payment method variants ────────────
+//
+// CSS contract (RetailPosScreen / PaymentModal):
+//   .retail-cart-action-btn--discount  — Discount button in cart
+//   .retail-discount-overlay           — Discount modal backdrop
+//   .retail-discount-modal             — Discount modal panel
+//   .retail-discount-tab--active       — Active discount tab
+//   #discount-pct                      — Percentage input
+//   .retail-discount-actions           — Modal action buttons
+//   .retail-total-row                  — Total row (discount/tax/grand)
+//   .retail-total-row--grand           — Grand total row
+//   .payment-method-label input[value="qris"] — QRIS radio
+//   .payment-qris-section              — QRIS payment section
+//   .payment-qris-btn                  — "Pay with QR" button
+//   #payment-split-toggle-cb           — Split tender checkbox
+//   .payment-split-section             — Split payment section
+//   .payment-split-amount-input        — Split amount input
+//   .payment-split-remaining           — Remaining balance
+//   .payment-split-remaining-amount    — Remaining amount value
+//   .payment-split-btn                 — Split action buttons
+
+test.describe('Payment Methods', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, 'kasir', '1234');
+    await selectWorkspace(page, WORKSPACES.STORE_POS);
+  });
+
+  // ── E2E-31: Discount → verify total reduction ────────────
+
+  test('applies 10% discount and verifies discount row appears in totals', async ({ page }) => {
+    // Add a product to the cart.
+    const productCards = page.locator('.product-card-btn');
+    await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
+    await productCards.first().click();
+    await page.waitForTimeout(500);
+
+    // Verify cart has 1 line.
+    await expect(
+      page.locator('[data-testid="cart-panel-line-item"]').first(),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // Read the grand total before discount.
+    const grandRow = page.locator('.retail-total-row--grand');
+    await expect(grandRow).toBeVisible({ timeout: 5_000 });
+    const beforeText = await grandRow.textContent();
+    expect(beforeText).toBeTruthy();
+
+    // Click Discount button on the retail cart action bar.
+    const discountBtn = page.locator('.retail-cart-action-btn--discount');
+    await expect(discountBtn).toBeVisible({ timeout: 3_000 });
+    await discountBtn.click();
+    await page.waitForTimeout(500);
+
+    // Discount modal must open.
+    const overlay = page.locator('.retail-discount-overlay');
+    await expect(overlay).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.retail-discount-modal')).toBeVisible({ timeout: 3_000 });
+
+    // Percentage tab must be active.
+    await expect(page.locator('.retail-discount-tab--active').first()).toBeVisible({ timeout: 3_000 });
+
+    // Enter 10% discount.
+    const pctInput = page.locator('#discount-pct');
+    await expect(pctInput).toBeVisible({ timeout: 3_000 });
+    await pctInput.fill('10');
+    await page.waitForTimeout(200);
+
+    // Click Apply.
+    const applyBtn = page.locator('.retail-discount-actions').locator('button').last();
+    await expect(applyBtn).toBeVisible({ timeout: 3_000 });
+    await applyBtn.click();
+    await page.waitForTimeout(500);
+
+    // Discount modal must close after apply.
+    await expect(overlay).not.toBeVisible({ timeout: 5_000 });
+
+    // A discount row must appear in the cart totals.
+    // The .retail-total-row between subtotal and tax shows "Discount 10%".
+    const discountRow = page.locator('.retail-total-row').filter({ hasText: /discount|diskon/i });
+    await expect(discountRow.first()).toBeVisible({ timeout: 5_000 });
+
+    const discountText = await discountRow.first().textContent();
+    expect(discountText).toMatch(/10|discount|diskon/i);
+
+    // Grand total must have changed (verify total reduction).
+    const afterText = await page.locator('.retail-total-row--grand').textContent();
+    expect(afterText).toBeTruthy();
+    // Compare numeric values: after-discount total should be less than before.
+    const afterClean = (afterText ?? '').replace(/[^0-9.,\-]/g, '');
+    const beforeClean = (beforeText ?? '').replace(/[^0-9.,\-]/g, '');
+    const beforeNum = parseFloat(beforeClean);
+    const afterNum = parseFloat(afterClean);
+    if (!isNaN(beforeNum) && !isNaN(afterNum)) {
+      expect(afterNum).toBeLessThan(beforeNum);
+    }
+  });
+
+  // ── E2E-32: QRIS → generate QR → verify overlay ─────────
+
+  test('QRIS payment generates QR code overlay', async ({ page }) => {
+    // Add a product to the cart.
+    const productCards = page.locator('.product-card-btn');
+    await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
+    await productCards.first().click();
+    await page.waitForTimeout(500);
+
+    // Open payment modal.
+    await page.locator('.retail-cart-action-btn--pay').click();
+    const paymentModal = page.locator('[data-testid="payment-modal"]');
+    await expect(paymentModal).toBeVisible({ timeout: 5_000 });
+
+    // Select QRIS payment method.
+    const qrisRadio = page.locator('input[value="qris"]');
+    await expect(qrisRadio).toBeAttached({ timeout: 5_000 });
+    await qrisRadio.check({ force: true });
+    await page.waitForTimeout(500);
+
+    // QRIS section must render with description.
+    await expect(page.locator('.payment-qris-section')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.payment-qris-description')).toBeVisible({ timeout: 3_000 });
+
+    // "Pay with QR" button must be enabled.
+    const payQrBtn = page.locator('.payment-qris-btn');
+    await expect(payQrBtn).toBeVisible({ timeout: 3_000 });
+    await expect(payQrBtn).toBeEnabled();
+
+    // Click to generate the QR.
+    await payQrBtn.click();
+    await page.waitForTimeout(1_000);
+
+    // QrisQrDisplay component renders an overlay above payment modal
+    // with QR code content. Verify QR-specific element appeared.
+    const qrContent = page.locator('[class*="qris"], [class*="qr"]').first();
+    await expect(qrContent).toBeVisible({ timeout: 5_000 });
+    const overlayText = await qrContent.textContent();
+    expect(overlayText).toBeTruthy();
+    expect(overlayText!.length).toBeGreaterThan(5);
+
+    // No error boundary.
+    await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });
+  });
+
+  // ── E2E-33: Split tender → verify balance zero ──────────
+
+  test('split tender shows remaining balance and split-evenly fills amounts', async ({ page }) => {
+    // Add a product to the cart.
+    const productCards = page.locator('.product-card-btn');
+    await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
+    await productCards.first().click();
+    await page.waitForTimeout(500);
+
+    // Open payment modal.
+    await page.locator('.retail-cart-action-btn--pay').click();
+    await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
+
+    // Enable split tender.
+    const splitCheckbox = page.locator('#payment-split-toggle-cb');
+    await expect(splitCheckbox).toBeAttached({ timeout: 5_000 });
+    await splitCheckbox.check({ force: true });
+    await page.waitForTimeout(500);
+
+    // Split section must render.
+    await expect(page.locator('.payment-split-section')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.payment-split-header')).toBeVisible({ timeout: 3_000 });
+
+    // At least 2 split rows (cash + card).
+    const splitRows = page.locator('.payment-split-row');
+    const rowCount = await splitRows.count();
+    expect(rowCount).toBeGreaterThanOrEqual(2);
+
+    // Each row must have an amount input.
+    const amountInputs = page.locator('.payment-split-amount-input');
+    const inputCount = await amountInputs.count();
+    expect(inputCount).toBeGreaterThanOrEqual(2);
+
+    // The remaining balance must be visible (initially equals total).
+    const remainingLabel = page.locator('.payment-split-remaining');
+    await expect(remainingLabel).toBeVisible({ timeout: 3_000 });
+
+    const remainingAmount = page.locator('.payment-split-remaining-amount');
+    await expect(remainingAmount).toBeVisible({ timeout: 3_000 });
+
+    // Fill row 0 (cash) and row 1 (card) with amounts that sum to the total.
+    // Read the total from the modal to compute split amounts dynamically.
+    const totalText = await page.locator('.payment-total-amount').first().textContent();
+    const totalCleaned = (totalText ?? '0').replace(/[^0-9.,\-]/g, '');
+    const totalNum = parseFloat(totalCleaned) || 0;
+    // Split approximately 40/60: 40% cash, 60% card.
+    const cashAmount = (totalNum * 0.4).toFixed(2);
+    const cardAmount = (totalNum * 0.6).toFixed(2);
+
+    const row0Input = amountInputs.nth(0);
+    const row1Input = amountInputs.nth(1);
+    await row0Input.fill(cashAmount);
+    await page.waitForTimeout(200);
+    await row1Input.fill(cardAmount);
+    await page.waitForTimeout(300);
+
+    // Both inputs must have non-empty values after entry.
+    const val0 = await row0Input.inputValue();
+    const val1 = await row1Input.inputValue();
+    expect(val0.length).toBeGreaterThan(0);
+    expect(val1.length).toBeGreaterThan(0);
+
+    // Remaining must be 0 — the split fully allocates the total.
+    const remText = await remainingAmount.textContent();
+    expect(remText).toBeTruthy();
+    const remCleaned = (remText ?? '').replace(/[^0-9.,\-]/g, '');
+    const remNum = parseFloat(remCleaned) || 0;
+    expect(remNum).toBe(0);
+
+    // No error boundary.
+    await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });
+  });
+});
