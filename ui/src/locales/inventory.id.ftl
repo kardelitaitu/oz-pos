@@ -95,6 +95,15 @@ inv-shift-summary-title = Ringkasan Shift
 inv-shift-summary-performed = Transaksi yang dilakukan selama shift ini:
 inv-shift-no-transactions = Tidak ada transaksi yang tercatat.
 
+# Inventory Shift — error toasts + a11y
+inv-shift-error-locations = Gagal memuat lokasi
+inv-shift-error-active = Gagal memuat shift aktif
+inv-shift-error-start = Gagal memulai shift
+inv-shift-error-end = Gagal mengakhiri shift
+inv-shift-bar-aria = Info Shift
+inv-shift-location-aria = Lokasi
+inv-shift-notes-aria = Catatan
+
 # Transit Audit
 inv-transit-title = Audit Stok Transit
 inv-transit-col-sku = SKU

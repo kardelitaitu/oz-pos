@@ -73,6 +73,15 @@ inv-shift-summary-title = Shift Summary
 inv-shift-summary-performed = Transactions performed during this shift:
 inv-shift-no-transactions = No transactions recorded.
 
+# Inventory Shift — error toasts + a11y
+inv-shift-error-locations = Failed to load locations
+inv-shift-error-active = Failed to load active shift
+inv-shift-error-start = Failed to start shift
+inv-shift-error-end = Failed to end shift
+inv-shift-bar-aria = Shift Info
+inv-shift-location-aria = Location
+inv-shift-notes-aria = Notes
+
 # Transit Audit
 inv-transit-title = Transit Stock Audit
 inv-transit-col-sku = SKU
