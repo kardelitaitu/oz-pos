@@ -122,7 +122,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         pendingTrackFetchRef.current.add(sku);
         getProductTrackSerial(sku).then((track) => {
           setTrackSerialMap((prev) => ({ ...prev, [sku]: track }));
-        }).catch(() => {});
+        }).catch(() => { /* serial track lookup is best-effort */ });
       }
     }
   }, [lines, trackSerialMap]);
@@ -649,7 +649,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ),
         );
       })
-      .catch(() => setCustomerSearchResults([]))
+      .catch(() => { addToast({ message: l10n.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
   }, [showCustomerSearch, customerSearchQuery]);
 
