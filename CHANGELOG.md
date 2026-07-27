@@ -6,6 +6,117 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.22] — 2026-07-27
+
+### Added
+
+#### 🧪 E2E Test Coverage — Payment Methods & Workflows (6 new tests)
+
+- **Sale — Discount, QRIS, Split Tender (E2E-31/32/33)**: Added hard-assertion tests for discount application (add 10% → verify total reduction with NaN guards), QRIS payment flow (select QRIS radio → click Pay with QR → verify overlay with content), and split tender (read total dynamically → compute 40%/60% split → verify remaining = 0).
+- **Inventory Workflows (E2E-34/35/36)**: Stock adjustment flow (search product → select → fill qty + reason → apply), purchase order creation (open form → select supplier → fill SKU/qty in 2 lines → submit), stock transfer (create → fill source/dest → fill SKU/qty → submit). All tests target `.inv-adjust` / `.po-screen` / `.stock-transfers` CSS contracts with hard assertions.
+- **Refund Flow (E2E-37)**: Complete sale → navigate to sales history → View sale detail → click Refund → check line item checkbox → fill reason → Process Refund → verify `.refund-done` success state. Added `completedSales` persistence to dev-mock so sales history always has data, + `saleDetails` map for `get_sale` lookup + real `totalMinor` computation in `process_refund` mock.
+
+#### 🏗️ Settings — Batch API
+
+- **`setSettings` IPC command**: New `set_settings` Tauri command accepting `Record<string, string>` — all settings written in a single atomic transaction + single IPC round-trip. Replaced 5 parallel `setSetting` calls in KDS workspace card and 2 in Inventory card with one `setSettings` call each.
+
+#### 🌐 i18n — 100+ New Fluent Keys
+
+New FTL keys added across 12 bundles for error toasts, aria-labels, and UI strings:
+- **KDS** (19 keys): Layout switcher popover aria-labels, settings panel slider/toggle/density labels, screen aria-label, ticket card aria-labels. Bundles: `kds.ftl`, `kds.id.ftl`.
+- **Staff** (15 keys): Session lock screen error messages, connection status footer, StaffManagementScreen error toasts. Bundles: `staff.ftl`, `staff.id.ftl`, `shared.ftl`, `shared.id.ftl`.
+- **POS** (15 keys): Payment credit method labels, loyalty labels, retail POS strings, error toast messages. Bundles: `sales.ftl`, `sales.id.ftl`.
+- **Inventory** (50+ keys): Stock alert panel (15), transaction log (13), transit audit (6), stock counting error/column labels (10), threshold config dialogs (6). Bundles: `inventory.ftl`, `inventory.id.ftl`.
+- **Management** (12 keys): Tax save/delete error toasts, shift error messages, currency delete error, terminal binding labels, audit log action labels. Bundles: `tax.ftl`, `tax.id.ftl`, `shifts.ftl`, `shifts.id.ftl`, `currency.ftl`, `currency.id.ftl`, `terminals.ftl`, `terminals.id.ftl`.
+- **Reports** (4 keys): CustomReportScreen aria-labels. Bundles: `reports.ftl`, `reports.id.ftl`.
+- **Purchasing** (20 keys): Purchase order form labels, supplier select, error messages, status badges. Bundles: `purchasing.ftl`, `purchasing.id.ftl`.
+
+#### 🔌 Hardware DTO Expansion
+
+- **Scale + LocalPrefs in `HardwareSettingsDto` / `TerminalProfile`**: Added 3 scale fields (`scale_connection`, `scale_device_path`, `scale_baud_rate`, `scale_zero_on_boot`) and 3 localPrefs fields (`sound_volume`, `dark_mode`, `scale_auto_zero`) with serde defaults for backward compatibility. TerminalPreferencesCard settings now persist end-to-end through the Rust IPC layer instead of `localStorage`.
+
+#### 📧 Email Reports — Desktop Scheduler
+
+- **Desktop background scheduler**: New `email_scheduler.rs` daemon polls every 60s, calls shared `should_send_scheduled` / `generate_filtered_report_email` / `record_sent_timestamp`. Registered in `apps/desktop-client/src/lib.rs`.
+- **SMTP transport dedup**: Consolidated 3 duplicate SMTP transport builder implementations (desktop-client, cloud-server, email_sender test) into a single shared `build_smtp_transport()` in `crates/oz-core/src/export/email_sender.rs` with TLS/STARTTLS support.
+
+### Changed
+
+#### 🏗️ Settings Page — Topbar & Sidebar UX Overhaul
+
+- **Topbar 5-column CSS grid**: Restructured from 3 flex sections to a proper grid with dedicated columns for back button (col 1), category breadcrumb (col 2), section title (col 3), search (col 4), and clock (col 5). Each column independently responsive.
+- **Back button (iOS-style chevron)**: Replaced mobile-only hamburger menu with an always-visible `<` chevron back button. Navigates to the workspace picker via `onNavigate` callback from `AppShell`. Renamed `.settings-mobile-menu-btn` → `.settings-back-btn`.
+- **Breadcrumb wiring**: Category breadcrumb button now toggles the corresponding sidebar accordion category when clicked.
+- **Sidebar scrollbar**: Added fade-away opacity behavior — scrollbar visible on hover/idle, fades to 15% opacity after 1.5s of inactivity. Uses `transition: opacity` on `::-webkit-scrollbar-thumb`.
+- **Collapsed sidebar tooltips**: Portal-based tooltips now escape overflow clipping in collapsed (56px) mode, positioned to the right of icons. Tooltips properly follow mouse position.
+- **Sidebar expand button**: Centered the expand/collapse toggle in the collapsed sidebar header.
+- **Responsive search**: Added tablet/mobile breakpoints reducing `.settings-topbar-search-input` width from 20rem → 14rem → 10rem. Changed `flex-shrink: 0` → `min-width: 0` to allow natural shrinking on narrow viewports. Added `max-width: 100%` on the input.
+
+#### 🏗️ Settings — Workspace Cards Wired to IPC
+
+All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC endpoints:
+- **Store POS**: Wired `setReceiptSettings` Tauri command + `useWorkspace()` for terminalId context. Printer/scanner hardware now persisted via `getHardwareSettings`/`setHardwareSettings`.
+- **Restaurant POS**: Switched from `setSetting` (unscoped singleton) to `setSettings` batch API. Loads `courseFiring` from backend.
+- **KDS**: All 5 settings (layout, auto-advance, sound alerts, sound volume, display density) now loaded from + saved to backend via `setSettings` batch API.
+- **Inventory**: Both settings (low-stock threshold, auto-reorder) wired to `setSettings` batch API.
+- **Terminal Preferences**: Expanded to persist scale + localPrefs through `HardwareSettingsDto`. Fixed dirty-tracking + userId dependency array.
+
+#### 🎨 Appearance Settings
+
+- **Brand colour revert**: Palette now re-applied when reverting brand colour changes — the accent palette CSS variables are updated to match the reverted colour.
+- **Embedded mode**: Hidden "Reset all to defaults" button when `AppearanceSettings` renders inside the settings page (button only shown in standalone mode).
+
+### Fixed
+
+#### 🐛 Bug Fixes
+
+- **Topology**: Guarded undefined `node.name` in Fluent `topology-port-aria` call — added `|| ''` fallback to prevent "Variable type not supported: $name, undefined" error.
+- **Tauri mock**: Made `__TAURI_INTERNALS__` writable before mock setup (`index.html:74`) to fix "Cannot assign to read only property" error in dev mode.
+- **SettingsContext**: Added null-value guards on all 7 `Promise.allSettled` result handlers — `status === 'fulfilled' && value` check prevents setting state to `undefined`.
+- **ConnectionStatus**: Added hover opacity transition — badge starts at 70% opacity, goes to 100% on hover.
+- **`[hidden]` attribute**: Restored native `[hidden]` behavior (was overridden by CSS reset).
+- **Reduced motion accordion**: Fixed accordion restore in `prefers-reduced-motion: reduce` mode.
+- **SessionLockScreen i18n tests**: Added missing FTL keys to test mock (`session-lock-enter-pin` and 6 others) — 2 pre-existing test failures resolved.
+
+#### 🧹 50+ Pattern Fixes Across 30 Screens
+
+**Non-null assertions eliminated** (12):
+- **POS**: PaymentModal `selectedCustomer!` guard, RetailPosScreen `rawToken!` + `session!.user_id` safe defaults
+- **KDS**: KdsScreen `rawToken!` → `|| ''` fallback
+- **Management**: ShiftManagementScreen (3: `rawToken!`, `closedShiftSummary!`, `showDetailModal!`), TaxConfigurationScreen `rawToken!`
+- **Inventory**: StockCountDetail non-null guard
+
+**Silent catch blocks → error toasts** (25+):
+- **POS**: PaymentModal (customer search, loyalty fetch ×2, points value), RetailPosScreen (customer search, serial track documented as best-effort)
+- **KDS**: KdsLayoutSwitcher, KdsSettingsPanel save failures → i18n error toasts
+- **Inventory**: StockCountsScreen, StockCountDetail, StockCountHistory, InventoryAdjustmentScreen, ThresholdConfigScreen
+- **Management**: ShiftManagementScreen (3: load + handleSave + confirmDelete), TaxConfigurationScreen (2: handleSave + confirmDelete), ExchangeRateScreen (2: handleSave + confirmDelete)
+- **Staff**: StaffManagementScreen silent catch → toast
+
+**Hardcoded strings → Fluent i18n** (200+):
+- **KDS**: KdsLayoutSwitcher (10 strings), KdsSettingsPanel (12), KdsTicketCard (aria-label), KdsScreen (aria-label)
+- **Staff**: StaffLoginScreen connection footer, SessionLockScreen (7 strings)
+- **POS**: PaymentModal (4), RetailPosScreen (7)
+- **Inventory**: StockAlertPanel (15+), TransactionLogScreen (20+), TransitAuditScreen (6), StockCountsScreen, StockCountDetail, StockCountHistory, StockCountForm, ThresholdConfigScreen
+- **Management**: TerminalManagementScreen (device binding section, 6 strings), AuditLogScreen (5), OfflineQueueScreen (aria-label), PromotionsManagementScreen (error toasts)
+
+**Stray fragments removed** (12):
+- **Management**: TaxConfigurationScreen (6), StaffManagementScreen (1)
+- **Inventory**: StockCountForm (1 between form fields)
+- **Purchasing**: PurchaseOrderForm (1)
+
+**Misc fixes**:
+- StockTransfersScreen: Replaced manual exit animations with `useExitAnimation` hook
+- PurchaseOrdersScreen: Added `useLocalization` for FTL translations, error toast on save failure, removed unused import
+- CustomReportScreen: i18n aria-labels, eliminated non-null assertions
+- TaxConfigurationScreen: Repaired `handleSaveCat` silent catch
+- FeatureToggleScreen: Removed empty CSS blocks
+- DataManagementScreen: Fixed inverted `prefers-reduced-motion` media query
+- SettingsSelect: Removed duplicate `:focus-visible` selector
+- `eslint-disable` comment on `unknown` type in PurchaseOrdersScreen
+
+---
+
 ## [0.0.21] — 2026-07-25
 
 ### Added
