@@ -142,4 +142,11 @@ fastpin-enter-pin = Masukkan PIN untuk { $user }
 session-lock-expired = Sesi telah berakhir. Silakan login kembali.
 session-lock-invalid-pin = PIN tidak valid
 
+# ── Connection Status (shared between StaffLoginScreen + SessionLockScreen) ──
+staff-login-connection-checking = Memeriksa…
+staff-login-connection-connected = Terhubung
+staff-login-connection-disconnected = Terputus
+staff-login-connection-auth = Auth
+staff-login-connection-sync = Sinkron
+
 # ── Product Management ──
