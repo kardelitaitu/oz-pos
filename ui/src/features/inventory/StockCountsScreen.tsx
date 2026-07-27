@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listStockCounts,
   type StockCountDto,
@@ -16,6 +17,7 @@ export default function StockCountsScreen() {
   const [filter, setFilter] = useState<string>('all');
 
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -23,7 +25,7 @@ export default function StockCountsScreen() {
       const data = await listStockCounts();
       setCounts(data);
     } catch {
-      // IPC unavailable.
+      addToast({ message: l10n.getString('sc-error-load') || 'Failed to load stock counts', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -38,10 +40,10 @@ export default function StockCountsScreen() {
 
   const statusBadge = (status: string) => {
     const cls = `sc-badge sc-badge--${status}`;
-    return <span className={cls}>{l10n.getString(`sc-status-${status}`) ?? status}</span>;
+    return <span className={cls}><Localized id={`sc-status-${status}`}>{status}</Localized></span>;
   };
 
-  const typeLabel = (t: string) => l10n.getString(`sc-type-${t}`) ?? t;
+  const typeLabel = (t: string) => <Localized id={`sc-type-${t}`}>{t}</Localized>;
 
   return (
     <div className="sc-screen">
