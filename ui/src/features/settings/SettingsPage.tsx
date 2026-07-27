@@ -39,6 +39,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/frontend/shared/Toast';
 import { useOptionalTheme, type Theme } from '@/frontend/shell/ThemeProvider';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
 import FeatureToggleScreen from './FeatureToggleScreen';
 import DataManagementScreen from './DataManagementScreen';
@@ -143,16 +144,16 @@ function getToday(): string {
 // ── Component ─────────────────────────────────────────────────────
 
 /** Settings hub — sidebar-driven navigation across general, appearance, features, data management, staff, terminals, multi-store, audit, offline queue, shifts, tax, currency, and promotions. */
-export default function SettingsPage({ onNavigate }: { onNavigate?: (route: string) => void }) {
+export default function SettingsPage() {
   return (
     <SettingsProvider>
-      <SettingsPageContent {...(onNavigate ? { onNavigate } : {})} />
+      <SettingsPageContent />
     </SettingsProvider>
   );
 }
 
 /** Inner component that consumes useSettings() — wrapped by SettingsProvider. */
-function SettingsPageContent({ onNavigate }: { onNavigate?: (route: string) => void }) {
+function SettingsPageContent() {
   const settingsCtx = useSettings();
   const loadError = settingsCtx.error;
   const [saving, setSaving] = useState(false);
@@ -251,7 +252,8 @@ function SettingsPageContent({ onNavigate }: { onNavigate?: (route: string) => v
   const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
 
   const { session } = useAuth();
-  const { sessionToken, terminalId, activeWorkspace } = useWorkspace();
+  const { sessionToken, terminalId } = useWorkspace();
+  const { goToWorkspacePicker } = useWorkspaceNav();
   const userId = session?.user_id ?? 'default';
 
   const [displayCardSize, setDisplayCardSize] = useState(0);
@@ -842,7 +844,7 @@ function SettingsPageContent({ onNavigate }: { onNavigate?: (route: string) => v
           <button
             type="button"
             className="settings-mobile-menu-btn"
-            onClick={() => { const backRoute = activeWorkspace === 'restaurant-pos' ? 'sales' : 'products'; onNavigate?.(backRoute); }}
+            onClick={() => goToWorkspacePicker()}
             aria-label={l10n.getString('settings-back-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
