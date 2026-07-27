@@ -76,4 +76,30 @@ terminal-status-minutes-ago = { $n }m lalu
 terminal-status-hours-ago = { $n }j lalu
 terminal-status-error-load = Gagal memuat terminal
 
+# Device binding (ADR #4 Phase 3)
+terminal-binding-title = Pengikatan Perangkat
+terminal-binding-bound-store = Terikat ke toko:
+terminal-binding-signature = Tanda tangan
+terminal-binding-valid = Valid
+terminal-binding-invalid = Tidak Valid / Dirusak
+terminal-binding-store-label = Toko
+terminal-binding-instance-label = Instance Ruang Kerja
+# Conjunction following middot in binding info paragraph (lowercase).
+terminal-binding-instance-conjunction = instance:
+terminal-binding-select-store = -- Pilih toko --
+terminal-binding-select-instance = -- Pilih instance --
+terminal-binding-primary = (Utama)
+terminal-binding-update = Perbarui Pengikatan
+terminal-binding-bind = Ikat Terminal
+terminal-binding-clear = Hapus Pengikatan
+terminal-binding-error-load = Gagal memuat pengikatan perangkat
+terminal-binding-error-save = Gagal menyimpan pengikatan perangkat
+terminal-binding-error-clear = Gagal menghapus pengikatan perangkat
+
+# Feature override counts
+terminal-overrides-count = { $count ->
+    [one] { $count } penimpaan
+   *[other] { $count } penimpaan
+}
+
 # ── Promotions ──

@@ -560,7 +560,6 @@ export default function TerminalManagementScreen() {
                     )}
                   </td>
                   <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt)}</td>
-                  { }
                   <td>
                     <div className="terminal-mgmt-cell-actions">
                     <Localized id="terminal-edit-action" attrs={{ "aria-label": true }} vars={{ name: terminal.name }}>
@@ -731,8 +730,7 @@ export default function TerminalManagementScreen() {
                         </span>
                         {groupOverrides.length > 0 && (
                           <span className="terminal-mgmt-feature-group-count">
-                            {groupOverrides.length} override
-                            {groupOverrides.length !== 1 ? 's' : ''}
+                            {l10n.getString('terminal-overrides-count', { count: groupOverrides.length }) || `${groupOverrides.length} override${groupOverrides.length !== 1 ? 's' : ''}`}
                           </span>
                         )}
                       </div>
@@ -759,7 +757,7 @@ export default function TerminalManagementScreen() {
                                 </span>
                                 {isOverridden && (
                                   <span className="terminal-mgmt-toggle-badge">
-                                    overridden
+                                    <Localized id="terminal-overridden">overridden</Localized>
                                   </span>
                                 )}
                               </span>
@@ -817,7 +815,7 @@ export default function TerminalManagementScreen() {
         {isEditing && (
           <div className="terminal-mgmt-feature-overrides">
             <h3 className="terminal-mgmt-feature-overrides-title">
-              Device Binding
+              <Localized id="terminal-binding-title">Device Binding</Localized>
             </h3>
             {bindingLoading ? (
               <div className="terminal-mgmt-binding-skeleton" aria-hidden="true">
@@ -844,31 +842,31 @@ export default function TerminalManagementScreen() {
                 {binding?.bounded && (
                   <div className="terminal-mgmt-binding-info">
                     <p>
-                      Bound to store: <strong>{binding.boundStoreId}</strong>
-                      {binding.boundInstanceId && (<> &middot; instance: <strong>{binding.boundInstanceId}</strong></>)}
+                      <Localized id="terminal-binding-bound-store">Bound to store:</Localized> <strong>{binding.boundStoreId}</strong>
+                      {binding.boundInstanceId && (<> &middot; <Localized id="terminal-binding-instance-conjunction">instance:</Localized> <strong>{binding.boundInstanceId}</strong></>)}
                     </p>
                     <p className={binding.signatureValid ? 'terminal-mgmt-status-active' : 'terminal-mgmt-status-inactive'}>
-                      Signature: {binding.signatureValid ? 'Valid' : 'Invalid / Tampered'}
+                      <Localized id="terminal-binding-signature">Signature:</Localized> {binding.signatureValid ? l10n.getString('terminal-binding-valid') || 'Valid' : l10n.getString('terminal-binding-invalid') || 'Invalid / Tampered'}
                     </p>
                   </div>
                 )}
                 <div className="terminal-mgmt-binding-fields">
                   <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-store">
-                    <span className="terminal-mgmt-label">Store</span>
+                    <span className="terminal-mgmt-label"><Localized id="terminal-binding-store-label">Store</Localized></span>
                     <select
                       id="bind-store"
                       className="terminal-mgmt-input"
                       value={selectedStoreId}
                       onChange={(e) => setSelectedStoreId(e.target.value)}
                     >
-                      <option value="">-- Select store --</option>
+                      <option value="">{l10n.getString('terminal-binding-select-store') || '-- Select store --'}</option>
                       {bindingStores.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ' (Primary)' : ''}</option>
+                        <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ` ${l10n.getString('terminal-binding-primary') || '(Primary)'}` : ''}</option>
                       ))}
                     </select>
                   </label>
                   <label className="terminal-mgmt-field terminal-mgmt-field--horizontal" htmlFor="bind-instance">
-                    <span className="terminal-mgmt-label">Workspace Instance</span>
+                    <span className="terminal-mgmt-label"><Localized id="terminal-binding-instance-label">Workspace Instance</Localized></span>
                     <select
                       id="bind-instance"
                       className="terminal-mgmt-input"
@@ -876,7 +874,7 @@ export default function TerminalManagementScreen() {
                       onChange={(e) => setSelectedInstanceId(e.target.value)}
                       disabled={!selectedStoreId}
                     >
-                      <option value="">-- Select instance --</option>
+                      <option value="">{l10n.getString('terminal-binding-select-instance') || '-- Select instance --'}</option>
                       {bindingInstances.map((i) => (
                         <option key={i.instance_id} value={i.instance_id}>{i.name} ({i.type_key})</option>
                       ))}
@@ -891,7 +889,7 @@ export default function TerminalManagementScreen() {
                     disabled={!selectedStoreId || !selectedInstanceId}
                     onClick={handleBind}
                   >
-                    {binding?.bounded ? 'Update Binding' : 'Bind Terminal'}
+                    {binding?.bounded ? l10n.getString('terminal-binding-update') || 'Update Binding' : l10n.getString('terminal-binding-bind') || 'Bind Terminal'}
                   </Button>
                   {binding?.bounded && (
                     <Button
@@ -900,7 +898,7 @@ export default function TerminalManagementScreen() {
                       disabled={bindingSaving}
                       onClick={handleClearBinding}
                     >
-                      Clear Binding
+                      <Localized id="terminal-binding-clear">Clear Binding</Localized>
                     </Button>
                   )}
                 </div>
