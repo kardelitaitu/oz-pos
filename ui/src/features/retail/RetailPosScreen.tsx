@@ -4,7 +4,7 @@ import { usePosState } from '@/features/sales/usePosState';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
-import { useLocalization } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -69,8 +69,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
   const { sessionToken: rawToken, setActiveWorkspace } = useWorkspace();
-  const sessionToken = rawToken!;
-  const userId = session!.user_id;
+  const sessionToken = rawToken || '';
+  const userId = session?.user_id ?? '';
 
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
@@ -604,7 +604,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setCartId(newCartId);
       return newCartId;
     } catch {
-      addToast({ message: 'Failed to create sale cart', type: 'error' });
+      addToast({ message: l10n.getString('retail-toast-failed-cart') || 'Failed to create sale cart', type: 'error' });
       return null;
     }
   }, [cartId, addToast, sessionToken]);
@@ -613,7 +613,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!overrideTarget) return;
     const cId = cartId;
     if (!cId) {
-      addToast({ message: 'No active sale cart', type: 'error' });
+      addToast({ message: l10n.getString('retail-toast-no-cart') || 'No active sale cart', type: 'error' });
       setOverrideTarget(null);
       return;
     }
@@ -769,7 +769,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         const held = carts.find((c) => c.bill_type === 'hold');
         if (held) setHeldCartId(held.id);
       })
-      .catch(() => { if (mounted) addToast({ message: 'Failed to load held carts', type: 'error' }); });
+      .catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
     return () => { mounted = false; };
   }, [sessionToken, addToast]);
 
@@ -1216,8 +1216,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                               className="retail-cart-serial-input"
                               value={serialNumbers[line.id] ?? ''}
                               onChange={(e) => handleSerialChange(line.id, e.target.value)}
-                              placeholder="Serial #"
-                              aria-label={`Serial number for ${line.name ?? line.sku}`}
+                              placeholder={l10n.getString('retail-serial-placeholder') || 'Serial #'}
+                              aria-label={l10n.getString('retail-serial-aria', { name: line.name ?? line.sku }) || `Serial number for ${line.name ?? line.sku}`}
                               style={{
                                 marginTop: 4, padding: '2px 4px', fontSize: 10,
                                 width: '100%', boxSizing: 'border-box',
@@ -1255,9 +1255,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                                 setOverrideTarget({ id: line.id as LineId, name: line.name ?? line.sku, unit_price: line.unit_price });
                                 ensureCart(line.unit_price.currency);
                               }}
-                              aria-label={`Override price for ${line.name ?? line.sku}`}
+                              aria-label={l10n.getString('retail-override-aria', { name: line.name ?? line.sku }) || `Override price for ${line.name ?? line.sku}`}
                             >
-                              Override
+                              <Localized id="retail-override-btn"><span>Override</span></Localized>
                             </button>
                           )}
                         </td>
