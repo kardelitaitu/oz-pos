@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/Button';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -16,6 +16,7 @@ import {
 import './ThresholdConfigScreen.css';
 
 export default function ThresholdConfigScreen() {
+  const { l10n } = useLocalization();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
 
@@ -61,9 +62,8 @@ export default function ThresholdConfigScreen() {
 
   const handleOpenAddDialog = () => {
     setEditingId(null);
-    if (products.length > 0) {
-      // Find the first product that has SKU or is tracking stock
-      setSelectedProductId(products[0]!.sku); // Product DTO uses SKU as id or we map by SKU
+    if (products.length > 0 && products[0]?.sku) {
+      setSelectedProductId(products[0].sku);
     }
     setSelectedLocationId(''); // Global
     setThresholdVal('5');
@@ -88,7 +88,7 @@ export default function ThresholdConfigScreen() {
       const locId = selectedLocationId === '' ? null : selectedLocationId;
       const numVal = parseInt(thresholdVal, 10);
       if (isNaN(numVal) || numVal < 0) {
-        addToast({ message: 'Threshold must be a valid non-negative integer', type: 'error' });
+        addToast({ message: l10n.getString('inv-threshold-error-qty') || 'Threshold must be a valid non-negative integer', type: 'error' });
         return;
       }
 
@@ -137,7 +137,7 @@ export default function ThresholdConfigScreen() {
 
       <div className="log-filters">
         <div className="log-filter-group">
-          <Localized id="inv-transit-col-dest">
+          <Localized id="inv-threshold-filter-label">
             <label htmlFor="filter-location">Filter by Location</label>
           </Localized>
           <select
@@ -232,10 +232,10 @@ export default function ThresholdConfigScreen() {
         open={deleteConfirmId !== null}
         onCancel={() => setDeleteConfirmId(null)}
         onConfirm={handleDeleteConfirm}
-        title="Delete Threshold?"
-        message="Are you sure you want to delete this threshold alert boundary? This action cannot be undone."
+        title={l10n.getString('inv-threshold-delete-title') || 'Delete Threshold?'}
+        message={l10n.getString('inv-threshold-delete-message') || 'Are you sure you want to delete this threshold alert boundary? This action cannot be undone.'}
         variant="danger"
-        confirmLabel="Delete"
+        confirmLabel={l10n.getString('inv-threshold-delete-confirm') || 'Delete'}
       />
 
       {isDialogOpen && (
@@ -308,7 +308,7 @@ export default function ThresholdConfigScreen() {
                 checked={enabled}
                 onChange={e => setEnabled(e.target.checked)}
               />
-              <span>Enabled</span>
+              <Localized id="inv-threshold-status-enabled"><span>Enabled</span></Localized>
             </label>
 
             <div className="dialog-actions">
