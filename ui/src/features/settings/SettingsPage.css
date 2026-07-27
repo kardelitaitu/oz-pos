@@ -588,6 +588,10 @@
 
 /* ── Existing form styles (preserved from original) ──────────── */
 
+.settings-label--section {
+  font-weight: var(--font-weight-semibold);
+}
+
 .settings-section-title {
   font-size: var(--text-xl);
   font-weight: var(--font-weight-semibold);

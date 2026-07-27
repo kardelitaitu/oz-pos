@@ -205,6 +205,7 @@ const SCREENS: ScreenEntry[] = [
       'store-name',
       'address',
       'tax-id',
+      'branch',
       'settings-sync-token-actions',
       'settings-sync-status-text',
       'topology',

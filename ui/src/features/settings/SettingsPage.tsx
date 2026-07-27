@@ -605,7 +605,7 @@ function SettingsPageContent() {
           </div>
           {/* COL 3–5: empty in skeleton */}
           <div className="settings-topbar__col settings-topbar__col--search" />
-          <div className="settings-topbar__col settings-topbar__col--clock" />
+          <div className="settings-topbar__col" />
           <div className="settings-topbar__col settings-topbar__col--actions" />
         </header>
         <div className="settings-body">
@@ -901,7 +901,7 @@ function SettingsPageContent() {
           </div>
         </div>
         {/* COL 4: clock */}
-        <div className="settings-topbar__col settings-topbar__col--clock">
+        <div className="settings-topbar__col">
           <span className="settings-topbar-clock" aria-label={`${today}, ${clock}`}>
             {today} {clock}
           </span>
