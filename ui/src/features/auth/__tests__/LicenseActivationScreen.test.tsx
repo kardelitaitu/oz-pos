@@ -53,7 +53,11 @@ vi.mock('@fluent/react', () => ({
         'auth-phone-label': 'Phone Number',
         'auth-license-label': 'License Key',
         'auth-validation-phone-required': 'Phone number is required.',
-        'auth-validation-invalid-phone': 'Invalid phone number format.'
+        'auth-validation-invalid-phone': 'Invalid phone number format.',
+        'auth-ip-unknown': 'Unknown',
+        'auth-ip-detecting': 'Detecting...',
+        'staff-login-connection-auth': 'Auth',
+        'staff-login-connection-sync': 'Sync'
       };
       return (map as Record<string, string>)[id] || id;
     }

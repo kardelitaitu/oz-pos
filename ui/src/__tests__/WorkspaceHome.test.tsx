@@ -723,7 +723,7 @@ describe('WorkspaceHome', () => {
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
-      expect(btn.getAttribute('title')).toBe('workspace-home-fullscreen-hint');
+      expect(btn.getAttribute('title')).toBe('F11');
     });
 
     it('renders fullscreen button in loading state with accessible tooltip', async () => {
@@ -746,7 +746,7 @@ describe('WorkspaceHome', () => {
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
-      expect(btn.getAttribute('title')).toBe('workspace-home-fullscreen-hint');
+      expect(btn.getAttribute('title')).toBe('F11');
     });
 
     it('renders fullscreen button in error state with accessible tooltip', async () => {
@@ -769,7 +769,7 @@ describe('WorkspaceHome', () => {
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
-      expect(btn.getAttribute('title')).toBe('workspace-home-fullscreen-hint');
+      expect(btn.getAttribute('title')).toBe('F11');
     });
   });
 
