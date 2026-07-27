@@ -97,7 +97,9 @@ export function useKdsPreferences(): {
         key,
         value: value ?? '',
       }));
-      setUserPreferences(userId, entries).catch(() => {});
+      setUserPreferences(userId, entries).catch(() => {
+        // Server persistence is best-effort; localStorage already saved.
+      });
     },
     [userId],
   );

@@ -365,9 +365,9 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   const { l10n } = useLocalization();
   const { session, logout, isManager } = useAuth();
   const { activeWorkspace, setActiveWorkspace, sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const { isEnabled } = useFeatures();
-  const userId = session!.user_id;
+  const userId = session?.user_id ?? '';
 
   const handleOpenSettings = useCallback(() => {
     if (onNavigate) {
@@ -962,7 +962,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   useEffect(() => {
     getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
-      .catch(() => addToast({ message: 'Failed to load receipt settings', type: 'error' }));
+      .catch(() => addToast({ message: l10n.getString('pos-toast-receipt-settings-failed') || 'Failed to load receipt settings', type: 'error' }));
   }, [addToast, sessionToken]);
 
   const handleCloseShiftClick = useCallback(() => {

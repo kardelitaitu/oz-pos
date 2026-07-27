@@ -46,6 +46,7 @@ po-form-error-po-required = PO number is required
 po-form-error-supplier-required = Supplier is required
 po-form-error-sku-required = Each line must have a SKU
 po-form-error-generic = Failed to create purchase order
+po-form-error-suppliers-failed = Failed to load suppliers
 
 # Status labels
 po-status-all = All

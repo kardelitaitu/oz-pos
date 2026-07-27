@@ -67,7 +67,9 @@ export function useCustomerDisplay({
 
     if (itemCount === 0 || !total) {
       // Cart is empty — clear the display.
-      displayClear(dId).catch(() => {});
+      displayClear(dId).catch(() => {
+        // Display hardware may be disconnected — best-effort.
+      });
       lastContentRef.current = '';
       return;
     }
@@ -83,7 +85,9 @@ export function useCustomerDisplay({
     const content = `${line1}|${line2}`;
     if (content === lastContentRef.current) return; // skip redundant updates
 
-    displayShow({ displayId: dId, line1, line2 }).catch(() => {});
+    displayShow({ displayId: dId, line1, line2 }).catch(() => {
+      // Display hardware may be disconnected — best-effort.
+    });
     lastContentRef.current = content;
   }, [lines, total]);
 
@@ -91,7 +95,9 @@ export function useCustomerDisplay({
   const handlePaymentComplete = useCallback(() => {
     const dId = displayIdRef.current;
     if (!dId) return;
-    displayClear(dId).catch(() => {});
+    displayClear(dId).catch(() => {
+      // Display hardware may be disconnected — best-effort.
+    });
     lastContentRef.current = '';
     onPaymentComplete?.();
   }, [onPaymentComplete]);

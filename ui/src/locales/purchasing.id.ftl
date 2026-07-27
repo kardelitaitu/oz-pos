@@ -46,6 +46,7 @@ po-form-error-po-required = Nomor PO wajib diisi
 po-form-error-supplier-required = Pemasok wajib diisi
 po-form-error-sku-required = Setiap baris harus memiliki SKU
 po-form-error-generic = Gagal membuat pesanan pembelian
+po-form-error-suppliers-failed = Gagal memuat pemasok
 
 # Status labels
 po-status-all = Semua

@@ -542,6 +542,7 @@ pos-no-barcode-match = Tidak ada produk atau bundel yang cocok dengan barcode in
 pos-close-shift-cart-error = Selesaikan atau kosongkan penjualan saat ini sebelum menutup shift.
 pos-close-shift-failed = Gagal menutup shift
 pos-scanner-error = Kesalahan pemindai: { $detail }
+pos-toast-receipt-settings-failed = Gagal memuat pengaturan nota
 
 # ── Payment (remaining) ──
 payment-dialog-aria =

@@ -34,7 +34,9 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     let mounted = true;
     getVersion().then(v => {
       if (mounted) setAppVersion(v.version);
-    }).catch(() => {});
+    }).catch(() => {
+      // Version display is non-critical — use hardcoded fallback.
+    });
     
     getLocalIp().then(ip => {
       if (mounted) setIpAddress(ip);

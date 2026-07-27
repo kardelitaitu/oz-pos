@@ -1232,8 +1232,8 @@ export default function PaymentModal({
                         <span
                           className={`payment-change-amount ${!sufficient ? 'payment-change-insufficient' : ''}`}
                         >
-                          {sufficient
-                            ? formatMoney(change!)
+                          {sufficient && change
+                            ? formatMoney(change)
                             : l10n.getString('payment-insufficient')}
                         </span>
                       </div>

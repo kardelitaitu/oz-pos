@@ -7,6 +7,7 @@ import {
   type CreatePurchaseOrderArgs,
 } from '@/api/purchasing';
 import { Button } from '@/components/Button';
+import { useToast } from '@/frontend/shared/Toast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './PurchaseOrderForm.css';
 
@@ -36,12 +37,15 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useFocusTrap(panelRef, !saving, onClose);
 
   useEffect(() => {
-    listSuppliers().then(setSuppliers).catch(() => {});
+    listSuppliers().then(setSuppliers).catch(() => {
+      addToast({ message: l10n.getString('po-form-error-suppliers-failed') || 'Failed to load suppliers', type: 'error' });
+    });
   }, []);
 
   const addLine = useCallback(() => {

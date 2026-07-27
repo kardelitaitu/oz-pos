@@ -434,7 +434,7 @@ export default function WorkspaceHome() {
     }
 
     function getColumns(): number {
-      const style = getComputedStyle(grid!);
+      const style = grid ? getComputedStyle(grid) : { gridTemplateColumns: '1' } as CSSStyleDeclaration;
       const gridCols = style.gridTemplateColumns.split(' ');
       return gridCols.length;
     }

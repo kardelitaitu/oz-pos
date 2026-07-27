@@ -50,7 +50,9 @@ export function useBarcodeScanner({
     return () => {
       cancelled = true;
       if (startedRef.current) {
-        stopScanner().catch(() => {});
+        stopScanner().catch(() => {
+          // Cleanup on unmount — scanner may already be stopped.
+        });
         startedRef.current = false;
       }
     };

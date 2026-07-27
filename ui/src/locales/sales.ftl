@@ -37,6 +37,7 @@ pos-close-shift-failed = Failed to close shift
 
 # Scanner
 pos-scanner-error = Scanner error: { $detail }
+pos-toast-receipt-settings-failed = Failed to load receipt settings
 
 # Payment Modal
 payment-dialog-aria =
