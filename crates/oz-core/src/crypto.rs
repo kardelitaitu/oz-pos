@@ -277,7 +277,7 @@ mod tests {
         let plaintext = "shared-secret";
 
         let api_encrypted = encrypt_api_key(plaintext, machine_id).unwrap();
-        let smtp_encrypted = encrypt_smtp_password(plaintext, machine_id).unwrap();
+        let _smtp_encrypted = encrypt_smtp_password(plaintext, machine_id).unwrap();
 
         // Same plaintext, same machine → different ciphertext (due to nonce),
         // but more importantly: API-key ciphertext should NOT decrypt as SMTP.

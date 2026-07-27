@@ -108,10 +108,10 @@ impl Store<'_> {
     /// Decryption happens transparently in [`get_smtp_config`].
     pub fn save_smtp_config(&self, config: &SmtpConfig) -> Result<(), CoreError> {
         let mut config = config.clone();
-        if let Some(ref pwd) = config.password {
-            if !pwd.is_empty() {
-                config.password = Some(crate::crypto::encrypt_smtp_at_rest(pwd));
-            }
+        if let Some(ref pwd) = config.password
+            && !pwd.is_empty()
+        {
+            config.password = Some(crate::crypto::encrypt_smtp_at_rest(pwd));
         }
         let json = serde_json::to_string(&config)
             .map_err(|e| CoreError::Internal(format!("failed to serialize SMTP config: {e}")))?;
@@ -131,10 +131,10 @@ impl Store<'_> {
         };
         let mut config: SmtpConfig = serde_json::from_str(&raw)
             .map_err(|e| CoreError::Internal(format!("failed to deserialize SMTP config: {e}")))?;
-        if let Some(ref pwd) = config.password {
-            if !pwd.is_empty() {
-                config.password = Some(crate::crypto::decrypt_smtp_at_rest(pwd));
-            }
+        if let Some(ref pwd) = config.password
+            && !pwd.is_empty()
+        {
+            config.password = Some(crate::crypto::decrypt_smtp_at_rest(pwd));
         }
         Ok(Some(config))
     }

@@ -127,22 +127,11 @@ pub fn should_send_scheduled(
     let weekday = now_tz.weekday();
     let day_of_month = now_tz.day();
 
+    // Check cadence: weekly → Mondays only, monthly → 1st only
     match schedule.cadence.as_str() {
-        "weekly" => {
-            // Send on Mondays only
-            if weekday != chrono::Weekday::Mon {
-                return Ok(false);
-            }
-        }
-        "monthly" => {
-            // Send on the 1st only
-            if day_of_month != 1 {
-                return Ok(false);
-            }
-        }
-        "daily" | _ => {
-            // Send every day
-        }
+        "weekly" if weekday != chrono::Weekday::Mon => return Ok(false),
+        "monthly" if day_of_month != 1 => return Ok(false),
+        _ => { /* daily — send every day */ }
     }
 
     // Deduplication: check last_sent_at
@@ -208,7 +197,7 @@ pub fn generate_filtered_report_email(
 ) -> Result<super::email_report::ReportEmail, CoreError> {
     let lookback_start = Utc::now()
         .checked_sub_signed(chrono::Duration::days(schedule.lookback_days as i64))
-        .unwrap_or_else(|| Utc::now())
+        .unwrap_or(Utc::now())
         .format("%Y-%m-%d")
         .to_string();
     let end = Utc::now().format("%Y-%m-%d").to_string();
@@ -248,10 +237,10 @@ fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffse
             || s.starts_with("gmt-") =>
         {
             let offset_str = &s[3..];
-            if let Ok(hours) = offset_str.parse::<i32>() {
-                if let Some(offset) = chrono::FixedOffset::east_opt(hours * 3600) {
-                    return Utc::now().with_timezone(&offset);
-                }
+            if let Ok(hours) = offset_str.parse::<i32>()
+                && let Some(offset) = chrono::FixedOffset::east_opt(hours * 3600)
+            {
+                return Utc::now().with_timezone(&offset);
             }
             Utc::now().into()
         }
@@ -282,7 +271,7 @@ fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffse
             Utc::now().into()
         }
         "europe/berlin" | "europe/paris" | "europe/rome" | "europe/madrid" | "europe/amsterdam" => {
-            let offset = chrono::FixedOffset::east_opt(1 * 3600).unwrap();
+            let offset = chrono::FixedOffset::east_opt(3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "europe/moscow" => {
@@ -321,14 +310,15 @@ mod tests {
     fn should_send_daily_within_window() {
         let conn = migrations::fresh_db();
         let store = Store::new(&conn);
-        let mut schedule = ReportScheduleConfig::default();
-        schedule.enabled = true;
-        schedule.cadence = "daily".to_string();
-
-        // Set send_at_time to current UTC time ± 1 min (within 2-min window)
+        // send_at_time to current UTC time ± 1 min (within 2-min window)
         let now = Utc::now();
-        schedule.send_at_time = now.format("%H:%M").to_string();
-        schedule.timezone = "UTC".to_string();
+        let schedule = ReportScheduleConfig {
+            enabled: true,
+            cadence: "daily".to_string(),
+            send_at_time: now.format("%H:%M").to_string(),
+            timezone: "UTC".to_string(),
+            ..Default::default()
+        };
 
         // Should return true (no last_sent_at record yet)
         let result = should_send_scheduled(&store, &schedule).unwrap();
@@ -342,17 +332,18 @@ mod tests {
     fn should_send_daily_outside_window() {
         let conn = migrations::fresh_db();
         let store = Store::new(&conn);
-        let mut schedule = ReportScheduleConfig::default();
-        schedule.enabled = true;
-        schedule.cadence = "daily".to_string();
-        // Set a time far from now
-        let far_time = Utc::now()
-            .checked_sub_signed(chrono::Duration::hours(3))
-            .unwrap()
-            .format("%H:%M")
-            .to_string();
-        schedule.send_at_time = far_time;
-        schedule.timezone = "UTC".to_string();
+        // Set a time far from now (3 hours before current)
+        let schedule = ReportScheduleConfig {
+            enabled: true,
+            cadence: "daily".to_string(),
+            send_at_time: Utc::now()
+                .checked_sub_signed(chrono::Duration::hours(3))
+                .unwrap()
+                .format("%H:%M")
+                .to_string(),
+            timezone: "UTC".to_string(),
+            ..Default::default()
+        };
 
         let result = should_send_scheduled(&store, &schedule).unwrap();
         assert!(!result, "should NOT send when outside time window");
@@ -366,12 +357,14 @@ mod tests {
         // Record a send "today"
         record_sent_timestamp(&store).unwrap();
 
-        let mut schedule = ReportScheduleConfig::default();
-        schedule.enabled = true;
-        schedule.cadence = "daily".to_string();
         let now = Utc::now();
-        schedule.send_at_time = now.format("%H:%M").to_string();
-        schedule.timezone = "UTC".to_string();
+        let schedule = ReportScheduleConfig {
+            enabled: true,
+            cadence: "daily".to_string(),
+            send_at_time: now.format("%H:%M").to_string(),
+            timezone: "UTC".to_string(),
+            ..Default::default()
+        };
 
         let result = should_send_scheduled(&store, &schedule).unwrap();
         assert!(!result, "dedup should block same-day resend");
@@ -381,14 +374,15 @@ mod tests {
     fn weekly_blocks_non_monday() {
         let conn = migrations::fresh_db();
         let store = Store::new(&conn);
-        let mut schedule = ReportScheduleConfig::default();
-        schedule.enabled = true;
-        schedule.cadence = "weekly".to_string();
-
         // Set send time to current time so time check passes
         let now = Utc::now();
-        schedule.send_at_time = now.format("%H:%M").to_string();
-        schedule.timezone = "UTC".to_string();
+        let schedule = ReportScheduleConfig {
+            enabled: true,
+            cadence: "weekly".to_string(),
+            send_at_time: now.format("%H:%M").to_string(),
+            timezone: "UTC".to_string(),
+            ..Default::default()
+        };
 
         let result = should_send_scheduled(&store, &schedule).unwrap();
 
@@ -401,13 +395,14 @@ mod tests {
     fn monthly_blocks_non_first() {
         let conn = migrations::fresh_db();
         let store = Store::new(&conn);
-        let mut schedule = ReportScheduleConfig::default();
-        schedule.enabled = true;
-        schedule.cadence = "monthly".to_string();
-
         let now = Utc::now();
-        schedule.send_at_time = now.format("%H:%M").to_string();
-        schedule.timezone = "UTC".to_string();
+        let schedule = ReportScheduleConfig {
+            enabled: true,
+            cadence: "monthly".to_string(),
+            send_at_time: now.format("%H:%M").to_string(),
+            timezone: "UTC".to_string(),
+            ..Default::default()
+        };
 
         let result = should_send_scheduled(&store, &schedule).unwrap();
         let is_first = now.day() == 1;
