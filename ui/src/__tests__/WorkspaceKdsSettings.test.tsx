@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceKdsSettings } from '@/features/settings/workspace-cards/WorkspaceKdsSettings';
 
 const testL10n = {
@@ -26,6 +27,7 @@ const testL10n = {
       'workspace-kds-auto-ack': 'Auto-Acknowledge',
       'workspace-kds-density': 'Density',
       'save': 'Save',
+      'settings-save-error': 'Save failed',
     };
     return d[id] ?? id;
   },
@@ -73,7 +75,7 @@ vi.mock('../features/settings/SettingsSelect', () => ({
 }));
 
 function Wrapper({ children }: { children: ReactNode }) {
-  return <LocalizationProvider l10n={testL10n}>{children}</LocalizationProvider>;
+  return <LocalizationProvider l10n={testL10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
 }
 function renderCard(overrides: Record<string, unknown> = {}) {
   return render(<Wrapper><WorkspaceKdsSettings

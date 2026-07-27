@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useToast } from '@/frontend/shared/Toast';
 import { getSetting, setSettings } from '@/api/settings';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -22,6 +23,9 @@ export function WorkspaceInventorySettings({
   onSaved,
 }: WorkspaceCardProps) {
   // ── Draft state ──────────────────────────────────────────────
+
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
 
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const [deductionPreferWarehouse, setDeductionPreferWarehouse] = useState(false);
@@ -73,7 +77,7 @@ export function WorkspaceInventorySettings({
       originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
       onSaved?.();
     } catch {
-      // Hook handles error
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
