@@ -429,7 +429,8 @@ export function AppearanceSettings({
           </h2>
         </div>
         <div className="settings-form">
-          <div className="appearance-reset-actions">
+          {!embedded && (
+            <div className="appearance-reset-actions">
               <Localized id="appearance-reset-all-aria" attrs={{ 'aria-label': true }}>
                   <Button
                   type="button"
@@ -448,6 +449,7 @@ export function AppearanceSettings({
                 </Button>
               </Localized>
             </div>
+          )}
           {previewFields}
           {!embedded && (
             <div className="settings-actions">
