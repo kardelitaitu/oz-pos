@@ -68,3 +68,16 @@ custom-report-run = Jalankan
 custom-report-results = Hasil
 custom-report-export-csv = Ekspor CSV
 custom-report-no-columns-match = Tidak ada kolom yang cocok
+
+# Custom Report — a11y labels
+custom-report-dataset-aria = Dataset
+custom-report-start-aria = Tanggal mulai
+custom-report-end-aria = Tanggal akhir
+custom-report-search-placeholder = Cari kolom…
+custom-report-search-aria = Cari kolom
+custom-report-search-clear-aria = Hapus pencarian
+custom-report-columns-aria = Pemilihan kolom
+custom-report-run-aria = Jalankan laporan
+custom-report-region-aria = Pembuat Laporan Kustom
+custom-report-export-aria = Ekspor CSV
+custom-report-columns-selected = { $selected } / { $total } dipilih

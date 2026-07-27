@@ -66,3 +66,16 @@ custom-report-run = Run Report
 custom-report-results = Results
 custom-report-export-csv = Export CSV
 custom-report-no-columns-match = No columns match your search
+
+# Custom Report — a11y labels
+custom-report-dataset-aria = Dataset
+custom-report-start-aria = Start date
+custom-report-end-aria = End date
+custom-report-search-placeholder = Search columns…
+custom-report-search-aria = Search columns
+custom-report-search-clear-aria = Clear search
+custom-report-columns-aria = Column selection
+custom-report-run-aria = Run report
+custom-report-region-aria = Custom Report Builder
+custom-report-export-aria = Export CSV
+custom-report-columns-selected = { $selected } / { $total } selected
