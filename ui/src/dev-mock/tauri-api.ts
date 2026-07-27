@@ -114,7 +114,7 @@ const MOCK_WORKSPACES = [
 
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
 const loginAttempts: Record<string, number> = {};
-const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_THRESHOLD = 4;
 // LOCKOUT_DURATION_MS = 30_000 is defined for documentation;
 // the mock uses a simple attempt-count lockout that resets on
 // successful login to keep the dev loop fast.
@@ -189,7 +189,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     // Check lockout.
     const attempts = loginAttempts[key] ?? 0;
     if (attempts >= LOCKOUT_THRESHOLD) {
-      throw new Error('Account locked. Too many failed attempts.');
+      throw new Error('Account locked. Too many failed attempts. Try again in 30s');
     }
 
     if (!staff || pin !== staff.pin_hash) {

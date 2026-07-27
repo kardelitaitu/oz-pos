@@ -66,8 +66,8 @@ test.describe('Settings Change', () => {
     await appearanceNav.click();
     await page.waitForTimeout(1_000);
 
-    // The Appearance section heading should be visible.
-    const appearanceHeading = page.locator('.settings-section-title').filter({ hasText: 'Appearance' });
+    // The Appearance section heading is "Display" (from Localized id="settings-section-display").
+    const appearanceHeading = page.locator('.settings-section-title').filter({ hasText: 'Display' });
     await expect(appearanceHeading.first()).toBeVisible({ timeout: 5_000 });
 
     // "Appearance" nav item should now be active.
