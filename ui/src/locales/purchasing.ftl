@@ -86,3 +86,26 @@ suppliers-no-results = No suppliers match your search.
 suppliers-clear-search = Clear search
 suppliers-no-data = No suppliers yet.
 suppliers-add-first = Add your first supplier
+
+# Supplier table columns
+suppliers-table-aria = Suppliers
+suppliers-col-code = Code
+suppliers-col-name = Name
+suppliers-col-contact = Contact
+suppliers-col-phone = Phone
+suppliers-col-email = Email
+suppliers-col-status = Status
+suppliers-col-actions =
+    .aria-label = Actions
+suppliers-edit = Edit
+
+# Supplier form fields
+suppliers-field-code = Code *
+suppliers-field-name = Name *
+suppliers-field-contact = Contact Person
+suppliers-field-phone = Phone
+suppliers-field-email = Email
+suppliers-field-address = Address
+suppliers-field-tax-id = Tax ID
+suppliers-field-payment-terms = Payment Terms
+suppliers-field-notes = Notes

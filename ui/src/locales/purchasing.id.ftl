@@ -86,3 +86,26 @@ suppliers-no-results = Tidak ada pemasok yang cocok dengan pencarian Anda.
 suppliers-clear-search = Hapus pencarian
 suppliers-no-data = Belum ada pemasok.
 suppliers-add-first = Tambah pemasok pertama
+
+# Supplier table columns
+suppliers-table-aria = Pemasok
+suppliers-col-code = Kode
+suppliers-col-name = Nama
+suppliers-col-contact = Kontak
+suppliers-col-phone = Telepon
+suppliers-col-email = Email
+suppliers-col-status = Status
+suppliers-col-actions =
+    .aria-label = Tindakan
+suppliers-edit = Edit
+
+# Supplier form fields
+suppliers-field-code = Kode *
+suppliers-field-name = Nama *
+suppliers-field-contact = Kontak Person
+suppliers-field-phone = Telepon
+suppliers-field-email = Email
+suppliers-field-address = Alamat
+suppliers-field-tax-id = NPWP
+suppliers-field-payment-terms = Ketentuan Pembayaran
+suppliers-field-notes = Catatan

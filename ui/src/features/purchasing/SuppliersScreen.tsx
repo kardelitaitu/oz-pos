@@ -56,7 +56,7 @@ export default function SuppliersScreen() {
       const data = await listSuppliers();
       setSuppliers(data);
     } catch {
-      // IPC unavailable
+      setSuppliers([]);
     } finally {
       setLoading(false);
     }
@@ -244,16 +244,18 @@ export default function SuppliersScreen() {
         </Card>
       ) : (
         <div className="suppliers-table-wrap">
-          <table className="suppliers-table" aria-label="Suppliers">
+          <table className="suppliers-table" aria-label={l10n.getString('suppliers-table-aria') || 'Suppliers'}>
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Contact</th>
-                <th>Phone</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th aria-label="Actions"> </th>
+                <Localized id="suppliers-col-code"><th>Code</th></Localized>
+                <Localized id="suppliers-col-name"><th>Name</th></Localized>
+                <Localized id="suppliers-col-contact"><th>Contact</th></Localized>
+                <Localized id="suppliers-col-phone"><th>Phone</th></Localized>
+                <Localized id="suppliers-col-email"><th>Email</th></Localized>
+                <Localized id="suppliers-col-status"><th>Status</th></Localized>
+                <Localized id="suppliers-col-actions" attrs={{ 'aria-label': true }}>
+                  <th aria-label="Actions"> </th>
+                </Localized>
               </tr>
             </thead>
             <tbody>{filtered.map((s) => (
@@ -267,9 +269,11 @@ export default function SuppliersScreen() {
                     <span className={`suppliers-badge suppliers-badge--${s.status}`}>{s.status}</span>
                   </td>
                   <td className="suppliers-cell-actions">
-                    <button type="button" className="suppliers-action-btn" onClick={() => openEdit(s)}>
-                      Edit
-                    </button>
+                    <Localized id="suppliers-edit">
+                      <button type="button" className="suppliers-action-btn" onClick={() => openEdit(s)}>
+                        Edit
+                      </button>
+                    </Localized>
                   </td>
                 </tr>
               ))}
@@ -290,7 +294,7 @@ export default function SuppliersScreen() {
         cancelLabel={l10n.getString('suppliers-btn-cancel')}
       >
         <label className="suppliers-field" htmlFor="supplier-field-code">
-          <span className="suppliers-label">Code *</span>
+          <Localized id="suppliers-field-code"><span className="suppliers-label">Code *</span></Localized>
           <input
             className="suppliers-input"
             type="text"
@@ -301,7 +305,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <label className="suppliers-field" htmlFor="supplier-field-name">
-          <span className="suppliers-label">Name *</span>
+          <Localized id="suppliers-field-name"><span className="suppliers-label">Name *</span></Localized>
           <input
             className="suppliers-input"
             type="text"
@@ -313,7 +317,7 @@ export default function SuppliersScreen() {
         </label>
         <div className="suppliers-row">
           <label className="suppliers-field" htmlFor="supplier-field-contact">
-            <span className="suppliers-label">Contact Person</span>
+            <Localized id="suppliers-field-contact"><span className="suppliers-label">Contact Person</span></Localized>
             <input
               className="suppliers-input"
               type="text"
@@ -324,7 +328,7 @@ export default function SuppliersScreen() {
             />
           </label>
           <label className="suppliers-field" htmlFor="supplier-field-phone">
-            <span className="suppliers-label">Phone</span>
+            <Localized id="suppliers-field-phone"><span className="suppliers-label">Phone</span></Localized>
             <input
               className="suppliers-input"
               type="tel"
@@ -336,7 +340,7 @@ export default function SuppliersScreen() {
           </label>
         </div>
         <label className="suppliers-field" htmlFor="supplier-field-email">
-          <span className="suppliers-label">Email</span>
+          <Localized id="suppliers-field-email"><span className="suppliers-label">Email</span></Localized>
           <input
             className="suppliers-input"
             type="email"
@@ -347,7 +351,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <label className="suppliers-field" htmlFor="supplier-field-address">
-          <span className="suppliers-label">Address</span>
+          <Localized id="suppliers-field-address"><span className="suppliers-label">Address</span></Localized>
           <input
             className="suppliers-input"
             type="text"
@@ -359,7 +363,7 @@ export default function SuppliersScreen() {
         </label>
         <div className="suppliers-row">
           <label className="suppliers-field" htmlFor="supplier-field-tax-id">
-            <span className="suppliers-label">Tax ID</span>
+            <Localized id="suppliers-field-tax-id"><span className="suppliers-label">Tax ID</span></Localized>
             <input
               className="suppliers-input"
               type="text"
@@ -370,7 +374,7 @@ export default function SuppliersScreen() {
             />
           </label>
           <label className="suppliers-field" htmlFor="supplier-field-payment-terms">
-            <span className="suppliers-label">Payment Terms</span>
+            <Localized id="suppliers-field-payment-terms"><span className="suppliers-label">Payment Terms</span></Localized>
             <input
               className="suppliers-input"
               type="text"
@@ -382,7 +386,7 @@ export default function SuppliersScreen() {
           </label>
         </div>
         <label className="suppliers-field" htmlFor="supplier-field-notes">
-          <span className="suppliers-label">Notes</span>
+          <Localized id="suppliers-field-notes"><span className="suppliers-label">Notes</span></Localized>
           <textarea
             className="suppliers-input suppliers-textarea"
             id="supplier-field-notes"

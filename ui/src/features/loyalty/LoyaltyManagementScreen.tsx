@@ -52,7 +52,7 @@ export default function LoyaltyManagementScreen() {
       setCustomers(custs);
       setTiers(t);
     } catch {
-      // IPC unavailable.
+      /* API unavailable — keep existing state */
     } finally {
       setLoading(false);
     }
@@ -97,7 +97,7 @@ export default function LoyaltyManagementScreen() {
       setTiers((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       setEditingTier(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save tier');
+      setError(err instanceof Error ? err.message : l10n.getString('loyalty-save-tier-error') || 'Failed to save tier');
     } finally {
       setSavingTier(false);
     }
