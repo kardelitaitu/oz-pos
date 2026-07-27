@@ -36,6 +36,11 @@ dashboard-top-product = Top Product
 dashboard-low-stock-alerts = Low Stock Alerts
 dashboard-no-data = No sales data for today
 
+# Dashboard — a11y
+dashboard-region-aria = Dashboard
+dashboard-stock-alerts-aria = Low stock alerts
+dashboard-stock-left = left
+
 # Menu Engineering
 menu-eng-title = Menu Engineering
 menu-eng-products = Products

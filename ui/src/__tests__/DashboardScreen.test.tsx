@@ -11,7 +11,11 @@ spinner-label = Loading dashboard
 `;
 
 // dashboard keys only exist in id locale, so fallback children are used
-const reportsFtl = ``;
+const reportsFtl = `
+dashboard-region-aria = Dashboard
+dashboard-stock-alerts-aria = Low stock alerts
+dashboard-stock-left = left
+`;
 
 // ── mock API functions ─────────────────────────────────────────────────
 const mockGetDailyRevenue = vi.fn();

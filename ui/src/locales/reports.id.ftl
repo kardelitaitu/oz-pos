@@ -6,6 +6,11 @@ dashboard-low-stock-alerts = Peringatan Stok Menipis
 dashboard-no-data = Belum ada data penjualan hari ini
 dashboard-view-report = Lihat Laporan Lengkap
 
+# Dashboard — a11y
+dashboard-region-aria = Dasbor
+dashboard-stock-alerts-aria = Peringatan stok menipis
+dashboard-stock-left = tersisa
+
 top-products-title = Produk Terlaris
 top-products-period = Periode
 top-products-today = Hari Ini
