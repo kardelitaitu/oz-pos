@@ -40,4 +40,10 @@ promotions-field-ends-at = Berakhir Pada
 promotions-field-min-order = Min. Pesanan
 promotions-field-category = Kategori
 
+# Error toasts
+promotions-error-load = Gagal memuat promosi
+promotions-error-save = Gagal menyimpan promosi
+promotions-error-delete = Gagal menghapus promosi
+promotions-error-toggle = Gagal mengalihkan promosi
+
 # ── Loyalty (remaining) ──

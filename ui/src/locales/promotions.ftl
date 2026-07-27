@@ -41,3 +41,9 @@ promotions-field-starts-at = Starts At
 promotions-field-ends-at = Ends At
 promotions-field-min-order = Min Order
 promotions-field-category = Category
+
+# Error toasts
+promotions-error-load = Failed to load promotions
+promotions-error-save = Failed to save promotion
+promotions-error-delete = Failed to delete promotion
+promotions-error-toggle = Failed to toggle promotion
