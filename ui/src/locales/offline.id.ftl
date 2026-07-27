@@ -16,6 +16,7 @@ offline-queue-synced-at = Tersinkron Pada
 offline-queue-delete = Hapus
 offline-queue-delete-success = Item dihapus.
 offline-queue-none = —
+offline-queue-table-aria = Item antrean luring
 offline-queue-status-pending = Tertunda
 offline-queue-status-synced = Tersinkron
 offline-queue-status-failed = Gagal
