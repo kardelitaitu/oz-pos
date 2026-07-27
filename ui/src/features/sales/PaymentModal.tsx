@@ -244,7 +244,7 @@ export default function PaymentModal({
         allCustomersRef.current = customers;
         setCustomerSearchResults(customers);
       })
-      .catch(() => setCustomerSearchResults([]))
+      .catch(() => { addToast({ message: l10n.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
   }, [showCustomerSearch]);
 
@@ -278,7 +278,7 @@ export default function PaymentModal({
             setLoyaltyDiscount(0n);
           }
         })
-        .catch(() => setLoyaltyAccount(null));
+        .catch(() => { addToast({ message: l10n.getString('payment-toast-loyalty-failed') || 'Failed to load loyalty account', type: 'error' }); setLoyaltyAccount(null); });
     } else {
       setLoyaltyAccount(null);
       setRedeemPoints(false);
@@ -290,7 +290,7 @@ export default function PaymentModal({
     if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
       getPointsValue(loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
-        .catch(() => setPointsWorthMinor(null));
+        .catch(() => { addToast({ message: l10n.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
     } else {
       setPointsWorthMinor(null);
     }
@@ -309,7 +309,7 @@ export default function PaymentModal({
           setLoyaltyDiscount(discount > totalMinor ? totalMinor : discount);
         }
       })
-      .catch(() => {});
+      .catch(() => { /* points value calc is best-effort */ });
     return () => { cancelled = true; };
   }, [pointsToRedeem, redeemPoints, totalMinor]);
 
