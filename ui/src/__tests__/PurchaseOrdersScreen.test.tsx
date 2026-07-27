@@ -133,14 +133,17 @@ describe('PurchaseOrdersScreen', () => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
     });
 
-    const draftBadge = screen.getByText('draft');
-    expect(draftBadge.className).toContain('po-status--draft');
+    const draftBadge = document.querySelector('.po-status--draft');
+    expect(draftBadge).toBeInTheDocument();
+    expect(draftBadge!.textContent).toBe('Draft');
 
-    const pendingBadge = screen.getByText('pending');
-    expect(pendingBadge.className).toContain('po-status--pending');
+    const pendingBadge = document.querySelector('.po-status--pending');
+    expect(pendingBadge).toBeInTheDocument();
+    expect(pendingBadge!.textContent).toBe('Pending');
 
-    const approvedBadge = screen.getByText('approved');
-    expect(approvedBadge.className).toContain('po-status--approved');
+    const approvedBadge = document.querySelector('.po-status--approved');
+    expect(approvedBadge).toBeInTheDocument();
+    expect(approvedBadge!.textContent).toBe('Approved');
   });
 
   // ── Status filters ───────────────────────────────────────────
@@ -163,7 +166,7 @@ describe('PurchaseOrdersScreen', () => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText('Draft'));
+    await user.click(screen.getByRole('button', { name: 'Draft' }));
 
     await waitFor(() => {
       expect(screen.getByText('PO-001')).toBeInTheDocument();
