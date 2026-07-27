@@ -42,6 +42,22 @@ sc-start-count = Mulai Opname
 sc-new-count-title = Stok Opname Baru
 sc-hist-title = Riwayat Opname
 sc-hist-empty = Tidak ada opname selesai untuk ditampilkan.
+
+# Error messages
+sc-error-load = Gagal memuat stok opname.
+sc-error-add-line = Gagal menambah baris
+sc-error-update-line = Gagal memperbarui baris
+sc-error-remove-line = Gagal menghapus baris
+sc-error-start-count = Gagal memulai opname
+sc-error-complete = Gagal menyelesaikan opname
+sc-error-products = Gagal memuat produk
+sc-error-load-history = Gagal memuat riwayat
+sc-error-load-lines = Gagal memuat baris opname
+
+# History adjustment columns
+sc-col-previous = Sebelumnya
+sc-col-new = Baru
+sc-col-reason = Alasan
 sc-hist-reconciliation = Laporan Rekonsiliasi
 sc-hist-lines-title = Baris Opname
 sc-hist-adjust-title = Penyesuaian Diterapkan

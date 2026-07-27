@@ -111,6 +111,13 @@ inv-threshold-status-enabled = Enabled
 inv-threshold-status-disabled = Disabled
 inv-threshold-unknown-product = Unknown Product
 
+# Threshold Config — additional keys
+inv-threshold-filter-label = Filter by Location
+inv-threshold-delete-title = Delete Threshold?
+inv-threshold-delete-message = Are you sure you want to delete this threshold alert boundary? This action cannot be undone.
+inv-threshold-delete-confirm = Delete
+inv-threshold-error-qty = Threshold must be a valid non-negative integer
+
 # Stock Alert Panel
 inv-alert-title = Stock Alert Panel
 inv-alert-badge-count = { $count } Stock Alerts

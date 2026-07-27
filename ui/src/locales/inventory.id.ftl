@@ -133,6 +133,13 @@ inv-threshold-status-enabled = Aktif
 inv-threshold-status-disabled = Nonaktif
 inv-threshold-unknown-product = Produk Tidak Dikenal
 
+# Threshold Config — additional keys
+inv-threshold-filter-label = Filter berdasarkan Lokasi
+inv-threshold-delete-title = Hapus Batas?
+inv-threshold-delete-message = Apakah Anda yakin ingin menghapus batas peringatan stok ini? Tindakan ini tidak dapat dibatalkan.
+inv-threshold-delete-confirm = Hapus
+inv-threshold-error-qty = Batas harus berupa bilangan bulat non-negatif yang valid
+
 # Stock Alert Panel
 inv-alert-title = Panel Peringatan Stok
 inv-alert-badge-count = { $count } Peringatan Stok
