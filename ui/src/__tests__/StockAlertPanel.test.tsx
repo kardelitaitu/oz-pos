@@ -3,6 +3,20 @@ import { screen, waitFor, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
 
+// ── Mock @fluent/react ────────────────────────────────────────
+
+vi.mock('@fluent/react', () => ({
+  useLocalization: () => ({
+    l10n: {
+      getString: (id: string, vars?: Record<string, unknown>) => {
+        if (id === 'inv-alert-badge-count' && vars) return `${vars['count']} active alerts`;
+        return id;
+      },
+    },
+  }),
+  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+}));
+
 // ── Mock auth and workspace contexts ───────────────────────────
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -131,7 +145,7 @@ describe('StockAlertPanel', () => {
       expect(screen.getByText('Coffee Beans')).toBeInTheDocument();
     });
 
-    const ackBtns = screen.getAllByRole('button', { name: /acknowledge/i });
+    const ackBtns = screen.getAllByRole('button', { name: /ack/i });
     await user.click(ackBtns[0]!);
 
     expect(mockAcknowledgeStockAlert).toHaveBeenCalledWith(
