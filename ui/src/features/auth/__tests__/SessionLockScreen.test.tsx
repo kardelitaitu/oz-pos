@@ -34,13 +34,27 @@ vi.mock('@fluent/react', () => ({
   Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLocalization: () => ({
     l10n: {
-      getString: (id: string) => {
+      getString: (id: string, vars?: Record<string, string>) => {
         const map: Record<string, string> = {
           'session-lock-title': 'Session Locked',
           'session-lock-expired': 'Sesi telah berakhir',
           'session-lock-invalid-pin': 'PIN tidak dikenali',
+          'session-lock-enter-pin': 'Enter PIN to unlock',
+          'session-lock-pin-aria': 'PIN: { $length } of { $max } digits entered',
+          'session-lock-lockout': 'Wait { $seconds }s.',
+          'session-lock-pad-aria': 'PIN pad',
+          'staff-login-clear': 'Clear',
+          'staff-login-connection-checking': 'Checking…',
+          'staff-login-connection-connected': 'Connected',
+          'staff-login-connection-disconnected': 'Disconnected',
+          'staff-login-connection-auth': 'Auth',
+          'staff-login-connection-sync': 'Sync',
         };
-        return (map as Record<string, string>)[id] || id;
+        let result = (map as Record<string, string>)[id];
+        if (result && vars) {
+          result = result.replace(/\{\s*\$(\w+)\s*\}/g, (_, key) => vars[key] ?? `{$${key}}`);
+        }
+        return result || id;
       },
     },
   }),
