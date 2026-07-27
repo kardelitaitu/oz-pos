@@ -22,6 +22,8 @@ interface ShiftBarProps {
 
 export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -53,7 +55,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         }
       })
       .catch(() => {
-        addToast({ message: l10n.getString('inv-shift-error-locations') || 'Failed to load locations', type: 'error' });
+        addToast({ message: l10nRef.current.getString('inv-shift-error-locations') || 'Failed to load locations', type: 'error' });
       });
 
     getActiveInventoryShift(sessionToken, session.user_id)
@@ -62,9 +64,9 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         onShiftChange?.(shift);
       })
       .catch(() => {
-        addToast({ message: l10n.getString('inv-shift-error-active') || 'Failed to load active shift', type: 'error' });
+        addToast({ message: l10nRef.current.getString('inv-shift-error-active') || 'Failed to load active shift', type: 'error' });
       });
-  }, [sessionToken, session?.user_id, onShiftChange, addToast, l10n]);
+  }, [sessionToken, session?.user_id, onShiftChange, addToast]); // l10n via ref — stable dep chain
 
   // Handle timer tick
   useEffect(() => {
@@ -103,7 +105,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setNotes('');
       if (onShiftChange) onShiftChange(shift);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-shift-error-start') || 'Failed to start shift'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-shift-error-start') || 'Failed to start shift'), type: 'error' });
     }
   };
 
@@ -133,7 +135,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setActiveShift(null);
       if (onShiftChange) onShiftChange(null);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-shift-error-end') || 'Failed to end shift'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-shift-error-end') || 'Failed to end shift'), type: 'error' });
     }
   };
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -21,6 +21,8 @@ export default function StockCountHistory() {
   const [selectedLines, setSelectedLines] = useState<StockCountLineDto[]>([]);
 
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
 
   const load = useCallback(async () => {
@@ -33,11 +35,11 @@ export default function StockCountHistory() {
       setCounts(c.filter((cnt) => cnt.status === 'completed' || cnt.status === 'cancelled'));
       setAdjustments(a);
     } catch {
-      addToast({ message: l10n.getString('sc-error-load-history') || 'Failed to load history', type: 'error' });
+      addToast({ message: l10nRef.current.getString('sc-error-load-history') || 'Failed to load history', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -47,10 +49,10 @@ export default function StockCountHistory() {
       const lines = await getCountLines(id);
       setSelectedLines(lines);
     } catch {
-      addToast({ message: l10n.getString('sc-error-load-lines') || 'Failed to load count lines', type: 'error' });
+      addToast({ message: l10nRef.current.getString('sc-error-load-lines') || 'Failed to load count lines', type: 'error' });
       setSelectedLines([]);
     }
-  }, [addToast, l10n]);
+  }, [addToast]);
 
   const countAdjustments = useMemo(() => {
     if (!selectedCount) return [];

@@ -73,6 +73,8 @@ export default function PaymentModal({
   tenderPresets,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [otherLabel, setOtherLabel] = useState('');
@@ -187,9 +189,9 @@ export default function PaymentModal({
           setExchangeRates(rates);
           if (base) setBaseCurrency(base);
         })
-        .catch(() => addToast({ message: l10n.getString('payment-toast-currency-failed'), type: 'error' }));
+        .catch(() => addToast({ message: l10nRef.current.getString('payment-toast-currency-failed'), type: 'error' }));
     }
-  }, [open, multiCurrency, addToast, l10n]);
+  }, [open, multiCurrency, addToast]); // l10n via ref — stable dep chain
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -244,9 +246,9 @@ export default function PaymentModal({
         allCustomersRef.current = customers;
         setCustomerSearchResults(customers);
       })
-      .catch(() => { addToast({ message: l10n.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
+      .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, addToast, l10n]);
+  }, [showCustomerSearch, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -278,23 +280,23 @@ export default function PaymentModal({
             setLoyaltyDiscount(0n);
           }
         })
-        .catch(() => { addToast({ message: l10n.getString('payment-toast-loyalty-failed') || 'Failed to load loyalty account', type: 'error' }); setLoyaltyAccount(null); });
+        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-loyalty-failed') || 'Failed to load loyalty account', type: 'error' }); setLoyaltyAccount(null); });
     } else {
       setLoyaltyAccount(null);
       setRedeemPoints(false);
       setLoyaltyDiscount(0n);
     }
-  }, [selectedCustomer, addToast, l10n]);
+  }, [selectedCustomer, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
       getPointsValue(loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
-        .catch(() => { addToast({ message: l10n.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
+        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
     } else {
       setPointsWorthMinor(null);
     }
-  }, [loyaltyAccount, addToast, l10n]);
+  }, [loyaltyAccount, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!redeemPoints || pointsToRedeem <= 0) {

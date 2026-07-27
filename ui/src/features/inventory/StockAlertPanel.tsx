@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, memo } from 'react';
+import { useCallback, useEffect, useState, useRef, memo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { StockAlertEvent } from '@/api/inventory';
@@ -28,6 +28,8 @@ export const StockAlertPanel = memo(function StockAlertPanel({
 }: StockAlertPanelProps) {
   const { sessionToken } = useWorkspace();
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   const [alerts, setAlerts] = useState<StockAlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,11 +47,12 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       const data = await getActiveStockAlerts(token, locationId);
       setAlerts(data.slice(0, maxAlerts));
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('inv-alert-error-load') || 'Failed to load alerts');
+      setError(err instanceof Error ? err.message : l10nRef.current.getString('inv-alert-error-load') || 'Failed to load alerts');
     } finally {
       setLoading(false);
     }
-  }, [token, locationId, maxAlerts, l10n]);
+  }, [token, locationId, maxAlerts]); // l10n accessed via ref — stable dep chain
+
 
   useEffect(() => {
     fetchAlerts();
@@ -71,7 +74,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         // Remove from local state immediately for snappy UX
         setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       } catch (err) {
-        setError(err instanceof Error ? err.message : l10n.getString('inv-alert-error-ack') || 'Failed to acknowledge');
+        setError(err instanceof Error ? err.message : l10nRef.current.getString('inv-alert-error-ack') || 'Failed to acknowledge');
       } finally {
         setAcknowledging((prev) => {
           const next = new Set(prev);
@@ -80,7 +83,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         });
       }
     },
-    [token, l10n],
+    [token], // l10n accessed via ref — stable dep chain
   );
 
   // ── Severity ─────────────────────────────────────────────────────

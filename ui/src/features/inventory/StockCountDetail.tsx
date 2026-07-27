@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -42,6 +42,8 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
@@ -55,20 +57,20 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         setLines(await getCountLines(countId));
       }
     } catch {
-      addToast({ message: l10n.getString('sc-error-load') || 'Failed to load stock count', type: 'error' });
+      addToast({ message: l10nRef.current.getString('sc-error-load') || 'Failed to load stock count', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [countId, addToast, l10n]);
+  }, [countId, addToast]);
 
   useEffect(() => {
     load();
     if (sessionToken) {
       listProductsScoped(sessionToken).then(setProducts).catch(() => {
-        addToast({ message: l10n.getString('sc-error-products') || 'Failed to load products', type: 'error' });
+        addToast({ message: l10nRef.current.getString('sc-error-products') || 'Failed to load products', type: 'error' });
       });
     }
-  }, [load, sessionToken, addToast, l10n]);
+  }, [load, sessionToken, addToast]);
 
   const isEditable = count?.status === 'draft' || count?.status === 'in_progress';
 
@@ -100,38 +102,38 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       setSearchQuery('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-add-line') || 'Failed to add line'));
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-add-line') || 'Failed to add line'));
     } finally {
       setSaving(false);
     }
-  }, [countId, selectedSku, selectedName, expectedQty, load, l10n]);
+  }, [countId, selectedSku, selectedName, expectedQty, load]);
 
   const handleRecordCount = useCallback(async (lineId: string, countedQty: number) => {
     try {
       await updateCountLine({ lineId, countedQty, notes: '' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-update-line') || 'Failed to update'));
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-update-line') || 'Failed to update'));
     }
-  }, [load, l10n]);
+  }, [load]);
 
   const handleRemoveLine = useCallback(async (lineId: string) => {
     try {
       await removeCountLine({ lineId });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-remove-line') || 'Failed to remove'));
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-remove-line') || 'Failed to remove'));
     }
-  }, [load, l10n]);
+  }, [load]);
 
   const handleStartCounting = useCallback(async () => {
     try {
       await updateStockCountStatus(countId, 'in_progress');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-start-count') || 'Failed to start count'));
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-start-count') || 'Failed to start count'));
     }
-  }, [countId, load, l10n]);
+  }, [countId, load]);
 
   const handleComplete = useCallback(async () => {
     setSaving(true);
@@ -139,15 +141,15 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     try {
       const adjustments = await completeStockCount({ countId });
       setSuccessMsg(
-        l10n.getString('sc-complete-success', { count: adjustments.length }),
+        l10nRef.current.getString('sc-complete-success', { count: adjustments.length }),
       );
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-complete') || 'Failed to complete'));
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-complete') || 'Failed to complete'));
     } finally {
       setSaving(false);
     }
-  }, [countId, load, l10n]);
+  }, [countId, load]);
 
   const totalExpected = lines.reduce((s, l) => s + l.expected_qty, 0);
   const totalCounted = lines.reduce((s, l) => s + (l.counted_qty ?? 0), 0);

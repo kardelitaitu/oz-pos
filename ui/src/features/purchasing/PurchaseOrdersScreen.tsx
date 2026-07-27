@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -22,6 +22,8 @@ function formatMinor(minor: number): string {
 /** Purchase orders list screen — view, filter, approve, receive, and cancel purchase orders with status management. */
 export default function PurchaseOrdersScreen() {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,11 +38,11 @@ export default function PurchaseOrdersScreen() {
       const data = await listPurchaseOrders();
       setOrders(data);
     } catch {
-      addToast({ message: l10n.getString('po-error-load') || 'Failed to load purchase orders', type: 'error' });
+      addToast({ message: l10nRef.current.getString('po-error-load') || 'Failed to load purchase orders', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -55,11 +57,11 @@ export default function PurchaseOrdersScreen() {
       await updatePoStatus({ id, status });
       await load();
     } catch {
-      addToast({ message: l10n.getString('po-error-update') || 'Failed to update purchase order', type: 'error' });
+      addToast({ message: l10nRef.current.getString('po-error-update') || 'Failed to update purchase order', type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [load, addToast, l10n]);
+  }, [load, addToast]);
 
   const handleReceive = useCallback(async (id: string) => {
     setActionLoading(id);
@@ -67,11 +69,11 @@ export default function PurchaseOrdersScreen() {
       await receivePurchaseOrder(id);
       await load();
     } catch {
-      addToast({ message: l10n.getString('po-error-receive') || 'Failed to receive purchase order', type: 'error' });
+      addToast({ message: l10nRef.current.getString('po-error-receive') || 'Failed to receive purchase order', type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [load, addToast, l10n]);
+  }, [load, addToast]);
 
   const openCreate = useCallback(() => {
     setEditingId(null);

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -17,6 +17,8 @@ export default function StockCountsScreen() {
   const [filter, setFilter] = useState<string>('all');
 
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
 
   const load = useCallback(async () => {
@@ -25,11 +27,11 @@ export default function StockCountsScreen() {
       const data = await listStockCounts();
       setCounts(data);
     } catch {
-      addToast({ message: l10n.getString('sc-error-load') || 'Failed to load stock counts', type: 'error' });
+      addToast({ message: l10nRef.current.getString('sc-error-load') || 'Failed to load stock counts', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast]);
 
   useEffect(() => { load(); }, [load]);
 

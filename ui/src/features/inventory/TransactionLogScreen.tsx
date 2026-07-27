@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
@@ -17,6 +17,8 @@ export default function TransactionLogScreen() {
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -46,9 +48,9 @@ export default function TransactionLogScreen() {
         setTransactions(txs);
         setLocations(locs);
       })
-      .catch((err) => addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-log-error-load') || 'Failed to load transactions'), type: 'error' }))
+      .catch((err) => addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-load') || 'Failed to load transactions'), type: 'error' }))
       .finally(() => setLoading(false));
-  }, [sessionToken, addToast, l10n]);
+  }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
   const handleRowClick = async (txId: string) => {
     if (!sessionToken) return;
@@ -66,7 +68,7 @@ export default function TransactionLogScreen() {
         setExpandedLines(detail[1]);
       }
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-log-error-lines') || 'Failed to load transaction details'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-lines') || 'Failed to load transaction details'), type: 'error' });
     } finally {
       setLoadingLines(false);
     }

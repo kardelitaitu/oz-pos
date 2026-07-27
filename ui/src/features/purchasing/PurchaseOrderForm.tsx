@@ -27,6 +27,8 @@ interface Props {
 /** Purchase order creation / editing form — supplier selection, line items with SKU, quantity, unit cost, and expected delivery date. */
 export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [poNumber, setPoNumber] = useState('');
   const [supplierId, setSupplierId] = useState('');
@@ -43,10 +45,10 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   useFocusTrap(panelRef, !saving, onClose);
 
   useEffect(() => {
-    listSuppliers().then(setSuppliers).catch(() => {
-      addToast({ message: l10n.getString('po-form-error-suppliers-failed') || 'Failed to load suppliers', type: 'error' });
+    listSuppliers().then(setSuppliers)    .catch(() => {
+      addToast({ message: l10nRef.current.getString('po-form-error-suppliers-failed') || 'Failed to load suppliers', type: 'error' });
     });
-  }, [addToast, l10n]);
+  }, [addToast]); // l10n via ref — stable dep chain
 
   const addLine = useCallback(() => {
     setLines((prev) => [...prev, { sku: '', product_name: '', qty: 1, unit_cost_minor: 0 }]);
@@ -63,10 +65,10 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   const subtotal = lines.reduce((sum, l) => sum + l.qty * l.unit_cost_minor, 0);
 
   const handleSave = useCallback(async () => {
-    if (!poNumber.trim()) { setError(l10n.getString('po-form-error-po-required')); return; }
-    if (!supplierId) { setError(l10n.getString('po-form-error-supplier-required')); return; }
+    if (!poNumber.trim()) { setError(l10nRef.current.getString('po-form-error-po-required')); return; }
+    if (!supplierId) { setError(l10nRef.current.getString('po-form-error-supplier-required')); return; }
     if (lines.length === 0 || lines.some((l) => !l.sku.trim())) {
-      setError(l10n.getString('po-form-error-sku-required'));
+      setError(l10nRef.current.getString('po-form-error-sku-required'));
       return;
     }
 
@@ -88,11 +90,11 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
       await createPurchaseOrder(args);
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('po-form-error-generic'));
+      setError(err instanceof Error ? err.message : l10nRef.current.getString('po-form-error-generic'));
     } finally {
       setSaving(false);
     }
-  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved, l10n]);
+  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved]); // l10n via ref — stable dep chain
 
   return (
     <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('po-form-aria-label')}>
