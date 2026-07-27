@@ -1,4 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
+// Vite React Refresh: force full remount on HMR to prevent stale
+// ThemeContext mismatch in DevToolbar / StatusBar / RestaurantMenu.
+/// @refresh reset
 import {
 
   createContext,
