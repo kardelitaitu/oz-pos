@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useToast } from '@/frontend/shared/Toast';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
 import { setReceiptSettings } from '@/api/settings';
@@ -24,6 +25,8 @@ export function WorkspaceStorePosSettings({
   onSaved,
 }: WorkspaceCardProps) {
   const { settings } = useSettings();
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
 
   // ── Draft state ──────────────────────────────────────────────
@@ -99,7 +102,7 @@ export function WorkspaceStorePosSettings({
 
       onSaved?.();
     } catch {
-      // Error handled by hook's error state
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }

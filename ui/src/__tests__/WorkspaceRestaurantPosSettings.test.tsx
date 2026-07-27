@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceRestaurantPosSettings } from '@/features/settings/workspace-cards/WorkspaceRestaurantPosSettings';
 
 // ── Fluent test l10n ───────────────────────────────────────────────
@@ -29,6 +30,7 @@ const testL10n = {
       'workspace-resto-kp-connection': 'Connection',
       'workspace-resto-kp-ip': 'Kitchen Printer IP',
       'save': 'Save',
+      'settings-save-error': 'Save failed',
     };
     return defaults[id] ?? id;
   },
@@ -107,7 +109,7 @@ vi.mock('../features/settings/SettingsSelect', () => ({
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function Wrapper({ children }: { children: ReactNode }) {
-  return <LocalizationProvider l10n={testL10n}>{children}</LocalizationProvider>;
+  return <LocalizationProvider l10n={testL10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
 }
 
 function renderCard(overrides: Record<string, unknown> = {}) {
