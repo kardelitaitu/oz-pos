@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, Profiler } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
@@ -31,8 +31,9 @@ const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
 /** KDS (Kitchen Display System) screen — real-time order queue with switchable layouts and per-user preferences. */
 export default function KdsScreen() {
   const workspaceScope = useWorkspaceScope();
+  const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
@@ -142,7 +143,7 @@ export default function KdsScreen() {
         console.debug('[Profiler] KdsScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
       }
     }}>
-    <div className="kds" role="region" aria-label="Kitchen Display System">
+    <div className="kds" role="region" aria-label={l10n.getString('kds-screen-aria') || 'Kitchen Display System'}>
       <div className="kds-header">
         <div className="kds-header-left">
           <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
