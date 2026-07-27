@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listTaxRatesScoped,
   createTaxRate,
@@ -36,6 +37,7 @@ const EMPTY_TAX_FORM: TaxFormData = {
 /** Tax configuration screen — CRUD for tax rates, inclusive/exclusive toggle, and per-category tax rate assignment. */
 export default function TaxConfigurationScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   // ── Tax rates state ─────────────────────────────────────────────
@@ -127,11 +129,11 @@ export default function TaxConfigurationScreen() {
       setShowModal(false);
       await loadAll();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('tax-config-save-error') || 'Failed to save tax rate', type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, loadAll]);
+  }, [form, editingId, loadAll, l10n, addToast]);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
@@ -140,9 +142,10 @@ export default function TaxConfigurationScreen() {
       setDeleting(null);
       await loadAll();
     } catch {
+      addToast({ message: l10n.getString('tax-config-delete-error') || 'Failed to delete tax rate', type: 'error' });
       setDeleting(null);
     }
-  }, [loadAll]);
+  }, [loadAll, l10n, addToast]);
 
   // ── Category tax rates ──────────────────────────────────────────
 

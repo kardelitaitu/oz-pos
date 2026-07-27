@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import taxFtl from '@/locales/tax.ftl?raw';
 import TaxConfigurationScreen from '@/features/tax/TaxConfigurationScreen';
 
@@ -50,20 +51,20 @@ async function waitForTable() {
 
 describe('TaxConfigurationScreen', () => {
   it('renders title', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
     expect(screen.getByRole('heading', { name: /tax configuration/i })).toBeInTheDocument();
   });
 
   it('shows loading skeleton while fetching tax rates', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     expect(document.querySelector('.tax-config-loading-skeleton')).toBeInTheDocument();
     expect(screen.queryByText(/loading tax rates/i)).not.toBeInTheDocument();
   });
 
   it('renders tax rate rows', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
     // Use getAllByText — 'Sales Tax' appears in both the table and category badges
     expect(screen.getAllByText('Sales Tax').length).toBeGreaterThanOrEqual(1);
@@ -73,7 +74,7 @@ describe('TaxConfigurationScreen', () => {
   });
 
   it('shows default badge for default tax rate', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
     // Sales Tax is default, VAT is not
     const defaultBadges = screen.getAllByText('Default');
@@ -87,14 +88,14 @@ describe('TaxConfigurationScreen', () => {
       if (cmd === 'list_category_tax_rates') return Promise.resolve([]);
       return Promise.resolve([]);
     });
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitFor(() => {
       expect(screen.getByText(/no tax rates configured/i)).toBeInTheDocument();
     });
   });
 
   it('opens add modal when Add Tax Rate is clicked', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /add tax rate/i }));
     const dialog = screen.getByRole('dialog');
@@ -108,7 +109,7 @@ describe('TaxConfigurationScreen', () => {
   // ── New edge-case tests ─────────────────────────────────────────
 
   it('opens edit modal pre-filled when Edit is clicked', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     // 'Sales Tax' appears in both the rate table and category badges,
@@ -128,7 +129,7 @@ describe('TaxConfigurationScreen', () => {
   });
 
   it('deletes a tax rate when Delete is clicked', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     // Find and click the Delete button for VAT (non-default)
@@ -147,7 +148,7 @@ describe('TaxConfigurationScreen', () => {
   });
 
   it('renders the category tax rates section', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     // Category section heading
@@ -157,7 +158,7 @@ describe('TaxConfigurationScreen', () => {
   });
 
   it('shows assigned tax rate badges in category section', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     // Food category has Sales Tax (tax-1) assigned
@@ -179,7 +180,7 @@ describe('TaxConfigurationScreen', () => {
       return Promise.resolve([]);
     });
 
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     const vatRow = screen.getByText('VAT').closest('tr')!;
@@ -193,7 +194,7 @@ describe('TaxConfigurationScreen', () => {
   });
 
   it('closes the add modal when Escape is pressed', async () => {
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     // Open add modal
@@ -217,7 +218,7 @@ describe('TaxConfigurationScreen', () => {
       return Promise.resolve([]);
     });
 
-    renderWithFluentSync(<TaxConfigurationScreen />, taxFtl);
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
     // Open add modal, fill form, and save

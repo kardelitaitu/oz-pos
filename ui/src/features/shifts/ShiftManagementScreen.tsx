@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useToast } from '@/frontend/shared/Toast';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
@@ -38,6 +39,7 @@ const fmt = (minor: number, currency = 'USD') =>
 /** Shift management screen — view active shift status, open and close shifts, record cash payouts, and display reconciliation reports. */
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
@@ -77,11 +79,11 @@ export default function ShiftManagementScreen() {
       setShifts(allShifts);
       setActiveShift(active);
     } catch {
-      // IPC unavailable.
+      addToast({ message: l10n.getString('shift-load-error') || 'Failed to load shifts', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [userId, sessionToken]);
+  }, [userId, sessionToken, l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
 
