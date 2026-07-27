@@ -222,6 +222,7 @@ export default function SessionLockScreen({
         {/* PIN pad */}
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
+          id="session-lock-pin-pad"
           className="session-lock-pad"
           ref={pinWrapRef}
           tabIndex={-1}

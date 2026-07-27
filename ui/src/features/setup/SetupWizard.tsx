@@ -641,6 +641,7 @@ function StepFeatures({
                 <span className="toggle-switch">
                   <Localized id="setup-features-toggle-aria" attrs={{ 'aria-label': true }} vars={{ label }}>
                     <input
+                      id={`setup-feature-${f.key}`}
                       type="checkbox"
                       checked={isOn}
                       onChange={() => onToggle(f.key)}

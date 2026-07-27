@@ -575,6 +575,7 @@ export default function StaffLoginScreen() {
           {step === 'pin' && (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
             <div
+              id="staff-login-pin-pad"
               className="staff-login-pin-wrap"
               ref={pinWrapRef}
               tabIndex={-1}
