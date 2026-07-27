@@ -189,8 +189,8 @@ export default function TabletAppShell() {
     >
       {pageDenied ? (
         <PermissionDenied
-          action={pageRegistration!.label}
-          requiredRole={pageRegistration!.requiredRole!}
+          action={pageRegistration?.label ?? ''}
+          requiredRole={pageRegistration?.requiredRole ?? ''}
         />
       ) : PageComponent ? (
         <PageComponent />
