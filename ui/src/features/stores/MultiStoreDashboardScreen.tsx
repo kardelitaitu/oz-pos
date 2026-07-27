@@ -20,7 +20,7 @@ function isOnline(lastSeenAt: string | null): boolean {
 export default function MultiStoreDashboardScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [stores, setStores] = useState<StoreProfile[]>([]);
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);

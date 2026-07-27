@@ -703,7 +703,7 @@ describe('WorkspaceHome', () => {
   // ── Fullscreen button ───────────────────────────────────────
 
   describe('fullscreen button', () => {
-    it('renders a fullscreen toggle button with F11 tooltip', async () => {
+    it('renders a fullscreen toggle button with accessible tooltip', async () => {
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: sampleWorkspaces,
         loading: false,
@@ -723,10 +723,10 @@ describe('WorkspaceHome', () => {
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
-      expect(btn.getAttribute('title')).toBe('F11');
+      expect(btn.getAttribute('title')).toBe('workspace-home-fullscreen-hint');
     });
 
-    it('renders fullscreen button in loading state with F11 tooltip', async () => {
+    it('renders fullscreen button in loading state with accessible tooltip', async () => {
       mockWorkspaceValue.mockReturnValue({
   availableWorkspaces: [],
   loading: true,
@@ -746,10 +746,10 @@ describe('WorkspaceHome', () => {
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
-      expect(btn.getAttribute('title')).toBe('F11');
+      expect(btn.getAttribute('title')).toBe('workspace-home-fullscreen-hint');
     });
 
-    it('renders fullscreen button in error state with F11 tooltip', async () => {
+    it('renders fullscreen button in error state with accessible tooltip', async () => {
       mockWorkspaceValue.mockReturnValue({
         availableWorkspaces: [],
         loading: false,
@@ -769,7 +769,7 @@ describe('WorkspaceHome', () => {
 
       const btn = document.querySelector('.workspace-home-fullscreen-btn') as HTMLButtonElement;
       expect(btn).toBeInTheDocument();
-      expect(btn.getAttribute('title')).toBe('F11');
+      expect(btn.getAttribute('title')).toBe('workspace-home-fullscreen-hint');
     });
   });
 

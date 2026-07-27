@@ -206,7 +206,13 @@ nav-switch-workspace = Switch Workspace
 
 # Workspace home
 workspace-home-fullscreen-aria = Toggle fullscreen
+workspace-home-fullscreen-hint = F11
 workspace-home-loading = Loading workspaces…
+workspace-home-loading-aria = Loading workspaces
+workspace-home-sr-error = Connection error
+workspace-home-available = { $count } workspaces available
+workspace-home-coming-soon = Coming soon
+workspace-card-active-aria = Active workspace
 workspace-home-subtitle = Select a workspace to start
 workspace-home-empty = No workspaces available
 workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.

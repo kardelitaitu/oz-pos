@@ -30,7 +30,7 @@ interface TerminalStatusPanelProps {
 export default function TerminalStatusPanel({ refreshTrigger }: TerminalStatusPanelProps) {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

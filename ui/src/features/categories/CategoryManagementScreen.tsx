@@ -169,7 +169,7 @@ export default function CategoryManagementScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -14,7 +14,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
  */
 export default function DailyTotalWidget() {
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [summary, setSummary] = useState<DailySummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
 

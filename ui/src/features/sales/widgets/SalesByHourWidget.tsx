@@ -13,7 +13,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
  */
 export default function SalesByHourWidget() {
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [hourly, setHourly] = useState<SalesByHourRow[]>([]);
   const [loading, setLoading] = useState(true);
 

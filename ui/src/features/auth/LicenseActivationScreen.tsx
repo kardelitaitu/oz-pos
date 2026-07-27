@@ -26,7 +26,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
   const [appVersion, setAppVersion] = useState<string>('0.0.22');
-  const [ipAddress, setIpAddress] = useState<string>('Detecting...');
+  const [ipAddress, setIpAddress] = useState<string>(l10n.getString('auth-ip-detecting') || 'Detecting...');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();
 
@@ -41,7 +41,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     getLocalIp().then(ip => {
       if (mounted) setIpAddress(ip);
     }).catch(() => {
-      if (mounted) setIpAddress('Unknown');
+      if (mounted) setIpAddress(l10n.getString('auth-ip-unknown') || 'Unknown');
     });
 
     return () => { mounted = false; };
@@ -290,11 +290,11 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
 
       <div className="license-server-status-container">
         <ConnectionStatus 
-          label="Auth" 
+          label={l10n.getString('staff-login-connection-auth') || 'Auth'} 
           url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" 
         />
         <ConnectionStatus 
-          label="Sync" 
+          label={l10n.getString('staff-login-connection-sync') || 'Sync'} 
           url="" 
         />
         <MachineIdStatus />

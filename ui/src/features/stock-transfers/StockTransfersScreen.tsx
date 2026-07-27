@@ -46,7 +46,7 @@ export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
