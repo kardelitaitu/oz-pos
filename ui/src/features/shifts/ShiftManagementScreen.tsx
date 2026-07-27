@@ -40,7 +40,7 @@ export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const { currency } = useCurrency();
   const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
@@ -780,7 +780,8 @@ export default function ShiftManagementScreen() {
             </div>
             <div className="shift-mgmt-modal-body">
               {(() => {
-                const s = closedShiftSummary!;
+                if (!closedShiftSummary) return null;
+                const s = closedShiftSummary;
                 return (
                   <>
               <div className="shift-mgmt-summary-grid">
@@ -866,7 +867,8 @@ export default function ShiftManagementScreen() {
 
       {/* ── Shift Detail Modal ────────────────────────── */}
       {mDetail && showDetailModal && (() => {
-        const s = showDetailModal!;
+        if (!showDetailModal) return null;
+        const s = showDetailModal;
         return (
         <div className={`shift-mgmt-overlay${eDetail ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-detail-label')}>
           <div className={`shift-mgmt-modal shift-mgmt-modal--wide${eDetail ? ' shift-modal-exit' : ''}`}>
