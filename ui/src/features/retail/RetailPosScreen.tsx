@@ -65,6 +65,8 @@ interface RetailPosScreenProps {
 /** Retail POS sales screen — product lookup on the left, cart panel on the right with resizable width and barcode scanning support. */
 export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
@@ -336,11 +338,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     const m = new Map<string, string>();
     categories.forEach((c) => {
       const catId = `category-${c.id}`;
-      const label = l10n.getString(catId);
+      const label = l10nRef.current.getString(catId);
       m.set(c.id, label !== catId ? label : c.name);
     });
     return m;
-  }, [categories, l10n]);
+  }, [categories]); // l10n via ref
 
   const lowStockCount = useMemo(
     () => products.filter((p) => p.stock_qty != null && p.stock_qty > 0 && p.stock_qty <= 5).length,
@@ -649,9 +651,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ),
         );
       })
-      .catch(() => { addToast({ message: l10n.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
+      .catch(() => { addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, customerSearchQuery, addToast, l10n]);
+  }, [showCustomerSearch, customerSearchQuery, addToast]); // l10n via ref
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -682,9 +684,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   });
 
   const handlePay = useCallback(() => {
-    if (!activeShift) { addToast({ message: l10n.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
+    if (!activeShift) { addToast({ message: l10nRef.current.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
     setShowPayment(true);
-  }, [activeShift, addToast, l10n]);
+  }, [activeShift, addToast]); // l10n via ref
 
   // ── Hold cart ────────────────────────────────────────────────
 
@@ -753,11 +755,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartsList((prev) => prev.filter((c) => c.id !== cartId));
       if (heldCartId === cartId) setHeldCartId(null);
-      addToast({ type: 'success', message: l10n.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
+      addToast({ type: 'success', message: l10nRef.current.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
     } catch {
-      addToast({ type: 'error', message: l10n.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
+      addToast({ type: 'error', message: l10nRef.current.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
     }
-  }, [sessionToken, heldCartId, addToast, l10n]);
+  }, [sessionToken, heldCartId, addToast]); // l10n via ref
 
   // ── Load persisted held carts on mount ───────────────────────
 
@@ -769,9 +771,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         const held = carts.find((c) => c.bill_type === 'hold');
         if (held) setHeldCartId(held.id);
       })
-      .catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
+      .catch(() => { if (mounted) addToast({ message: l10nRef.current.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
     return () => { mounted = false; };
-  }, [sessionToken, addToast, l10n]);
+  }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
   // ── Options / Workspace Settings ──────────────────────────
 
