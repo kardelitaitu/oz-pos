@@ -65,6 +65,7 @@ import SettingsNavTree, {
   CATEGORIES as CATEGORIES_REF,
   CATEGORY_I18N_KEYS as CATEGORY_I18N_KEYS_REF,
   NAV_L10N_KEYS as NAV_L10N_KEYS_REF,
+  type SettingsNavTreeHandle,
 } from './SettingsNavTree';
 
 // ── Lazy-loaded workspace settings cards (ADR #22 Phase 3) ──
@@ -279,6 +280,7 @@ function SettingsPageContent() {
   const [activeSection, setActiveSection] = useState('general');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const sidebarNavRef = useRef<SettingsNavTreeHandle>(null);
 
   // ── Field validation state ────────────────────────────────
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -843,9 +845,10 @@ function SettingsPageContent() {
         <div className="settings-topbar__col">
           <button
             type="button"
-            className="settings-mobile-menu-btn"
+            className="settings-back-btn"
             onClick={() => goToWorkspacePicker()}
             aria-label={l10n.getString('settings-back-aria')}
+            title={l10n.getString('settings-back-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="16 5 8 12 16 19" />
@@ -956,6 +959,7 @@ function SettingsPageContent() {
       <div className="settings-body">
         {/* ── Settings sidebar navigation tree ────────────── */}
         <SettingsNavTree
+          ref={sidebarNavRef}
           activeSection={activeSection}
           onNavigate={navigateToSection}
           searchQuery={searchQuery}
@@ -979,8 +983,7 @@ function SettingsPageContent() {
                     <button
                       type="button"
                       className="settings-section-header-category"
-                      // Category expand is handled internally by SettingsNavTree
-                      onClick={() => {}}
+                      onClick={() => { sidebarNavRef.current?.toggleCategory(currentCategory.label); }}
                       aria-label={l10n.getString(CATEGORY_I18N_KEYS_REF[currentCategory.label] ?? '')}
                     >
                       <Localized id={CATEGORY_I18N_KEYS_REF[currentCategory.label] ?? ''}>
