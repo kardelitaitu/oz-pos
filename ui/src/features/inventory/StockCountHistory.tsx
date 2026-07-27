@@ -37,9 +37,9 @@ export default function StockCountHistory() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast, l10n]);
 
-  useEffect(() => { load(); }, [load]);  // eslint-disable-line react-hooks/exhaustive-deps -- addToast/l10n stable from context
+  useEffect(() => { load(); }, [load]);
 
   const handleSelectCount = useCallback(async (id: string) => {
     setSelectedCount(id);
@@ -50,7 +50,7 @@ export default function StockCountHistory() {
       addToast({ message: l10n.getString('sc-error-load-lines') || 'Failed to load count lines', type: 'error' });
       setSelectedLines([]);
     }
-  }, []);
+  }, [addToast, l10n]);
 
   const countAdjustments = useMemo(() => {
     if (!selectedCount) return [];

@@ -40,7 +40,7 @@ export default function PurchaseOrdersScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast, l10n]);
 
   useEffect(() => { load(); }, [load]);
 

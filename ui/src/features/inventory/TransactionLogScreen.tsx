@@ -48,7 +48,7 @@ export default function TransactionLogScreen() {
       })
       .catch((err) => addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-log-error-load') || 'Failed to load transactions'), type: 'error' }))
       .finally(() => setLoading(false));
-  }, [sessionToken, addToast]);
+  }, [sessionToken, addToast, l10n]);
 
   const handleRowClick = async (txId: string) => {
     if (!sessionToken) return;

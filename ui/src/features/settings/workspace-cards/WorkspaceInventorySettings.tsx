@@ -62,7 +62,6 @@ export function WorkspaceInventorySettings({
     }).finally(() => {
       setLoaded(true);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
   // ── Save ─────────────────────────────────────────────────────
@@ -81,7 +80,7 @@ export function WorkspaceInventorySettings({
     } finally {
       setSaving(false);
     }
-  }, [userId, lowStockThreshold, deductionPreferWarehouse, onSaved]);
+  }, [userId, lowStockThreshold, deductionPreferWarehouse, onSaved, addToast, l10n]);
 
   const isCompact = variant === 'inspector-drawer';
 

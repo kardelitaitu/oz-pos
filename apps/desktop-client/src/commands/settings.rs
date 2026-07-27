@@ -930,6 +930,63 @@ pub async fn set_settings(
     Ok(())
 }
 
+/// Write (or overwrite) multiple settings in a single transaction, resolved from a session token. ADR #7.
+///
+/// All entries are written atomically — either all succeed or none
+/// do. A single `SettingsUpdated` event is published with all changed
+/// keys after the transaction commits.
+#[command]
+pub async fn set_settings_scoped(
+    session_token: String,
+    entries: HashMap<String, String>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+
+    let terminal_id = state
+        .terminal_id
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let keys: Vec<String> = entries.keys().cloned().collect();
+
+    {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = oz_core::db::Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
+        let tx = db.unchecked_transaction()?;
+        for (key, value) in &entries {
+            Settings::set_tracked(&tx, key, value, &terminal_id)?;
+        }
+        tx.commit()?;
+    }
+
+    // Publish a single SettingsUpdated event for all changed keys.
+    let kernel = state.kernel.lock().await;
+    let bus = kernel.event_bus();
+    let event = oz_core::events::SettingsUpdated {
+        changed_keys: keys,
+        terminal_id,
+    };
+    if let Err(e) = bus.publish(&event) {
+        tracing::warn!(
+            key_count = entries.len(),
+            error = %e,
+            "failed to publish SettingsUpdated event"
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

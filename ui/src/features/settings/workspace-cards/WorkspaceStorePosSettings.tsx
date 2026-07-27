@@ -106,7 +106,7 @@ export function WorkspaceStorePosSettings({
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, userId, showCurrency, showTax, paperWidth, showTableNumber, footer, settings.receipt, onSaved]);
+  }, [terminalId, hw, userId, showCurrency, showTax, paperWidth, showTableNumber, footer, settings.receipt, onSaved, addToast, l10n]);
 
   // ── Variant classes ──────────────────────────────────────────
 

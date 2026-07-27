@@ -108,7 +108,7 @@ export default function CustomReportScreen() {
     }
 
     return ordered;
-  }, [dsDef.columns, columnOrder, selectedCols]);
+  }, [dsDef, columnOrder, selectedCols]);
 
   /** Filter column items by search term. */
   const filteredItems = useMemo(() => {

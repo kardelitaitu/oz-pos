@@ -103,6 +103,7 @@ export function KdsSettingsPanel({
           aria-label={l10n.getString('kds-settings-aria') || 'KDS settings'}
         >
           {/* Sound toggle */}
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="kds-settings-toggle">
             <input
               type="checkbox"
@@ -148,6 +149,7 @@ export function KdsSettingsPanel({
           </div>
 
           {/* Auto-acknowledge toggle */}
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="kds-settings-toggle">
             <input
               type="checkbox"

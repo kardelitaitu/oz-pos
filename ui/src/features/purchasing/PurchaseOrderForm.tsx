@@ -46,7 +46,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
     listSuppliers().then(setSuppliers).catch(() => {
       addToast({ message: l10n.getString('po-form-error-suppliers-failed') || 'Failed to load suppliers', type: 'error' });
     });
-  }, []);
+  }, [addToast, l10n]);
 
   const addLine = useCallback(() => {
     setLines((prev) => [...prev, { sku: '', product_name: '', qty: 1, unit_cost_minor: 0 }]);

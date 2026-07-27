@@ -64,7 +64,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       .catch(() => {
         addToast({ message: l10n.getString('inv-shift-error-active') || 'Failed to load active shift', type: 'error' });
       });
-  }, [sessionToken, session?.user_id, onShiftChange]);
+  }, [sessionToken, session?.user_id, onShiftChange, addToast, l10n]);
 
   // Handle timer tick
   useEffect(() => {

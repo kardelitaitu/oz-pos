@@ -1,0 +1,28 @@
+fix(lint): resolve 33 react-hooks/exhaustive-deps warnings + ADR #7 raw-param violation
+
+exhaustive-deps fixes (22 files):
+- Added missing `addToast`/`l10n` dependencies to useCallback/useEffect
+  arrays across AuditLogScreen, LicenseActivationScreen, GiftCardsScreen,
+  ShiftBar, StockAlertPanel, StockCountDetail, StockCountHistory,
+  StockCountsScreen, ThresholdConfigScreen, TransactionLogScreen,
+  PurchaseOrderForm, PurchaseOrdersScreen, CustomReportScreen,
+  RetailPosScreen, PaymentModal, PosScreen
+- Added `addToast` + `l10n` to 5 workspace card handleSave callbacks
+  (WorkspaceInventorySettings, WorkspaceKdsSettings,
+  WorkspaceRestaurantPosSettings, WorkspaceStorePosSettings)
+- CustomReportScreen: changed [dsDef.columns, ...] to [dsDef, ...]
+- Removed 2 stale eslint-disable comments (StockCountHistory,
+  WorkspaceInventorySettings) that masked already-fixed deps
+
+ADR #7 Phase 4 (verify-no-raw-params.sh):
+- Added set_settings_scoped command to apps/desktop-client/commands/
+  settings.rs with full scoped session-token pattern (resolve_session,
+  open_store, permission check, batch transaction, event publish)
+- Registered set_settings_scoped in lib.rs command list
+
+unused eslint-disable cleanup:
+- Removed 4 unused {/* eslint-disable-next-line jsx-a11y/... */}
+  comments from ThresholdConfigScreen.tsx (labels with htmlFor
+  are correctly recognized by linter)
+- Added back scoped eslint-disable on the one checkbox label where
+  <Localized> text is invisible to the a11y rule

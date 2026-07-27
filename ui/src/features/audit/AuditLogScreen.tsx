@@ -122,7 +122,7 @@ export default function AuditLogScreen() {
         setLoading(false);
       }
     }
-  }, [limit]);
+  }, [limit, l10n]);
 
   useEffect(() => {
     cancelledRef.current = false;

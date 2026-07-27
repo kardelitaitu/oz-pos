@@ -45,7 +45,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     });
 
     return () => { mounted = false; };
-  }, []);
+  }, [l10n]);
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -59,7 +59,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [countId]);
+  }, [countId, addToast, l10n]);
 
   useEffect(() => {
     load();

@@ -49,7 +49,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
     } finally {
       setLoading(false);
     }
-  }, [token, locationId, maxAlerts]);
+  }, [token, locationId, maxAlerts, l10n]);
 
   useEffect(() => {
     fetchAlerts();
@@ -80,7 +80,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         });
       }
     },
-    [token],
+    [token, l10n],
   );
 
   // ── Severity ─────────────────────────────────────────────────────

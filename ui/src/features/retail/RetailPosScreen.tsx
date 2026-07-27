@@ -607,7 +607,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       addToast({ message: l10n.getString('retail-toast-failed-cart') || 'Failed to create sale cart', type: 'error' });
       return null;
     }
-  }, [cartId, addToast, sessionToken]);
+  }, [cartId, addToast, l10n, sessionToken]);
 
   const handleOverrideConfirm = useCallback(async (newPriceMinor: number) => {
     if (!overrideTarget) return;
@@ -629,7 +629,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setOverrideTarget(null);
     }
-  }, [overrideTarget, cartId, addToast, updateLinePrice, sessionToken]);
+  }, [overrideTarget, cartId, addToast, l10n, updateLinePrice, sessionToken]);
 
   const allCustomersRef = useRef<CustomerDto[]>([]);
 
@@ -651,7 +651,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       })
       .catch(() => { addToast({ message: l10n.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, customerSearchQuery]);
+  }, [showCustomerSearch, customerSearchQuery, addToast, l10n]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -771,7 +771,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       })
       .catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
     return () => { mounted = false; };
-  }, [sessionToken, addToast]);
+  }, [sessionToken, addToast, l10n]);
 
   // ── Options / Workspace Settings ──────────────────────────
 

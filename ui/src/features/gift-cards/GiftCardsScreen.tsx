@@ -64,7 +64,7 @@ export default function GiftCardsScreen() {
     } catch (err) {
       addToast({ message: err instanceof Error ? err.message : (l10n.getString('gift-cards-error-freeze') || 'Failed to toggle freeze'), type: 'error' });
     }
-  }, [load, addToast]);
+  }, [load, addToast, l10n]);
 
   const handleTopUp = useCallback(async (cardNumber: string) => {
     const amount = parseInt(topUpAmount, 10);

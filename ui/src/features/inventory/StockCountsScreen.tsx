@@ -29,7 +29,7 @@ export default function StockCountsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast, l10n]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -963,7 +963,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
     getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
       .catch(() => addToast({ message: l10n.getString('pos-toast-receipt-settings-failed') || 'Failed to load receipt settings', type: 'error' }));
-  }, [addToast, sessionToken]);
+  }, [addToast, l10n, sessionToken]);
 
   const handleCloseShiftClick = useCallback(() => {
     setCloseShiftError(null);

@@ -246,7 +246,7 @@ export default function PaymentModal({
       })
       .catch(() => { addToast({ message: l10n.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch]);
+  }, [showCustomerSearch, addToast, l10n]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -284,7 +284,7 @@ export default function PaymentModal({
       setRedeemPoints(false);
       setLoyaltyDiscount(0n);
     }
-  }, [selectedCustomer]);
+  }, [selectedCustomer, addToast, l10n]);
 
   useEffect(() => {
     if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
@@ -294,7 +294,7 @@ export default function PaymentModal({
     } else {
       setPointsWorthMinor(null);
     }
-  }, [loyaltyAccount]);
+  }, [loyaltyAccount, addToast, l10n]);
 
   useEffect(() => {
     if (!redeemPoints || pointsToRedeem <= 0) {
