@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   getStockCount,
   getCountLines,
@@ -41,8 +42,9 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,7 +55,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         setLines(await getCountLines(countId));
       }
     } catch {
-      // silent
+      addToast({ message: l10n.getString('sc-error-load') || 'Failed to load stock count', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -61,8 +63,12 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
   useEffect(() => {
     load();
-    listProductsScoped(sessionToken).then(setProducts).catch(() => {});
-  }, [load, sessionToken]);
+    if (sessionToken) {
+      listProductsScoped(sessionToken).then(setProducts).catch(() => {
+        addToast({ message: l10n.getString('sc-error-products') || 'Failed to load products', type: 'error' });
+      });
+    }
+  }, [load, sessionToken, addToast, l10n]);
 
   const isEditable = count?.status === 'draft' || count?.status === 'in_progress';
 
@@ -94,38 +100,38 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       setSearchQuery('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add line');
+      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-add-line') || 'Failed to add line'));
     } finally {
       setSaving(false);
     }
-  }, [countId, selectedSku, selectedName, expectedQty, load]);
+  }, [countId, selectedSku, selectedName, expectedQty, load, l10n]);
 
   const handleRecordCount = useCallback(async (lineId: string, countedQty: number) => {
     try {
       await updateCountLine({ lineId, countedQty, notes: '' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update');
+      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-update-line') || 'Failed to update'));
     }
-  }, [load]);
+  }, [load, l10n]);
 
   const handleRemoveLine = useCallback(async (lineId: string) => {
     try {
       await removeCountLine({ lineId });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove');
+      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-remove-line') || 'Failed to remove'));
     }
-  }, [load]);
+  }, [load, l10n]);
 
   const handleStartCounting = useCallback(async () => {
     try {
       await updateStockCountStatus(countId, 'in_progress');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start count');
+      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-start-count') || 'Failed to start count'));
     }
-  }, [countId, load]);
+  }, [countId, load, l10n]);
 
   const handleComplete = useCallback(async () => {
     setSaving(true);
@@ -137,7 +143,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       );
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete');
+      setError(err instanceof Error ? err.message : (l10n.getString('sc-error-complete') || 'Failed to complete'));
     } finally {
       setSaving(false);
     }
@@ -201,9 +207,9 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
       <div className="sc-detail-meta">
         <span className={`sc-badge sc-badge--${count.status}`}>
-          {l10n.getString(`sc-status-${count.status}`) ?? count.status}
+          <Localized id={`sc-status-${count.status}`}>{count.status}</Localized>
         </span>
-        <span>{l10n.getString(`sc-type-${count.count_type}`) ?? count.count_type}</span>
+        <span><Localized id={`sc-type-${count.count_type}`}>{count.count_type}</Localized></span>
         <span>{new Date(count.created_at).toLocaleDateString()}</span>
       </div>
 
