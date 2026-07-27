@@ -1251,7 +1251,7 @@ export default function NodeTopologyEditor({
                           key={port}
                           className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''}`}
                           onClick={(e) => handlePortClick(e, node.id, port)}
-                          aria-label={l10n.getString('topology-port-aria', { name: node.name, port })}
+                          aria-label={l10n.getString('topology-port-aria', { name: node.name || '', port })}
                         >
                         </button>
                       );
