@@ -1,18 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { Localized, useLocalization } from '@fluent/react';
 import type { KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import './KdsLayoutSwitcher.css';
 
-interface LayoutOption {
-  id: KdsLayout;
-  label: string;
-}
+const LAYOUT_IDS: KdsLayout[] = ['kanban', 'focus', 'metro'];
 
-const LAYOUTS: LayoutOption[] = [
-  { id: 'kanban', label: 'Kanban' },
-  { id: 'focus', label: 'Focus' },
-  { id: 'metro', label: 'Metro' },
-];
+/** Map layout id → l10n key for translated display name. */
+const LAYOUT_KEY_MAP: Record<KdsLayout, string> = {
+  kanban: 'kds-layout-kanban',
+  focus: 'kds-layout-focus',
+  metro: 'kds-layout-metro',
+};
 
 function LayoutIcon({ layout }: { layout: KdsLayout }) {
   return (
@@ -52,6 +51,10 @@ interface KdsLayoutSwitcherProps {
   onToggleTableNumber: (show: boolean) => void;
 }
 
+function layoutLabel(layout: KdsLayout): string {
+  return LAYOUT_KEY_MAP[layout] || layout;
+}
+
 export function KdsLayoutSwitcher({
   currentLayout,
   showOrderId,
@@ -60,6 +63,7 @@ export function KdsLayoutSwitcher({
   onToggleOrderId,
   onToggleTableNumber,
 }: KdsLayoutSwitcherProps) {
+  const { l10n } = useLocalization();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -89,7 +93,7 @@ export function KdsLayoutSwitcher({
     };
   }, [open, close]);
 
-  const currentIcon = LAYOUTS.find((l) => l.id === currentLayout);
+  const currentIcon = currentLayout;
 
   return (
     <>
@@ -97,34 +101,34 @@ export function KdsLayoutSwitcher({
         ref={btnRef}
         className="kds-layout-btn"
         onClick={() => setOpen((p) => !p)}
-        aria-label="Layout options"
+        aria-label={l10n.getString('kds-layout-options-aria') || 'Layout options'}
         aria-expanded={open}
       >
-        {currentIcon && <LayoutIcon layout={currentIcon.id} />}
+        {currentIcon && <LayoutIcon layout={currentIcon} />}
       </button>
       {open && createPortal(
         <div
           ref={popoverRef}
           className="kds-layout-popover"
           role="dialog"
-          aria-label="KDS layout and display options"
+          aria-label={l10n.getString('kds-layout-popover-aria') || 'KDS layout and display options'}
         >
-          <p className="kds-layout-popover-section-title">Layout</p>
+          <p className="kds-layout-popover-section-title"><Localized id="kds-layout-label">Layout</Localized></p>
           <div className="kds-layout-options">
-            {LAYOUTS.map(({ id, label }) => (
+            {LAYOUT_IDS.map((id) => (
               <button
                 key={id}
                 className={`kds-layout-option ${id === currentLayout ? 'kds-layout-option--active' : ''}`}
                 onClick={() => { onSelectLayout(id); close(); }}
-                aria-label={label}
+                aria-label={l10n.getString(layoutLabel(id)) || id}
                 aria-pressed={id === currentLayout}
               >
                 <LayoutIcon layout={id} />
-                <span>{label}</span>
+                <span><Localized id={layoutLabel(id)}>{id}</Localized></span>
               </button>
             ))}
           </div>
-          <p className="kds-layout-popover-section-title">Display</p>
+          <p className="kds-layout-popover-section-title"><Localized id="kds-layout-display-label">Display</Localized></p>
           <label className="kds-layout-toggle">
             <input
               type="checkbox"
@@ -132,7 +136,7 @@ export function KdsLayoutSwitcher({
               checked={showOrderId}
               onChange={(e) => onToggleOrderId(e.target.checked)}
             />
-            <span className="kds-layout-toggle-label">Order ID</span>
+            <span className="kds-layout-toggle-label"><Localized id="kds-layout-order-id">Order ID</Localized></span>
           </label>
           <label className="kds-layout-toggle">
             <input
@@ -141,7 +145,7 @@ export function KdsLayoutSwitcher({
               checked={showTableNumber}
               onChange={(e) => onToggleTableNumber(e.target.checked)}
             />
-            <span className="kds-layout-toggle-label">Table Number</span>
+            <span className="kds-layout-toggle-label"><Localized id="kds-layout-table-number">Table Number</Localized></span>
           </label>
         </div>,
         document.body,
