@@ -53,6 +53,7 @@ staff-error-display-name-required = Display name is required
 staff-error-role-required = Please select a role
 staff-error-pin-length = PIN must be at least 4 characters
 staff-error-save-failed = Failed to save staff member
+staff-error-workspaces-failed = Failed to load workspace settings
 staff-table-aria = Staff members
 staff-field-username-aria =
     .aria-label = Username

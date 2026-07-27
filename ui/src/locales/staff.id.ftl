@@ -84,6 +84,7 @@ staff-error-display-name-required = Nama tampilan wajib diisi
 staff-error-role-required = Silakan pilih peran
 staff-error-pin-length = PIN minimal 4 karakter
 staff-error-save-failed = Gagal menyimpan anggota staf
+staff-error-workspaces-failed = Gagal memuat pengaturan ruang kerja
 staff-table-aria = Anggota staf
 staff-field-username-aria = Nama Pengguna
 staff-field-name-aria = Nama Tampilan
