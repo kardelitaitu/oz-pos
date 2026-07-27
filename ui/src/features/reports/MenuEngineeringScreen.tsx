@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import {
   ScatterChart,
   Scatter,
@@ -108,38 +108,9 @@ function ScatterDot(props: Record<string, unknown>) {
   );
 }
 
-/** Custom tooltip for the scatter chart. */
-function ScatterTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: MenuEngineeringRow }>;
-}) {
-  if (!active || !payload || payload.length === 0) return null;
-  const row = payload[0]!.payload;
-
-  return (
-    <div className="menu-eng-tooltip">
-      <strong className="menu-eng-tooltip-name">{row.name}</strong>
-      <div className="menu-eng-tooltip-grid">
-        <span>Volume:</span>
-        <span>{row.total_volume}</span>
-        <span>Revenue:</span>
-        <span>{fmtCurrency(row.total_revenue_minor)}</span>
-        <span>Margin:</span>
-        <span>{fmtCurrency(row.total_margin_minor)}</span>
-        <span>Price:</span>
-        <span>{fmtCurrency(row.unit_price_minor)}</span>
-        <span>Cost:</span>
-        <span>{fmtCurrency(row.unit_cost_minor)}</span>
-      </div>
-    </div>
-  );
-}
-
 /** Menu engineering report — scatter chart of menu items by popularity and profitability with quadrant classification (Star, Plowhorse, Puzzle, Dog). */
 export default function MenuEngineeringScreen() {
+  const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(monthAgo());
@@ -215,6 +186,36 @@ export default function MenuEngineeringScreen() {
     return counts;
   }, [rowsWithMeta]);
 
+  // ── Custom tooltip for the scatter chart (inner function so l10n is in scope) ──
+  function ScatterTooltip({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: Array<{ payload: MenuEngineeringRow }>;
+  }) {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]!.payload;
+
+    return (
+      <div className="menu-eng-tooltip">
+        <strong className="menu-eng-tooltip-name">{row.name}</strong>
+        <div className="menu-eng-tooltip-grid">
+          <span>{l10n.getString('menu-eng-tooltip-volume') || 'Volume'}:</span>
+          <span>{row.total_volume}</span>
+          <span>{l10n.getString('menu-eng-tooltip-revenue') || 'Revenue'}:</span>
+          <span>{fmtCurrency(row.total_revenue_minor)}</span>
+          <span>{l10n.getString('menu-eng-tooltip-margin') || 'Margin'}:</span>
+          <span>{fmtCurrency(row.total_margin_minor)}</span>
+          <span>{l10n.getString('menu-eng-tooltip-price') || 'Price'}:</span>
+          <span>{fmtCurrency(row.unit_price_minor)}</span>
+          <span>{l10n.getString('menu-eng-tooltip-cost') || 'Cost'}:</span>
+          <span>{fmtCurrency(row.unit_cost_minor)}</span>
+        </div>
+      </div>
+    );
+  }
+
   // Compute max axis values for scatter plot (avoids Infinity issues).
   const maxVolume = useMemo(() => {
     if (!result?.rows?.length) return 100;
@@ -257,23 +258,23 @@ export default function MenuEngineeringScreen() {
     URL.revokeObjectURL(url);
   };
 
-  function recommendation(q: MenuQuadrant): string {
+  function recKey(q: MenuQuadrant): string {
     switch (q) {
-      case 'Star':
-        return 'Promote Star — high volume & high margin. Feature prominently.';
-      case 'Plowhorse':
-        return 'Increase Price on Plowhorse — high volume but low margin. Raise price or reduce cost.';
-      case 'Puzzle':
-        return 'Reposition Puzzle — low volume but high margin. Improve visibility or bundle.';
-      case 'Dog':
-        return 'Remove Dog — low volume & low margin. Consider delisting.';
+      case 'Star': return 'menu-eng-rec-star';
+      case 'Plowhorse': return 'menu-eng-rec-plowhorse';
+      case 'Puzzle': return 'menu-eng-rec-puzzle';
+      case 'Dog': return 'menu-eng-rec-dog';
     }
+  }
+
+  function recommendation(q: MenuQuadrant): string {
+    return l10n.getString(recKey(q)) || QUADRANT_META[q].label;
   }
 
   if (loading) {
     return (
-      <div className="menu-eng" role="region" aria-label="Menu Engineering Report">
-        <Spinner aria-label="Loading menu engineering report" />
+      <div className="menu-eng" role="region" aria-label={l10n.getString('menu-eng-region-aria') || 'Menu Engineering Report'}>
+        <Spinner aria-label={l10n.getString('menu-eng-loading-aria') || 'Loading menu engineering report'} />
       </div>
     );
   }
@@ -283,7 +284,7 @@ export default function MenuEngineeringScreen() {
   const totalProducts = result?.rows.length ?? 0;
 
   return (
-    <div className="menu-eng" role="region" aria-label="Menu Engineering Report">
+    <div className="menu-eng" role="region" aria-label={l10n.getString('menu-eng-region-aria') || 'Menu Engineering Report'}>
       {/* ── Header ────────────────────────────────────── */}
       <div className="menu-eng-header">
         <Localized id="menu-eng-title">
@@ -300,7 +301,7 @@ export default function MenuEngineeringScreen() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="menu-eng-input"
-            aria-label="Start date"
+            aria-label={l10n.getString('menu-eng-start-date-aria') || 'Start date'}
           />
 
           <label htmlFor="me-end-date" className="menu-eng-label">
@@ -312,14 +313,14 @@ export default function MenuEngineeringScreen() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="menu-eng-input"
-            aria-label="End date"
+            aria-label={l10n.getString('menu-eng-end-date-aria') || 'End date'}
           />
 
           <Button
             variant="secondary"
             onClick={exportCsv}
             disabled={!result || rowsWithMeta.length === 0}
-            aria-label="Export CSV"
+            aria-label={l10n.getString('menu-eng-export-csv-aria') || 'Export CSV'}
           >
             <Localized id="inv-report-export-csv">Export CSV</Localized>
           </Button>
@@ -475,7 +476,7 @@ export default function MenuEngineeringScreen() {
                 type="number"
                 tick={{ fontSize: 11 }}
                 label={{
-                  value: 'Volume (units sold)',
+                  value: l10n.getString('menu-eng-axis-volume') || 'Volume (units sold)',
                   position: 'bottom',
                   offset: -5,
                   style: { fontSize: 12, fill: '#64748b' },
@@ -486,7 +487,7 @@ export default function MenuEngineeringScreen() {
                 tick={{ fontSize: 11 }}
                 tickFormatter={(v: number) => fmtCompact(v)}
                 label={{
-                  value: 'Total Margin',
+                  value: l10n.getString('menu-eng-axis-margin') || 'Total Margin',
                   angle: -90,
                   position: 'insideLeft',
                   offset: -45,
@@ -527,16 +528,16 @@ export default function MenuEngineeringScreen() {
 
         <div className="menu-eng-chart-legend">
           <span style={{ color: QUADRANT_META.Star.color }}>
-            ● Star (high vol, high margin)
+            {l10n.getString('menu-eng-legend-star') || '● Star (high vol, high margin)'}
           </span>
           <span style={{ color: QUADRANT_META.Plowhorse.color }}>
-            ▲ Plowhorse (high vol, low margin)
+            {l10n.getString('menu-eng-legend-plowhorse') || '▲ Plowhorse (high vol, low margin)'}
           </span>
           <span style={{ color: QUADRANT_META.Puzzle.color }}>
-            ◆ Puzzle (low vol, high margin)
+            {l10n.getString('menu-eng-legend-puzzle') || '◆ Puzzle (low vol, high margin)'}
           </span>
           <span style={{ color: QUADRANT_META.Dog.color }}>
-            ▼ Dog (low vol, low margin)
+            {l10n.getString('menu-eng-legend-dog') || '▼ Dog (low vol, low margin)'}
           </span>
         </div>
       </Card>
@@ -554,21 +555,27 @@ export default function MenuEngineeringScreen() {
             </Localized>
           </p>
         ) : (
-          <div className="menu-eng-table" role="table" aria-label="Menu engineering product breakdown">
+          <div className="menu-eng-table" role="table" aria-label={l10n.getString('menu-eng-table-aria') || 'Menu engineering product breakdown'}>
             <div className="menu-eng-table-header" role="row">
               <span role="columnheader">#</span>
               <span role="columnheader">
                 <Localized id="top-products-name">Name</Localized>
               </span>
-              <span role="columnheader">SKU</span>
+              <span role="columnheader">
+                <Localized id="menu-eng-sku-header">SKU</Localized>
+              </span>
               <span role="columnheader">
                 <Localized id="top-products-quantity">Qty</Localized>
               </span>
               <span role="columnheader">
                 <Localized id="top-products-revenue">Revenue</Localized>
               </span>
-              <span role="columnheader">Margin</span>
-              <span role="columnheader">Margin/Unit</span>
+              <span role="columnheader">
+                <Localized id="menu-eng-margin-header">Margin</Localized>
+              </span>
+              <span role="columnheader">
+                <Localized id="menu-eng-margin-unit-header">Margin/Unit</Localized>
+              </span>
               <span role="columnheader">
                 <Localized id="menu-eng-quadrant">Quadrant</Localized>
               </span>

@@ -331,6 +331,13 @@ sales-dashboard-no-data = Tidak ada data hari ini
 sales-dashboard-revenue-title = Pendapatan (14h)
 sales-dashboard-category-title = Berdasarkan Kategori
 sales-dashboard-heatmap-title = Jam Tersibuk
+sales-dashboard-region-aria = Dasbor pelaporan
+sales-dashboard-grid-aria = Widget dasbor
+sales-dashboard-daily-aria = Ringkasan penjualan harian
+sales-dashboard-hourly-aria = Penjualan per jam
+sales-dashboard-hourly-bars-aria = Grafik penjualan per jam
+sales-dashboard-category-aria = Rincian kategori
+sales-dashboard-heatmap-aria = Peta panas penjualan per jam
 
 # ── Void Orders ──
 void-orders-title = Pesanan

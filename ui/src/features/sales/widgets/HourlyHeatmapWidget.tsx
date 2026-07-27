@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { getHourlyHeatmap } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasHeatmap from '@/components/charts/CanvasHeatmap';
@@ -7,6 +7,7 @@ import type { HeatmapCell } from '@/components/charts/CanvasHeatmap';
 
 /** Canvas 2D hourly heatmap widget for the reporting dashboard. */
 export default function HourlyHeatmapWidget() {
+  const { l10n } = useLocalization();
   const [cells, setCells] = useState<HeatmapCell[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export default function HourlyHeatmapWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--heatmap" aria-label="Hourly sales heatmap">
+    <div className="reporting-widget reporting-widget--heatmap" aria-label={l10n.getString('sales-dashboard-heatmap-aria') || 'Hourly sales heatmap'}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-heatmap-title">
           <h3 className="reporting-widget-title">Busiest Hours</h3>

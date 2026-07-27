@@ -297,6 +297,13 @@ sales-dashboard-no-data = No data for today
 sales-dashboard-revenue-title = Revenue (14d)
 sales-dashboard-category-title = By Category
 sales-dashboard-heatmap-title = Busiest Hours
+sales-dashboard-region-aria = Reporting dashboard
+sales-dashboard-grid-aria = Dashboard widgets
+sales-dashboard-daily-aria = Daily sales summary
+sales-dashboard-hourly-aria = Sales by hour
+sales-dashboard-hourly-bars-aria = Hourly sales bars
+sales-dashboard-category-aria = Category breakdown
+sales-dashboard-heatmap-aria = Hourly sales heatmap
 
 # Void Orders
 void-orders-title = Orders

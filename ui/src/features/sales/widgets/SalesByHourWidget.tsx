@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { exportSalesByHourScoped, type SalesByHourRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
 import { Skeleton } from '@/components/Skeleton';
@@ -12,6 +12,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
  * provided by the host dashboard page.
  */
 export default function SalesByHourWidget() {
+  const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [hourly, setHourly] = useState<SalesByHourRow[]>([]);
@@ -23,7 +24,7 @@ export default function SalesByHourWidget() {
       const h = await exportSalesByHourScoped(sessionToken);
       setHourly(h);
     } catch {
-      // IPC unavailable.
+      setHourly([]);
     } finally {
       setLoading(false);
     }
@@ -56,13 +57,13 @@ export default function SalesByHourWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--hourly" aria-label="Sales by hour">
+    <div className="reporting-widget reporting-widget--hourly" aria-label={l10n.getString('sales-dashboard-hourly-aria') || 'Sales by hour'}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-hourly-title">
           <h3 className="reporting-widget-title">Sales by Hour</h3>
         </Localized>
       </div>
-      <div className="reporting-widget-hourly-chart" role="list" aria-label="Hourly sales bars">
+      <div className="reporting-widget-hourly-chart" role="list" aria-label={l10n.getString('sales-dashboard-hourly-bars-aria') || 'Hourly sales bars'}>
         {hourly.map((h) => {
           const barPct = peakHour > 0 ? Math.round((h.total_minor / peakHour) * 100) : 0;
           return (
