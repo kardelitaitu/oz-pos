@@ -1,3 +1,6 @@
+// Vite React Refresh: force full remount on HMR to prevent stale
+// WorkspaceContext / WorkspaceScopeContext mismatch.
+/// @refresh reset
 import {
   createContext,
   useContext,

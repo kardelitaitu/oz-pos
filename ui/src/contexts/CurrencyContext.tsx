@@ -1,3 +1,6 @@
+// Vite React Refresh: force full remount on HMR to prevent stale
+// CurrencyContext mismatch.
+/// @refresh reset
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { getDefaultCurrency, setDefaultCurrency as setDefaultCurrencyApi } from '@/api/currency';
 

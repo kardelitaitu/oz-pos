@@ -1,3 +1,6 @@
+// Vite React Refresh: force full remount on HMR to prevent stale
+// HardwareAccelContext mismatch.
+/// @refresh reset
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import './HardwareAccel.css';
 
