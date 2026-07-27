@@ -1,6 +1,7 @@
 # ui/src/locales/kds.ftl — Kitchen Display System
 
 kds-title = Kitchen Display
+kds-screen-aria = Kitchen Display System
 kds-pending = Pending
 kds-preparing = Preparing
 kds-ready = Ready

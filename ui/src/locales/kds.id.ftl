@@ -1,4 +1,5 @@
 kds-title = Tampilan Dapur
+kds-screen-aria = Sistem Tampilan Dapur
 kds-pending = Tertunda
 kds-preparing = Disiapkan
 kds-ready = Siap
