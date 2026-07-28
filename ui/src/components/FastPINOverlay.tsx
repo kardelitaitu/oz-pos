@@ -98,11 +98,22 @@ const GLOBAL_MAX_ATTEMPTS = 15;
 const GLOBAL_WINDOW_MS = 5 * 60 * 1000;
 const globalAttemptTimestamps: number[] = [];
 
-function isGloballyRateLimited(): boolean {
+/** Remove expired timestamps older than the window. */
+function pruneGlobalAttemptTimestamps(): void {
   const now = Date.now();
-  while (globalAttemptTimestamps.length > 0 && globalAttemptTimestamps[0]! < now - GLOBAL_WINDOW_MS) {
-    globalAttemptTimestamps.shift();
+  const cutoff = now - GLOBAL_WINDOW_MS;
+  while (globalAttemptTimestamps.length > 0) {
+    const ts = globalAttemptTimestamps[0];
+    if (ts !== undefined && ts < cutoff) {
+      globalAttemptTimestamps.shift();
+    } else {
+      break;
+    }
   }
+}
+
+/** Check whether the session-level global rate limit has been exceeded. */
+function isGloballyRateLimited(): boolean {
   return globalAttemptTimestamps.length >= GLOBAL_MAX_ATTEMPTS;
 }
 
@@ -269,6 +280,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
     // Session-scoped global rate limit: reject if this page session has
     // exceeded 15 failed attempts across ALL usernames in 5 minutes.
     // This prevents username rotation attacks against the per-user limiter.
+    pruneGlobalAttemptTimestamps();
     if (isGloballyRateLimited()) {
       setError(l10nRef.current.getString('staff-login-lockout', { seconds: String(Math.ceil(GLOBAL_WINDOW_MS / 1000)) }));
       setLoading(false);
