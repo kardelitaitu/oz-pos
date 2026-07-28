@@ -302,8 +302,7 @@ export default function ThresholdConfigScreen() {
               />
             </div>
 
-            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text rendered by <Localized>, invisible to linter */}
-            <label className="threshold-checkbox-label">
+            <label className="threshold-checkbox-label" aria-label={l10n.getString('inv-threshold-status-enabled') || 'Enabled'}>
               <input
                 type="checkbox"
                 checked={enabled}

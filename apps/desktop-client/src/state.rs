@@ -108,6 +108,15 @@ pub struct AppState {
     /// resolution. Commands look up their context via [`AppState::resolve_session`].
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
 
+    /// Session TTL in seconds. Read from `session.ttl_seconds` setting
+    /// at startup; defaults to 86400 (24 hours). Set to 0 to disable
+    /// session expiry (development mode).
+    ///
+    /// Used by `create_session` to stamp `expires_at` on new sessions,
+    /// and by `resolve_session` / `prune_expired_sessions` to reject
+    /// stale tokens.
+    pub session_ttl_seconds: i64,
+
     /// Terminal identifier for multi-terminal deployments.
     ///
     /// Set once at startup from the registered terminal matching this
@@ -148,6 +157,15 @@ impl AppState {
             oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|_| "redis://127.0.0.1/".into());
         let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn).unwrap_or(300);
         let cache = platform_startup::init_cache(&redis_url, cache_ttl);
+
+        // ── Session TTL ──────────────────────────────────────────────
+        // Read from settings; default 24h. 0 or missing = no expiry.
+        // MUST be read before `conn` is moved into `Arc::new(Mutex::new(conn))`.
+        let session_ttl_seconds: i64 = oz_core::Settings::get(&conn, "session.ttl_seconds")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(86400);
 
         // ── OZ_TERMINAL_ID for multi-terminal support ───────────────
         // On subsequent launches where MultiTerminal is already enabled,
@@ -235,6 +253,7 @@ impl AppState {
             cache,
             inventory_pubsub_shutdown,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds,
             terminal_id,
         })
     }
@@ -289,13 +308,77 @@ impl AppState {
     ///
     /// ADR #4 / ADR #7: Commands call this to look up the caller's
     /// resolved scope (store, instance, type, user, role, terminal).
-    /// Returns `AppError::InvalidSession` if the token is unknown.
+    /// Returns `AppError::InvalidSession` if the token is unknown
+    /// OR if the session has expired (TTL check).
+    ///
+    /// Expired sessions are atomically removed from the store during
+    /// resolution, so subsequent lookups also get `InvalidSession`.
+    ///
+    /// Uses a double-check lock pattern: the fast path (valid session)
+    /// only acquires a shared read lock. The exclusive write lock is
+    /// only acquired when a session is actually expired, which is rare.
     pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
-        let store = self
+        // Fast path: read-only check.
+        {
+            let store = self
+                .session_store
+                .read()
+                .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
+
+            match store.get(token) {
+                Some(ctx) if !ctx.is_expired() => return Ok(ctx.clone()),
+                Some(_) => {} // expired — fall through to write-lock path
+                None => return Err(AppError::InvalidSession),
+            }
+        }
+
+        // Slow path: expired session — acquire write lock to remove it.
+        let mut store = self
             .session_store
-            .read()
+            .write()
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
-        store.get(token).cloned().ok_or(AppError::InvalidSession)
+
+        // Double-check: another thread may have already removed or refreshed it.
+        if let Some(ctx) = store.get(token) {
+            if ctx.is_expired() {
+                store.remove(token);
+                tracing::info!(token = %token, "session expired — removed from store");
+            }
+        }
+
+        Err(AppError::InvalidSession)
+    }
+
+    /// Remove all expired sessions from the store in a single sweep.
+    ///
+    /// Called periodically by the background session-cleanup daemon
+    /// (every 5 minutes). Also called lazily during `create_session`
+    /// when the store is approaching capacity.
+    pub fn prune_expired_sessions(&self) -> usize {
+        let mut store = match self.session_store.write() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("session store lock poisoned during prune: {e}");
+                return 0;
+            }
+        };
+        let before = store.len();
+        store.retain(|token, ctx| {
+            if ctx.is_expired() {
+                tracing::trace!(token = %token, "pruning expired session");
+                false
+            } else {
+                true
+            }
+        });
+        let pruned = before - store.len();
+        if pruned > 0 {
+            tracing::info!(
+                "pruned {pruned} expired session(s), {remaining} remain",
+                remaining = store.len()
+            );
+        }
+        pruned
     }
 
     /// Resolve a session token and open the store-scoped database.
@@ -439,6 +522,7 @@ impl AppState {
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds: 86400,
             terminal_id: Arc::new(Mutex::new(None)),
         }
     }
@@ -458,6 +542,8 @@ mod tests {
             "s1".into(),
             "i1".into(),
             "type1".into(),
+            None,
+            0,
         );
         state
             .session_store
@@ -494,6 +580,8 @@ mod tests {
             "store-main".into(),
             "instance-1".into(),
             "kds".into(),
+            None,
+            0,
         );
         state
             .session_store
@@ -520,6 +608,8 @@ mod tests {
             "s1".into(),
             "i1".into(),
             "type1".into(),
+            None,
+            0,
         );
         state
             .session_store

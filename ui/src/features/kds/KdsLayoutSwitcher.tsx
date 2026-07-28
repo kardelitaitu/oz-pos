@@ -129,8 +129,7 @@ export function KdsLayoutSwitcher({
             ))}
           </div>
           <p className="kds-layout-popover-section-title"><Localized id="kds-layout-display-label">Display</Localized></p>
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="kds-layout-toggle">
+          <label className="kds-layout-toggle" aria-label={l10n.getString('kds-layout-order-id') || 'Order ID'}>
             <input
               type="checkbox"
               role="switch"
@@ -139,8 +138,7 @@ export function KdsLayoutSwitcher({
             />
             <span className="kds-layout-toggle-label"><Localized id="kds-layout-order-id">Order ID</Localized></span>
           </label>
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="kds-layout-toggle">
+          <label className="kds-layout-toggle" aria-label={l10n.getString('kds-layout-table-number') || 'Table Number'}>
             <input
               type="checkbox"
               role="switch"

@@ -245,8 +245,7 @@ export default function SyncSection({
             </Localized>
           </span>
           <span className="settings-field-input-wrap">
-            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-            <label className="settings-toggle" htmlFor="sync-enabled">
+            <label className="settings-toggle" htmlFor="sync-enabled" aria-label={l10n.getString('toggle') || 'Toggle'}>
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input

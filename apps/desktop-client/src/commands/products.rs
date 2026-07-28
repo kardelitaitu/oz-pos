@@ -1219,6 +1219,8 @@ mod tests {
             "default".into(),
             "default-restaurant-pos".into(),
             "restaurant-pos".into(),
+            None,
+            0,
         );
         state
             .session_store

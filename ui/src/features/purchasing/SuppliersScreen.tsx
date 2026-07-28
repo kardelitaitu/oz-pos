@@ -293,8 +293,7 @@ export default function SuppliersScreen() {
         saveDisabled={!form.name.trim() || !form.code.trim()}
         cancelLabel={l10n.getString('suppliers-btn-cancel')}
       >
-        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-        <label className="suppliers-field" htmlFor="supplier-field-code">
+        <label className="suppliers-field" htmlFor="supplier-field-code" aria-label={l10n.getString('suppliers-field-code') || 'Code *'}>
           <Localized id="suppliers-field-code"><span className="suppliers-label">Code *</span></Localized>
           <input
             className="suppliers-input"
@@ -305,8 +304,7 @@ export default function SuppliersScreen() {
             autoComplete="off"
           />
         </label>
-        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-        <label className="suppliers-field" htmlFor="supplier-field-name">
+        <label className="suppliers-field" htmlFor="supplier-field-name" aria-label={l10n.getString('suppliers-field-name') || 'Name *'}>
           <Localized id="suppliers-field-name"><span className="suppliers-label">Name *</span></Localized>
           <input
             className="suppliers-input"
@@ -318,8 +316,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <div className="suppliers-row">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="suppliers-field" htmlFor="supplier-field-contact">
+          <label className="suppliers-field" htmlFor="supplier-field-contact" aria-label={l10n.getString('suppliers-field-contact') || 'Contact Person'}>
             <Localized id="suppliers-field-contact"><span className="suppliers-label">Contact Person</span></Localized>
             <input
               className="suppliers-input"
@@ -330,8 +327,7 @@ export default function SuppliersScreen() {
               autoComplete="off"
             />
           </label>
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="suppliers-field" htmlFor="supplier-field-phone">
+          <label className="suppliers-field" htmlFor="supplier-field-phone" aria-label={l10n.getString('suppliers-field-phone') || 'Phone'}>
             <Localized id="suppliers-field-phone"><span className="suppliers-label">Phone</span></Localized>
             <input
               className="suppliers-input"
@@ -343,8 +339,7 @@ export default function SuppliersScreen() {
             />
           </label>
         </div>
-        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-        <label className="suppliers-field" htmlFor="supplier-field-email">
+        <label className="suppliers-field" htmlFor="supplier-field-email" aria-label={l10n.getString('suppliers-field-email') || 'Email'}>
           <Localized id="suppliers-field-email"><span className="suppliers-label">Email</span></Localized>
           <input
             className="suppliers-input"
@@ -355,8 +350,7 @@ export default function SuppliersScreen() {
             autoComplete="off"
           />
         </label>
-        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-        <label className="suppliers-field" htmlFor="supplier-field-address">
+        <label className="suppliers-field" htmlFor="supplier-field-address" aria-label={l10n.getString('suppliers-field-address') || 'Address'}>
           <Localized id="suppliers-field-address"><span className="suppliers-label">Address</span></Localized>
           <input
             className="suppliers-input"
@@ -368,8 +362,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <div className="suppliers-row">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="suppliers-field" htmlFor="supplier-field-tax-id">
+          <label className="suppliers-field" htmlFor="supplier-field-tax-id" aria-label={l10n.getString('suppliers-field-tax-id') || 'Tax ID'}>
             <Localized id="suppliers-field-tax-id"><span className="suppliers-label">Tax ID</span></Localized>
             <input
               className="suppliers-input"
@@ -380,8 +373,7 @@ export default function SuppliersScreen() {
               autoComplete="off"
             />
           </label>
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="suppliers-field" htmlFor="supplier-field-payment-terms">
+          <label className="suppliers-field" htmlFor="supplier-field-payment-terms" aria-label={l10n.getString('suppliers-field-payment-terms') || 'Payment Terms'}>
             <Localized id="suppliers-field-payment-terms"><span className="suppliers-label">Payment Terms</span></Localized>
             <input
               className="suppliers-input"
@@ -393,8 +385,7 @@ export default function SuppliersScreen() {
             />
           </label>
         </div>
-        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-        <label className="suppliers-field" htmlFor="supplier-field-notes">
+        <label className="suppliers-field" htmlFor="supplier-field-notes" aria-label={l10n.getString('suppliers-field-notes') || 'Notes'}>
           <Localized id="suppliers-field-notes"><span className="suppliers-label">Notes</span></Localized>
           <textarea
             className="suppliers-input suppliers-textarea"
