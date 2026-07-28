@@ -295,7 +295,7 @@ export default function OfflineQueueScreen() {
               {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
             </div>
           )}
-          <table className="offline-queue-table" aria-label="Offline queue items">
+          <table className="offline-queue-table" aria-label={l10n.getString('offline-queue-table-aria') || 'Offline queue items'}>
             <thead>
               <tr>
                 <Localized id="offline-queue-action"><th>Action</th></Localized>

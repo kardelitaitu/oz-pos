@@ -24,7 +24,7 @@ vi.mock('@fluent/react', () => ({
   },
   useLocalization: () => ({
     l10n: {
-      getString: (id: string) => {
+      getString: (id: string, vars?: Record<string, string>) => {
         const strings: Record<string, string> = {
           'custom-report-title': 'Custom Report',
           'custom-report-dataset': 'Dataset',
@@ -38,8 +38,24 @@ vi.mock('@fluent/react', () => ({
           'error-occurred': 'An error occurred',
           'no-results': 'No results found',
           'custom-report-no-columns-match': 'No columns match your search',
+          // a11y labels
+          'custom-report-dataset-aria': 'Dataset',
+          'custom-report-start-aria': 'Start date',
+          'custom-report-end-aria': 'End date',
+          'custom-report-search-placeholder': 'Search columns…',
+          'custom-report-search-aria': 'Search columns',
+          'custom-report-search-clear-aria': 'Clear search',
+          'custom-report-columns-aria': 'Column selection',
+          'custom-report-run-aria': 'Run report',
+          'custom-report-region-aria': 'Custom Report Builder',
+          'custom-report-export-aria': 'Export CSV',
+          'custom-report-columns-selected': '{ $selected } / { $total } selected',
         };
-        return strings[id] ?? id;
+        let result = strings[id];
+        if (result && vars) {
+          result = result.replace(/\{\s*\$(\w+)\s*\}/g, (_, key) => vars[key] ?? `{$${key}}`);
+        }
+        return result ?? id;
       },
     },
   }),

@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceInventorySettings } from '@/features/settings/workspace-cards/WorkspaceInventorySettings';
 
 const testL10n = {
@@ -23,6 +24,7 @@ const testL10n = {
       'workspace-inv-deduction-heading': 'Deduction Rules',
       'workspace-inv-deduction-warehouse': 'Prefer Warehouse First',
       'save': 'Save',
+      'settings-save-error': 'Save failed',
     };
     return d[id] ?? id;
   },
@@ -30,7 +32,7 @@ const testL10n = {
 };
 
 function Wrapper({ children }: { children: ReactNode }) {
-  return <LocalizationProvider l10n={testL10n}>{children}</LocalizationProvider>;
+  return <LocalizationProvider l10n={testL10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
 }
 function renderCard(overrides: Record<string, unknown> = {}) {
   return render(<Wrapper><WorkspaceInventorySettings

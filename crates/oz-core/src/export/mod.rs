@@ -8,6 +8,7 @@
 
 pub mod cloud_destination;
 pub mod email_report;
+pub mod email_sender;
 
 use serde::{Deserialize, Serialize};
 

@@ -82,6 +82,15 @@ export function AppearanceSettings({
     });
   }, [embedded]);
 
+  // In embedded mode, sync the logo path from BrandContext so the
+  // preview shows the previously uploaded logo on re-visit.
+  const { settings: brandCtx } = useBrand();
+  useEffect(() => {
+    if (embedded && brandCtx.logo_path !== undefined) {
+      setLogoPath(brandCtx.logo_path);
+    }
+  }, [embedded, brandCtx.logo_path]);
+
   const activeColour = embedded ? (colourProp ?? colour) : colour;
   const activeStoreName = embedded ? (storeNameProp ?? storeName) : storeName;
 
@@ -152,10 +161,15 @@ export function AppearanceSettings({
     setShowResetConfirm(false);
     setResetting(true);
     try {
-      // Reset in-memory state immediately so the UI updates.
-      setColour(DEFAULT_COLOUR);
+      // Update parent state in embedded mode so SettingsPage tracks changes.
+      if (embedded) {
+        onColourChange?.(DEFAULT_COLOUR);
+        onStoreNameChange?.('');
+      } else {
+        setColour(DEFAULT_COLOUR);
+        setStoreName('');
+      }
       setLogoPath(null);
-      setStoreName('');
 
       // Persist changes via backend.
       await setBrandPrimaryColour(DEFAULT_COLOUR);
@@ -173,7 +187,7 @@ export function AppearanceSettings({
     } finally {
       setResetting(false);
     }
-  }, [refreshBrandSettings, addToast, l10n]);
+  }, [embedded, onColourChange, onStoreNameChange, refreshBrandSettings, addToast, l10n]);
 
   // ── Card body slices (shared between embedded and non-embedded) ──
   // Defined after all callbacks to avoid TDZ errors.

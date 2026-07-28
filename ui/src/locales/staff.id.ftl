@@ -84,6 +84,7 @@ staff-error-display-name-required = Nama tampilan wajib diisi
 staff-error-role-required = Silakan pilih peran
 staff-error-pin-length = PIN minimal 4 karakter
 staff-error-save-failed = Gagal menyimpan anggota staf
+staff-error-workspaces-failed = Gagal memuat pengaturan ruang kerja
 staff-table-aria = Anggota staf
 staff-field-username-aria = Nama Pengguna
 staff-field-name-aria = Nama Tampilan
@@ -140,5 +141,16 @@ fastpin-enter-pin = Masukkan PIN untuk { $user }
 # ── Session Lock Screen (i18n parity fix) ────────────────────────────────
 session-lock-expired = Sesi telah berakhir. Silakan login kembali.
 session-lock-invalid-pin = PIN tidak valid
+session-lock-enter-pin = Masukkan PIN untuk membuka
+session-lock-pin-aria = PIN: { $length } dari { $max } digit dimasukkan
+session-lock-pad-aria = Papan PIN
+session-lock-lockout = Tunggu { $seconds } dtk.
+
+# ── Connection Status (shared between StaffLoginScreen + SessionLockScreen) ──
+staff-login-connection-checking = Memeriksa…
+staff-login-connection-connected = Terhubung
+staff-login-connection-disconnected = Terputus
+staff-login-connection-auth = Auth
+staff-login-connection-sync = Sinkron
 
 # ── Product Management ──

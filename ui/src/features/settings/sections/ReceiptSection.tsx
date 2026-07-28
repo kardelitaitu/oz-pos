@@ -168,6 +168,88 @@ export default function ReceiptSection({
             </label>
           </span>
         </div>
+
+        {/* Paper Margins */}
+        <div className="settings-field settings-field--horizontal">
+          <span className="settings-label settings-label--section">
+            <Localized id="settings-margins-heading">
+              <span>Paper Margins (mm)</span>
+            </Localized>
+          </span>
+          <span className="settings-field-input-wrap" />
+        </div>
+
+        <div className="settings-field settings-field--horizontal">
+          <label htmlFor="receipt-margin-top" className="settings-label">
+            {l10n.getString('settings-margin-top')}
+          </label>
+          <span className="settings-field-input-wrap">
+            <input
+              className="settings-input"
+              type="number"
+              id="receipt-margin-top"
+              min={0}
+              max={20}
+              step={1}
+              value={receipt.marginTop}
+              onChange={(e) => { setReceipt({ ...receipt, marginTop: Math.max(0, Math.min(20, Number(e.target.value) || 0)) }); markDirty(); }}
+            />
+          </span>
+        </div>
+
+        <div className="settings-field settings-field--horizontal">
+          <label htmlFor="receipt-margin-bottom" className="settings-label">
+            {l10n.getString('settings-margin-bottom')}
+          </label>
+          <span className="settings-field-input-wrap">
+            <input
+              className="settings-input"
+              type="number"
+              id="receipt-margin-bottom"
+              min={0}
+              max={20}
+              step={1}
+              value={receipt.marginBottom}
+              onChange={(e) => { setReceipt({ ...receipt, marginBottom: Math.max(0, Math.min(20, Number(e.target.value) || 0)) }); markDirty(); }}
+            />
+          </span>
+        </div>
+
+        <div className="settings-field settings-field--horizontal">
+          <label htmlFor="receipt-margin-left" className="settings-label">
+            {l10n.getString('settings-margin-left')}
+          </label>
+          <span className="settings-field-input-wrap">
+            <input
+              className="settings-input"
+              type="number"
+              id="receipt-margin-left"
+              min={0}
+              max={20}
+              step={1}
+              value={receipt.marginLeft}
+              onChange={(e) => { setReceipt({ ...receipt, marginLeft: Math.max(0, Math.min(20, Number(e.target.value) || 0)) }); markDirty(); }}
+            />
+          </span>
+        </div>
+
+        <div className="settings-field settings-field--horizontal">
+          <label htmlFor="receipt-margin-right" className="settings-label">
+            {l10n.getString('settings-margin-right')}
+          </label>
+          <span className="settings-field-input-wrap">
+            <input
+              className="settings-input"
+              type="number"
+              id="receipt-margin-right"
+              min={0}
+              max={20}
+              step={1}
+              value={receipt.marginRight}
+              onChange={(e) => { setReceipt({ ...receipt, marginRight: Math.max(0, Math.min(20, Number(e.target.value) || 0)) }); markDirty(); }}
+            />
+          </span>
+        </div>
       </div>
     </Card>
   );

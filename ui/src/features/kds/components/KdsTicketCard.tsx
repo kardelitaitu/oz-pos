@@ -56,7 +56,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
     <button
       className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}`}
       onClick={handleClick}
-      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? ', URGENT' : ''}, ${display}`}
+      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${l10n.getString('kds-urgent-badge') || 'URGENT'}` : ''}, ${display}`}
     >
       <div className="kds-ticket-header">
         <span className="kds-ticket-id-group">

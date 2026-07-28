@@ -109,6 +109,7 @@ shift-report-total = Total:
 shift-open-error = Failed to open shift
 shift-close-error = Failed to close shift
 shift-payout-error = Failed to record payout
+shift-load-error = Failed to load shifts
 shift-table-label = Shift history
 shift-modal-open-label = Open shift
 shift-modal-payout-label = Record cash payout

@@ -27,24 +27,24 @@ const MOCK_STAFF: Record<string, {
 };
 
 const MOCK_PRODUCTS = [
-  { sku: 'LATTE', name: 'Caff\u00e8 Latte', category: 'Hot Drinks', price: { minor_units: 450, currency: 'USD' }, barcode: '4901234567890', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'MLATTE', name: 'Matcha Latte', category: 'Hot Drinks', price: { minor_units: 520, currency: 'USD' }, barcode: '4901234567891', in_stock: true, stock_qty: 30, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'ESPR', name: 'Espresso Shot', category: 'Hot Drinks', price: { minor_units: 300, currency: 'USD' }, barcode: '4901234567892', in_stock: true, stock_qty: 80, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'HCHOCO', name: 'Hot Chocolate', category: 'Hot Drinks', price: { minor_units: 420, currency: 'USD' }, barcode: '4901234567893', in_stock: true, stock_qty: 25, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'ICCOFF', name: 'Iced Coffee', category: 'Cold Drinks', price: { minor_units: 380, currency: 'USD' }, barcode: '4901234567894', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'ICTEA', name: 'Iced Tea', category: 'Cold Drinks', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567895', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'JUICE-O', name: 'Orange Juice', category: 'Cold Drinks', price: { minor_units: 350, currency: 'USD' }, barcode: '4901234567904', in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'LEMONADE', name: 'Lemonade', category: 'Cold Drinks', price: { minor_units: 300, currency: 'USD' }, barcode: '4901234567897', in_stock: true, stock_qty: 35, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'PBAGEL', name: 'Plain Bagel', category: 'Food', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567898', in_stock: true, stock_qty: 15, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'SBAGEL', name: 'Sesame Bagel', category: 'Food', price: { minor_units: 280, currency: 'USD' }, barcode: '4901234567899', in_stock: true, stock_qty: 12, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'CROISS', name: 'Butter Croissant', category: 'Food', price: { minor_units: 320, currency: 'USD' }, barcode: '4901234567800', in_stock: true, stock_qty: 18, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'CSAND', name: 'Chicken Sandwich', category: 'Food', price: { minor_units: 550, currency: 'USD' }, barcode: '4901234567801', in_stock: true, stock_qty: 10, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'VSAND', name: 'Veggie Sandwich', category: 'Food', price: { minor_units: 480, currency: 'USD' }, barcode: '4901234567802', in_stock: true, stock_qty: 8, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'WATER-S', name: 'Sparkling Water', category: 'Cold Drinks', price: { minor_units: 180, currency: 'USD' }, barcode: '4901234567803', in_stock: true, stock_qty: 150, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'BROWNIE', name: 'Fudge Brownie', category: 'Snacks', price: { minor_units: 300, currency: 'USD' }, barcode: '4901234567804', in_stock: false, stock_qty: 0, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'CMUFFIN', name: 'Chocolate Muffin', category: 'Snacks', price: { minor_units: 280, currency: 'USD' }, barcode: '4901234567805', in_stock: false, stock_qty: 0, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'NUTS', name: 'Mixed Nuts', category: 'Snacks', price: { minor_units: 400, currency: 'USD' }, barcode: '4901234567806', in_stock: true, stock_qty: 22, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'CHIPS', name: 'Potato Chips', category: 'Snacks', price: { minor_units: 200, currency: 'USD' }, barcode: '4901234567807', in_stock: true, stock_qty: 55, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'LATTE', name: 'Caff\u00e8 Latte', category: 'Hot Drinks', price: { minor_units: 450, currency: 'USD' }, barcode: '4901234567890', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'MLATTE', name: 'Matcha Latte', category: 'Hot Drinks', price: { minor_units: 520, currency: 'USD' }, barcode: '4901234567891', in_stock: true, stock_qty: 30, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'ESPR', name: 'Espresso Shot', category: 'Hot Drinks', price: { minor_units: 300, currency: 'USD' }, barcode: '4901234567892', in_stock: true, stock_qty: 80, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'HCHOCO', name: 'Hot Chocolate', category: 'Hot Drinks', price: { minor_units: 420, currency: 'USD' }, barcode: '4901234567893', in_stock: true, stock_qty: 25, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'ICCOFF', name: 'Iced Coffee', category: 'Cold Drinks', price: { minor_units: 380, currency: 'USD' }, barcode: '4901234567894', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'ICTEA', name: 'Iced Tea', category: 'Cold Drinks', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567895', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'JUICE-O', name: 'Orange Juice', category: 'Cold Drinks', price: { minor_units: 350, currency: 'USD' }, barcode: '4901234567904', in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'LEMONADE', name: 'Lemonade', category: 'Cold Drinks', price: { minor_units: 300, currency: 'USD' }, barcode: '4901234567897', in_stock: true, stock_qty: 35, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'PBAGEL', name: 'Plain Bagel', category: 'Food', price: { minor_units: 250, currency: 'USD' }, barcode: '4901234567898', in_stock: true, stock_qty: 15, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'SBAGEL', name: 'Sesame Bagel', category: 'Food', price: { minor_units: 280, currency: 'USD' }, barcode: '4901234567899', in_stock: true, stock_qty: 12, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'CROISS', name: 'Butter Croissant', category: 'Food', price: { minor_units: 320, currency: 'USD' }, barcode: '4901234567800', in_stock: true, stock_qty: 18, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'CSAND', name: 'Chicken Sandwich', category: 'Food', price: { minor_units: 550, currency: 'USD' }, barcode: '4901234567801', in_stock: true, stock_qty: 10, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'VSAND', name: 'Veggie Sandwich', category: 'Food', price: { minor_units: 480, currency: 'USD' }, barcode: '4901234567802', in_stock: true, stock_qty: 8, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'WATER-S', name: 'Sparkling Water', category: 'Cold Drinks', price: { minor_units: 180, currency: 'USD' }, barcode: '4901234567803', in_stock: true, stock_qty: 150, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'BROWNIE', name: 'Fudge Brownie', category: 'Snacks', price: { minor_units: 300, currency: 'USD' }, barcode: '4901234567804', in_stock: false, stock_qty: 0, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'CMUFFIN', name: 'Chocolate Muffin', category: 'Snacks', price: { minor_units: 280, currency: 'USD' }, barcode: '4901234567805', in_stock: false, stock_qty: 0, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'NUTS', name: 'Mixed Nuts', category: 'Snacks', price: { minor_units: 400, currency: 'USD' }, barcode: '4901234567806', in_stock: true, stock_qty: 22, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'CHIPS', name: 'Potato Chips', category: 'Snacks', price: { minor_units: 200, currency: 'USD' }, barcode: '4901234567807', in_stock: true, stock_qty: 55, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
 ];
 
 const MOCK_CATEGORIES = [
@@ -114,7 +114,7 @@ const MOCK_WORKSPACES = [
 
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
 const loginAttempts: Record<string, number> = {};
-const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_THRESHOLD = 4;
 // LOCKOUT_DURATION_MS = 30_000 is defined for documentation;
 // the mock uses a simple attempt-count lockout that resets on
 // successful login to keep the dev loop fast.
@@ -127,6 +127,47 @@ interface CartLine {
   qty: number;
 }
 let cartState: { lines: CartLine[] } = { lines: [] };
+
+// ── Completed sales (persisted so sales history + refund e2e work) ─
+interface MockCompletedSale {
+  id: string;
+  total: { minor_units: number; currency: string };
+  lineCount: number;
+  status: string;
+  paymentMethod: string;
+  userId: string;
+  createdAt: string;
+}
+const completedSales: MockCompletedSale[] = [
+  // Pre-seeded sale so sales history always has at least one row.
+  {
+    id: 'seed-sale-001',
+    total: { minor_units: 1250, currency: 'USD' },
+    lineCount: 2,
+    status: 'Completed',
+    paymentMethod: 'cash',
+    userId: 'admin-1',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+];
+const saleDetails: Record<string, MockCompletedSale & { subtotal: { minor_units: number; currency: string }; taxTotal: { minor_units: number; currency: string }; tenderedMinor: number; lines: Array<{ id: string; sku: string; name: string; qty: number; unit_price: { minor_units: number; currency: string }; total_minor: number; tax_amount: null; tax_rate_id: null }> }> = {
+  'seed-sale-001': {
+    id: 'seed-sale-001',
+    total: { minor_units: 1250, currency: 'USD' },
+    subtotal: { minor_units: 1250, currency: 'USD' },
+    taxTotal: { minor_units: 0, currency: 'USD' },
+    lineCount: 2,
+    status: 'Completed',
+    paymentMethod: 'cash',
+    tenderedMinor: 2000,
+    userId: 'admin-1',
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+    lines: [
+      { id: 'seed-line-1', sku: 'LATTE', name: 'Caffè Latte', qty: 1, unit_price: { minor_units: 450, currency: 'USD' }, total_minor: 450, tax_amount: null, tax_rate_id: null },
+      { id: 'seed-line-2', sku: 'CROISS', name: 'Butter Croissant', qty: 2, unit_price: { minor_units: 320, currency: 'USD' }, total_minor: 640, tax_amount: null, tax_rate_id: null },
+    ],
+  },
+};
 
 // ── Active shift state (for pay-btn-enabled E2E test) ──────────
 let mockActiveShift: Record<string, unknown> | null = {
@@ -156,7 +197,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     // Check lockout.
     const attempts = loginAttempts[key] ?? 0;
     if (attempts >= LOCKOUT_THRESHOLD) {
-      throw new Error('Account locked. Too many failed attempts.');
+      throw new Error('Account locked. Too many failed attempts. Try again in 30s');
     }
 
     if (!staff || pin !== staff.pin_hash) {
@@ -213,6 +254,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'ping': () => 'pong',
   'version': () => ({ name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' }),
+  'version_scoped': () => ({ name: 'oz-pos', version: '0.0.9', rustVersion: '1.80', target: 'x86_64' }),
   'get_local_ip': () => '192.168.1.100',
 
   // ═══════════════════════════════════════════════════════════════
@@ -267,18 +309,42 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
   'list_workspace_screens': () => [],
   'list_workspace_screens_scoped': () => [],
+  'get_workspace_instance': (args) => {
+    const { instanceId } = args as { instanceId: string };
+    return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
+  },
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
     return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
   },
+  'create_workspace_instance': (args) => ({
+    instance_id: `ws-${Date.now()}`,
+    ...(args as Record<string, unknown>),
+  }),
   'create_workspace_instance_scoped': (args) => {
     const req = (args as { req: Record<string, unknown> }).req;
     return { instance_id: `ws-${Date.now()}`, ...req };
   },
   'update_workspace_instance_scoped': (args) => args,
   'delete_workspace_instance_scoped': () => null,
+  'archive_workspace_instance_scoped': () => null,
   'set_default_instance_scoped': () => null,
   'list_screens_scoped': () => [],
+  'list_all_workspaces_scoped': () => [
+    { key: 'store-pos', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart' },
+    { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant' },
+    { key: 'kds', name: 'Kitchen Display', description: 'Order display', icon: 'utensils' },
+    { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
+    { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
+  ],
+  'get_user_workspace_instances': () => [],
+  'get_user_workspace_instances_scoped': () => [],
+  'set_user_workspace_instances': () => null,
+  'set_user_workspace_instances_scoped': () => null,
+  'get_user_workspaces': () => [],
+  'get_user_workspaces_scoped': () => [],
+  'set_user_workspaces': () => null,
+  'set_user_workspaces_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // TERMINALS
@@ -324,10 +390,18 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_store_settings': () => ({
     name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: 'TAX-001', currency: 'IDR', branch: 'Cabang A', logo: '',
   }),
+  'get_store_settings_scoped': () => ({
+    name: 'TOKO TEST', address: 'Jl. Contoh No. 123', taxId: 'TAX-001', currency: 'IDR', branch: 'Cabang A', logo: '',
+  }),
   'set_store_settings': () => null,
   'set_store_settings_scoped': () => null,
 
   'get_receipt_settings': () => ({
+    showCurrency: true, decimalSeparator: 'dot', showTax: true, footer: 'Terima kasih',
+    paperWidth: 'standard', showTableNumber: false,
+    marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+  }),
+  'get_receipt_settings_scoped': () => ({
     showCurrency: true, decimalSeparator: 'dot', showTax: true, footer: 'Terima kasih',
     paperWidth: 'standard', showTableNumber: false,
     marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
@@ -343,6 +417,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     lookback_days: 1,
   }),
   'save_report_schedule': () => null,
+  'send_test_report': () => 'Email sent',
 
   'load_topology': () => ({
     nodes: [
@@ -356,6 +431,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     ],
   }),
   'save_topology': () => null,
+  'apply_topology_diff': () => null,
 
   'set_receipt_settings_scoped': () => null,
 
@@ -379,16 +455,39 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'set_credit_settings': () => null,
   'set_credit_settings_scoped': () => null,
   'list_credit_sales': () => [],
+  'list_credit_sales_scoped': () => [],
   'settle_credit': () => null,
   'settle_credit_scoped': () => null,
 
   'seed_default_roles_scoped': () => 3,
 
   // ═══════════════════════════════════════════════════════════════
+  // SECURITY / ENCRYPTION
+  // ═══════════════════════════════════════════════════════════════
+
+  'get_key_rotation_info': () => ({
+    last_rotated_at: null,
+    rotation_due: false,
+    key_algorithm: 'aes-256-gcm',
+    can_rotate: true,
+  }),
+  'rotate_encryption_key': () => ({
+    success: true,
+    rotated_at: new Date().toISOString(),
+    key_algorithm: 'aes-256-gcm',
+  }),
+
+  // ═══════════════════════════════════════════════════════════════
   // BRANDING
   // ═══════════════════════════════════════════════════════════════
 
   'get_brand_settings': () => ({
+    primary_colour: '#10b981',
+    logo_path: null,
+    store_name: 'OZ-POS Demo',
+    colour_hover: null,
+  }),
+  'get_brand_settings_scoped': () => ({
     primary_colour: '#10b981',
     logo_path: null,
     store_name: 'OZ-POS Demo',
@@ -432,6 +531,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   },
 
   'get_product_track_serial': () => false,
+  'get_product_track_serial_scoped': () => false,
   'get_product_stock': () => ({ quantity: 50 }),
 
   'adjust_stock': () => 50,
@@ -448,6 +548,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_categories': () => MOCK_CATEGORIES,
+  'list_categories_scoped': () => MOCK_CATEGORIES,
   'create_category': () => ({ id: 'cat-new' }),
   'update_category': () => ({ id: 'cat-upd' }),
   'delete_category': () => null,
@@ -491,24 +592,82 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'complete_sale': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const saleId = `mock-sale-${Date.now()}`;
+    // Persist into completed sales so sales history / refund e2e work.
+    const now = new Date().toISOString();
+    completedSales.push({
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
+    });
+    saleDetails[saleId] = {
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
+      subtotal: { minor_units: minorTotal, currency: 'USD' },
+      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
+      lines: cartState.lines.map((l, i) => ({
+        id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
+        unit_price: l.price, total_minor: l.price.minor_units * l.qty,
+        tax_amount: null, tax_rate_id: null,
+      })),
+    };
     cartState = { lines: [] };
-    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
   'complete_sale_scoped': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const saleId = `mock-sale-${Date.now()}`;
+    const now = new Date().toISOString();
+    completedSales.push({
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
+    });
+    saleDetails[saleId] = {
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
+      subtotal: { minor_units: minorTotal, currency: 'USD' },
+      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
+      lines: cartState.lines.map((l, i) => ({
+        id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
+        unit_price: l.price, total_minor: l.price.minor_units * l.qty,
+        tax_amount: null, tax_rate_id: null,
+      })),
+    };
     cartState = { lines: [] };
-    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
   'complete_sale_with_resolved_shortfalls_scoped': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const saleId = `mock-sale-${Date.now()}`;
+    const now = new Date().toISOString();
+    completedSales.push({
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
+    });
+    saleDetails[saleId] = {
+      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
+      subtotal: { minor_units: minorTotal, currency: 'USD' },
+      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
+      lines: cartState.lines.map((l, i) => ({
+        id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
+        unit_price: l.price, total_minor: l.price.minor_units * l.qty,
+        tax_amount: null, tax_rate_id: null,
+      })),
+    };
     cartState = { lines: [] };
-    return { saleId: `mock-sale-${Date.now()}`, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
 
-  'get_sale': () => null,
-  'get_sale_scoped': () => null,
+  'get_sale': (args) => {
+    const { id } = (args as { id?: string }) ?? {};
+    return id ? (saleDetails[id] ?? null) : null;
+  },
+  'get_sale_scoped': (args) => {
+    const { id } = (args as { id?: string }) ?? {};
+    return id ? (saleDetails[id] ?? null) : null;
+  },
 
   'set_cart_discount': () => null,
   'set_cart_discount_scoped': () => null,
@@ -529,16 +688,26 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'delete_held_cart': () => null,
   'delete_held_cart_scoped': () => null,
 
-  'list_sales': () => [],
-  'list_sales_scoped': () => [],
+  'list_sales': () => [...completedSales],
+  'list_sales_scoped': () => [...completedSales],
   'void_sale': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
   'void_sale_scoped': () => ({ id: 'voided-sale', status: 'voided', total: { minor_units: 0, currency: 'IDR' }, line_count: 0, created_at: new Date().toISOString() }),
 
   'lookup_sale_by_receipt_barcode': () => null,
   'lookup_sale_by_receipt_barcode_scoped': () => null,
 
-  'process_refund': () => ({ refundId: 'refund-1', totalMinor: 0 }),
-  'process_refund_scoped': () => ({ refundId: 'refund-1', totalMinor: 0 }),
+  'process_refund': (args) => {
+    const a = (args as { args?: { lines?: Array<{ lineTotalMinor: number }> } })?.args ?? (args as { lines?: Array<{ lineTotalMinor: number }> }) ?? {};
+    const lines = a.lines ?? [];
+    const totalMinor = lines.reduce((sum, l) => sum + (l.lineTotalMinor ?? 0), 0);
+    return { refundId: `refund-${Date.now()}`, totalMinor };
+  },
+  'process_refund_scoped': (args) => {
+    const a = (args as { args?: { lines?: Array<{ lineTotalMinor: number }> } })?.args ?? (args as { lines?: Array<{ lineTotalMinor: number }> }) ?? {};
+    const lines = a.lines ?? [];
+    const totalMinor = lines.reduce((sum, l) => sum + (l.lineTotalMinor ?? 0), 0);
+    return { refundId: `refund-${Date.now()}`, totalMinor };
+  },
   'list_refunds': () => [],
   'list_refunds_scoped': () => [],
 
@@ -550,6 +719,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'export_eod_report_scoped': () => null,
 
   'print_sales_receipt': () => ({ printed: true }),
+  'print_sales_receipt_scoped': () => ({ printed: true }),
 
   'get_cart_deduction_location': () => ({ locationId: 'loc-1', locationName: 'Main Store' }),
   'override_cart_deduction_location_scoped': () => null,
@@ -560,6 +730,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'currency_info': () => ({ code: 'IDR', exponent: 0 }),
   'list_currencies': () => MOCK_CURRENCIES,
+  'list_currencies_scoped': () => MOCK_CURRENCIES,
   'get_default_currency': () => 'IDR',
   'set_default_currency': () => null,
   'list_exchange_rates': () => [],
@@ -571,6 +742,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_customers': () => MOCK_CUSTOMERS,
+  'list_customers_scoped': () => MOCK_CUSTOMERS,
   'get_customer': (args) => {
     const { id } = args as { id: string };
     return MOCK_CUSTOMERS.find(c => c.id === id) ?? null;
@@ -635,6 +807,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     };
   },
   'list_shifts': () => [],
+  'list_shifts_scoped': () => [],
   'get_shift': () => null,
   'get_shift_report': () => null,
   'create_cash_payout': () => null,
@@ -650,6 +823,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'set_workspace_inventory_locations': () => null,
   'get_workspace_inventory_locations': () => [],
+  'get_workspace_locations_scoped': () => [],
+  'invalidate_location_cache_scoped': () => null,
+  'get_low_stock_alerts_at_location_scoped': () => [],
+  'active_stock_alerts_scoped': () => [],
+  'acknowledge_stock_alert_scoped': () => null,
 
   'start_inventory_shift': () => ({
     id: 'inv-shift-1', user_id: 'user-1', location_id: 'loc-1', terminal_id: null,
@@ -759,6 +937,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_low_stock_alerts': () => [],
   'get_category_breakdown': () => [],
   'get_menu_engineering': () => ({ rows: [], median_volume: 0, median_margin: 0 }),
+  'build_custom_report': () => ({
+    rows: [], columns: [], total: 0, page: 1, pageSize: 50, totalPages: 1,
+  }),
 
   // ═══════════════════════════════════════════════════════════════
   // TAX
@@ -767,6 +948,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'compute_cart_tax': () => 0,
   'compute_cart_tax_scoped': () => 0,
   'list_tax_rates': () => [],
+  'list_tax_rates_scoped': () => [],
   'create_tax_rate': () => null,
   'update_tax_rate': () => null,
   'delete_tax_rate': () => null,
@@ -840,6 +1022,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'open_cash_drawer': () => ({ opened: true }),
   'print_receipt': () => ({ printedLines: 3 }),
   'list_scanners': () => [{ id: 'scanner-1' }],
+  'list_displays': () => ['display-1', 'display-2'],
+  'display_show': () => null,
+  'display_clear': () => null,
+  'read_scale_weight': () => ({ grams: 150, stable: true }),
+  'discover_hardware': () => [],
   'start_scanner': () => null,
   'stop_scanner': () => null,
 
@@ -871,6 +1058,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'delete_offline_item': () => null,
 
   'get_sync_settings': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
+  'get_sync_settings_scoped': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
   'update_sync_settings': () => null,
   'sync_run': () => ({ synced: 0, failed: 0, error: null }),
   'offline_queue_status_summary': () => ({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 }),

@@ -178,6 +178,26 @@ export default function AppShell() {
     prevWorkspaceRef.current = activeWorkspace;
   }, [activeWorkspace]);
 
+  // ── Hash-based routing for e2e tests ─────────────────────────
+  // The e2e suite navigates via window.location.hash (see helpers.ts
+  // navigateTo). Listen for hashchange and map #/route to registered
+  // page routes so the AppShell React state stays in sync.
+  useEffect(() => {
+    const syncFromHash = () => {
+      const raw = window.location.hash.replace('#/', '');
+      if (!raw) return;
+      // Only sync if the route is registered (prevents garbage hashes
+      // from setting currentRoute to an unknown value).
+      if (getPage(raw)) {
+        setCurrentRoute(raw);
+      }
+    };
+    // Sync once on mount so #/route bookmarks / direct nav work.
+    syncFromHash();
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
   const handleComplete = useCallback(async (state: WizardState) => {
     await completeSetup({
       preset: state.preset ?? 'custom',

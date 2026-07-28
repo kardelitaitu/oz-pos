@@ -206,6 +206,10 @@ nav-tablist-aria =
 # Audit Log
 audit-log-title = Log Audit
 audit-log-load-more = Muat Lebih Banyak
+audit-log-error-load = Gagal memuat log audit
+audit-log-mark-reviewed = Tandai Ditinjau
+audit-log-reviewed-at = Ditinjau: { $date }
+audit-log-user-system = sistem
 audit-log-loading = Memuat…
 audit-log-refresh = Segarkan
 audit-log-retry = Coba Lagi
@@ -253,8 +257,14 @@ spinner-label = Memuat…
 
 # ── Workspace Home ──
 workspace-home-fullscreen-aria = Alihkan layar penuh
+workspace-home-fullscreen-hint = F11
 workspace-home-user-aria = Masuk sebagai { $name }
 workspace-home-loading = Memuat ruang kerja…
+workspace-home-loading-aria = Memuat ruang kerja
+workspace-home-sr-error = Kesalahan koneksi
+workspace-home-available = { $count } ruang kerja tersedia
+workspace-home-coming-soon = Segera hadir
+workspace-card-active-aria = Ruang kerja aktif
 workspace-home-subtitle = Pilih ruang kerja untuk memulai
 workspace-home-empty = Tidak ada ruang kerja tersedia
 workspace-home-empty-desc = Anda belum memiliki akses ke ruang kerja apa pun. Hubungi administrator.

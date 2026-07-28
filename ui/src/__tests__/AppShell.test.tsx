@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import AppShell from '@/frontend/shell/AppShell';
 import type { AuthContextValue } from '@/contexts/AuthContext';
+import staffFtl from '@/locales/staff.ftl?raw';
 
 // ── Mock sub-screens ─────────────────────────────────────────────
 
@@ -263,7 +264,7 @@ describe('AppShell — KDS workspace navigation', () => {
         loading: false,
       });
 
-      await renderWithProviders(<AppShell />);
+      await renderWithProviders(<AppShell />, staffFtl);
 
       await act(async () => {});
 

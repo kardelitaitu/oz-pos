@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { animDuration } from '@/utils/animation';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listStockTransfers,
@@ -8,8 +7,6 @@ import {
   sendStockTransfer,
   receiveStockTransfer,
   cancelStockTransfer,
-  addStockTransferLine as _addStockTransferLine,
-  removeStockTransferLine as _removeStockTransferLine,
   type StockTransfer,
   type StockTransferLine,
   type ReceivedLineInput,
@@ -19,6 +16,7 @@ import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -48,29 +46,11 @@ export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  // ── Exit animation state ───────────────────────────────────────
-  const ANIM_MS = animDuration(200);
-  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [detailExiting, setDetailExiting] = useState(false);
-  const [createExiting, setCreateExiting] = useState(false);
-  const [receiveExiting, setReceiveExiting] = useState(false);
-
-  // Cleanup exit timers on unmount
-  useEffect(() => {
-    return () => {
-      if (exitTimerRef.current !== null) {
-        clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
-    };
-  }, []);
 
   // Detail view
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -95,6 +75,11 @@ export default function StockTransfersScreen() {
   const [receiveLines, setReceiveLines] = useState<Record<string, string>>({});
   const [receiveSaving, setReceiveSaving] = useState(false);
   const receivePanelRef = useRef<HTMLDivElement>(null);
+
+  // ── Exit animations ───────────────────────────────────────────
+  const detailExit = useExitAnimation(detailId !== null, () => { setDetailId(null); setDetail(null); });
+  const createExit = useExitAnimation(showCreate, () => { setShowCreate(false); resetCreateForm(); });
+  const receiveExit = useExitAnimation(receiveTransferId !== null, () => setReceiveTransferId(null));
 
   // Cancel state
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -138,15 +123,8 @@ export default function StockTransfersScreen() {
   }, [l10n]);
 
   const closeDetail = useCallback(() => {
-    if (detailId === null) return;
-    setDetailExiting(true);
-    exitTimerRef.current = setTimeout(() => {
-      setDetailId(null);
-      setDetail(null);
-      setDetailExiting(false);
-      exitTimerRef.current = null;
-    }, ANIM_MS);
-  }, [detailId, ANIM_MS]);
+    detailExit.requestClose();
+  }, [detailExit]);
 
   const openSend = useCallback(async () => {
     if (!detailId) return;
@@ -168,14 +146,8 @@ export default function StockTransfersScreen() {
   }, [detailId, detail]);
 
   const closeReceive = useCallback(() => {
-    if (receiveTransferId === null) return;
-    setReceiveExiting(true);
-    exitTimerRef.current = setTimeout(() => {
-      setReceiveTransferId(null);
-      setReceiveExiting(false);
-      exitTimerRef.current = null;
-    }, ANIM_MS);
-  }, [receiveTransferId, ANIM_MS]);
+    receiveExit.requestClose();
+  }, [receiveExit]);
 
   const handleReceive = useCallback(async () => {
     if (!receiveTransferId || !session?.user_id) return;
@@ -285,23 +257,16 @@ export default function StockTransfersScreen() {
   }, [resetCreateForm]);
 
   const closeCreate = useCallback(() => {
-    if (!showCreate) return;
-    setCreateExiting(true);
-    exitTimerRef.current = setTimeout(() => {
-      setShowCreate(false);
-      resetCreateForm();
-      setCreateExiting(false);
-      exitTimerRef.current = null;
-    }, ANIM_MS);
-  }, [showCreate, resetCreateForm, ANIM_MS]);
+    createExit.requestClose();
+  }, [createExit]);
 
   // ── Focus traps for modals ─────────────────────────────────────
   // Deactivate detail trap while receive modal is open so Escape only
   // closes the top-most modal instead of all active modals.
-  const detailTrapActive = detailId !== null && !detailExiting && !detailLoading && receiveTransferId === null;
+  const detailTrapActive = detailId !== null && !detailExit.exiting && !detailLoading && receiveTransferId === null;
   useFocusTrap(detailPanelRef, detailTrapActive, closeDetail);
-  useFocusTrap(createPanelRef, showCreate && !createExiting && !createSaving, closeCreate);
-  useFocusTrap(receivePanelRef, receiveTransferId !== null && !receiveExiting && !receiveSaving, closeReceive);
+  useFocusTrap(createPanelRef, showCreate && !createExit.exiting && !createSaving, closeCreate);
+  useFocusTrap(receivePanelRef, receiveTransferId !== null && !receiveExit.exiting && !receiveSaving, closeReceive);
 
   const filtered = statusFilter === 'all'
     ? transfers
@@ -456,9 +421,9 @@ export default function StockTransfersScreen() {
       )}
 
       {/* ── Detail Modal ─────────────────────────────────────────── */}
-      {(detailId || detailExiting) && (
-        <div className={`stock-transfers-overlay${detailExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-detail-aria')}>
-          <div className={`stock-transfers-modal stock-transfers-modal--wide${detailExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={detailPanelRef}>
+      {detailExit.shouldRender && (
+        <div className={`stock-transfers-overlay${detailExit.exiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-detail-aria')}>
+          <div className={`stock-transfers-modal stock-transfers-modal--wide${detailExit.exiting ? ' stock-transfers-modal--exiting' : ''}`} ref={detailPanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-detail-title">
                 <h2>Transfer Details</h2>
@@ -589,9 +554,9 @@ export default function StockTransfersScreen() {
       )}
 
       {/* ── Create Modal ─────────────────────────────────────────── */}
-      {(showCreate || createExiting) && (
-        <div className={`stock-transfers-overlay${createExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-create-aria')}>
-          <div className={`stock-transfers-modal stock-transfers-modal--wide${createExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={createPanelRef}>
+      {createExit.shouldRender && (
+        <div className={`stock-transfers-overlay${createExit.exiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-create-aria')}>
+          <div className={`stock-transfers-modal stock-transfers-modal--wide${createExit.exiting ? ' stock-transfers-modal--exiting' : ''}`} ref={createPanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-create-title">
                 <h2>New Stock Transfer</h2>
@@ -690,9 +655,9 @@ export default function StockTransfersScreen() {
       )}
 
       {/* ── Receive Modal ────────────────────────────────────────── */}
-      {(receiveTransferId || receiveExiting) && detail && (
-        <div className={`stock-transfers-overlay${receiveExiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-receive-aria')}>
-          <div className={`stock-transfers-modal${receiveExiting ? ' stock-transfers-modal--exiting' : ''}`} ref={receivePanelRef}>
+      {receiveExit.shouldRender && detail && (
+        <div className={`stock-transfers-overlay${receiveExit.exiting ? ' stock-transfers-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('stock-transfers-receive-aria')}>
+          <div className={`stock-transfers-modal${receiveExit.exiting ? ' stock-transfers-modal--exiting' : ''}`} ref={receivePanelRef}>
             <div className="stock-transfers-modal-header">
               <Localized id="stock-transfers-receive-title">
                 <h2>Receive Transfer</h2>

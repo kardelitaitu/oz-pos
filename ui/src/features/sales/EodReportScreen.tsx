@@ -240,7 +240,7 @@ function ShiftSummarySection({ shifts, currency }: ShiftSummaryProps) {
 export default function EodReportScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [report, setReport] = useState<EodReport | null>(null);
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [loading, setLoading] = useState(true);

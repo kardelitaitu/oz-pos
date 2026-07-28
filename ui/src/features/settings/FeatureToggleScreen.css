@@ -254,19 +254,11 @@
   transition: background-color var(--duration-200) var(--ease-out);
 }
 
-.feature-toggle-item--flash-enabled {
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .feature-toggle-item--flash-enabled {
     animation: flash-enabled var(--duration-1200) var(--ease-out) forwards;
   }
-}
 
-.feature-toggle-item--flash-disabled {
-}
-
-@media (prefers-reduced-motion: no-preference) {
   .feature-toggle-item--flash-disabled {
     animation: flash-disabled var(--duration-1200) var(--ease-out) forwards;
   }

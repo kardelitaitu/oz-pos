@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Localized } from '@fluent/react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listPurchaseOrders,
   updatePoStatus,
@@ -20,6 +21,10 @@ function formatMinor(minor: number): string {
 
 /** Purchase orders list screen — view, filter, approve, receive, and cancel purchase orders with status management. */
 export default function PurchaseOrdersScreen() {
+  const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const { addToast } = useToast();
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -33,11 +38,11 @@ export default function PurchaseOrdersScreen() {
       const data = await listPurchaseOrders();
       setOrders(data);
     } catch {
-      // IPC unavailable
+      addToast({ message: l10nRef.current.getString('po-error-load') || 'Failed to load purchase orders', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -52,11 +57,11 @@ export default function PurchaseOrdersScreen() {
       await updatePoStatus({ id, status });
       await load();
     } catch {
-      // ignore
+      addToast({ message: l10nRef.current.getString('po-error-update') || 'Failed to update purchase order', type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [load]);
+  }, [load, addToast]);
 
   const handleReceive = useCallback(async (id: string) => {
     setActionLoading(id);
@@ -64,11 +69,11 @@ export default function PurchaseOrdersScreen() {
       await receivePurchaseOrder(id);
       await load();
     } catch {
-      // ignore
+      addToast({ message: l10nRef.current.getString('po-error-receive') || 'Failed to receive purchase order', type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [load]);
+  }, [load, addToast]);
 
   const openCreate = useCallback(() => {
     setEditingId(null);
@@ -104,7 +109,9 @@ export default function PurchaseOrdersScreen() {
             className={`po-filter-btn ${statusFilter === s ? 'po-filter-btn--active' : ''}`}
             onClick={() => setStatusFilter(s)}
           >
-            {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            <Localized id={`po-status-${s}`}>
+              <span>{s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}</span>
+            </Localized>
           </button>
         ))}
       </div>
@@ -151,25 +158,35 @@ export default function PurchaseOrdersScreen() {
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
           <div className="po-empty">
-            {statusFilter === 'all'
-              ? <p>No purchase orders yet.</p>
-              : <p>No purchase orders with status &quot;{statusFilter}&quot;.</p>}
-            <Button variant="secondary" onClick={openCreate}>Create Purchase Order</Button>
+            {statusFilter === 'all' ? (
+              <Localized id="po-empty">
+                <p>No purchase orders yet.</p>
+              </Localized>
+            ) : (
+              <Localized id="po-empty-filtered" vars={{ status: statusFilter }}>
+                <p>{`No purchase orders with status "${statusFilter}".`}</p>
+              </Localized>
+            )}
+            <Localized id="po-add">
+              <Button variant="secondary" onClick={openCreate}>Create Purchase Order</Button>
+            </Localized>
           </div>
         </Card>
       ) : (
         <div className="po-table-wrap">
-          <table className="po-table" aria-label="Purchase Orders">
+          <table className="po-table" aria-label={l10n.getString('po-title') || 'Purchase Orders'}>
             <thead>
               <tr>
-                <th>PO #</th>
-                <th>Supplier</th>
-                <th>Status</th>
-                <th>Order Date</th>
-                <th>Expected</th>
-                <th>Total</th>
-                <th>Items</th>
-                <th aria-label="Actions"> </th>
+                <Localized id="po-col-number"><th>PO #</th></Localized>
+                <Localized id="po-col-supplier"><th>Supplier</th></Localized>
+                <Localized id="po-col-status"><th>Status</th></Localized>
+                <Localized id="po-col-order-date"><th>Order Date</th></Localized>
+                <Localized id="po-col-expected"><th>Expected</th></Localized>
+                <Localized id="po-col-total"><th>Total</th></Localized>
+                <Localized id="po-col-items"><th>Items</th></Localized>
+                <Localized id="po-col-actions" attrs={{ 'aria-label': true }}>
+                  <th aria-label="Actions"> </th>
+                </Localized>
               </tr>
             </thead>
             <tbody>{filtered.map((po) => (
@@ -177,7 +194,9 @@ export default function PurchaseOrdersScreen() {
                   <td className="po-cell-number">{po.po_number}</td>
                   <td>{po.supplier_name || po.supplier_id}</td>
                   <td>
-                    <span className={`po-status po-status--${po.status}`}>{po.status}</span>
+                    <span className={`po-status po-status--${po.status}`}>
+                      <Localized id={`po-status-${po.status}`}>{po.status}</Localized>
+                    </span>
                   </td>
                   <td className="po-cell-date">{po.order_date.slice(0, 10)}</td>
                   <td className="po-cell-date">{po.expected_date ? po.expected_date.slice(0, 10) : '\u2014'}</td>
@@ -185,44 +204,52 @@ export default function PurchaseOrdersScreen() {
                   <td>{po.lines.length}</td>
                   <td className="po-cell-actions">
                     {po.status === 'draft' && (
-                      <button
-                        type="button"
-                        className="po-action-btn"
-                        disabled={actionLoading === po.id}
-                        onClick={() => handleStatusChange(po.id, 'pending')}
-                      >
-                        Submit
-                      </button>
+                      <Localized id="po-action-submit">
+                        <button
+                          type="button"
+                          className="po-action-btn"
+                          disabled={actionLoading === po.id}
+                          onClick={() => handleStatusChange(po.id, 'pending')}
+                        >
+                          Submit
+                        </button>
+                      </Localized>
                     )}
                     {po.status === 'pending' && (
-                      <button
-                        type="button"
-                        className="po-action-btn"
-                        disabled={actionLoading === po.id}
-                        onClick={() => handleStatusChange(po.id, 'approved')}
-                      >
-                        Approve
-                      </button>
+                      <Localized id="po-action-approve">
+                        <button
+                          type="button"
+                          className="po-action-btn"
+                          disabled={actionLoading === po.id}
+                          onClick={() => handleStatusChange(po.id, 'approved')}
+                        >
+                          Approve
+                        </button>
+                      </Localized>
                     )}
                     {po.status === 'approved' && (
-                      <button
-                        type="button"
-                        className="po-action-btn po-action-btn--primary"
-                        disabled={actionLoading === po.id}
-                        onClick={() => handleReceive(po.id)}
-                      >
-                        Receive
-                      </button>
+                      <Localized id="po-action-receive">
+                        <button
+                          type="button"
+                          className="po-action-btn po-action-btn--primary"
+                          disabled={actionLoading === po.id}
+                          onClick={() => handleReceive(po.id)}
+                        >
+                          Receive
+                        </button>
+                      </Localized>
                     )}
                     {(po.status === 'draft' || po.status === 'pending') && (
-                      <button
-                        type="button"
-                        className="po-action-btn po-action-btn--danger"
-                        disabled={actionLoading === po.id}
-                        onClick={() => handleStatusChange(po.id, 'cancelled')}
-                      >
-                        Cancel
-                      </button>
+                      <Localized id="po-action-cancel">
+                        <button
+                          type="button"
+                          className="po-action-btn po-action-btn--danger"
+                          disabled={actionLoading === po.id}
+                          onClick={() => handleStatusChange(po.id, 'cancelled')}
+                        >
+                          Cancel
+                        </button>
+                      </Localized>
                     )}
                   </td>
                 </tr>

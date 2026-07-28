@@ -3,9 +3,8 @@
 //! ## Background task
 //!
 //! [`start_report_sender_loop`] spawns a tokio task that polls every 60
-//! seconds. When the current time matches the configured `send_at_time`
-//! for the active cadence, it generates an analytics bundle and sends it
-//! to all configured recipients.
+//! seconds. Scheduling logic (cadence, timezone, dedup) and report-type
+//! filtering are delegated to [`oz_core::export::email_sender`].
 //!
 //! ## Test send
 //!
@@ -16,68 +15,15 @@
 use std::sync::Arc;
 
 use lettre::message::header::ContentType;
-use lettre::{
-    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
-    transport::smtp::authentication::Credentials,
-};
+use lettre::{AsyncTransport, Message};
 use oz_core::{
     Store,
     export::{
-        AnalyticsBundle, ExportConfig, ReportScheduleConfig,
-        email_report::{ReportEmail, ReportEmailBuilder, SmtpConfig},
+        email_report::{ReportEmail, SmtpConfig},
+        email_sender,
     },
 };
-use tracing::{error, info, warn};
-
-// ── SMTP transport builder ───────────────────────────────────────────
-
-/// Build an async SMTP transport from the configuration.
-///
-/// Returns `None` when the config is missing or invalid (logged as a
-/// warning so the server continues running without crashing).
-fn build_transport(config: &SmtpConfig) -> Option<AsyncSmtpTransport<Tokio1Executor>> {
-    if let Err(e) = config.validate() {
-        warn!("SMTP config invalid, cannot build transport: {e}");
-        return None;
-    }
-
-    let creds = match (&config.username, &config.password) {
-        (Some(u), Some(p)) if !u.is_empty() && !p.is_empty() => {
-            Some(Credentials::new(u.clone(), p.clone()))
-        }
-        _ => None,
-    };
-
-    let transport = if config.use_tls || config.port == 465 {
-        // Try STARTTLS on standard ports; port 465 often uses implicit TLS
-        match AsyncSmtpTransport::<Tokio1Executor>::relay(&config.host) {
-            Ok(relay) => {
-                let relay = if let Some(c) = creds {
-                    relay.credentials(c)
-                } else {
-                    relay
-                };
-                relay.port(config.port).build()
-            }
-            Err(e) => {
-                warn!("Failed to build TLS SMTP transport to {}: {e}", config.host);
-                return None;
-            }
-        }
-    } else {
-        // Plain SMTP without encryption
-        let transport =
-            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&config.host).port(config.port);
-        let transport = if let Some(c) = creds {
-            transport.credentials(c)
-        } else {
-            transport
-        };
-        transport.build()
-    };
-
-    Some(transport)
-}
+use tracing::{error, info};
 
 // ── Send a single email ──────────────────────────────────────────────
 
@@ -96,8 +42,12 @@ pub async fn send_email(
         return Err("No recipients configured".into());
     }
 
-    let transport =
-        build_transport(smtp_config).ok_or_else(|| "Invalid SMTP config".to_string())?;
+    // Validate config early so the caller gets a clear error.
+    smtp_config
+        .validate()
+        .map_err(|e| format!("Invalid SMTP config: {e}"))?;
+
+    let transport = email_sender::build_smtp_transport(smtp_config)?;
 
     for recipient in to {
         let msg = Message::builder()
@@ -136,49 +86,14 @@ pub async fn send_email(
     Ok(())
 }
 
-// ── Generate a report email from the DB ─────────────────────────────
-
-/// Generate a report email for the current period.
-///
-/// Loads the report schedule config to determine the lookback window,
-/// exports an analytics bundle, and builds the email.
-pub fn generate_report_email(
-    store: &Store<'_>,
-    schedule: &ReportScheduleConfig,
-) -> Result<ReportEmail, String> {
-    let lookback_start = chrono::Utc::now()
-        .checked_sub_signed(chrono::Duration::days(schedule.lookback_days as i64))
-        .ok_or_else(|| "Failed to compute lookback date".to_string())?
-        .format("%Y-%m-%d")
-        .to_string();
-    let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
-
-    let store_name = get_store_name(store).unwrap_or_else(|_| "OZ-POS Store".to_string());
-
-    let bundle: AnalyticsBundle = store
-        .export_analytics_bundle(
-            ExportConfig {
-                start_date: lookback_start.clone(),
-                end_date: end.clone(),
-                ..ExportConfig::default()
-            },
-            "",
-            &store_name,
-        )
-        .map_err(|e| format!("Failed to export analytics: {e}"))?;
-
-    let date_label = format!("{} to {}", lookback_start, end);
-    Ok(ReportEmailBuilder::build(&bundle, &store_name, &date_label))
-}
-
 // ── Background scheduled send loop ──────────────────────────────────
 
 /// Start the background task that polls every 60s and sends scheduled
 /// report emails when the configured send time arrives.
 ///
-/// The task holds an `Arc<Mutex<Connection>>` — a lightweight clone of
-/// the same database handle used by the HTTP handlers. The lock is
-/// acquired only during checks and sends (typically < 100ms).
+/// Uses [`email_sender::should_send_scheduled`] for cadence + timezone +
+/// dedup logic and [`email_sender::generate_filtered_report_email`] for
+/// report-type-aware generation.
 pub fn start_report_sender_loop(db: Arc<tokio::sync::Mutex<rusqlite::Connection>>) {
     tokio::spawn(async move {
         info!("Report sender background loop started (poll interval: 60s)");
@@ -193,14 +108,13 @@ pub fn start_report_sender_loop(db: Arc<tokio::sync::Mutex<rusqlite::Connection>
     });
 }
 
-/// Try to send a scheduled report — checks the schedule config and
-/// sends if the time matches.
+/// Try to send a scheduled report — checks the schedule config via the
+/// shared scheduler, generates a filtered report, and sends.
 async fn try_send_scheduled(
     db: Arc<tokio::sync::Mutex<rusqlite::Connection>>,
 ) -> Result<(), String> {
-    // Scope 1: Read SMTP + schedule config, drop non-Send Store/Connection
-    // before any .await to satisfy tokio::spawn Send bounds.
-    let (smtp_config, schedule, recipients) = {
+    // Scope 1: Read SMTP + schedule config, check schedule.
+    let (smtp_config, schedule, recipients, should_send) = {
         let conn = db.lock().await;
         let store = Store::new(&conn);
 
@@ -220,30 +134,51 @@ async fn try_send_scheduled(
             _ => return Ok(()),
         };
 
-        (smtp_config, schedule.clone(), schedule.recipients.clone())
+        // Use shared scheduler for cadence + timezone + dedup
+        let should_send = email_sender::should_send_scheduled(&store, &schedule)
+            .map_err(|e| format!("Schedule check failed: {e}"))?;
+
+        (
+            smtp_config,
+            schedule.clone(),
+            schedule.recipients.clone(),
+            should_send,
+        )
     };
 
-    // Check if it's time to send
-    let now = chrono::Utc::now();
-    let current_time = now.format("%H:%M").to_string();
-
-    if current_time != schedule.send_at_time {
+    if !should_send {
         return Ok(());
     }
 
-    // Scope 2: Generate report
+    // Scope 2: Generate filtered report
+    let store_name = {
+        let conn = db.lock().await;
+        let store = Store::new(&conn);
+        get_store_name(&store).unwrap_or_else(|_| "OZ-POS Store".to_string())
+    };
+
     let report = {
         let conn = db.lock().await;
         let store = Store::new(&conn);
-        generate_report_email(&store, &schedule)?
+        email_sender::generate_filtered_report_email(&store, &schedule, &store_name)
+            .map_err(|e| format!("Failed to generate report: {e}"))?
     };
 
     send_email(&smtp_config, &report, &recipients).await?;
 
+    // Record successful send for dedup
+    {
+        let conn = db.lock().await;
+        let store = Store::new(&conn);
+        email_sender::record_sent_timestamp(&store)
+            .map_err(|e| format!("Failed to record send timestamp: {e}"))?;
+    }
+
     info!(
-        "Scheduled report sent to {} recipients (cadence: {})",
+        "Scheduled report sent to {} recipients (cadence: {}, types: {:?})",
         recipients.len(),
         schedule.cadence,
+        schedule.report_types,
     );
 
     Ok(())
@@ -252,9 +187,8 @@ async fn try_send_scheduled(
 /// Send a test report immediately (used by the Tauri desktop client for
 /// the "Send Test Report" button in Settings).
 ///
-/// Loads SMTP config and the report schedule config, generates a report
-/// for the lookback window, and sends it to all configured recipients.
-/// Returns a success message or an error string.
+/// Uses the filtered report generator so the test email reflects the
+/// user's report_type selections.
 #[allow(dead_code)]
 pub async fn send_test_report(
     db: Arc<tokio::sync::Mutex<rusqlite::Connection>>,
@@ -278,7 +212,10 @@ pub async fn send_test_report(
         schedule.recipients.clone()
     };
 
-    let report = generate_report_email(&store, &schedule)?;
+    let store_name = get_store_name(&store).unwrap_or_else(|_| "OZ-POS Store".to_string());
+
+    let report = email_sender::generate_filtered_report_email(&store, &schedule, &store_name)
+        .map_err(|e| format!("Failed to generate report: {e}"))?;
     drop(store);
     drop(conn);
 
@@ -302,6 +239,7 @@ fn get_store_name(store: &Store<'_>) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::export::ReportScheduleConfig;
     use oz_core::migrations;
     use std::sync::Arc;
 
@@ -316,7 +254,8 @@ mod tests {
             ..ReportScheduleConfig::default()
         };
 
-        let result = generate_report_email(&store, &schedule);
+        let store_name = "Test Store";
+        let result = email_sender::generate_filtered_report_email(&store, &schedule, store_name);
         assert!(result.is_ok(), "should generate email: {:?}", result.err());
         let email = result.unwrap();
         assert!(email.subject.contains("OZ-POS Report"));
@@ -330,7 +269,7 @@ mod tests {
         let store = Store::new(&conn);
 
         let schedule = ReportScheduleConfig::default();
-        let result = generate_report_email(&store, &schedule);
+        let result = email_sender::generate_filtered_report_email(&store, &schedule, "Store");
         assert!(
             result.is_ok(),
             "empty DB should still generate: {:?}",

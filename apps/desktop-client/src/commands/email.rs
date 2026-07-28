@@ -11,8 +11,8 @@ use crate::state::AppState;
 /// Send a test report email using the currently configured SMTP
 /// settings and report schedule.
 ///
-/// This is a Tauri IPC command, invoked from the Settings → Reports
-/// screen's "Send Test Report" button.
+/// Uses [`oz_core::export::email_sender::generate_filtered_report_email`]
+/// so that the user's report_type checkbox selections are respected.
 ///
 /// # Returns
 ///
@@ -22,14 +22,10 @@ use crate::state::AppState;
 pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppError> {
     let db = state.db.clone();
 
-    // Scope DB operations to drop MutexGuard<Connection> before any .await
-    // (rusqlite::Connection is !Send, so the guard makes the future !Send
-    // if held across an await point).
     let (smtp_config, recipients, report_email) = {
         let conn = db.lock().await;
         let store = oz_core::Store::new(&conn);
 
-        // Load SMTP config
         let smtp_config = store
             .get_smtp_config()
             .map_err(|e| AppError::Internal(format!("Failed to load SMTP config: {e}")))?
@@ -37,7 +33,6 @@ pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppE
                 AppError::Internal("SMTP not configured. Please save SMTP settings first.".into())
             })?;
 
-        // Load schedule config (or use defaults)
         let schedule = store
             .get_report_schedule()
             .map_err(|e| AppError::Internal(format!("Failed to load report schedule: {e}")))?
@@ -49,44 +44,23 @@ pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppE
             schedule.recipients.clone()
         };
 
-        // Generate report email
-        let lookback_days = schedule.lookback_days.max(1);
-        let lookback_start = chrono::Utc::now()
-            .checked_sub_signed(chrono::Duration::days(lookback_days as i64))
-            .ok_or_else(|| AppError::Internal("Failed to compute lookback date".into()))?
-            .format("%Y-%m-%d")
-            .to_string();
-        let end = chrono::Utc::now().format("%Y-%m-%d").to_string();
-
         let store_name = oz_core::Settings::get(store.conn, "store.name")
             .ok()
             .flatten()
             .unwrap_or_else(|| "OZ-POS Store".to_string());
 
-        let bundle = store
-            .export_analytics_bundle(
-                oz_core::export::ExportConfig {
-                    start_date: lookback_start.clone(),
-                    end_date: end.clone(),
-                    ..oz_core::export::ExportConfig::default()
-                },
-                "",
-                &store_name,
-            )
-            .map_err(|e| AppError::Internal(format!("Failed to export analytics: {e}")))?;
-
-        let date_label = format!("{} to {}", lookback_start, end);
-        let report_email = oz_core::export::email_report::ReportEmailBuilder::build(
-            &bundle,
+        // Generate filtered report email (respects report_types checkboxes)
+        let report_email = oz_core::export::email_sender::generate_filtered_report_email(
+            &store,
+            &schedule,
             &store_name,
-            &date_label,
-        );
+        )
+        .map_err(|e| AppError::Internal(format!("Failed to generate report: {e}")))?;
 
         (smtp_config, recipients, report_email)
-    }; // conn + store dropped here — now safe to .await
+    };
 
-    // Build SMTP transport and send
-    let transport = build_smtp_transport(&smtp_config)
+    let transport = oz_core::export::email_sender::build_smtp_transport(&smtp_config)
         .map_err(|e| AppError::Internal(format!("SMTP transport failed: {e}")))?;
 
     for recipient in &recipients {
@@ -157,46 +131,4 @@ pub async fn save_report_schedule(
     store
         .save_report_schedule(&config)
         .map_err(|e| AppError::Internal(format!("Failed to save report schedule: {e}")))
-}
-
-/// Build an async SMTP transport from the config.
-/// Logs errors internally so the caller can provide a generic message.
-fn build_smtp_transport(
-    config: &oz_core::export::email_report::SmtpConfig,
-) -> Result<lettre::AsyncSmtpTransport<lettre::Tokio1Executor>, String> {
-    use lettre::transport::smtp::authentication::Credentials;
-
-    let creds = match (&config.username, &config.password) {
-        (Some(u), Some(p)) if !u.is_empty() && !p.is_empty() => {
-            Some(Credentials::new(u.clone(), p.clone()))
-        }
-        _ => None,
-    };
-
-    if config.use_tls || config.port == 465 {
-        match lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(&config.host) {
-            Ok(relay) => {
-                let relay = if let Some(c) = creds {
-                    relay.credentials(c)
-                } else {
-                    relay
-                };
-                Ok(relay.port(config.port).build())
-            }
-            Err(e) => Err(format!(
-                "Failed to build TLS SMTP transport to {}: {e}",
-                config.host
-            )),
-        }
-    } else {
-        let transport =
-            lettre::AsyncSmtpTransport::<lettre::Tokio1Executor>::builder_dangerous(&config.host)
-                .port(config.port);
-        let transport = if let Some(c) = creds {
-            transport.credentials(c)
-        } else {
-            transport
-        };
-        Ok(transport.build())
-    }
 }

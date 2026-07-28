@@ -95,6 +95,15 @@ inv-shift-summary-title = Ringkasan Shift
 inv-shift-summary-performed = Transaksi yang dilakukan selama shift ini:
 inv-shift-no-transactions = Tidak ada transaksi yang tercatat.
 
+# Inventory Shift — error toasts + a11y
+inv-shift-error-locations = Gagal memuat lokasi
+inv-shift-error-active = Gagal memuat shift aktif
+inv-shift-error-start = Gagal memulai shift
+inv-shift-error-end = Gagal mengakhiri shift
+inv-shift-bar-aria = Info Shift
+inv-shift-location-aria = Lokasi
+inv-shift-notes-aria = Catatan
+
 # Transit Audit
 inv-transit-title = Audit Stok Transit
 inv-transit-col-sku = SKU
@@ -106,6 +115,14 @@ inv-transit-col-sent = Dikirim Pada
 inv-transit-col-overdue = Terlambat
 inv-transit-reverse-btn = Batalkan Transfer
 inv-transit-no-overdue = Tidak ada item transit yang terlambat.
+inv-transit-reverse-title = Batalkan Transfer?
+inv-transit-reverse-message = Apakah Anda yakin ingin membatalkan transfer stok ini? Stok akan dikembalikan ke lokasi asal. Tindakan ini tidak dapat dibatalkan.
+inv-transit-reverse-confirm = Batalkan
+inv-transit-transfer-label = Transfer #
+inv-transit-reversed-toast = Transfer stok berhasil dibatalkan
+inv-transit-error-load = Gagal memuat stok transit
+inv-transit-error-reverse = Gagal membatalkan transfer
+inv-transit-unknown = Tidak diketahui
 
 # Transaction Log
 inv-log-title = Log Transaksi Stok
@@ -115,6 +132,24 @@ inv-log-filter-type = Tipe
 inv-log-filter-all = Semua
 inv-log-expand-btn = Detail
 inv-log-col-barcode = Barcode Dipindai
+inv-log-col-datetime = Tanggal / Waktu
+inv-log-col-type = Tipe
+inv-log-col-location = Lokasi
+inv-log-col-staff = Staf
+inv-log-col-actions = Tindakan
+inv-log-filter-start = Tanggal Mulai
+inv-log-filter-end = Tanggal Akhir
+inv-log-type-sale = Penjualan
+inv-log-type-void = Void
+inv-log-type-refund = Refund
+inv-log-type-transfer = Transfer
+inv-log-type-po-receive = PO Diterima
+inv-log-type-stock-count = Stok Opname
+inv-log-type-manual-adjustment = Penyesuaian Manual
+inv-log-loading-lines = Memuat baris...
+inv-log-notes = Catatan
+inv-log-error-load = Gagal memuat transaksi
+inv-log-error-lines = Gagal memuat detail transaksi
 
 # Threshold Config
 inv-threshold-title = Konfigurasi Batas Stok
@@ -133,11 +168,36 @@ inv-threshold-status-enabled = Aktif
 inv-threshold-status-disabled = Nonaktif
 inv-threshold-unknown-product = Produk Tidak Dikenal
 
+# Threshold Config — additional keys
+inv-threshold-filter-label = Filter berdasarkan Lokasi
+inv-threshold-delete-title = Hapus Batas?
+inv-threshold-delete-message = Apakah Anda yakin ingin menghapus batas peringatan stok ini? Tindakan ini tidak dapat dibatalkan.
+inv-threshold-delete-confirm = Hapus
+inv-threshold-error-qty = Batas harus berupa bilangan bulat non-negatif yang valid
+inv-threshold-error-load = Gagal memuat data batas
+inv-threshold-error-save = Gagal menyimpan batas
+inv-threshold-error-delete = Gagal menghapus batas
+
 # Stock Alert Panel
 inv-alert-title = Panel Peringatan Stok
 inv-alert-badge-count = { $count } Peringatan Stok
 inv-alert-col-triggered = Memicu
 inv-alert-acknowledge-btn = Tanggapi
+inv-alert-loading-aria = Memuat peringatan stok
+inv-alert-loading = Memuat peringatan...
+inv-alert-aria = Peringatan stok
+inv-alert-panel-aria = Panel peringatan stok
+inv-alert-empty = Tidak ada peringatan aktif
+inv-alert-time-now = Baru saja
+inv-alert-time-min = { $min }m lalu
+inv-alert-time-hr = { $hr }j lalu
+inv-alert-ack-aria = Tanggapi peringatan untuk { $name }
+inv-alert-ack = Tanggapi
+inv-alert-acking = ...
+inv-alert-stock-label = Stok
+inv-alert-threshold-label = Batas
+inv-alert-error-load = Gagal memuat peringatan
+inv-alert-error-ack = Gagal menanggapi
 
 # ── Table Management ──
 

@@ -400,9 +400,15 @@ mod tests {
     #[test]
     fn init_module_system_with_invalid_db_path_fails() {
         let kernel = AsyncMutex::new(Kernel::new());
-        let bad_path = std::path::Path::new("/nonexistent/path/db.sqlite");
 
-        let result = init_module_system(&kernel, bad_path);
+        // Use a path in a nonexistent parent directory so
+        // rusqlite::Connection::open is guaranteed to fail on
+        // all platforms (SQLite can create new DB files but
+        // cannot create parent directories).
+        let dir = tempfile::tempdir().unwrap();
+        let bad_path = dir.path().join("nonexistent_subdir").join("db.sqlite");
+
+        let result = init_module_system(&kernel, &bad_path);
         assert!(result.is_err(), "should fail with invalid path");
     }
 

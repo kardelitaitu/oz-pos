@@ -35,6 +35,7 @@ serde_json = { workspace = true }
 rsa = { version = "0.9", features = ["pem", "sha2"] }
 base64 = "0.22"
 sha2 = "0.10"
+lettre = { workspace = true }
 redis = { version = "0.27", optional = true }
 mdns-sd = { workspace = true, optional = true }
 

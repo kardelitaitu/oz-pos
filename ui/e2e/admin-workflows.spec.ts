@@ -174,8 +174,8 @@ test.describe('Admin Management Screens', () => {
   test('About section renders version info', async ({ page }) => {
     await clickSidebarNav(page, 'About');
 
-    // About section heading must be visible.
-    const aboutHeading = page.locator('.settings-section-title').filter({ hasText: 'About' });
+    // About section heading must be visible ("System & License Ownership").
+    const aboutHeading = page.locator('.settings-section-title').filter({ hasText: 'System' });
     await expect(aboutHeading.first()).toBeVisible({ timeout: SCREEN_TIMEOUT });
   });
 });

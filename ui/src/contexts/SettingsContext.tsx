@@ -195,27 +195,27 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
 
     let hasAnyFailure = false;
     try {
-      if (rR.status === 'fulfilled') {
+      if (rR.status === 'fulfilled' && rR.value) {
         setSettings((prev) => ({ ...prev, receipt: rR.value }));
       } else {
         hasAnyFailure = true;
       }
-      if (sR.status === 'fulfilled') {
+      if (sR.status === 'fulfilled' && sR.value) {
         setSettings((prev) => ({ ...prev, store: sR.value }));
       } else {
         hasAnyFailure = true;
       }
-      if (cR.status === 'fulfilled') {
+      if (cR.status === 'fulfilled' && cR.value) {
         setSettings((prev) => ({ ...prev, currencies: cR.value }));
       } else {
         hasAnyFailure = true;
       }
-      if (syncR.status === 'fulfilled') {
+      if (syncR.status === 'fulfilled' && syncR.value) {
         setSettings((prev) => ({ ...prev, sync: syncR.value }));
       } else {
         hasAnyFailure = true;
       }
-      if (prefsR.status === 'fulfilled') {
+      if (prefsR.status === 'fulfilled' && prefsR.value) {
         const p = prefsR.value;
         const cardSize = p['cardsize'] !== undefined
           ? Math.min(4, Math.max(0, parseInt(p['cardsize'], 10) || 0))
@@ -231,7 +231,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       } else {
         hasAnyFailure = true;
       }
-      if (brandR.status === 'fulfilled') {
+      if (brandR.status === 'fulfilled' && brandR.value) {
         setSettings((prev) => ({
           ...prev,
           brand: {
@@ -242,7 +242,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       } else {
         hasAnyFailure = true;
       }
-      if (verR.status === 'fulfilled') {
+      if (verR.status === 'fulfilled' && verR.value) {
         setSettings((prev) => ({ ...prev, appVersion: verR.value.version }));
       } else {
         hasAnyFailure = true;
@@ -280,35 +280,40 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
 
     if (scopes.has('receipt')) {
       tasks.push(
-        getReceiptSettingsScoped(sessionToken).then((v) =>
-          setSettings((prev) => ({ ...prev, receipt: v })),
-        ),
+        getReceiptSettingsScoped(sessionToken).then((v) => {
+          if (!v) return;
+          setSettings((prev) => ({ ...prev, receipt: v }));
+        }),
       );
     }
     if (scopes.has('store')) {
       tasks.push(
-        getStoreSettingsScoped(sessionToken).then((v) =>
-          setSettings((prev) => ({ ...prev, store: v })),
-        ),
+        getStoreSettingsScoped(sessionToken).then((v) => {
+          if (!v) return;
+          setSettings((prev) => ({ ...prev, store: v }));
+        }),
       );
     }
     if (scopes.has('currencies')) {
       tasks.push(
-        listCurrenciesScoped(sessionToken).then((v) =>
-          setSettings((prev) => ({ ...prev, currencies: v })),
-        ),
+        listCurrenciesScoped(sessionToken).then((v) => {
+          if (!v) return;
+          setSettings((prev) => ({ ...prev, currencies: v }));
+        }),
       );
     }
     if (scopes.has('sync')) {
       tasks.push(
-        getSyncSettingsScoped(sessionToken).then((v) =>
-          setSettings((prev) => ({ ...prev, sync: v })),
-        ),
+        getSyncSettingsScoped(sessionToken).then((v) => {
+          if (!v) return;
+          setSettings((prev) => ({ ...prev, sync: v }));
+        }),
       );
     }
     if (scopes.has('preferences')) {
       tasks.push(
         getUserPreferencesScoped(sessionToken).then((p) => {
+          if (!p) return;
           const cardSize = p['cardsize'] !== undefined
             ? Math.min(4, Math.max(0, parseInt(p['cardsize'], 10) || 0))
             : 0;
@@ -325,19 +330,21 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     }
     if (scopes.has('brand')) {
       tasks.push(
-        getBrandSettingsScoped(sessionToken).then((v) =>
+        getBrandSettingsScoped(sessionToken).then((v) => {
+          if (!v) return;
           setSettings((prev) => ({
             ...prev,
             brand: { colour: v.primary_colour, storeName: v.store_name },
-          })),
-        ),
+          }));
+        }),
       );
     }
     if (scopes.has('version')) {
       tasks.push(
-        getVersionScoped(sessionToken).then((v: VersionInfo) =>
-          setSettings((prev) => ({ ...prev, appVersion: v.version })),
-        ),
+        getVersionScoped(sessionToken).then((v: VersionInfo) => {
+          if (!v) return;
+          setSettings((prev) => ({ ...prev, appVersion: v.version }));
+        }),
       );
     }
 

@@ -25,7 +25,7 @@ export default function KioskScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);

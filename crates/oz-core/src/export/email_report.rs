@@ -102,22 +102,112 @@ pub const SMTP_CONFIG_SETTINGS_KEY: &str = "smtp_config";
 
 impl Store<'_> {
     /// Save the SMTP config to the settings table.
+    ///
+    /// The password field is encrypted at rest before serialization
+    /// so that casual database inspection does not reveal it.
+    /// Decryption happens transparently in [`get_smtp_config`].
     pub fn save_smtp_config(&self, config: &SmtpConfig) -> Result<(), CoreError> {
-        let json = serde_json::to_string(config)
+        let mut config = config.clone();
+        if let Some(ref pwd) = config.password
+            && !pwd.is_empty()
+        {
+            config.password = Some(crate::crypto::encrypt_smtp_at_rest(pwd));
+        }
+        let json = serde_json::to_string(&config)
             .map_err(|e| CoreError::Internal(format!("failed to serialize SMTP config: {e}")))?;
         self.set_setting(SMTP_CONFIG_SETTINGS_KEY, &json)
     }
 
     /// Load the SMTP config from the settings table.
+    ///
+    /// The password field is transparently decrypted if it was
+    /// encrypted at rest. Legacy plaintext passwords are returned
+    /// as-is (backward compatible).
     /// Returns `None` if no config has been saved yet.
     pub fn get_smtp_config(&self) -> Result<Option<SmtpConfig>, CoreError> {
         let raw = match self.get_setting(SMTP_CONFIG_SETTINGS_KEY)? {
             Some(v) => v,
             None => return Ok(None),
         };
-        let config: SmtpConfig = serde_json::from_str(&raw)
+        let mut config: SmtpConfig = serde_json::from_str(&raw)
             .map_err(|e| CoreError::Internal(format!("failed to deserialize SMTP config: {e}")))?;
+        if let Some(ref pwd) = config.password
+            && !pwd.is_empty()
+        {
+            config.password = Some(crate::crypto::decrypt_smtp_at_rest(pwd));
+        }
         Ok(Some(config))
+    }
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+    use crate::db::Store;
+    use crate::migrations;
+
+    #[test]
+    fn smtp_password_encrypted_at_rest() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+
+        let cfg = SmtpConfig {
+            host: "smtp.test.com".into(),
+            port: 587,
+            username: Some("user".into()),
+            password: Some("my-secret-password".into()),
+            from: "test@test.com".into(),
+            use_tls: true,
+        };
+        s.save_smtp_config(&cfg).unwrap();
+
+        // Read the raw JSON from settings — password should be encrypted
+        let raw = s.get_setting(SMTP_CONFIG_SETTINGS_KEY).unwrap().unwrap();
+        assert!(
+            !raw.contains("my-secret-password"),
+            "password should be encrypted at rest, got: {raw}"
+        );
+
+        // But get_smtp_config should decrypt transparently
+        let loaded = s.get_smtp_config().unwrap().unwrap();
+        assert_eq!(loaded.password, Some("my-secret-password".into()));
+    }
+
+    #[test]
+    fn smtp_legacy_plaintext_password_still_readable() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+
+        // Simulate legacy plaintext storage by writing directly
+        let legacy_json = r#"{"host":"old.smtp.com","port":25,"username":null,"password":"legacy-pass","from":"old@old.com","use_tls":false}"#;
+        s.set_setting(SMTP_CONFIG_SETTINGS_KEY, legacy_json)
+            .unwrap();
+
+        let loaded = s.get_smtp_config().unwrap().unwrap();
+        assert_eq!(
+            loaded.password,
+            Some("legacy-pass".into()),
+            "legacy plaintext passwords should be readable"
+        );
+    }
+
+    #[test]
+    fn smtp_null_password_unchanged() {
+        let conn = migrations::fresh_db();
+        let s = Store::new(&conn);
+
+        let cfg = SmtpConfig {
+            host: "smtp.test.com".into(),
+            port: 587,
+            username: None,
+            password: None,
+            from: "test@test.com".into(),
+            use_tls: false,
+        };
+        s.save_smtp_config(&cfg).unwrap();
+
+        let loaded = s.get_smtp_config().unwrap().unwrap();
+        assert!(loaded.password.is_none());
     }
 }
 

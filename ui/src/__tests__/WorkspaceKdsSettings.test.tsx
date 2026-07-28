@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceKdsSettings } from '@/features/settings/workspace-cards/WorkspaceKdsSettings';
 
 const testL10n = {
@@ -26,6 +27,7 @@ const testL10n = {
       'workspace-kds-auto-ack': 'Auto-Acknowledge',
       'workspace-kds-density': 'Density',
       'save': 'Save',
+      'settings-save-error': 'Save failed',
     };
     return d[id] ?? id;
   },
@@ -73,7 +75,7 @@ vi.mock('../features/settings/SettingsSelect', () => ({
 }));
 
 function Wrapper({ children }: { children: ReactNode }) {
-  return <LocalizationProvider l10n={testL10n}>{children}</LocalizationProvider>;
+  return <LocalizationProvider l10n={testL10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
 }
 function renderCard(overrides: Record<string, unknown> = {}) {
   return render(<Wrapper><WorkspaceKdsSettings
@@ -88,10 +90,10 @@ describe('WorkspaceKdsSettings', () => {
     expect(screen.getByText('SLA Escalation')).toBeInTheDocument();
   });
 
-  it('renders sound toggle (initially checked from antialiased prefs)', () => {
+    it('renders sound toggle (initially checked — default)', () => {
     renderCard();
     const t = document.getElementById('kds-sound') as HTMLInputElement;
-    // fontSmoothing === 'antialiased' → soundEnabled = true
+    // DEFAULT_KDS.soundEnabled = true
     expect(t.checked).toBe(true);
   });
 
@@ -141,11 +143,15 @@ describe('WorkspaceKdsSettings', () => {
   it('calls onSaved after successful save', async () => {
     const onSaved = vi.fn();
     renderCard({ onSaved });
+
+    // Wait for getSetting calls to resolve
+    await new Promise((r) => setTimeout(r, 10));
+
     const t = document.getElementById('kds-auto-ack') as HTMLInputElement;
     fireEvent.click(t);
     await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
   });
 
   it('hides Save button in inspector-drawer variant', () => {

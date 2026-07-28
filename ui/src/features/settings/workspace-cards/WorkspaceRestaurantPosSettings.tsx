@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useToast } from '@/frontend/shared/Toast';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
+import { setReceiptSettings, getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -20,10 +22,13 @@ import { hasChanges } from './helpers';
  */
 export function WorkspaceRestaurantPosSettings({
   terminalId,
+  userId,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
   const { settings } = useSettings();
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
 
   // ── Draft state ──────────────────────────────────────────────
@@ -45,28 +50,68 @@ export function WorkspaceRestaurantPosSettings({
   // ── Initialise ───────────────────────────────────────────────
 
   useEffect(() => {
+    // Only seed initial values once; subsequent re-runs must not
+    // overwrite user edits (e.g. when settings.receipt changes).
+    if (originalsLoaded) return;
+
     setTableManagement(settings.receipt.showTableNumber);
-    if (!originalsLoaded) {
-      originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring };
+
+    // Load courseFiring from the backend settings table.
+    let cancelled = false;
+    getSetting('restaurant.course_firing').then((raw) => {
+      if (cancelled) return;
+      const loaded = raw === 'true';
+      setCourseFiring(loaded);
+      originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring: loaded };
       setOriginalsLoaded(true);
-    }
-  }, [settings.receipt, originalsLoaded, courseFiring]);
+    }).catch(() => {
+      originalsRef.current = { tableManagement: settings.receipt.showTableNumber, courseFiring: false };
+      setOriginalsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [settings.receipt, originalsLoaded]);
 
   // ── Save ─────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
+      const tasks: Promise<unknown>[] = [];
+
+      // Persist table management + course firing to the backend
+      tasks.push(
+        setReceiptSettings({
+          showCurrency: settings.receipt.showCurrency,
+          decimalSeparator: settings.receipt.decimalSeparator,
+          showTax: settings.receipt.showTax,
+          footer: settings.receipt.footer,
+          paperWidth: settings.receipt.paperWidth,
+          showTableNumber: tableManagement,
+          marginTop: settings.receipt.marginTop,
+          marginBottom: settings.receipt.marginBottom,
+          marginLeft: settings.receipt.marginLeft,
+          marginRight: settings.receipt.marginRight,
+        }, userId ?? 'default'),
+      );
+      tasks.push(
+        setSettings({ 'restaurant.course_firing': String(courseFiring) }, userId ?? 'default'),
+      );
+
       if (terminalId && hw.profile) {
-        await hw.save();
+        tasks.push(hw.save(userId));
       }
+
+      await Promise.all(tasks);
+
+      originalsRef.current = { tableManagement, courseFiring };
+
       onSaved?.();
     } catch {
-      // Hook handles error state
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, onSaved]);
+  }, [terminalId, hw, userId, tableManagement, courseFiring, settings.receipt, onSaved, addToast, l10n]);
 
   const isCompact = variant === 'inspector-drawer';
 

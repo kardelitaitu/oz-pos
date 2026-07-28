@@ -3,6 +3,7 @@ import { screen, fireEvent, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import poFtl from '@/locales/purchasing.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -27,7 +28,9 @@ const poL10n = new ReactLocalization([poBundle]);
 // Wrapper to provide Fluent + render.
 function renderForm(el: React.ReactElement): ReturnType<typeof render> {
   return render(
-    <LocalizationProvider l10n={poL10n}>{el}</LocalizationProvider>,
+    <LocalizationProvider l10n={poL10n}>
+      <ToastProvider>{el}</ToastProvider>
+    </LocalizationProvider>,
   );
 }
 

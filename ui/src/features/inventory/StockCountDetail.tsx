@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   getStockCount,
   getCountLines,
@@ -41,8 +42,11 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,16 +57,20 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         setLines(await getCountLines(countId));
       }
     } catch {
-      // silent
+      addToast({ message: l10nRef.current.getString('sc-error-load') || 'Failed to load stock count', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [countId]);
+  }, [countId, addToast]);
 
   useEffect(() => {
     load();
-    listProductsScoped(sessionToken).then(setProducts).catch(() => {});
-  }, [load, sessionToken]);
+    if (sessionToken) {
+      listProductsScoped(sessionToken).then(setProducts).catch(() => {
+        addToast({ message: l10nRef.current.getString('sc-error-products') || 'Failed to load products', type: 'error' });
+      });
+    }
+  }, [load, sessionToken, addToast]);
 
   const isEditable = count?.status === 'draft' || count?.status === 'in_progress';
 
@@ -94,7 +102,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       setSearchQuery('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add line');
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-add-line') || 'Failed to add line'));
     } finally {
       setSaving(false);
     }
@@ -105,7 +113,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await updateCountLine({ lineId, countedQty, notes: '' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update');
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-update-line') || 'Failed to update'));
     }
   }, [load]);
 
@@ -114,7 +122,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await removeCountLine({ lineId });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove');
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-remove-line') || 'Failed to remove'));
     }
   }, [load]);
 
@@ -123,7 +131,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await updateStockCountStatus(countId, 'in_progress');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start count');
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-start-count') || 'Failed to start count'));
     }
   }, [countId, load]);
 
@@ -133,15 +141,15 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     try {
       const adjustments = await completeStockCount({ countId });
       setSuccessMsg(
-        l10n.getString('sc-complete-success', { count: adjustments.length }),
+        l10nRef.current.getString('sc-complete-success', { count: adjustments.length }),
       );
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete');
+      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-complete') || 'Failed to complete'));
     } finally {
       setSaving(false);
     }
-  }, [countId, load, l10n]);
+  }, [countId, load]);
 
   const totalExpected = lines.reduce((s, l) => s + l.expected_qty, 0);
   const totalCounted = lines.reduce((s, l) => s + (l.counted_qty ?? 0), 0);
@@ -201,9 +209,9 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
       <div className="sc-detail-meta">
         <span className={`sc-badge sc-badge--${count.status}`}>
-          {l10n.getString(`sc-status-${count.status}`) ?? count.status}
+          <Localized id={`sc-status-${count.status}`}>{count.status}</Localized>
         </span>
-        <span>{l10n.getString(`sc-type-${count.count_type}`) ?? count.count_type}</span>
+        <span><Localized id={`sc-type-${count.count_type}`}>{count.count_type}</Localized></span>
         <span>{new Date(count.created_at).toLocaleDateString()}</span>
       </div>
 

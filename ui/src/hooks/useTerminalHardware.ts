@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getHardwareSettings, setHardwareSettings, type HardwareSettingsDto } from '@/api/settings';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -90,157 +91,63 @@ export function createDefaultProfile(terminalId: string, storeId?: string): Term
   };
 }
 
-// ── Storage key ─────────────────────────────────────────────────────
+// ── IPC ↔ Profile mapping ──────────────────────────────────────────
 
-function storageKey(terminalId: string): string {
-  return `oz-pos-terminal-hardware-${terminalId}`;
-}
-
-// TODO (Phase 0c): When Tauri fs plugin is integrated, replace
-// localStorage with filesystem reads/writes to:
-//   %APPDATA%/oz-pos/terminals/{terminalId}/terminal_profile.json (Windows)
-//   ~/.local/share/oz-pos/terminals/{terminalId}/terminal_profile.json (Linux/macOS)
-
-// ── Validation ──────────────────────────────────────────────────────
-
-interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-}
-
-/** Validate a parsed object against the TerminalHardwareProfile schema.
- *  Returns a list of field-level errors. Invalid fields are reset to
- *  defaults by the caller via mergeWithDefaults. */
-function validateProfile(obj: unknown): ValidationResult {
-  const errors: string[] = [];
-
-  if (!obj || typeof obj !== 'object') {
-    return { valid: false, errors: ['Profile is not an object'] };
-  }
-
-  const p = obj as Record<string, unknown>;
-
-  if (typeof p['terminalId'] !== 'string') errors.push('terminalId: expected string');
-  if (typeof p['storeId'] !== 'string') errors.push('storeId: expected string');
-  if (typeof p['version'] !== 'number') errors.push('version: expected number');
-  if (typeof p['initialized'] !== 'string') errors.push('initialized: expected string');
-
-  // hardware
-  if (p['hardware'] && typeof p['hardware'] === 'object') {
-    const hw = p['hardware'] as Record<string, unknown>;
-
-    if (hw['printer'] && typeof hw['printer'] === 'object') {
-      const pr = hw['printer'] as Record<string, unknown>;
-      if (pr['connection'] && !['network', 'usb', 'serial', 'auto'].includes(String(pr['connection']))) {
-        errors.push('hardware.printer.connection: invalid value');
-      }
-      if (pr['paperSize'] && !['58', '80', 'a4', 'letter'].includes(String(pr['paperSize']))) {
-        errors.push('hardware.printer.paperSize: invalid value');
-      }
-    }
-
-    if (hw['scale'] && typeof hw['scale'] === 'object') {
-      const sc = hw['scale'] as Record<string, unknown>;
-      if (sc['connection'] && !['serial', 'usb', 'none'].includes(String(sc['connection']))) {
-        errors.push('hardware.scale.connection: invalid value');
-      }
-      if (typeof sc['baudRate'] === 'number' && (sc['baudRate'] as number) < 0) {
-        errors.push('hardware.scale.baudRate: must be non-negative');
-      }
-    }
-
-    if (hw['scanner'] && typeof hw['scanner'] === 'object') {
-      const sn = hw['scanner'] as Record<string, unknown>;
-      if (sn['mode'] && !['keyboard', 'serial', 'auto'].includes(String(sn['mode']))) {
-        errors.push('hardware.scanner.mode: invalid value');
-      }
-    }
-  } else {
-    errors.push('hardware: expected object');
-  }
-
-  // localPrefs
-  if (p['localPrefs'] && typeof p['localPrefs'] === 'object') {
-    const lp = p['localPrefs'] as Record<string, unknown>;
-    if (typeof lp['soundVolume'] === 'number' && ((lp['soundVolume'] as number) < 0 || (lp['soundVolume'] as number) > 100)) {
-      errors.push('localPrefs.soundVolume: must be 0-100');
-    }
-    if (lp['darkMode'] !== undefined && typeof lp['darkMode'] !== 'boolean') {
-      errors.push('localPrefs.darkMode: expected boolean');
-    }
-    if (lp['scaleAutoZero'] !== undefined && typeof lp['scaleAutoZero'] !== 'boolean') {
-      errors.push('localPrefs.scaleAutoZero: expected boolean');
-    }
-  } else {
-    errors.push('localPrefs: expected object');
-  }
-
-  return { valid: errors.length === 0, errors };
-}
-
-const VALID_PRINTER_CONNS: PrinterConnection[] = ['network', 'usb', 'serial', 'auto'];
-const VALID_PAPER_SIZES: PaperSize[] = ['58', '80', 'a4', 'letter'];
-const VALID_SCALE_CONNS: ScaleConnection[] = ['serial', 'usb', 'none'];
-const VALID_SCANNER_MODES: ScannerMode[] = ['keyboard', 'serial', 'auto'];
-
-/** Merge a partially-valid profile with defaults, resetting invalid enum fields. */
-function mergeWithDefaults(partial: TerminalHardwareProfile): TerminalHardwareProfile {
-  const defaults = createDefaultProfile(partial.terminalId, partial.storeId);
-  const result = { ...defaults };
-
-  const pp = partial.hardware?.printer;
-  result.hardware.printer = {
-    connection: pp?.connection && VALID_PRINTER_CONNS.includes(pp.connection as PrinterConnection)
-      ? pp.connection : defaults.hardware.printer.connection,
-    devicePath: pp?.devicePath ?? defaults.hardware.printer.devicePath,
-    paperSize: pp?.paperSize && VALID_PAPER_SIZES.includes(pp.paperSize as PaperSize)
-      ? pp.paperSize : defaults.hardware.printer.paperSize,
-    testPrintIp: pp?.testPrintIp ?? defaults.hardware.printer.testPrintIp,
+/** Extract the IPC-compatible DTO from a full profile. */
+function toHardwareSettingsDto(profile: TerminalHardwareProfile): HardwareSettingsDto {
+  return {
+    printerConnection: profile.hardware.printer.connection,
+    printerDevicePath: profile.hardware.printer.devicePath,
+    printerPaperSize: profile.hardware.printer.paperSize,
+    scannerDeviceId: profile.hardware.scanner.deviceId,
+    scannerInputMode: profile.hardware.scanner.mode,
+    scaleConnection: profile.hardware.scale.connection,
+    scaleDevicePath: profile.hardware.scale.devicePath,
+    scaleBaudRate: profile.hardware.scale.baudRate,
+    scaleZeroOnBoot: profile.hardware.scale.zeroOnBoot,
+    soundVolume: profile.localPrefs.soundVolume,
+    darkMode: profile.localPrefs.darkMode,
+    scaleAutoZero: profile.localPrefs.scaleAutoZero,
   };
-
-  const sp = partial.hardware?.scale;
-  result.hardware.scale = {
-    connection: sp?.connection && VALID_SCALE_CONNS.includes(sp.connection as ScaleConnection)
-      ? sp.connection : defaults.hardware.scale.connection,
-    devicePath: sp?.devicePath ?? defaults.hardware.scale.devicePath,
-    baudRate: typeof sp?.baudRate === 'number' && sp.baudRate >= 0
-      ? sp.baudRate : defaults.hardware.scale.baudRate,
-    zeroOnBoot: typeof sp?.zeroOnBoot === 'boolean' ? sp.zeroOnBoot : defaults.hardware.scale.zeroOnBoot,
-  };
-
-  const snp = partial.hardware?.scanner;
-  result.hardware.scanner = {
-    mode: snp?.mode && VALID_SCANNER_MODES.includes(snp.mode as ScannerMode)
-      ? snp.mode : defaults.hardware.scanner.mode,
-    deviceId: snp?.deviceId ?? defaults.hardware.scanner.deviceId,
-  };
-
-  const lp = partial.localPrefs;
-  result.localPrefs = {
-    soundVolume: typeof lp?.soundVolume === 'number' && lp.soundVolume >= 0 && lp.soundVolume <= 100
-      ? lp.soundVolume : defaults.localPrefs.soundVolume,
-    darkMode: typeof lp?.darkMode === 'boolean' ? lp.darkMode : defaults.localPrefs.darkMode,
-    scaleAutoZero: typeof lp?.scaleAutoZero === 'boolean' ? lp.scaleAutoZero : defaults.localPrefs.scaleAutoZero,
-  };
-
-  if (partial.initialized) result.initialized = partial.initialized;
-  result.version = Math.max(defaults.version, partial.version ?? 0);
-
-  return result;
 }
 
-// ── Read from storage ───────────────────────────────────────────────
-
-function readFromStorage(terminalId: string): string | null {
-  return localStorage.getItem(storageKey(terminalId));
-}
-
-function writeToStorage(terminalId: string, data: string): void {
-  localStorage.setItem(storageKey(terminalId), data);
-}
-
-function removeFromStorage(terminalId: string): void {
-  localStorage.removeItem(storageKey(terminalId));
+/** Build a full profile from IPC DTO + defaults for unsupported fields. */
+function fromHardwareSettingsDto(
+  terminalId: string,
+  storeId: string | undefined,
+  dto: HardwareSettingsDto,
+): TerminalHardwareProfile {
+  const defaults = createDefaultProfile(terminalId, storeId);
+  return {
+    ...defaults,
+    hardware: {
+      ...defaults.hardware,
+      printer: {
+        ...defaults.hardware.printer,
+        connection: (dto.printerConnection as PrinterConnection) || defaults.hardware.printer.connection,
+        devicePath: dto.printerDevicePath ?? defaults.hardware.printer.devicePath,
+        paperSize: (dto.printerPaperSize as PaperSize) || defaults.hardware.printer.paperSize,
+      },
+      scanner: {
+        ...defaults.hardware.scanner,
+        deviceId: dto.scannerDeviceId ?? defaults.hardware.scanner.deviceId,
+        mode: (dto.scannerInputMode as ScannerMode) || defaults.hardware.scanner.mode,
+      },
+      scale: {
+        ...defaults.hardware.scale,
+        connection: (dto.scaleConnection as ScaleConnection) || defaults.hardware.scale.connection,
+        devicePath: dto.scaleDevicePath ?? defaults.hardware.scale.devicePath,
+        baudRate: dto.scaleBaudRate ?? defaults.hardware.scale.baudRate,
+        zeroOnBoot: dto.scaleZeroOnBoot ?? defaults.hardware.scale.zeroOnBoot,
+      },
+    },
+    localPrefs: {
+      ...defaults.localPrefs,
+      soundVolume: dto.soundVolume ?? defaults.localPrefs.soundVolume,
+      darkMode: dto.darkMode ?? defaults.localPrefs.darkMode,
+      scaleAutoZero: dto.scaleAutoZero ?? defaults.localPrefs.scaleAutoZero,
+    },
+  };
 }
 
 // ── Hook return type ────────────────────────────────────────────────
@@ -260,9 +167,9 @@ export interface UseTerminalHardwareResult {
   updateScanner: (partial: Partial<ScannerConfig>) => void;
   /** Update local preferences. */
   updateLocalPrefs: (partial: Partial<LocalPrefs>) => void;
-  /** Persist the current profile to storage (three-phase commit). */
-  save: () => Promise<void>;
-  /** Re-read profile from storage. */
+  /** Persist full hardware + localPrefs to filesystem via IPC. */
+  save: (userId?: string) => Promise<void>;
+  /** Re-read profile from IPC. */
   reload: () => void;
 }
 
@@ -270,8 +177,10 @@ export interface UseTerminalHardwareResult {
 
 /**
  * Hook to manage terminal hardware bindings (printer, scale, scanner)
- * stored per-terminal in localStorage (filesystem when Tauri fs plugin
- * is available in future).
+ * stored in the filesystem via Tauri IPC (terminal_profiles/{id}.json).
+ *
+ * Full terminal profile (printer, scanner, scale, localPrefs) is
+ * persisted via getHardwareSettings / setHardwareSettings IPC.
  *
  * @param terminalId - Unique terminal identifier
  * @param storeId - Optional store identifier for the profile
@@ -285,9 +194,9 @@ export function useTerminalHardware(
   const [error, setError] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
-  // ── Load profile on mount ──────────────────────────────────
+  // ── Load profile from IPC on mount ──────────────────────────
 
-  const loadProfile = useCallback(() => {
+  const loadProfile = useCallback(async () => {
     if (!terminalId) {
       setProfile(null);
       setIsLoading(false);
@@ -298,47 +207,13 @@ export function useTerminalHardware(
     setError(null);
 
     try {
-      const raw = readFromStorage(terminalId);
-
-      if (!raw) {
-        // New terminal — create default profile
-        const defaults = createDefaultProfile(terminalId, storeId);
-        setProfile(defaults);
-        setIsLoading(false);
-        return;
-      }
-
-      // Parse and validate
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        // Corrupted JSON — rename and create fresh
-        handleCorruptedFile(terminalId, raw);
-        const defaults = createDefaultProfile(terminalId, storeId);
-        setProfile(defaults);
-        setIsLoading(false);
-        setError('Hardware profile was corrupted — reset to defaults.');
-        return;
-      }
-
-      const validation = validateProfile(parsed);
-      if (!validation.valid) {
-        // Schema validation failed — merge valid fields, reset invalid
-        const merged = mergeWithDefaults(parsed as TerminalHardwareProfile);
-        setProfile(merged);
-        setIsLoading(false);
-        // Save the corrected profile
-        try {
-          writeToStorage(terminalId, JSON.stringify(merged, null, 2));
-        } catch { /* best-effort */ }
-        return;
-      }
-
-      setProfile(parsed as TerminalHardwareProfile);
+      const dto = await getHardwareSettings();
+      const resolved = fromHardwareSettingsDto(terminalId, storeId, dto);
+      setProfile(resolved);
       setIsLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load terminal hardware profile');
+    } catch {
+      // IPC unavailable (non-Tauri env, dev mock) — use defaults
+      setProfile(createDefaultProfile(terminalId, storeId));
       setIsLoading(false);
     }
   }, [terminalId, storeId]);
@@ -401,40 +276,18 @@ export function useTerminalHardware(
     });
   }, []);
 
-  // ── Three-phase commit save ─────────────────────────────────
+  // ── Save to IPC ─────────────────────────────────────────────
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (userId?: string) => {
     if (!profile || !terminalId) return;
 
     setIsLoading(true);
     setError(null);
 
-    const newData = JSON.stringify(profile, null, 2);
-
-    // Phase 1: Backup existing data
-    const oldData = readFromStorage(terminalId);
-
     try {
-      // Phase 2: Write new data
-      writeToStorage(terminalId, newData);
-
-      // Phase 3: Success — cleanup (old backup not needed since
-      // localStorage is atomic per-key)
-
-      // For filesystem-based storage (future Tauri fs plugin),
-      // this is where we'd delete the .bak file.
-
+      await setHardwareSettings(toHardwareSettingsDto(profile), userId ?? '');
       setIsLoading(false);
     } catch (err) {
-      // Phase 3 (failure): Restore from old data
-      if (oldData !== null) {
-        try {
-          writeToStorage(terminalId, oldData);
-        } catch { /* desperate */ }
-      } else {
-        removeFromStorage(terminalId);
-      }
-
       const msg = err instanceof Error ? err.message : 'Failed to save hardware profile';
       setError(msg);
       setIsLoading(false);
@@ -458,25 +311,4 @@ export function useTerminalHardware(
     save,
     reload,
   };
-}
-
-// ── Corruption recovery ─────────────────────────────────────────────
-
-/** Handle a corrupted profile file: rename it, create fresh defaults. */
-function handleCorruptedFile(terminalId: string, corruptedRaw: string): void {
-  const key = storageKey(terminalId);
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const corruptedKey = `${key}.corrupted.${timestamp}`;
-
-  try {
-    // Save the corrupted data for forensic purposes
-    localStorage.setItem(corruptedKey, corruptedRaw);
-    // Clear the original key so a fresh profile is created
-    localStorage.removeItem(key);
-  } catch {
-    // If even the backup fails, just clear the original
-    try {
-      localStorage.removeItem(key);
-    } catch { /* hopeless */ }
-  }
 }

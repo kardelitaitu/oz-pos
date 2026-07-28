@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { exportDailySummaryScoped, type DailySummaryRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
 import { Skeleton } from '@/components/Skeleton';
@@ -13,8 +13,9 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
  * provided by the host dashboard page.
  */
 export default function DailyTotalWidget() {
+  const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [summary, setSummary] = useState<DailySummaryRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,7 +25,7 @@ export default function DailyTotalWidget() {
       const s = await exportDailySummaryScoped(sessionToken);
       setSummary(s);
     } catch {
-      // IPC unavailable.
+      setSummary([]);
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ export default function DailyTotalWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--daily-total" aria-label="Daily sales summary">
+    <div className="reporting-widget reporting-widget--daily-total" aria-label={l10n.getString('sales-dashboard-daily-aria') || 'Daily sales summary'}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-daily-total">
           <h3 className="reporting-widget-title">Daily Summary</h3>

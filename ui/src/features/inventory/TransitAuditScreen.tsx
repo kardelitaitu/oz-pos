@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
 import './TransitAuditScreen.css';
@@ -18,8 +18,9 @@ export default function TransitAuditScreen() {
   const [loading, setLoading] = useState(true);
   const [reverseConfirmId, setReverseConfirmId] = useState<string | null>(null);
   const { addToast } = useToast();
+  const { l10n } = useLocalization();
 
-  const loadTransfers = async () => {
+  const loadTransfers = useCallback(async () => {
     setLoading(true);
     try {
       const allTransfers = await listStockTransfers();
@@ -33,16 +34,15 @@ export default function TransitAuditScreen() {
       );
       setTransfers(enriched);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to load transit stock', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-transit-error-load') || 'Failed to load transit stock'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast, l10n]);
 
   useEffect(() => {
     loadTransfers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only load
-  }, []);
+  }, [loadTransfers]);
 
   const handleReverseClick = (id: string) => {
     setReverseConfirmId(id);
@@ -54,9 +54,9 @@ export default function TransitAuditScreen() {
       await cancelStockTransfer(reverseConfirmId);
       setReverseConfirmId(null);
       await loadTransfers();
-      addToast({ message: 'Stock transfer reversed successfully', type: 'success' });
+      addToast({ message: l10n.getString('inv-transit-reversed-toast') || 'Stock transfer reversed successfully', type: 'success' });
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to reverse transfer', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-transit-error-reverse') || 'Failed to reverse transfer'), type: 'error' });
     }
   };
 
@@ -102,7 +102,7 @@ export default function TransitAuditScreen() {
               <div key={transfer.id} className={`transit-card ${overdue ? 'overdue' : ''}`}>
                 <div className="transit-meta">
                   <div>
-                    <span>Transfer #</span>
+                    <span><Localized id="inv-transit-transfer-label">Transfer #</Localized></span>
                     <strong>{transfer.transfer_number}</strong>
                   </div>
                   <div>
@@ -121,7 +121,7 @@ export default function TransitAuditScreen() {
                     <Localized id="inv-transit-col-sent">
                       <span>Sent At</span>
                     </Localized>
-                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : 'Unknown'}</strong>
+                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : (l10n.getString('inv-transit-unknown') || 'Unknown')}</strong>
                   </div>
                 </div>
 
@@ -166,10 +166,10 @@ export default function TransitAuditScreen() {
         open={reverseConfirmId !== null}
         onCancel={() => setReverseConfirmId(null)}
         onConfirm={handleReverseConfirm}
-        title="Reverse Transfer?"
-        message="Are you sure you want to reverse this stock transfer? Stock will be returned to the source location. This action cannot be undone."
+        title={l10n.getString('inv-transit-reverse-title') || 'Reverse Transfer?'}
+        message={l10n.getString('inv-transit-reverse-message') || 'Are you sure you want to reverse this stock transfer? Stock will be returned to the source location. This action cannot be undone.'}
         variant="danger"
-        confirmLabel="Reverse"
+        confirmLabel={l10n.getString('inv-transit-reverse-confirm') || 'Reverse'}
       />
     </div>
   );

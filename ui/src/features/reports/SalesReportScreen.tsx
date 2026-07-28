@@ -164,7 +164,7 @@ export default function SalesReportScreen() {
 
     revenuePromise
       .then(setPrevRevenueData)
-      .catch(() => setPrevRevenueData([]))
+      .catch(() => { /* period comparison is best-effort; silently clear on failure */ setPrevRevenueData([]); })
 
   }, [comparePeriod, view, calcPrevRange]);
 
@@ -319,7 +319,7 @@ export default function SalesReportScreen() {
     : null;
 
   return (
-    <div className="sales-report" role="region" aria-label="Sales Report">
+    <div className="sales-report" role="region" aria-label={l10n.getString('sales-report-region-aria') || 'Sales Report'}>
       <div className="sales-report-header">
         <Localized id="sales-report-title">
           <h1 className="sales-report-title">Sales Report</h1>
@@ -335,7 +335,7 @@ export default function SalesReportScreen() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="sales-report-input"
-            aria-label="Start date"
+            aria-label={l10n.getString('sales-report-start-aria') || 'Start date'}
           />
 
           <label htmlFor="end-date" className="sales-report-label">
@@ -347,13 +347,13 @@ export default function SalesReportScreen() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="sales-report-input"
-            aria-label="End date"
+            aria-label={l10n.getString('sales-report-end-aria') || 'End date'}
           />
 
           <div
             className="sales-report-view-toggle"
             role="radiogroup"
-            aria-label="View mode"
+            aria-label={l10n.getString('sales-report-view-aria') || 'View mode'}
           >
             {(['daily', 'weekly', 'monthly'] as ViewMode[]).map((mode) => (
               <button
@@ -374,7 +374,7 @@ export default function SalesReportScreen() {
           <Button
             variant={comparePeriod ? 'primary' : 'secondary'}
             onClick={() => setComparePeriod((p) => !p)}
-            aria-label={comparePeriod ? 'Disable period comparison' : 'Compare to previous period'}
+            aria-label={comparePeriod ? (l10n.getString('sales-report-compare-off-aria') || 'Disable period comparison') : (l10n.getString('sales-report-compare-on-aria') || 'Compare to previous period')}
             aria-pressed={comparePeriod}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 'var(--space-1)' }}>
@@ -387,14 +387,14 @@ export default function SalesReportScreen() {
           <Button
             variant="secondary"
             onClick={printReport}
-            aria-label="Print report"
+            aria-label={l10n.getString('sales-report-print-aria') || 'Print report'}
           >
             <Localized id="print">Print</Localized>
           </Button>
           <Button
             variant="secondary"
             onClick={exportCsv}
-            aria-label="Export CSV"
+            aria-label={l10n.getString('sales-report-export-aria') || 'Export CSV'}
           >
             <Localized id="sales-report-export-csv">Export CSV</Localized>
           </Button>
@@ -553,7 +553,7 @@ export default function SalesReportScreen() {
           <div
             className="sales-report-heatmap"
             role="grid"
-            aria-label="Hourly heatmap"
+            aria-label={l10n.getString('sales-report-heatmap-aria') || 'Hourly heatmap'}
           >
             <div className="sales-report-heatmap-header">
               <div className="sales-report-heatmap-corner" />

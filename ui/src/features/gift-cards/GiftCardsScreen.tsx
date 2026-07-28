@@ -45,11 +45,11 @@ export default function GiftCardsScreen() {
       const result = await listGiftCards(filter);
       setCards(result);
     } catch {
-      // IPC unavailable.
+      addToast({ message: l10n.getString('gift-cards-error-load') || 'Failed to load gift cards', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter]);
+  }, [search, statusFilter, addToast, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -62,9 +62,9 @@ export default function GiftCardsScreen() {
       }
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to toggle freeze', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10n.getString('gift-cards-error-freeze') || 'Failed to toggle freeze'), type: 'error' });
     }
-  }, [load, addToast]);
+  }, [load, addToast, l10n]);
 
   const handleTopUp = useCallback(async (cardNumber: string) => {
     const amount = parseInt(topUpAmount, 10);
@@ -79,7 +79,7 @@ export default function GiftCardsScreen() {
       setTopUpAmount('');
       await load();
     } catch (err) {
-      setTopUpError(err instanceof Error ? err.message : 'Top-up failed');
+      setTopUpError(err instanceof Error ? err.message : (l10n.getString('gift-cards-error-topup') || 'Top-up failed'));
     }
   }, [topUpAmount, load, l10n]);
 
@@ -238,10 +238,10 @@ export default function GiftCardsScreen() {
                         className="gift-card-topup-input"
                         id="gift-card-topup-amount"
                         name="gift-card-topup-amount"
-                        placeholder="Amount (minor units)"
+                        placeholder={l10n.getString('gift-cards-topup-placeholder') || 'Amount (minor units)'}
                         value={topUpAmount}
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}
-                        aria-label="Top-up amount"
+                        aria-label={l10n.getString('gift-cards-topup-aria') || 'Top-up amount'}
                       />
                       <Localized id="gift-cards-confirm-topup">
                         <Button variant="primary" onClick={() => handleTopUp(gc.card.card_number)}>

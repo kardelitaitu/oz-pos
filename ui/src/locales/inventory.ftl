@@ -73,6 +73,15 @@ inv-shift-summary-title = Shift Summary
 inv-shift-summary-performed = Transactions performed during this shift:
 inv-shift-no-transactions = No transactions recorded.
 
+# Inventory Shift — error toasts + a11y
+inv-shift-error-locations = Failed to load locations
+inv-shift-error-active = Failed to load active shift
+inv-shift-error-start = Failed to start shift
+inv-shift-error-end = Failed to end shift
+inv-shift-bar-aria = Shift Info
+inv-shift-location-aria = Location
+inv-shift-notes-aria = Notes
+
 # Transit Audit
 inv-transit-title = Transit Stock Audit
 inv-transit-col-sku = SKU
@@ -84,6 +93,14 @@ inv-transit-col-sent = Sent At
 inv-transit-col-overdue = Overdue
 inv-transit-reverse-btn = Reverse Transfer
 inv-transit-no-overdue = No overdue transit items.
+inv-transit-reverse-title = Reverse Transfer?
+inv-transit-reverse-message = Are you sure you want to reverse this stock transfer? Stock will be returned to the source location. This action cannot be undone.
+inv-transit-reverse-confirm = Reverse
+inv-transit-transfer-label = Transfer #
+inv-transit-reversed-toast = Stock transfer reversed successfully
+inv-transit-error-load = Failed to load transit stock
+inv-transit-error-reverse = Failed to reverse transfer
+inv-transit-unknown = Unknown
 
 # Transaction Log
 inv-log-title = Inventory Transaction Log
@@ -93,6 +110,24 @@ inv-log-filter-type = Type
 inv-log-filter-all = All
 inv-log-expand-btn = Details
 inv-log-col-barcode = Barcode Scanned
+inv-log-col-datetime = Date / Time
+inv-log-col-type = Type
+inv-log-col-location = Location
+inv-log-col-staff = Staff
+inv-log-col-actions = Action
+inv-log-filter-start = Start Date
+inv-log-filter-end = End Date
+inv-log-type-sale = Sale
+inv-log-type-void = Void
+inv-log-type-refund = Refund
+inv-log-type-transfer = Transfer
+inv-log-type-po-receive = PO Receive
+inv-log-type-stock-count = Stock Count
+inv-log-type-manual-adjustment = Manual Adjustment
+inv-log-loading-lines = Loading lines...
+inv-log-notes = Notes
+inv-log-error-load = Failed to load transactions
+inv-log-error-lines = Failed to load transaction details
 
 # Threshold Config
 inv-threshold-title = Stock Threshold Configuration
@@ -111,9 +146,34 @@ inv-threshold-status-enabled = Enabled
 inv-threshold-status-disabled = Disabled
 inv-threshold-unknown-product = Unknown Product
 
+# Threshold Config — additional keys
+inv-threshold-filter-label = Filter by Location
+inv-threshold-delete-title = Delete Threshold?
+inv-threshold-delete-message = Are you sure you want to delete this threshold alert boundary? This action cannot be undone.
+inv-threshold-delete-confirm = Delete
+inv-threshold-error-qty = Threshold must be a valid non-negative integer
+inv-threshold-error-load = Failed to load threshold data
+inv-threshold-error-save = Failed to save threshold
+inv-threshold-error-delete = Failed to delete threshold
+
 # Stock Alert Panel
 inv-alert-title = Stock Alert Panel
 inv-alert-badge-count = { $count } Stock Alerts
 inv-alert-col-triggered = Triggered
 inv-alert-acknowledge-btn = Acknowledge
+inv-alert-loading-aria = Loading stock alerts
+inv-alert-loading = Loading alerts...
+inv-alert-aria = Stock alerts
+inv-alert-panel-aria = Stock alerts panel
+inv-alert-empty = No active alerts
+inv-alert-time-now = Just now
+inv-alert-time-min = { $min }m ago
+inv-alert-time-hr = { $hr }h ago
+inv-alert-ack-aria = Acknowledge alert for { $name }
+inv-alert-ack = Ack
+inv-alert-acking = ...
+inv-alert-stock-label = Stock
+inv-alert-threshold-label = Threshold
+inv-alert-error-load = Failed to load alerts
+inv-alert-error-ack = Failed to acknowledge
 

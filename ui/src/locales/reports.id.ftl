@@ -6,6 +6,11 @@ dashboard-low-stock-alerts = Peringatan Stok Menipis
 dashboard-no-data = Belum ada data penjualan hari ini
 dashboard-view-report = Lihat Laporan Lengkap
 
+# Dashboard — a11y
+dashboard-region-aria = Dasbor
+dashboard-stock-alerts-aria = Peringatan stok menipis
+dashboard-stock-left = tersisa
+
 top-products-title = Produk Terlaris
 top-products-period = Periode
 top-products-today = Hari Ini
@@ -54,6 +59,41 @@ menu-eng-star = Bintang
 menu-eng-plowhorse = Kuda Beban
 menu-eng-puzzle = Teka-teki
 menu-eng-dog = Anjing
+menu-eng-loading-aria = Memuat laporan rekayasa menu
+menu-eng-region-aria = Laporan Rekayasa Menu
+menu-eng-start-date-aria = Tanggal mulai
+menu-eng-end-date-aria = Tanggal akhir
+menu-eng-export-csv-aria = Ekspor CSV
+menu-eng-tooltip-volume = Volume
+menu-eng-tooltip-revenue = Pendapatan
+menu-eng-tooltip-margin = Margin
+menu-eng-tooltip-price = Harga
+menu-eng-tooltip-cost = Biaya
+menu-eng-sku-header = SKU
+menu-eng-margin-header = Margin
+menu-eng-margin-unit-header = Margin/Unit
+menu-eng-axis-volume = Volume (unit terjual)
+menu-eng-axis-margin = Total Margin
+menu-eng-legend-star = ● Bintang (vol tinggi, margin tinggi)
+menu-eng-legend-plowhorse = ▲ Kuda Beban (vol tinggi, margin rendah)
+menu-eng-legend-puzzle = ◆ Teka-teki (vol rendah, margin tinggi)
+menu-eng-legend-dog = ▼ Anjing (vol rendah, margin rendah)
+menu-eng-table-aria = Rincian produk rekayasa menu
+menu-eng-rec-star = Promosikan Bintang — volume & margin tinggi. Tampilkan dengan jelas.
+menu-eng-rec-plowhorse = Naikkan Harga Kuda Beban — volume tinggi tapi margin rendah. Naikkan harga atau kurangi biaya.
+menu-eng-rec-puzzle = Reposisi Teka-teki — volume rendah tapi margin tinggi. Tingkatkan visibilitas atau bundel.
+menu-eng-rec-dog = Hapus Anjing — volume & margin rendah. Pertimbangkan untuk menghapus.
+
+# Sales Report — a11y labels
+sales-report-region-aria = Laporan Penjualan
+sales-report-start-aria = Tanggal mulai
+sales-report-end-aria = Tanggal akhir
+sales-report-view-aria = Mode tampilan
+sales-report-compare-off-aria = Nonaktifkan perbandingan periode
+sales-report-compare-on-aria = Bandingkan dengan periode sebelumnya
+sales-report-print-aria = Cetak laporan
+sales-report-export-aria = Ekspor CSV
+sales-report-heatmap-aria = Peta panas per jam
 
 # Period comparison
 sales-report-compare = Bandingkan
@@ -68,3 +108,16 @@ custom-report-run = Jalankan
 custom-report-results = Hasil
 custom-report-export-csv = Ekspor CSV
 custom-report-no-columns-match = Tidak ada kolom yang cocok
+
+# Custom Report — a11y labels
+custom-report-dataset-aria = Dataset
+custom-report-start-aria = Tanggal mulai
+custom-report-end-aria = Tanggal akhir
+custom-report-search-placeholder = Cari kolom…
+custom-report-search-aria = Cari kolom
+custom-report-search-clear-aria = Hapus pencarian
+custom-report-columns-aria = Pemilihan kolom
+custom-report-run-aria = Jalankan laporan
+custom-report-region-aria = Pembuat Laporan Kustom
+custom-report-export-aria = Ekspor CSV
+custom-report-columns-selected = { $selected } / { $total } dipilih

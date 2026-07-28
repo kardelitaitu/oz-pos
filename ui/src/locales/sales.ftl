@@ -37,6 +37,7 @@ pos-close-shift-failed = Failed to close shift
 
 # Scanner
 pos-scanner-error = Scanner error: { $detail }
+pos-toast-receipt-settings-failed = Failed to load receipt settings
 
 # Payment Modal
 payment-dialog-aria =
@@ -72,6 +73,7 @@ payment-method-label = Payment Method
 payment-method-cash = Cash
 payment-method-card = Card
 payment-method-qris = QRIS
+payment-method-credit = Credit
 payment-other-placeholder =
     .placeholder = Other...
 payment-other-aria =
@@ -123,6 +125,7 @@ payment-customer-change = Change
 payment-customer-select = Select Customer
 payment-loyalty-use-points = Use Points
 payment-loyalty-points-label = Points
+payment-loyalty-discount-label = Discount: -{ $amount }
 payment-customer-search-heading = Select Customer
 payment-customer-search-loading = Loading…
 payment-customer-search-empty = No customers found
@@ -131,6 +134,9 @@ payment-retry-aria =
     .aria-label = Retry payment
 payment-retry = Retry
 payment-toast-currency-failed = Failed to load currency data
+payment-toast-customers-failed = Failed to load customers
+payment-toast-loyalty-failed = Failed to load loyalty account
+payment-toast-points-value-failed = Failed to load points value
 payment-customer-placeholder =
     .placeholder = e.g. John Doe
 payment-loyalty-points-aria =
@@ -156,6 +162,7 @@ shortfall-negative-override = Allow negative stock (Manager PIN override)
 shortfall-warehouse-warning = ⚠ Warehouse fulfillment may incur delivery charges.
 shortfall-cancel-btn = Cancel Sale
 shortfall-confirm-btn = Confirm &amp; Continue
+payment-shortfall-cancelled = Sale cancelled due to insufficient stock.
 
 # Sales History
 sales-history-title = Sales History
@@ -290,6 +297,13 @@ sales-dashboard-no-data = No data for today
 sales-dashboard-revenue-title = Revenue (14d)
 sales-dashboard-category-title = By Category
 sales-dashboard-heatmap-title = Busiest Hours
+sales-dashboard-region-aria = Reporting dashboard
+sales-dashboard-grid-aria = Dashboard widgets
+sales-dashboard-daily-aria = Daily sales summary
+sales-dashboard-hourly-aria = Sales by hour
+sales-dashboard-hourly-bars-aria = Hourly sales bars
+sales-dashboard-category-aria = Category breakdown
+sales-dashboard-heatmap-aria = Hourly sales heatmap
 
 # Void Orders
 void-orders-title = Orders
@@ -742,6 +756,12 @@ retail-toast-stock-inquiry-soon = Stock inquiry coming soon
 retail-toast-failed-load-held = Failed to load held carts
 retail-toast-held-cart-deleted = Held cart deleted
 retail-toast-failed-delete-held = Failed to delete held cart
+retail-toast-failed-cart = Failed to create sale cart
+retail-toast-no-cart = No active sale cart
+retail-override-btn = Override
+retail-override-aria = Override price for { $name }
+retail-serial-placeholder = Serial #
+retail-serial-aria = Serial number for { $name }
 retail-held-carts-title = Held Carts
 retail-held-carts-empty = No held carts
 retail-fn-bar-aria = Function bar
@@ -752,6 +772,7 @@ retail-cart-qty-decrease-aria = Decrease quantity
 retail-cart-qty-increase-aria = Increase quantity
 retail-cart-remove-aria = Remove from cart
 retail-toast-insufficient-stock = Insufficient stock
+retail-toast-customers-failed = Failed to load customers
 retail-low-stock-banner =
     { $count ->
         [one] { $count } product low on stock

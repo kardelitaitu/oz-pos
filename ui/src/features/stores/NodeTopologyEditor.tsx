@@ -926,7 +926,7 @@ export default function NodeTopologyEditor({
           </Localized>
           <span className={`topology-tier-badge tier-${currentTier}`}>
             <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
-              {currentTier.toUpperCase()} TIER
+              <span>{currentTier.toUpperCase()} TIER</span>
             </Localized>
           </span>
         </div>
@@ -1251,7 +1251,7 @@ export default function NodeTopologyEditor({
                           key={port}
                           className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''}`}
                           onClick={(e) => handlePortClick(e, node.id, port)}
-                          aria-label={l10n.getString('topology-port-aria', { name: node.name, port })}
+                          aria-label={l10n.getString('topology-port-aria', { name: node.name || '', port })}
                         >
                         </button>
                       );

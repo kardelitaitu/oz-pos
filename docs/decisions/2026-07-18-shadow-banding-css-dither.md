@@ -1,5 +1,7 @@
 # ADR #15: Shadow Banding Mitigation — Single-Layer Uniform Blur & CSS Noise Dithering
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 observation) · O1: test counts cited (Card 8 / StaffLoginScreen 7 / DesignSystem 21 "pass") vs current grep of it()/test()/describe() = 9/9/22 (Card & DesignSystem match if describe is excluded; StaffLoginScreen off by ~1 — minor drift as tests added) · verified accurate: 6 shadow tokens (0 0 12px, opacities 0.00/0.08/0.16/0.24/0.32/0.40) present across all 3 themes in ui/src/frontend/themes/tokens.css; 8-stop --color-bg radial gradient present (tokens.css:93-101); --noise-uri feTurbulence baseFrequency=0.25 numOctaves=4 + mix-blend-mode:overlay in components.css:265-373; @media (prefers-contrast: high) hide present; StaffLoginScreen.css + Card.tsx + 3 __tests__ files all exist; ADR #3 ref resolves -->
+
 **Status:** Implemented (2026-07-26)
 **Date:** 2026-07-18
 **Author:** Architecture Team & OZ-POS Contributors

@@ -1,5 +1,7 @@
 # Admin Guide — OZ-POS
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 observation) · O1: doc lists KDS as a top-level "Workspace" alongside Store POS / Inventory / Admin, but the seed (migration 035_workspaces.sql) registers KDS as a screen (workspace_key='kds') under restaurant-pos, not a standalone workspace type; user-facing simplification, not a code error · verified accurate: workspace_types seeded store-pos/inventory/restaurant-pos/admin (035_workspaces.sql:30-33); roles Owner/Manager/Cashier/Kitchen match staff.rs:408-419; scripts/backup-db.sh + scripts/restore-db.sh exist; shift open/close + cash payout + offline-queue + reports (sales/eod/menu-engineering/custom/inventory) all map to real features; setup wizard presets (simple retail/restaurant/custom) are user-facing guidance consistent with workspace seeds -->
+
 ## Installation
 
 1. Download the latest release from GitHub Releases

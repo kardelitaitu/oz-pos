@@ -18,6 +18,7 @@ offline-queue-synced-at = Synced At
 offline-queue-delete = Delete
 offline-queue-delete-success = Item deleted.
 offline-queue-none = —
+offline-queue-table-aria = Offline queue items
 offline-queue-status-pending = Pending
 offline-queue-status-synced = Synced
 offline-queue-status-failed = Failed

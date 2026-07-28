@@ -1,5 +1,7 @@
 # ADR #19 Implementation Status
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 observation) · O1: doc lists "Inventory" as a workspace type (Cross-Client Parity + UI Integration) while ADR-18 §13-37 renamed the workspace_types.key to 'warehouse' via migration 091; the user-facing module name stays "Inventory" (modules/inventory/manifest.json id="inventory", name="Inventory") so the label is consistent — only the internal key changed, not a contradiction · verified accurate: crates/oz-core/src/sale_deduction.rs exists with LocationStock:50/Shortfall:65/CompleteSaleResult:88/PartialStockResult:107; adjust_stock #[deprecated] at products.rs:735+1173; migrations 092/093/094 present; location_resolver.rs 4 helpers; void_pending_sale + process_refund FIFO flow in sale_deduction.rs; StockShortfallDialog.tsx + CartPanel.tsx + PaymentModal.tsx + FastPINOverlay.tsx present; UI wrappers completeSaleScoped/voidPendingSale/overrideCartDeductionLocation present in sales.ts; Status "All §15 implemented" matches on-disk code -->
+
 **Date:** 2026-07-19 (updated)
 **Based on:** [2026-07-19-sale-deduction-multi-location.md](./2026-07-19-sale-deduction-multi-location.md)
 **Status:** ✅ All §15 Acceptance Criteria implemented

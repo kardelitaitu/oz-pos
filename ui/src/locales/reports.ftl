@@ -36,6 +36,11 @@ dashboard-top-product = Top Product
 dashboard-low-stock-alerts = Low Stock Alerts
 dashboard-no-data = No sales data for today
 
+# Dashboard — a11y
+dashboard-region-aria = Dashboard
+dashboard-stock-alerts-aria = Low stock alerts
+dashboard-stock-left = left
+
 # Menu Engineering
 menu-eng-title = Menu Engineering
 menu-eng-products = Products
@@ -52,6 +57,41 @@ menu-eng-star = Star
 menu-eng-plowhorse = Plowhorse
 menu-eng-puzzle = Puzzle
 menu-eng-dog = Dog
+menu-eng-loading-aria = Loading menu engineering report
+menu-eng-region-aria = Menu Engineering Report
+menu-eng-start-date-aria = Start date
+menu-eng-end-date-aria = End date
+menu-eng-export-csv-aria = Export CSV
+menu-eng-tooltip-volume = Volume
+menu-eng-tooltip-revenue = Revenue
+menu-eng-tooltip-margin = Margin
+menu-eng-tooltip-price = Price
+menu-eng-tooltip-cost = Cost
+menu-eng-sku-header = SKU
+menu-eng-margin-header = Margin
+menu-eng-margin-unit-header = Margin/Unit
+menu-eng-axis-volume = Volume (units sold)
+menu-eng-axis-margin = Total Margin
+menu-eng-legend-star = ● Star (high vol, high margin)
+menu-eng-legend-plowhorse = ▲ Plowhorse (high vol, low margin)
+menu-eng-legend-puzzle = ◆ Puzzle (low vol, high margin)
+menu-eng-legend-dog = ▼ Dog (low vol, low margin)
+menu-eng-table-aria = Menu engineering product breakdown
+menu-eng-rec-star = Promote Star — high volume & high margin. Feature prominently.
+menu-eng-rec-plowhorse = Increase Price on Plowhorse — high volume but low margin. Raise price or reduce cost.
+menu-eng-rec-puzzle = Reposition Puzzle — low volume but high margin. Improve visibility or bundle.
+menu-eng-rec-dog = Remove Dog — low volume & low margin. Consider delisting.
+
+# Sales Report — a11y labels
+sales-report-region-aria = Sales Report
+sales-report-start-aria = Start date
+sales-report-end-aria = End date
+sales-report-view-aria = View mode
+sales-report-compare-off-aria = Disable period comparison
+sales-report-compare-on-aria = Compare to previous period
+sales-report-print-aria = Print report
+sales-report-export-aria = Export CSV
+sales-report-heatmap-aria = Hourly heatmap
 
 # Period comparison
 sales-report-compare = Compare
@@ -66,3 +106,16 @@ custom-report-run = Run Report
 custom-report-results = Results
 custom-report-export-csv = Export CSV
 custom-report-no-columns-match = No columns match your search
+
+# Custom Report — a11y labels
+custom-report-dataset-aria = Dataset
+custom-report-start-aria = Start date
+custom-report-end-aria = End date
+custom-report-search-placeholder = Search columns…
+custom-report-search-aria = Search columns
+custom-report-search-clear-aria = Clear search
+custom-report-columns-aria = Column selection
+custom-report-run-aria = Run report
+custom-report-region-aria = Custom Report Builder
+custom-report-export-aria = Export CSV
+custom-report-columns-selected = { $selected } / { $total } selected

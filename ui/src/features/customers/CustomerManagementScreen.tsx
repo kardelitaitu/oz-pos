@@ -40,7 +40,7 @@ export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const userId = session?.user_id ?? '';
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);

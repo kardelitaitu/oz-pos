@@ -73,6 +73,8 @@ export default function PaymentModal({
   tenderPresets,
 }: PaymentModalProps) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { addToast } = useToast();
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [otherLabel, setOtherLabel] = useState('');
@@ -187,9 +189,9 @@ export default function PaymentModal({
           setExchangeRates(rates);
           if (base) setBaseCurrency(base);
         })
-        .catch(() => addToast({ message: l10n.getString('payment-toast-currency-failed'), type: 'error' }));
+        .catch(() => addToast({ message: l10nRef.current.getString('payment-toast-currency-failed'), type: 'error' }));
     }
-  }, [open, multiCurrency, addToast, l10n]);
+  }, [open, multiCurrency, addToast]); // l10n via ref — stable dep chain
 
   const exchangeRateInfo = useMemo(() => {
     if (selectedCurrency === total.currency) return null;
@@ -244,9 +246,9 @@ export default function PaymentModal({
         allCustomersRef.current = customers;
         setCustomerSearchResults(customers);
       })
-      .catch(() => setCustomerSearchResults([]))
+      .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch]);
+  }, [showCustomerSearch, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -278,23 +280,23 @@ export default function PaymentModal({
             setLoyaltyDiscount(0n);
           }
         })
-        .catch(() => setLoyaltyAccount(null));
+        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-loyalty-failed') || 'Failed to load loyalty account', type: 'error' }); setLoyaltyAccount(null); });
     } else {
       setLoyaltyAccount(null);
       setRedeemPoints(false);
       setLoyaltyDiscount(0n);
     }
-  }, [selectedCustomer]);
+  }, [selectedCustomer, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
       getPointsValue(loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
-        .catch(() => setPointsWorthMinor(null));
+        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
     } else {
       setPointsWorthMinor(null);
     }
-  }, [loyaltyAccount]);
+  }, [loyaltyAccount, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!redeemPoints || pointsToRedeem <= 0) {
@@ -309,7 +311,7 @@ export default function PaymentModal({
           setLoyaltyDiscount(discount > totalMinor ? totalMinor : discount);
         }
       })
-      .catch(() => {});
+      .catch(() => { /* points value calc is best-effort */ });
     return () => { cancelled = true; };
   }, [pointsToRedeem, redeemPoints, totalMinor]);
 
@@ -489,11 +491,13 @@ export default function PaymentModal({
 
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
-          await redeemLoyaltyPoints(
-            selectedCustomer!.id,
-            Number(loyaltyDiscount),
-            saleResult.saleId,
-          );
+          if (selectedCustomer?.id) {
+            await redeemLoyaltyPoints(
+              selectedCustomer.id,
+              Number(loyaltyDiscount),
+              saleResult.saleId,
+            );
+          }
         } catch {
           // non-blocking
         }
@@ -793,11 +797,13 @@ export default function PaymentModal({
 
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
-          await redeemLoyaltyPoints(
-            selectedCustomer!.id,
-            Number(loyaltyDiscount),
-            saleResult.saleId,
-          );
+          if (selectedCustomer?.id) {
+            await redeemLoyaltyPoints(
+              selectedCustomer.id,
+              Number(loyaltyDiscount),
+              saleResult.saleId,
+            );
+          }
         } catch {
           // Loyalty redemption failure is non-blocking
         }
@@ -925,7 +931,7 @@ export default function PaymentModal({
           }}
           onCancel={() => {
             setShortfallResult(null);
-            addToast({ message: 'Sale cancelled due to insufficient stock.', type: 'info' });
+            addToast({ message: l10n.getString('payment-shortfall-cancelled') || 'Sale cancelled due to insufficient stock.', type: 'info' });
             animateLeave(onClose);
           }}
         />
@@ -1109,7 +1115,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : 'Credit'}
+                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : l10n.getString('payment-method-credit') || 'Credit'}
                         </span>
                       </label>
                     ))}
@@ -1228,8 +1234,8 @@ export default function PaymentModal({
                         <span
                           className={`payment-change-amount ${!sufficient ? 'payment-change-insufficient' : ''}`}
                         >
-                          {sufficient
-                            ? formatMoney(change!)
+                          {sufficient && change
+                            ? formatMoney(change)
                             : l10n.getString('payment-insufficient')}
                         </span>
                       </div>
@@ -1425,7 +1431,7 @@ export default function PaymentModal({
               <div className="payment-loyalty-section">
                 <div className="payment-loyalty-balance">
                   <span className="payment-loyalty-label">
-                    Points: {loyaltyAccount.account.points}
+                    {l10n.getString('payment-loyalty-points-label') || 'Points'}: {loyaltyAccount.account.points}
                   </span>
                   <span className="payment-loyalty-value">
                     {pointsWorthMinor !== null
@@ -1465,10 +1471,12 @@ export default function PaymentModal({
                       </span>
                     </div>
                     <span className="payment-loyalty-discount-label">
-                      Discount: -{formatMoney({
+                      <Localized id="payment-loyalty-discount-label" vars={{ amount: formatMoney({
                         minor_units: Number(loyaltyDiscount),
                         currency: total.currency,
-                      } as Money)}
+                      } as Money) }}>
+                        <span>{'Discount: -{ $amount }'}</span>
+                      </Localized>
                     </span>
                     <Localized id="payment-cancel">
                       <button

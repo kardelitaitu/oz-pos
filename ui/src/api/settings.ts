@@ -110,18 +110,25 @@ export const settleCredit = (saleId: string, userId: string): Promise<void> =>
 export const settleCreditScoped = (sessionToken: string, saleId: string): Promise<void> =>
   loggedInvoke<void>('settle_credit_scoped', { sessionToken, saleId });
 
-// ── Hardware Settings (printer + scanner) ─────────────────────
+// ── Hardware Settings (printer + scanner + scale + localPrefs) ──
 
-/** Hardware configuration for printer and scanner devices. */
+/** Full terminal hardware and local-preference configuration. */
 export interface HardwareSettingsDto {
   printerConnection: string;
   printerDevicePath: string;
   printerPaperSize: string;
   scannerDeviceId: string;
   scannerInputMode: string;
+  scaleConnection: string;
+  scaleDevicePath: string;
+  scaleBaudRate: number;
+  scaleZeroOnBoot: boolean;
+  soundVolume: number;
+  darkMode: boolean;
+  scaleAutoZero: boolean;
 }
 
-/** Get the hardware settings (printer, scanner). */
+/** Get the hardware settings (printer, scanner, scale, localPrefs). */
 export const getHardwareSettings = (): Promise<HardwareSettingsDto> =>
   loggedInvoke<HardwareSettingsDto>('get_hardware_settings');
 
@@ -217,6 +224,27 @@ export const getSetting = (key: string): Promise<string | null> =>
   loggedInvoke<string | null>('get_setting', { key });
 
 /**
+ * Write (or overwrite) a single raw setting value. Unscoped —
+ * reads/writes to the primary store database. Requires a valid
+ * `userId` for the SETTINGS_EDIT permission check.
+ *
+ * Prefer `setSettings` (batch) for multiple keys to reduce IPC
+ * round-trips. This variant exists for single-key callers.
+ */
+export const setSetting = (key: string, value: string, userId: string): Promise<void> =>
+  loggedInvoke<void>('set_setting', { key, value, userId });
+
+/**
+ * Write multiple settings atomically in a single IPC call + DB
+ * transaction. All entries succeed or fail together.
+ *
+ * Prefer this over multiple `setSetting` calls when persisting
+ * more than one key (e.g. the KDS or Inventory workspace cards).
+ */
+export const setSettings = (entries: Record<string, string>, userId: string): Promise<void> =>
+  loggedInvoke<void>('set_settings', { entries, userId });
+
+/**
  * Write (or overwrite) a single raw setting value using the scoped variant (ADR #7).
  *
  * Requires a valid `sessionToken` from `useWorkspace()`. When the token is null
@@ -233,5 +261,3 @@ export const setSettingScoped = (
   }
   return loggedInvoke<void>('set_setting_scoped', { sessionToken, key, value });
 };
-
-

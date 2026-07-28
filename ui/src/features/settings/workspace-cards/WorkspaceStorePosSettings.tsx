@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useToast } from '@/frontend/shared/Toast';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
+import { setReceiptSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -18,10 +20,13 @@ import { hasChanges } from './helpers';
  */
 export function WorkspaceStorePosSettings({
   terminalId,
+  userId,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
   const { settings } = useSettings();
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
 
   // ── Draft state ──────────────────────────────────────────────
@@ -67,18 +72,41 @@ export function WorkspaceStorePosSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // Save terminal hardware if available
+      const tasks: Promise<unknown>[] = [];
+
+      // Persist receipt settings to the backend (unscoped)
+      tasks.push(
+        setReceiptSettings({
+          showCurrency,
+          decimalSeparator: settings.receipt.decimalSeparator,
+          showTax,
+          footer,
+          paperWidth,
+          showTableNumber,
+          marginTop: settings.receipt.marginTop,
+          marginBottom: settings.receipt.marginBottom,
+          marginLeft: settings.receipt.marginLeft,
+          marginRight: settings.receipt.marginRight,
+        }, userId ?? 'default'),
+      );
+
+      // Save terminal hardware to filesystem via IPC
       if (terminalId && hw.profile) {
-        await hw.save();
+        tasks.push(hw.save(userId));
       }
-      // TODO (Phase 2): Call IPC to save store-level receipt settings
+
+      await Promise.all(tasks);
+
+      // Update originals so dirty tracking resets
+      originalsRef.current = { paperWidth, showCurrency, showTax, showTableNumber, footer };
+
       onSaved?.();
     } catch {
-      // Error handled by hook's error state
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, onSaved]);
+  }, [terminalId, hw, userId, showCurrency, showTax, paperWidth, showTableNumber, footer, settings.receipt, onSaved, addToast, l10n]);
 
   // ── Variant classes ──────────────────────────────────────────
 

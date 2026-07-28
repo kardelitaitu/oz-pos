@@ -89,7 +89,7 @@ export default function DashboardScreen() {
     : 1;
 
   return (
-    <div className="dashboard" role="region" aria-label="Dashboard">
+    <div className="dashboard" role="region" aria-label={l10n.getString('dashboard-region-aria') || 'Dashboard'}>
       <Localized id="dashboard-title">
         <h1 className="dashboard-title">Dashboard</h1>
       </Localized>
@@ -158,13 +158,13 @@ export default function DashboardScreen() {
         ) : (
           <ul
             className="dashboard-low-stock-list"
-            aria-label="Low stock alerts"
+            aria-label={l10n.getString('dashboard-stock-alerts-aria') || 'Low stock alerts'}
           >
             {lowStock.map((item) => (
               <li key={item.product_id} className="dashboard-low-stock-item">
                 <span className="dashboard-low-stock-name">{item.name}</span>
                 <span className="dashboard-low-stock-qty">
-                  {item.current_qty} left
+                  {item.current_qty} {l10n.getString('dashboard-stock-left') || 'left'}
                 </span>
               </li>
             ))}

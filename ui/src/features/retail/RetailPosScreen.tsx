@@ -4,7 +4,7 @@ import { usePosState } from '@/features/sales/usePosState';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
-import { useLocalization } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -65,12 +65,14 @@ interface RetailPosScreenProps {
 /** Retail POS sales screen — product lookup on the left, cart panel on the right with resizable width and barcode scanning support. */
 export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
   const { sessionToken: rawToken, setActiveWorkspace } = useWorkspace();
-  const sessionToken = rawToken!;
-  const userId = session!.user_id;
+  const sessionToken = rawToken || '';
+  const userId = session?.user_id ?? '';
 
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
@@ -122,7 +124,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         pendingTrackFetchRef.current.add(sku);
         getProductTrackSerial(sku).then((track) => {
           setTrackSerialMap((prev) => ({ ...prev, [sku]: track }));
-        }).catch(() => {});
+        }).catch(() => { /* serial track lookup is best-effort */ });
       }
     }
   }, [lines, trackSerialMap]);
@@ -336,11 +338,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     const m = new Map<string, string>();
     categories.forEach((c) => {
       const catId = `category-${c.id}`;
-      const label = l10n.getString(catId);
+      const label = l10nRef.current.getString(catId);
       m.set(c.id, label !== catId ? label : c.name);
     });
     return m;
-  }, [categories, l10n]);
+  }, [categories]); // l10n via ref
 
   const lowStockCount = useMemo(
     () => products.filter((p) => p.stock_qty != null && p.stock_qty > 0 && p.stock_qty <= 5).length,
@@ -604,16 +606,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setCartId(newCartId);
       return newCartId;
     } catch {
-      addToast({ message: 'Failed to create sale cart', type: 'error' });
+      addToast({ message: l10n.getString('retail-toast-failed-cart') || 'Failed to create sale cart', type: 'error' });
       return null;
     }
-  }, [cartId, addToast, sessionToken]);
+  }, [cartId, addToast, l10n, sessionToken]);
 
   const handleOverrideConfirm = useCallback(async (newPriceMinor: number) => {
     if (!overrideTarget) return;
     const cId = cartId;
     if (!cId) {
-      addToast({ message: 'No active sale cart', type: 'error' });
+      addToast({ message: l10n.getString('retail-toast-no-cart') || 'No active sale cart', type: 'error' });
       setOverrideTarget(null);
       return;
     }
@@ -629,7 +631,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } finally {
       setOverrideTarget(null);
     }
-  }, [overrideTarget, cartId, addToast, updateLinePrice, sessionToken]);
+  }, [overrideTarget, cartId, addToast, l10n, updateLinePrice, sessionToken]);
 
   const allCustomersRef = useRef<CustomerDto[]>([]);
 
@@ -649,9 +651,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ),
         );
       })
-      .catch(() => setCustomerSearchResults([]))
+      .catch(() => { addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, customerSearchQuery]);
+  }, [showCustomerSearch, customerSearchQuery, addToast]); // l10n via ref
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -682,9 +684,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   });
 
   const handlePay = useCallback(() => {
-    if (!activeShift) { addToast({ message: l10n.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
+    if (!activeShift) { addToast({ message: l10nRef.current.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
     setShowPayment(true);
-  }, [activeShift, addToast, l10n]);
+  }, [activeShift, addToast]); // l10n via ref
 
   // ── Hold cart ────────────────────────────────────────────────
 
@@ -753,11 +755,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartsList((prev) => prev.filter((c) => c.id !== cartId));
       if (heldCartId === cartId) setHeldCartId(null);
-      addToast({ type: 'success', message: l10n.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
+      addToast({ type: 'success', message: l10nRef.current.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
     } catch {
-      addToast({ type: 'error', message: l10n.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
+      addToast({ type: 'error', message: l10nRef.current.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
     }
-  }, [sessionToken, heldCartId, addToast, l10n]);
+  }, [sessionToken, heldCartId, addToast]); // l10n via ref
 
   // ── Load persisted held carts on mount ───────────────────────
 
@@ -769,9 +771,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         const held = carts.find((c) => c.bill_type === 'hold');
         if (held) setHeldCartId(held.id);
       })
-      .catch(() => { if (mounted) addToast({ message: 'Failed to load held carts', type: 'error' }); });
+      .catch(() => { if (mounted) addToast({ message: l10nRef.current.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
     return () => { mounted = false; };
-  }, [sessionToken, addToast]);
+  }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
   // ── Options / Workspace Settings ──────────────────────────
 
@@ -1216,8 +1218,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                               className="retail-cart-serial-input"
                               value={serialNumbers[line.id] ?? ''}
                               onChange={(e) => handleSerialChange(line.id, e.target.value)}
-                              placeholder="Serial #"
-                              aria-label={`Serial number for ${line.name ?? line.sku}`}
+                              placeholder={l10n.getString('retail-serial-placeholder') || 'Serial #'}
+                              aria-label={l10n.getString('retail-serial-aria', { name: line.name ?? line.sku }) || `Serial number for ${line.name ?? line.sku}`}
                               style={{
                                 marginTop: 4, padding: '2px 4px', fontSize: 10,
                                 width: '100%', boxSizing: 'border-box',
@@ -1255,9 +1257,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                                 setOverrideTarget({ id: line.id as LineId, name: line.name ?? line.sku, unit_price: line.unit_price });
                                 ensureCart(line.unit_price.currency);
                               }}
-                              aria-label={`Override price for ${line.name ?? line.sku}`}
+                              aria-label={l10n.getString('retail-override-aria', { name: line.name ?? line.sku }) || `Override price for ${line.name ?? line.sku}`}
                             >
-                              Override
+                              <Localized id="retail-override-btn"><span>Override</span></Localized>
                             </button>
                           )}
                         </td>

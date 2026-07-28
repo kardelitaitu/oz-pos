@@ -169,9 +169,10 @@ export default function StaffManagementScreen() {
         setForm((prev) => ({ ...prev, wsMode: 'custom', wsKeys: userKeys }));
       }
     } catch {
+      addToast({ message: l10n.getString('staff-error-workspaces-failed') || 'Failed to load workspace settings', type: 'error' });
       setAllWorkspaces([]);
     }
-  }, [callerUserId]);
+  }, [callerUserId, addToast, l10n]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -380,7 +381,6 @@ export default function StaffManagementScreen() {
             </thead>
             <tbody>{staff.map((member) => (
                 <tr key={member.id} className={!member.is_active ? 'staff-mgmt-row--inactive' : ''}>
-                  { }
                   <td>
                     <Badge variant={roleVariant(member.role_name)}>
                       <span className="staff-mgmt-role-badge-content">
@@ -409,7 +409,6 @@ export default function StaffManagementScreen() {
                       </Localized>
                     )}
                   </td>
-                  { }
                   <td>
                     <div className="staff-mgmt-cell-actions">
                     <Localized id="staff-edit-aria" attrs={{ "aria-label": true }} vars={{ name: member.display_name }}>

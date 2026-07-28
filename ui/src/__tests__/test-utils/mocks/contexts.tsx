@@ -79,6 +79,7 @@ export function createWorkspaceContextMock() {
       workspaceScreens: [],
       loading: false,
       sessionToken: 'mock-session-token',
+      terminalId: '',
     }),
     WorkspaceProvider: ({ children }: { children: ReactNode }) => (
       <>{children}</>

@@ -115,14 +115,14 @@ export default function AuditLogScreen() {
       }
     } catch (err) {
       if (!cancelledRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to load audit log');
+        setError(err instanceof Error ? err.message : l10n.getString('audit-log-error-load') || 'Failed to load audit log');
       }
     } finally {
       if (!cancelledRef.current) {
         setLoading(false);
       }
     }
-  }, [limit]);
+  }, [limit, l10n]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -186,7 +186,7 @@ export default function AuditLogScreen() {
           )}
           {lastReviewed && (
             <span className="audit-log-reviewed-at">
-              Reviewed: {new Date(lastReviewed).toLocaleDateString()}
+              <Localized id="audit-log-reviewed-at" vars={{ date: new Date(lastReviewed).toLocaleDateString() }}><span>Reviewed: {new Date(lastReviewed).toLocaleDateString()}</span></Localized>
             </span>
           )}
         </div>
@@ -196,7 +196,7 @@ export default function AuditLogScreen() {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 4 }}>
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              Mark Reviewed
+              <Localized id="audit-log-mark-reviewed"><span>Mark Reviewed</span></Localized>
             </Button>
           )}
           <Button variant="secondary" onClick={() => load(0)} loading={loading}>
@@ -350,7 +350,7 @@ export default function AuditLogScreen() {
                         <span className="audit-log-target-none">&mdash;</span>
                       )}
                     </td>
-                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : 'system'}</td>
+                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : l10n.getString('audit-log-user-system') || 'system'}</td>
                     <td>
                       <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`}>
                         {entry.outcome}

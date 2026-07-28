@@ -127,8 +127,8 @@ describe('ThresholdConfigScreen', () => {
     });
 
     // Filter by Store Front (loc-2) — should show only th-3 (1 row)
-    // Label uses inv-transit-col-dest = "Destination" from inventory.ftl
-    const filterSelect = screen.getByRole('combobox', { name: /destination/i });
+    // Label uses inv-threshold-filter-label = "Filter by Location"
+    const filterSelect = screen.getByRole('combobox', { name: /filter by location/i });
     await user.selectOptions(filterSelect, 'loc-2');
 
     await waitFor(() => {

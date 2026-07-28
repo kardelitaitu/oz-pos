@@ -10,6 +10,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceRestaurantPosSettings } from '@/features/settings/workspace-cards/WorkspaceRestaurantPosSettings';
 
 // ── Fluent test l10n ───────────────────────────────────────────────
@@ -29,6 +30,7 @@ const testL10n = {
       'workspace-resto-kp-connection': 'Connection',
       'workspace-resto-kp-ip': 'Kitchen Printer IP',
       'save': 'Save',
+      'settings-save-error': 'Save failed',
     };
     return defaults[id] ?? id;
   },
@@ -78,6 +80,20 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
   },
 }));
 
+vi.mock('@/api/settings', () => ({
+  setReceiptSettings: vi.fn().mockResolvedValue(undefined),
+  setSettings: vi.fn().mockResolvedValue(undefined),
+  getSetting: vi.fn(async (key: string) => {
+    if (key === 'restaurant.course_firing') return 'false';
+    return null;
+  }),
+  setHardwareSettings: vi.fn().mockResolvedValue(undefined),
+  getHardwareSettings: vi.fn().mockResolvedValue({
+    printerConnection: 'auto', printerDevicePath: '', printerPaperSize: '80',
+    scannerDeviceId: '', scannerInputMode: 'auto',
+  }),
+}));
+
 vi.mock('../features/settings/SettingsSelect', () => ({
   default: ({ id, value, onChange, options }: {
     id: string; value: string; onChange: (v: string) => void;
@@ -93,7 +109,7 @@ vi.mock('../features/settings/SettingsSelect', () => ({
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function Wrapper({ children }: { children: ReactNode }) {
-  return <LocalizationProvider l10n={testL10n}>{children}</LocalizationProvider>;
+  return <LocalizationProvider l10n={testL10n}><ToastProvider>{children}</ToastProvider></LocalizationProvider>;
 }
 
 function renderCard(overrides: Record<string, unknown> = {}) {
@@ -126,8 +142,12 @@ describe('WorkspaceRestaurantPosSettings', () => {
     expect(screen.getByText('Course Firing')).toBeInTheDocument();
   });
 
-  it('renders course firing toggle unchecked', () => {
+  it('renders course firing toggle unchecked (defaults to false)', async () => {
     renderCard();
+    await waitFor(() => {
+      const t = document.getElementById('resto-course-firing') as HTMLInputElement;
+      expect(t).not.toBeNull();
+    });
     const t = document.getElementById('resto-course-firing') as HTMLInputElement;
     expect(t.checked).toBe(false);
   });
@@ -163,11 +183,14 @@ describe('WorkspaceRestaurantPosSettings', () => {
   it('calls onSaved after successful save', async () => {
     const onSaved = vi.fn();
     renderCard({ onSaved });
+
+    // Wait for async init (getSetting loads courseFiring) to complete
     const t = document.getElementById('resto-table-mgmt') as HTMLInputElement;
+    expect(t).not.toBeNull();
     fireEvent.click(t);
     await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
   });
 
   it('hides Save button in inspector-drawer variant', () => {

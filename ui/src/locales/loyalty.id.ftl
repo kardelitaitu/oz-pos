@@ -32,6 +32,7 @@ loyalty-tier-multiplier-aria =
     .aria-label = Pengali perolehan
 loyalty-tier-colour-aria =
     .aria-label = Warna tingkatan
+loyalty-save-tier-error = Gagal menyimpan tingkatan
 
 loyalty-table-actions = Tindakan
 loyalty-expand = Perluas

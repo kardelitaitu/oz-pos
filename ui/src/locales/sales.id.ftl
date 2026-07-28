@@ -34,6 +34,7 @@ shortfall-negative-override = Izinkan stok negatif (Override PIN Manajer)
 shortfall-warehouse-warning = ⚠ Pemenuhan gudang mungkin dikenakan biaya pengiriman.
 shortfall-cancel-btn = Batalkan Penjualan
 shortfall-confirm-btn = Konfirmasi &amp; Lanjutkan
+payment-shortfall-cancelled = Penjualan dibatalkan karena stok tidak mencukupi.
 
 pos-scan-barcode = Pindai Barcode
 pos-search-product = Cari Produk…
@@ -330,6 +331,13 @@ sales-dashboard-no-data = Tidak ada data hari ini
 sales-dashboard-revenue-title = Pendapatan (14h)
 sales-dashboard-category-title = Berdasarkan Kategori
 sales-dashboard-heatmap-title = Jam Tersibuk
+sales-dashboard-region-aria = Dasbor pelaporan
+sales-dashboard-grid-aria = Widget dasbor
+sales-dashboard-daily-aria = Ringkasan penjualan harian
+sales-dashboard-hourly-aria = Penjualan per jam
+sales-dashboard-hourly-bars-aria = Grafik penjualan per jam
+sales-dashboard-category-aria = Rincian kategori
+sales-dashboard-heatmap-aria = Peta panas penjualan per jam
 
 # ── Void Orders ──
 void-orders-title = Pesanan
@@ -541,6 +549,7 @@ pos-no-barcode-match = Tidak ada produk atau bundel yang cocok dengan barcode in
 pos-close-shift-cart-error = Selesaikan atau kosongkan penjualan saat ini sebelum menutup shift.
 pos-close-shift-failed = Gagal menutup shift
 pos-scanner-error = Kesalahan pemindai: { $detail }
+pos-toast-receipt-settings-failed = Gagal memuat pengaturan nota
 
 # ── Payment (remaining) ──
 payment-dialog-aria =
@@ -572,6 +581,7 @@ payment-method-label = Metode Pembayaran
 payment-method-cash = Tunai
 payment-method-card = Kartu
 payment-method-qris = QRIS
+payment-method-credit = Kredit
 payment-other-placeholder =
     .placeholder = Lainnya…
 payment-other-aria =
@@ -590,6 +600,9 @@ payment-qris-btn-aria =
     .aria-label = Hasilkan kode QR QRIS
 payment-qris-pay = Bayar dengan QR
 payment-toast-currency-failed = Gagal memuat data mata uang
+payment-toast-customers-failed = Gagal memuat pelanggan
+payment-toast-loyalty-failed = Gagal memuat akun loyalitas
+payment-toast-points-value-failed = Gagal memuat nilai poin
 payment-customer-placeholder =
     .placeholder = mis. John Doe
 payment-loyalty-points-aria =
@@ -626,6 +639,7 @@ payment-customer-change = Ganti
 payment-customer-select = Pilih Pelanggan
 payment-loyalty-use-points = Gunakan Poin
 payment-loyalty-points-label = Poin
+payment-loyalty-discount-label = Diskon: -{ $amount }
 payment-customer-search-heading = Pilih Pelanggan
 payment-customer-search-loading = Memuat…
 payment-customer-search-empty = Tidak ada pelanggan
@@ -742,6 +756,12 @@ retail-toast-stock-inquiry-soon = Cek stok segera hadir
 retail-toast-failed-load-held = Gagal memuat pesanan ditahan
 retail-toast-held-cart-deleted = Pesanan ditahan dihapus
 retail-toast-failed-delete-held = Gagal menghapus pesanan ditahan
+retail-toast-failed-cart = Gagal membuat keranjang penjualan
+retail-toast-no-cart = Tidak ada keranjang penjualan aktif
+retail-override-btn = Ganti Harga
+retail-override-aria = Ganti harga untuk { $name }
+retail-serial-placeholder = No. Seri
+retail-serial-aria = Nomor seri untuk { $name }
 retail-held-carts-title = Pesanan Ditahan
 retail-held-carts-empty = Tidak ada pesanan ditahan
 retail-fn-bar-aria = Bilah fungsi
@@ -752,6 +772,7 @@ retail-cart-qty-decrease-aria = Kurangi jumlah
 retail-cart-qty-increase-aria = Tambah jumlah
 retail-cart-remove-aria = Hapus dari keranjang
 retail-toast-insufficient-stock = Stok tidak mencukupi
+retail-toast-customers-failed = Gagal memuat pelanggan
 retail-low-stock-banner =
     { $count ->
         [one] { $count } produk stok menipis

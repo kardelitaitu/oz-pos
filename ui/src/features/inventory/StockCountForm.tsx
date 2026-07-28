@@ -82,8 +82,8 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
             <Localized id="sc-notes-label">
               <span>Notes (optional)</span>
             </Localized>
-          </div>            { }
-            <textarea
+          </div>
+          <textarea
             id="sc-notes"
             className="sc-form-textarea"
             value={notes}

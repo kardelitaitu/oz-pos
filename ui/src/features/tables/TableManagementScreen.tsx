@@ -9,7 +9,7 @@ import './TableManagementScreen.css';
 export default function TableManagementScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [tables, setTables] = useState<Table[]>([]);
   const [selected, setSelected] = useState<Table | null>(null);
   const [section, setSection] = useState<string | null>(null);

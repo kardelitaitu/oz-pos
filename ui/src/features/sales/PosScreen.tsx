@@ -363,11 +363,13 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   } = usePosState();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { session, logout, isManager } = useAuth();
   const { activeWorkspace, setActiveWorkspace, sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const { isEnabled } = useFeatures();
-  const userId = session!.user_id;
+  const userId = session?.user_id ?? '';
 
   const handleOpenSettings = useCallback(() => {
     if (onNavigate) {
@@ -581,12 +583,12 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       }
       // ADR-19 §5.1: reject add_line when cart exists but has no deduction location
       if (cartId && !deductionLocationIdRef.current) {
-        addToast({ message: l10n.getString('pos-cart-unbound-error') || 'Cart has no deduction location — cannot add items', type: 'error' });
+        addToast({ message: l10nRef.current.getString('pos-cart-unbound-error') || 'Cart has no deduction location — cannot add items', type: 'error' });
         return;
       }
       addProduct(product, qty);
     },
-    [addProduct, addToast, cartId, l10n],
+    [addProduct, addToast, cartId], // l10n via ref
   );
 
   // ADR-19 §17: badge click → FastPINOverlay for manager override
@@ -662,27 +664,27 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
           }
           addToast({
             type: 'success',
-            message: l10n.getString('pos-bundle-expanded', { name: bundle.bundle.name, count: expanded.length }),
+            message: l10nRef.current.getString('pos-bundle-expanded', { name: bundle.bundle.name, count: expanded.length }),
           });
         } else {
-          addToast({ type: 'warning', message: l10n.getString('pos-no-barcode-match') });
+          addToast({ type: 'warning', message: l10nRef.current.getString('pos-no-barcode-match') });
         }
       } catch {
         // Silently ignore — the scanner will beep, user retries.
       }
-    }, [handleAddProduct, addToast, l10n, sessionToken]),
+    }, [handleAddProduct, addToast, sessionToken]), // l10n via ref
     onError: useCallback(
       (error: string) => {
         addToast({
           type: 'error',
-          message: l10n.getString(
+          message: l10nRef.current.getString(
             'pos-scanner-error',
             { detail: error },
             `Scanner error: ${error}`,
           ),
         });
       },
-      [addToast, l10n],
+      [addToast], // l10n via ref
     ),
   });
 
@@ -962,21 +964,21 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   useEffect(() => {
     getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
-      .catch(() => addToast({ message: 'Failed to load receipt settings', type: 'error' }));
-  }, [addToast, sessionToken]);
+      .catch(() => addToast({ message: l10nRef.current.getString('pos-toast-receipt-settings-failed') || 'Failed to load receipt settings', type: 'error' }));
+  }, [addToast, sessionToken]); // l10n via ref — stable dep chain
 
   const handleCloseShiftClick = useCallback(() => {
     setCloseShiftError(null);
     setClosedShiftSummary(null);
     // Enforce: cart must be empty before closing shift.
     if (lines.length > 0) {
-      setCloseShiftError(l10n.getString('pos-close-shift-cart-error'));
+      setCloseShiftError(l10nRef.current.getString('pos-close-shift-cart-error'));
       return;
     }
     setClosingBalance('');
     setShiftNotes('');
     setShowCloseShift(true);
-  }, [lines, l10n]);
+  }, [lines]); // l10n via ref
 
   const handleConfirmCloseShift = useCallback(async () => {
     if (!activeShift) return;
@@ -990,12 +992,12 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       setClosedShiftSummary(closed);
       setActiveShift(null); // no longer active
     } catch (err) {
-      const msg = err instanceof Error ? err.message : l10n.getString('pos-close-shift-failed');
+      const msg = err instanceof Error ? err.message : l10nRef.current.getString('pos-close-shift-failed');
       setCloseShiftError(msg);
     } finally {
       setClosingShift(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, l10n, sessionToken]);
+  }, [activeShift, closingBalance, shiftNotes, sessionToken]); // l10n via ref
 
   const handleOpenShiftClick = useCallback(() => {
     setOpeningBalance('');

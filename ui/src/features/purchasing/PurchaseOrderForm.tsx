@@ -7,6 +7,7 @@ import {
   type CreatePurchaseOrderArgs,
 } from '@/api/purchasing';
 import { Button } from '@/components/Button';
+import { useToast } from '@/frontend/shared/Toast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './PurchaseOrderForm.css';
 
@@ -26,6 +27,8 @@ interface Props {
 /** Purchase order creation / editing form — supplier selection, line items with SKU, quantity, unit cost, and expected delivery date. */
 export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props) {
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [poNumber, setPoNumber] = useState('');
   const [supplierId, setSupplierId] = useState('');
@@ -36,13 +39,16 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addToast } = useToast();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useFocusTrap(panelRef, !saving, onClose);
 
   useEffect(() => {
-    listSuppliers().then(setSuppliers).catch(() => {});
-  }, []);
+    listSuppliers().then(setSuppliers)    .catch(() => {
+      addToast({ message: l10nRef.current.getString('po-form-error-suppliers-failed') || 'Failed to load suppliers', type: 'error' });
+    });
+  }, [addToast]); // l10n via ref — stable dep chain
 
   const addLine = useCallback(() => {
     setLines((prev) => [...prev, { sku: '', product_name: '', qty: 1, unit_cost_minor: 0 }]);
@@ -59,10 +65,10 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   const subtotal = lines.reduce((sum, l) => sum + l.qty * l.unit_cost_minor, 0);
 
   const handleSave = useCallback(async () => {
-    if (!poNumber.trim()) { setError(l10n.getString('po-form-error-po-required')); return; }
-    if (!supplierId) { setError(l10n.getString('po-form-error-supplier-required')); return; }
+    if (!poNumber.trim()) { setError(l10nRef.current.getString('po-form-error-po-required')); return; }
+    if (!supplierId) { setError(l10nRef.current.getString('po-form-error-supplier-required')); return; }
     if (lines.length === 0 || lines.some((l) => !l.sku.trim())) {
-      setError(l10n.getString('po-form-error-sku-required'));
+      setError(l10nRef.current.getString('po-form-error-sku-required'));
       return;
     }
 
@@ -84,11 +90,11 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
       await createPurchaseOrder(args);
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('po-form-error-generic'));
+      setError(err instanceof Error ? err.message : l10nRef.current.getString('po-form-error-generic'));
     } finally {
       setSaving(false);
     }
-  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved, l10n]);
+  }, [poNumber, supplierId, expectedDate, notes, lines, onSaved]); // l10n via ref — stable dep chain
 
   return (
     <div className="po-form-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('po-form-aria-label')}>
@@ -113,7 +119,6 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                 <input className="po-form-input" type="text" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="PO-001" />
               </Localized>
             </label>
-            { }
             <label className="po-form-field">
               <Localized id="po-form-supplier-label">
                 <span className="po-form-label">Supplier *</span>

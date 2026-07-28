@@ -1,5 +1,7 @@
 I have inspected `SalesDashboardScreen.test.tsx` and the corresponding widget components, identified why the test is failing, and detailed the findings in the requested markdown file at `C:\My Script\oz-pos\context.md`. 
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: AUDITED (transient debugging artifact — not a code-claim doc) · this is a one-off summary of a SalesDashboardScreen.test.tsx 'shows no data state' failure (3 widgets render the same /no data for today/i text -> findByText throws Found multiple elements); recommends within() scoping or findAllByText; no version/architecture claims to audit; treated as a historical note, not judged against the codebase -->
+
 ### Summary of Findings:
 - **Cause of Failure**: The test `'shows no data state'` expects only a single element with `/no data for today/i` text. However, when both API mock calls return empty arrays (`[]`), three different widgets (**Sales by Hour**, **By Category**, and **Busiest Hours**) simultaneously render this text. This causes `screen.findByText` to throw a `Found multiple elements` error.
 - **Potential Fixes Analyzed**:

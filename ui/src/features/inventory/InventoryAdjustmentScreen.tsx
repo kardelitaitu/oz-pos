@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listProducts,
   adjustStock,
@@ -43,25 +44,34 @@ export default function InventoryAdjustmentScreen() {
   const [success, setSuccess] = useState<{ name: string; delta: string; newQty: number } | null>(null);
 
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
 
   // ── Load products ──────────────────────────────────────────────
 
+  const mountedRef = useRef(true);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await listProducts();
-      setProducts(data);
+      if (mountedRef.current) setProducts(data);
     } catch {
-      // IPC unavailable.
+      if (mountedRef.current) {
+        addToast({ message: l10n.getString('inv-error-load') || 'Failed to load products', type: 'error' });
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [addToast, l10n]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, [load]);
 
   // ── Filtered products for search ───────────────────────────────
 

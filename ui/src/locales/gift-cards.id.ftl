@@ -38,3 +38,15 @@ gift-cards-payment-apply-btn = Terapkan Kartu Hadiah
 gift-cards-payment-processing = Memproses…
 gift-cards-payment-lookup-failed = Pencarian gagal
 gift-cards-payment-redemption-failed = Penukaran gagal
+
+# Gift Cards — error toasts
+gift-cards-error-load = Gagal memuat kartu hadiah
+gift-cards-error-freeze = Gagal mengubah status beku
+gift-cards-error-topup = Top-up gagal
+gift-cards-error-issue = Gagal menerbitkan kartu hadiah
+
+# Gift Cards — placeholders & aria
+gift-cards-topup-placeholder = Jumlah (unit minor)
+gift-cards-topup-aria = Jumlah top-up
+gift-cards-issue-to-placeholder = Nama pelanggan
+gift-cards-issue-pin-placeholder = Untuk pengecekan saldo

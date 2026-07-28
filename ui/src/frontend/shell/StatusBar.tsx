@@ -79,7 +79,7 @@ export default function StatusBar() {
                 aria-hidden="true"
               />
               <span className="statusbar-version">
-                OZ-POS Enterprise v0.0.21
+                OZ-POS Enterprise v0.0.22
               </span>
             </div>
           </Tooltip>

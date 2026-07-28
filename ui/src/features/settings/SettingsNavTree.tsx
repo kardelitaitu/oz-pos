@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Localized, useLocalization } from '@fluent/react';
 import Tooltip from '@/frontend/shell/Tooltip';
@@ -324,16 +324,21 @@ interface SettingsNavTreeProps {
   onMobileClose: () => void;
 }
 
+// ── Imperative handle type for parent ───────────────────────────
+export interface SettingsNavTreeHandle {
+  toggleCategory: (label: string) => void;
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
-export default function SettingsNavTree({
+const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(function SettingsNavTree({
   activeSection,
   onNavigate,
   searchQuery,
   onSearchChange,
   mobileSidebarOpen,
   onMobileClose,
-}: SettingsNavTreeProps) {
+}, ref) {
   const { l10n } = useLocalization();
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -528,6 +533,9 @@ export default function SettingsNavTree({
       prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label]
     );
   }, []);
+
+  // ── Expose imperative toggleCategory to parent (P60-breadcrumb) ─
+  useImperativeHandle(ref, () => ({ toggleCategory }), [toggleCategory]);
 
   // ── Fuse.js fuzzy search (P60-blog-2) ────────────────────────
   const searchData = useMemo(() => {
@@ -896,7 +904,7 @@ export default function SettingsNavTree({
                       {cat.keys.map((key, itemIdx) => {
                         const item = NAV_ITEMS.find((n) => n.key === key)!;
                         return (
-                          <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800}>
+                          <Tooltip key={key} content={l10n.getString(NAV_L10N_KEYS[item.key] ?? '')} showDelay={800} portal>
                             <div className="settings-nav-item-wrapper">
                               <button
                                 type="button"
@@ -971,4 +979,6 @@ export default function SettingsNavTree({
       </div>
     </>
   );
-}
+});
+
+export default SettingsNavTree;

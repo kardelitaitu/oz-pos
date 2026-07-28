@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/Button';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -21,6 +21,9 @@ interface ShiftBarProps {
 }
 
 export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
+  const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -51,15 +54,19 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
           setSelectedLocationId(activeLocs[0]!.id);
         }
       })
-      .catch(console.error);
+      .catch(() => {
+        addToast({ message: l10nRef.current.getString('inv-shift-error-locations') || 'Failed to load locations', type: 'error' });
+      });
 
     getActiveInventoryShift(sessionToken, session.user_id)
       .then(shift => {
         setActiveShift(shift);
         onShiftChange?.(shift);
       })
-      .catch(console.error);
-  }, [sessionToken, session?.user_id, onShiftChange]);
+      .catch(() => {
+        addToast({ message: l10nRef.current.getString('inv-shift-error-active') || 'Failed to load active shift', type: 'error' });
+      });
+  }, [sessionToken, session?.user_id, onShiftChange, addToast]); // l10n via ref — stable dep chain
 
   // Handle timer tick
   useEffect(() => {
@@ -98,7 +105,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setNotes('');
       if (onShiftChange) onShiftChange(shift);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to start shift', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-shift-error-start') || 'Failed to start shift'), type: 'error' });
     }
   };
 
@@ -128,7 +135,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setActiveShift(null);
       if (onShiftChange) onShiftChange(null);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to end shift', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-shift-error-end') || 'Failed to end shift'), type: 'error' });
     }
   };
 
@@ -136,7 +143,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
 
   return (
     <>
-      <div className="inventory-shift-bar" data-testid="shift-bar" role="region" aria-label="Shift Info">
+      <div className="inventory-shift-bar" data-testid="shift-bar" role="region" aria-label={l10n.getString('inv-shift-bar-aria') || 'Shift Info'}>
         {activeShift ? (
           <div className="shift-status-active" aria-live="polite">
             <div className="status-indicator" />
@@ -170,7 +177,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               className="shift-select"
               value={selectedLocationId}
               onChange={e => setSelectedLocationId(e.target.value)}
-              aria-label="Location"
+              aria-label={l10n.getString('inv-shift-location-aria') || 'Location'}
             >
               {locations.map(loc => (
                 <option key={loc.id} value={loc.id}>
@@ -186,7 +193,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Shift Notes"
-                aria-label="Notes"
+                aria-label={l10n.getString('inv-shift-notes-aria') || 'Notes'}
               />
             </Localized>
 

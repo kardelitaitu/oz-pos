@@ -575,6 +575,7 @@ export default function StaffLoginScreen() {
           {step === 'pin' && (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
             <div
+              id="staff-login-pin-pad"
               className="staff-login-pin-wrap"
               ref={pinWrapRef}
               tabIndex={-1}
@@ -628,7 +629,7 @@ export default function StaffLoginScreen() {
       {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
         <div className="staff-login-footer-left">
-          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.21</span>
+          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.22</span>
           <Localized id="staff-login-copyright">
             <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
           </Localized>
@@ -636,15 +637,15 @@ export default function StaffLoginScreen() {
         <div className="staff-login-footer-right">
           <div className="staff-login-connection-group">
             {/* Auth status — via checkLicenseStatus IPC */}
-            <div className="connection-status" title={authOnline === null ? 'Checking...' : authOnline ? 'Connected' : 'Disconnected'}>
+            <div className="connection-status" title={authOnline === null ? l10n.getString('staff-login-connection-checking') || 'Checking…' : authOnline ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
               <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-              <span className="connection-label">Auth</span>
+              <span className="connection-label">{l10n.getString('staff-login-connection-auth') || 'Auth'}</span>
               {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
             </div>
             {/* Sync status — via useSyncConnection IPC */}
-            <div className="connection-status" title={syncStatus.state === 'checking' ? 'Checking...' : syncStatus.state === 'connected' ? 'Connected' : 'Disconnected'}>
+            <div className="connection-status" title={syncStatus.state === 'checking' ? l10n.getString('staff-login-connection-checking') || 'Checking…' : syncStatus.state === 'connected' ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
               <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-              <span className="connection-label">Sync</span>
+              <span className="connection-label">{l10n.getString('staff-login-connection-sync') || 'Sync'}</span>
               {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
             </div>
           </div>

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import stockCountingFtl from '@/locales/stock-counting.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -41,7 +42,7 @@ describe('StockCountHistory', () => {
   it('shows loading skeleton initially', async () => {
     mockListCounts.mockReturnValue(new Promise(() => {}));
     mockListAdjustments.mockReturnValue(new Promise(() => {}));
-    const { container } = renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    const { container } = renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
     const skeleton = container.querySelector('[aria-hidden="true"].sc-hist-screen');
     expect(skeleton).toBeInTheDocument();
     // Verify old loading text is not present
@@ -51,7 +52,7 @@ describe('StockCountHistory', () => {
   it('shows empty state when no completed/cancelled counts exist', async () => {
     mockListCounts.mockResolvedValue([]);
     mockListAdjustments.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
     await waitFor(() => {
       // FTL sc-hist-empty = "No completed counts to display."
       expect(screen.getByText(/no completed counts/i)).toBeInTheDocument();
@@ -62,7 +63,7 @@ describe('StockCountHistory', () => {
   it('renders history title', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
     await waitFor(() => {
       // FTL sc-hist-title = "Count History"
       expect(screen.getByText(/count history/i)).toBeInTheDocument();
@@ -72,7 +73,7 @@ describe('StockCountHistory', () => {
   it('loads and displays count list items', async () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -91,7 +92,7 @@ describe('StockCountHistory', () => {
     ];
     mockListCounts.mockResolvedValue(allCounts);
     mockListAdjustments.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -106,7 +107,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -124,7 +125,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue(sampleLines);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -147,7 +148,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue(sampleAdjustments);
     mockGetLines.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -168,7 +169,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -186,7 +187,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockResolvedValue([]);
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();
@@ -204,7 +205,7 @@ describe('StockCountHistory', () => {
     mockListCounts.mockResolvedValue(sampleCounts);
     mockListAdjustments.mockResolvedValue([]);
     mockGetLines.mockRejectedValue(new Error('Network error'));
-    renderWithFluentSync(<StockCountHistory />, stockCountingFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><StockCountHistory /></ToastProvider>, stockCountingFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('SC-001')).toBeInTheDocument();

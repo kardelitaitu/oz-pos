@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { useToast } from '@/frontend/shared/Toast';
+import { getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -36,10 +38,14 @@ const DEFAULT_KDS: KdsDraftState = {
  * Consumes `useSettings()` for shared KDS configuration.
  */
 export function WorkspaceKdsSettings({
+  userId,
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
   // ── Draft state ──────────────────────────────────────────────
+
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
 
   const [draft, setDraft] = useState<KdsDraftState>(DEFAULT_KDS);
   const [saving, setSaving] = useState(false);
@@ -52,14 +58,39 @@ export function WorkspaceKdsSettings({
     originalsRef.current as unknown as Record<string, unknown>,
   ), [draft, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Initialise from settings ─────────────────────────────────
+  // ── Initialise from backend ─────────────────────────────────
 
   useEffect(() => {
-    if (!originalsLoaded) {
+    // Only seed initial values once; subsequent re-runs must not
+    // overwrite user edits.
+    if (originalsLoaded) return;
+
+    // Load all 5 KDS settings from the backend, then set originals
+    // to the loaded values so dirty tracking doesn't fire on mount.
+    Promise.all([
+      getSetting('kds.sound_enabled'),
+      getSetting('kds.yellow_threshold_min'),
+      getSetting('kds.red_threshold_min'),
+      getSetting('kds.auto_acknowledge'),
+      getSetting('kds.density'),
+    ]).then(([sound, yellow, red, ack, density]) => {
+      const loaded: KdsDraftState = {
+        soundEnabled: sound !== 'false',
+        yellowThresholdMin: parseInt(yellow ?? '', 10) || DEFAULT_KDS.yellowThresholdMin,
+        redThresholdMin: parseInt(red ?? '', 10) || DEFAULT_KDS.redThresholdMin,
+        autoAcknowledge: ack === 'true',
+        density: (density === 'comfortable' || density === 'compact') ? density : DEFAULT_KDS.density,
+      };
+      setDraft(loaded);
+      originalsRef.current = loaded;
+    }).catch(() => {
+      // Fallback: keep DEFAULT_KDS values
       originalsRef.current = { ...draft };
+    }).finally(() => {
       setOriginalsLoaded(true);
-    }
-  }, [originalsLoaded, draft]);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originalsLoaded]);
 
   // ── Update helpers ───────────────────────────────────────────
 
@@ -72,14 +103,21 @@ export function WorkspaceKdsSettings({
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // TODO (Phase 3): Call dedicated KDS settings IPC
+      await setSettings({
+        'kds.sound_enabled': String(draft.soundEnabled),
+        'kds.yellow_threshold_min': String(draft.yellowThresholdMin),
+        'kds.red_threshold_min': String(draft.redThresholdMin),
+        'kds.auto_acknowledge': String(draft.autoAcknowledge),
+        'kds.density': draft.density,
+      }, userId ?? 'default');
+      originalsRef.current = { ...draft };
       onSaved?.();
     } catch {
-      // Hook handles error
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [onSaved]);
+  }, [userId, draft, onSaved, addToast, l10n]);
 
   const isCompact = variant === 'inspector-drawer';
 

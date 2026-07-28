@@ -109,6 +109,7 @@ shift-stat-none = Tidak Ada
 shift-open-error = Gagal membuka shift
 shift-close-error = Gagal menutup shift
 shift-payout-error = Gagal mencatat penarikan
+shift-load-error = Gagal memuat shift
 shift-table-label = Riwayat shift
 shift-modal-open-label = Buka shift
 shift-modal-payout-label = Catat penarikan tunai

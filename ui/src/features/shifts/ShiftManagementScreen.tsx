@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useToast } from '@/frontend/shared/Toast';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { Card } from '@/components/Card';
@@ -38,9 +39,10 @@ const fmt = (minor: number, currency = 'USD') =>
 /** Shift management screen — view active shift status, open and close shifts, record cash payouts, and display reconciliation reports. */
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const { currency } = useCurrency();
   const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
@@ -77,11 +79,11 @@ export default function ShiftManagementScreen() {
       setShifts(allShifts);
       setActiveShift(active);
     } catch {
-      // IPC unavailable.
+      addToast({ message: l10n.getString('shift-load-error') || 'Failed to load shifts', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [userId, sessionToken]);
+  }, [userId, sessionToken, l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -112,11 +114,11 @@ export default function ShiftManagementScreen() {
       setOpeningBalance('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open shift');
+      setError(err instanceof Error ? err.message : l10n.getString('shift-open-error') || 'Failed to open shift');
     } finally {
       setSaving(false);
     }
-  }, [openingBalance, userId, load]);
+  }, [openingBalance, userId, load, l10n]);
 
   // ── Close shift ───────────────────────────────────────────────────
 
@@ -137,11 +139,11 @@ export default function ShiftManagementScreen() {
       setClosedShiftSummary(closed);
       setActiveShift(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to close shift');
+      setError(err instanceof Error ? err.message : l10n.getString('shift-close-error') || 'Failed to close shift');
     } finally {
       setSaving(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, userId]);
+  }, [activeShift, closingBalance, shiftNotes, userId, l10n]);
 
 
   const dismissCloseSummary = useCallback(async () => {
@@ -170,11 +172,11 @@ export default function ShiftManagementScreen() {
       setPayoutReason('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to record payout');
+      setError(err instanceof Error ? err.message : l10n.getString('shift-payout-error') || 'Failed to record payout');
     } finally {
       setSaving(false);
     }
-  }, [activeShift, payoutAmount, payoutReason, load]);
+  }, [activeShift, payoutAmount, payoutReason, load, l10n]);
 
   // ── Format time/date helpers ───────────────────────────────────────
 
@@ -780,7 +782,8 @@ export default function ShiftManagementScreen() {
             </div>
             <div className="shift-mgmt-modal-body">
               {(() => {
-                const s = closedShiftSummary!;
+                if (!closedShiftSummary) return null;
+                const s = closedShiftSummary;
                 return (
                   <>
               <div className="shift-mgmt-summary-grid">
@@ -866,7 +869,8 @@ export default function ShiftManagementScreen() {
 
       {/* ── Shift Detail Modal ────────────────────────── */}
       {mDetail && showDetailModal && (() => {
-        const s = showDetailModal!;
+        if (!showDetailModal) return null;
+        const s = showDetailModal;
         return (
         <div className={`shift-mgmt-overlay${eDetail ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-detail-label')}>
           <div className={`shift-mgmt-modal shift-mgmt-modal--wide${eDetail ? ' shift-modal-exit' : ''}`}>

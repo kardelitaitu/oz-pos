@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { Localized, useLocalization } from '@fluent/react';
 import './KdsSettingsPanel.css';
 
 /** Display density for KDS ticket cards. */
@@ -50,6 +51,7 @@ export function KdsSettingsPanel({
   onChangeAutoAcknowledge,
   onChangeDensity,
 }: KdsSettingsPanelProps) {
+  const { l10n } = useLocalization();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -85,7 +87,7 @@ export function KdsSettingsPanel({
         ref={btnRef}
         className="kds-settings-btn"
         onClick={() => setOpen((p) => !p)}
-        aria-label="KDS settings"
+        aria-label={l10n.getString('kds-settings-aria') || 'KDS settings'}
         aria-expanded={open}
       >
         <svg className="kds-settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -98,9 +100,10 @@ export function KdsSettingsPanel({
           ref={popoverRef}
           className="kds-settings-popover"
           role="dialog"
-          aria-label="KDS settings"
+          aria-label={l10n.getString('kds-settings-aria') || 'KDS settings'}
         >
           {/* Sound toggle */}
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="kds-settings-toggle">
             <input
               type="checkbox"
@@ -108,14 +111,14 @@ export function KdsSettingsPanel({
               checked={settings.soundEnabled}
               onChange={(e) => onChangeSound(e.target.checked)}
             />
-            <span className="kds-settings-toggle-label">Sound</span>
+            <span className="kds-settings-toggle-label"><Localized id="kds-settings-sound">Sound</Localized></span>
           </label>
 
           {/* Yellow threshold slider */}
           <div className="kds-settings-slider-group">
-            <span className="kds-settings-slider-label">
-              Yellow at {settings.yellowThresholdMin} min
-            </span>
+            <Localized id="kds-settings-yellow" vars={{ min: settings.yellowThresholdMin }}>
+              <span className="kds-settings-slider-label">{`Yellow at ${settings.yellowThresholdMin} min`}</span>
+            </Localized>
             <input
               type="range"
               className="kds-settings-slider"
@@ -124,15 +127,15 @@ export function KdsSettingsPanel({
               step={1}
               value={settings.yellowThresholdMin}
               onChange={(e) => onChangeYellowThreshold(Number(e.target.value))}
-              aria-label="Yellow escalation threshold in minutes"
+              aria-label={l10n.getString('kds-settings-yellow-aria') || 'Yellow escalation threshold in minutes'}
             />
           </div>
 
           {/* Red threshold slider */}
           <div className="kds-settings-slider-group">
-            <span className="kds-settings-slider-label">
-              Red at {settings.redThresholdMin} min
-            </span>
+            <Localized id="kds-settings-red" vars={{ min: settings.redThresholdMin }}>
+              <span className="kds-settings-slider-label">{`Red at ${settings.redThresholdMin} min`}</span>
+            </Localized>
             <input
               type="range"
               className="kds-settings-slider"
@@ -141,11 +144,12 @@ export function KdsSettingsPanel({
               step={1}
               value={settings.redThresholdMin}
               onChange={(e) => onChangeRedThreshold(Number(e.target.value))}
-              aria-label="Red escalation threshold in minutes"
+              aria-label={l10n.getString('kds-settings-red-aria') || 'Red escalation threshold in minutes'}
             />
           </div>
 
           {/* Auto-acknowledge toggle */}
+          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
           <label className="kds-settings-toggle">
             <input
               type="checkbox"
@@ -153,12 +157,12 @@ export function KdsSettingsPanel({
               checked={settings.autoAcknowledge}
               onChange={(e) => onChangeAutoAcknowledge(e.target.checked)}
             />
-            <span className="kds-settings-toggle-label">Auto-acknowledge</span>
+            <span className="kds-settings-toggle-label"><Localized id="kds-settings-auto-ack">Auto-acknowledge</Localized></span>
           </label>
 
           {/* Display density */}
           <div className="kds-settings-density">
-            <span className="kds-settings-slider-label">Density</span>
+            <span className="kds-settings-slider-label"><Localized id="kds-settings-density">Density</Localized></span>
             <div className="kds-settings-density-options">
               {(['comfortable', 'compact'] as const).map((d) => (
                 <button
@@ -167,7 +171,7 @@ export function KdsSettingsPanel({
                   onClick={() => onChangeDensity(d)}
                   aria-pressed={d === settings.density}
                 >
-                  {d}
+                  <Localized id={d === 'comfortable' ? 'kds-settings-density-comfortable' : 'kds-settings-density-compact'}>{d}</Localized>
                 </button>
               ))}
             </div>

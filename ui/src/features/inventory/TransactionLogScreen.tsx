@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/Button';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
@@ -16,6 +16,9 @@ import './TransactionLogScreen.css';
 export default function TransactionLogScreen() {
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
+  const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -45,9 +48,9 @@ export default function TransactionLogScreen() {
         setTransactions(txs);
         setLocations(locs);
       })
-      .catch((err) => addToast({ message: err instanceof Error ? err.message : 'Failed to load transactions', type: 'error' }))
+      .catch((err) => addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-load') || 'Failed to load transactions'), type: 'error' }))
       .finally(() => setLoading(false));
-  }, [sessionToken, addToast]);
+  }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
   const handleRowClick = async (txId: string) => {
     if (!sessionToken) return;
@@ -65,7 +68,7 @@ export default function TransactionLogScreen() {
         setExpandedLines(detail[1]);
       }
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to load transaction details', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-lines') || 'Failed to load transaction details'), type: 'error' });
     } finally {
       setLoadingLines(false);
     }
@@ -113,7 +116,7 @@ export default function TransactionLogScreen() {
             value={filterLocation}
             onChange={e => setFilterLocation(e.target.value)}
           >
-            <option value="">All</option>
+            <Localized id="inv-log-filter-all"><option value="">All</option></Localized>
             {locations.map(loc => (
               <option key={loc.id} value={loc.id}>
                 {loc.name}
@@ -132,7 +135,7 @@ export default function TransactionLogScreen() {
             value={filterStaff}
             onChange={e => setFilterStaff(e.target.value)}
           >
-            <option value="">All</option>
+            <Localized id="inv-log-filter-all"><option value="">All</option></Localized>
             {uniqueStaffIds.map(id => (
               <option key={id} value={id}>
                 {id}
@@ -151,19 +154,19 @@ export default function TransactionLogScreen() {
             value={filterType}
             onChange={e => setFilterType(e.target.value)}
           >
-            <option value="">All</option>
-            <option value="sale">Sale</option>
-            <option value="void">Void</option>
-            <option value="refund">Refund</option>
-            <option value="transfer">Transfer</option>
-            <option value="purchase-order-receive">PO Receive</option>
-            <option value="stock-count">Stock Count</option>
-            <option value="manual-adjustment">Manual Adjustment</option>
+            <Localized id="inv-log-filter-all"><option value="">All</option></Localized>
+            <Localized id="inv-log-type-sale"><option value="sale">Sale</option></Localized>
+            <Localized id="inv-log-type-void"><option value="void">Void</option></Localized>
+            <Localized id="inv-log-type-refund"><option value="refund">Refund</option></Localized>
+            <Localized id="inv-log-type-transfer"><option value="transfer">Transfer</option></Localized>
+            <Localized id="inv-log-type-po-receive"><option value="purchase-order-receive">PO Receive</option></Localized>
+            <Localized id="inv-log-type-stock-count"><option value="stock-count">Stock Count</option></Localized>
+            <Localized id="inv-log-type-manual-adjustment"><option value="manual-adjustment">Manual Adjustment</option></Localized>
           </select>
         </div>
 
         <div className="log-filter-group">
-          <label htmlFor="filter-start-date">Start Date</label>
+          <Localized id="inv-log-filter-start"><label htmlFor="filter-start-date">Start Date</label></Localized>
           <input
             id="filter-start-date"
             type="date"
@@ -174,7 +177,7 @@ export default function TransactionLogScreen() {
         </div>
 
         <div className="log-filter-group">
-          <label htmlFor="filter-end-date">End Date</label>
+          <Localized id="inv-log-filter-end"><label htmlFor="filter-end-date">End Date</label></Localized>
           <input
             id="filter-end-date"
             type="date"
@@ -196,11 +199,11 @@ export default function TransactionLogScreen() {
         <table className="log-table">
           <thead>
             <tr>
-              <th>Date / Time</th>
-              <th>Type</th>
-              <th>Location</th>
-              <th>Staff</th>
-              <th>Action</th>
+              <Localized id="inv-log-col-datetime"><th>Date / Time</th></Localized>
+              <Localized id="inv-log-col-type"><th>Type</th></Localized>
+              <Localized id="inv-log-col-location"><th>Location</th></Localized>
+              <Localized id="inv-log-col-staff"><th>Staff</th></Localized>
+              <Localized id="inv-log-col-actions"><th>Action</th></Localized>
             </tr>
           </thead>
           <tbody>{filteredTxs.map(tx => {
@@ -235,12 +238,12 @@ export default function TransactionLogScreen() {
                         <div className="log-details-container">
                           {tx.notes && (
                             <div className="details-notes">
-                              <strong>Notes:</strong> {tx.notes}
+                              <Localized id="inv-log-notes"><strong>Notes:</strong></Localized> {tx.notes}
                             </div>
                           )}
                           <div aria-live="polite">
                           {loadingLines ? (
-                            <span>Loading lines...</span>
+                            <Localized id="inv-log-loading-lines"><span>Loading lines...</span></Localized>
                           ) : (
                             <table className="details-table">
                               <thead>

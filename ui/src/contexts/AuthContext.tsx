@@ -1,4 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
+// Vite React Refresh: force full remount on HMR to prevent stale
+// AuthContext mismatch.
+/// @refresh reset
 import {
   createContext,
   useContext,

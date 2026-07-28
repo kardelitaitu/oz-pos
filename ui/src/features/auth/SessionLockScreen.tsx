@@ -194,10 +194,10 @@ export default function SessionLockScreen({
         <div className="session-lock-time">{timeStr}</div>
         <div className="session-lock-date">{dateStr}</div>
 
-        <div className="session-lock-sub">Enter PIN to unlock</div>
+        <div className="session-lock-sub">{l10n.getString('session-lock-enter-pin') || 'Enter PIN to unlock'}</div>
 
         {/* PIN dots */}
-        <div className="session-lock-pin-dots" aria-label={`PIN: ${pin.length} of ${MAX_PIN_LENGTH} digits entered`}>
+        <div className="session-lock-pin-dots" aria-label={l10n.getString('session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) }) || `PIN: ${pin.length} of ${MAX_PIN_LENGTH} digits entered`}>
           {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
             <span
               key={i}
@@ -213,7 +213,7 @@ export default function SessionLockScreen({
             {error}
             {isLocked && (
               <span className="session-lock-rate-limit">
-                {' '}Wait {lockoutRemainingSec}s.
+                {' '}{l10n.getString('session-lock-lockout', { seconds: String(lockoutRemainingSec) }) || `Wait ${lockoutRemainingSec}s.`}
               </span>
             )}
           </div>
@@ -222,12 +222,13 @@ export default function SessionLockScreen({
         {/* PIN pad */}
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
+          id="session-lock-pin-pad"
           className="session-lock-pad"
           ref={pinWrapRef}
           tabIndex={-1}
           onKeyDown={handleKeyDown}
           role="application"
-          aria-label="PIN pad"
+          aria-label={l10n.getString('session-lock-pad-aria') || 'PIN pad'}
         >
           {[['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3']].map((row) => (
             <div className="session-lock-pad-row" key={row[0]}>
@@ -252,7 +253,7 @@ export default function SessionLockScreen({
               onClick={() => setPin([])}
               disabled={pin.length === 0 || isLocked}
             >
-              Clear
+              {l10n.getString('staff-login-clear') || 'Clear'}
             </button>
             <button
               type="button"
@@ -280,14 +281,14 @@ export default function SessionLockScreen({
 
         {/* ── Connection status indicators ──────── */}
         <div className="session-lock-connection-group">
-          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? 'Checking...' : authOnline ? 'Connected' : 'Disconnected'}>
+          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? l10n.getString('staff-login-connection-checking') || 'Checking…' : authOnline ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
             <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-            <span className="connection-label">Auth</span>
+            <span className="connection-label">{l10n.getString('staff-login-connection-auth') || 'Auth'}</span>
             {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
           </div>
-          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? 'Checking...' : syncStatus.state === 'connected' ? 'Connected' : 'Disconnected'}>
+          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? l10n.getString('staff-login-connection-checking') || 'Checking…' : syncStatus.state === 'connected' ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
             <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-            <span className="connection-label">Sync</span>
+            <span className="connection-label">{l10n.getString('staff-login-connection-sync') || 'Sync'}</span>
             {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
           </div>
         </div>

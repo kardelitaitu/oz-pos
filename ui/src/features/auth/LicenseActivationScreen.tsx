@@ -25,8 +25,8 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
-  const [appVersion, setAppVersion] = useState<string>('0.0.21');
-  const [ipAddress, setIpAddress] = useState<string>('Detecting...');
+  const [appVersion, setAppVersion] = useState<string>('0.0.22');
+  const [ipAddress, setIpAddress] = useState<string>(l10n.getString('auth-ip-detecting') || 'Detecting...');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();
 
@@ -34,16 +34,18 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     let mounted = true;
     getVersion().then(v => {
       if (mounted) setAppVersion(v.version);
-    }).catch(() => {});
+    }).catch(() => {
+      // Version display is non-critical — use hardcoded fallback.
+    });
     
     getLocalIp().then(ip => {
       if (mounted) setIpAddress(ip);
     }).catch(() => {
-      if (mounted) setIpAddress('Unknown');
+      if (mounted) setIpAddress(l10n.getString('auth-ip-unknown') || 'Unknown');
     });
 
     return () => { mounted = false; };
-  }, []);
+  }, [l10n]);
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -288,11 +290,11 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
 
       <div className="license-server-status-container">
         <ConnectionStatus 
-          label="Auth" 
+          label={l10n.getString('staff-login-connection-auth') || 'Auth'} 
           url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" 
         />
         <ConnectionStatus 
-          label="Sync" 
+          label={l10n.getString('staff-login-connection-sync') || 'Sync'} 
           url="" 
         />
         <MachineIdStatus />

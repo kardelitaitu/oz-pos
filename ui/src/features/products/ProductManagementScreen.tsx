@@ -66,7 +66,7 @@ function dtoToProduct(dto: ProductDto): Product {
 /** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRateDto[]>([]);

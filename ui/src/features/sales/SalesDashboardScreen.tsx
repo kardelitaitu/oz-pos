@@ -1,4 +1,4 @@
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { getWidgets } from '@/platform/ui/widget-registry';
 import { useFeatures } from '@/hooks/useFeatures';
 import { Card } from '@/components/Card';
@@ -13,11 +13,12 @@ import './SalesDashboardScreen.css';
  * only appear when their feature is turned on.
  */
 export default function SalesDashboardScreen() {
+  const { l10n } = useLocalization();
   const { enabled } = useFeatures();
   const widgets = getWidgets(enabled);
 
   return (
-    <div className="reporting-dashboard" role="region" aria-label="Reporting dashboard">
+    <div className="reporting-dashboard" role="region" aria-label={l10n.getString('sales-dashboard-region-aria') || 'Reporting dashboard'}>
       <Localized id="sales-dashboard-title">
         <h1 className="reporting-dashboard-title">Sales Dashboard</h1>
       </Localized>
@@ -29,7 +30,7 @@ export default function SalesDashboardScreen() {
           </Localized>
         </div>
       ) : (
-        <div className="reporting-dashboard-grid" role="list" aria-label="Dashboard widgets">
+        <div className="reporting-dashboard-grid" role="list" aria-label={l10n.getString('sales-dashboard-grid-aria') || 'Dashboard widgets'}>
           {widgets.map((w) => {
             const WidgetComponent = w.component;
             const widthClass = w.width === 2 ? 'widget-width-2' : 'widget-width-1';

@@ -222,8 +222,10 @@ describe('Settings Toggle Buttons Regression Suite', () => {
 
     // Navigate to Cloud Sync section where sync-enabled lives
     await user.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
+    await waitFor(() => {
+      expect(document.getElementById('sync-enabled')).not.toBeNull();
+    });
     const syncInput = document.getElementById('sync-enabled') as HTMLInputElement;
-    expect(syncInput, 'Input #sync-enabled should exist').not.toBeNull();
 
     const syncWrapper = syncInput.closest('.settings-toggle') as HTMLLabelElement;
     expect(syncWrapper, 'Wrapper for #sync-enabled should have .settings-toggle class').not.toBeNull();

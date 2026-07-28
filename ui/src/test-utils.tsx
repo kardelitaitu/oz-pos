@@ -26,6 +26,7 @@ const defaultWorkspaceValue: WorkspaceContextValue = {
   resolvedStoreId: 'default',
   sessionToken: MOCK_SESSION_TOKEN,
   swapSessionToken: vi.fn(),
+  terminalId: '',
 };
 
 export interface RenderWithWorkspaceOptions extends RenderOptions {

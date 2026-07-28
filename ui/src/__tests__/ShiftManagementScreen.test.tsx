@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import shiftsFtl from '@/locales/shifts.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -72,7 +73,7 @@ describe('ShiftManagementScreen', () => {
   it('renders the title', async () => {
     mockListShifts.mockResolvedValue([]);
     mockGetActiveShift.mockResolvedValue(null);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Shift Management')).toBeInTheDocument();
     });
@@ -81,7 +82,7 @@ describe('ShiftManagementScreen', () => {
   it('shows loading skeleton initially', async () => {
     mockListShifts.mockReturnValue(new Promise(() => {}));
     mockGetActiveShift.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
     expect(document.querySelector('.shift-mgmt-loading-skeleton')).toBeInTheDocument();
   });
 
@@ -90,7 +91,7 @@ describe('ShiftManagementScreen', () => {
   it('shows no active shift banner when none is active', async () => {
     mockListShifts.mockResolvedValue(closedShifts);
     mockGetActiveShift.mockResolvedValue(null);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('No active shift')).toBeInTheDocument();
@@ -101,7 +102,7 @@ describe('ShiftManagementScreen', () => {
   it('shows Open Shift button on the no-active banner', async () => {
     mockListShifts.mockResolvedValue([]);
     mockGetActiveShift.mockResolvedValue(null);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Open Shift')).toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('ShiftManagementScreen', () => {
   it('shows active shift card when a shift is active', async () => {
     mockListShifts.mockResolvedValue([activeShift]);
     mockGetActiveShift.mockResolvedValue(activeShift);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Active Shift')).toBeInTheDocument();
@@ -125,7 +126,7 @@ describe('ShiftManagementScreen', () => {
   it('shows sales stats on the active shift card', async () => {
     mockListShifts.mockResolvedValue([activeShift]);
     mockGetActiveShift.mockResolvedValue(activeShift);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       // "Sales" appears in multiple labels (Sales, Cash Sales, Card Sales).
@@ -141,7 +142,7 @@ describe('ShiftManagementScreen', () => {
   it('shows shift history table with shifts', async () => {
     mockListShifts.mockResolvedValue(closedShifts);
     mockGetActiveShift.mockResolvedValue(null);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Shift History')).toBeInTheDocument();
@@ -153,7 +154,7 @@ describe('ShiftManagementScreen', () => {
   it('shows empty state when no shifts exist', async () => {
     mockListShifts.mockResolvedValue([]);
     mockGetActiveShift.mockResolvedValue(null);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('No shifts recorded yet.')).toBeInTheDocument();
@@ -166,7 +167,7 @@ describe('ShiftManagementScreen', () => {
     const user = userEvent.setup();
     mockListShifts.mockResolvedValue([]);
     mockGetActiveShift.mockResolvedValue(null);
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Open Shift')).toBeInTheDocument();
@@ -192,7 +193,7 @@ describe('ShiftManagementScreen', () => {
       paymentBreakdown: [], hourlyBreakdown: [], cashPayouts: [],
       saleCount: 0, voidCount: 0, refundCount: 0,
     });
-    renderWithFluentSync(<ShiftManagementScreen />, shiftsFtl, sharedFtl);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('View')).toBeInTheDocument();

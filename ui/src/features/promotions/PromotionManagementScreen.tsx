@@ -65,11 +65,11 @@ export default function PromotionManagementScreen() {
       const items = await listPromotions();
       setPromotions(items);
     } catch {
-      // IPC unavailable
+      addToast({ message: l10n.getString('promotions-error-load') || 'Failed to load promotions', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -115,11 +115,11 @@ export default function PromotionManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to save promotion', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-save') || 'Failed to save promotion', type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [form, modalMode, load, closeModal, addToast, session?.user_id]);
+  }, [form, modalMode, load, closeModal, addToast, l10n, session?.user_id]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -129,20 +129,20 @@ export default function PromotionManagementScreen() {
       await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to delete promotion', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-delete') || 'Failed to delete promotion', type: 'error' });
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load, addToast, session?.user_id]);
+  }, [deleteTarget, load, addToast, l10n, session?.user_id]);
 
   const toggleActive = useCallback(async (p: Promotion) => {
     try {
       await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : 'Failed to toggle promotion', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-toggle') || 'Failed to toggle promotion', type: 'error' });
     }
-  }, [load, addToast, session?.user_id]);
+  }, [load, addToast, l10n, session?.user_id]);
 
   return (
     <div className="promo-mgmt">
@@ -213,9 +213,8 @@ export default function PromotionManagementScreen() {
             <tbody>{promotions.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
-                  { }
                   <td>
-                    <Localized id={PROMO_TYPE_LABELS[p.promo_type]!}>
+                    <Localized id={PROMO_TYPE_LABELS[p.promo_type] ?? 'promotions-percentage'}>
                       <span>{p.promo_type}</span>
                     </Localized>
                   </td>
@@ -299,7 +298,7 @@ export default function PromotionManagementScreen() {
                   <select id="promo-field-type" value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
                     {PROMO_TYPES.map((t) => (
                       <option key={t} value={t}>
-                        {l10n.getString(PROMO_TYPE_LABELS[t]!) || t}
+                        {l10n.getString(PROMO_TYPE_LABELS[t] ?? 'promotions-percentage') || t}
                       </option>
                     ))}
                   </select>

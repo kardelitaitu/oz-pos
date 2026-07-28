@@ -12,6 +12,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
+import { useToast } from '@/frontend/shared/Toast';
 import './ExchangeRateScreen.css';
 
 function todayStr(): string {
@@ -40,6 +41,7 @@ const EMPTY_FORM: FormData = {
 /** Exchange rate management screen — create and delete currency exchange rates for multi-currency support. */
 export default function ExchangeRateScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const [rates, setRates] = useState<ExchangeRateDto[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,11 +92,11 @@ export default function ExchangeRateScreen() {
       setShowModal(false);
       await load();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('currency-save-error') || 'Failed to save exchange rate', type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [form, load]);
+  }, [form, load, l10n, addToast]);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
@@ -103,9 +105,10 @@ export default function ExchangeRateScreen() {
       setDeleting(null);
       await load();
     } catch {
+      addToast({ message: l10n.getString('currency-delete-error') || 'Failed to delete exchange rate', type: 'error' });
       setDeleting(null);
     }
-  }, [load]);
+  }, [load, l10n, addToast]);
 
   const currencyOptions = currencies.map((c) => (
     <option key={c.code} value={c.code}>

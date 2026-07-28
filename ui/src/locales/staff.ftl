@@ -53,6 +53,7 @@ staff-error-display-name-required = Display name is required
 staff-error-role-required = Please select a role
 staff-error-pin-length = PIN must be at least 4 characters
 staff-error-save-failed = Failed to save staff member
+staff-error-workspaces-failed = Failed to load workspace settings
 staff-table-aria = Staff members
 staff-field-username-aria =
     .aria-label = Username
@@ -121,3 +122,14 @@ fastpin-enter-pin = Enter PIN for { $user }
 # ── Session Lock Screen (i18n parity fix) ────────────────────────────────
 session-lock-expired = Session expired. Please log in again.
 session-lock-invalid-pin = Invalid PIN
+session-lock-enter-pin = Enter PIN to unlock
+session-lock-pin-aria = PIN: { $length } of { $max } digits entered
+session-lock-pad-aria = PIN pad
+session-lock-lockout = Wait { $seconds }s.
+
+# ── Connection Status (shared between StaffLoginScreen + SessionLockScreen) ──
+staff-login-connection-checking = Checking…
+staff-login-connection-connected = Connected
+staff-login-connection-disconnected = Disconnected
+staff-login-connection-auth = Auth
+staff-login-connection-sync = Sync

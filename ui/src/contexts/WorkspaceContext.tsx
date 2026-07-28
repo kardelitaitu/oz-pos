@@ -1,3 +1,6 @@
+// Vite React Refresh: force full remount on HMR to prevent stale
+// WorkspaceContext / WorkspaceScopeContext mismatch.
+/// @refresh reset
 import {
   createContext,
   useContext,
@@ -135,6 +138,8 @@ export interface WorkspaceContextValue {
   resolvedStoreId: string;
   /** ADR #4 / ADR #7: opaque session token for scoped command authorization. */
   sessionToken: string | null;
+  /** ADR #22: device/terminal ID for hardware-scoped settings. */
+  terminalId: string;
   /**
    * ADR #6: Hot-swap the session token to a new user without resetting
    * the active workspace/instance. Used by FastPINOverlay for shared
@@ -188,6 +193,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const sessionTokenRef = useRef(sessionToken);
   sessionTokenRef.current = sessionToken;
+
+  // ADR #22: Device/terminal ID resolved once on mount.
+  const [terminalId, setTerminalId] = useState('');
+  useEffect(() => {
+    getDeviceId().then(setTerminalId).catch(() => setTerminalId(''));
+  }, []);
 
   // ADR #6: Stable ref for the active instance so swapSessionToken
   // can read it without depending on the state (keeps the callback
@@ -524,6 +535,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           resolvedStoreId,
           sessionToken,
           swapSessionToken,
+          terminalId,
         }}
       >
         {children}

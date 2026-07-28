@@ -524,7 +524,7 @@ describe('SettingsPage', () => {
       expect(screen.getByLabelText(/server url/i)).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/^api key$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/enable cloud sync/i)).toBeInTheDocument();
+    expect(screen.getByText(/enable cloud sync/i)).toBeInTheDocument();
   });
 
   it('shows not-configured hint when sync is unconfigured', async () => {

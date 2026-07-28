@@ -1,6 +1,7 @@
 # ui/src/locales/kds.ftl — Kitchen Display System
 
 kds-title = Kitchen Display
+kds-screen-aria = Kitchen Display System
 kds-pending = Pending
 kds-preparing = Preparing
 kds-ready = Ready
@@ -18,3 +19,26 @@ kds-time-ago = { $minutes }m
 kds-urgent-badge = URGENT
 kds-pull-to-refresh = Pull down to refresh
 kds-release-to-refresh = Release to refresh
+
+# Layout switcher
+kds-layout-label = Layout
+kds-layout-display-label = Display
+kds-layout-options-aria = Layout options
+kds-layout-popover-aria = KDS layout and display options
+kds-layout-order-id = Order ID
+kds-layout-table-number = Table Number
+kds-layout-kanban = Kanban
+kds-layout-focus = Focus
+kds-layout-metro = Metro
+
+# Settings panel
+kds-settings-aria = KDS settings
+kds-settings-sound = Sound
+kds-settings-yellow = Yellow at { $min } min
+kds-settings-yellow-aria = Yellow escalation threshold in minutes
+kds-settings-red = Red at { $min } min
+kds-settings-red-aria = Red escalation threshold in minutes
+kds-settings-auto-ack = Auto-acknowledge
+kds-settings-density = Density
+kds-settings-density-comfortable = Comfortable
+kds-settings-density-compact = Compact

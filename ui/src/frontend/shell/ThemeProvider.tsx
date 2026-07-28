@@ -1,4 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
+// Vite React Refresh: force full remount on HMR to prevent stale
+// ThemeContext mismatch in DevToolbar / StatusBar / RestaurantMenu.
+/// @refresh reset
 import {
 
   createContext,
@@ -133,4 +136,12 @@ export function useTheme(): ThemeContextValue {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return ctx;
+}
+
+/**
+ * Access the current theme and toggle function safely outside a ThemeProvider.
+ * Returns `null` when no ThemeProvider wraps the calling tree.
+ */
+export function useOptionalTheme(): ThemeContextValue | null {
+  return useContext(ThemeContext);
 }

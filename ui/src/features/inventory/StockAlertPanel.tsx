@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, memo } from 'react';
+import { useCallback, useEffect, useState, useRef, memo } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { StockAlertEvent } from '@/api/inventory';
 import { getActiveStockAlerts, acknowledgeStockAlert } from '@/api/inventory';
@@ -26,6 +27,9 @@ export const StockAlertPanel = memo(function StockAlertPanel({
   maxAlerts = 20,
 }: StockAlertPanelProps) {
   const { sessionToken } = useWorkspace();
+  const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   const [alerts, setAlerts] = useState<StockAlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,11 +47,12 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       const data = await getActiveStockAlerts(token, locationId);
       setAlerts(data.slice(0, maxAlerts));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load alerts');
+      setError(err instanceof Error ? err.message : l10nRef.current.getString('inv-alert-error-load') || 'Failed to load alerts');
     } finally {
       setLoading(false);
     }
-  }, [token, locationId, maxAlerts]);
+  }, [token, locationId, maxAlerts]); // l10n accessed via ref — stable dep chain
+
 
   useEffect(() => {
     fetchAlerts();
@@ -69,7 +74,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         // Remove from local state immediately for snappy UX
         setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to acknowledge');
+        setError(err instanceof Error ? err.message : l10nRef.current.getString('inv-alert-error-ack') || 'Failed to acknowledge');
       } finally {
         setAcknowledging((prev) => {
           const next = new Set(prev);
@@ -78,7 +83,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         });
       }
     },
-    [token],
+    [token], // l10n accessed via ref — stable dep chain
   );
 
   // ── Severity ─────────────────────────────────────────────────────
@@ -91,10 +96,10 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       const now = new Date();
       const diffMs = now.getTime() - d.getTime();
       const diffMin = Math.floor(diffMs / 60000);
-      if (diffMin < 1) return 'Just now';
-      if (diffMin < 60) return `${diffMin}m ago`;
+      if (diffMin < 1) return l10n.getString('inv-alert-time-now') || 'Just now';
+      if (diffMin < 60) return l10n.getString('inv-alert-time-min', { min: diffMin }) || `${diffMin}m ago`;
       const diffHrs = Math.floor(diffMin / 60);
-      if (diffHrs < 24) return `${diffHrs}h ago`;
+      if (diffHrs < 24) return l10n.getString('inv-alert-time-hr', { hr: diffHrs }) || `${diffHrs}h ago`;
       return d.toLocaleDateString();
     } catch {
       return iso;
@@ -105,12 +110,12 @@ export const StockAlertPanel = memo(function StockAlertPanel({
 
   if (loading) {
     return (
-      <div className="stock-alert-panel" role="region" aria-label="Loading stock alerts">
+      <div className="stock-alert-panel" role="region" aria-label={l10n.getString('inv-alert-loading-aria') || 'Loading stock alerts'}>
         <div className="stock-alert-panel-header">
-          <span className="stock-alert-panel-title">Stock Alerts</span>
+          <span className="stock-alert-panel-title"><Localized id="inv-alert-title">Stock Alerts</Localized></span>
         </div>
         <div className="stock-alert-loading">
-          <span>Loading alerts...</span>
+          <Localized id="inv-alert-loading"><span>Loading alerts...</span></Localized>
         </div>
       </div>
     );
@@ -120,9 +125,9 @@ export const StockAlertPanel = memo(function StockAlertPanel({
 
   if (error && alerts.length === 0) {
     return (
-      <div className="stock-alert-panel" role="region" aria-label="Stock alerts">
+      <div className="stock-alert-panel" role="region" aria-label={l10n.getString('inv-alert-aria') || 'Stock alerts'}>
         <div className="stock-alert-panel-header">
-          <span className="stock-alert-panel-title">Stock Alerts</span>
+          <span className="stock-alert-panel-title"><Localized id="inv-alert-title">Stock Alerts</Localized></span>
         </div>
         <div className="stock-alert-error" role="alert">
           {error}
@@ -132,14 +137,14 @@ export const StockAlertPanel = memo(function StockAlertPanel({
   }
 
   return (
-    <div className="stock-alert-panel" role="region" aria-label="Stock alerts panel">
+    <div className="stock-alert-panel" role="region" aria-label={l10n.getString('inv-alert-panel-aria') || 'Stock alerts panel'}>
       {/* Header */}
       <div className="stock-alert-panel-header">
         <span className="stock-alert-panel-title">
-          Stock Alerts
+          <Localized id="inv-alert-title">Stock Alerts</Localized>
         </span>
         {alerts.length > 0 && (
-          <span className="stock-alert-panel-badge" aria-label={`${alerts.length} active alerts`}>
+          <span className="stock-alert-panel-badge" aria-label={l10n.getString('inv-alert-badge-count', { count: alerts.length })}>
             {alerts.length}
           </span>
         )}
@@ -153,7 +158,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
           <span className="stock-alert-empty-text">
-            No active alerts
+            <Localized id="inv-alert-empty">No active alerts</Localized>
           </span>
         </div>
       )}
@@ -175,12 +180,10 @@ export const StockAlertPanel = memo(function StockAlertPanel({
           <div className="stock-alert-metrics">
             <span className="stock-alert-metric-current">
               <span className={`stock-alert-severity-dot ${isCritical(alert) ? '' : 'stock-alert-severity-dot--warning'}`} />
-              <LocalizedText label="Stock">
-                <strong>{alert.current_qty}</strong>
-              </LocalizedText>
+              <strong aria-label={l10n.getString('inv-alert-stock-label') || 'Stock'}>{alert.current_qty}</strong>
             </span>
             <span className="stock-alert-metric-threshold">
-              <LocalizedText label="Threshold:">{alert.threshold}</LocalizedText>
+              <span aria-label={l10n.getString('inv-alert-threshold-label') || 'Threshold'}>{alert.threshold}</span>
             </span>
           </div>
 
@@ -193,9 +196,9 @@ export const StockAlertPanel = memo(function StockAlertPanel({
               className="stock-alert-ack-btn"
               onClick={() => handleAcknowledge(alert.id)}
               disabled={acknowledging.has(alert.id)}
-              aria-label={`Acknowledge alert for ${alert.product_name}`}
+              aria-label={l10n.getString('inv-alert-ack-aria', { name: alert.product_name })}
             >
-              {acknowledging.has(alert.id) ? '...' : 'Ack'}
+              {acknowledging.has(alert.id) ? (l10n.getString('inv-alert-acking') || '...') : (l10n.getString('inv-alert-ack') || 'Ack')}
             </button>
           </div>
         </div>
@@ -203,13 +206,3 @@ export const StockAlertPanel = memo(function StockAlertPanel({
     </div>
   );
 });
-
-/** Inline helper to wrap text in a label span without importing another component. */
-function LocalizedText({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <>
-      <span className="sr-only">{label}</span>
-      {children}
-    </>
-  );
-}

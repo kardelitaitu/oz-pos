@@ -1,5 +1,7 @@
 # ADR #20: Payment-Capture Ordering — Stock Reservation Before Payment Capture
 
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (1 finding) · F1: command/struct naming drift — ADR text specifies create_pending_sale / finalize_sale_scoped / void_pending_sale_scoped Tauri commands + a PendingSale struct, but implemented API is complete_sale_scoped (pos.rs) -> finalize_sale (crates/oz-core/src/db/sales.rs:438, IPC in inventory.rs:676, unscoped) + void_pending_sale (sales.rs:798, IPC inventory.rs:676, unscoped); NO create_pending_sale symbol and NO PendingSale Rust struct exist (PendingSale is a TS interface at ui/src/api/sales.ts:200) · verified accurate: migration 096_pending_sale_status.sql adds 'pending' to sales.status CHECK; 097_payment_idempotency_keys.sql adds idempotency_key UNIQUE index; finalize_sale/void_pending_sale/reap_stale_pending_sales present in sales.rs; init_pending_sale_reaper registered in platform/startup/src/lib.rs:251 (60s); UI wrappers completeSaleScoped/finalizeSale/voidPendingSale + PendingSale type present in ui/src/api/sales.ts; Status "Implemented" matches on-disk code -->
+
 **Status:** Implemented (2026-07-19)
 **Date:** 2026-07-19
 **Decision Record:** Closes ADR-18 §13 Finding #31 — the pre-capture ordering requirement that the deduction location must be locked BEFORE payment gateway capture is initiated.

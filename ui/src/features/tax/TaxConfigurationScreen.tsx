@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listTaxRatesScoped,
   createTaxRate,
@@ -36,8 +37,9 @@ const EMPTY_TAX_FORM: TaxFormData = {
 /** Tax configuration screen — CRUD for tax rates, inclusive/exclusive toggle, and per-category tax rate assignment. */
 export default function TaxConfigurationScreen() {
   const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken!;
+  const sessionToken = rawToken || '';
   // ── Tax rates state ─────────────────────────────────────────────
   const [rates, setRates] = useState<TaxRateDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,11 +129,11 @@ export default function TaxConfigurationScreen() {
       setShowModal(false);
       await loadAll();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('tax-config-save-error') || 'Failed to save tax rate', type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, loadAll]);
+  }, [form, editingId, loadAll, l10n, addToast]);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
@@ -140,9 +142,10 @@ export default function TaxConfigurationScreen() {
       setDeleting(null);
       await loadAll();
     } catch {
+      addToast({ message: l10n.getString('tax-config-delete-error') || 'Failed to delete tax rate', type: 'error' });
       setDeleting(null);
     }
-  }, [loadAll]);
+  }, [loadAll, l10n, addToast]);
 
   // ── Category tax rates ──────────────────────────────────────────
 
@@ -164,11 +167,11 @@ export default function TaxConfigurationScreen() {
       setShowCatModal(false);
       await loadAll();
     } catch {
-      // Error handling.
+      addToast({ message: l10n.getString('tax-config-cat-save-error') || 'Failed to save category tax rates', type: 'error' });
     } finally {
       setSavingCat(false);
     }
-  }, [editingCatId, selectedCatRateIds, loadAll]);
+  }, [editingCatId, selectedCatRateIds, loadAll, l10n, addToast]);
 
   const toggleCatRate = useCallback((rateId: string) => {
     setSelectedCatRateIds((prev) =>
@@ -263,7 +266,6 @@ export default function TaxConfigurationScreen() {
                         )}
                       </td>
                       <td>{r.display_rate}</td>
-                      { }
                       <td>
                         <span className={`tax-config-type-badge ${r.is_inclusive ? 'tax-config-type--inclusive' : 'tax-config-type--exclusive'}`}>
                           <Localized id={r.is_inclusive ? 'tax-config-type-inclusive' : 'tax-config-type-exclusive'}>
@@ -272,10 +274,8 @@ export default function TaxConfigurationScreen() {
                         </span>
                       </td>
                       <td>{r.is_default ? l10n.getString('tax-config-yes') : '\u2014'}</td>
-                      { }
                       <td className="tax-config-cell-actions">
                         <Localized id="tax-config-edit-aria" attrs={{ "aria-label": true }} vars={{ name: r.name }}>
-                        { }
                         <button
                           type="button"
                           className="tax-config-action-btn"
@@ -287,7 +287,6 @@ export default function TaxConfigurationScreen() {
                         </button>
                         </Localized>
                         <Localized id="tax-config-delete-aria" attrs={{ "aria-label": true }} vars={{ name: r.name }}>
-                        { }
                         <button
                           type="button"
                           className="tax-config-action-btn tax-config-action-btn--danger"
@@ -365,10 +364,8 @@ export default function TaxConfigurationScreen() {
                               </Localized>
                             )}
                           </td>
-                          { }
                           <td className="tax-config-cell-actions">
                             <Localized id="tax-config-cat-edit-aria" attrs={{ "aria-label": true }} vars={{ name: cat.name }}>
-                            { }
                             <button
                               type="button"
                               className="tax-config-action-btn"

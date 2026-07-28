@@ -77,3 +77,29 @@ terminal-status-just-now = Just now
 terminal-status-minutes-ago = { $n }m ago
 terminal-status-hours-ago = { $n }h ago
 terminal-status-error-load = Failed to load terminals
+
+# Device binding (ADR #4 Phase 3)
+terminal-binding-title = Device Binding
+terminal-binding-bound-store = Bound to store:
+terminal-binding-signature = Signature
+terminal-binding-valid = Valid
+terminal-binding-invalid = Invalid / Tampered
+terminal-binding-store-label = Store
+terminal-binding-instance-label = Workspace Instance
+# Conjunction following middot in binding info paragraph (lowercase).
+terminal-binding-instance-conjunction = instance:
+terminal-binding-select-store = -- Select store --
+terminal-binding-select-instance = -- Select instance --
+terminal-binding-primary = (Primary)
+terminal-binding-update = Update Binding
+terminal-binding-bind = Bind Terminal
+terminal-binding-clear = Clear Binding
+terminal-binding-error-load = Failed to load device binding
+terminal-binding-error-save = Failed to save device binding
+terminal-binding-error-clear = Failed to clear device binding
+
+# Feature override counts
+terminal-overrides-count = { $count ->
+    [one] { $count } override
+   *[other] { $count } overrides
+}

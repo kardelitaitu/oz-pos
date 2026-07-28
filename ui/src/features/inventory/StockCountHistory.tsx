@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useToast } from '@/frontend/shared/Toast';
 import {
   listStockCounts,
   listStockAdjustments,
@@ -20,6 +21,9 @@ export default function StockCountHistory() {
   const [selectedLines, setSelectedLines] = useState<StockCountLineDto[]>([]);
 
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const { addToast } = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -31,11 +35,11 @@ export default function StockCountHistory() {
       setCounts(c.filter((cnt) => cnt.status === 'completed' || cnt.status === 'cancelled'));
       setAdjustments(a);
     } catch {
-      // silent
+      addToast({ message: l10nRef.current.getString('sc-error-load-history') || 'Failed to load history', type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -45,9 +49,10 @@ export default function StockCountHistory() {
       const lines = await getCountLines(id);
       setSelectedLines(lines);
     } catch {
+      addToast({ message: l10nRef.current.getString('sc-error-load-lines') || 'Failed to load count lines', type: 'error' });
       setSelectedLines([]);
     }
-  }, []);
+  }, [addToast]);
 
   const countAdjustments = useMemo(() => {
     if (!selectedCount) return [];
@@ -123,7 +128,7 @@ export default function StockCountHistory() {
               >
                 <span className="sc-hist-item-number">{c.count_number}</span>
                 <span className={`sc-badge sc-badge--${c.status}`}>
-                  {l10n.getString(`sc-status-${c.status}`) ?? c.status}
+                  <Localized id={`sc-status-${c.status}`}>{c.status}</Localized>
                 </span>
                 <span className="sc-hist-item-date">{new Date(c.created_at).toLocaleDateString()}</span>
               </button>
@@ -143,7 +148,7 @@ export default function StockCountHistory() {
                   <h3><Localized id="sc-hist-lines-title"><span>Count Lines</span></Localized></h3>
                   <div className="sc-hist-table">
                     <div className="sc-hist-tr sc-hist-th">
-                      <span>SKU</span><span>Product</span><span>Expected</span><span>Counted</span><span>Diff</span>
+                      <span><Localized id="sc-col-sku">SKU</Localized></span><span><Localized id="sc-col-name">Product</Localized></span><span><Localized id="sc-col-expected">Expected</Localized></span><span><Localized id="sc-col-counted">Counted</Localized></span><span><Localized id="sc-col-diff">Diff</Localized></span>
                     </div>
                     {selectedLines.map((l) => (
                       <div key={l.id} className="sc-hist-tr">
@@ -165,7 +170,7 @@ export default function StockCountHistory() {
                   <h3><Localized id="sc-hist-adjust-title"><span>Adjustments Applied</span></Localized></h3>
                   <div className="sc-hist-table">
                     <div className="sc-hist-tr sc-hist-th">
-                      <span>SKU</span><span>Product</span><span>Previous</span><span>New</span><span>Reason</span>
+                      <span><Localized id="sc-col-sku">SKU</Localized></span><span><Localized id="sc-col-name">Product</Localized></span><span><Localized id="sc-col-previous">Previous</Localized></span><span><Localized id="sc-col-new">New</Localized></span><span><Localized id="sc-col-reason">Reason</Localized></span>
                     </div>
                     {countAdjustments.map((a) => (
                       <div key={a.id} className="sc-hist-tr">
