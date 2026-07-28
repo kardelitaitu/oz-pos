@@ -12,9 +12,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
   will-change: backdrop-filter;
   transform: translateZ(0);
   animation: po-overlay-in var(--duration-200) var(--ease-out);
@@ -64,10 +64,11 @@
 .price-override-modal {
   width: 360px;
   max-width: 92vw;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  color: #f9fafb !important;
   padding: var(--space-5);
   position: relative;
   display: flex;
@@ -87,7 +88,7 @@
   border: none;
   border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-fg-tertiary);
+  color: #9ca3af;
   font-size: var(--text-xl);
   cursor: pointer;
   transition: background-color var(--duration-100) var(--ease-out),
@@ -95,8 +96,8 @@
 }
 
 .price-override-close:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
+  background: #1f2937;
+  color: #ffffff;
 }
 
 .price-override-close:focus-visible {
@@ -114,14 +115,14 @@
   margin: 0;
   font-size: var(--text-lg);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-fg-primary);
+  color: #f9fafb !important;
   padding-right: var(--space-6);
 }
 
 .price-override-item {
   margin: 0;
   font-size: var(--text-sm);
-  color: var(--color-fg-secondary);
+  color: #9ca3af !important;
   line-height: var(--leading-relaxed);
 }
 
@@ -138,34 +139,35 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--space-2) var(--space-3);
-  background: var(--color-bg-surface);
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-md);
 }
 
 .price-override-current-label {
   font-size: var(--text-sm);
-  color: var(--color-fg-tertiary);
+  color: #9ca3af !important;
 }
 
 .price-override-current-value {
   font-size: var(--text-base);
   font-weight: var(--font-weight-bold);
-  color: var(--color-fg);
+  color: #f9fafb !important;
 }
 
 .price-override-new-label {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--color-fg-secondary);
+  color: #9ca3af !important;
 }
 
 .price-override-input {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-xl);
   font-weight: var(--font-weight-bold);
-  color: var(--color-fg);
-  background: var(--color-bg-input);
-  border: 1px solid var(--color-border);
+  color: #f9fafb !important;
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-lg);
   text-align: center;
   transition: border-color var(--duration-150) var(--ease-out),
@@ -189,11 +191,11 @@
 .price-override-cancel-btn {
   padding: var(--space-1_5) var(--space-3);
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-bold);
   font-family: var(--font-sans);
-  color: var(--color-fg-secondary);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  color: #f3f4f6 !important;
+  background: #374151 !important;
+  border: 1px solid #4b5563 !important;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color var(--duration-100) var(--ease-out),
@@ -201,8 +203,8 @@
 }
 
 .price-override-cancel-btn:hover:not(:disabled) {
-  background: var(--color-bg-hover);
-  border-color: var(--color-border-hover);
+  background: #4b5563 !important;
+  color: #ffffff !important;
 }
 
 .price-override-cancel-btn:focus-visible {
@@ -217,18 +219,19 @@
 .price-override-next-btn {
   padding: var(--space-1_5) var(--space-4);
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-bold);
   font-family: var(--font-sans);
-  color: var(--color-accent-fg);
-  background: var(--color-accent);
-  border: none;
+  color: #ffffff !important;
+  background: #10b981 !important;
+  border: 1px solid #10b981 !important;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color var(--duration-100) var(--ease-out);
 }
 
 .price-override-next-btn:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  background: #059669 !important;
+  border-color: #059669 !important;
 }
 
 .price-override-next-btn:focus-visible {
