@@ -25,6 +25,8 @@ import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import ScaleIndicator from './ScaleIndicator';
 import { EditProductModal } from './EditProductModal';
+import { AddCategoryModal } from './AddCategoryModal';
+import { AddProductModal } from './AddProductModal';
 import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
@@ -384,6 +386,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const PAGE_SIZE = 50;
 
   const [editingProduct, setEditingProduct] = useState<ProductDto | null>(null);
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
 
   const handleEditProduct = useCallback((p: ProductDto) => {
     setEditingProduct(p);
@@ -394,6 +398,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       prev.map((p) => (p.sku === updatedProduct.sku ? updatedProduct : p)),
     );
     setEditingProduct(null);
+  }, [setProducts]);
+
+  const handleSaveNewCategory = useCallback((newCat: CategoryDto) => {
+    setCategories((prev) => [...prev, newCat]);
+    setActiveCategory(newCat.id);
+  }, [setCategories]);
+
+  const handleSaveNewProduct = useCallback((newProd: ProductDto) => {
+    setProducts((prev) => [newProd, ...prev]);
   }, [setProducts]);
 
   const filteredProducts = useMemo(() => {
@@ -1149,6 +1162,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                 {catLabels.get(cat.id) ?? cat.name}
               </button>
             ))}
+            <Localized id="retail-add-category-btn">
+              <button
+                type="button"
+                className="retail-cat-btn retail-cat-btn--add"
+                onClick={() => setIsAddCategoryOpen(true)}
+                title="Add new category"
+                aria-label="Add new category"
+              >
+                + Category
+              </button>
+            </Localized>
           </div>
 
           {/* ── Search bar ────────────────────── */}
@@ -1168,6 +1192,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                 &times;
               </button>
             )}
+            <Localized id="retail-add-product-btn">
+              <button
+                type="button"
+                className="retail-add-product-btn"
+                onClick={() => setIsAddProductOpen(true)}
+                title="Add new product"
+                aria-label="Add new product"
+              >
+                + Product
+              </button>
+            </Localized>
           </div>
 
           {isEnabled(FEATURES.USB_SCALE) && (
@@ -1998,6 +2033,21 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         isOpen={Boolean(editingProduct)}
         onClose={() => setEditingProduct(null)}
         onSave={handleSaveProductEdit}
+      />
+
+      {/* ── Add Category modal ──────────────── */}
+      <AddCategoryModal
+        isOpen={isAddCategoryOpen}
+        onClose={() => setIsAddCategoryOpen(false)}
+        onSave={handleSaveNewCategory}
+      />
+
+      {/* ── Add Product modal ───────────────── */}
+      <AddProductModal
+        categories={categories}
+        isOpen={isAddProductOpen}
+        onClose={() => setIsAddProductOpen(false)}
+        onSave={handleSaveNewProduct}
       />
 
       {/* ── Quick Return modal ──────────────── */}
