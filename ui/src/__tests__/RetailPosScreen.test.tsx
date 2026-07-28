@@ -370,7 +370,7 @@ describe('RetailPosScreen — rendering', () => {
     expect(holdBtn).toBeDisabled();
   });
 
-  it('shows zero credit reminders when no outstanding credits', async () => {
+  it('hides credit reminders button when no outstanding credits', async () => {
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReturnValue({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -388,9 +388,7 @@ describe('RetailPosScreen — rendering', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
-    const creditBtn = await screen.findByText(/Credit Reminders/);
-    expect(creditBtn).toBeInTheDocument();
-    expect(creditBtn.textContent).toMatch(/Credit Reminders/);
+    expect(screen.queryByText(/Credit Reminders/)).not.toBeInTheDocument();
   });
 
   // ── Table Management ─────────────────────────────────────────

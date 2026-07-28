@@ -1531,17 +1531,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   {l10n.getString('pos-cart-clear')}
                 </button>
               </div>
-              <div style={{ padding: '4px 8px' }}>
-                <button
-                  onClick={() => { setShowCreditList(true); loadCreditSales(); }}
-                  style={{
-                    width: '100%', padding: '6px', fontSize: 11, background: creditSales.length > 0 ? 'var(--color-warning-pos-darker)' : 'var(--color-fg-secondary)',
-                    color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer', fontWeight: 700,
-                  }}
-                >
-                  {l10n.getString('retail-credit-reminders', { count: creditSales.length }) || `Credit Reminders (${creditSales.length})`}
-                </button>
-              </div>
+              {creditSales.length > 0 && (
+                <div className="retail-credit-reminder-container">
+                  <button
+                    type="button"
+                    className="retail-credit-reminder-btn"
+                    onClick={() => { setShowCreditList(true); loadCreditSales(); }}
+                  >
+                    {l10n.getString('retail-credit-reminders', { count: creditSales.length }) || `Credit Reminders (${creditSales.length})`}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
