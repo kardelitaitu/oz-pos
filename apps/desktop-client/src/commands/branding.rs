@@ -178,8 +178,6 @@ pub async fn pick_logo_file(app_handle: tauri::AppHandle) -> Result<Option<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
     #[test]
     fn brand_settings_debug() {
         let s = BrandSettingsDto {

@@ -52,6 +52,11 @@ pub struct SessionContext {
 
 impl SessionContext {
     /// Create a new session context.
+    ///
+    /// Eight positional parameters is justified because this is a struct
+    /// constructor that sets all 8 fields at once. A builder would add
+    /// ceremony without preventing misuse.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         user_id: String,
         role_id: String,

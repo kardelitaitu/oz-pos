@@ -353,11 +353,11 @@ impl AppState {
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
 
         // Double-check: another thread may have already removed or refreshed it.
-        if let Some(ctx) = store.get(token) {
-            if ctx.is_expired() {
-                store.remove(token);
-                tracing::info!(token = %token, "session expired — removed from store");
-            }
+        if let Some(ctx) = store.get(token)
+            && ctx.is_expired()
+        {
+            store.remove(token);
+            tracing::info!(token = %token, "session expired — removed from store");
         }
 
         Err(AppError::InvalidSession)
