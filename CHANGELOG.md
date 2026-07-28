@@ -6,6 +6,39 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.23] — 2026-07-28
+
+Desktop App Security & Stability Audit closeout: **all 18 findings resolved** across the `apps/desktop-client` Tauri v2 + `platform/*` stack (`5 CRITICAL + 3 HIGH + 6 MEDIUM + 4 LOW`). The release ships hardened sync pull, multi-store authentication, kernel resource cleanup, session security, and code-quality cleanup. Adds `docs/releases/release-process.md` (L-4 runbook) and 9 new unit tests covering the audit guards (`sync_pull` confirm/backup, `PaymentKind::wire_method`, kernel shutdown channel, brand-path validation, lan retry). Per-finding analysis and verification live in [`docs/specs/_active/2026-07-12-desktop-app-audit.md`](docs/specs/_active/2026-07-12-desktop-app-audit.md).
+
+### Fixed#### 🔴 CRITICAL (5 / 5)
+
+- **C-4 — LAN server loopback-only bind + PSK handshake (`apps/desktop-client/src/lan_server.rs`)** — Committed in `9b7552e7`: server binds `127.0.0.1` only and requires a pre-shared key token before accepting any client connection.
+- **C-2 — Kernel module stop lifecycle** — Drop race fixed by the M-2 kernel shutdown channel (commit `cc062951`); `kernel.stop_all()` aborts running module tasks before retrying the lock.
+- **C-1 / C-3 / C-5** — Session token validation, PCI-DSS 3.3 PAN masking, and multi-store scope authorization closed in the 0.0.19 batch. Per-finding commit refs: see audit doc.
+
+#### 🟠 HIGH (3 / 3)
+
+- **H-1 — LAN-server deterministic retry (`apps/desktop-client/src/lan_server.rs`)** — Replaced jitter-based retry logic with exponential backoff + jitter caps; added connection-state assertions so half-open sockets no longer wedge the IPC layer.
+- **H-2 — Sync pull `confirm_destructive` + pre-pull backup (`apps/desktop-client/src/commands/sync.rs`)** — `sync_pull` now requires an explicit `confirm_destructive: bool` arg; takes a timestamped `<db_path>.sync-pull-<ts>.backup.db` snapshot via `Store::backup` *before* applying the server snapshot. 3 unit tests cover the new guard + backup rotation path.
+- **H-3 — Brand logo path canonicalization (`apps/desktop-client/src/commands/branding.rs`)** — Cross-platform path resolution now rejects `..` segments, validates the suffix against an allow-list, and rejects URIs that escape the brand assets directory.
+
+#### 🟡 MEDIUM (6 / 6 closed; M-3 piggy-backed on M-1)
+
+- **M-1 — Lock consolidation** — Collapsed 3 stale dual DB-lock patterns in `pos.rs` (cart removal / sale creation / plugin hooks) into a single scoped critical-section per command. **M-3** — piggy-backed remediation along the same dual-lock surface; per-finding evidence in the audit doc.
+- **M-2 — Kernel shutdown channel (`apps/desktop-client/src/state.rs`)** — Added `kernel_shutdown: oneshot::Sender<()>` field; `Drop::drop` sends the shutdown signal *before* retrying the kernel lock; retry count 50 → 200 (500 ms → 2000 ms window) so module cleanup beats the panic-on-stop path. Dynamic warning message reports actual wait time.
+- **M-4 — Settings error-logging (`apps/desktop-client/src/commands/settings.rs`)** — `set_settings` / `set_receipt_settings` / `set_store_settings` paths now log `tracing::error!(...)` on storage failure *before* returning `AppError` so support can correlate user-visible errors with backend state.
+- **M-5 — Plugin task abort (`crates/oz-plugin/src/manager.rs`)** — Background Lua tasks now register with the tokio task group so `stop_all()` cancels them instead of detaching; previously a plugin could outlive the workspace that spawned it.
+- **M-6 — Store-profile currency lookup (`apps/desktop-client/src/commands/pos.rs`)** — `start_sale` / `start_sale_scoped` now read the store's default currency via `oz_core::Settings::get_default_currency()` instead of the hardcoded `"USD"` fallback. Falls back to `"USD"` only when no profile is set.
+
+#### 🟢 LOW (4 / 4)
+
+- **L-1 — Typed `PaymentKind` enum (`apps/desktop-client/src/commands/pos.rs`)** — Introduced `pub enum PaymentKind { Single, Split }` with a `wire_method(&self, &str) -> String` helper. Replaced the magic `"split"` literal at both `complete_sale` and `complete_sale_scoped` sites with typed enum dispatch. Both call sites collapsed to a single ternary so the bool-binding bug class is structurally impossible to recur.
+- **L-2 — `#[tauri::command]` shorthand consistency (`apps/desktop-client/src/commands/*.rs`)** — Bulk-replaced 280 occurrences of the bare `#[command]` macro pattern with the fully-qualified `#[tauri::command]` attribute across 25 command files (audit, branding, customers, gift_cards, categories, bundles, auth, currencies, exchange_rates, history, kds, health, inventory, hardware, inventory_counts, loyalty, features, license, offline_queue, printer, promotions, settings, shifts, topology, tax). Cleaned up dead `, command` imports in `use tauri::{...}` lines.
+- **L-3 — Workspace-pinned `hmac` / `sha2` / `hex` (`Cargo.toml`, `apps/desktop-client/Cargo.toml`)** — Added `hex = "0.4"` to root `[workspace.dependencies]` and switched the three crates to `hmac = { workspace = true }`, `sha2 = { workspace = true }`, `hex = { workspace = true }`. Single source of truth for crypto dep versions.
+- **L-4 — Release-process runbook (`docs/releases/release-process.md`)** — New 138-line document covering build → sign → notarize → publish → rotate steps. Most critical section: **updater pubkey rotation procedure** (when the `oz-pos-updater.key` keypair is rotated, how to bump the `tauri.conf.json` `updater.pubkey`, how to publish overlapping releases so old clients can still verify, and the 2-maintainer review requirement for the rotation PR).
+
+---
+
 ## [0.0.22] — 2026-07-27
 
 ### Added
