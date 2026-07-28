@@ -1585,7 +1585,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         >
           <div className={`retail-shift-modal${retailClearConfirmExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
-            <p style={{ fontSize: 13, margin: '0 0 16px', color: '#555' }}>
+            <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
               {l10n.getString('retail-clear-cart-confirm', { count: lineCount }) || `Remove all ${lineCount} item${lineCount !== 1 ? 's' : ''} from the cart?`}
             </p>
             <div className="retail-shift-modal-actions">
@@ -1869,7 +1869,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         >
           <div className={`retail-shift-modal${retailQuickReturnExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
-            <p style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-fg-tertiary)', marginBottom: 8 }}>
               {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
             </p>
             <input
