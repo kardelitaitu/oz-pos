@@ -9,7 +9,7 @@
 //! survive application restarts.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use foundation::Percentage;
 use oz_core::db::Store;
@@ -19,6 +19,43 @@ use oz_core::{Cart, CartId, CartLine, LineId, Money, PaymentSplitArg, SaleStatus
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
+
+/// Discriminator for [`CompleteSaleArgs`]/[`CompleteSaleScopedArgs`] payment
+/// state.
+///
+/// ADR #20 (payment-capture ordering) stores the canonical marker string
+/// [`PaymentKind::SPLIT_MARKER`] in the `sales.payment_method` column
+/// whenever the sale is settled via multiple tenders. This enum wraps the
+/// marker so the code path no longer references a bare string literal (L-1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaymentKind {
+    /// Sale settled via a single payment method (cash, card, QRIS, etc.).
+    /// The wire value is the user-supplied `payment_method` argument.
+    Single,
+    /// Sale settled via multiple payment methods (split-tender).
+    /// The wire value is the canonical marker [`PaymentKind::SPLIT_MARKER`].
+    Split,
+}
+
+impl PaymentKind {
+    /// Canonical wire-format string for split-tender sales. Persisted
+    /// in `sales.payment_method` and roundtripped through the IPC DTO.
+    pub const SPLIT_MARKER: &'static str = "split";
+
+    /// Resolve this payment kind to the wire-format string stored in
+    /// `sales.payment_method`. Both variants earn their place: `Single`
+    /// returns the user-supplied method verbatim; `Split` returns the
+    /// canonical ADR #20 marker. Associated function (no `&self`) —
+    /// callers don't need to construct a `PaymentKind` value just to
+    /// invoke it.
+    pub fn wire_method(has_splits: bool, single_method: &str) -> String {
+        if has_splits {
+            Self::SPLIT_MARKER.to_string()
+        } else {
+            single_method.to_string()
+        }
+    }
+}
 
 // ── Discount ─────────────────────────────────────────────────────────
 
@@ -40,7 +77,7 @@ pub struct SetCartDiscountArgs {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_cart_discount_scoped`
 /// with a `session_token` instead.
-#[command]
+#[tauri::command]
 pub async fn set_cart_discount(
     args: SetCartDiscountArgs,
     state: State<'_, AppState>,
@@ -85,7 +122,7 @@ pub struct SetCartDiscountScopedArgs {
 ///
 /// ADR #7: Scoped variant of `set_cart_discount`. The `user_id` for
 /// permission checks is read from the resolved `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn set_cart_discount_scoped(
     session_token: String,
     args: SetCartDiscountScopedArgs,
@@ -150,7 +187,7 @@ pub struct StartSaleResult {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `start_sale_scoped`
 /// with a `session_token` to create the cart in the store-scoped database.
-#[command]
+#[tauri::command]
 pub async fn start_sale(
     args: StartSaleArgs,
     state: State<'_, AppState>,
@@ -186,7 +223,7 @@ pub async fn start_sale(
 /// instance and locks it on the `active_carts` row at cart-start time.
 ///
 /// Requires `SALES_PROCESS` permission from the resolved session (Bug #5).
-#[command]
+#[tauri::command]
 pub async fn start_sale_scoped(
     session_token: String,
     args: StartSaleArgs,
@@ -265,7 +302,7 @@ pub struct AddLineResult {
 /// Add a line to an active cart using the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `add_line_scoped`.
-#[command]
+#[tauri::command]
 pub async fn add_line(
     args: AddLineArgs,
     state: State<'_, AppState>,
@@ -303,7 +340,7 @@ pub async fn add_line(
 /// the deduction location at cart-start time).
 ///
 /// Requires `SALES_PROCESS` permission from the resolved session (Bug #6).
-#[command]
+#[tauri::command]
 pub async fn add_line_scoped(
     session_token: String,
     args: AddLineArgs,
@@ -377,7 +414,7 @@ pub struct OverrideLinePriceArgs {
 /// Override the unit price of a cart line using the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `override_line_price_scoped`.
-#[command]
+#[tauri::command]
 pub async fn override_line_price(
     args: OverrideLinePriceArgs,
     state: State<'_, AppState>,
@@ -408,7 +445,7 @@ pub struct OverrideLinePriceScopedArgs {
 ///
 /// ADR #7: Scoped variant of `override_line_price`. The `user_id` for
 /// permission checks is read from the resolved `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn override_line_price_scoped(
     session_token: String,
     args: OverrideLinePriceScopedArgs,
@@ -486,7 +523,7 @@ pub struct DeductionLocationInfo {
 ///
 /// Returns `null` when the cart has no deduction location lock
 /// (unbound workspace) or the cart does not exist.
-#[command]
+#[tauri::command]
 pub async fn get_cart_deduction_location(
     cart_id: CartId,
     state: State<'_, AppState>,
@@ -513,7 +550,7 @@ pub async fn get_cart_deduction_location(
 /// audit record that a manager authorised the current location.
 ///
 /// ADR-19 §17: called after FastPINOverlay PIN verification.
-#[command]
+#[tauri::command]
 pub async fn override_cart_deduction_location_scoped(
     session_token: String,
     cart_id: CartId,
@@ -622,7 +659,7 @@ pub struct CompleteSaleResult {
 /// **Deprecated for multi-store (ADR #7):** Use `complete_sale_scoped`
 /// with a `session_token` instead. The `user_id` is read from the
 /// resolved `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn complete_sale(
     args: CompleteSaleArgs,
     state: State<'_, AppState>,
@@ -715,11 +752,7 @@ pub async fn complete_sale(
     let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(args.user_id))
         .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
     let has_splits = args.payment_splits.as_ref().is_some_and(|s| !s.is_empty());
-    let payment_method = if has_splits {
-        "split".to_string()
-    } else {
-        args.payment_method.clone()
-    };
+    let payment_method = PaymentKind::wire_method(has_splits, &args.payment_method);
     sale.payment_method = Some(payment_method);
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
@@ -893,7 +926,7 @@ pub struct CompleteSaleWithResolvedShortfallsArgs {
 /// accordingly — using [`Store::complete_sale_with_resolved_shortfalls`].
 /// The front-end passes cart line data since the original cart was deleted
 /// in the first `complete_sale_scoped` call.
-#[command]
+#[tauri::command]
 pub async fn complete_sale_with_resolved_shortfalls_scoped(
     session_token: String,
     args: CompleteSaleWithResolvedShortfallsArgs,
@@ -1018,7 +1051,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
 /// from the resolved `SessionContext`. Uses the store-scoped database
 /// with two sequential locks (cart removal then sale creation) while
 /// plugin hooks and event publishing run without holding any DB lock.
-#[command]
+#[tauri::command]
 pub async fn complete_sale_scoped(
     session_token: String,
     args: CompleteSaleScopedArgs,
@@ -1119,11 +1152,7 @@ pub async fn complete_sale_scoped(
     let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
         .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
     let has_splits = args.payment_splits.as_ref().is_some_and(|s| !s.is_empty());
-    sale.payment_method = Some(if has_splits {
-        "split".to_string()
-    } else {
-        args.payment_method.clone()
-    });
+    sale.payment_method = Some(PaymentKind::wire_method(has_splits, &args.payment_method));
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
 
@@ -1238,7 +1267,7 @@ pub async fn complete_sale_scoped(
 /// Compute tax for a live cart from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `compute_cart_tax_scoped`.
-#[command]
+#[tauri::command]
 pub async fn compute_cart_tax(
     lines: Vec<oz_core::db::CartLineTaxInput>,
     currency: String,
@@ -1257,7 +1286,7 @@ pub async fn compute_cart_tax(
 /// Compute cart tax for the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn compute_cart_tax_scoped(
     session_token: String,
     lines: Vec<oz_core::db::CartLineTaxInput>,
@@ -1329,7 +1358,7 @@ pub struct HoldCartResult {
 /// Park the current sale as a held order in the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `hold_cart_scoped`.
-#[command]
+#[tauri::command]
 pub async fn hold_cart(
     args: HoldCartArgs,
     state: State<'_, AppState>,
@@ -1354,7 +1383,7 @@ pub async fn hold_cart(
 /// Hold a cart in the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn hold_cart_scoped(
     session_token: String,
     args: HoldCartArgs,
@@ -1394,7 +1423,7 @@ pub async fn hold_cart_scoped(
 /// List all held carts from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_held_carts_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_held_carts(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
@@ -1408,7 +1437,7 @@ pub async fn list_held_carts(
 /// List held carts for the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn list_held_carts_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -1437,7 +1466,7 @@ pub async fn list_held_carts_scoped(
 /// List open bills from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_open_bills_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_open_bills(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
@@ -1451,7 +1480,7 @@ pub async fn list_open_bills(
 /// List open bills for the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn list_open_bills_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -1480,7 +1509,7 @@ pub async fn list_open_bills_scoped(
 /// Resume a held cart from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_held_cart_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_held_cart(
     id: String,
     state: State<'_, AppState>,
@@ -1495,7 +1524,7 @@ pub async fn get_held_cart(
 /// Get a held cart from the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_held_cart_scoped(
     session_token: String,
     id: String,
@@ -1525,7 +1554,7 @@ pub async fn get_held_cart_scoped(
 /// Delete a held cart from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_held_cart_scoped`.
-#[command]
+#[tauri::command]
 pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -1538,7 +1567,7 @@ pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<
 /// Delete a held cart in the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn delete_held_cart_scoped(
     session_token: String,
     id: String,
