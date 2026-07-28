@@ -407,15 +407,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   const handleSort = useCallback((field: SortField) => {
-    setSortField((prevField) => {
-      if (prevField === field) {
-        setSortOrder((prevOrder) => (prevOrder === 'asc' ? 'desc' : 'asc'));
-        return field;
-      }
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
       setSortOrder('asc');
-      return field;
-    });
-  }, []);
+    }
+  }, [sortField]);
 
   const sortedProducts = useMemo(() => {
     const list = [...filteredProducts];
