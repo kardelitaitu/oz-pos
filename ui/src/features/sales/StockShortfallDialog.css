@@ -7,18 +7,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
 }
 
 .shortfall-modal {
   width: clamp(20rem, 40vw, 38rem);
   max-width: 94vw;
   max-height: 90vh;
-  background: var(--color-bg-elevated);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
   display: flex;
   flex-direction: column;
   overflow: hidden;

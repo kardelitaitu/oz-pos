@@ -1,7 +1,11 @@
 .refund-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9,14 +13,15 @@
 }
 
 .refund-modal {
-  background: var(--color-bg-elevated);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   width: 35rem;
   max-width: 90vw;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
 }
 
 .refund-header {

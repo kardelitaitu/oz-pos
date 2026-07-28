@@ -1347,7 +1347,8 @@
 .retail-held-carts-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1356,8 +1357,8 @@
 }
 .retail-held-carts-modal {
   position: relative;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
   padding: var(--space-5);
   min-width: 360px;
@@ -1365,13 +1366,13 @@
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
   animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 .retail-held-carts-modal h3 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-base);
-  color: var(--color-fg-primary);
+  color: #f9fafb !important;
   text-transform: uppercase;
 }
 .retail-held-carts-empty {
@@ -1447,7 +1448,8 @@
 .retail-discount-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1457,19 +1459,19 @@
 
 .retail-discount-modal {
   position: relative;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
   padding: var(--space-5);
   min-width: 17.5rem;
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
   animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
 .retail-discount-modal h3 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-base);
-  color: var(--color-fg-primary);
+  color: #f9fafb !important;
   text-transform: uppercase;
 }
 
@@ -1643,7 +1645,8 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1654,9 +1657,11 @@
   max-width: 95vw;
   max-height: 95vh;
   overflow: auto;
-  background: var(--color-bg-elevated);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
+  border-radius: var(--radius-xl);
   padding: var(--space-5);
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
 }
 
 .retail-preview-close {
@@ -1863,7 +1868,8 @@
 .retail-qty-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1873,13 +1879,13 @@
 
 .retail-qty-modal {
   position: relative;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
   padding: var(--space-5);
   min-width: 17.5rem;
   text-align: center;
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
   animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
@@ -2022,7 +2028,8 @@
 .retail-shortcuts-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2032,12 +2039,12 @@
 
 .retail-shortcuts-modal {
   position: relative;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
   padding: var(--space-5);
   min-width: 360px;
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
   animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 

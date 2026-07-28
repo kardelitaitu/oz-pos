@@ -219,10 +219,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
+  transform: translateZ(0);
   padding: var(--space-4);
 }
 
@@ -278,9 +279,10 @@
 
 .stock-transfers-modal {
   position: relative;
-  background: var(--color-bg-elevated);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
   max-height: 90vh;
   overflow-y: auto;
   width: 100%;
