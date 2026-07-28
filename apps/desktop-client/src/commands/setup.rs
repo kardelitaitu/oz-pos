@@ -7,7 +7,7 @@
 
 use oz_core::{FeatureRegistry, Settings, Store, features};
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
@@ -57,7 +57,7 @@ pub struct EnabledFeaturesResult {
 ///
 /// The front-end calls this once on mount to decide which nav items
 /// and UI elements to show/hide.
-#[command]
+#[tauri::command]
 pub async fn get_enabled_features(
     state: State<'_, AppState>,
 ) -> Result<EnabledFeaturesResult, AppError> {
@@ -76,7 +76,7 @@ pub async fn get_enabled_features(
 ///
 /// Called by the front-end when the user clicks "Complete Setup" on
 /// the last step of the wizard.
-#[command]
+#[tauri::command]
 pub async fn complete_setup(
     state: State<'_, AppState>,
     args: CompleteSetupArgs,
@@ -134,7 +134,7 @@ pub async fn complete_setup(
 ///
 /// The front-end calls this on mount to decide whether to render
 /// the wizard or the main application.
-#[command]
+#[tauri::command]
 pub async fn get_setup_status(state: State<'_, AppState>) -> Result<SetupStatus, AppError> {
     let db = state.db.lock().await;
 
@@ -148,7 +148,7 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> Result<SetupStatus,
 }
 
 /// Requires the `staff:manage_roles` permission.
-#[command]
+#[tauri::command]
 pub async fn seed_default_roles_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -177,7 +177,7 @@ pub async fn seed_default_roles_scoped(
 ///
 /// Called when the user clicks "Skip setup". Only writes the
 /// `show_setup_wizard = false` flag — no preset or features are saved.
-#[command]
+#[tauri::command]
 pub async fn dismiss_setup_wizard(state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     Settings::set(&db, oz_core::settings::keys::SHOW_SETUP_WIZARD, "false")?;

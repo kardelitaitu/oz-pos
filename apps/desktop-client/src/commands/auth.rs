@@ -6,7 +6,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
@@ -53,7 +53,7 @@ pub struct CheckUsernameResult {
 ///
 /// Called before transitioning to the PIN step so the UI can reject
 /// unknown usernames early without collecting a PIN.
-#[command]
+#[tauri::command]
 pub async fn staff_check_username(
     args: CheckUsernameArgs,
     state: State<'_, AppState>,
@@ -90,7 +90,7 @@ pub async fn staff_check_username(
 /// - The username doesn't match any active user
 /// - The PIN doesn't match the stored hash
 /// - The rate-limit lockout is active (includes retry-after info)
-#[command]
+#[tauri::command]
 pub async fn staff_login(
     args: StaffLoginArgs,
     state: State<'_, AppState>,
@@ -211,7 +211,7 @@ pub struct SessionContextDto {
 /// store. Session TTL (default 24h) is configurable via the
 /// `session.ttl_seconds` setting. A background daemon prunes
 /// expired tokens every 5 minutes.
-#[command]
+#[tauri::command]
 pub async fn create_session(
     args: CreateSessionArgs,
     state: State<'_, AppState>,
@@ -347,7 +347,7 @@ pub async fn create_session(
 /// ADR #4 / ADR #7: Called on logout or store switch. After this
 /// call, any commands using the old token will fail with
 /// `AppError::InvalidSession`.
-#[command]
+#[tauri::command]
 pub async fn destroy_session(
     state: State<'_, AppState>,
     session_token: String,

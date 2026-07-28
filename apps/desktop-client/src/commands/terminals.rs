@@ -7,7 +7,7 @@
 //! pattern. Old commands are preserved with deprecation notices.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -167,14 +167,14 @@ pub struct UpdateTerminalResult {
 /// List all registered terminals.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_terminals_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_terminals(state: State<'_, AppState>) -> Result<Vec<TerminalDto>, AppError> {
     let db = state.db.lock().await;
     run_list_terminals(&db)
 }
 
 /// List terminals from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_terminals_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -198,7 +198,7 @@ fn run_list_terminals(conn: &rusqlite::Connection) -> Result<Vec<TerminalDto>, A
 /// Get a single terminal by id.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_terminal_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_terminal(
     id: String,
     state: State<'_, AppState>,
@@ -214,7 +214,7 @@ pub async fn get_terminal(
 }
 
 /// Get a terminal from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_terminal_scoped(
     session_token: String,
     id: String,
@@ -236,7 +236,7 @@ pub async fn get_terminal_scoped(
 /// Ping a terminal to update its last_seen_at timestamp.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `ping_terminal_scoped`.
-#[command]
+#[tauri::command]
 pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
@@ -250,7 +250,7 @@ pub async fn ping_terminal(id: String, state: State<'_, AppState>) -> Result<(),
 }
 
 /// Ping a terminal in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn ping_terminal_scoped(
     session_token: String,
     id: String,
@@ -273,7 +273,7 @@ pub async fn ping_terminal_scoped(
 /// List feature overrides for a terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_terminal_overrides_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_terminal_overrides(
     terminal_id: String,
     state: State<'_, AppState>,
@@ -290,7 +290,7 @@ pub async fn list_terminal_overrides(
 }
 
 /// List terminal overrides from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_terminal_overrides_scoped(
     session_token: String,
     terminal_id: String,
@@ -313,7 +313,7 @@ pub async fn list_terminal_overrides_scoped(
 /// List all terminal profiles.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_terminal_profiles_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_terminal_profiles(
     state: State<'_, AppState>,
 ) -> Result<Vec<TerminalProfileDto>, AppError> {
@@ -325,7 +325,7 @@ pub async fn list_terminal_profiles(
 }
 
 /// List terminal profiles from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_terminal_profiles_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -343,7 +343,7 @@ pub async fn list_terminal_profiles_scoped(
 /// Get the profile for a terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_terminal_profile_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_terminal_profile(
     terminal_id: String,
     state: State<'_, AppState>,
@@ -360,7 +360,7 @@ pub async fn get_terminal_profile(
 }
 
 /// Get a terminal profile from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_terminal_profile_scoped(
     session_token: String,
     terminal_id: String,
@@ -383,7 +383,7 @@ pub async fn get_terminal_profile_scoped(
 /// Get a terminal's device binding and validate its HMAC signature.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_device_binding_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_device_binding(
     terminal_id: String,
     state: State<'_, AppState>,
@@ -400,7 +400,7 @@ pub async fn get_device_binding(
 }
 
 /// Get device binding from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_device_binding_scoped(
     session_token: String,
     terminal_id: String,
@@ -458,7 +458,7 @@ fn build_device_binding_dto(
 /// Register a new terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `register_terminal_scoped`.
-#[command]
+#[tauri::command]
 pub async fn register_terminal(
     user_id: String,
     args: RegisterTerminalArgs,
@@ -487,7 +487,7 @@ pub async fn register_terminal(
 }
 
 /// Register a terminal in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn register_terminal_scoped(
     session_token: String,
     args: RegisterTerminalArgs,
@@ -530,7 +530,7 @@ pub async fn register_terminal_scoped(
 /// Update an existing terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `update_terminal_scoped`.
-#[command]
+#[tauri::command]
 pub async fn update_terminal(
     user_id: String,
     args: UpdateTerminalArgs,
@@ -573,7 +573,7 @@ pub async fn update_terminal(
 }
 
 /// Update a terminal in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn update_terminal_scoped(
     session_token: String,
     args: UpdateTerminalArgs,
@@ -630,7 +630,7 @@ pub async fn update_terminal_scoped(
 /// Delete a terminal by id.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_scoped`.
-#[command]
+#[tauri::command]
 pub async fn delete_terminal(
     user_id: String,
     id: String,
@@ -649,7 +649,7 @@ pub async fn delete_terminal(
 }
 
 /// Delete a terminal in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn delete_terminal_scoped(
     session_token: String,
     id: String,
@@ -682,7 +682,7 @@ pub async fn delete_terminal_scoped(
 /// Set (upsert) a feature override for a terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_terminal_override_scoped`.
-#[command]
+#[tauri::command]
 pub async fn set_terminal_override(
     user_id: String,
     terminal_id: String,
@@ -710,7 +710,7 @@ pub async fn set_terminal_override(
 }
 
 /// Set a terminal override in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_terminal_override_scoped(
     session_token: String,
     terminal_id: String,
@@ -752,7 +752,7 @@ pub async fn set_terminal_override_scoped(
 /// Delete a feature override for a terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_override_scoped`.
-#[command]
+#[tauri::command]
 pub async fn delete_terminal_override(
     user_id: String,
     terminal_id: String,
@@ -774,7 +774,7 @@ pub async fn delete_terminal_override(
 }
 
 /// Delete a terminal override in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn delete_terminal_override_scoped(
     session_token: String,
     terminal_id: String,
@@ -853,7 +853,7 @@ pub struct SetTerminalProfileArgs {
 /// Set (upsert) the profile for a terminal.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_terminal_profile_scoped`.
-#[command]
+#[tauri::command]
 pub async fn set_terminal_profile(
     user_id: String,
     args: SetTerminalProfileArgs,
@@ -883,7 +883,7 @@ pub async fn set_terminal_profile(
 }
 
 /// Set a terminal profile in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_terminal_profile_scoped(
     session_token: String,
     args: SetTerminalProfileArgs,
@@ -927,7 +927,7 @@ pub async fn set_terminal_profile_scoped(
 /// Delete a terminal's profile.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_terminal_profile_scoped`.
-#[command]
+#[tauri::command]
 pub async fn delete_terminal_profile(
     user_id: String,
     terminal_id: String,
@@ -947,7 +947,7 @@ pub async fn delete_terminal_profile(
 }
 
 /// Delete a terminal profile in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn delete_terminal_profile_scoped(
     session_token: String,
     terminal_id: String,
@@ -995,7 +995,7 @@ pub struct SetDeviceBindingArgs {
 /// Set (or update) a terminal's device binding with HMAC signature.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_device_binding_scoped`.
-#[command]
+#[tauri::command]
 pub async fn set_device_binding(
     user_id: String,
     args: SetDeviceBindingArgs,
@@ -1040,7 +1040,7 @@ pub async fn set_device_binding(
 }
 
 /// Set a device binding in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_device_binding_scoped(
     session_token: String,
     args: SetDeviceBindingArgs,
@@ -1114,7 +1114,7 @@ pub struct DeviceBindingDto {
 /// Clear a terminal's device binding.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `clear_device_binding_scoped`.
-#[command]
+#[tauri::command]
 pub async fn clear_device_binding(
     user_id: String,
     terminal_id: String,
@@ -1134,7 +1134,7 @@ pub async fn clear_device_binding(
 }
 
 /// Clear a device binding in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn clear_device_binding_scoped(
     session_token: String,
     terminal_id: String,

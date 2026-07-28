@@ -8,7 +8,6 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri::State;
-use tauri::command;
 use tauri_plugin_dialog::DialogExt;
 
 use oz_core::Settings;
@@ -28,7 +27,7 @@ pub struct BrandSettingsDto {
 }
 
 /// Load all brand settings at once.
-#[command]
+#[tauri::command]
 pub async fn get_brand_settings(state: State<'_, AppState>) -> Result<BrandSettingsDto, AppError> {
     let conn = state.db.lock().await;
     Ok(BrandSettingsDto {
@@ -39,7 +38,7 @@ pub async fn get_brand_settings(state: State<'_, AppState>) -> Result<BrandSetti
 }
 
 /// Load all brand settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_brand_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -60,7 +59,7 @@ pub async fn get_brand_settings_scoped(
 }
 
 /// Set the primary brand colour.
-#[command]
+#[tauri::command]
 pub async fn set_brand_primary_colour(
     colour: String,
     state: State<'_, AppState>,
@@ -132,7 +131,7 @@ fn validate_logo_path(app_handle: &tauri::AppHandle, path: &str) -> Result<Strin
 /// - Has an allowed image file extension (png, jpg, jpeg, gif, svg, webp)
 ///
 /// An empty string clears the stored logo path.
-#[command]
+#[tauri::command]
 pub async fn set_brand_logo_path(path: String, state: State<'_, AppState>) -> Result<(), AppError> {
     // Validate the path against app data directory rules (H-3).
     if let Some(ref app_handle) = state.app {
@@ -148,7 +147,7 @@ pub async fn set_brand_logo_path(path: String, state: State<'_, AppState>) -> Re
 }
 
 /// Set the brand store display name.
-#[command]
+#[tauri::command]
 pub async fn set_brand_store_name(
     name: String,
     state: State<'_, AppState>,
@@ -159,7 +158,7 @@ pub async fn set_brand_store_name(
 
 /// Open a native file picker filtered to image files and return the
 /// chosen path, or `None` if the user cancelled.
-#[command]
+#[tauri::command]
 pub async fn pick_logo_file(app_handle: tauri::AppHandle) -> Result<Option<String>, AppError> {
     use tokio::sync::oneshot;
 

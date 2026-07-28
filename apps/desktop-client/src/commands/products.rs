@@ -5,7 +5,7 @@
 //! The front-end uses this to populate the product grid.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
 use oz_core::inventory_transaction::InventoryTransactionId;
@@ -40,7 +40,7 @@ pub struct AdjustStockArgs {
 /// Returns the new quantity on success.
 #[deprecated(note = "use adjust_stock_scoped instead")]
 #[allow(deprecated)]
-#[command]
+#[tauri::command]
 pub async fn adjust_stock(
     args: AdjustStockArgs,
     state: State<'_, AppState>,
@@ -88,7 +88,7 @@ pub async fn adjust_stock(
 /// `session_token` instead of relying on the global database. The
 /// backend resolves the token to a `SessionContext`, opens the
 /// store-scoped database, and adjusts stock within that store only.
-#[command]
+#[tauri::command]
 pub async fn adjust_stock_scoped(
     session_token: String,
     args: AdjustStockArgs,
@@ -199,7 +199,7 @@ pub struct MoneyDto {
 /// `list_products_scoped` with a `session_token` parameter instead.
 /// This command queries the global database, which only works in
 /// single-store mode.
-#[command]
+#[tauri::command]
 pub async fn list_products(state: State<'_, AppState>) -> Result<Vec<ProductDto>, AppError> {
     let db = state.db.lock().await;
     run_list_products(&db)
@@ -215,7 +215,7 @@ pub async fn list_products(state: State<'_, AppState>) -> Result<Vec<ProductDto>
 ///
 /// This is the reference implementation for all store-scoped domain
 /// commands. New commands should follow this pattern.
-#[command]
+#[tauri::command]
 pub async fn list_products_scoped(
     state: State<'_, AppState>,
     session_token: String,
@@ -276,7 +276,7 @@ fn map_products_to_dtos(
 /// Returns validation error for empty barcodes.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `lookup_by_barcode_scoped`.
-#[command]
+#[tauri::command]
 pub async fn lookup_by_barcode(
     barcode: String,
     state: State<'_, AppState>,
@@ -290,7 +290,7 @@ pub async fn lookup_by_barcode(
 
 /// Look up a product by barcode for the store resolved from a
 /// session token. ADR #7 scoped variant.
-#[command]
+#[tauri::command]
 pub async fn lookup_by_barcode_scoped(
     session_token: String,
     barcode: String,
@@ -319,7 +319,7 @@ fn run_lookup_by_barcode(
 /// Returns the product DTO or `null` when no match is found.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `lookup_product_by_sku_scoped`.
-#[command]
+#[tauri::command]
 pub async fn lookup_product_by_sku(
     sku: String,
     state: State<'_, AppState>,
@@ -333,7 +333,7 @@ pub async fn lookup_product_by_sku(
 
 /// Look up a product by SKU for the store resolved from a
 /// session token. ADR #7 scoped variant.
-#[command]
+#[tauri::command]
 pub async fn lookup_product_by_sku_scoped(
     session_token: String,
     sku: String,
@@ -460,7 +460,7 @@ pub struct CreateProductResult {
 /// **Deprecated for multi-store (ADR #7):** Use `create_product_scoped`
 /// with a `session_token` instead. The `user_id` field should be read
 /// from the resolved session, not passed as a frontend parameter.
-#[command]
+#[tauri::command]
 pub async fn create_product(
     args: CreateProductArgs,
     state: State<'_, AppState>,
@@ -530,7 +530,7 @@ pub async fn create_product(
 /// permission checks is read from the resolved `SessionContext`,
 /// not passed as a frontend parameter. The product is created in
 /// the store-scoped database for the session's `store_id`.
-#[command]
+#[tauri::command]
 pub async fn create_product_scoped(
     session_token: String,
     args: CreateProductScopedArgs,
@@ -659,7 +659,7 @@ pub struct UpdateProductResult {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `update_product_scoped`
 /// with a `session_token` instead.
-#[command]
+#[tauri::command]
 pub async fn update_product(
     args: UpdateProductArgs,
     state: State<'_, AppState>,
@@ -698,7 +698,7 @@ pub async fn update_product(
 ///
 /// ADR #7: Scoped variant of `update_product`. The `user_id` for
 /// permission checks is read from the resolved `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn update_product_scoped(
     session_token: String,
     args: UpdateProductScopedArgs,
@@ -750,7 +750,7 @@ pub async fn update_product_scoped(
 /// Check whether a product tracks serial numbers.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_product_track_serial_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_product_track_serial(
     sku: String,
     state: State<'_, AppState>,
@@ -763,7 +763,7 @@ pub async fn get_product_track_serial(
 }
 
 /// Check whether a product tracks serial numbers, store-scoped. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_product_track_serial_scoped(
     session_token: String,
     sku: String,
@@ -801,7 +801,7 @@ pub struct DeleteProductScopedArgs {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_product_scoped`
 /// with a `session_token` instead.
-#[command]
+#[tauri::command]
 pub async fn delete_product(
     args: DeleteProductArgs,
     state: State<'_, AppState>,
@@ -817,7 +817,7 @@ pub async fn delete_product(
 ///
 /// ADR #7: Scoped variant of `delete_product`. The `user_id` for
 /// permission checks is read from the resolved `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn delete_product_scoped(
     session_token: String,
     args: DeleteProductScopedArgs,

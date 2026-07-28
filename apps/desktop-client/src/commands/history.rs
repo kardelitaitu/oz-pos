@@ -5,7 +5,7 @@
 //! end-of-day reporting.
 
 use serde::Serialize;
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::Money;
 use oz_core::db::{DailySummaryRow, SalesByHourRow, Store};
@@ -38,7 +38,7 @@ pub struct SaleListItem {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_sales_scoped`
 /// with a `session_token` to list sales from the store-scoped database.
-#[command]
+#[tauri::command]
 pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -52,7 +52,7 @@ pub async fn list_sales(state: State<'_, AppState>) -> Result<Vec<SaleListItem>,
 /// ADR #7: Scoped variant of `list_sales`. The backend resolves the
 /// opaque `session_token` to a `SessionContext`, opens the store-scoped
 /// database, and returns only that store's completed sales.
-#[command]
+#[tauri::command]
 pub async fn list_sales_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -111,7 +111,7 @@ pub struct SaleDetail {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_sale_scoped`
 /// with a `session_token` to look up the sale in the store-scoped database.
-#[command]
+#[tauri::command]
 pub async fn get_sale(
     id: String,
     state: State<'_, AppState>,
@@ -128,7 +128,7 @@ pub async fn get_sale(
 /// ADR #7: Scoped variant of `get_sale`. The backend resolves the
 /// session token to open the store-scoped database and looks up the
 /// sale within that store only.
-#[command]
+#[tauri::command]
 pub async fn get_sale_scoped(
     session_token: String,
     id: String,
@@ -167,7 +167,7 @@ fn map_sale_to_detail(s: oz_core::Sale) -> SaleDetail {
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `export_daily_summary_scoped`
 /// with a `session_token` for store-scoped reports.
-#[command]
+#[tauri::command]
 pub async fn export_daily_summary(
     state: State<'_, AppState>,
 ) -> Result<Vec<DailySummaryRow>, AppError> {
@@ -181,7 +181,7 @@ pub async fn export_daily_summary(
 /// Fetch the daily sales summary for the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `export_daily_summary`.
-#[command]
+#[tauri::command]
 pub async fn export_daily_summary_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -199,7 +199,7 @@ pub async fn export_daily_summary_scoped(
 /// Fetch sales-by-hour breakdown from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `export_sales_by_hour_scoped`.
-#[command]
+#[tauri::command]
 pub async fn export_sales_by_hour(
     state: State<'_, AppState>,
 ) -> Result<Vec<SalesByHourRow>, AppError> {
@@ -213,7 +213,7 @@ pub async fn export_sales_by_hour(
 /// Fetch sales-by-hour breakdown for the store resolved from a session token.
 ///
 /// ADR #7: Scoped variant of `export_sales_by_hour`.
-#[command]
+#[tauri::command]
 pub async fn export_sales_by_hour_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -267,7 +267,7 @@ pub struct PaymentBreakdown {
 /// Fetch the full EOD (End-of-Day) report from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `export_eod_report_scoped`.
-#[command]
+#[tauri::command]
 pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, AppError> {
     let db = state.db.lock().await;
     build_eod_report(&db)
@@ -277,7 +277,7 @@ pub async fn export_eod_report(state: State<'_, AppState>) -> Result<EodReport, 
 ///
 /// ADR #7: Scoped variant of `export_eod_report`. Opens the store-scoped
 /// database and builds the report from that store's data only.
-#[command]
+#[tauri::command]
 pub async fn export_eod_report_scoped(
     session_token: String,
     state: State<'_, AppState>,

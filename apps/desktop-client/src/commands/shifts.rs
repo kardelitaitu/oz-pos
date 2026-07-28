@@ -3,7 +3,7 @@
 //! Open/close cashier shifts with cash balance reconciliation.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::db::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 use oz_core::{CashPayout, Shift, Store};
@@ -118,7 +118,7 @@ pub struct OpenShiftScopedArgs {
 /// Open a new shift for a user using the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `open_shift_scoped`.
-#[command]
+#[tauri::command]
 pub async fn open_shift(
     args: OpenShiftArgs,
     state: State<'_, AppState>,
@@ -140,7 +140,7 @@ pub async fn open_shift(
 }
 
 /// Open a shift in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn open_shift_scoped(
     session_token: String,
     args: OpenShiftScopedArgs,
@@ -199,7 +199,7 @@ pub struct CloseShiftScopedArgs {
 /// Close an active shift using the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `close_shift_scoped`.
-#[command]
+#[tauri::command]
 pub async fn close_shift(
     args: CloseShiftArgs,
     state: State<'_, AppState>,
@@ -219,7 +219,7 @@ pub async fn close_shift(
 }
 
 /// Close a shift in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn close_shift_scoped(
     session_token: String,
     args: CloseShiftScopedArgs,
@@ -250,7 +250,7 @@ pub async fn close_shift_scoped(
 /// Get the currently open shift for a user from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_active_shift_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_active_shift(
     user_id: String,
     state: State<'_, AppState>,
@@ -266,7 +266,7 @@ pub async fn get_active_shift(
 }
 
 /// Get the active shift for the session user from the store-scoped DB. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_active_shift_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -290,7 +290,7 @@ pub async fn get_active_shift_scoped(
 /// List all shifts, most recent first.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_shifts_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_shifts(state: State<'_, AppState>) -> Result<Vec<ShiftDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -301,7 +301,7 @@ pub async fn list_shifts(state: State<'_, AppState>) -> Result<Vec<ShiftDto>, Ap
 }
 
 /// List shifts for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_shifts_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -318,7 +318,7 @@ pub async fn list_shifts_scoped(
 }
 
 /// Get a single shift by id.
-#[command]
+#[tauri::command]
 pub async fn get_shift(
     id: String,
     state: State<'_, AppState>,
@@ -454,7 +454,7 @@ pub struct CreateCashPayoutArgs {
 }
 
 /// Record a cash payout (safe drop) against an open shift.
-#[command]
+#[tauri::command]
 pub async fn create_cash_payout(
     args: CreateCashPayoutArgs,
     state: State<'_, AppState>,
@@ -474,7 +474,7 @@ pub async fn create_cash_payout(
 }
 
 /// Generate a comprehensive report for a single shift.
-#[command]
+#[tauri::command]
 pub async fn get_shift_report(
     shift_id: String,
     state: State<'_, AppState>,

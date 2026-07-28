@@ -5,7 +5,7 @@
 //! its own SKU, optional price override, and barcode.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::{Money, ProductVariant, Store};
 
@@ -78,7 +78,7 @@ impl From<ProductVariant> for ProductVariantDto {
 // ── List ──────────────────────────────────────────────────────────────
 
 /// List all variants for a given parent product SKU.
-#[command]
+#[tauri::command]
 pub async fn list_product_variants(
     parent_sku: String,
     state: State<'_, AppState>,
@@ -97,7 +97,7 @@ pub async fn list_product_variants(
 // ── Get by SKU ────────────────────────────────────────────────────────
 
 /// Get a single variant by its own SKU.
-#[command]
+#[tauri::command]
 pub async fn get_product_variant(
     sku: String,
     state: State<'_, AppState>,
@@ -143,7 +143,7 @@ pub struct CreateProductVariantResult {
 }
 
 /// Create a new product variant.
-#[command]
+#[tauri::command]
 pub async fn create_product_variant(
     args: CreateProductVariantArgs,
     state: State<'_, AppState>,
@@ -217,7 +217,7 @@ pub struct UpdateProductVariantResult {
 }
 
 /// Update an existing product variant (matched by SKU).
-#[command]
+#[tauri::command]
 pub async fn update_product_variant(
     args: UpdateProductVariantArgs,
     state: State<'_, AppState>,
@@ -267,7 +267,7 @@ pub async fn update_product_variant(
 // ── Delete ────────────────────────────────────────────────────────────
 
 /// Delete a product variant by its own SKU.
-#[command]
+#[tauri::command]
 pub async fn delete_product_variant(
     sku: String,
     state: State<'_, AppState>,

@@ -7,7 +7,7 @@
 //! server URL and API key.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::db::Store;
 use oz_core::settings::Settings;
@@ -29,7 +29,7 @@ pub struct SyncSettingsDto {
 }
 
 /// Get sync settings.
-#[command]
+#[tauri::command]
 pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSettingsDto, AppError> {
     let db = state.db.lock().await;
     let server_url = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
@@ -44,7 +44,7 @@ pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSetting
 }
 
 /// Get sync settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_sync_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -80,7 +80,7 @@ pub struct UpdateSyncSettingsArgs {
     pub enabled: bool,
 }
 
-#[command]
+#[tauri::command]
 /// Update sync settings.
 pub async fn update_sync_settings(
     args: UpdateSyncSettingsArgs,
@@ -108,7 +108,7 @@ pub async fn update_sync_settings(
 /// lock is not held during the network round-trip, avoiding the
 /// "Cannot drop a runtime in a context where blocking is not allowed"
 /// panic that reqwest::blocking triggers inside Tauri's async runtime.
-#[command]
+#[tauri::command]
 pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, AppError> {
     // Phase 1: Read pending items and config from DB (brief lock).
     let (pending_items, config_opt) = {
@@ -159,7 +159,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
 }
 
 /// Get the pending sync count.
-#[command]
+#[tauri::command]
 pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -174,7 +174,7 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
 /// If `url` is provided (from the front-end text field), it is used
 /// directly so users can request a token before saving. Otherwise the
 /// saved value from settings is used.
-#[command]
+#[tauri::command]
 pub async fn request_sync_token(
     url: Option<String>,
     state: State<'_, AppState>,
@@ -205,7 +205,7 @@ pub async fn request_sync_token(
 /// If `url` is provided (from the front-end text field), it is used
 /// directly so users can test a URL before saving. Otherwise the
 /// saved value from settings is used.
-#[command]
+#[tauri::command]
 pub async fn test_sync_connection(
     url: Option<String>,
     state: State<'_, AppState>,
@@ -252,7 +252,7 @@ pub struct SyncPullArgs {
 ///
 /// Uses a three-phase split (read -> async HTTP -> write) so the DB
 /// lock is not held during the network round-trip.
-#[command]
+#[tauri::command]
 pub async fn sync_pull(
     args: SyncPullArgs,
     state: State<'_, AppState>,

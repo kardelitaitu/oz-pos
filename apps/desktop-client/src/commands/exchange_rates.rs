@@ -11,7 +11,7 @@ findings: closed C-1 (Epic X-3, see audit doc §11); no remaining findings in th
 //! depend on Tauri-specific types (`State`, `#[command]`) and the
 //! app-level `AppState` / `AppError`.
 
-use tauri::{State, command};
+use tauri::{State};
 
 use foundation::validate_not_empty;
 use modules_currency::commands::{CreateExchangeRateArgs, ExchangeRateDto};
@@ -20,7 +20,7 @@ use modules_currency::repository::CurrencyRepository;
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[command]
+#[tauri::command]
 /// List exchange rates.
 pub async fn list_exchange_rates(
     state: State<'_, AppState>,
@@ -31,7 +31,7 @@ pub async fn list_exchange_rates(
     Ok(rows.into_iter().map(ExchangeRateDto::from).collect())
 }
 
-#[command]
+#[tauri::command]
 /// Create exchange rate.
 pub async fn create_exchange_rate(
     args: CreateExchangeRateArgs,
@@ -63,7 +63,7 @@ pub async fn create_exchange_rate(
     Ok(ExchangeRateDto::from(row))
 }
 
-#[command]
+#[tauri::command]
 /// Delete exchange rate.
 pub async fn delete_exchange_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;

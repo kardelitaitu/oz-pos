@@ -3,7 +3,7 @@
 //! These commands expose the `oz_core::db::reports` Store methods as
 //! Tauri IPC handlers for the dashboard and analytics front-end.
 
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::db::Store;
 use oz_core::db::reports::{
@@ -15,7 +15,7 @@ use oz_core::export::{CustomReportRequest, CustomReportResponse};
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[command]
+#[tauri::command]
 /// Get menu engineering.
 pub async fn get_menu_engineering(
     state: State<'_, AppState>,
@@ -29,7 +29,7 @@ pub async fn get_menu_engineering(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Get daily revenue.
 pub async fn get_daily_revenue(
     state: State<'_, AppState>,
@@ -43,7 +43,7 @@ pub async fn get_daily_revenue(
     Ok(rows)
 }
 
-#[command]
+#[tauri::command]
 /// Get weekly revenue.
 pub async fn get_weekly_revenue(
     state: State<'_, AppState>,
@@ -57,7 +57,7 @@ pub async fn get_weekly_revenue(
     Ok(rows)
 }
 
-#[command]
+#[tauri::command]
 /// Get monthly revenue.
 pub async fn get_monthly_revenue(
     state: State<'_, AppState>,
@@ -71,7 +71,7 @@ pub async fn get_monthly_revenue(
     Ok(rows)
 }
 
-#[command]
+#[tauri::command]
 /// Get top products.
 pub async fn get_top_products(
     state: State<'_, AppState>,
@@ -86,7 +86,7 @@ pub async fn get_top_products(
     Ok(rows)
 }
 
-#[command]
+#[tauri::command]
 /// Get hourly heatmap.
 pub async fn get_hourly_heatmap(
     state: State<'_, AppState>,
@@ -100,7 +100,7 @@ pub async fn get_hourly_heatmap(
     Ok(rows)
 }
 
-#[command]
+#[tauri::command]
 /// Get low stock alerts.
 #[allow(deprecated)]
 pub async fn get_low_stock_alerts(
@@ -114,7 +114,7 @@ pub async fn get_low_stock_alerts(
     Ok(rows)
 }
 
-#[command]
+#[tauri::command]
 /// Get category breakdown.
 pub async fn get_category_breakdown(
     state: State<'_, AppState>,
@@ -133,7 +133,7 @@ pub async fn get_category_breakdown(
 /// The backend validates column names against a per-dataset whitelist
 /// to prevent SQL injection — only recognised columns are included.
 /// Supported datasets: "sales" (5 columns, date filter), "inventory" (5 columns).
-#[command]
+#[tauri::command]
 pub async fn build_custom_report(
     state: State<'_, AppState>,
     request: CustomReportRequest,

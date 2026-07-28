@@ -9,7 +9,7 @@
 //! pattern. Old commands taking raw `user_id` / `store_id` are deprecated.
 
 use serde::Serialize;
-use tauri::{State, command};
+use tauri::{State};
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -74,7 +74,7 @@ pub struct CreateInstanceRequest {
 /// List workspace instances accessible to the session user within their store. ADR #7.
 ///
 /// ADR #5: Filters results by subscription tier entitlement.
-#[command]
+#[tauri::command]
 pub async fn list_workspaces_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -112,7 +112,7 @@ pub async fn list_workspaces_scoped(
 }
 
 /// Get a single workspace instance. `is_default` reflects the session user. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_workspace_instance_scoped(
     session_token: String,
     instance_id: String,
@@ -135,7 +135,7 @@ pub async fn get_workspace_instance_scoped(
 /// Create a new workspace instance (admin). Permission from session. ADR #7.
 ///
 /// ADR #5: Enforces subscription tier quota before creating.
-#[command]
+#[tauri::command]
 pub async fn create_workspace_instance_scoped(
     session_token: String,
     req: CreateInstanceRequest,
@@ -190,7 +190,7 @@ pub async fn create_workspace_instance_scoped(
 /// Renames the instance and updates its description / accent colour.
 /// The `type_key` and `store_id` are immutable and cannot be changed.
 /// Requires `STAFF_UPDATE` permission from the session user.
-#[command]
+#[tauri::command]
 pub async fn update_workspace_instance_scoped(
     session_token: String,
     instance_id: String,
@@ -224,7 +224,7 @@ pub async fn update_workspace_instance_scoped(
 ///
 /// Sets the instance status to `archived`, preserving referential
 /// integrity with historical sales. Requires `STAFF_UPDATE` permission.
-#[command]
+#[tauri::command]
 pub async fn archive_workspace_instance_scoped(
     session_token: String,
     instance_id: String,
@@ -250,7 +250,7 @@ pub async fn archive_workspace_instance_scoped(
 ///
 /// Iterates the target store's database, restores suspended instances up to
 /// the tier's per-store register limit, and returns the count of restored instances.
-#[command]
+#[tauri::command]
 pub async fn recover_workspace_instances_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -291,7 +291,7 @@ pub async fn recover_workspace_instances_scoped(
 /// If the store has more active instances than the tier allows, the
 /// least-recently-used instances are transitioned to `QuotaSuspended`.
 /// Returns the count of suspended instances.
-#[command]
+#[tauri::command]
 pub async fn suspend_surplus_workspace_instances_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -328,7 +328,7 @@ pub async fn suspend_surplus_workspace_instances_scoped(
 }
 
 /// List screens for a workspace type from the store-scoped database. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_workspace_screens_scoped(
     session_token: String,
     type_key: String,
@@ -351,7 +351,7 @@ pub async fn list_workspace_screens_scoped(
 }
 
 /// Replace all instance assignments for a user. Caller permission from session. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_user_workspace_instances_scoped(
     session_token: String,
     user_id: String,
@@ -377,7 +377,7 @@ pub async fn set_user_workspace_instances_scoped(
 }
 
 /// Get instance IDs assigned to a user. Permission check from session. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_user_workspace_instances_scoped(
     session_token: String,
     user_id: String,
@@ -404,7 +404,7 @@ pub async fn get_user_workspace_instances_scoped(
 /// within a specific store.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_workspaces(
     state: State<'_, AppState>,
     role_id: String,
@@ -421,7 +421,7 @@ pub async fn list_workspaces(
 /// Get a single workspace instance by ID.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_workspace_instance_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_workspace_instance(
     state: State<'_, AppState>,
     instance_id: String,
@@ -442,7 +442,7 @@ pub async fn get_workspace_instance(
 /// quota before creating. Previously this deprecated command bypassed the
 /// quota system entirely, allowing an attacker to create unlimited
 /// instances regardless of tier by calling it directly.
-#[command]
+#[tauri::command]
 pub async fn create_workspace_instance(
     state: State<'_, AppState>,
     req: CreateInstanceRequest,
@@ -490,7 +490,7 @@ pub async fn create_workspace_instance(
 /// List all workspace types.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped` instead.
-#[command]
+#[tauri::command]
 pub async fn list_workspace_types(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceTypeDto>, AppError> {
@@ -512,7 +512,7 @@ pub async fn list_workspace_types(
 /// List ALL workspace types (for admin dropdowns).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped` instead.
-#[command]
+#[tauri::command]
 pub async fn list_all_workspaces(
     state: State<'_, AppState>,
     user_id: String,
@@ -534,7 +534,7 @@ pub async fn list_all_workspaces(
 }
 
 /// List all workspace types resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_all_workspaces_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -565,7 +565,7 @@ pub async fn list_all_workspaces_scoped(
 /// Replace all workspace assignments for a user (legacy tables).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
-#[command]
+#[tauri::command]
 pub async fn set_user_workspaces(
     state: State<'_, AppState>,
     user_id: String,
@@ -583,7 +583,7 @@ pub async fn set_user_workspaces(
 }
 
 /// Replace all workspace assignments for a user (legacy tables), caller from session. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_user_workspaces_scoped(
     session_token: String,
     user_id: String,
@@ -610,7 +610,7 @@ pub async fn set_user_workspaces_scoped(
 /// Get the explicit workspace keys assigned to a user (legacy table).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_user_workspaces(
     state: State<'_, AppState>,
     user_id: String,
@@ -624,7 +624,7 @@ pub async fn get_user_workspaces(
 }
 
 /// Get workspace keys for a user (legacy table), caller from session. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_user_workspaces_scoped(
     session_token: String,
     user_id: String,
@@ -648,7 +648,7 @@ pub async fn get_user_workspaces_scoped(
 /// List screens (nav items) for a given workspace type.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_workspace_screens_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_workspace_screens(
     state: State<'_, AppState>,
     type_key: String,
@@ -669,7 +669,7 @@ pub async fn list_workspace_screens(
 /// Replace all instance assignments for a user (old command).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
-#[command]
+#[tauri::command]
 pub async fn set_user_workspace_instances(
     state: State<'_, AppState>,
     user_id: String,
@@ -690,7 +690,7 @@ pub async fn set_user_workspace_instances(
 /// Get the explicit instance IDs assigned to a user (old command).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_user_workspace_instances(
     state: State<'_, AppState>,
     user_id: String,
@@ -751,7 +751,7 @@ fn verify_binding_hmac(
 ///
 /// This is called once at boot time (before authentication). It does not use
 /// a session token because no user is logged in yet.
-#[command]
+#[tauri::command]
 pub async fn resolve_boot_store(
     state: State<'_, AppState>,
     device_id: Option<String>,

@@ -1,7 +1,7 @@
 //! Refund commands — process refund against a completed sale.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::db::Store;
 use oz_core::permissions;
@@ -74,7 +74,7 @@ pub struct ProcessRefundResult {
 /// **Deprecated for multi-store (ADR #7):** Use `process_refund_scoped`
 /// with a `session_token` instead. The `user_id` is read from the
 /// resolved session.
-#[command]
+#[tauri::command]
 pub async fn process_refund(
     args: ProcessRefundArgs,
     state: State<'_, AppState>,
@@ -95,7 +95,7 @@ pub async fn process_refund(
 /// ADR #7: Scoped variant of `process_refund`. The `user_id` for
 /// permission checks and the refund record is read from the resolved
 /// `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn process_refund_scoped(
     session_token: String,
     args: ProcessRefundScopedArgs,
@@ -207,7 +207,7 @@ fn run_process_refund(
 /// Look up a sale by its receipt barcode from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `lookup_sale_by_receipt_barcode_scoped`.
-#[command]
+#[tauri::command]
 pub async fn lookup_sale_by_receipt_barcode(
     barcode: String,
     state: State<'_, AppState>,
@@ -224,7 +224,7 @@ pub async fn lookup_sale_by_receipt_barcode(
 /// ADR #7: Scoped variant of `lookup_sale_by_receipt_barcode`.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn lookup_sale_by_receipt_barcode_scoped(
     session_token: String,
     barcode: String,
@@ -254,7 +254,7 @@ pub async fn lookup_sale_by_receipt_barcode_scoped(
 /// List all refunds for a sale from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_refunds_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_refunds(
     sale_id: String,
     state: State<'_, AppState>,
@@ -271,7 +271,7 @@ pub async fn list_refunds(
 /// ADR #7: Scoped variant of `list_refunds`.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn list_refunds_scoped(
     session_token: String,
     sale_id: String,

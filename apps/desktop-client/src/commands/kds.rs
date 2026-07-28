@@ -5,7 +5,7 @@
 //!
 //! All KDS commands require `kds:view` or `kds:update` permission.
 
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_core::KdsOrder;
 use oz_core::db::Store;
@@ -18,7 +18,7 @@ use crate::state::AppState;
 /// List KDS orders from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_kds_orders_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_kds_orders(
     user_id: String,
     status: Option<String>,
@@ -33,7 +33,7 @@ pub async fn list_kds_orders(
 }
 
 /// List KDS orders for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_kds_orders_scoped(
     session_token: String,
     status: Option<String>,
@@ -57,7 +57,7 @@ pub async fn list_kds_orders_scoped(
 /// Get the kitchen queue from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_kds_queue_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_kds_queue(
     user_id: String,
     kds_zone: Option<String>,
@@ -72,7 +72,7 @@ pub async fn get_kds_queue(
 }
 
 /// Get the kitchen queue for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_kds_queue_scoped(
     session_token: String,
     kds_zone: Option<String>,
@@ -96,7 +96,7 @@ pub async fn get_kds_queue_scoped(
 /// Update a KDS order's status in the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `update_kds_status_scoped`.
-#[command]
+#[tauri::command]
 pub async fn update_kds_status(
     user_id: String,
     id: String,
@@ -112,7 +112,7 @@ pub async fn update_kds_status(
 }
 
 /// Update a KDS order's status in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn update_kds_status_scoped(
     session_token: String,
     id: String,
@@ -137,7 +137,7 @@ pub async fn update_kds_status_scoped(
 /// Create KDS orders from a completed sale. Returns one order per kitchen zone.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `create_kds_order_from_sale_scoped`.
-#[command]
+#[tauri::command]
 pub async fn create_kds_order_from_sale(
     user_id: String,
     sale_id: String,
@@ -156,7 +156,7 @@ pub async fn create_kds_order_from_sale(
 /// Passes the session's `store_id` so the KDS order carries store identity
 /// for defense-in-depth filtering on KDS tablets (ADR #8). Returns one
 /// KDS order per kitchen zone; an empty vec when no restaurant items exist.
-#[command]
+#[tauri::command]
 pub async fn create_kds_order_from_sale_scoped(
     session_token: String,
     sale_id: String,
@@ -180,7 +180,7 @@ pub async fn create_kds_order_from_sale_scoped(
 /// Get a KDS order by id from the global database.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_kds_order_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_kds_order(
     user_id: String,
     id: String,
@@ -195,7 +195,7 @@ pub async fn get_kds_order(
 }
 
 /// Get a KDS order from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_kds_order_scoped(
     session_token: String,
     id: String,

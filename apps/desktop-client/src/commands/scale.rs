@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{State, command};
+use tauri::{State};
 
 use oz_hal::WeightReading;
 
@@ -21,7 +21,7 @@ pub struct ScaleDeviceInfo {
 ///
 /// Uses the default scale registered under the "default" key.
 /// Returns `None` if no scale is registered.
-#[command]
+#[tauri::command]
 pub async fn read_scale_weight(
     state: State<'_, AppState>,
 ) -> Result<Option<WeightReading>, AppError> {
@@ -36,7 +36,7 @@ pub async fn read_scale_weight(
 }
 
 /// List all registered weight scales.
-#[command]
+#[tauri::command]
 pub async fn list_scale_devices(
     state: State<'_, AppState>,
 ) -> Result<Vec<ScaleDeviceInfo>, AppError> {

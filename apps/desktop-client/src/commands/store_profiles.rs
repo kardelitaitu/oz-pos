@@ -5,7 +5,7 @@
 
 use oz_core::StoreProfile;
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::{State};
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -88,7 +88,7 @@ pub struct UpdateStoreProfileArgs {
 // ── Commands ───────────────────────────────────────────────────────
 
 /// List all store profiles.
-#[command]
+#[tauri::command]
 pub async fn list_store_profiles(
     state: State<'_, AppState>,
 ) -> Result<Vec<StoreProfileDto>, AppError> {
@@ -99,7 +99,7 @@ pub async fn list_store_profiles(
 }
 
 /// Get a single store profile by id.
-#[command]
+#[tauri::command]
 pub async fn get_store_profile(
     id: String,
     state: State<'_, AppState>,
@@ -111,7 +111,7 @@ pub async fn get_store_profile(
 }
 
 /// Get the primary store profile.
-#[command]
+#[tauri::command]
 pub async fn get_primary_store(
     state: State<'_, AppState>,
 ) -> Result<Option<StoreProfileDto>, AppError> {
@@ -125,7 +125,7 @@ pub async fn get_primary_store(
 ///
 /// ADR #4 Phase 2: Also creates the per-store SQLite database file
 /// with all migrations applied.
-#[command]
+#[tauri::command]
 pub async fn create_store_profile(
     args: CreateStoreProfileArgs,
     state: State<'_, AppState>,
@@ -155,7 +155,7 @@ pub async fn create_store_profile(
 }
 
 /// Update a store profile's mutable fields.
-#[command]
+#[tauri::command]
 pub async fn update_store_profile(
     args: UpdateStoreProfileArgs,
     state: State<'_, AppState>,
@@ -174,7 +174,7 @@ pub async fn update_store_profile(
 }
 
 /// Promote a store to primary (demoting the current primary).
-#[command]
+#[tauri::command]
 pub async fn set_primary_store(
     id: String,
     state: State<'_, AppState>,
@@ -186,7 +186,7 @@ pub async fn set_primary_store(
 }
 
 /// Delete a non-primary store profile.
-#[command]
+#[tauri::command]
 pub async fn delete_store_profile(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let conn = state.db.lock().await;
     let store = oz_core::Store::new(&conn);

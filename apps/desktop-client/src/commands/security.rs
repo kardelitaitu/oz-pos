@@ -7,7 +7,6 @@
 
 use oz_security::RotationInfo;
 use serde::Serialize;
-use tauri::command;
 
 use crate::error::AppError;
 
@@ -30,7 +29,7 @@ pub struct KeyRotationStatus {
 /// Get the current key rotation status (key age, creation timestamp).
 ///
 /// Returns the status without exposing the key material itself.
-#[command]
+#[tauri::command]
 pub async fn get_key_rotation_info() -> Result<KeyRotationStatus, AppError> {
     let keyring = oz_security::default_keyring()
         .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
@@ -56,7 +55,7 @@ pub async fn get_key_rotation_info() -> Result<KeyRotationStatus, AppError> {
 /// Generates a new random 256-bit AES key, archives the previous key,
 /// and stores the creation timestamp. Returns the [`RotationInfo`] with
 /// the new key's metadata.
-#[command]
+#[tauri::command]
 pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
     let keyring = oz_security::default_keyring()
         .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
