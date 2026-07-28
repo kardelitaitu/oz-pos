@@ -1,7 +1,7 @@
 /*
 last audited 12-07-27 by C-2 env-var fix
-crate: oz-pos-app | status: SAFE (C-2 resolved) | lint: CLEAN
-findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied | next: consolidate lock types; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
+crate: oz-pos-app | status: SAFE (C-2 resolved; M-4, M-5 fixed) | lint: CLEAN
+findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied; M-4 logging; M-5 plugin task handle | next: SQLCipher | perf: Arc-clones on checkout hot path
 */
 
 //! `AppState` — the long-lived state managed by Tauri and reached via
@@ -96,6 +96,10 @@ pub struct AppState {
     /// Plugin file watcher (kept alive to prevent dropping).
     pub plugin_watcher: Option<notify::RecommendedWatcher>,
 
+    /// Join handle for the plugin hot-reload background task. Aborted on
+    /// [`AppState::drop`] to stop the loop gracefully (M-5).
+    pub plugin_hot_reload_task: Option<tokio::task::JoinHandle<()>>,
+
     /// Background sync daemon. Started during app setup via
     /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
     pub sync_daemon: SyncDaemon,
@@ -167,9 +171,14 @@ impl AppState {
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
 
         // ── Cache layer initialisation (read settings BEFORE moving conn) ──
-        let redis_url =
-            oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|_| "redis://127.0.0.1/".into());
-        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn).unwrap_or(300);
+        let redis_url = oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to read redis_url setting, falling back to localhost");
+            "redis://127.0.0.1/".into()
+        });
+        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to read cache_ttl setting, falling back to 300s");
+            300u64
+        });
         let cache = platform_startup::init_cache(&redis_url, cache_ttl);
 
         // ── Session TTL ──────────────────────────────────────────────
@@ -238,13 +247,16 @@ impl AppState {
                 },
             )));
 
-        // Start plugin hot-reload file watcher.
-        let plugin_watcher = plugins_dir.as_ref().and_then(|dir| {
-            if !dir.exists() {
-                return None;
+        // Start plugin hot-reload file watcher (M-5).
+        let (plugin_watcher, plugin_hot_reload_task) = if let Some(dir) = plugins_dir.as_ref() {
+            if dir.exists() {
+                start_plugin_watcher(plugins.clone(), dir.clone())
+            } else {
+                (None, None)
             }
-            start_plugin_watcher(plugins.clone(), dir.clone())
-        });
+        } else {
+            (None, None)
+        };
 
         tracing::info!(
             cache_healthy = cache.is_healthy(),
@@ -263,6 +275,7 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             plugins,
             plugin_watcher,
+            plugin_hot_reload_task,
             sync_daemon: SyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
@@ -429,30 +442,38 @@ impl AppState {
 
 /// Start a background file watcher that hot-reloads plugins when
 /// `.lua` or `plugin.toml` files change in `plugins_dir`.
+///
+/// Returns a tuple of (file watcher, task join handle). The join handle
+/// should be stored and aborted during [`Drop`] to stop the loop
+/// gracefully (M-5).
 fn start_plugin_watcher(
     plugins: Arc<Mutex<Option<PluginManager>>>,
     plugins_dir: PathBuf,
-) -> Option<notify::RecommendedWatcher> {
+) -> (Option<notify::RecommendedWatcher>, Option<tokio::task::JoinHandle<()>>) {
     let reload_flag = Arc::new(AtomicBool::new(false));
     let flag_clone = reload_flag.clone();
 
-    let mut watcher = notify::RecommendedWatcher::new(
+    let mut watcher = match notify::RecommendedWatcher::new(
         move |_res: Result<notify::Event, notify::Error>| {
             flag_clone.store(true, Ordering::SeqCst);
         },
         notify::Config::default(),
-    )
-    .map_err(|e| tracing::warn!(error = %e, "failed to create plugin file watcher"))
-    .ok()?;
+    ) {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to create plugin file watcher");
+            return (None, None);
+        }
+    };
 
-    watcher
-        .watch(&plugins_dir, notify::RecursiveMode::Recursive)
-        .map_err(|e| tracing::warn!(error = %e, "failed to watch plugins directory"))
-        .ok()?;
+    if let Err(e) = watcher.watch(&plugins_dir, notify::RecursiveMode::Recursive) {
+        tracing::warn!(error = %e, "failed to watch plugins directory");
+        return (None, None);
+    }
 
     tracing::info!(dir = %plugins_dir.display(), "plugin hot-reload watcher started");
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
             if reload_flag.swap(false, Ordering::SeqCst) {
@@ -474,7 +495,7 @@ fn start_plugin_watcher(
         }
     });
 
-    Some(watcher)
+    (Some(watcher), Some(handle))
 }
 
 fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -487,6 +508,12 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 
 impl Drop for AppState {
     fn drop(&mut self) {
+        // Abort the plugin hot-reload background task (M-5).
+        if let Some(handle) = self.plugin_hot_reload_task.take() {
+            handle.abort();
+            tracing::info!("plugin hot-reload task cancelled");
+        }
+
         tracing::info!("stopping kernel modules");
         // Retry the lock for up to 500ms before giving up. This addresses
         // a Windows window-lifecycle bottleneck where `try_lock()` would
@@ -532,6 +559,7 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             plugins: Arc::new(Mutex::new(None)),
             plugin_watcher: None,
+            plugin_hot_reload_task: None,
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
@@ -654,5 +682,6 @@ mod tests {
         assert_eq!(state.db_path.to_str(), Some(":memory:"));
         assert!(state.app.is_none());
         assert!(state.plugin_watcher.is_none());
+        assert!(state.plugin_hot_reload_task.is_none());
     }
 }
