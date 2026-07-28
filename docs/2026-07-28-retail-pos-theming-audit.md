@@ -161,6 +161,8 @@ Retail POS is the **only POS-class screen** that maintains its own theme state b
 
 **Step A — [CLOSED via `972e4b0c`] Replace local shadow state with `useOptionalTheme()?.theme` consumption**:
 
+  - _Implicit closure: deleting the shadow state also closes P0-3 storage-key shadow, P2-6 dead underscore-prefixed setter, and P2-7 missing-useTheme import. All four findings are satisfied by the same edit._
+
 ```tsx
 // RetailPosScreen.tsx (where the local useState lives)
 - const [theme, _setTheme] = useState<'light' | 'dark'>(() => { ... localStorage.getItem('retail-theme') ... });
