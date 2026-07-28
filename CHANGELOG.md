@@ -39,6 +39,46 @@ Desktop App Security & Stability Audit closeout: **all 18 findings resolved** ac
 
 ---
 
+## [0.0.24] — 2026-07-28
+
+Retail POS Theme Integration Audit: **all 7 findings resolved** (3 P0 + 2 P1 + 2 P2). The `RetailPosScreen` now participates in the global theme system — consuming `useOptionalTheme()?.theme` from `ThemeProvider` instead of a shadow `useState` with its own `localStorage` key. Eleven POS-domain CSS tokens (`--color-primary-pos`, `--color-success-pos`, `--color-warning-pos`, `--color-fn-key-pos`, `--color-bg-pos`, `--color-dark-bg-pos`, `--color-dark-border-pos`, and their light/dark/darker variants) are now defined in `tokens.css` across all three theme blocks. Hardcoded colour literals replaced with token references, and dual-declaration fallbacks added for nine `color-mix()` sites so legacy WKWebView (< Safari 16.4) renders a solid colour instead of `unset`. Three new theme-regression tests added (runtime sync, source-grep guard, expanded token-resolution check). Full audit documentation lives in [`docs/2026-07-28-retail-pos-theming-audit.md`](docs/2026-07-28-retail-pos-theming-audit.md).
+
+### Fixed
+
+#### 🔴 P0 — Theme Drift & Orphan Tokens (3 / 3)
+
+- **P0-1 — Shadow theme state (`RetailPosScreen.tsx:166–172`)** — Replaced the 6-line standalone `useState<'light' | 'dark'>('dark')` with a single `useOptionalTheme()?.theme` expression that subscribes to the global `ThemeProvider`. The `data-theme={theme}` attribute on the `.retail-pos` root now stays in lockstep with `<html data-theme>` when the user toggles via `ThemeToggle`.
+- **P0-2 — Orphan POS tokens (`RetailPosScreen.css` × 30+ usages)** — Added 11 POS-domain token declarations to `ui/src/frontend/themes/tokens.css`: `--color-primary-pos`, `--color-primary-pos-light`, `--color-primary-pos-dark`, `--color-success-pos`, `--color-success-pos-darker`, `--color-warning-pos`, `--color-fn-key-pos`, `--color-dark-bg-pos`, `--color-dark-border-pos` (brand-locked in `:root`), `--color-bg-pos` (`var(--color-bg)` / `var(--neutral-100)` / `var(--neutral-50)` per theme), and `--color-ink` (theme-adaptive). Previously these tokens were referenced ~30 times in CSS but defined 0 times — they resolved to `unset`.
+- **P0-3 — Storage-key collision + dead setter** — Removed the `localStorage['retail-theme']` key (collided with the global `'oz-pos-theme-v4'` key), the unused `_setTheme` setter, and the narrowed `'light' | 'dark'` type. The component now inherits the global 3-value theme type (`'default' | 'light' | 'dark'`).
+
+#### 🟠 P1 — CSS Compliance (2 / 2)
+
+- **P1-4 — Hardcoded `#000` literal + `hsl()` blends (`RetailPosScreen.css:1068, 321/334/341`)** — Replaced the hardcoded `#000` in `.retail-low-stock-banner` with `var(--color-ink)`. Migrated three `hsl(var(--cat-hue, 210), …)` blend sites to theme-aware `color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) …) …)` expressions so they respond to dark/light theme changes.
+- **P1-5 — WKWebView colour-mix fallback (9 sites)** — Added preceding `var(--color-bg-surface)` / `var(--color-bg-elevated)` / `var(--color-primary-pos)` / `var(--color-success-pos)` solid-token declarations before nine `color-mix()` rules so legacy WebKit engines (macOS WKWebView < Safari 16.4) that ignore `color-mix()` fall back to a predictable colour instead of `unset`. Covering: 3 cat-strip blend sites, 2 header nav button sites, shift badge, resize handle, cart table focus ring, and scan flash animation.
+
+#### 🟡 P2 — Type & Setter Hygiene (2 / 2)
+
+- **P2-6 — Obsolete type set** — Removed the standalone `useState<'light' | 'dark'>` declaration; the component now inherits the global 3-value `'default' | 'light' | 'dark'` type.
+- **P2-7 — Dead `_setTheme` setter** — Removed the unused underscore-prefixed setter that was never invoked.
+
+### Added
+
+#### 🧪 Theme-Regression Tests (3 new guards)
+
+- **Runtime theme-sync test (`RetailPosScreen.test.tsx`)** — New test mounts `<RetailPosScreen />` inside a `ToggleThemeWrapper`, toggles the global theme via `useTheme().setTheme('dark' | 'light')`, and asserts that the `.retail-pos` root's `data-theme` attribute tracks `<html data-theme>` through each transition.
+- **Source-grep regression guard (`themeRegressionRetailPosScreen.test.tsx`)** — Statically reads `RetailPosScreen.tsx` with `fs.readFileSync` and asserts the shadow-state anti-pattern (`useState<'light'`, `retail-theme`, `_setTheme`) is absent. Fails-closed if the pattern re-emerges.
+- **Expanded token-resolution check (`themeRegression.test.tsx`)** — Renamed `CORE_TOKENS` → `THEME_TOKENS` and added POS-specific tokens (`--color-primary-pos`, `--color-success-pos`, `--color-warning-pos`) to the resolution verification so the existing theme-regression test also guards POS token definitions.
+
+#### 🧪 Test Setup Hardening
+
+- **Cross-file flake prevention (`test-setup.ts` + `RetailPosScreenCheckout.test.tsx`)** — Global `beforeEach` now clears `sessionStorage` in addition to `localStorage`, removes leaked `data-theme` / `is-theme-transitioning` from `<html>`, and deletes injected `<style>` tags. Added global `afterEach(cleanup)` to unmount rendered React trees. Wrapped synchronous `/Change/` assertions in `waitFor` to prevent cross-file render races.
+
+#### 📚 Documentation
+
+- **Retail POS theming audit doc** — Created `docs/2026-07-28-retail-pos-theming-audit.md` documenting all 7 findings, remediation steps, residual risks, and verification summary. Marked VERIFIED after all fixes landed and pre-CI gates passed.
+
+---
+
 ## [0.0.22] — 2026-07-27
 
 ### Added
