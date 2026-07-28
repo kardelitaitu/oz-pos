@@ -155,18 +155,21 @@ pub async fn start_sale(
     args: StartSaleArgs,
     state: State<'_, AppState>,
 ) -> Result<StartSaleResult, AppError> {
-    let currency_str = if args.currency.is_empty() {
-        "USD"
+    let db = state.db.lock().await;
+
+    let currency: oz_core::Currency = if args.currency.is_empty() {
+        // M-6: lookup the store profile's default currency instead of hardcoding "USD".
+        let code = oz_core::Settings::get_default_currency(&db)?
+            .unwrap_or_else(|| "USD".to_string());
+        code.parse()
+            .map_err(|_| AppError::Invalid(format!("invalid default currency code: {code}")))?
     } else {
-        &args.currency
+        args.currency.parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.currency)))?
     };
-    let currency: oz_core::Currency = currency_str
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency_str}")))?;
     let cart = Cart::new(currency);
     let id = cart.id();
 
-    let db = state.db.lock().await;
     let store = Store::new(&db);
     store.save_active_cart(&cart, None)?;
     drop(db);
@@ -189,17 +192,6 @@ pub async fn start_sale_scoped(
     args: StartSaleArgs,
     state: State<'_, AppState>,
 ) -> Result<StartSaleResult, AppError> {
-    let currency_str = if args.currency.is_empty() {
-        "USD"
-    } else {
-        &args.currency
-    };
-    let currency: oz_core::Currency = currency_str
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency_str}")))?;
-    let cart = Cart::new(currency);
-    let id = cart.id();
-
     let (session, conn) = state.resolve_scope(&session_token)?;
     let db = conn
         .lock()
@@ -211,6 +203,19 @@ pub async fn start_sale_scoped(
         &session.user_id,
         oz_core::permissions::SALES_PROCESS,
     )?;
+
+    let currency: oz_core::Currency = if args.currency.is_empty() {
+        // M-6: lookup the store profile's default currency instead of hardcoding "USD".
+        let code = oz_core::Settings::get_default_currency(&db)?
+            .unwrap_or_else(|| "USD".to_string());
+        code.parse()
+            .map_err(|_| AppError::Invalid(format!("invalid default currency code: {code}")))?
+    } else {
+        args.currency.parse()
+            .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.currency)))?
+    };
+    let cart = Cart::new(currency);
+    let id = cart.id();
 
     // Resolve the primary deduction location for this workspace instance.
     let deduction_location_id =
