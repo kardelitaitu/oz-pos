@@ -1,8 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import userEvent from '@testing-library/user-event';
-import { render } from '@testing-library/react';
-import { withFluent } from '@/locales/test-utils';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import type { Product } from '@/types/domain';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -108,7 +107,7 @@ afterEach(() => {
 
 function renderMenu(props: { onAddProduct?: (product: Product) => void } = {}) {
   const { onAddProduct } = props;
-  return render(withFluent(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl));
+  return renderWithFluentSync(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl);
 }
 
 describe('RestaurantMenu', () => {

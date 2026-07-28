@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, render } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
 import StatusBar from '@/frontend/shell/StatusBar';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -49,7 +49,7 @@ beforeEach(() => {
 });
 
 function renderBar() {
-  return render(withFluent(<StatusBar />, sharedFtl));
+  return renderWithFluentSync(<StatusBar />, sharedFtl);
 }
 
 describe('StatusBar', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, within } from '@testing-library/react';
-import { withFluent } from '@/locales/test-utils';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import { ToastProvider, useToast, type ToastVariant } from '@/hooks/useToast';
 import { useRef, useCallback } from 'react';
@@ -47,7 +47,7 @@ function TestConsumer({
 }
 
 function renderWithProvider(ui: ReactNode) {
-  return render(withFluent(<ToastProvider>{ui}</ToastProvider>, sharedFtl));
+  return renderWithFluentSync(<ToastProvider>{ui}</ToastProvider>, sharedFtl);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────

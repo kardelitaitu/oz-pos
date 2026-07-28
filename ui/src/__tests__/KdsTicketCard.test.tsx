@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, render } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -46,7 +47,7 @@ const baseOrder: KdsOrder = {
 
 function renderCard(order: Partial<KdsOrder> = {}) {
   const merged = { ...baseOrder, ...order };
-  return render(withFluent(<KdsTicketCard order={merged} onAdvance={onAdvance} />, sharedFtl, kdsFtl));
+  return renderWithFluentSync(<KdsTicketCard order={merged} onAdvance={onAdvance} />, sharedFtl, kdsFtl);
 }
 
 const onAdvance = vi.fn();
