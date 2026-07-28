@@ -1,21 +1,14 @@
-fix(db): audit findings — migration ordering, foreign_keys PRAGMA, orphaned files
+fix(test): replace dangerouslyIgnoreUnhandledErrors with targeted rejection handler
 
-Database layer audit (0.0.23):
+Removed the blanket `dangerouslyIgnoreUnhandledErrors: true` from
+vite.config.ts which silently swallowed ALL unhandled promise rejections.
 
-1. Fix migration ordering: moved `046_track_serial.sql` from between 047
-   entries to before all 047 entries (correct semantic order — all 046
-   migrations now run before 047 starts).
+Added a targeted `process.on('unhandledRejection')` handler in
+test-setup.ts that:
+- Filters known noise (Fluent missing keys, React act() warnings,
+  DOM nesting, punycode deprecation) — same patterns as the existing
+  console.error suppressor
+- Logs all other rejections as console.warn so they're visible
+  without failing the suite
 
-2. Add `PRAGMA foreign_keys = ON` to `run()` startup function — SQLite
-   defaults foreign_keys OFF. Previously only 4 of 24+ DB modules set
-   it manually; now every connection through `run()` enforces FK
-   constraints.
-
-3. Remove 2 orphaned migration files: `034_active_carts.sql` (superseded
-   by 037_active_carts.sql) and `044_sale_lines_overridden_price.sql`
-   (never added to ALL array, never applied to any database).
-
-4. Fix duplicated WAL comment in `run()` and update doc comment to
-   mention foreign_keys PRAGMA.
-
-All 17 migration tests pass. Clippy clean.
+All 3,228 tests pass with 0 failures.
