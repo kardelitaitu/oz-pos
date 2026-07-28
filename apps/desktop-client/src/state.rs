@@ -23,6 +23,20 @@ findings: unsafe env::set_var removed; terminal_id typed field added; Drop bound
 //! real deployment will switch to `r2d2_sqlite` or `deadpool-sqlite`
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
+//!
+//! # Sync primitive convention (M-1)
+//!
+//! | Primitive | Where | Why |
+//! |-----------|-------|-----|
+//! | `tokio::sync::Mutex` | Every async-accessible field (`db`, `kernel`, `plugins`, `scanner_cancel`, `terminal_id`) | `.lock().await` is required in Tauri command handlers; calling `.lock()` on `std::sync::Mutex` from async code blocks the tokio worker thread. |
+//! | `std::sync::RwLock` | `session_store` only | Accessed from both sync (`resolve_session`, `create_session`) and async (`session cleanup daemon`) code. `tokio::sync::RwLock::read()` would panic if called from sync context without a blocking wrapper. Keep `std::sync::RwLock` and wrap async access with `tokio::task::spawn_blocking` when necessary. |
+//! | `std::sync::mpsc` | `inventory_pubsub_shutdown` only | Used from `Drop` which is sync-only. Tokio channels don't implement `Sync` and would require an async `Drop` bound. |
+//! | `Arc<AtomicBool>` | Plugin reload flag | Lock-free flag set by the `notify` callback (sync) and consumed by the tokio loop (async). Correct by design — no `.lock()` at all. |
+//!
+//! **Rule of thumb:** When adding a new field to `AppState`, default to
+//! `tokio::sync::Mutex` unless the field is accessed exclusively from
+//! sync code (e.g. `Drop`, `notify` callbacks). If you must use
+//! `std::sync::Mutex`, document why in the field's doc comment.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
