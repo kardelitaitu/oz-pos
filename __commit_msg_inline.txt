@@ -1,4 +1,1 @@
-chore: commit remaining uncommitted working-tree changes from 0.0.22
-
-- CloudSyncSettings.test.tsx: fix getEnabledCheckbox() to use getByRole('switch')
-- skill-drift-report.md: auto-generated drift report snapshot
+chore(release): bump version 0.0.22 → 0.0.23
