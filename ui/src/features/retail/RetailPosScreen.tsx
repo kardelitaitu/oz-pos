@@ -1166,16 +1166,31 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             </div>
           ) : (
             <div className="retail-grid">
-                {pagedProducts.map((p) => <ProductCard
-                  key={p.sku}
-                  product={p}
-                  catHue={catHue}
-                  formatMoney={formatMoney}
-                  handleAdd={handleAdd}
-                  handleOpenQtyPicker={handleOpenQtyPicker}
-                  scaleEnabled={isEnabled(FEATURES.USB_SCALE)}
-                  onSetWeighTarget={handleSetWeighTarget}
-                />)}
+              <table className="retail-product-table">
+                <thead>
+                  <tr>
+                    <th className="retail-col-sku">{l10n.getString('retail-col-sku') || 'SKU'}</th>
+                    <th className="retail-col-name">{l10n.getString('retail-col-name') || 'Product Name'}</th>
+                    <th className="retail-col-stock">{l10n.getString('retail-col-stock') || 'Stock'}</th>
+                    <th className="retail-col-price">{l10n.getString('retail-col-price') || 'Price'}</th>
+                    <th className="retail-col-action">{l10n.getString('retail-col-action') || 'Action'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedProducts.map((p) => (
+                    <ProductCard
+                      key={p.sku}
+                      product={p}
+                      catHue={catHue}
+                      formatMoney={formatMoney}
+                      handleAdd={handleAdd}
+                      handleOpenQtyPicker={handleOpenQtyPicker}
+                      scaleEnabled={isEnabled(FEATURES.USB_SCALE)}
+                      onSetWeighTarget={handleSetWeighTarget}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
           {totalPages > 1 && (
@@ -2013,31 +2028,58 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
   }, []);
 
   return (
-    <button
-      className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
-      style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerLeave}
-      aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
-      aria-disabled={isOutOfStock}
-    >
-      {product.stock_qty != null && product.stock_qty > 0 && (
-        <span className={`retail-product-stock-badge retail-stock-${product.stock_qty <= 5 ? 'low' : product.stock_qty <= 10 ? 'medium' : 'high'}`}>{product.stock_qty}</span>
-      )}
-      {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
-      <span className="retail-product-name">{product.name}</span>
-      <span className="retail-product-price">{formatMoney(product.price)}</span>
-      {scaleEnabled && (
+    <tr className={`retail-product-row${isOutOfStock ? ' retail-product-row--out-of-stock' : ''}`}>
+      <td className="retail-col-sku">{product.sku}</td>
+      <td className="retail-col-name">
         <button
           type="button"
-          className="retail-product-weigh-btn"
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
-          aria-label={`Weigh ${product.name}`}
+          className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
+          style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerLeave}
+          aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
+          aria-disabled={isOutOfStock}
+          disabled={isOutOfStock}
         >
-          ⚖
+          <span>{product.name}</span>
+          {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
         </button>
-      )}
-    </button>
+      </td>
+      <td className="retail-col-stock">
+        {product.stock_qty != null && product.stock_qty > 0 ? (
+          <span className={`retail-product-stock-badge retail-stock-${product.stock_qty <= 5 ? 'low' : product.stock_qty <= 10 ? 'medium' : 'high'}`}>
+            {product.stock_qty}
+          </span>
+        ) : (
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>Out of stock</span>
+        )}
+      </td>
+      <td className="retail-col-price">{formatMoney(product.price)}</td>
+      <td className="retail-col-action">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+          <button
+            type="button"
+            className="retail-table-add-btn"
+            disabled={isOutOfStock}
+            onClick={() => {
+              if (!isOutOfStock) handleAdd(product);
+            }}
+          >
+            + Cart
+          </button>
+          {scaleEnabled && (
+            <button
+              type="button"
+              className="retail-product-weigh-btn"
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
+              aria-label={`Weigh ${product.name}`}
+            >
+              ⚖
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
