@@ -318,6 +318,7 @@
   padding: var(--space-2_5) var(--space-1_5);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-hover);
+  border-top: 0.1875rem solid var(--color-bg-surface); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix, so the preceding declaration wins */
   border-top: 0.1875rem solid color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 12%);
   cursor: pointer;
   min-height: 4.375rem;
@@ -331,6 +332,7 @@
 }
 
 .retail-product-btn:hover {
+  background: var(--color-bg-surface); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 30%);
   border-color: var(--color-primary-pos);
   transform: translateY(-1px);
@@ -338,6 +340,7 @@
 }
 
 .retail-product-btn:active {
+  background: var(--color-bg-surface); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 50%);
   transform: translateY(0) scale(0.98);
 }
