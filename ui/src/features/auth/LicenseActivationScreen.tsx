@@ -30,7 +30,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
-  const [appVersion, setAppVersion] = useState<string>('0.0.23');
+  const [appVersion, setAppVersion] = useState<string>('0.0.24');
   const [ipAddress, setIpAddress] = useState<string>(l10n.getString('auth-ip-detecting') || 'Detecting...');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();
