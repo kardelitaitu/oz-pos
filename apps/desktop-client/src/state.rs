@@ -460,7 +460,10 @@ impl AppState {
 fn start_plugin_watcher(
     plugins: Arc<Mutex<Option<PluginManager>>>,
     plugins_dir: PathBuf,
-) -> (Option<notify::RecommendedWatcher>, Option<tokio::task::JoinHandle<()>>) {
+) -> (
+    Option<notify::RecommendedWatcher>,
+    Option<tokio::task::JoinHandle<()>>,
+) {
     let reload_flag = Arc::new(AtomicBool::new(false));
     let flag_clone = reload_flag.clone();
 

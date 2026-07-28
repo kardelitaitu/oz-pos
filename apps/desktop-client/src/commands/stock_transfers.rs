@@ -3,7 +3,7 @@
 //! Exposes CRUD + send/receive lifecycle operations to the front-end.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::stock_transfer::{StockTransfer, StockTransferLine};

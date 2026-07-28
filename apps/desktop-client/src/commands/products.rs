@@ -5,7 +5,7 @@
 //! The front-end uses this to populate the product grid.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::inventory::{CANONICAL_DEFAULT_LOCATION_UUID, LocationId};
 use oz_core::inventory_transaction::InventoryTransactionId;

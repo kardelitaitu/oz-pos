@@ -7,7 +7,7 @@
 
 use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::permissions;

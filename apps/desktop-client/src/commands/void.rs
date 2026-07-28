@@ -4,7 +4,7 @@
 //! stock restoration, and audit logging inside a single transaction.
 
 use serde::Deserialize;
-use tauri::{State};
+use tauri::State;
 
 use oz_core::permissions;
 

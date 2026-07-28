@@ -3,7 +3,7 @@
 //! Delegates to `oz_core::db::Store` for all CRUD operations.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::Customer;
 use oz_core::db::Store;

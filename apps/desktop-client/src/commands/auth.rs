@@ -6,7 +6,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;

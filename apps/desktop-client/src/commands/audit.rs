@@ -4,7 +4,7 @@
 //! stored in SQLite via `oz_core::db::Store::list_audit_entries`.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::Store;
 

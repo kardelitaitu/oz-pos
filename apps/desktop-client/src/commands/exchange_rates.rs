@@ -11,7 +11,7 @@ findings: closed C-1 (Epic X-3, see audit doc §11); no remaining findings in th
 //! depend on Tauri-specific types (`State`, `#[command]`) and the
 //! app-level `AppState` / `AppError`.
 
-use tauri::{State};
+use tauri::State;
 
 use foundation::validate_not_empty;
 use modules_currency::commands::{CreateExchangeRateArgs, ExchangeRateDto};

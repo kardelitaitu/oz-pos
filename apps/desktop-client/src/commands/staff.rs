@@ -3,7 +3,7 @@
 //! These commands are the IPC surface for the Staff Management UI.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::auth::hash_pin;
 use oz_core::db::Store;

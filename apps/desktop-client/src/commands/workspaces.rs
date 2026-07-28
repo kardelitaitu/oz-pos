@@ -9,7 +9,7 @@
 //! pattern. Old commands taking raw `user_id` / `store_id` are deprecated.
 
 use serde::Serialize;
-use tauri::{State};
+use tauri::State;
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;

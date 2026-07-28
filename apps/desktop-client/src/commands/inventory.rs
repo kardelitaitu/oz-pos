@@ -12,7 +12,7 @@ use oz_core::{
         WorkspaceLocationBinding, get_workspace_locations, invalidate_location_cache,
     },
 };
-use tauri::{State};
+use tauri::State;
 
 // ── Locations CRUD ──────────────────────────────────────────────────
 

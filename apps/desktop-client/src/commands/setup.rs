@@ -7,7 +7,7 @@
 
 use oz_core::{FeatureRegistry, Settings, Store, features};
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;

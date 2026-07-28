@@ -3,7 +3,7 @@
 //! CRUD for promotion rules and recording promotion applications against sales.
 
 use serde::Deserialize;
-use tauri::{State};
+use tauri::State;
 
 use oz_core::{Promotion, PromotionApplication, Store};
 

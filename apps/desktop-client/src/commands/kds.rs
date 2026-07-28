@@ -5,7 +5,7 @@
 //!
 //! All KDS commands require `kds:view` or `kds:update` permission.
 
-use tauri::{State};
+use tauri::State;
 
 use oz_core::KdsOrder;
 use oz_core::db::Store;

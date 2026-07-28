@@ -9,7 +9,7 @@
 //! survive application restarts.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use foundation::Percentage;
 use oz_core::db::Store;
@@ -197,12 +197,13 @@ pub async fn start_sale(
 
     let currency: oz_core::Currency = if args.currency.is_empty() {
         // M-6: lookup the store profile's default currency instead of hardcoding "USD".
-        let code = oz_core::Settings::get_default_currency(&db)?
-            .unwrap_or_else(|| "USD".to_string());
+        let code =
+            oz_core::Settings::get_default_currency(&db)?.unwrap_or_else(|| "USD".to_string());
         code.parse()
             .map_err(|_| AppError::Invalid(format!("invalid default currency code: {code}")))?
     } else {
-        args.currency.parse()
+        args.currency
+            .parse()
             .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.currency)))?
     };
     let cart = Cart::new(currency);
@@ -244,12 +245,13 @@ pub async fn start_sale_scoped(
 
     let currency: oz_core::Currency = if args.currency.is_empty() {
         // M-6: lookup the store profile's default currency instead of hardcoding "USD".
-        let code = oz_core::Settings::get_default_currency(&db)?
-            .unwrap_or_else(|| "USD".to_string());
+        let code =
+            oz_core::Settings::get_default_currency(&db)?.unwrap_or_else(|| "USD".to_string());
         code.parse()
             .map_err(|_| AppError::Invalid(format!("invalid default currency code: {code}")))?
     } else {
-        args.currency.parse()
+        args.currency
+            .parse()
             .map_err(|_| AppError::Invalid(format!("invalid currency code: {}", args.currency)))?
     };
     let cart = Cart::new(currency);

@@ -7,7 +7,7 @@
 //! pattern. Old commands are preserved with deprecation notices.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use hmac::{Hmac, Mac};
 use sha2::Sha256;

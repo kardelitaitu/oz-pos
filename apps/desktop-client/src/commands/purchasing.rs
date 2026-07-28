@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::{Store, purchase_orders::CreatePoLineInput};
 use oz_core::{PurchaseOrderLine, PurchaseOrderWithLines, Supplier};

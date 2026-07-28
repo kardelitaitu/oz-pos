@@ -10,7 +10,7 @@
 //! - Freeze/unfreeze cards (e.g., for fraud prevention)
 
 use serde::Serialize;
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::gift_card::{

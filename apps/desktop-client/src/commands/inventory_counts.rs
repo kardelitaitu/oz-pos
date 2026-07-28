@@ -4,7 +4,7 @@
 //! that generates adjustments and updates inventory quantities.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::{CountType, StockAdjustment, StockCount, StockCountLine, StockCountStatus, Store};
 

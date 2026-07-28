@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{State};
+use tauri::State;
 
 use chrono::{DateTime, Utc};
 use oz_core::Settings;

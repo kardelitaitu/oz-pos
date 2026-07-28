@@ -4,7 +4,7 @@
 //! transactions that were created while the network was unavailable.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::{OfflineQueueItem, Store};
 

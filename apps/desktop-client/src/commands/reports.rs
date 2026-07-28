@@ -3,7 +3,7 @@
 //! These commands expose the `oz_core::db::reports` Store methods as
 //! Tauri IPC handlers for the dashboard and analytics front-end.
 
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::db::reports::{

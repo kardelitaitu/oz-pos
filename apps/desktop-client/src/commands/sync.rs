@@ -7,7 +7,7 @@
 //! server URL and API key.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::settings::Settings;

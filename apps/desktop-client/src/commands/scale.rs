@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{State};
+use tauri::State;
 
 use oz_hal::WeightReading;
 

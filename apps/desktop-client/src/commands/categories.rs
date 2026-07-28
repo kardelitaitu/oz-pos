@@ -5,7 +5,7 @@
 //! display and manipulate product categories.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::Store;
 

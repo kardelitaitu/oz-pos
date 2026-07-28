@@ -3,7 +3,7 @@
 //! Open/close cashier shifts with cash balance reconciliation.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::db::{ShiftPaymentBreakdown, ShiftReport, ShiftSalesByHour};
 use oz_core::{CashPayout, Shift, Store};

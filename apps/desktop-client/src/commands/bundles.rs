@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use tauri::{State};
+use tauri::State;
 
 use oz_core::Store;
 use oz_core::product_bundle::{BundleItem, BundleWithItems, ProductBundle};

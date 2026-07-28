@@ -5,7 +5,7 @@
 //! end-of-day reporting.
 
 use serde::Serialize;
-use tauri::{State};
+use tauri::State;
 
 use oz_core::Money;
 use oz_core::db::{DailySummaryRow, SalesByHourRow, Store};

@@ -15,7 +15,7 @@ findings: unsafe env::set_var removed from async command path; terminal_id writt
 //! after the initial Setup Wizard.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use oz_core::{Feature, FeatureGuardRegistry, Store, Terminal};
 use platform_kernel::ModuleStatus;

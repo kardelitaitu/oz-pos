@@ -5,7 +5,7 @@
 
 use oz_core::StoreProfile;
 use serde::{Deserialize, Serialize};
-use tauri::{State};
+use tauri::State;
 
 use crate::error::AppError;
 use crate::state::AppState;

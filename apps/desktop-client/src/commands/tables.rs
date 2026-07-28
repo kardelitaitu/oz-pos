@@ -5,7 +5,7 @@
 //! All commands have scoped variants (ADR #7) that use the session token
 //! pattern. Old commands are preserved with deprecation notices.
 
-use tauri::{State};
+use tauri::State;
 
 use oz_core::Table;
 use oz_core::db::Store;
