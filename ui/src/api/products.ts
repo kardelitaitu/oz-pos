@@ -17,6 +17,8 @@ export interface ProductDto {
   created_at: string;
   price_updated_at: string;
   product_type: string;
+  low_stock_threshold?: number | null;
+  high_stock_threshold?: number | null;
 }
 
 /** Arguments for creating a new product. */

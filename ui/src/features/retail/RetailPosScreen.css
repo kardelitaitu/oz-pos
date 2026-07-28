@@ -464,9 +464,16 @@
 }
 
 .retail-col-action {
-  width: 90px;
+  width: 140px;
   text-align: center;
   line-height: 1.25;
+}
+
+.retail-col-action-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1_5);
 }
 
 .retail-table-add-btn {
@@ -482,6 +489,28 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.retail-table-edit-btn {
+  padding: 0 var(--space-2);
+  height: 1.5rem;
+  line-height: 1.5rem;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  font-family: inherit;
+  background: var(--color-border-hover);
+  color: var(--color-fg-primary);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out);
+}
+
+.retail-table-edit-btn:hover {
+  background: var(--color-border-strong);
+  color: var(--color-accent);
 }
 
 .retail-table-add-btn:hover:not(:disabled) {
@@ -2115,6 +2144,150 @@
   }
 
   .retail-resize-handle {
-    flex: 0 0 var(--space-4);
+    width: var(--space-4);
   }
+}
+
+/* ── Retail Edit Product Modal ─────────────────────────────── */
+.retail-edit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  animation: retail-modal-fade-in var(--duration-150) var(--ease-out);
+}
+
+.retail-edit-modal-dialog {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.retail-edit-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-border-hover);
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.retail-edit-modal-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-primary);
+}
+
+.retail-edit-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}
+
+.retail-edit-modal-close:hover {
+  color: var(--color-fg-primary);
+}
+
+.retail-edit-modal-form {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.retail-edit-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.retail-edit-form-row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.retail-edit-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.retail-edit-input {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  background: var(--color-bg-body);
+  color: var(--color-fg-primary);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.retail-edit-input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+.retail-edit-input--readonly {
+  background: var(--color-border-hover);
+  color: var(--color-fg-tertiary);
+  cursor: not-allowed;
+}
+
+.retail-edit-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.retail-edit-modal-btn {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: inherit;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out);
+}
+
+.retail-edit-modal-btn--secondary {
+  background: var(--color-border-hover);
+  color: var(--color-fg-primary);
+  border: 1px solid var(--color-border-strong);
+}
+
+.retail-edit-modal-btn--secondary:hover {
+  background: var(--color-border-strong);
+}
+
+.retail-edit-modal-btn--primary {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  border: 1px solid var(--color-accent);
+}
+
+.retail-edit-modal-btn--primary:hover {
+  filter: brightness(1.1);
 }

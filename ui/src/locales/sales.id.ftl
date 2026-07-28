@@ -790,6 +790,18 @@ retail-col-stock = Stok
 retail-col-price = Harga
 retail-col-action = Aksi
 
+# ── Edit Product Modal ──
+retail-edit-product-title = Edit Produk
+retail-edit-field-sku = SKU / Kode
+retail-edit-field-name = Nama Produk
+retail-edit-field-price = Harga (IDR)
+retail-edit-field-stock = Jumlah Stok
+retail-edit-field-low-stock = Ambang Stok Rendah
+retail-edit-field-high-stock = Ambang Stok Tinggi
+retail-edit-save = Simpan Perubahan
+retail-edit-cancel = Batal
+retail-edit-btn-aria = Edit produk { $name }
+
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan

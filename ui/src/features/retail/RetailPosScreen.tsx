@@ -24,6 +24,7 @@ import { formatMoney, type CartId, type LineId, type Money, type Product, type S
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import ScaleIndicator from './ScaleIndicator';
+import { EditProductModal } from './EditProductModal';
 import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
@@ -381,6 +382,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const [productPage, setProductPage] = useState(0);
   const PAGE_SIZE = 50;
+
+  const [editingProduct, setEditingProduct] = useState<ProductDto | null>(null);
+
+  const handleEditProduct = useCallback((p: ProductDto) => {
+    setEditingProduct(p);
+  }, []);
+
+  const handleSaveProductEdit = useCallback((updatedProduct: ProductDto) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.sku === updatedProduct.sku ? updatedProduct : p)),
+    );
+    setEditingProduct(null);
+  }, [setProducts]);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.product_type === 'retail');
@@ -1238,6 +1252,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                       catHue={catHue}
                       formatMoney={formatMoney}
                       handleAdd={handleAdd}
+                      handleEdit={handleEditProduct}
                       handleOpenQtyPicker={handleOpenQtyPicker}
                       scaleEnabled={isEnabled(FEATURES.USB_SCALE)}
                       onSetWeighTarget={handleSetWeighTarget}
@@ -1977,6 +1992,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         />
       )}
 
+      {/* ── Edit Product modal ──────────────── */}
+      <EditProductModal
+        product={editingProduct}
+        isOpen={Boolean(editingProduct)}
+        onClose={() => setEditingProduct(null)}
+        onSave={handleSaveProductEdit}
+      />
+
       {/* ── Quick Return modal ──────────────── */}
       {retailQuickReturnExit.shouldRender && (
         <button
@@ -2049,11 +2072,12 @@ function isPriceRecent(p: ProductDto): boolean {
   return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
 }
 
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget }: {
+function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget }: {
   product: ProductDto;
   catHue: (catId: string | null) => number;
   formatMoney: (m: Money) => string;
   handleAdd: (p: ProductDto) => void;
+  handleEdit: (p: ProductDto) => void;
   handleOpenQtyPicker: (p: ProductDto) => void;
   scaleEnabled: boolean;
   onSetWeighTarget: (p: ProductDto) => void;
@@ -2062,6 +2086,15 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
   const priceRecent = useMemo(() => isPriceRecent(product), [product]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
+
+  const lowThreshold = product.low_stock_threshold ?? 5;
+  const highThreshold = product.high_stock_threshold ?? 10;
+  const stockLevel =
+    product.stock_qty != null && product.stock_qty <= lowThreshold
+      ? 'low'
+      : product.stock_qty != null && product.stock_qty <= highThreshold
+      ? 'medium'
+      : 'high';
 
   const handlePointerDown = useCallback(() => {
     if (isOutOfStock) return;
@@ -2102,7 +2135,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
       </td>
       <td className="retail-col-stock">
         {product.stock_qty != null && product.stock_qty > 0 ? (
-          <span className={`retail-product-stock-badge retail-stock-${product.stock_qty <= 5 ? 'low' : product.stock_qty <= 10 ? 'medium' : 'high'}`}>
+          <span className={`retail-product-stock-badge retail-stock-${stockLevel}`}>
             {product.stock_qty}
           </span>
         ) : (
@@ -2111,7 +2144,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
       </td>
       <td className="retail-col-price">{formatMoney(product.price)}</td>
       <td className="retail-col-action">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+        <div className="retail-col-action-group">
           <button
             type="button"
             className="retail-table-add-btn"
@@ -2121,6 +2154,18 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPic
             }}
           >
             + Cart
+          </button>
+          <button
+            type="button"
+            className="retail-table-edit-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleEdit(product);
+            }}
+            aria-label={`Edit ${product.name}`}
+          >
+            Edit
           </button>
           {scaleEnabled && (
             <button

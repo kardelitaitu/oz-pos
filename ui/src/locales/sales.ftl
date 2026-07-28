@@ -799,6 +799,18 @@ retail-col-stock = Stock
 retail-col-price = Price
 retail-col-action = Action
 
+# ── Edit Product Modal ──
+retail-edit-product-title = Edit Product
+retail-edit-field-sku = SKU / Code
+retail-edit-field-name = Product Name
+retail-edit-field-price = Price (IDR)
+retail-edit-field-stock = Stock Quantity
+retail-edit-field-low-stock = Low Stock Threshold
+retail-edit-field-high-stock = High Stock Threshold
+retail-edit-save = Save Changes
+retail-edit-cancel = Cancel
+retail-edit-btn-aria = Edit product { $name }
+
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...
 gift-cards-status-all = All Statuses
