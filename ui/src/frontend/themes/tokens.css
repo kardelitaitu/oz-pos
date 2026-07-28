@@ -274,6 +274,23 @@
   --color-ink:                #000000;
   /* Text on POS primary-coloured surfaces — always light for contrast. */
   --color-pos-on-primary:     #ffffff;
+
+  /* ── POS Modal Tokens (theme-aware, replaces hardcoded Tailwind greys) ─ */
+  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.8);
+  --color-pos-modal-bg:           #111827;
+  --color-pos-modal-border:       #374151;
+  --color-pos-modal-fg:           #f9fafb;
+  --color-pos-modal-heading:      #f9fafb;
+  --color-pos-modal-label:        #9ca3af;
+  --color-pos-modal-input-bg:     #1f2937;
+  --color-pos-modal-input-border: #374151;
+  --color-pos-modal-input-fg:     #f9fafb;
+  --color-pos-modal-btn-bg:       #374151;
+  --color-pos-modal-btn-fg:       #f3f4f6;
+  --color-pos-modal-btn-border:   #4b5563;
+  --color-pos-modal-btn-hover-bg: #4b5563;
+  --color-pos-modal-btn-hover-fg: #ffffff;
+  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
 }
 
 /* ── Light mode (Steel Blue Elevated) ────────────────────────────── */
@@ -381,6 +398,23 @@
   --color-ink:                #000000;
   /* Text on POS primary-coloured surfaces — always light for contrast. */
   --color-pos-on-primary:     #ffffff;
+
+  /* ── POS Modal Tokens (light) ─ */
+  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.5);
+  --color-pos-modal-bg:           #ffffff;
+  --color-pos-modal-border:       #d1d5db;
+  --color-pos-modal-fg:           #111827;
+  --color-pos-modal-heading:      #111827;
+  --color-pos-modal-label:        #6b7280;
+  --color-pos-modal-input-bg:     #f9fafb;
+  --color-pos-modal-input-border: #d1d5db;
+  --color-pos-modal-input-fg:     #111827;
+  --color-pos-modal-btn-bg:       #f3f4f6;
+  --color-pos-modal-btn-fg:       #374151;
+  --color-pos-modal-btn-border:   #d1d5db;
+  --color-pos-modal-btn-hover-bg: #e5e7eb;
+  --color-pos-modal-btn-hover-fg: #111827;
+  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.15);
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -485,6 +519,23 @@
   --color-ink:                #000000;
   /* Text on POS primary-coloured surfaces — always light for contrast. */
   --color-pos-on-primary:     #ffffff;
+
+  /* ── POS Modal Tokens (dark) ─ */
+  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.8);
+  --color-pos-modal-bg:           var(--neutral-100);
+  --color-pos-modal-border:       var(--neutral-300);
+  --color-pos-modal-fg:           var(--neutral-900);
+  --color-pos-modal-heading:      var(--neutral-900);
+  --color-pos-modal-label:        var(--neutral-600);
+  --color-pos-modal-input-bg:     var(--neutral-200);
+  --color-pos-modal-input-border: var(--neutral-300);
+  --color-pos-modal-input-fg:     var(--neutral-800);
+  --color-pos-modal-btn-bg:       var(--neutral-300);
+  --color-pos-modal-btn-fg:       var(--neutral-800);
+  --color-pos-modal-btn-border:   var(--neutral-400);
+  --color-pos-modal-btn-hover-bg: var(--neutral-400);
+  --color-pos-modal-btn-hover-fg: var(--neutral-950);
+  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
 }
 
 /* ── Smooth theme transitions ──────────────────── */

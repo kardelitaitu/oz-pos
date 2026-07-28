@@ -1057,8 +1057,8 @@
 .retail-quick-return-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1075,13 +1075,13 @@
 .retail-preview-modal,
 .retail-quick-return-modal {
   position: relative;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: var(--radius-xl) !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
+  border-radius: var(--radius-xl);
   padding: var(--space-5);
   min-width: 20rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-  color: #f9fafb !important;
+  box-shadow: var(--color-pos-modal-shadow);
+  color: var(--color-pos-modal-fg);
   animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
@@ -1178,7 +1178,7 @@
 .retail-preview-modal h3 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-md);
-  color: #f9fafb !important;
+  color: var(--color-pos-modal-heading);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -1190,7 +1190,7 @@
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-1);
-  color: #9ca3af !important;
+  color: var(--color-pos-modal-label);
 }
 
 .retail-shift-modal input,
@@ -1200,9 +1200,9 @@
   width: 100%;
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  border: 1px solid #374151 !important;
-  background: #1f2937 !important;
-  color: #f9fafb !important;
+  border: 1px solid var(--color-pos-modal-input-border);
+  background: var(--color-pos-modal-input-bg);
+  color: var(--color-pos-modal-input-fg);
   border-radius: var(--radius-sm);
   font-family: inherit;
   box-sizing: border-box;
@@ -1219,18 +1219,18 @@
   padding: var(--space-2_5) var(--space-4);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
-  border: 1px solid #4b5563 !important;
+  border: 1px solid var(--color-pos-modal-btn-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-transform: uppercase;
-  background: #374151 !important;
-  color: #f3f4f6 !important;
+  background: var(--color-pos-modal-btn-bg);
+  color: var(--color-pos-modal-btn-fg);
   transition: background-color var(--duration-150) var(--ease-out);
 }
 
 .retail-shift-modal-actions button:hover:not(:disabled) {
-  background: #4b5563 !important;
-  color: #ffffff !important;
+  background: var(--color-pos-modal-btn-hover-bg);
+  color: var(--color-pos-modal-btn-hover-fg);
 }
 
 .retail-shift-modal-actions button:disabled {
@@ -1239,25 +1239,25 @@
 }
 
 .retail-shift-confirm-btn {
-  background: #10b981 !important;
-  color: #ffffff !important;
-  border: 1px solid #10b981 !important;
+  background: var(--color-success-pos);
+  color: var(--color-pos-on-primary);
+  border: 1px solid var(--color-success-pos);
 }
 
 .retail-shift-confirm-btn:hover:not(:disabled) {
-  background: #059669 !important;
-  border-color: #059669 !important;
+  background: var(--color-success-pos-darker);
+  border-color: var(--color-success-pos-darker);
 }
 
 .retail-shift-confirm-btn--danger {
-  background: #ef4444 !important;
-  color: #ffffff !important;
-  border: 1px solid #ef4444 !important;
+  background: var(--color-danger);
+  color: var(--color-danger-fg);
+  border: 1px solid var(--color-danger);
 }
 
 .retail-shift-confirm-btn--danger:hover:not(:disabled) {
-  background: #dc2626 !important;
-  border-color: #dc2626 !important;
+  background: var(--color-danger-hover);
+  border-color: var(--color-danger-hover);
 }
 
 .retail-shift-error {
@@ -1344,36 +1344,18 @@
 
 /* ── Held carts list modal ─────────────────────────────────── */
 
-.retail-held-carts-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: retail-modal-fade-in var(--duration-200) var(--ease-out);
-}
+/* Base overlay/modal styles inherited from combined .retail-*-overlay / .retail-*-modal block above.
+   Only variant-specific properties are defined here. */
 .retail-held-carts-modal {
-  position: relative;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
   min-width: 360px;
   max-width: 30rem;
   max-height: 70vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-  animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 .retail-held-carts-modal h3 {
-  margin: 0 0 var(--space-3);
   font-size: var(--text-base);
-  color: #f9fafb !important;
-  text-transform: uppercase;
+  color: var(--color-pos-modal-heading);
 }
 .retail-held-carts-empty {
   text-align: center;
@@ -1445,34 +1427,13 @@
 
 /* ── Discount modal ────────────────────────────────────────── */
 
-.retail-discount-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: retail-modal-fade-in var(--duration-200) var(--ease-out);
-}
-
+/* Base overlay/modal styles inherited from combined block. */
 .retail-discount-modal {
-  position: relative;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
   min-width: 17.5rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-  animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
-
 .retail-discount-modal h3 {
-  margin: 0 0 var(--space-3);
   font-size: var(--text-base);
-  color: #f9fafb !important;
-  text-transform: uppercase;
+  color: var(--color-pos-modal-heading);
 }
 
 .retail-discount-modal label {
@@ -1641,27 +1602,18 @@
 
 /* ── Preview popup overlay ───────────────────────────── */
 
+/* Base overlay/modal styles inherited from combined block.
+   Preview uses higher z-index (9999) and has no entry animation. */
 .retail-preview-overlay {
-  position: fixed;
-  inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  animation: none;
 }
 
 .retail-preview-modal {
-  position: relative;
   max-width: 95vw;
   max-height: 95vh;
   overflow: auto;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  animation: none;
 }
 
 .retail-preview-close {
@@ -1865,28 +1817,10 @@
 
 /* ── Quantity picker modal ──────────────────────────────────── */
 
-.retail-qty-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: retail-modal-fade-in var(--duration-200) var(--ease-out);
-}
-
+/* Base overlay/modal styles inherited from combined block. */
 .retail-qty-modal {
-  position: relative;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
   min-width: 17.5rem;
   text-align: center;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-  animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
 .retail-qty-heading {
