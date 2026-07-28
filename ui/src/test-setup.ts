@@ -2,7 +2,8 @@
 // polyfills the components need.
 
 import '@testing-library/jest-dom/vitest';
-import { beforeEach, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import { beforeEach, afterEach, vi } from 'vitest';
 import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
 
 // ── Global mock: @tauri-apps/api/event ─────────────────────────
@@ -78,13 +79,30 @@ vi.mock('@/contexts/WorkspaceContext', async (importOriginal) => {
   };
 });
 
-// ── Global beforeEach: clean mocks and localStorage ─────────────
+// ── Global beforeEach: clean mocks and browser state ────────────
 // Every test starts with a clean slate. Individual test files that
 // need additional setup (e.g. mockImplementation overrides) add
 // their own beforeEach after this global one runs.
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
+
+  // Reset theme-related DOM pollution that can leak between test files
+  // in the same vitest worker (e.g. ThemeProvider leaves data-theme and
+  // test-injected style tags behind). This prevents cross-file flakes.
+  const html = document.documentElement;
+  html.removeAttribute('data-theme');
+  html.classList.remove('is-theme-transitioning');
+  document.querySelectorAll('style#theme-test-styles').forEach((el) => el.remove());
+});
+
+// ── Global afterEach: remove rendered React trees ─────────────────
+// Vitest does not auto-cleanup testing-library renders the way Jest
+// does. Leaving portals/overlays mounted can pollute the DOM for the
+// next test and cause order-dependent flakes.
+afterEach(() => {
+  cleanup();
 });
 
 // matchMedia is not implemented in jsdom; Fluent uses it for

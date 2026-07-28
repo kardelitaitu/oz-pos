@@ -291,7 +291,7 @@ describe('RetailPosScreen — checkout & navigation', () => {
       (btn) => btn.textContent?.includes('Exact'),
     )!;
     await userEvent.click(exactBtn);
-    expect(screen.getByText(/Change/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Change/)).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /^Complete$/i }));
     // ReceiptPreview shows after sale completes — verify it rendered
     await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument(), { timeout: 5000 });
@@ -398,8 +398,10 @@ describe('RetailPosScreen — checkout & navigation', () => {
       (btn) => btn.textContent?.includes('10.000'),
     )!;
     await userEvent.click(tenKBtn);
-    // Change should be displayed
-    expect(screen.getByText(/Change/)).toBeInTheDocument();
+    // Change is rendered by a useEffect after the tender state updates, so
+    // wait for it rather than asserting synchronously — this avoids a known
+    // cross-file flake when retail+theme tests share a vitest worker.
+    await waitFor(() => expect(screen.getByText(/Change/)).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /^Complete$/i }));
     // ReceiptPreview shows after sale completes — verify it rendered
     await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument(), { timeout: 5000 });
