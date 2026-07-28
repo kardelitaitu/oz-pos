@@ -15,7 +15,7 @@ findings: unsafe env::set_var removed from async command path; terminal_id writt
 //! after the initial Setup Wizard.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::{Feature, FeatureGuardRegistry, Store, Terminal};
 use platform_kernel::ModuleStatus;
@@ -51,7 +51,7 @@ pub struct ListAllFeaturesResult {
 /// and dependency information.
 ///
 /// The front-end renders this into the Feature Toggle screen.
-#[command]
+#[tauri::command]
 pub async fn list_all_features(
     state: State<'_, AppState>,
 ) -> Result<ListAllFeaturesResult, AppError> {
@@ -134,7 +134,7 @@ pub struct SetFeaturesBulkArgs {
 ///
 /// This is intended for bulk group toggles in the Feature Toggle screen
 /// (e.g. "Enable all Hardware", "Disable all Advanced").
-#[command]
+#[tauri::command]
 pub async fn set_features_bulk(
     args: SetFeaturesBulkArgs,
     state: State<'_, AppState>,
@@ -185,7 +185,7 @@ pub async fn set_features_bulk(
 /// `kernel.start_module` / `kernel.stop_module`. Module lifecycle
 /// failures are logged but do not prevent the feature toggle from
 /// succeeding — the feature registry is persisted regardless.
-#[command]
+#[tauri::command]
 pub async fn set_feature(
     args: SetFeatureArgs,
     state: State<'_, AppState>,

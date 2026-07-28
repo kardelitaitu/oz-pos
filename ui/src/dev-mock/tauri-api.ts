@@ -112,6 +112,46 @@ const MOCK_WORKSPACES = [
   { instance_id: 'ws-5', type_key: 'admin', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Admin', description: 'Settings & management', icon: 'settings', layout_mode: 'default', colour: '#8b5cf6', is_default: false },
 ];
 
+// ── Mock KDS orders ──────────────────────────────────────────────
+const MOCK_KDS_ORDERS = [
+  {
+    id: 'kds-order-1',
+    display_number: 101,
+    status: 'pending',
+    received_at: new Date(Date.now() - 60000).toISOString(),
+    items_summary: '1x Caffè Latte, 1x Butter Croissant',
+    item_count: 2,
+    order_type: 'dine_in',
+    table_number: 'T3',
+    notes: null,
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-2',
+    display_number: 102,
+    status: 'preparing',
+    received_at: new Date(Date.now() - 300000).toISOString(),
+    items_summary: '2x Espresso Shot, 1x Iced Coffee',
+    item_count: 3,
+    order_type: 'takeaway',
+    table_number: null,
+    notes: 'No ice please',
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-3',
+    display_number: 103,
+    status: 'ready',
+    received_at: new Date(Date.now() - 600000).toISOString(),
+    items_summary: '1x Matcha Latte',
+    item_count: 1,
+    order_type: 'dine_in',
+    table_number: 'T7',
+    notes: null,
+    store_id: 'store-1',
+  },
+];
+
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
 const loginAttempts: Record<string, number> = {};
 const LOCKOUT_THRESHOLD = 4;
@@ -881,10 +921,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // KDS
   // ═══════════════════════════════════════════════════════════════
 
-  'list_kds_orders': () => [],
-  'list_kds_orders_scoped': () => [],
-  'get_kds_queue': () => [],
-  'get_kds_queue_scoped': () => [],
+  'list_kds_orders': () => MOCK_KDS_ORDERS,
+  'list_kds_orders_scoped': () => MOCK_KDS_ORDERS,
+  'get_kds_queue': () => MOCK_KDS_ORDERS,
+  'get_kds_queue_scoped': () => MOCK_KDS_ORDERS,
   'update_kds_status': () => null,
   'update_kds_status_scoped': () => null,
   'create_kds_order_from_sale': () => [],

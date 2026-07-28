@@ -3,6 +3,8 @@
 //! These commands are the IPC surface for `ui/src/features/auth/`. PIN
 //! hashing and verification is delegated to `oz_core::auth`.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
@@ -200,6 +202,7 @@ pub struct SessionContextDto {
 /// Create a new session and return an opaque session token.
 ///
 /// ADR #4 / ADR #7: Called after login + workspace selection.
+/// Session TTL (default 24h) is configurable via `session.ttl_seconds`.
 #[command]
 pub async fn create_session(
     args: CreateSessionArgs,
@@ -212,24 +215,79 @@ pub async fn create_session(
         ));
     }
 
+    // Server-side authorization: verify the user has a valid role assignment
+    // for the requested workspace instance (ADR #4 / ADR #7).
+    {
+        let db = state.db.lock().await;
+        let store = oz_core::db::Store::new(&db);
+        if !store.verify_instance_access(
+            &args.role_id,
+            &args.user_id,
+            &args.instance_id,
+            &args.store_id,
+        )? {
+            tracing::warn!(
+                user_id = %args.user_id,
+                role_id = %args.role_id,
+                instance_id = %args.instance_id,
+                "authorization denied — user has no access to this instance"
+            );
+            return Err(AppError::Invalid(
+                "User does not have access to this workspace instance".into(),
+            ));
+        }
+    }
+
     let token = uuid::Uuid::now_v7().to_string();
 
+    // Snapshot the current time once for both expiry and creation timestamp.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    // Compute session expiry from the cached TTL setting.
+    let expires_at = if state.session_ttl_seconds > 0 {
+        Some(now_ts + state.session_ttl_seconds)
+    } else {
+        None
+    };
+
     {
-        let mut store = state
+        let mut session_store = state
             .session_store
             .write()
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
 
-        if store.contains_key(&token) {
+        // Lazy prune: sweep expired sessions when the store is near capacity.
+        if session_store.len() >= 200 {
+            let before = session_store.len();
+            session_store.retain(|_, ctx| !ctx.is_expired());
+            let pruned = before - session_store.len();
+            if pruned > 0 {
+                tracing::info!("lazy prune removed {pruned} expired session(s)");
+            }
+        }
+
+        if session_store.contains_key(&token) {
             tracing::warn!(token = %token, "session token collision detected — overwriting");
         }
 
+        // Deterministic LRU eviction: find the oldest session by created_at.
         const MAX_SESSIONS: usize = 256;
-        if store.len() >= MAX_SESSIONS
-            && let Some(old_token) = store.keys().next().cloned()
-        {
-            store.remove(&old_token);
-            tracing::warn!(old_token = %old_token, "session store full — evicted oldest session");
+        if session_store.len() >= MAX_SESSIONS {
+            let oldest_entry = session_store
+                .iter()
+                .min_by_key(|(_, ctx)| ctx.created_at)
+                .map(|(token, _)| token.clone());
+
+            if let Some(old_token) = oldest_entry {
+                session_store.remove(&old_token);
+                tracing::warn!(
+                    old_token = %old_token,
+                    "session store full — evicted oldest session by created_at"
+                );
+            }
         }
 
         let context = SessionContext::new(
@@ -239,8 +297,10 @@ pub async fn create_session(
             args.store_id.clone(),
             args.instance_id.clone(),
             args.type_key.clone(),
+            expires_at,
+            now_ts,
         );
-        store.insert(token.clone(), context.clone());
+        session_store.insert(token.clone(), context.clone());
     }
 
     // Invalidate the location cache — a new session means either a fresh
@@ -251,6 +311,7 @@ pub async fn create_session(
     tracing::info!(
         user_id = %args.user_id,
         store_id = %args.store_id,
+        ttl_seconds = %state.session_ttl_seconds,
         "session created"
     );
 

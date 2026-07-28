@@ -128,7 +128,7 @@ impl StripePaymentProcessor {
         let mut headers = HeaderMap::new();
         let mut auth_value = HeaderValue::from_str(&format!("Bearer {}", secret_key))
             .unwrap_or_else(|e| {
-                tracing::error!(?e, "invalid Stripe API key — using placeholder auth header");
+                tracing::error!(error = %e, "invalid Stripe auth header — using placeholder");
                 HeaderValue::from_static("Bearer placeholder")
             });
         auth_value.set_sensitive(true);
@@ -144,8 +144,8 @@ impl StripePaymentProcessor {
             .build()
             .unwrap_or_else(|e| {
                 tracing::error!(
-                    ?e,
-                    "failed to build reqwest Client for Stripe — using default"
+                    error = %e,
+                    "failed to build HTTP client for Stripe — using default"
                 );
                 reqwest::Client::new()
             });

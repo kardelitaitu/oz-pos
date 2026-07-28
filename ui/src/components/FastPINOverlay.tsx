@@ -83,6 +83,43 @@ function UserIcon() {
 // ── Constants ───────────────────────────────────────────────────────
 
 const MAX_PIN_LENGTH = 4;
+const MAX_PIN_ATTEMPTS = 3;
+const RATE_LIMIT_WARN_AFTER = 2;
+
+// Minimum interval (ms) between consecutive staffLogin calls — prevents
+// automated brute-force via high-speed digit entry (e.g. a script
+// that enters 4 digits at 100ms intervals).
+const MIN_ATTEMPT_INTERVAL_MS = 500;
+
+// Module-level global rate limit: max 15 failed attempts per 5 minutes
+// across ALL usernames within a page session. Prevents attackers from
+// rotating through usernames to bypass the per-user rate limiter.
+const GLOBAL_MAX_ATTEMPTS = 15;
+const GLOBAL_WINDOW_MS = 5 * 60 * 1000;
+const globalAttemptTimestamps: number[] = [];
+
+/** Remove expired timestamps older than the window. */
+function pruneGlobalAttemptTimestamps(): void {
+  const now = Date.now();
+  const cutoff = now - GLOBAL_WINDOW_MS;
+  while (globalAttemptTimestamps.length > 0) {
+    const ts = globalAttemptTimestamps[0];
+    if (ts !== undefined && ts < cutoff) {
+      globalAttemptTimestamps.shift();
+    } else {
+      break;
+    }
+  }
+}
+
+/** Check whether the session-level global rate limit has been exceeded. */
+function isGloballyRateLimited(): boolean {
+  return globalAttemptTimestamps.length >= GLOBAL_MAX_ATTEMPTS;
+}
+
+function recordGlobalAttempt(): void {
+  globalAttemptTimestamps.push(Date.now());
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -125,9 +162,22 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exiting, setExiting] = useState(false);
+  const [pinAttempts, setPinAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinSubmitted = useRef(false);
+  const lastAttemptRef = useRef(0);
+
+  // ── Computed rate-limit values ────────────────────────────────
+
+  const remainingAttempts = Math.max(0, MAX_PIN_ATTEMPTS - pinAttempts);
+  const isLocked = lockedUntil !== null;
+  const lockoutRemainingSec = lockedUntil !== null
+    ? Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000))
+    : 0;
 
   // ── Reset state on open ──────────────────────────────────────
 
@@ -138,6 +188,8 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
       setPin([]);
       setError(null);
       setLoading(false);
+      setPinAttempts(0);
+      setLockedUntil(null);
       pinSubmitted.current = false;
     }
   }, [open]);
@@ -193,10 +245,49 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose, exiting]);
 
+  // ── Auto-unlock after lockout period ─────────────────────────
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const remaining = lockedUntil - Date.now();
+    if (remaining <= 0) {
+      setLockedUntil(null);
+      setPinAttempts(0);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setLockedUntil(null);
+      setPinAttempts(0);
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [lockedUntil]);
+
   // ── Verify PIN and swap session ─────────────────────────────
 
   const attemptVerify = useCallback(async () => {
-    if (pin.length === 0) return;
+    if (pin.length === 0 || isLocked) return;
+
+    // Enforce minimum interval between staffLogin calls to prevent
+    // rapid automated attacks (e.g. a script entering digits at 100ms).
+    const elapsed = Date.now() - lastAttemptRef.current;
+    if (elapsed < MIN_ATTEMPT_INTERVAL_MS) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, MIN_ATTEMPT_INTERVAL_MS - elapsed),
+      );
+    }
+    lastAttemptRef.current = Date.now();
+
+    // Session-scoped global rate limit: reject if this page session has
+    // exceeded 15 failed attempts across ALL usernames in 5 minutes.
+    // This prevents username rotation attacks against the per-user limiter.
+    pruneGlobalAttemptTimestamps();
+    if (isGloballyRateLimited()) {
+      setError(l10nRef.current.getString('staff-login-lockout', { seconds: String(Math.ceil(GLOBAL_WINDOW_MS / 1000)) }));
+      setLoading(false);
+      return;
+    }
+    recordGlobalAttempt();
+
     setLoading(true);
     setError(null);
     try {
@@ -223,10 +314,21 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
         err instanceof Error ? err.message : "PIN verification failed";
       setError(message);
       setPin([]);
+      // Increment local attempt counter — even if the backend error is
+      // identical to a previous one, the counter advances so the client
+      // can eventually lock the pad and force a cooldown.
+      setPinAttempts((prev) => prev + 1);
+      // Parse backend rate-limit error to sync the client lockout timer.
+      const lockoutMatch = message.match(/Try again in (\d+)s/);
+      if (lockoutMatch && lockoutMatch[1]) {
+        const seconds = parseInt(lockoutMatch[1], 10);
+        setLockedUntil(Date.now() + seconds * 1000);
+        setPinAttempts(MAX_PIN_ATTEMPTS);
+      }
     } finally {
       setLoading(false);
     }
-  }, [pin, username, swapSession, swapSessionToken, onClose, onVerified]);
+  }, [pin, username, swapSession, swapSessionToken, onClose, onVerified, isLocked]); /* l10n intentionally excluded via l10nRef — prevents infinite re-render loops from unstable l10n references */
 
   // ── Auto-submit when PIN reaches max length ─────────────────
 
@@ -243,20 +345,23 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
   // ── PIN pad handlers ────────────────────────────────────────
 
   const handlePinDigit = useCallback((digit: string) => {
+    if (isLocked) return;
     setPin((prev) => {
       if (prev.length >= MAX_PIN_LENGTH) return prev;
       return [...prev, digit];
     });
-  }, []);
+  }, [isLocked]);
 
   const handlePinBackspace = useCallback(() => {
+    if (isLocked) return;
     setPin((prev) => prev.slice(0, -1));
-  }, []);
+  }, [isLocked]);
 
   const handlePinClear = useCallback(() => {
+    if (isLocked) return;
     setPin([]);
     pinSubmitted.current = false;
-  }, []);
+  }, [isLocked]);
 
   // ── Back button ─────────────────────────────────────────────
 
@@ -352,7 +457,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
                   className="fastpin-pad-key"
                   onClick={() => handlePinDigit(digit)}
                   aria-label={digit}
-                  disabled={loading}
+                  disabled={loading || isLocked}
                 >
                   {digit}
                 </button>
@@ -367,7 +472,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
               className="fastpin-pad-key fastpin-pad-key--action"
               onClick={handlePinClear}
               aria-label="Clear"
-              disabled={loading || pin.length === 0}
+              disabled={loading || isLocked || pin.length === 0}
             >
               <Localized id="staff-login-clear">Clear</Localized>
             </button>
@@ -382,7 +487,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
               className="fastpin-pad-key"
               onClick={() => handlePinDigit("0")}
               aria-label="0"
-              disabled={loading}
+              disabled={loading || isLocked}
             >
               0
             </button>
@@ -396,7 +501,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
               className="fastpin-pad-key fastpin-pad-key--action"
               onClick={handlePinBackspace}
               aria-label="Backspace"
-              disabled={loading || pin.length === 0}
+              disabled={loading || isLocked || pin.length === 0}
             >
               <BackspaceIcon />
             </button>
@@ -527,7 +632,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
               type="button"
               className="fastpin-submit-btn fastpin-pin-submit"
               onClick={attemptVerify}
-              disabled={pin.length === 0 || loading}
+              disabled={pin.length === 0 || loading || isLocked}
             >
               {loading ? (
                 <>
@@ -557,9 +662,19 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
 
         {/* ── Error ──────────────────────────────────────── */}
         {error && (
-          <div className="fastpin-error" role="alert">
+          <div className="fastpin-error" role="alert" aria-live="polite">
             <AlertIcon />
             {error}
+            {pinAttempts >= RATE_LIMIT_WARN_AFTER && pinAttempts < MAX_PIN_ATTEMPTS && (
+              <span className="fastpin-rate-limit">
+                {' '}{l10n.getString('staff-login-attempts-remaining', { count: String(remainingAttempts) })}
+              </span>
+            )}
+            {isLocked && (
+              <span className="fastpin-rate-limit fastpin-rate-limit--lockout">
+                {' '}{l10n.getString('staff-login-lockout', { seconds: String(lockoutRemainingSec) })}
+              </span>
+            )}
           </div>
         )}
 

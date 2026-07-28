@@ -103,8 +103,7 @@ export function KdsSettingsPanel({
           aria-label={l10n.getString('kds-settings-aria') || 'KDS settings'}
         >
           {/* Sound toggle */}
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="kds-settings-toggle">
+          <label className="kds-settings-toggle" aria-label={l10n.getString('kds-settings-sound') || 'Sound'}>
             <input
               type="checkbox"
               role="switch"
@@ -149,8 +148,7 @@ export function KdsSettingsPanel({
           </div>
 
           {/* Auto-acknowledge toggle */}
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="kds-settings-toggle">
+          <label className="kds-settings-toggle" aria-label={l10n.getString('kds-settings-auto-ack') || 'Auto-acknowledge'}>
             <input
               type="checkbox"
               role="switch"

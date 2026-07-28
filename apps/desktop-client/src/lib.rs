@@ -108,6 +108,50 @@ pub fn run() {
                 crate::email_scheduler::run_scheduler_loop(email_db).await;
             });
 
+            // ── Background session cleanup daemon (TTL expiry) ──────
+            // Runs every 5 minutes to sweep expired sessions from the
+            // in-memory store. Expired sessions are also caught during
+            // resolve_session, so this is a safety net + memory reclaimer.
+            {
+                let session_store = app.state::<AppState>().session_store.clone();
+                platform_startup::spawn_daemon("session cleanup", async move {
+                    let mut interval = tokio::time::interval(
+                        std::time::Duration::from_secs(300),
+                    );
+                    // Skip the first tick so startup isn't delayed.
+                    interval.tick().await;
+                    loop {
+                        interval.tick().await;
+                        let Ok(mut store) = session_store.write() else {
+                            tracing::warn!(
+                                "session store lock poisoned — skipping cleanup cycle"
+                            );
+                            continue;
+                        };
+                        let before = store.len();
+                        store.retain(|token, ctx| {
+                            if ctx.is_expired() {
+                                tracing::trace!(
+                                    token = %token,
+                                    "session cleanup: removing expired session"
+                                );
+                                false
+                            } else {
+                                true
+                            }
+                        });
+                        let pruned = before - store.len();
+                        if pruned > 0 {
+                            tracing::info!(
+                                "session cleanup: pruned {pruned} expired session(s), \
+                                 {remaining} remain",
+                                remaining = store.len()
+                            );
+                        }
+                    }
+                });
+            }
+
             // ── LAN event forwarder ────────────────────────────────────
             // Read LAN server config from the settings table (C-4).
             // Default: loopback-only, no PSK. External bind requires

@@ -3,7 +3,7 @@
 //! Exposes CRUD + send/receive lifecycle operations to the front-end.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::stock_transfer::{StockTransfer, StockTransferLine};
@@ -29,7 +29,7 @@ pub struct TransferWithLines {
     pub lines: Vec<StockTransferLine>,
 }
 
-#[command]
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 /// Create stock transfer.
 pub async fn create_stock_transfer(
@@ -57,7 +57,7 @@ pub async fn create_stock_transfer(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Get stock transfer.
 pub async fn get_stock_transfer(
     id: String,
@@ -75,7 +75,7 @@ pub async fn get_stock_transfer(
     Ok(transfer.map(|t| TransferWithLines { transfer: t, lines }))
 }
 
-#[command]
+#[tauri::command]
 /// List stock transfers.
 pub async fn list_stock_transfers(
     state: State<'_, AppState>,
@@ -87,7 +87,7 @@ pub async fn list_stock_transfers(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Get stock transfer lines.
 pub async fn get_stock_transfer_lines(
     transfer_id: String,
@@ -100,7 +100,7 @@ pub async fn get_stock_transfer_lines(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Add stock transfer line.
 pub async fn add_stock_transfer_line(
     transfer_id: String,
@@ -116,7 +116,7 @@ pub async fn add_stock_transfer_line(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Remove stock transfer line.
 pub async fn remove_stock_transfer_line(
     line_id: String,
@@ -129,7 +129,7 @@ pub async fn remove_stock_transfer_line(
     Ok(())
 }
 
-#[command]
+#[tauri::command]
 /// Send stock transfer.
 pub async fn send_stock_transfer(
     id: String,
@@ -142,7 +142,7 @@ pub async fn send_stock_transfer(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Receive stock transfer.
 pub async fn receive_stock_transfer(
     id: String,
@@ -164,7 +164,7 @@ pub async fn receive_stock_transfer(
     Ok(result)
 }
 
-#[command]
+#[tauri::command]
 /// Cancel stock transfer.
 pub async fn cancel_stock_transfer(
     id: String,

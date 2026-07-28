@@ -78,6 +78,35 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 app.manage(state);
 
+                // ── Background session cleanup daemon (TTL expiry) ──────
+                // Runs every 5 minutes to sweep expired sessions from the
+                // in-memory session store.
+                {
+                    let session_store = app.state::<AppState>().session_store.clone();
+                    platform_startup::spawn_daemon("tablet session cleanup", async move {
+                        let mut interval =
+                            tokio::time::interval(std::time::Duration::from_secs(300));
+                        interval.tick().await;
+                        loop {
+                            interval.tick().await;
+                            let Ok(mut store) = session_store.write() else {
+                                tracing::warn!(
+                                    "session store lock poisoned — skipping cleanup cycle"
+                                );
+                                continue;
+                            };
+                            let before = store.len();
+                            store.retain(|_, ctx| !ctx.is_expired());
+                            let pruned = before - store.len();
+                            if pruned > 0 {
+                                tracing::info!(
+                                    "tablet session cleanup: pruned {pruned} expired session(s)"
+                                );
+                            }
+                        }
+                    });
+                }
+
                 // ── Background sync daemon ────────────────────────────────
                 // Uses the same 3-phase split as the Tauri commands:
                 // read DB → async HTTP → write DB, so the DB lock is never

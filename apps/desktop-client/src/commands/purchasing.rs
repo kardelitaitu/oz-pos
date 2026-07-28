@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::{Store, purchase_orders::CreatePoLineInput};
 use oz_core::{PurchaseOrderLine, PurchaseOrderWithLines, Supplier};
@@ -252,7 +252,7 @@ pub struct UpdatePoStatusArgs {
 
 // ── Supplier commands ───────────────────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// List suppliers.
 pub async fn list_suppliers(state: State<'_, AppState>) -> Result<Vec<SupplierDto>, AppError> {
     let db = state.db.lock().await;
@@ -262,7 +262,7 @@ pub async fn list_suppliers(state: State<'_, AppState>) -> Result<Vec<SupplierDt
     Ok(suppliers.into_iter().map(SupplierDto::from).collect())
 }
 
-#[command]
+#[tauri::command]
 /// Get supplier.
 pub async fn get_supplier(
     id: String,
@@ -275,7 +275,7 @@ pub async fn get_supplier(
     Ok(supplier.map(SupplierDto::from))
 }
 
-#[command]
+#[tauri::command]
 /// Create supplier.
 pub async fn create_supplier(
     args: CreateSupplierArgs,
@@ -301,7 +301,7 @@ pub async fn create_supplier(
     Ok(SupplierDto::from(supplier))
 }
 
-#[command]
+#[tauri::command]
 /// Update supplier.
 pub async fn update_supplier(
     args: UpdateSupplierArgs,
@@ -331,7 +331,7 @@ pub async fn update_supplier(
 
 // ── Purchase Order commands ─────────────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// List purchase orders.
 pub async fn list_purchase_orders(
     state: State<'_, AppState>,
@@ -343,7 +343,7 @@ pub async fn list_purchase_orders(
     Ok(pos.into_iter().map(PurchaseOrderDto::from).collect())
 }
 
-#[command]
+#[tauri::command]
 /// Get purchase order.
 pub async fn get_purchase_order(
     id: String,
@@ -356,7 +356,7 @@ pub async fn get_purchase_order(
     Ok(po.map(PurchaseOrderDto::from))
 }
 
-#[command]
+#[tauri::command]
 /// Create purchase order.
 pub async fn create_purchase_order(
     args: CreatePurchaseOrderArgs,
@@ -389,7 +389,7 @@ pub async fn create_purchase_order(
     Ok(PurchaseOrderDto::from(po))
 }
 
-#[command]
+#[tauri::command]
 /// Update po status.
 pub async fn update_po_status(
     args: UpdatePoStatusArgs,
@@ -402,7 +402,7 @@ pub async fn update_po_status(
     Ok(PurchaseOrderDto::from(po))
 }
 
-#[command]
+#[tauri::command]
 /// Receive purchase order.
 pub async fn receive_purchase_order(
     id: String,

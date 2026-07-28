@@ -12,14 +12,14 @@ use oz_core::{
         WorkspaceLocationBinding, get_workspace_locations, invalidate_location_cache,
     },
 };
-use tauri::{State, command};
+use tauri::State;
 
 // ── Locations CRUD ──────────────────────────────────────────────────
 
 /// Create a new inventory location.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn create_inventory_location(
     session_token: String,
     name: String,
@@ -50,7 +50,7 @@ pub async fn create_inventory_location(
 /// List all inventory locations.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn list_inventory_locations(
     session_token: String,
     state: State<'_, AppState>,
@@ -78,7 +78,7 @@ pub async fn list_inventory_locations(
 /// Update details of an existing inventory location.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn update_inventory_location(
     session_token: String,
     id: String,
@@ -110,7 +110,7 @@ pub async fn update_inventory_location(
 /// Deactivate an inventory location (fails if contains stock or pending transfers).
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn deactivate_inventory_location(
     session_token: String,
     id: String,
@@ -139,7 +139,7 @@ pub async fn deactivate_inventory_location(
 /// Resolve locations bound to a workspace instance (unified resolver ADR-19 §10).
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_workspace_locations_scoped(
     session_token: String,
     instance_id: String,
@@ -167,7 +167,7 @@ pub async fn get_workspace_locations_scoped(
 }
 
 /// Invalidate the location resolver cache.
-#[command]
+#[tauri::command]
 pub async fn invalidate_location_cache_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -182,7 +182,7 @@ pub async fn invalidate_location_cache_scoped(
 /// Set inventory location bindings for a workspace instance.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn set_workspace_inventory_locations(
     session_token: String,
     instance_id: String,
@@ -212,7 +212,7 @@ pub async fn set_workspace_inventory_locations(
 /// Get inventory location bindings for a workspace instance.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_workspace_inventory_locations(
     session_token: String,
     instance_id: String,
@@ -243,7 +243,7 @@ pub async fn get_workspace_inventory_locations(
 /// Start a new inventory shift for the current user at a location.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn start_inventory_shift(
     session_token: String,
     location_id: String,
@@ -278,7 +278,7 @@ pub async fn start_inventory_shift(
 /// End an active inventory shift.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn end_inventory_shift(
     session_token: String,
     shift_id: String,
@@ -307,7 +307,7 @@ pub async fn end_inventory_shift(
 /// Retrieve the active inventory shift for the current user, if any.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_active_inventory_shift(
     session_token: String,
     state: State<'_, AppState>,
@@ -335,7 +335,7 @@ pub async fn get_active_inventory_shift(
 /// List all inventory shifts history.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn list_inventory_shifts(
     session_token: String,
     state: State<'_, AppState>,
@@ -365,7 +365,7 @@ pub async fn list_inventory_shifts(
 /// Create a new manual / staff inventory transaction audit log session.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn create_inventory_transaction(
     session_token: String,
     type_str: String,
@@ -402,7 +402,7 @@ pub async fn create_inventory_transaction(
 /// List all inventory transactions.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn list_inventory_transactions(
     session_token: String,
     state: State<'_, AppState>,
@@ -430,7 +430,7 @@ pub async fn list_inventory_transactions(
 /// Retrieve details of a single transaction, including its lines.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_inventory_transaction(
     session_token: String,
     id: String,
@@ -461,7 +461,7 @@ pub async fn get_inventory_transaction(
 /// Set a stock alert threshold boundary.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn set_stock_threshold(
     session_token: String,
     product_id: String,
@@ -493,7 +493,7 @@ pub async fn set_stock_threshold(
 /// Get stock alert thresholds for a location.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_stock_thresholds(
     session_token: String,
     location_id: Option<String>,
@@ -522,7 +522,7 @@ pub async fn get_stock_thresholds(
 /// Delete a stock alert threshold boundary.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn delete_stock_threshold(
     session_token: String,
     id: String,
@@ -551,7 +551,7 @@ pub async fn delete_stock_threshold(
 /// Get per-location low stock alerts.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn get_low_stock_alerts_at_location_scoped(
     session_token: String,
     location_id: String,
@@ -583,7 +583,7 @@ pub async fn get_low_stock_alerts_at_location_scoped(
 /// Get active stock alerts for a location (enriched with product SKU/name).
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn active_stock_alerts_scoped(
     session_token: String,
     location_id: String,
@@ -612,7 +612,7 @@ pub async fn active_stock_alerts_scoped(
 /// Acknowledge a stock alert event (records who acknowledged it).
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn acknowledge_stock_alert_scoped(
     session_token: String,
     alert_id: String,
@@ -643,7 +643,7 @@ pub async fn acknowledge_stock_alert_scoped(
 /// Transition a pending sale's status to completed after payment capture.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn finalize_sale(
     session_token: String,
     sale_id: String,
@@ -672,7 +672,7 @@ pub async fn finalize_sale(
 /// Void a pending sale and restore stock.
 ///
 /// Requires `SALES_PROCESS` permission.
-#[command]
+#[tauri::command]
 pub async fn void_pending_sale(
     session_token: String,
     sale_id: String,

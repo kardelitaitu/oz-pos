@@ -7,7 +7,7 @@
 //! server URL and API key.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::settings::Settings;
@@ -29,7 +29,7 @@ pub struct SyncSettingsDto {
 }
 
 /// Get sync settings.
-#[command]
+#[tauri::command]
 pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSettingsDto, AppError> {
     let db = state.db.lock().await;
     let server_url = Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty());
@@ -44,7 +44,7 @@ pub async fn get_sync_settings(state: State<'_, AppState>) -> Result<SyncSetting
 }
 
 /// Get sync settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_sync_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -80,7 +80,7 @@ pub struct UpdateSyncSettingsArgs {
     pub enabled: bool,
 }
 
-#[command]
+#[tauri::command]
 /// Update sync settings.
 pub async fn update_sync_settings(
     args: UpdateSyncSettingsArgs,
@@ -108,7 +108,7 @@ pub async fn update_sync_settings(
 /// lock is not held during the network round-trip, avoiding the
 /// "Cannot drop a runtime in a context where blocking is not allowed"
 /// panic that reqwest::blocking triggers inside Tauri's async runtime.
-#[command]
+#[tauri::command]
 pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, AppError> {
     // Phase 1: Read pending items and config from DB (brief lock).
     let (pending_items, config_opt) = {
@@ -159,7 +159,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
 }
 
 /// Get the pending sync count.
-#[command]
+#[tauri::command]
 pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -174,7 +174,7 @@ pub async fn pending_sync_count(state: State<'_, AppState>) -> Result<i64, AppEr
 /// If `url` is provided (from the front-end text field), it is used
 /// directly so users can request a token before saving. Otherwise the
 /// saved value from settings is used.
-#[command]
+#[tauri::command]
 pub async fn request_sync_token(
     url: Option<String>,
     state: State<'_, AppState>,
@@ -205,7 +205,7 @@ pub async fn request_sync_token(
 /// If `url` is provided (from the front-end text field), it is used
 /// directly so users can test a URL before saving. Otherwise the
 /// saved value from settings is used.
-#[command]
+#[tauri::command]
 pub async fn test_sync_connection(
     url: Option<String>,
     state: State<'_, AppState>,
@@ -229,14 +229,40 @@ pub async fn test_sync_connection(
     }
 }
 
+/// Arguments for `sync_pull`.
+#[derive(Debug, Deserialize)]
+pub struct SyncPullArgs {
+    /// Must be `true` to proceed with the destructive pull.
+    /// Prevents accidental local-data overwrite from UI double-clicks
+    /// or programmatic calls without user consent (H-2).
+    pub confirm_destructive: bool,
+}
+
 /// Pull a server snapshot and overwrite the local cache for products,
-/// tax rates, and users. The UI is expected to confirm the overwrite
-/// before invoking this command.
+/// tax rates, and users.
 ///
-/// Uses a three-phase split (read → async HTTP → write) so the DB
+/// The caller must explicitly acknowledge the destructive nature of this
+/// operation by passing `confirm_destructive: true`. If false, the
+/// command returns an error without fetching from the server.
+///
+/// Before applying the server snapshot, a backup of the current local
+/// database is written to `<db_path>.sync-pull-<timestamp>.backup.db`.
+/// This ensures the local state can be recovered if the pull overwrites
+/// data unexpectedly (H-2).
+///
+/// Uses a three-phase split (read -> async HTTP -> write) so the DB
 /// lock is not held during the network round-trip.
-#[command]
-pub async fn sync_pull(state: State<'_, AppState>) -> Result<PullResult, AppError> {
+#[tauri::command]
+pub async fn sync_pull(
+    args: SyncPullArgs,
+    state: State<'_, AppState>,
+) -> Result<PullResult, AppError> {
+    if !args.confirm_destructive {
+        return Err(AppError::Invalid(
+            "confirm_destructive must be true to proceed with sync pull".into(),
+        ));
+    }
+
     // Phase 1: Read config from DB (brief lock).
     let config_opt = {
         let db = state.db.lock().await;
@@ -259,7 +285,26 @@ pub async fn sync_pull(state: State<'_, AppState>) -> Result<PullResult, AppErro
     // Phase 2: Async HTTP fetch (no DB lock held).
     let snapshot = sync_client::fetch_snapshot_from_server(&config).await;
 
-    // Phase 3: Apply snapshot to DB (brief lock).
+    // Phase 3: Create a pre-pull backup (defence in depth — H-2).
+    // The backup file is timestamped so operators can correlate it with
+    // a specific pull event.
+    {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let mut backup_path = state.db_path.clone();
+        let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+        let ext = format!("sync-pull-{timestamp}.backup.db");
+        backup_path.set_extension(&ext);
+        store
+            .backup(&backup_path.display().to_string())
+            .map_err(|e| {
+                tracing::warn!(backup = %backup_path.display(), error = %e, "sync-pull backup failed");
+                AppError::Internal(format!("sync-pull backup failed: {e}"))
+            })?;
+        tracing::info!(backup = %backup_path.display(), "pre-pull backup created");
+    }
+
+    // Phase 4: Apply snapshot to DB (brief lock).
     let db = state.db.lock().await;
     let store = Store::new(&db);
     match snapshot {
@@ -332,6 +377,27 @@ mod tests {
         let debug = format!("{args:?}");
         assert!(debug.contains("sync.example.com"));
         assert!(debug.contains("true"));
+    }
+
+    #[test]
+    fn sync_pull_args_deserialize() {
+        let json = r#"{"confirm_destructive":true}"#;
+        let args: SyncPullArgs = serde_json::from_str(json).unwrap();
+        assert!(args.confirm_destructive);
+    }
+
+    #[test]
+    fn sync_pull_args_deserialize_false() {
+        let json = r#"{"confirm_destructive":false}"#;
+        let args: SyncPullArgs = serde_json::from_str(json).unwrap();
+        assert!(!args.confirm_destructive);
+    }
+
+    #[test]
+    fn sync_pull_args_default_false() {
+        let json = r#"{"confirm_destructive":false}"#;
+        let args: SyncPullArgs = serde_json::from_str(json).unwrap();
+        assert!(!args.confirm_destructive);
     }
 
     #[test]

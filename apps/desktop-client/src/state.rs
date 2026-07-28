@@ -1,7 +1,7 @@
 /*
 last audited 12-07-27 by C-2 env-var fix
-crate: oz-pos-app | status: SAFE (C-2 resolved) | lint: CLEAN
-findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied | next: consolidate lock types; shutdown channels; SQLCipher | perf: Arc-clones on checkout hot path
+crate: oz-pos-app | status: SAFE (C-2 resolved; M-4, M-5 fixed) | lint: CLEAN
+findings: unsafe env::set_var removed; terminal_id typed field added; Drop bounded retry applied; M-4 logging; M-5 plugin task handle | next: SQLCipher | perf: Arc-clones on checkout hot path
 */
 
 //! `AppState` — the long-lived state managed by Tauri and reached via
@@ -23,6 +23,20 @@ findings: unsafe env::set_var removed; terminal_id typed field added; Drop bound
 //! real deployment will switch to `r2d2_sqlite` or `deadpool-sqlite`
 //! so that Tauri commands can issue concurrent reads (the `rust-backend`
 //! skill prescribes this; switching is mechanical).
+//!
+//! # Sync primitive convention (M-1)
+//!
+//! | Primitive | Where | Why |
+//! |-----------|-------|-----|
+//! | `tokio::sync::Mutex` | Every async-accessible field (`db`, `kernel`, `plugins`, `scanner_cancel`, `terminal_id`) | `.lock().await` is required in Tauri command handlers; calling `.lock()` on `std::sync::Mutex` from async code blocks the tokio worker thread. |
+//! | `std::sync::RwLock` | `session_store` only | Accessed from both sync (`resolve_session`, `create_session`) and async (`session cleanup daemon`) code. `tokio::sync::RwLock::read()` would panic if called from sync context without a blocking wrapper. Keep `std::sync::RwLock` and wrap async access with `tokio::task::spawn_blocking` when necessary. |
+//! | `std::sync::mpsc` | `inventory_pubsub_shutdown` only | Used from `Drop` which is sync-only. Tokio channels don't implement `Sync` and would require an async `Drop` bound. |
+//! | `Arc<AtomicBool>` | Plugin reload flag | Lock-free flag set by the `notify` callback (sync) and consumed by the tokio loop (async). Correct by design — no `.lock()` at all. |
+//!
+//! **Rule of thumb:** When adding a new field to `AppState`, default to
+//! `tokio::sync::Mutex` unless the field is accessed exclusively from
+//! sync code (e.g. `Drop`, `notify` callbacks). If you must use
+//! `std::sync::Mutex`, document why in the field's doc comment.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -82,6 +96,10 @@ pub struct AppState {
     /// Plugin file watcher (kept alive to prevent dropping).
     pub plugin_watcher: Option<notify::RecommendedWatcher>,
 
+    /// Join handle for the plugin hot-reload background task. Aborted on
+    /// [`AppState::drop`] to stop the loop gracefully (M-5).
+    pub plugin_hot_reload_task: Option<tokio::task::JoinHandle<()>>,
+
     /// Background sync daemon. Started during app setup via
     /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
     pub sync_daemon: SyncDaemon,
@@ -101,12 +119,26 @@ pub struct AppState {
     /// Dropped on app shutdown to stop the listener thread gracefully.
     pub inventory_pubsub_shutdown: Option<std::sync::mpsc::Sender<()>>,
 
+    /// Kernel shutdown signal. Send `()` in [`Drop`] before attempting the
+    /// kernel lock retry loop (M-2). Long-running kernel operations can
+    /// listen on the corresponding receiver to abort early on shutdown.
+    pub kernel_shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+
     /// In-memory session store mapping opaque session tokens to resolved
     /// [`SessionContext`] values. ADR #4 / ADR #7.
     ///
     /// Tokens are randomly-generated UUIDs created during login/session
     /// resolution. Commands look up their context via [`AppState::resolve_session`].
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
+
+    /// Session TTL in seconds. Read from `session.ttl_seconds` setting
+    /// at startup; defaults to 86400 (24 hours). Set to 0 to disable
+    /// session expiry (development mode).
+    ///
+    /// Used by `create_session` to stamp `expires_at` on new sessions,
+    /// and by `resolve_session` / `prune_expired_sessions` to reject
+    /// stale tokens.
+    pub session_ttl_seconds: i64,
 
     /// Terminal identifier for multi-terminal deployments.
     ///
@@ -144,10 +176,24 @@ impl AppState {
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
 
         // ── Cache layer initialisation (read settings BEFORE moving conn) ──
-        let redis_url =
-            oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|_| "redis://127.0.0.1/".into());
-        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn).unwrap_or(300);
+        let redis_url = oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to read redis_url setting, falling back to localhost");
+            "redis://127.0.0.1/".into()
+        });
+        let cache_ttl = oz_core::Settings::get_redis_cache_ttl(&conn).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to read cache_ttl setting, falling back to 300s");
+            300u64
+        });
         let cache = platform_startup::init_cache(&redis_url, cache_ttl);
+
+        // ── Session TTL ──────────────────────────────────────────────
+        // Read from settings; default 24h. 0 or missing = no expiry.
+        // MUST be read before `conn` is moved into `Arc::new(Mutex::new(conn))`.
+        let session_ttl_seconds: i64 = oz_core::Settings::get(&conn, "session.ttl_seconds")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(86400);
 
         // ── OZ_TERMINAL_ID for multi-terminal support ───────────────
         // On subsequent launches where MultiTerminal is already enabled,
@@ -206,13 +252,21 @@ impl AppState {
                 },
             )));
 
-        // Start plugin hot-reload file watcher.
-        let plugin_watcher = plugins_dir.as_ref().and_then(|dir| {
-            if !dir.exists() {
-                return None;
+        // Start plugin hot-reload file watcher (M-5).
+        let (plugin_watcher, plugin_hot_reload_task) = if let Some(dir) = plugins_dir.as_ref() {
+            if dir.exists() {
+                start_plugin_watcher(plugins.clone(), dir.clone())
+            } else {
+                (None, None)
             }
-            start_plugin_watcher(plugins.clone(), dir.clone())
-        });
+        } else {
+            (None, None)
+        };
+
+        // ── Kernel shutdown channel (M-2) ────────────────────────────
+        // The receiver is dropped here — the infrastructure is in place for
+        // future long-running kernel operations to listen for shutdown.
+        let (kernel_shutdown_tx, _kernel_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
         tracing::info!(
             cache_healthy = cache.is_healthy(),
@@ -231,10 +285,13 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             plugins,
             plugin_watcher,
+            plugin_hot_reload_task,
             sync_daemon: SyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
+            kernel_shutdown: Some(kernel_shutdown_tx),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds,
             terminal_id,
         })
     }
@@ -289,13 +346,77 @@ impl AppState {
     ///
     /// ADR #4 / ADR #7: Commands call this to look up the caller's
     /// resolved scope (store, instance, type, user, role, terminal).
-    /// Returns `AppError::InvalidSession` if the token is unknown.
+    /// Returns `AppError::InvalidSession` if the token is unknown
+    /// OR if the session has expired (TTL check).
+    ///
+    /// Expired sessions are atomically removed from the store during
+    /// resolution, so subsequent lookups also get `InvalidSession`.
+    ///
+    /// Uses a double-check lock pattern: the fast path (valid session)
+    /// only acquires a shared read lock. The exclusive write lock is
+    /// only acquired when a session is actually expired, which is rare.
     pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
-        let store = self
+        // Fast path: read-only check.
+        {
+            let store = self
+                .session_store
+                .read()
+                .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
+
+            match store.get(token) {
+                Some(ctx) if !ctx.is_expired() => return Ok(ctx.clone()),
+                Some(_) => {} // expired — fall through to write-lock path
+                None => return Err(AppError::InvalidSession),
+            }
+        }
+
+        // Slow path: expired session — acquire write lock to remove it.
+        let mut store = self
             .session_store
-            .read()
+            .write()
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
-        store.get(token).cloned().ok_or(AppError::InvalidSession)
+
+        // Double-check: another thread may have already removed or refreshed it.
+        if let Some(ctx) = store.get(token)
+            && ctx.is_expired()
+        {
+            store.remove(token);
+            tracing::info!(token = %token, "session expired — removed from store");
+        }
+
+        Err(AppError::InvalidSession)
+    }
+
+    /// Remove all expired sessions from the store in a single sweep.
+    ///
+    /// Called periodically by the background session-cleanup daemon
+    /// (every 5 minutes). Also called lazily during `create_session`
+    /// when the store is approaching capacity.
+    pub fn prune_expired_sessions(&self) -> usize {
+        let mut store = match self.session_store.write() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("session store lock poisoned during prune: {e}");
+                return 0;
+            }
+        };
+        let before = store.len();
+        store.retain(|token, ctx| {
+            if ctx.is_expired() {
+                tracing::trace!(token = %token, "pruning expired session");
+                false
+            } else {
+                true
+            }
+        });
+        let pruned = before - store.len();
+        if pruned > 0 {
+            tracing::info!(
+                "pruned {pruned} expired session(s), {remaining} remain",
+                remaining = store.len()
+            );
+        }
+        pruned
     }
 
     /// Resolve a session token and open the store-scoped database.
@@ -332,30 +453,41 @@ impl AppState {
 
 /// Start a background file watcher that hot-reloads plugins when
 /// `.lua` or `plugin.toml` files change in `plugins_dir`.
+///
+/// Returns a tuple of (file watcher, task join handle). The join handle
+/// should be stored and aborted during [`Drop`] to stop the loop
+/// gracefully (M-5).
 fn start_plugin_watcher(
     plugins: Arc<Mutex<Option<PluginManager>>>,
     plugins_dir: PathBuf,
-) -> Option<notify::RecommendedWatcher> {
+) -> (
+    Option<notify::RecommendedWatcher>,
+    Option<tokio::task::JoinHandle<()>>,
+) {
     let reload_flag = Arc::new(AtomicBool::new(false));
     let flag_clone = reload_flag.clone();
 
-    let mut watcher = notify::RecommendedWatcher::new(
+    let mut watcher = match notify::RecommendedWatcher::new(
         move |_res: Result<notify::Event, notify::Error>| {
             flag_clone.store(true, Ordering::SeqCst);
         },
         notify::Config::default(),
-    )
-    .map_err(|e| tracing::warn!(error = %e, "failed to create plugin file watcher"))
-    .ok()?;
+    ) {
+        Ok(w) => w,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to create plugin file watcher");
+            return (None, None);
+        }
+    };
 
-    watcher
-        .watch(&plugins_dir, notify::RecursiveMode::Recursive)
-        .map_err(|e| tracing::warn!(error = %e, "failed to watch plugins directory"))
-        .ok()?;
+    if let Err(e) = watcher.watch(&plugins_dir, notify::RecursiveMode::Recursive) {
+        tracing::warn!(error = %e, "failed to watch plugins directory");
+        return (None, None);
+    }
 
     tracing::info!(dir = %plugins_dir.display(), "plugin hot-reload watcher started");
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
             if reload_flag.swap(false, Ordering::SeqCst) {
@@ -377,7 +509,7 @@ fn start_plugin_watcher(
         }
     });
 
-    Some(watcher)
+    (Some(watcher), Some(handle))
 }
 
 fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -390,8 +522,23 @@ fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
 
 impl Drop for AppState {
     fn drop(&mut self) {
+        // Abort the plugin hot-reload background task (M-5).
+        if let Some(handle) = self.plugin_hot_reload_task.take() {
+            handle.abort();
+            tracing::info!("plugin hot-reload task cancelled");
+        }
+
+        // Signal kernel shutdown (M-2). This tells any kernel command
+        // holding the lock to abort early, reducing contention during the
+        // retry loop below. The receiver is a no-op for now — infrastructure
+        // for future long-running kernel operations.
+        if let Some(tx) = self.kernel_shutdown.take() {
+            let _ = tx.send(());
+            tracing::info!("kernel shutdown signal sent");
+        }
+
         tracing::info!("stopping kernel modules");
-        // Retry the lock for up to 500ms before giving up. This addresses
+        // Retry the lock for up to 2000ms (200 × 10ms) before giving up. This addresses
         // a Windows window-lifecycle bottleneck where `try_lock()` would
         // silently skip `stop_all()` if a Tauri command was mid-execution.
         // A single `try_lock()` is too aggressive during shutdown because
@@ -399,8 +546,9 @@ impl Drop for AppState {
         // deadlock if a command holding the lock is waiting for the runtime
         // to shut down (circular dependency). The bounded retry loop
         // gives commands time to finish while guaranteeing the Drop
-        // doesn't hang indefinitely.
-        const DROP_LOCK_RETRIES: usize = 50;
+        // doesn't hang indefinitely. Increased from 50→200 for a more
+        // generous shutdown window (M-2).
+        const DROP_LOCK_RETRIES: usize = 200;
         let mut stopped = false;
         for _ in 0..DROP_LOCK_RETRIES {
             if let Ok(mut kernel) = self.kernel.try_lock() {
@@ -412,8 +560,9 @@ impl Drop for AppState {
         }
         if !stopped {
             tracing::warn!(
-                "kernel lock contended after 500ms, skipping stop_all — \
-                 modules may not have been stopped cleanly"
+                "kernel lock contended after {}ms, skipping stop_all — \
+                 modules may not have been stopped cleanly",
+                DROP_LOCK_RETRIES * 10,
             );
         }
     }
@@ -435,10 +584,13 @@ impl AppState {
             kernel: Mutex::new(Kernel::new()),
             plugins: Arc::new(Mutex::new(None)),
             plugin_watcher: None,
+            plugin_hot_reload_task: None,
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
+            kernel_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds: 86400,
             terminal_id: Arc::new(Mutex::new(None)),
         }
     }
@@ -458,6 +610,8 @@ mod tests {
             "s1".into(),
             "i1".into(),
             "type1".into(),
+            None,
+            0,
         );
         state
             .session_store
@@ -494,6 +648,8 @@ mod tests {
             "store-main".into(),
             "instance-1".into(),
             "kds".into(),
+            None,
+            0,
         );
         state
             .session_store
@@ -520,6 +676,8 @@ mod tests {
             "s1".into(),
             "i1".into(),
             "type1".into(),
+            None,
+            0,
         );
         state
             .session_store
@@ -550,5 +708,6 @@ mod tests {
         assert_eq!(state.db_path.to_str(), Some(":memory:"));
         assert!(state.app.is_none());
         assert!(state.plugin_watcher.is_none());
+        assert!(state.plugin_hot_reload_task.is_none());
     }
 }

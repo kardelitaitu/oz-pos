@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use tauri::command;
 
 use modules_currency::commands::CurrencyDto;
 use modules_currency::repository::CurrencyRepository;
@@ -22,7 +21,7 @@ pub struct CurrencyInfo {
     pub exponent: u32,
 }
 
-#[command]
+#[tauri::command]
 /// Currency info.
 pub async fn currency_info(code: String) -> Result<CurrencyInfo, AppError> {
     let currency: oz_core::Currency = code
@@ -34,7 +33,7 @@ pub async fn currency_info(code: String) -> Result<CurrencyInfo, AppError> {
     })
 }
 
-#[command]
+#[tauri::command]
 /// List currencies.
 pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyDto>, AppError> {
     let db = state.db.lock().await;
@@ -42,7 +41,7 @@ pub async fn list_currencies(state: State<'_, AppState>) -> Result<Vec<CurrencyD
     Ok(repo.list_currencies()?)
 }
 
-#[command]
+#[tauri::command]
 /// List currencies resolved from a session token. ADR #7.
 pub async fn list_currencies_scoped(
     session_token: String,
@@ -67,7 +66,7 @@ pub struct SetDefaultCurrencyArgs {
     pub code: String,
 }
 
-#[command]
+#[tauri::command]
 /// Get default currency.
 pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<String>, AppError> {
     let db = state.db.lock().await;
@@ -75,7 +74,7 @@ pub async fn get_default_currency(state: State<'_, AppState>) -> Result<Option<S
     Ok(repo.get_default_currency()?)
 }
 
-#[command]
+#[tauri::command]
 /// Set default currency.
 pub async fn set_default_currency(
     args: SetDefaultCurrencyArgs,

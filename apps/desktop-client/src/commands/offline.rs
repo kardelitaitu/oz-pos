@@ -4,7 +4,7 @@
 //! transactions that were created while the network was unavailable.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::{OfflineQueueItem, Store};
 
@@ -77,7 +77,7 @@ pub struct EnqueueOfflineArgs {
 // ── Commands ──────────────────────────────────────────────────────────
 
 /// Manually enqueue a transaction for later sync.
-#[command]
+#[tauri::command]
 pub async fn enqueue_offline(
     args: EnqueueOfflineArgs,
     state: State<'_, AppState>,
@@ -95,7 +95,7 @@ pub async fn enqueue_offline(
 }
 
 /// List all pending (unsynced) offline queue items, oldest first.
-#[command]
+#[tauri::command]
 pub async fn list_pending_offline(
     state: State<'_, AppState>,
 ) -> Result<Vec<OfflineQueueItemDto>, AppError> {
@@ -113,7 +113,7 @@ fn run_list_pending_offline(
 }
 
 /// List all offline queue items (most recent first).
-#[command]
+#[tauri::command]
 pub async fn list_all_offline(
     state: State<'_, AppState>,
 ) -> Result<Vec<OfflineQueueItemDto>, AppError> {
@@ -144,7 +144,7 @@ pub struct OfflineQueueSummaryDto {
 
 /// Get a summary of the offline queue status (P1-6 sync observability).
 /// Returns counts by status, conflict count, and timing info.
-#[command]
+#[tauri::command]
 pub async fn offline_queue_status_summary(
     state: State<'_, AppState>,
 ) -> Result<OfflineQueueSummaryDto, AppError> {
@@ -163,7 +163,7 @@ pub async fn offline_queue_status_summary(
 }
 
 /// Get the count of pending offline items.
-#[command]
+#[tauri::command]
 pub async fn pending_offline_count(state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -176,7 +176,7 @@ pub async fn pending_offline_count(state: State<'_, AppState>) -> Result<i64, Ap
 ///
 /// For each pending item, tries to process the action. Currently marks
 /// items as synced as a placeholder — real sync logic will be added later.
-#[command]
+#[tauri::command]
 pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -211,7 +211,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
 }
 
 /// Delete a processed offline queue item.
-#[command]
+#[tauri::command]
 pub async fn delete_offline_item(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 

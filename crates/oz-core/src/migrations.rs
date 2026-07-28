@@ -196,12 +196,12 @@ pub const ALL: &[Migration] = &[
         sql: include_str!("../migrations/047_purchase_orders.sql"),
     },
     Migration {
-        id: "047_stock_transfers.sql",
-        sql: include_str!("../migrations/047_stock_transfers.sql"),
-    },
-    Migration {
         id: "046_track_serial.sql",
         sql: include_str!("../migrations/046_track_serial.sql"),
+    },
+    Migration {
+        id: "047_stock_transfers.sql",
+        sql: include_str!("../migrations/047_stock_transfers.sql"),
     },
     Migration {
         id: "047_receipt_barcodes.sql",
@@ -524,8 +524,9 @@ pub const ALL: &[Migration] = &[
 /// Apply every unapplied migration and configure runtime PRAGMAs.
 ///
 /// After migrations, sets WAL journal mode + busy_timeout for better
-/// concurrent-read performance and multi-connection safety. These are
-/// idempotent — safe to call on every startup.
+/// concurrent-read performance and multi-connection safety, and enables
+/// foreign key enforcement (SQLite defaults to OFF). These are idempotent
+/// — safe to call on every startup.
 pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
     platform_core::database::run(conn, ALL)?;
     // WAL mode enables concurrent reads while a write is in progress.
@@ -533,6 +534,9 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
     // connections contend for the write lock (default is 0 = immediate fail).
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "busy_timeout", "5000")?;
+    // Enable foreign key enforcement. SQLite defaults to OFF — the setting
+    // is per-connection, so we must set it on every connection open.
+    conn.pragma_update(None, "foreign_keys", "ON")?;
     Ok(())
 }
 

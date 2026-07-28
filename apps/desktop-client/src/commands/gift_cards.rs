@@ -10,7 +10,7 @@
 //! - Freeze/unfreeze cards (e.g., for fraud prevention)
 
 use serde::Serialize;
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::gift_card::{
@@ -83,7 +83,7 @@ mod tests {
 /// Creates a new gift card with a unique card number and stores
 /// the initial loaded value. Returns the created gift card with
 /// its transaction history.
-#[command]
+#[tauri::command]
 pub async fn issue_gift_card(
     input: IssueGiftCardInput,
     state: State<'_, AppState>,
@@ -99,7 +99,7 @@ pub async fn issue_gift_card(
 ///
 /// Looks up a gift card and returns it with all associated
 /// transactions (issue, top-ups, redemptions).
-#[command]
+#[tauri::command]
 pub async fn get_gift_card(
     card_number_or_id: String,
     state: State<'_, AppState>,
@@ -115,7 +115,7 @@ pub async fn get_gift_card(
 ///
 /// Returns a list of gift cards with their transaction history.
 /// Use the `filter` parameter to filter by card status (active, frozen, redeemed).
-#[command]
+#[tauri::command]
 pub async fn list_gift_cards(
     filter: GiftCardFilter,
     state: State<'_, AppState>,
@@ -131,7 +131,7 @@ pub async fn list_gift_cards(
 ///
 /// Returns the balance in minor units, currency code, and card status.
 /// Returns `None` if the card does not exist.
-#[command]
+#[tauri::command]
 pub async fn get_gift_card_balance(
     card_number_or_id: String,
     state: State<'_, AppState>,
@@ -154,7 +154,7 @@ pub async fn get_gift_card_balance(
 /// Deducts the specified amount from the card balance and records
 /// a redemption transaction. Returns the updated gift card with
 /// transaction history.
-#[command]
+#[tauri::command]
 pub async fn redeem_gift_card(
     card_number_or_id: String,
     amount_minor: i64,
@@ -172,7 +172,7 @@ pub async fn redeem_gift_card(
 ///
 /// Increases the card's balance by the specified amount and records
 /// a top-up transaction. Returns the updated gift card with history.
-#[command]
+#[tauri::command]
 pub async fn top_up_gift_card(
     card_number_or_id: String,
     amount_minor: i64,
@@ -189,7 +189,7 @@ pub async fn top_up_gift_card(
 ///
 /// Prevents further transactions on the card (e.g., for fraud prevention
 /// or customer request). The card balance is preserved.
-#[command]
+#[tauri::command]
 pub async fn freeze_gift_card(
     card_number_or_id: String,
     state: State<'_, AppState>,
@@ -204,7 +204,7 @@ pub async fn freeze_gift_card(
 /// Unfreeze a previously frozen gift card.
 ///
 /// Restores normal transaction capabilities to the card.
-#[command]
+#[tauri::command]
 pub async fn unfreeze_gift_card(
     card_number_or_id: String,
     state: State<'_, AppState>,

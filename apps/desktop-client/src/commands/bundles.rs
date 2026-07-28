@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::Store;
 use oz_core::product_bundle::{BundleItem, BundleWithItems, ProductBundle};
@@ -36,7 +36,7 @@ pub struct CreateBundleItemArg {
 }
 
 /// List all bundles with their items.
-#[command]
+#[tauri::command]
 pub async fn list_bundles(state: State<'_, AppState>) -> Result<Vec<BundleWithItems>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -44,7 +44,7 @@ pub async fn list_bundles(state: State<'_, AppState>) -> Result<Vec<BundleWithIt
 }
 
 /// Get a single bundle by id.
-#[command]
+#[tauri::command]
 pub async fn get_bundle(
     id: String,
     state: State<'_, AppState>,
@@ -55,7 +55,7 @@ pub async fn get_bundle(
 }
 
 /// Create a new bundle.
-#[command]
+#[tauri::command]
 pub async fn create_bundle(
     args: CreateBundleArgs,
     state: State<'_, AppState>,
@@ -94,7 +94,7 @@ pub async fn create_bundle(
 }
 
 /// Update an existing bundle.
-#[command]
+#[tauri::command]
 pub async fn update_bundle(
     bundle: BundleWithItems,
     state: State<'_, AppState>,
@@ -109,7 +109,7 @@ pub async fn update_bundle(
 }
 
 /// Delete a bundle.
-#[command]
+#[tauri::command]
 pub async fn delete_bundle(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -118,7 +118,7 @@ pub async fn delete_bundle(id: String, state: State<'_, AppState>) -> Result<(),
 }
 
 /// Look up a bundle by its SKU (for barcode scanning / POS lookup).
-#[command]
+#[tauri::command]
 pub async fn lookup_bundle_by_sku(
     sku: String,
     state: State<'_, AppState>,

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{State, command};
+use tauri::State;
 
 use chrono::{DateTime, Utc};
 use oz_core::Settings;
@@ -56,7 +56,7 @@ pub struct LicenseStatusDto {
 }
 
 /// Activates a license key for the given email, phone, and machine ID.
-#[command]
+#[tauri::command]
 pub async fn activate_license(
     state: State<'_, AppState>,
     key: String,
@@ -151,7 +151,7 @@ pub async fn activate_license(
 }
 
 /// Retrieves the unique hardware identifier for this installation.
-#[command]
+#[tauri::command]
 pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().await;
     // Return the persisted machine ID if one already exists.
@@ -172,7 +172,7 @@ pub async fn get_machine_id(state: State<'_, AppState>) -> Result<String, AppErr
 /// stored tenant_id, api_key, and the new key. On success, updates
 /// both the Settings table and the tenant_subscription table with
 /// the fresh signed_payload from the server.
-#[command]
+#[tauri::command]
 pub async fn renew_license(state: State<'_, AppState>, new_key: String) -> Result<bool, AppError> {
     if new_key.trim().is_empty() {
         return Err(AppError::Invalid("new license key is required".into()));
@@ -346,7 +346,7 @@ pub struct ServerLicenseStatusDto {
 ///
 /// The stored API key is decrypted and sent as a Bearer token for
 /// authentication. Returns the server's response directly.
-#[command]
+#[tauri::command]
 pub async fn check_license_status(
     state: State<'_, AppState>,
 ) -> Result<ServerLicenseStatusDto, AppError> {
@@ -385,7 +385,7 @@ pub async fn check_license_status(
 }
 
 /// Analyzes the local license state and returns a comprehensive status response.
-#[command]
+#[tauri::command]
 pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseStatusDto, AppError> {
     let conn = state.db.lock().await;
 

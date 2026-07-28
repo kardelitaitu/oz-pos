@@ -6,7 +6,6 @@
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
-use tauri::command;
 
 use std::collections::HashMap;
 
@@ -50,7 +49,7 @@ pub struct ReceiptSettingsDto {
 
 // ── Get receipt settings ──────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// Get receipt settings.
 pub async fn get_receipt_settings(
     state: State<'_, AppState>,
@@ -60,7 +59,7 @@ pub async fn get_receipt_settings(
 }
 
 /// Get receipt settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_receipt_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -95,7 +94,7 @@ fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettin
 // ── Set receipt settings ──────────────────────────────────
 
 /// **Deprecated — use `set_receipt_settings_scoped` (ADR #7).**
-#[command]
+#[tauri::command]
 pub async fn set_receipt_settings(
     args: ReceiptSettingsDto,
     user_id: String,
@@ -108,7 +107,7 @@ pub async fn set_receipt_settings(
 }
 
 /// Set receipt settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_receipt_settings_scoped(
     session_token: String,
     args: ReceiptSettingsDto,
@@ -172,7 +171,7 @@ pub struct StoreSettingsDto {
 
 // ── Get store settings ────────────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// Get store settings.
 pub async fn get_store_settings(state: State<'_, AppState>) -> Result<StoreSettingsDto, AppError> {
     let conn = state.db.lock().await;
@@ -180,7 +179,7 @@ pub async fn get_store_settings(state: State<'_, AppState>) -> Result<StoreSetti
 }
 
 /// Get store settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_store_settings_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -211,7 +210,7 @@ fn run_get_store_settings(conn: &rusqlite::Connection) -> Result<StoreSettingsDt
 // ── Set store settings ────────────────────────────────────────
 
 /// **Deprecated — use `set_store_settings_scoped` (ADR #7).**
-#[command]
+#[tauri::command]
 pub async fn set_store_settings(
     args: StoreSettingsDto,
     user_id: String,
@@ -224,7 +223,7 @@ pub async fn set_store_settings(
 }
 
 /// Set store settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_store_settings_scoped(
     session_token: String,
     args: StoreSettingsDto,
@@ -276,7 +275,7 @@ pub struct CreditSettingsDto {
     pub max_limit_minor: i64,
 }
 
-#[command]
+#[tauri::command]
 /// Get credit settings.
 pub async fn get_credit_settings(
     state: State<'_, AppState>,
@@ -290,7 +289,7 @@ pub async fn get_credit_settings(
 }
 
 /// **Deprecated — use `set_credit_settings_scoped` (ADR #7).**
-#[command]
+#[tauri::command]
 pub async fn set_credit_settings(
     args: CreditSettingsDto,
     user_id: String,
@@ -308,7 +307,7 @@ pub async fn set_credit_settings(
 }
 
 /// Set credit settings resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn set_credit_settings_scoped(
     session_token: String,
     args: CreditSettingsDto,
@@ -356,14 +355,14 @@ pub struct CreditSaleDto {
 /// List credit sales.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_credit_sales_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_credit_sales(state: State<'_, AppState>) -> Result<Vec<CreditSaleDto>, AppError> {
     let conn = state.db.lock().await;
     run_list_credit_sales(&conn)
 }
 
 /// List credit sales for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_credit_sales_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -402,7 +401,7 @@ fn run_list_credit_sales(conn: &rusqlite::Connection) -> Result<Vec<CreditSaleDt
 }
 
 /// **Deprecated — use `settle_credit_scoped` (ADR #7).**
-#[command]
+#[tauri::command]
 pub async fn settle_credit(
     sale_id: String,
     user_id: String,
@@ -422,7 +421,7 @@ pub async fn settle_credit(
 }
 
 /// Settle a credit sale resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn settle_credit_scoped(
     session_token: String,
     sale_id: String,
@@ -546,7 +545,7 @@ fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, AppError> {
         .ok_or_else(|| AppError::Internal("db_path has no parent directory".into()))
 }
 
-#[command]
+#[tauri::command]
 /// Get hardware settings for the current terminal from `terminal_profiles/<id>.json`.
 ///
 /// On first access after upgrading from a version that stored hardware
@@ -618,7 +617,7 @@ pub async fn get_hardware_settings(
 /// **Deprecated — use `set_hardware_settings_scoped` (ADR #7).**
 ///
 /// Now writes to `terminal_profiles/<id>.json` instead of SQLite (ADR #22).
-#[command]
+#[tauri::command]
 pub async fn set_hardware_settings(
     args: HardwareSettingsDto,
     user_id: String,
@@ -649,7 +648,7 @@ pub async fn set_hardware_settings(
 ///
 /// Hardware settings are now per-terminal, stored in
 /// `terminal_profiles/<terminal_id>.json` (ADR #22).
-#[command]
+#[tauri::command]
 pub async fn set_hardware_settings_scoped(
     session_token: String,
     args: HardwareSettingsDto,
@@ -697,7 +696,7 @@ pub struct UserPrefEntry {
 }
 
 /// **Deprecated — use `get_user_preferences_scoped` (ADR #7).**
-#[command]
+#[tauri::command]
 pub async fn get_user_preferences(
     user_id: String,
     state: State<'_, AppState>,
@@ -708,7 +707,7 @@ pub async fn get_user_preferences(
 
 /// Get user preferences resolved from a session token. ADR #7.
 /// Uses `session.user_id` for the preference lookup.
-#[command]
+#[tauri::command]
 pub async fn get_user_preferences_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -725,7 +724,7 @@ pub async fn get_user_preferences_scoped(
 }
 
 /// **Deprecated — use `set_user_preferences_scoped` (ADR #7).**
-#[command]
+#[tauri::command]
 pub async fn set_user_preferences(
     user_id: String,
     prefs: Vec<UserPrefEntry>,
@@ -738,7 +737,7 @@ pub async fn set_user_preferences(
 
 /// Set user preferences resolved from a session token. ADR #7.
 /// Uses `session.user_id` for the preference write.
-#[command]
+#[tauri::command]
 pub async fn set_user_preferences_scoped(
     session_token: String,
     prefs: Vec<UserPrefEntry>,
@@ -761,7 +760,7 @@ pub async fn set_user_preferences_scoped(
 /// Read a single setting value by key.
 ///
 /// Returns `None` when the key does not exist.
-#[command]
+#[tauri::command]
 pub async fn get_setting(
     key: String,
     state: State<'_, AppState>,
@@ -779,7 +778,7 @@ fn run_get_setting(conn: &rusqlite::Connection, key: &str) -> Result<Option<Stri
 /// Write (or overwrite) a single setting value.
 ///
 /// Pass an empty string to store an empty value.
-#[command]
+#[tauri::command]
 pub async fn set_setting(
     key: String,
     value: String,
@@ -820,7 +819,7 @@ pub async fn set_setting(
 ///
 /// Pass an empty string to store an empty value.
 /// Writes a delta record and publishes a `SettingsUpdated` event (ADR #22).
-#[command]
+#[tauri::command]
 pub async fn set_setting_scoped(
     session_token: String,
     key: String,
@@ -886,7 +885,7 @@ fn run_set_setting(
 /// All entries are written atomically — either all succeed or none
 /// do. A single `SettingsUpdated` event is published with all changed
 /// keys after the transaction commits.
-#[command]
+#[tauri::command]
 pub async fn set_settings(
     entries: HashMap<String, String>,
     user_id: String,
@@ -935,7 +934,7 @@ pub async fn set_settings(
 /// All entries are written atomically — either all succeed or none
 /// do. A single `SettingsUpdated` event is published with all changed
 /// keys after the transaction commits.
-#[command]
+#[tauri::command]
 pub async fn set_settings_scoped(
     session_token: String,
     entries: HashMap<String, String>,

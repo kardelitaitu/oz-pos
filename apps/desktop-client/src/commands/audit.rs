@@ -4,7 +4,7 @@
 //! stored in SQLite via `oz_core::db::Store::list_audit_entries`.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 
@@ -70,7 +70,7 @@ fn default_limit() -> i64 {
 ///
 /// Supports pagination via `limit` and `offset`. Returns an array of
 /// [`AuditEntryDto`] with action, target, outcome, and timestamp.
-#[command]
+#[tauri::command]
 pub async fn list_audit_log(
     args: ListAuditLogArgs,
     state: State<'_, AppState>,

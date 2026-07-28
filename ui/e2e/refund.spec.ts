@@ -5,7 +5,7 @@ import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
  * E2E: Refund Flow — Complete a sale, find it in history, and process a refund.
  *
  * CSS contract:
- *   POS screen:           .product-card, .retail-cart-panel, .pay-btn
+ *   POS screen:           .retail-product-btn, .retail-cart-panel, .retail-cart-action-btn--pay
  *   Sales History:        .sales-history, .sales-history-table,
  *                         .sales-history-action-btn (View button),
  *                         .sales-history-modal (detail overlay),
@@ -31,30 +31,39 @@ test.describe('Refund Flow', () => {
     // ── Step 1: Complete a sale in the POS screen ──────────────
 
     // Wait for the POS screen to load (product grid visible).
-    await expect(page.locator('.product-card').first()).toBeVisible({ timeout: TIMEOUT });
+    await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: TIMEOUT });
 
     // Add a product to the cart.
-    const firstProduct = page.locator('.product-card').first();
+    const firstProduct = page.locator('.retail-product-btn').first();
     await firstProduct.click();
     await page.waitForTimeout(500);
 
     // The cart panel should show at least one item.
-    await expect(page.locator('.retail-cart-panel')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('[data-testid="cart-panel"]')).toBeVisible({ timeout: 5_000 });
 
     // Click the Pay button to open the payment modal.
-    const payBtn = page.locator('.pay-btn').first();
+    const payBtn = page.locator('.retail-cart-action-btn--pay').first();
     await expect(payBtn).toBeVisible({ timeout: 5_000 });
     await payBtn.click();
     await page.waitForTimeout(500);
 
-    // In the payment modal, click the "Complete Sale" / "Cash" button.
-    const completeBtn = page.locator('button:has-text("Complete"), button:has-text("Cash"), button:has-text("Selesai")').first();
-    await expect(completeBtn).toBeVisible({ timeout: 5_000 });
-    await completeBtn.click();
+    // Payment modal must appear.
+    await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
+
+    // Click a quick-pay button (Cash) to settle.
+    const quickPay = page.locator('[data-testid="quick-pay-button"]').first();
+    await expect(quickPay).toBeVisible({ timeout: 5_000 });
+    await quickPay.click();
+    await page.waitForTimeout(500);
+
+    // Find and click settle/confirm button.
+    const settleBtn = page.locator('[data-testid="settle-button"], button:has-text("Settle"), button:has-text("Confirm")').first();
+    await expect(settleBtn).toBeVisible({ timeout: 5_000 });
+    await settleBtn.click();
     await page.waitForTimeout(1_000);
 
     // After sale completes, the cart should reset (product grid remains).
-    await expect(page.locator('.product-card').first()).toBeVisible({ timeout: TIMEOUT });
+    await expect(page.locator('.retail-product-btn').first()).toBeVisible({ timeout: TIMEOUT });
 
     // ── Step 2: Navigate to Sales History ──────────────────────
 

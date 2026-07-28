@@ -35,10 +35,16 @@ REM    - Rust toolchain           (rustup + stable)
 REM    - Tauri CLI                (cargo install tauri-cli)
 REM    - UI dependencies          (cd ui && npm install, once)
 REM
-REM  STALE-PORT WORKAROUND (Windows only — run once before retrying if a
-REM  previous dev run crashed and port 1420 is still bound to a dead Vite):
-REM      powershell -Command "Get-NetTCPConnection -LocalPort 1420 |
-REM        ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"
+REM  STALE-PORT HANDLING (auto on every startup, Windows only):
+REM  Any stale dev-server (typically a leftover `node` from a crashed `vite`)
+REM  holding port 1420 is killed via scripts\free-dev-port.ps1, which:
+REM    - Covers both IPv4 and IPv6 listeners/bound sockets.
+REM    - Prints one line per kill so port-cleanup is observable in the console.
+REM    - Exits 0 when clean (incl. nothing to do) or 1 if a holder cannot be
+REM      stopped (e.g. SYSTEM-owned); the bat surfaces a warning below.
+REM  Manual fallback if you want to debug the kill step itself:
+REM      powershell.exe -ExecutionPolicy Bypass -NoProfile ^
+REM        -File "%~dp0scripts\free-dev-port.ps1" -Port 1420
 REM ============================================================================
 setlocal
 
@@ -47,8 +53,13 @@ REM `%~dp0` is this bat's own directory; `apps\desktop-client` is relative
 REM to that, which keeps the bat independent of its invocation CWD.
 cd /d "%~dp0apps\desktop-client"
 
-echo Killing any stale process listening on port 1420...
-powershell -Command "Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"
+REM Auto-clear any stale dev process bound to the Vite port (default 1420).
+REM The .ps1 prints [OK]/[WARN]/[FAIL] lines per holder so this is visible.
+echo Checking for stale dev processes on port 1420...
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0scripts\free-dev-port.ps1" -Port 1420
+if errorlevel 1 (
+    echo [WARNING] Could not cleanly free port 1420. Tauri may fail to start.
+)
 
 cargo tauri dev
 

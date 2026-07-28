@@ -5,7 +5,7 @@
 //! All commands have scoped variants (ADR #7) that use the session token
 //! pattern. Old commands are preserved with deprecation notices.
 
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::Table;
 use oz_core::db::Store;
@@ -19,7 +19,7 @@ use crate::state::AppState;
 /// List tables, optionally filtered by section.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_tables_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_tables(
     section: Option<String>,
     state: State<'_, AppState>,
@@ -32,7 +32,7 @@ pub async fn list_tables(
 }
 
 /// List tables for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_tables_scoped(
     session_token: String,
     section: Option<String>,
@@ -51,7 +51,7 @@ pub async fn list_tables_scoped(
 /// Get a single table by id.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_table_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_table(id: String, state: State<'_, AppState>) -> Result<Option<Table>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -61,7 +61,7 @@ pub async fn get_table(id: String, state: State<'_, AppState>) -> Result<Option<
 }
 
 /// Get a table from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_table_scoped(
     session_token: String,
     id: String,
@@ -80,7 +80,7 @@ pub async fn get_table_scoped(
 /// List all section names.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_sections_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_sections(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -90,7 +90,7 @@ pub async fn list_sections(state: State<'_, AppState>) -> Result<Vec<String>, Ap
 }
 
 /// List sections for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_sections_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -110,7 +110,7 @@ pub async fn list_sections_scoped(
 /// Create a new table.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `create_table_scoped`.
-#[command]
+#[tauri::command]
 pub async fn create_table(
     user_id: String,
     args: Table,
@@ -125,7 +125,7 @@ pub async fn create_table(
 }
 
 /// Create a table in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn create_table_scoped(
     session_token: String,
     table: Table,
@@ -154,7 +154,7 @@ pub async fn create_table_scoped(
 /// Update an existing table.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `update_table_scoped`.
-#[command]
+#[tauri::command]
 pub async fn update_table(
     user_id: String,
     table: Table,
@@ -169,7 +169,7 @@ pub async fn update_table(
 }
 
 /// Update a table in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn update_table_scoped(
     session_token: String,
     table: Table,
@@ -194,7 +194,7 @@ pub async fn update_table_scoped(
 /// Delete a table by id.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_table_scoped`.
-#[command]
+#[tauri::command]
 pub async fn delete_table(
     user_id: String,
     id: String,
@@ -209,7 +209,7 @@ pub async fn delete_table(
 }
 
 /// Delete a table in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn delete_table_scoped(
     session_token: String,
     id: String,
@@ -238,7 +238,7 @@ pub async fn delete_table_scoped(
 /// Update a table's status (e.g. "occupied", "available").
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `update_table_status_scoped`.
-#[command]
+#[tauri::command]
 pub async fn update_table_status(
     user_id: String,
     id: String,
@@ -254,7 +254,7 @@ pub async fn update_table_status(
 }
 
 /// Update a table's status in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn update_table_status_scoped(
     session_token: String,
     id: String,
@@ -280,7 +280,7 @@ pub async fn update_table_status_scoped(
 /// Assign an order/sale to a table.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `assign_table_order_scoped`.
-#[command]
+#[tauri::command]
 pub async fn assign_table_order(
     user_id: String,
     table_id: String,
@@ -296,7 +296,7 @@ pub async fn assign_table_order(
 }
 
 /// Assign an order to a table in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn assign_table_order_scoped(
     session_token: String,
     table_id: String,
@@ -326,7 +326,7 @@ pub async fn assign_table_order_scoped(
 /// Release a table (clear its order assignment).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `release_table_scoped`.
-#[command]
+#[tauri::command]
 pub async fn release_table(
     user_id: String,
     table_id: String,
@@ -341,7 +341,7 @@ pub async fn release_table(
 }
 
 /// Release a table in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn release_table_scoped(
     session_token: String,
     table_id: String,

@@ -3,7 +3,7 @@
 //! These commands are the IPC surface for the Staff Management UI.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::auth::hash_pin;
 use oz_core::db::Store;
@@ -53,7 +53,7 @@ fn to_staff_dto(user: &User, roles: &[Role]) -> StaffMemberDto {
 
 // ── List staff ─────────────────────────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// List staff.
 pub async fn list_staff(state: State<'_, AppState>) -> Result<Vec<StaffMemberDto>, AppError> {
     let db = state.db.lock().await;
@@ -77,7 +77,7 @@ pub struct RoleDto {
     pub description: String,
 }
 
-#[command]
+#[tauri::command]
 /// List roles.
 pub async fn list_roles(state: State<'_, AppState>) -> Result<Vec<RoleDto>, AppError> {
     let db = state.db.lock().await;
@@ -111,7 +111,7 @@ pub struct CreateStaffArgs {
     pub caller_user_id: String,
 }
 
-#[command]
+#[tauri::command]
 /// Create staff.
 pub async fn create_staff(
     args: CreateStaffArgs,
@@ -161,7 +161,7 @@ pub struct UpdateStaffArgs {
     pub caller_user_id: String,
 }
 
-#[command]
+#[tauri::command]
 /// Update staff.
 pub async fn update_staff(
     args: UpdateStaffArgs,
@@ -218,7 +218,7 @@ pub struct BootstrapOwnerResult {
 /// Returns `Conflict` if any users already exist, preventing accidental
 /// re-bootstrapping after staff accounts have been created.
 /// Returns `Invalid` if validation fails (empty username, short PIN, etc.).
-#[command]
+#[tauri::command]
 pub async fn bootstrap_owner(
     args: BootstrapOwnerArgs,
     state: State<'_, AppState>,

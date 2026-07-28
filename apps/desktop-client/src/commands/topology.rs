@@ -7,7 +7,7 @@
 
 use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::permissions;
@@ -377,7 +377,7 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
 // ── Commands ───────────────────────────────────────────────────────
 
 /// Save the topology graph to the settings store.
-#[command]
+#[tauri::command]
 pub async fn save_topology(
     nodes: Vec<TopologyNodePayload>,
     wires: Vec<TopologyWirePayload>,
@@ -391,7 +391,7 @@ pub async fn save_topology(
 ///
 /// Returns `None` when no topology has been saved yet (the front-end
 /// should fall back to the built-in retail preset).
-#[command]
+#[tauri::command]
 pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<TopologyData>, AppError> {
     let conn = state.db.lock().await;
     load_topology_data(&conn)
@@ -430,7 +430,7 @@ pub struct UpdateInstanceRequest {
 /// The topology diagram save is a separate step on the global DB and
 /// is not part of the workspace transaction. If the diagram save
 /// fails, the workspace mutations have already been committed.
-#[command]
+#[tauri::command]
 pub async fn apply_topology_diff(
     session_token: String,
     workspace_creations: Vec<CreateInstanceRequest>,

@@ -3,8 +3,10 @@
 //! These commands are the IPC surface for `ui/src/features/auth/`. PIN
 //! hashing and verification is delegated to `oz_core::auth`.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::auth::LoginSession;
 use oz_core::db::Store;
@@ -51,7 +53,7 @@ pub struct CheckUsernameResult {
 ///
 /// Called before transitioning to the PIN step so the UI can reject
 /// unknown usernames early without collecting a PIN.
-#[command]
+#[tauri::command]
 pub async fn staff_check_username(
     args: CheckUsernameArgs,
     state: State<'_, AppState>,
@@ -88,7 +90,7 @@ pub async fn staff_check_username(
 /// - The username doesn't match any active user
 /// - The PIN doesn't match the stored hash
 /// - The rate-limit lockout is active (includes retry-after info)
-#[command]
+#[tauri::command]
 pub async fn staff_login(
     args: StaffLoginArgs,
     state: State<'_, AppState>,
@@ -205,10 +207,11 @@ pub struct SessionContextDto {
 /// be passed to every subsequent command as the `session_token`
 /// parameter.
 ///
-/// The token is a random UUID v4 stored in the in-memory session
-/// store. It is valid until `destroy_session` is called or the
-/// process exits.
-#[command]
+/// The token is a random UUID v7 stored in the in-memory session
+/// store. Session TTL (default 24h) is configurable via the
+/// `session.ttl_seconds` setting. A background daemon prunes
+/// expired tokens every 5 minutes.
+#[tauri::command]
 pub async fn create_session(
     args: CreateSessionArgs,
     state: State<'_, AppState>,
@@ -220,28 +223,83 @@ pub async fn create_session(
         ));
     }
 
+    // Server-side authorization: verify the user has a valid role assignment
+    // for the requested workspace instance (ADR #4 / ADR #7).
+    {
+        let db = state.db.lock().await;
+        let store = oz_core::db::Store::new(&db);
+        if !store.verify_instance_access(
+            &args.role_id,
+            &args.user_id,
+            &args.instance_id,
+            &args.store_id,
+        )? {
+            tracing::warn!(
+                user_id = %args.user_id,
+                role_id = %args.role_id,
+                instance_id = %args.instance_id,
+                "authorization denied — user has no access to this instance"
+            );
+            return Err(AppError::Invalid(
+                "User does not have access to this workspace instance".into(),
+            ));
+        }
+    }
+
     let token = uuid::Uuid::now_v7().to_string();
 
+    // Snapshot the current time once for both expiry and creation timestamp.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    // Compute session expiry from the cached TTL setting.
+    // 0 or negative means no expiry (development mode).
+    let expires_at = if state.session_ttl_seconds > 0 {
+        Some(now_ts + state.session_ttl_seconds)
+    } else {
+        None
+    };
+
     {
-        let mut store = state
+        let mut session_store = state
             .session_store
             .write()
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
 
+        // Lazy prune: sweep expired sessions when the store is near capacity.
+        if session_store.len() >= 200 {
+            let before = session_store.len();
+            session_store.retain(|_, ctx| !ctx.is_expired());
+            let pruned = before - session_store.len();
+            if pruned > 0 {
+                tracing::info!("lazy prune removed {pruned} expired session(s)");
+            }
+        }
+
         // Defensive: log if a UUID collision occurs (astronomically unlikely).
-        if store.contains_key(&token) {
+        if session_store.contains_key(&token) {
             tracing::warn!(token = %token, "session token collision detected — overwriting");
         }
 
-        // Enforce a maximum session count to prevent unbounded growth.
-        // ADR #7 will replace this with TTL-based expiry.
+        // Enforce a maximum session count with deterministic LRU eviction.
+        // Iterates all entries to find the oldest by created_at timestamp.
+        // With max 256 entries, this is negligible overhead and guarantees
+        // fair eviction (unlike the previous non-deterministic keys().next()).
         const MAX_SESSIONS: usize = 256;
-        if store.len() >= MAX_SESSIONS {
-            // Evict the oldest entry (HashMap iteration order is non-deterministic,
-            // but this is an emergency backstop, not a precise LRU).
-            if let Some(old_token) = store.keys().next().cloned() {
-                store.remove(&old_token);
-                tracing::warn!(old_token = %old_token, "session store full — evicted oldest session");
+        if session_store.len() >= MAX_SESSIONS {
+            let oldest_entry = session_store
+                .iter()
+                .min_by_key(|(_, ctx)| ctx.created_at)
+                .map(|(token, _)| token.clone());
+
+            if let Some(old_token) = oldest_entry {
+                session_store.remove(&old_token);
+                tracing::warn!(
+                    old_token = %old_token,
+                    "session store full — evicted oldest session by created_at"
+                );
             }
         }
 
@@ -252,8 +310,10 @@ pub async fn create_session(
             args.store_id.clone(),
             args.instance_id.clone(),
             args.type_key.clone(),
+            expires_at,
+            now_ts,
         );
-        store.insert(token.clone(), context.clone());
+        session_store.insert(token.clone(), context.clone());
     }
 
     // Invalidate the location cache — a new session means either a fresh
@@ -265,6 +325,7 @@ pub async fn create_session(
         user_id = %args.user_id,
         store_id = %args.store_id,
         instance_id = %args.instance_id,
+        ttl_seconds = %state.session_ttl_seconds,
         "session created"
     );
 
@@ -286,7 +347,7 @@ pub async fn create_session(
 /// ADR #4 / ADR #7: Called on logout or store switch. After this
 /// call, any commands using the old token will fail with
 /// `AppError::InvalidSession`.
-#[command]
+#[tauri::command]
 pub async fn destroy_session(
     state: State<'_, AppState>,
     session_token: String,

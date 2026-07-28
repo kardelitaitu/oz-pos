@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
 import { activateLicense, getMachineId } from '@/api/license';
 import { getVersion, getLocalIp } from '@/api/system';
@@ -8,6 +8,11 @@ import MachineIdStatus from '@/components/MachineIdStatus';
 import { Localized, useLocalization } from '@fluent/react';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
 import './LicenseActivationScreen.css';
+
+// ── Environment / service URLs (extracted for configurability) ─────
+const AUTH_SERVICE_URL =
+  (import.meta.env['VITE_AUTH_SERVICE_URL'] as string | undefined)
+  ?? 'https://auth--oz-pos-license-service--76cyv4d6bn54.code.run';
 
 /** Props for the LicenseActivationScreen component. */
 export interface LicenseActivationScreenProps {
@@ -25,27 +30,31 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
-  const [appVersion, setAppVersion] = useState<string>('0.0.22');
+  const [appVersion, setAppVersion] = useState<string>('0.0.23');
   const [ipAddress, setIpAddress] = useState<string>(l10n.getString('auth-ip-detecting') || 'Detecting...');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();
+  // Stable ref so the mount effect runs exactly once without depending on
+  // l10n (which can cause the effect to re-fetch version/IP unnecessarily).
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   useEffect(() => {
     let mounted = true;
     getVersion().then(v => {
       if (mounted) setAppVersion(v.version);
-    }).catch(() => {
-      // Version display is non-critical — use hardcoded fallback.
+    }).catch((err) => {
+      console.warn('getVersion failed, using hardcoded fallback', err);
     });
     
     getLocalIp().then(ip => {
       if (mounted) setIpAddress(ip);
     }).catch(() => {
-      if (mounted) setIpAddress(l10n.getString('auth-ip-unknown') || 'Unknown');
+      if (mounted) setIpAddress(l10nRef.current.getString('auth-ip-unknown') || 'Unknown');
     });
 
     return () => { mounted = false; };
-  }, [l10n]);
+  }, []);
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -291,7 +300,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       <div className="license-server-status-container">
         <ConnectionStatus 
           label={l10n.getString('staff-login-connection-auth') || 'Auth'} 
-          url="https://auth--oz-pos-license-service--76cyv4d6bn54.code.run" 
+          url={AUTH_SERVICE_URL} 
         />
         <ConnectionStatus 
           label={l10n.getString('staff-login-connection-sync') || 'Sync'} 

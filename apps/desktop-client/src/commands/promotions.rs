@@ -3,7 +3,7 @@
 //! CRUD for promotion rules and recording promotion applications against sales.
 
 use serde::Deserialize;
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::{Promotion, PromotionApplication, Store};
 
@@ -151,7 +151,7 @@ mod tests {
 /// List all promotions.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_promotions_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_promotions(state: State<'_, AppState>) -> Result<Vec<Promotion>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -159,7 +159,7 @@ pub async fn list_promotions(state: State<'_, AppState>) -> Result<Vec<Promotion
 }
 
 /// List promotions for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_promotions_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -177,7 +177,7 @@ pub async fn list_promotions_scoped(
 /// Get a single promotion by id.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_promotion_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_promotion(
     id: String,
     state: State<'_, AppState>,
@@ -188,7 +188,7 @@ pub async fn get_promotion(
 }
 
 /// Get a promotion from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_promotion_scoped(
     session_token: String,
     id: String,
@@ -207,7 +207,7 @@ pub async fn get_promotion_scoped(
 /// Create a new promotion.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `create_promotion_scoped`.
-#[command]
+#[tauri::command]
 pub async fn create_promotion(
     user_id: String,
     args: CreatePromotionArgs,
@@ -241,7 +241,7 @@ pub async fn create_promotion(
 }
 
 /// Create a promotion in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn create_promotion_scoped(
     session_token: String,
     args: CreatePromotionArgs,
@@ -290,7 +290,7 @@ pub async fn create_promotion_scoped(
 /// Update an existing promotion.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `update_promotion_scoped`.
-#[command]
+#[tauri::command]
 pub async fn update_promotion(
     user_id: String,
     promotion: Promotion,
@@ -307,7 +307,7 @@ pub async fn update_promotion(
 }
 
 /// Update a promotion in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn update_promotion_scoped(
     session_token: String,
     promotion: Promotion,
@@ -339,7 +339,7 @@ pub async fn update_promotion_scoped(
 /// Delete a promotion by id.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `delete_promotion_scoped`.
-#[command]
+#[tauri::command]
 pub async fn delete_promotion(
     user_id: String,
     id: String,
@@ -353,7 +353,7 @@ pub async fn delete_promotion(
 }
 
 /// Delete a promotion in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn delete_promotion_scoped(
     session_token: String,
     id: String,
@@ -382,7 +382,7 @@ pub async fn delete_promotion_scoped(
 /// Apply a promotion to a sale.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `apply_promotion_scoped`.
-#[command]
+#[tauri::command]
 pub async fn apply_promotion(
     user_id: String,
     sale_id: String,
@@ -394,7 +394,7 @@ pub async fn apply_promotion(
 }
 
 /// Apply a promotion in the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn apply_promotion_scoped(
     session_token: String,
     sale_id: String,
@@ -518,7 +518,7 @@ fn run_apply_promotion(
 /// List all promotion applications for a sale.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `get_sale_promotions_scoped`.
-#[command]
+#[tauri::command]
 pub async fn get_sale_promotions(
     sale_id: String,
     state: State<'_, AppState>,
@@ -529,7 +529,7 @@ pub async fn get_sale_promotions(
 }
 
 /// Get sale promotions from the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn get_sale_promotions_scoped(
     session_token: String,
     sale_id: String,

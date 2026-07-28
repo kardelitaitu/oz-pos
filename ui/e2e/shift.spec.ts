@@ -183,4 +183,72 @@ test.describe('Shift Management', () => {
     const hasError = await errorBoundary.isVisible().catch(() => false);
     expect(hasError).toBe(false);
   });
+
+  // ── E2E-26: Cash payout recording ───────────────────────────
+
+  test('records a cash payout from an active shift', async ({ page }) => {
+    await page.evaluate(() => {
+      window.location.hash = '#/shifts';
+    });
+    await page.waitForTimeout(2_000);
+
+    await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+
+    // Open shift first.
+    const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
+    await openBtn.click();
+
+    const openModal = page.locator('.shift-mgmt-overlay');
+    await expect(openModal).toBeVisible({ timeout: 3_000 });
+
+    const balanceInput = page.locator('#open-balance');
+    await expect(balanceInput).toBeVisible();
+    await balanceInput.fill('50000');
+
+    const confirmOpenBtn = openModal.locator('button:has-text("Open Shift"), button:has-text("Buka")');
+    await confirmOpenBtn.click();
+    await page.waitForTimeout(1_000);
+
+    // Now the active shift card must be visible with the "Record Payout" button.
+    const activeCard = page.locator('.shift-mgmt-active-card');
+    await expect(activeCard).toBeVisible({ timeout: 5_000 });
+
+    // Click "Record Payout" button.
+    const payoutBtn = page.locator('button:has-text("Record Payout"), button:has-text("Payout")').first();
+    await expect(payoutBtn).toBeVisible({ timeout: 5_000 });
+    await payoutBtn.click();
+    await page.waitForTimeout(500);
+
+    // Payout modal must appear.
+    const payoutModal = page.locator('.shift-mgmt-overlay');
+    await expect(payoutModal).toBeVisible({ timeout: 3_000 });
+
+    // Modal header must say "Record Cash Payout" or "Payout".
+    const payoutHeader = page.locator('.shift-mgmt-modal-header h2');
+    await expect(payoutHeader).toBeVisible({ timeout: 3_000 });
+
+    // Fill payout amount.
+    const amountInput = page.locator('#payout-amount');
+    await expect(amountInput).toBeVisible();
+    await amountInput.fill('20000');
+    await page.waitForTimeout(200);
+
+    // Fill payout reason.
+    const reasonInput = page.locator('#payout-reason');
+    await expect(reasonInput).toBeVisible();
+    await reasonInput.fill('Safe drop');
+    await page.waitForTimeout(200);
+
+    // Click "Record Payout" confirm button in modal.
+    const confirmPayoutBtn = payoutModal.locator('button:has-text("Record Payout")').last();
+    await expect(confirmPayoutBtn).toBeEnabled({ timeout: 3_000 });
+    await confirmPayoutBtn.click();
+    await page.waitForTimeout(1_000);
+
+    // After recording, the payout modal should close and active card remains.
+    await expect(page.locator('.shift-mgmt-active-card')).toBeVisible({ timeout: 5_000 });
+
+    // Verify no crash.
+    await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });
+  });
 });

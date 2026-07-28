@@ -32,6 +32,11 @@ export interface AuthContextOverrides {
 /**
  * Create a mock `useAuth()` return value. Defaults to a cashier session.
  * Pass overrides for specific test scenarios (e.g. manager, owner).
+ *
+ * The returned function matches the `useAuth` hook signature so it can
+ * be used directly in `vi.mock('@/contexts/AuthContext', () => ({
+ *   useAuth: createAuthContextMock({ isManager: true }),
+ * }))`.
  */
 export function createAuthContextMock(overrides: AuthContextOverrides = {}) {
   const {
@@ -56,9 +61,10 @@ export function createAuthContextMock(overrides: AuthContextOverrides = {}) {
     },
     loading: false,
     error: null,
-    login: vi.fn(),
+    login: vi.fn(async (_username: string, _pin: string) => {}),
     logout: vi.fn(),
     clearError: vi.fn(),
+    swapSession: vi.fn(),
     isManager,
     isOwner,
   });
@@ -67,19 +73,37 @@ export function createAuthContextMock(overrides: AuthContextOverrides = {}) {
 // ── WorkspaceContext ──────────────────────────────────────────────
 
 /**
- * Create a mock WorkspaceContext provider factory.
- * Defaults to `store-pos` active workspace with empty workspace list.
+ * Create a mock WorkspaceContext module factory.
+ *
+ * Returns the full module shape that `vi.mock('@/contexts/WorkspaceContext')`
+ * expects: `{ useWorkspace, useWorkspaceScope, WorkspaceProvider }`.
+ *
+ * Defaults to `store-pos` active workspace with a mock session token.
+ * Components that need `useWorkspaceScope()` will receive non-null defaults.
  */
 export function createWorkspaceContextMock() {
   return {
     useWorkspace: () => ({
-      activeWorkspace: 'store-pos',
-      setActiveWorkspace: vi.fn(),
+      activeWorkspace: 'store-pos' as string | null,
+      setActiveWorkspace: vi.fn((_key: string | null) => {}),
+      activeInstance: null,
+      setActiveInstance: vi.fn(),
       availableWorkspaces: [],
       workspaceScreens: [],
       loading: false,
-      sessionToken: 'mock-session-token',
+      error: null,
+      retry: vi.fn(),
+      lastWorkspace: null,
+      switchStore: vi.fn((_storeId: string) => {}),
+      resolvedStoreId: 'default',
+      sessionToken: 'mock-session-token' as string | null,
+      swapSessionToken: vi.fn(async (_newUserId: string, _newRoleId: string) => {}),
       terminalId: '',
+    }),
+    useWorkspaceScope: () => ({
+      storeId: 'default',
+      instanceId: 'default',
+      typeKey: 'store-pos',
     }),
     WorkspaceProvider: ({ children }: { children: ReactNode }) => (
       <>{children}</>

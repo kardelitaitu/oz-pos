@@ -4,7 +4,7 @@
 //! that generates adjustments and updates inventory quantities.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::{CountType, StockAdjustment, StockCount, StockCountLine, StockCountStatus, Store};
 
@@ -183,7 +183,7 @@ pub struct CompleteStockCountArgs {
 // ── Commands ───────────────────────────────────────────────────────────
 
 /// Create a new stock count with an auto-generated count number.
-#[command]
+#[tauri::command]
 pub async fn create_stock_count(
     args: CreateStockCountArgs,
     state: State<'_, AppState>,
@@ -215,7 +215,7 @@ pub async fn create_stock_count(
 }
 
 /// Fetch a single stock count by id.
-#[command]
+#[tauri::command]
 pub async fn get_stock_count(
     id: String,
     state: State<'_, AppState>,
@@ -226,7 +226,7 @@ pub async fn get_stock_count(
 }
 
 /// List all stock counts, newest first.
-#[command]
+#[tauri::command]
 pub async fn list_stock_counts(state: State<'_, AppState>) -> Result<Vec<StockCountDto>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -235,7 +235,7 @@ pub async fn list_stock_counts(state: State<'_, AppState>) -> Result<Vec<StockCo
 }
 
 /// Get all lines for a stock count.
-#[command]
+#[tauri::command]
 pub async fn get_count_lines(
     count_id: String,
     state: State<'_, AppState>,
@@ -247,7 +247,7 @@ pub async fn get_count_lines(
 }
 
 /// Add a line to a stock count.
-#[command]
+#[tauri::command]
 pub async fn add_count_line(
     args: AddCountLineArgs,
     state: State<'_, AppState>,
@@ -272,7 +272,7 @@ pub async fn add_count_line(
 }
 
 /// Update a count line (record counted quantity).
-#[command]
+#[tauri::command]
 pub async fn update_count_line(
     args: UpdateCountLineArgs,
     state: State<'_, AppState>,
@@ -304,7 +304,7 @@ pub async fn update_count_line(
 }
 
 /// Remove a line from a stock count.
-#[command]
+#[tauri::command]
 pub async fn remove_count_line(
     args: RemoveCountLineArgs,
     state: State<'_, AppState>,
@@ -316,7 +316,7 @@ pub async fn remove_count_line(
 }
 
 /// Complete a stock count: create adjustments and update inventory.
-#[command]
+#[tauri::command]
 pub async fn complete_stock_count(
     args: CompleteStockCountArgs,
     state: State<'_, AppState>,
@@ -336,7 +336,7 @@ pub async fn complete_stock_count(
 }
 
 /// Update a stock count's status (e.g. from draft to in_progress).
-#[command]
+#[tauri::command]
 pub async fn update_stock_count_status(
     id: String,
     status: String,
@@ -360,7 +360,7 @@ pub async fn update_stock_count_status(
 }
 
 /// List all stock adjustments.
-#[command]
+#[tauri::command]
 pub async fn list_stock_adjustments(
     state: State<'_, AppState>,
 ) -> Result<Vec<StockAdjustmentDto>, AppError> {

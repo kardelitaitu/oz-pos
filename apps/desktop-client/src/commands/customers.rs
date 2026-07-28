@@ -3,7 +3,7 @@
 //! Delegates to `oz_core::db::Store` for all CRUD operations.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::Customer;
 use oz_core::db::Store;
@@ -53,7 +53,7 @@ impl From<Customer> for CustomerDto {
 
 // ── List customers ──────────────────────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// List customers.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_customers_scoped`.
@@ -66,7 +66,7 @@ pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDt
 }
 
 /// List customers for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_customers_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -83,7 +83,7 @@ pub async fn list_customers_scoped(
 
 // ── Get single customer ─────────────────────────────────────────────
 
-#[command]
+#[tauri::command]
 /// Get customer.
 pub async fn get_customer(
     id: String,
@@ -113,7 +113,7 @@ pub struct CreateCustomerArgs {
     pub notes: Option<String>,
 }
 
-#[command]
+#[tauri::command]
 /// Create customer.
 pub async fn create_customer(
     args: CreateCustomerArgs,
@@ -161,7 +161,7 @@ pub struct UpdateCustomerArgs {
     pub notes: Option<String>,
 }
 
-#[command]
+#[tauri::command]
 /// Update customer.
 pub async fn update_customer(
     args: UpdateCustomerArgs,
@@ -202,7 +202,7 @@ pub struct DeleteCustomerArgs {
     pub id: String,
 }
 
-#[command]
+#[tauri::command]
 /// Delete customer.
 pub async fn delete_customer(
     args: DeleteCustomerArgs,

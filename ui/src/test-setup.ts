@@ -202,3 +202,36 @@ if (typeof HTMLCanvasElement !== 'undefined') {
     return null;
   }) as typeof HTMLCanvasElement.prototype.getContext;
 }
+
+// ── Unhandled rejection handler ────────────────────────────────────
+//
+// Replaces the old `dangerouslyIgnoreUnhandledErrors: true` in vite.config.ts
+// which silently swallowed ALL unhandled promise rejections. This targeted
+// handler filters known noise (Fluent missing keys, React act() warnings)
+// while logging unknown rejections as warnings so they're visible in test
+// output without failing the suite.
+//
+// If an unknown rejection appears, investigate the root cause — it may be
+// a real bug in application code that the test doesn't properly catch.
+process.on('unhandledRejection', (reason: unknown) => {
+  const msg =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string'
+        ? reason
+        : String(reason ?? '');
+
+  // Filter known noise patterns (same as console.error filter above).
+  if (msg.includes('[@fluent/react]') && msg.includes('did not match any messages')) {
+    return;
+  }
+  if (msg.includes('was not wrapped in act') || msg.includes('flushSync was called from inside')) {
+    return;
+  }
+  if (msg.includes('validateDOMNesting') || msg.includes('punycode module is deprecated')) {
+    return;
+  }
+
+  // Log everything else as a warning so it's visible but doesn't crash.
+  console.warn('[test-setup] Unhandled promise rejection:', reason);
+});

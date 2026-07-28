@@ -4,7 +4,7 @@
 //! stock restoration, and audit logging inside a single transaction.
 
 use serde::Deserialize;
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::permissions;
 
@@ -40,7 +40,7 @@ pub struct VoidSaleScopedArgs {
 /// **Deprecated for multi-store (ADR #7):** Use `void_sale_scoped`
 /// with a `session_token` instead. The `user_id` is read from the
 /// resolved session, not passed as a frontend parameter.
-#[command]
+#[tauri::command]
 pub async fn void_sale(
     args: VoidSaleArgs,
     state: State<'_, AppState>,
@@ -62,7 +62,7 @@ pub async fn void_sale(
 ///
 /// ADR #7: Scoped variant of `void_sale`. The `user_id` for permission
 /// checks and the void operation is read from the resolved `SessionContext`.
-#[command]
+#[tauri::command]
 pub async fn void_sale_scoped(
     session_token: String,
     args: VoidSaleScopedArgs,

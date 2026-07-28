@@ -982,6 +982,103 @@ impl Store<'_> {
         let rows = stmt.query_map(params![user_id], |row| row.get::<_, String>(0))?;
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
     }
+
+    /// Verify that a user has access to a specific workspace instance.
+    ///
+    /// Resolution order (mirrors `list_workspaces_inner`):
+    /// 1. Owner/admin role keys — instance must exist and be active (with
+    ///    `user_store_access` check for multi-store mode)
+    /// 2. `user_workspace_instances` — direct assignment for this user
+    /// 3. `role_workspace_types` — role grants access to the instance's type
+    ///
+    /// Returns `Ok(true)` if the user may create a session against this
+    /// instance, `Ok(false)` if access is denied.
+    ///
+    /// Called by `create_session` in both desktop and tablet clients as a
+    /// server-side authorization gate (ADR #4 / ADR #7).
+    pub fn verify_instance_access(
+        &self,
+        role_id: &str,
+        user_id: &str,
+        instance_id: &str,
+        store_id: &str,
+    ) -> Result<bool, CoreError> {
+        // 1. Owner/admin bypass — check store access if user_store_access is active.
+        if role_id == "role-owner"
+            || role_id == "role-admin"
+            || role_id == "admin"
+            || role_id == "role-manager"
+            || role_id == "role-staff"
+            || role_id == "manager"
+        {
+            // Check if user has explicit store access rows (multi-store mode, ADR #4 Phase 2).
+            let has_store_access: bool = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1",
+                    params![user_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+
+            if has_store_access {
+                // Multi-store mode: user must have access to this specific store.
+                let store_accessible: bool = self
+                    .conn
+                    .query_row(
+                        "SELECT COUNT(*) > 0 FROM user_store_access WHERE user_id = ?1 AND store_id = ?2",
+                        params![user_id, store_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(false);
+                if !store_accessible {
+                    return Ok(false);
+                }
+            }
+
+            // Instance must exist and be active in this store.
+            let exists: bool = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM workspace_instances WHERE id = ?1 AND store_id = ?2 AND status = 'active'",
+                    params![instance_id, store_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            return Ok(exists);
+        }
+
+        // 2. Check for explicit user-level instance assignment.
+        let has_explicit: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM user_workspace_instances WHERE user_id = ?1 AND instance_id = ?2",
+                params![user_id, instance_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if has_explicit {
+            return Ok(true);
+        }
+
+        // 3. Fall back to role-based type access.
+        let has_role_access: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM workspace_instances wi
+                 JOIN role_workspace_types rwt ON wi.type_key = rwt.type_key
+                 WHERE wi.id = ?1
+                   AND wi.store_id = ?2
+                   AND wi.status = 'active'
+                   AND rwt.role_id = ?3",
+                params![instance_id, store_id, role_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        Ok(has_role_access)
+    }
 }
 
 #[cfg(test)]

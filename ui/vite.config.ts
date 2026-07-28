@@ -73,9 +73,6 @@ export default defineConfig({
     // is generous — no test file has hooks that take longer.
     hookTimeout: 5_000,
 
-    dangerouslyIgnoreUnhandledErrors: true,
-
-
     // ── Coverage ────────────────────────────────────────────────────────
     //
     // Run with `npm run test:coverage` (or `vitest run --coverage`).

@@ -64,6 +64,11 @@ pub struct AppState {
     /// [`SessionContext`] values. ADR #4 / ADR #7.
     pub session_store: Arc<RwLock<HashMap<String, SessionContext>>>,
 
+    /// Session TTL in seconds. Read from `session.ttl_seconds` setting
+    /// at startup; defaults to 86400 (24 hours). Set to 0 to disable
+    /// session expiry (development mode).
+    pub session_ttl_seconds: i64,
+
     /// Terminal identifier for multi-terminal deployments.
     ///
     /// Set once at startup or via set_feature(MultiTerminal, true).
@@ -92,6 +97,14 @@ impl AppState {
         migrations::run(&mut conn)
             .map_err(|e| AppError::Internal(format!("running migrations: {e}")))?;
 
+        // ── Session TTL ──────────────────────────────────────────────
+        // Read from settings; default 24h. 0 or missing = no expiry.
+        let session_ttl_seconds: i64 = oz_core::Settings::get(&conn, "session.ttl_seconds")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(86400);
+
         let registry = Arc::new(DriverRegistry::default());
 
         tracing::info!(?db_path, "AppState initialised");
@@ -104,6 +117,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds,
             terminal_id: Mutex::new(None),
         })
     }
@@ -111,14 +125,66 @@ impl AppState {
     /// Resolve an opaque session token to its [`SessionContext`].
     ///
     /// ADR #4 / ADR #7: Commands call this to look up the caller's
-    /// resolved scope.
-    /// Returns `AppError::InvalidSession` if the token is unknown.
+    /// resolved scope. Returns `AppError::InvalidSession` if the
+    /// token is unknown OR if the session has expired (TTL check).
+    ///
+    /// Expired sessions are atomically removed during resolution.
+    ///
+    /// Uses a double-check lock pattern: the fast path (valid session)
+    /// only acquires a shared read lock. The exclusive write lock is
+    /// only acquired when a session is actually expired, which is rare.
     pub fn resolve_session(&self, token: &str) -> Result<SessionContext, AppError> {
-        let store = self
+        // Fast path: read-only check.
+        {
+            let store = self
+                .session_store
+                .read()
+                .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
+
+            match store.get(token) {
+                Some(ctx) if !ctx.is_expired() => return Ok(ctx.clone()),
+                Some(_) => {} // expired — fall through to write-lock path
+                None => return Err(AppError::InvalidSession),
+            }
+        }
+
+        // Slow path: expired session — acquire write lock to remove it.
+        let mut store = self
             .session_store
-            .read()
+            .write()
             .map_err(|e| AppError::Internal(format!("session store lock poisoned: {e}")))?;
-        store.get(token).cloned().ok_or(AppError::InvalidSession)
+
+        // Double-check: another thread may have already removed or refreshed it.
+        if let Some(ctx) = store.get(token)
+            && ctx.is_expired()
+        {
+            store.remove(token);
+            tracing::info!(token = %token, "session expired — removed from store");
+        }
+
+        Err(AppError::InvalidSession)
+    }
+
+    /// Remove all expired sessions from the store in a single sweep.
+    /// Called periodically by the background session-cleanup daemon.
+    pub fn prune_expired_sessions(&self) -> usize {
+        let mut store = match self.session_store.write() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("session store lock poisoned during prune: {e}");
+                return 0;
+            }
+        };
+        let before = store.len();
+        store.retain(|_, ctx| !ctx.is_expired());
+        let pruned = before - store.len();
+        if pruned > 0 {
+            tracing::info!(
+                "pruned {pruned} expired session(s), {remaining} remain",
+                remaining = store.len()
+            );
+        }
+        pruned
     }
 }
 
@@ -174,6 +240,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
         }
     }
@@ -189,6 +256,7 @@ impl AppState {
             scanner_cancel: Mutex::new(None),
             kernel: Mutex::new(Kernel::new()),
             session_store: Arc::new(RwLock::new(HashMap::new())),
+            session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
         }
     }
@@ -249,6 +317,8 @@ mod tests {
             terminal_id: "term-1".into(),
             instance_id: "inst-1".into(),
             type_key: "pos".into(),
+            expires_at: None,
+            created_at: 0,
         };
         {
             let mut store = state.session_store.write().unwrap();
@@ -271,6 +341,8 @@ mod tests {
             terminal_id: "t1".into(),
             instance_id: "i1".into(),
             type_key: "pos".into(),
+            expires_at: None,
+            created_at: 0,
         };
         {
             let mut store = state.session_store.write().unwrap();

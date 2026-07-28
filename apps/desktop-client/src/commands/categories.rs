@@ -5,7 +5,7 @@
 //! display and manipulate product categories.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::Store;
 
@@ -28,14 +28,14 @@ pub struct CategoryDto {
 /// Fetch all categories, ordered by name.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_categories_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_categories(state: State<'_, AppState>) -> Result<Vec<CategoryDto>, AppError> {
     let db = state.db.lock().await;
     run_list_categories(&db)
 }
 
 /// Fetch all categories for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_categories_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -87,7 +87,7 @@ pub struct CreateCategoryResult {
     pub id: String,
 }
 
-#[command]
+#[tauri::command]
 /// Create category.
 pub async fn create_category(
     args: CreateCategoryArgs,
@@ -124,7 +124,7 @@ pub struct UpdateCategoryResult {
 }
 
 /// Update an existing category's name, colour, and icon.
-#[command]
+#[tauri::command]
 pub async fn update_category(
     args: UpdateCategoryArgs,
     state: State<'_, AppState>,
@@ -144,7 +144,7 @@ pub struct DeleteCategoryArgs {
     pub id: String,
 }
 
-#[command]
+#[tauri::command]
 /// Delete category.
 pub async fn delete_category(
     args: DeleteCategoryArgs,

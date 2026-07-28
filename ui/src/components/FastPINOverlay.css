@@ -441,6 +441,18 @@
   width: 100%;
 }
 
+/* ── Rate-limit warning (inside error banner) ──────────── */
+
+.fastpin-rate-limit {
+  display: inline;
+  font-weight: var(--font-weight-semibold, 600);
+  white-space: nowrap;
+}
+
+.fastpin-rate-limit--lockout {
+  color: var(--color-danger-fg, #dc2626);
+}
+
 /* ── Cancel footer ────────────────────────────────────── */
 
 .fastpin-footer {

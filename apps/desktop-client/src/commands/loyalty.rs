@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::loyalty::{
@@ -69,7 +69,7 @@ mod tests {
 }
 
 /// Retrieves the loyalty account details and tier information for a specific customer.
-#[command]
+#[tauri::command]
 pub async fn get_loyalty_account(
     customer_id: String,
     state: State<'_, AppState>,
@@ -82,7 +82,7 @@ pub async fn get_loyalty_account(
 }
 
 /// Lists all registered loyalty accounts along with their tier details.
-#[command]
+#[tauri::command]
 pub async fn list_loyalty_accounts(
     state: State<'_, AppState>,
 ) -> Result<Vec<LoyaltyAccountWithDetails>, AppError> {
@@ -94,7 +94,7 @@ pub async fn list_loyalty_accounts(
 }
 
 /// Awards loyalty points to a customer based on the total value of a completed sale.
-#[command]
+#[tauri::command]
 pub async fn earn_loyalty_points(
     customer_id: String,
     sale_id: String,
@@ -109,7 +109,7 @@ pub async fn earn_loyalty_points(
 }
 
 /// Redeems loyalty points for a customer against a specific sale and returns the discount value.
-#[command]
+#[tauri::command]
 pub async fn redeem_loyalty_points(
     customer_id: String,
     points: i64,
@@ -127,7 +127,7 @@ pub async fn redeem_loyalty_points(
 }
 
 /// Lists all defined loyalty tiers and their thresholds.
-#[command]
+#[tauri::command]
 pub async fn list_loyalty_tiers(state: State<'_, AppState>) -> Result<Vec<LoyaltyTier>, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -137,7 +137,7 @@ pub async fn list_loyalty_tiers(state: State<'_, AppState>) -> Result<Vec<Loyalt
 }
 
 /// Updates the definition, multipliers, thresholds, or styling of a loyalty tier.
-#[command]
+#[tauri::command]
 pub async fn update_loyalty_tier(
     tier: LoyaltyTier,
     state: State<'_, AppState>,
@@ -157,7 +157,7 @@ pub async fn update_loyalty_tier(
 }
 
 /// Converts a given amount of loyalty points into its equivalent monetary value in minor units.
-#[command]
+#[tauri::command]
 pub async fn get_points_value(points: i64, state: State<'_, AppState>) -> Result<i64, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -167,7 +167,7 @@ pub async fn get_points_value(points: i64, state: State<'_, AppState>) -> Result
 }
 
 /// Retrieves an existing loyalty account for a customer, or creates a new one if it does not exist.
-#[command]
+#[tauri::command]
 pub async fn get_or_create_loyalty_account(
     customer_id: String,
     state: State<'_, AppState>,

@@ -3,13 +3,12 @@
 
 use serde::Serialize;
 use tauri::State;
-use tauri::command;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
 /// Liveness probe. Returns `Ok("pong")` if the Tauri runtime is alive.
-#[command]
+#[tauri::command]
 pub async fn ping() -> Result<String, AppError> {
     Ok("pong".into())
 }
@@ -27,7 +26,7 @@ pub struct VersionInfo {
     pub target: &'static str,
 }
 
-#[command]
+#[tauri::command]
 /// Version.
 pub async fn version() -> Result<VersionInfo, AppError> {
     Ok(VersionInfo {
@@ -40,7 +39,7 @@ pub async fn version() -> Result<VersionInfo, AppError> {
 
 /// Version info resolved from a session token. ADR #7.
 /// Validates the session token and returns the same compile-time version info.
-#[command]
+#[tauri::command]
 pub async fn version_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -59,7 +58,7 @@ pub async fn version_scoped(
 /// Reads `COMPUTERNAME` on Windows, `HOSTNAME` on Unix, or falls back
 /// to `"unknown-device"`. This is used by WorkspaceContext to populate
 /// the `terminal_id` field when creating session tokens (ADR #7).
-#[command]
+#[tauri::command]
 pub async fn get_device_id() -> Result<String, AppError> {
     Ok(std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
@@ -67,7 +66,7 @@ pub async fn get_device_id() -> Result<String, AppError> {
 }
 
 /// Get the local IP address of the machine.
-#[command]
+#[tauri::command]
 pub async fn get_local_ip() -> Result<String, AppError> {
     use std::net::UdpSocket;
     // A trick to get the local IP address without making actual network requests.
@@ -134,12 +133,12 @@ mod tests {
     fn version_info_field_access() {
         let v = VersionInfo {
             name: "oz-pos-app",
-            version: "0.0.22",
+            version: "0.0.23",
             rust_version: "1.80",
             target: "wasm32",
         };
         assert_eq!(v.name, "oz-pos-app");
-        assert_eq!(v.version, "0.0.22");
+        assert_eq!(v.version, "0.0.23");
         assert_eq!(v.rust_version, "1.80");
         assert_eq!(v.target, "wasm32");
     }

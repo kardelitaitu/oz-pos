@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, State, command};
+use tauri::{Emitter, State};
 use tokio::sync::oneshot;
 
 use oz_core::{Currency, Money, Settings};
@@ -34,7 +34,7 @@ pub struct OpenCashDrawerResult {
     pub opened: bool,
 }
 
-#[command]
+#[tauri::command]
 /// Open cash drawer.
 pub async fn open_cash_drawer(
     args: OpenCashDrawerArgs,
@@ -68,7 +68,7 @@ pub struct PrintReceiptResult {
     pub printed_lines: usize,
 }
 
-#[command]
+#[tauri::command]
 /// Print receipt.
 pub async fn print_receipt(
     args: PrintReceiptArgs,
@@ -189,7 +189,7 @@ pub struct PrintSalesReceiptResult {
     pub printed: bool,
 }
 
-#[command]
+#[tauri::command]
 /// Print sales receipt.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `print_sales_receipt_scoped`.
@@ -208,7 +208,7 @@ pub async fn print_sales_receipt(
 /// Settings (store name, address, receipt config) are loaded from the
 /// store-scoped database, while the printer hardware itself is not
 /// store-specific.
-#[command]
+#[tauri::command]
 pub async fn print_sales_receipt_scoped(
     session_token: String,
     args: PrintSalesReceiptArgs,
@@ -348,7 +348,7 @@ pub struct ScannerInfo {
 }
 
 /// List all registered barcode scanners.
-#[command]
+#[tauri::command]
 pub async fn list_scanners(state: State<'_, AppState>) -> Result<Vec<ScannerInfo>, AppError> {
     let ids = state.registry.scanner_ids().await;
     Ok(ids.into_iter().map(|id| ScannerInfo { id }).collect())
@@ -360,7 +360,7 @@ pub async fn list_scanners(state: State<'_, AppState>) -> Result<Vec<ScannerInfo
 /// with shape `{ code: String, symbology: String }`. Calling
 /// `start_scanner` while a scanner is already running stops the
 /// previous one first.
-#[command]
+#[tauri::command]
 pub async fn start_scanner(scanner_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     // Stop any existing scanner first.
     {
@@ -436,7 +436,7 @@ pub async fn start_scanner(scanner_id: String, state: State<'_, AppState>) -> Re
 }
 
 /// Stop the active barcode scanner background task (if any).
-#[command]
+#[tauri::command]
 pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
     let mut cancel = state.scanner_cancel.lock().await;
     if let Some(sender) = cancel.take() {
@@ -448,7 +448,7 @@ pub async fn stop_scanner(state: State<'_, AppState>) -> Result<(), AppError> {
 // ── Customer Display ───────────────────────────────────
 
 /// List all registered customer displays.
-#[command]
+#[tauri::command]
 pub async fn list_displays(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     Ok(state.registry.display_ids().await)
 }
@@ -465,7 +465,7 @@ pub struct DisplayShowArgs {
 }
 
 /// Show content on a customer-facing pole display.
-#[command]
+#[tauri::command]
 pub async fn display_show(
     args: DisplayShowArgs,
     state: State<'_, AppState>,
@@ -491,7 +491,7 @@ pub async fn display_show(
 /// Calls `oz_hal::transport::usb::probe_all()` to enumerate known USB
 /// devices. Returns an empty vec (not an error) when no USB hardware is
 /// found — the front-end can fall back to manual configuration.
-#[command]
+#[tauri::command]
 pub async fn discover_hardware() -> Result<Vec<UsbDeviceInfo>, AppError> {
     // probe_all is synchronous USB enumeration — no blocking issues for
     // a one-shot discovery call. On Windows/macOS the rusb context init
@@ -505,7 +505,7 @@ pub async fn discover_hardware() -> Result<Vec<UsbDeviceInfo>, AppError> {
 }
 
 /// Clear a customer-facing pole display.
-#[command]
+#[tauri::command]
 pub async fn display_clear(display_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let display = state
         .registry

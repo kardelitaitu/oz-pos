@@ -5,7 +5,7 @@
 //! front-end.
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, command};
+use tauri::State;
 
 use oz_core::db::Store;
 
@@ -100,14 +100,14 @@ pub struct CategoryTaxRateRow {
 /// List tax rates.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_tax_rates_scoped`.
-#[command]
+#[tauri::command]
 pub async fn list_tax_rates(state: State<'_, AppState>) -> Result<Vec<TaxRateDto>, AppError> {
     let db = state.db.lock().await;
     run_list_tax_rates(&db)
 }
 
 /// List tax rates for the store resolved from a session token. ADR #7.
-#[command]
+#[tauri::command]
 pub async fn list_tax_rates_scoped(
     session_token: String,
     state: State<'_, AppState>,
@@ -126,7 +126,7 @@ fn run_list_tax_rates(conn: &rusqlite::Connection) -> Result<Vec<TaxRateDto>, Ap
     Ok(rates.into_iter().map(to_dto).collect())
 }
 
-#[command]
+#[tauri::command]
 /// Create tax rate.
 pub async fn create_tax_rate(
     args: CreateTaxRateArgs,
@@ -144,7 +144,7 @@ pub async fn create_tax_rate(
     Ok(to_dto(rate))
 }
 
-#[command]
+#[tauri::command]
 /// Update tax rate.
 pub async fn update_tax_rate(
     args: UpdateTaxRateArgs,
@@ -163,7 +163,7 @@ pub async fn update_tax_rate(
     Ok(to_dto(rate))
 }
 
-#[command]
+#[tauri::command]
 /// Delete tax rate.
 pub async fn delete_tax_rate(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
@@ -178,7 +178,7 @@ pub async fn delete_tax_rate(id: String, state: State<'_, AppState>) -> Result<(
 /// Get all category-to-tax-rate assignments.
 /// Returns an array of { category_id, tax_rate_ids } for every category
 /// that has at least one tax rate assigned.
-#[command]
+#[tauri::command]
 pub async fn list_category_tax_rates(
     state: State<'_, AppState>,
 ) -> Result<Vec<CategoryTaxRateRow>, AppError> {
@@ -201,7 +201,7 @@ pub async fn list_category_tax_rates(
 }
 
 /// Set (replace) the tax rates assigned to a category.
-#[command]
+#[tauri::command]
 pub async fn set_category_tax_rates(
     args: SetCategoryTaxRatesArgs,
     state: State<'_, AppState>,

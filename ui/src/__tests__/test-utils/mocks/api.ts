@@ -256,3 +256,189 @@ export function createProductsApiMock(overrides: ProductsApiOverrides = {}) {
     ...overrides,
   };
 }
+
+// ── KDS (Kitchen Display System) ──────────────────────────────────
+
+export interface KdsApiOverrides {
+  listKdsOrders?: ReturnType<typeof vi.fn>;
+  listKdsOrdersScoped?: ReturnType<typeof vi.fn>;
+  getKdsQueue?: ReturnType<typeof vi.fn>;
+  getKdsQueueScoped?: ReturnType<typeof vi.fn>;
+  updateKdsStatus?: ReturnType<typeof vi.fn>;
+  updateKdsStatusScoped?: ReturnType<typeof vi.fn>;
+  createKdsOrderFromSale?: ReturnType<typeof vi.fn>;
+  createKdsOrderFromSaleScoped?: ReturnType<typeof vi.fn>;
+  getKdsOrder?: ReturnType<typeof vi.fn>;
+  getKdsOrderScoped?: ReturnType<typeof vi.fn>;
+}
+
+const defaultKdsOrder = {
+  id: 'kds-1', sale_id: 'sale-1', store_id: 'default',
+  status: 'pending' as const, items_summary: 'Item 1, Item 2',
+  item_count: 2, display_number: 101,
+  received_at: new Date().toISOString(), started_at: null,
+  ready_at: null, served_at: null, prep_time_seconds: 0,
+  kitchen_zone: null, notes: '',
+};
+
+export function createKdsApiMock(overrides: KdsApiOverrides = {}) {
+  return {
+    listKdsOrders: vi.fn((_userId: string, _status?: string) => Promise.resolve([defaultKdsOrder])),
+    listKdsOrdersScoped: vi.fn((_token: string, _status?: string) => Promise.resolve([defaultKdsOrder])),
+    getKdsQueue: vi.fn((_userId: string, _kdsZone?: string) => Promise.resolve([defaultKdsOrder])),
+    getKdsQueueScoped: vi.fn((_token: string, _kdsZone?: string) => Promise.resolve([defaultKdsOrder])),
+    updateKdsStatus: vi.fn((_userId: string, _id: string, _status: string) => Promise.resolve({ ...defaultKdsOrder, status: _status })),
+    updateKdsStatusScoped: vi.fn((_token: string, _id: string, _status: string) => Promise.resolve({ ...defaultKdsOrder, status: _status })),
+    createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve([defaultKdsOrder])),
+    createKdsOrderFromSaleScoped: vi.fn((_token: string, _saleId: string) => Promise.resolve([defaultKdsOrder])),
+    getKdsOrder: vi.fn((_userId: string, _id: string) => Promise.resolve(defaultKdsOrder)),
+    getKdsOrderScoped: vi.fn((_token: string, _id: string) => Promise.resolve(defaultKdsOrder)),
+    ...overrides,
+  };
+}
+
+// ── Gift Cards ─────────────────────────────────────────────────────
+
+export interface GiftCardsApiOverrides {
+  issueGiftCard?: ReturnType<typeof vi.fn>;
+  getGiftCard?: ReturnType<typeof vi.fn>;
+  listGiftCards?: ReturnType<typeof vi.fn>;
+  getGiftCardBalance?: ReturnType<typeof vi.fn>;
+  redeemGiftCard?: ReturnType<typeof vi.fn>;
+  topUpGiftCard?: ReturnType<typeof vi.fn>;
+  freezeGiftCard?: ReturnType<typeof vi.fn>;
+  unfreezeGiftCard?: ReturnType<typeof vi.fn>;
+}
+
+const defaultGiftCard = {
+  id: 'gc-1', card_number: '1234-5678-9012-3456', pin: '0000',
+  initial_balance_minor: 100000, current_balance_minor: 75000,
+  currency: 'IDR', status: 'active', issued_to: 'Test Customer',
+  issue_date: new Date().toISOString(), expiry_date: null,
+  created_by: 'user-1', updated_at: new Date().toISOString(),
+};
+
+const defaultGiftCardTransaction = {
+  id: 'gctx-1', gift_card_id: 'gc-1', sale_id: null,
+  txn_type: 'issue', amount_minor: 100000, balance_after_minor: 100000,
+  notes: '', created_at: new Date().toISOString(),
+};
+
+const defaultGiftCardWithTransactions = {
+  card: defaultGiftCard,
+  transactions: [defaultGiftCardTransaction],
+};
+
+export function createGiftCardsApiMock(overrides: GiftCardsApiOverrides = {}) {
+  return {
+    issueGiftCard: vi.fn(() => Promise.resolve(defaultGiftCardWithTransactions)),
+    getGiftCard: vi.fn((_cardNumberOrId: string) => Promise.resolve(defaultGiftCardWithTransactions)),
+    listGiftCards: vi.fn((_filter: Record<string, unknown>) => Promise.resolve([defaultGiftCardWithTransactions])),
+    getGiftCardBalance: vi.fn((_cardNumberOrId: string) => Promise.resolve({ balance_minor: 75000, currency: 'IDR', status: 'active' })),
+    redeemGiftCard: vi.fn((_cardNumberOrId: string, _amountMinor: number, _saleId: string) => Promise.resolve({
+      card: defaultGiftCard,
+      transaction: { ...defaultGiftCardTransaction, txn_type: 'redeem', amount_minor: -25000, balance_after_minor: 50000, sale_id: 'sale-1' },
+    })),
+    topUpGiftCard: vi.fn((_cardNumberOrId: string, _amountMinor: number) => Promise.resolve(defaultGiftCardWithTransactions)),
+    freezeGiftCard: vi.fn((_cardNumberOrId: string) => Promise.resolve({ ...defaultGiftCard, status: 'frozen' })),
+    unfreezeGiftCard: vi.fn((_cardNumberOrId: string) => Promise.resolve({ ...defaultGiftCard, status: 'active' })),
+    ...overrides,
+  };
+}
+
+// ── Loyalty ────────────────────────────────────────────────────────
+
+export interface LoyaltyApiOverrides {
+  getLoyaltyAccount?: ReturnType<typeof vi.fn>;
+  listLoyaltyAccounts?: ReturnType<typeof vi.fn>;
+  earnLoyaltyPoints?: ReturnType<typeof vi.fn>;
+  redeemLoyaltyPoints?: ReturnType<typeof vi.fn>;
+  listLoyaltyTiers?: ReturnType<typeof vi.fn>;
+  updateLoyaltyTier?: ReturnType<typeof vi.fn>;
+  getPointsValue?: ReturnType<typeof vi.fn>;
+  getOrCreateLoyaltyAccount?: ReturnType<typeof vi.fn>;
+}
+
+const loyaltyTier = {
+  id: 'tier-1', name: 'Silver', min_points: 0,
+  points_per_unit: 10, earn_multiplier: 1.0,
+  colour: '#C0C0C0', sort_order: 1,
+  created_at: new Date().toISOString(),
+};
+
+const loyaltyAccount = {
+  id: 'loyalty-1', customer_id: 'cust-1', points: 500,
+  lifetime_points: 1500, tier_id: 'tier-1',
+  updated_at: new Date().toISOString(), created_at: new Date().toISOString(),
+};
+
+const loyaltyAccountWithDetails = {
+  account: loyaltyAccount,
+  tier: loyaltyTier,
+  recent_transactions: [],
+  next_tier: null,
+  points_to_next_tier: 500,
+};
+
+export function createLoyaltyApiMock(overrides: LoyaltyApiOverrides = {}) {
+  return {
+    getLoyaltyAccount: vi.fn((_customerId: string) => Promise.resolve(loyaltyAccountWithDetails)),
+    listLoyaltyAccounts: vi.fn(() => Promise.resolve([loyaltyAccountWithDetails])),
+    earnLoyaltyPoints: vi.fn((_customerId: string, _saleId: string, _totalMinor: number) => Promise.resolve({
+      id: 'loyaltytx-1', account_id: 'loyalty-1', sale_id: 'sale-1',
+      points: 100, txn_type: 'earn', description: 'Points earned',
+      created_at: new Date().toISOString(),
+    })),
+    redeemLoyaltyPoints: vi.fn((_customerId: string, _points: number, _saleId: string) => Promise.resolve({
+      transaction: {
+        id: 'loyaltytx-2', account_id: 'loyalty-1', sale_id: 'sale-1',
+        points: -200, txn_type: 'redeem', description: 'Points redeemed',
+        created_at: new Date().toISOString(),
+      },
+      discount_minor: 50000,
+    })),
+    listLoyaltyTiers: vi.fn(() => Promise.resolve([loyaltyTier])),
+    updateLoyaltyTier: vi.fn((_tier: Record<string, unknown>) => Promise.resolve(loyaltyTier)),
+    getPointsValue: vi.fn((_points: number) => Promise.resolve(25000)),
+    getOrCreateLoyaltyAccount: vi.fn((_customerId: string) => Promise.resolve(loyaltyAccount)),
+    ...overrides,
+  };
+}
+
+// ── Reports ────────────────────────────────────────────────────────
+
+export interface ReportsApiOverrides {
+  getDailyRevenue?: ReturnType<typeof vi.fn>;
+  getWeeklyRevenue?: ReturnType<typeof vi.fn>;
+  getMonthlyRevenue?: ReturnType<typeof vi.fn>;
+  getTopProducts?: ReturnType<typeof vi.fn>;
+  getHourlyHeatmap?: ReturnType<typeof vi.fn>;
+  getLowStockAlerts?: ReturnType<typeof vi.fn>;
+  getCategoryBreakdown?: ReturnType<typeof vi.fn>;
+  getMenuEngineering?: ReturnType<typeof vi.fn>;
+  buildCustomReport?: ReturnType<typeof vi.fn>;
+}
+
+const dailyRevenueRow = { date: '2026-07-27', total_minor: 1250000, currency: 'IDR', sale_count: 12 };
+const topProductRow = { product_id: 'prod-1', sku: 'SKU-001', name: 'Test Product', total_qty: 5, total_minor: 500000 };
+const hourlyRow = { day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 };
+const categoryRow = { category_id: 'cat-1', category_name: 'Food', total_minor: 500000, sale_count: 8, percentage: 40 };
+
+export function createReportsApiMock(overrides: ReportsApiOverrides = {}) {
+  return {
+    getDailyRevenue: vi.fn((_start: string, _end: string) => Promise.resolve([dailyRevenueRow])),
+    getWeeklyRevenue: vi.fn((_start: string, _end: string) => Promise.resolve([{ week_start: '2026-07-21', total_minor: 8500000, currency: 'IDR', sale_count: 65 }])),
+    getMonthlyRevenue: vi.fn((_start: string, _end: string) => Promise.resolve([{ month: '2026-07', total_minor: 35000000, currency: 'IDR', sale_count: 280 }])),
+    getTopProducts: vi.fn((_start: string, _end: string, _limit: number) => Promise.resolve([topProductRow])),
+    getHourlyHeatmap: vi.fn((_start: string, _end: string) => Promise.resolve([hourlyRow])),
+    getLowStockAlerts: vi.fn((_threshold: number) => Promise.resolve([])),
+    getCategoryBreakdown: vi.fn((_start: string, _end: string) => Promise.resolve([categoryRow])),
+    getMenuEngineering: vi.fn((_start: string, _end: string) => Promise.resolve({
+      rows: [{ product_id: 'prod-1', sku: 'SKU-001', name: 'Test', total_volume: 50, unit_price_minor: 10000, unit_cost_minor: 4000, margin_per_unit: 6000, total_margin_minor: 300000, total_revenue_minor: 500000 }],
+      median_volume: 25,
+      median_margin: 5000,
+    })),
+    buildCustomReport: vi.fn((_request: Record<string, unknown>) => Promise.resolve({ columns: ['SKU', 'Name'], rows: [['SKU-001', 'Test']] })),
+    ...overrides,
+  };
+}

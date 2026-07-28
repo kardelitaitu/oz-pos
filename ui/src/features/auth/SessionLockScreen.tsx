@@ -2,10 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { checkLicenseStatus } from '@/api/license';
+import { staffLogin } from '@/api/staff';
 import { useLocalization } from '@fluent/react';
 import './SessionLockScreen.css';
 
 const MAX_PIN_LENGTH = 4;
+const MAX_PIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 30_000;
 
 function AlertIcon() {
   return (
@@ -34,6 +37,7 @@ export default function SessionLockScreen({
   const [error, setError] = useState('');
   const [time, setTime] = useState(new Date());
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [pinAttempts, setPinAttempts] = useState(0);
   const pinWrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const lastErrorRef = useRef<string | null>(null);
@@ -42,9 +46,10 @@ export default function SessionLockScreen({
   const [authOnline, setAuthOnline] = useState<boolean | null>(null);
   const [authLatency, setAuthLatency] = useState<number | null>(null);
 
+  // Check license once on mount (decorative status pill — no continuous polling needed).
   useEffect(() => {
     let mounted = true;
-    const check = async () => {
+    (async () => {
       try {
         const start = performance.now();
         const result = await checkLicenseStatus();
@@ -61,10 +66,8 @@ export default function SessionLockScreen({
         setAuthLatency(null);
         setAuthOnline(false);
       }
-    };
-    check();
-    const id = setInterval(check, 60000);
-    return () => { mounted = false; clearInterval(id); };
+    })();
+    return () => { mounted = false; };
   }, []);
 
   // Auto-unlock after lockout period
@@ -134,26 +137,57 @@ export default function SessionLockScreen({
           setPin([]);
           return;
         }
-        const { staffLogin } = await import('@/api/staff');
         await staffLogin({ username, pin: entered });
         // Success — PIN verified
         setPin([]);
+        setPinAttempts(0);
         onUnlock();
       } catch (err) {
-        const msg = (err as Record<string, unknown> | null)?.['message'] as string
+        const errObj = err as Record<string, unknown> | null;
+        const msg = errObj?.['message'] as string
           ?? l10n.getString('session-lock-invalid-pin');
         setError(msg);
         setPin([]);
 
-        const lockoutMatch = msg.match(/Try again in (\d+)s/);
-        if (lockoutMatch && lockoutMatch[1]) {
-          const seconds = parseInt(lockoutMatch[1], 10);
-          setLockedUntil(Date.now() + seconds * 1000);
+        // Increment local attempt counter (defense-in-depth).
+        const nextAttempts = pinAttempts + 1;
+        setPinAttempts(nextAttempts);
+
+        // Enforce local lockout after MAX_PIN_ATTEMPTS.
+        if (nextAttempts >= MAX_PIN_ATTEMPTS) {
+          setLockedUntil(Date.now() + LOCKOUT_DURATION_MS);
+        }
+
+        // Also respect backend rate-limit instructions, if present.
+        const lockoutSeconds = parseRateLimitSeconds(msg, errObj);
+        if (lockoutSeconds !== null) {
+          setLockedUntil(Date.now() + lockoutSeconds * 1000);
         }
       }
     };
     attemptLogin();
-  }, [pin, session, onUnlock, l10n]);
+  }, [pin, session, onUnlock, l10n, pinAttempts]);
+
+  /**
+   * Parse the retry-after duration from a rate-limit error, supporting
+   * both the legacy string pattern and a future structured field.
+   */
+  function parseRateLimitSeconds(
+    msg: string,
+    errObj: Record<string, unknown> | null,
+  ): number | null {
+    // 1. Structured field on the error object (future-proof).
+    const retryAfter = errObj?.['retry_after_seconds'] ?? errObj?.['retry-after'];
+    if (typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0) {
+      return Math.ceil(retryAfter);
+    }
+    // 2. Legacy string pattern: "Try again in Ns" or "Try again in N seconds".
+    const match = msg.match(/Try again in (\d+)\s*s(?:econds?)?/i);
+    if (match && match[1]) {
+      return parseInt(match[1], 10);
+    }
+    return null;
+  }
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
