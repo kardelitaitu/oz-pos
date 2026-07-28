@@ -792,6 +792,13 @@ retail-fn-quick-return = Quick Return
 retail-header-workspaces-title = Back to workspaces
 retail-header-workspaces-aria = Back to workspaces
 
+# ── Retail POS table columns ──
+retail-col-sku = SKU / Code
+retail-col-name = Product Name
+retail-col-stock = Stock
+retail-col-price = Price
+retail-col-action = Action
+
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...
 gift-cards-status-all = All Statuses

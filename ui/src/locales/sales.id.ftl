@@ -783,6 +783,13 @@ retail-fn-quick-return = Retur Cepat
 retail-header-workspaces-title = Kembali ke ruang kerja
 retail-header-workspaces-aria = Kembali ke ruang kerja
 
+# ── Retail POS table columns ──
+retail-col-sku = SKU / Kode
+retail-col-name = Nama Produk
+retail-col-stock = Stok
+retail-col-price = Harga
+retail-col-action = Aksi
+
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
