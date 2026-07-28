@@ -70,6 +70,7 @@
   height: var(--space-7);
   padding: 0;
   /* POS accent overlay — no token equivalent for white-on-primary at 12% */
+  background: var(--color-bg-elevated); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-bg-elevated) 12%, transparent);
   border: none;
   border-radius: var(--radius-sm);
@@ -80,6 +81,7 @@
 
 .retail-header-nav-btn:hover {
   /* POS accent overlay hover — no token equivalent for white-on-primary at 22% */
+  background: var(--color-bg-elevated); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-bg-elevated) 22%, transparent);
 }
 
@@ -119,6 +121,7 @@
   gap: var(--space-1);
   padding: var(--space-0_5) var(--space-2);
   /* POS accent overlay */
+  background: var(--color-bg-elevated); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-bg-elevated) 12%, transparent);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
@@ -138,6 +141,7 @@
 
 .retail-resize-handle:hover,
 .retail-resize-handle:focus-visible {
+  background: var(--color-primary-pos); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-primary-pos) 10%, transparent);
 }
 
@@ -1594,6 +1598,7 @@
 .retail-cart-table-inner tbody tr:focus-within {
   outline: 2px solid var(--color-primary-pos);
   outline-offset: -2px;
+  background: var(--color-primary-pos-light); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-primary-pos-light) 40%, transparent);
 }
 
@@ -1844,6 +1849,7 @@
   inset: 0;
   pointer-events: none;
   z-index: 500;
+  background: var(--color-success-pos); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
   background: color-mix(in srgb, var(--color-success-pos) 15%, transparent);
   animation: retail-flash-out 300ms var(--ease-out) forwards;
 }
