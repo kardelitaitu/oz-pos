@@ -321,7 +321,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
-  line-height: 1.15;
+  line-height: 1;
 }
 
 .retail-product-table th {
@@ -329,7 +329,7 @@
   top: 0;
   z-index: 2;
   background: var(--color-border-hover);
-  padding: var(--space-1) var(--space-2);
+  padding: 4px var(--space-2);
   text-align: left;
   font-size: 12px;
   text-transform: uppercase;
@@ -337,6 +337,7 @@
   border-bottom: 1px solid var(--color-border-strong);
   font-weight: var(--font-weight-bold);
   letter-spacing: 0.5px;
+  line-height: 1;
 }
 
 .retail-col-sortable {
@@ -371,15 +372,14 @@
 }
 
 .retail-product-table td {
-  padding: 0 var(--space-2);
+  padding: 3px var(--space-2);
   border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
-  height: 1.5rem;
+  line-height: 1;
 }
 
 .retail-product-row {
   cursor: pointer;
-  height: 1.5rem;
   transition: background-color var(--duration-150) var(--ease-out);
 }
 
@@ -412,12 +412,14 @@
   color: var(--color-fg-secondary);
   white-space: nowrap;
   width: 140px;
+  line-height: 1;
 }
 
 .retail-col-name {
   font-weight: var(--font-weight-semibold);
   font-size: 14px;
   color: var(--color-fg-primary);
+  line-height: 1;
 }
 
 .retail-col-name .retail-product-btn {
@@ -433,7 +435,6 @@
   align-items: center;
   gap: var(--space-1_5);
   width: 100%;
-  height: 1.5rem;
   line-height: 1;
 }
 
@@ -444,6 +445,7 @@
 .retail-col-stock {
   width: 90px;
   text-align: center;
+  line-height: 1;
 }
 
 .retail-col-price {
@@ -454,17 +456,19 @@
   color: var(--color-accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  line-height: 1;
 }
 
 .retail-col-action {
   width: 80px;
   text-align: center;
+  line-height: 1;
 }
 
 .retail-table-add-btn {
-  padding: 0 6px;
-  height: 1.25rem;
-  line-height: 1.25rem;
+  padding: 1px 6px;
+  height: 1.125rem;
+  line-height: 1.125rem;
   font-size: 11px;
   font-weight: var(--font-weight-bold);
   font-family: inherit;
