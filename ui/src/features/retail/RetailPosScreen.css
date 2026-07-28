@@ -372,14 +372,17 @@
 }
 
 .retail-product-table td {
-  padding: 3px var(--space-2);
+  padding: 2px var(--space-2);
   border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
-  line-height: 1;
+  height: 1.25rem;
+  line-height: 1.1;
 }
 
 .retail-product-row {
   cursor: pointer;
+  height: 1.25rem;
+  max-height: 1.25rem;
   transition: background-color var(--duration-150) var(--ease-out);
 }
 
@@ -412,14 +415,14 @@
   color: var(--color-fg-secondary);
   white-space: nowrap;
   width: 140px;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .retail-col-name {
   font-weight: var(--font-weight-semibold);
   font-size: 14px;
   color: var(--color-fg-primary);
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .retail-col-name .retail-product-btn {
@@ -435,7 +438,9 @@
   align-items: center;
   gap: var(--space-1_5);
   width: 100%;
-  line-height: 1;
+  height: 1.25rem;
+  min-height: 0;
+  line-height: 1.1;
 }
 
 .retail-col-name .retail-product-btn:hover:not(:disabled) {
@@ -445,7 +450,7 @@
 .retail-col-stock {
   width: 90px;
   text-align: center;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .retail-col-price {
@@ -456,20 +461,20 @@
   color: var(--color-accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .retail-col-action {
   width: 80px;
   text-align: center;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .retail-table-add-btn {
-  padding: 1px 6px;
-  height: 1.125rem;
-  line-height: 1.125rem;
-  font-size: 11px;
+  padding: 0 5px;
+  height: 1rem;
+  line-height: 1rem;
+  font-size: 10px;
   font-weight: var(--font-weight-bold);
   font-family: inherit;
   background: var(--color-accent-subtle);
@@ -2075,19 +2080,6 @@
 }
 
 /* ── Touch-friendly: larger tap targets ─────────────────────── */
-
-.retail-product-btn {
-  min-height: 5rem;
-  padding: var(--space-3) var(--space-2);
-}
-
-.retail-product-btn .retail-product-name {
-  font-size: var(--text-sm);
-}
-
-.retail-product-btn .retail-product-price {
-  font-size: var(--text-sm);
-}
 
 .retail-cat-btn {
   padding: var(--space-2) 1.125rem;
