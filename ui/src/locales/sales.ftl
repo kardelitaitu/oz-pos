@@ -811,6 +811,13 @@ retail-edit-save = Save Changes
 retail-edit-cancel = Cancel
 retail-edit-btn-aria = Edit product { $name }
 
+# ── Add Category / Add Product Modals ──
+retail-add-category-btn = + Category
+retail-add-category-title = Add Category
+retail-add-category-field-name = Category Name
+retail-add-product-btn = + Product
+retail-add-product-title = Add Product
+
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...
 gift-cards-status-all = All Statuses

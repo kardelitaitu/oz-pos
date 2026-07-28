@@ -802,6 +802,13 @@ retail-edit-save = Simpan Perubahan
 retail-edit-cancel = Batal
 retail-edit-btn-aria = Edit produk { $name }
 
+# ── Add Category / Add Product Modals ──
+retail-add-category-btn = + Kategori
+retail-add-category-title = Tambah Kategori
+retail-add-category-field-name = Nama Kategori
+retail-add-product-btn = + Produk
+retail-add-product-title = Tambah Produk
+
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
