@@ -253,6 +253,25 @@
   --z-modal:     400;
   --z-toast:     500;
   --z-tooltip:   600;
+
+  /* ── POS Brand-Locked Tokens (audit P0-2, stable across themes) ─────
+   * Navy primary, bronze warning, gold F-key — POS keeps its visual
+   * identity (POS brand-stamped look) regardless of which Steel Blue
+   * variant the user has selected. Declared once in :root; later
+   * [data-theme=...] blocks omit these so :root values cascade. */
+  --color-primary-pos:        #1e3a5f;
+  --color-primary-pos-light:  #2e578c;
+  --color-primary-pos-dark:   #112239;
+  --color-success-pos:        #10b981;
+  --color-success-pos-darker: #059669;
+  --color-warning-pos:        #d97706;
+  --color-fn-key-pos:         #fbbf24;
+  --color-dark-bg-pos:        #0d131f;
+  --color-dark-border-pos:    #1f2937;
+
+  /* ── POS Surface Tokens ─── Default = Steel Blue Glassmorphism ── */
+  --color-bg-pos:             var(--color-bg);
+  --color-ink:                #000000;
 }
 
 /* ── Light mode (Steel Blue Elevated) ────────────────────────────── */
@@ -354,6 +373,10 @@
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
   --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
+
+  /* ── POS Surface Tokens (Light = Steel Blue Elevated) ──────── */
+  --color-bg-pos:             var(--neutral-100);
+  --color-ink:                #000000;
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -452,6 +475,10 @@
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
   --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
+
+  /* ── POS Surface Tokens (Dark = Steel Blue Solid) ──────────── */
+  --color-bg-pos:             var(--neutral-50);
+  --color-ink:                #000000;
 }
 
 /* ── Smooth theme transitions ──────────────────── */

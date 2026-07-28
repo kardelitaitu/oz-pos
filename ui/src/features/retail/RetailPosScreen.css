@@ -318,7 +318,7 @@
   padding: var(--space-2_5) var(--space-1_5);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-hover);
-  border-top: 0.1875rem solid hsl(var(--cat-hue, 210), 30%, 70%);
+  border-top: 0.1875rem solid color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 12%);
   cursor: pointer;
   min-height: 4.375rem;
   transition:
@@ -331,14 +331,14 @@
 }
 
 .retail-product-btn:hover {
-  background: hsl(var(--cat-hue, 210), 40%, 92%);
+  background: color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 30%);
   border-color: var(--color-primary-pos);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
 .retail-product-btn:active {
-  background: hsl(var(--cat-hue, 210), 40%, 82%);
+  background: color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 50%);
   transform: translateY(0) scale(0.98);
 }
 
@@ -1065,7 +1065,7 @@
   font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
   flex-shrink: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, #000);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, var(--color-ink));
   text-shadow: var(--shadow-sm);
 }
 
