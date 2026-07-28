@@ -10,6 +10,33 @@ use platform_core::database::Migration;
 ///
 /// The list is exhaustive at compile time; adding a new migration means
 /// adding a new entry here AND a new file in `crates/oz-core/migrations/`.
+///
+/// # Numbering gaps
+///
+/// The following migration numbers are intentionally absent — they held
+/// migrations that were removed, renumbered, or merged during development:
+///
+/// - 026 — removed (absorbed into 025_store_profiles rework)
+/// - 034 — removed (merged into 035_workspaces)
+/// - 044 — removed (redundant with 043_price_updated_at)
+/// - 056–059 — reserved for workspace-instance lifecycle (ultimately landed as 060)
+/// - 062 — removed (merged into 063_stock_movements)
+/// - 088 — removed (merged into 089_stock_summary_composite_pk)
+///
+/// The runner uses a tracking table (`schema_migrations`), not sequential
+/// numbering, so gaps are safe. Do not re-use a gap number — always append
+/// the next available integer.
+///
+/// # Shared-prefix convention (legacy)
+///
+/// Migrations 046 and 047 each have multiple files sharing the same numeric
+/// prefix (`046_gift_cards`, `046_suppliers`, `046_stock_counts`,
+/// `046_track_serial` and `047_purchase_orders`, `047_stock_transfers`,
+/// `047_receipt_barcodes`). This is a legacy pattern from early development
+/// when domain-adjacent migrations were batched under one number. New
+/// migrations MUST use a unique sequential prefix. The runner processes
+/// migrations in compile-time array order, so the shared prefixes have no
+/// functional impact.
 pub const ALL: &[Migration] = &[
     Migration {
         id: "001_sales.sql",
@@ -534,6 +561,12 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
     // connections contend for the write lock (default is 0 = immediate fail).
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "busy_timeout", "5000")?;
+    // synchronous=NORMAL is safe in WAL mode (the WAL itself provides
+    // durability) and yields 2–3× faster writes than the default FULL.
+    // For a local POS database, only a power loss or hard shutdown
+    // (without fsync) loses the most recent transaction, which the
+    // offline queue recovers from.
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
     // Enable foreign key enforcement. SQLite defaults to OFF — the setting
     // is per-connection, so we must set it on every connection open.
     conn.pragma_update(None, "foreign_keys", "ON")?;
