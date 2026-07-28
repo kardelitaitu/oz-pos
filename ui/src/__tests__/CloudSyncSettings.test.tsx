@@ -223,7 +223,7 @@ function getServerUrlInput(): HTMLInputElement {
 }
 
 function getEnabledCheckbox(): HTMLInputElement {
-  return screen.getByLabelText(/enable cloud sync/i) as HTMLInputElement;
+  return screen.getByRole('switch') as HTMLInputElement;
 }
 
 describe('CloudSyncSettings', () => {

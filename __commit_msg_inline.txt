@@ -1,24 +1,4 @@
-fix(ui): prevent infinite render loops from unstable l10n refs across 9 components
+chore: commit remaining uncommitted working-tree changes from 0.0.22
 
-Root cause: Adding `l10n` to useCallback/useEffect dependency arrays (from the
-exhaustive-deps fix) created infinite re-render loops when the test mock or
-provider returns a new `l10n` object on every render. Pattern:
-render → new l10n → callback recreated → effect re-fires → setState → render → loop.
-
-Fix: Standard React ref pattern — replace direct `l10n` references in callbacks
-and effects with `l10nRef.current` (via `useRef(l10n)`), removing `l10n` from
-dependency arrays while still using the latest value.
-
-Files changed:
-  - ui/src/features/inventory/StockAlertPanel.tsx (ref pattern + useRef import)
-  - ui/src/features/inventory/StockCountsScreen.tsx (load useCallback)
-  - ui/src/features/inventory/StockCountHistory.tsx (load + handleSelectCount)
-  - ui/src/features/inventory/StockCountDetail.tsx (load, useEffect, 5 handlers)
-  - ui/src/features/inventory/ShiftBar.tsx (useEffect, start/end shift)
-  - ui/src/features/inventory/TransactionLogScreen.tsx (useEffect, row click)
-  - ui/src/features/purchasing/PurchaseOrdersScreen.tsx (load, status, receive)
-  - ui/src/features/purchasing/PurchaseOrderForm.tsx (useEffect, handleSave)
-  - ui/src/features/sales/PaymentModal.tsx (currency, customer, loyalty ×2 effects)
-
-Validation: 3,219/3,228 UI tests pass (9 pre-existing failures, 0 regressions).
-Typecheck ✓, ESLint ✓, StockAlertPanel loop test ✓.
+- CloudSyncSettings.test.tsx: fix getEnabledCheckbox() to use getByRole('switch')
+- skill-drift-report.md: auto-generated drift report snapshot
