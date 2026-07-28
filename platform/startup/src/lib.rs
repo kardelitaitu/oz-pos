@@ -168,7 +168,7 @@ pub fn init_module_system(
                         Box::new(oz_notification::handlers::PaymentReceiptHandler::new(
                             client.clone(),
                             std::env::var("WHATSAPP_RECEIPT_PHONE")
-                                .unwrap_or_else(|_| "+6280000000000".into()),
+                                .unwrap_or_else(|_| "+15550000000".into()),
                         )),
                     );
                     // Default threshold: alert when ≤ 5 items remaining.
@@ -177,7 +177,7 @@ pub fn init_module_system(
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(5);
                     let manager_phone = std::env::var("WHATSAPP_MANAGER_PHONE")
-                        .unwrap_or_else(|_| "+6280000000000".into());
+                        .unwrap_or_else(|_| "+15550000000".into());
                     bus.subscribe::<oz_core::events::StockAdjusted>(
                         "stock.adjusted",
                         Box::new(oz_notification::handlers::StockLowAlertHandler::new(

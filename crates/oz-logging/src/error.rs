@@ -13,6 +13,10 @@ pub enum LoggingError {
     /// The configured log level is invalid.
     #[error("invalid log level: {0}")]
     InvalidLevel(String),
+
+    /// The global tracing subscriber has already been set.
+    #[error("logging already initialised: {0}")]
+    InitFailed(String),
 }
 
 #[cfg(test)]
@@ -49,6 +53,13 @@ mod tests {
     fn implements_std_error() {
         let err = LoggingError::InvalidLevel("test".into());
         let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn init_failed_display() {
+        let err = LoggingError::InitFailed("already set".into());
+        assert!(err.to_string().contains("already initialised"));
+        assert!(err.to_string().contains("already set"));
     }
 
     #[test]

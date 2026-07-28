@@ -148,7 +148,7 @@ impl SquarePaymentProcessor {
         let mut headers = HeaderMap::new();
         let mut auth_value =
             HeaderValue::from_str(&format!("Bearer {}", api_key)).unwrap_or_else(|e| {
-                tracing::error!(?e, "invalid Square API key — using placeholder auth header");
+                tracing::error!(error = %e, "invalid Square auth header — using placeholder");
                 HeaderValue::from_static("Bearer placeholder")
             });
         auth_value.set_sensitive(true);
@@ -161,8 +161,8 @@ impl SquarePaymentProcessor {
             .build()
             .unwrap_or_else(|e| {
                 tracing::error!(
-                    ?e,
-                    "failed to build reqwest Client for Square — using default"
+                    error = %e,
+                    "failed to build HTTP client for Square — using default"
                 );
                 reqwest::Client::new()
             });

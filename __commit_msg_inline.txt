@@ -1,1 +1,23 @@
-chore(release): bump version 0.0.22 → 0.0.23
+fix(logging): resolve 6 audit findings — P1 key leak, P2 DEV gate, P3 try_init
+
+P1 — Payment driver error logging:
+- Changed tracing::error!(?e, ...) to tracing::error!(error = %e, ...)
+  across Stripe, Square, and QRIS drivers. The ?e Debug format
+  could potentially expose API key material; %e (Display) is opaque.
+
+P2 — Frontend console logging:
+- Gated ui/src/utils/action-log.ts with if (import.meta.env.DEV)
+  (consistent with logged-invoke.ts pattern)
+
+P3 — oz-logging improvements:
+- Added LoggingError::InitFailed variant
+- Added try_init() and try_init_json() — non-panicking init that
+  returns Result instead of panicking on double-init
+- Added test for InitFailed display
+
+P3 — WhatsApp handler:
+- Changed hardcoded fallback phone from +6280000000000 to +15550000000
+  (obviously fake US test number)
+
+Audited AuditLogScreen.tsx — entry.details rendered via React text
+content (not dangerouslySetInnerHTML), confirmed safe from XSS.

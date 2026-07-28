@@ -186,8 +186,8 @@ impl QrisPaymentProcessor {
         let mut auth_value =
             HeaderValue::from_str(&format!("Basic {}", encoded)).unwrap_or_else(|e| {
                 tracing::error!(
-                    ?e,
-                    "invalid Midtrans server key — using placeholder auth header"
+                    error = %e,
+                    "invalid Midtrans auth header — using placeholder"
                 );
                 HeaderValue::from_static("Basic placeholder")
             });
@@ -201,8 +201,8 @@ impl QrisPaymentProcessor {
             .build()
             .unwrap_or_else(|e| {
                 tracing::error!(
-                    ?e,
-                    "failed to build reqwest Client for Midtrans — using default"
+                    error = %e,
+                    "failed to build HTTP client for Midtrans — using default"
                 );
                 reqwest::Client::new()
             });

@@ -31,6 +31,40 @@ pub mod visitor;
 pub use error::LoggingError;
 use tracing_subscriber::EnvFilter;
 
+/// Non-panicking variant of [`init`].
+///
+/// Returns `Err` (instead of panicking) if the global subscriber has
+/// already been set. All other behaviour is identical to [`init`].
+pub fn try_init() -> Result<(), LoggingError> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .try_init()
+        .map_err(|e| LoggingError::InitFailed(format!("{e}")))?;
+    Ok(())
+}
+
+/// Non-panicking variant of [`init_json`].
+///
+/// Returns `Err` (instead of panicking) if the global subscriber has
+/// already been set. All other behaviour is identical to [`init_json`].
+pub fn try_init_json() -> Result<(), LoggingError> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .json()
+        .with_target(false)
+        .flatten_event(false)
+        .with_current_span(false)
+        .with_span_list(false)
+        .try_init()
+        .map_err(|e| LoggingError::InitFailed(format!("{e}")))?;
+    Ok(())
+}
+
 /// Initialise structured logging via `tracing-subscriber` with
 /// human-readable text output to stdout.
 ///
