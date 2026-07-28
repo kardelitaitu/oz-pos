@@ -400,10 +400,47 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     return list;
   }, [products, activeCategory, searchQuery, categories]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  type SortField = 'sku' | 'name' | 'stock' | 'price';
+  type SortOrder = 'asc' | 'desc';
+
+  const [sortField, setSortField] = useState<SortField>('sku');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  const handleSort = useCallback((field: SortField) => {
+    setSortField((prevField) => {
+      if (prevField === field) {
+        setSortOrder((prevOrder) => (prevOrder === 'asc' ? 'desc' : 'asc'));
+        return field;
+      }
+      setSortOrder('asc');
+      return field;
+    });
+  }, []);
+
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    list.sort((a, b) => {
+      let comp = 0;
+      if (sortField === 'sku') {
+        comp = a.sku.localeCompare(b.sku);
+      } else if (sortField === 'name') {
+        comp = a.name.localeCompare(b.name);
+      } else if (sortField === 'stock') {
+        const stockA = a.stock_qty ?? 0;
+        const stockB = b.stock_qty ?? 0;
+        comp = stockA - stockB;
+      } else if (sortField === 'price') {
+        comp = a.price.minor_units - b.price.minor_units;
+      }
+      return sortOrder === 'asc' ? comp : -comp;
+    });
+    return list;
+  }, [filteredProducts, sortField, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / PAGE_SIZE));
   const pagedProducts = useMemo(
-    () => filteredProducts.slice(productPage * PAGE_SIZE, (productPage + 1) * PAGE_SIZE),
-    [filteredProducts, productPage],
+    () => sortedProducts.slice(productPage * PAGE_SIZE, (productPage + 1) * PAGE_SIZE),
+    [sortedProducts, productPage],
   );
 
   // Reset page when filter changes
@@ -1140,10 +1177,58 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <table className="retail-product-table">
                 <thead>
                   <tr>
-                    <th className="retail-col-sku">{l10n.getString('retail-col-sku') || 'SKU'}</th>
-                    <th className="retail-col-name">{l10n.getString('retail-col-name') || 'Product Name'}</th>
-                    <th className="retail-col-stock">{l10n.getString('retail-col-stock') || 'Stock'}</th>
-                    <th className="retail-col-price">{l10n.getString('retail-col-price') || 'Price'}</th>
+                    <th
+                      className="retail-col-sku retail-col-sortable"
+                      onClick={() => handleSort('sku')}
+                      role="columnheader"
+                      aria-sort={sortField === 'sku' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="retail-th-content">
+                        <span>{l10n.getString('retail-col-sku') || 'SKU / Code'}</span>
+                        <span className="retail-sort-icon">
+                          {sortField === 'sku' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="retail-col-name retail-col-sortable"
+                      onClick={() => handleSort('name')}
+                      role="columnheader"
+                      aria-sort={sortField === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="retail-th-content">
+                        <span>{l10n.getString('retail-col-name') || 'Product Name'}</span>
+                        <span className="retail-sort-icon">
+                          {sortField === 'name' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="retail-col-stock retail-col-sortable"
+                      onClick={() => handleSort('stock')}
+                      role="columnheader"
+                      aria-sort={sortField === 'stock' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="retail-th-content" style={{ justifyContent: 'center' }}>
+                        <span>{l10n.getString('retail-col-stock') || 'Stock'}</span>
+                        <span className="retail-sort-icon">
+                          {sortField === 'stock' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="retail-col-price retail-col-sortable"
+                      onClick={() => handleSort('price')}
+                      role="columnheader"
+                      aria-sort={sortField === 'price' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="retail-th-content" style={{ justifyContent: 'flex-end' }}>
+                        <span>{l10n.getString('retail-col-price') || 'Price'}</span>
+                        <span className="retail-sort-icon">
+                          {sortField === 'price' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                        </span>
+                      </div>
+                    </th>
                     <th className="retail-col-action">{l10n.getString('retail-col-action') || 'Action'}</th>
                   </tr>
                 </thead>
