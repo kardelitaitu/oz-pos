@@ -62,8 +62,9 @@ pub fn run() {
     platform_startup::console::init_console_subscriber();
 
     // Initialise structured logging early so the very first line of Tauri
-    // output is captured.
-    oz_logging::init();
+    // output is captured. Uses try_init so a second invocation (e.g.
+    // by a plugin or test harness) does not panic.
+    let _ = oz_logging::try_init();
 
     let result: Result<(), AppError> = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())

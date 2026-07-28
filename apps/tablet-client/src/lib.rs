@@ -57,8 +57,9 @@ pub fn run() {
     // Initialise tokio-console before any other tracing setup.
     platform_startup::console::init_console_subscriber();
 
-    oz_logging::init(); // Gated out of test builds to keep the test binary free of WebView2Loader.dll
-    // linkage (see commit 562f1f0 for full diagnosis).
+    // Use try_init so test builds that lack WebView2Loader.dll don't
+    // panic when logging is already initialised by the test harness.
+    let _ = oz_logging::try_init();
     #[cfg(not(test))]
     {
         let result: Result<(), AppError> = tauri::Builder::default()

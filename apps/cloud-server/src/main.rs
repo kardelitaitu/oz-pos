@@ -79,9 +79,9 @@ async fn main() {
 
     // ── Logging ──────────────────────────────────────────────────────
     if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
-        oz_logging::init_json();
+        oz_logging::try_init_json().expect("logging init_json failed");
     } else {
-        oz_logging::init();
+        oz_logging::try_init().expect("logging init failed");
     }
 
     // ── Config validation (--validate-config skips the server) ───────
