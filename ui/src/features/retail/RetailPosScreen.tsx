@@ -1203,19 +1203,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                       </div>
                     </th>
                     <th
-                      className="retail-col-name retail-col-sortable"
-                      onClick={() => handleSort('name')}
-                      role="columnheader"
-                      aria-sort={sortField === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      <div className="retail-th-content">
-                        <span>{l10n.getString('retail-col-name') || 'Product Name'}</span>
-                        <span className="retail-sort-icon">
-                          {sortField === 'name' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                        </span>
-                      </div>
-                    </th>
-                    <th
                       className="retail-col-stock retail-col-sortable"
                       onClick={() => handleSort('stock')}
                       role="columnheader"
@@ -1225,6 +1212,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                         <span>{l10n.getString('retail-col-stock') || 'Stock'}</span>
                         <span className="retail-sort-icon">
                           {sortField === 'stock' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="retail-col-name retail-col-sortable"
+                      onClick={() => handleSort('name')}
+                      role="columnheader"
+                      aria-sort={sortField === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
+                      <div className="retail-th-content">
+                        <span>{l10n.getString('retail-col-name') || 'Product Name'}</span>
+                        <span className="retail-sort-icon">
+                          {sortField === 'name' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                         </span>
                       </div>
                     </th>
@@ -2117,6 +2117,15 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
   return (
     <tr className={`retail-product-row${isOutOfStock ? ' retail-product-row--out-of-stock' : ''}`}>
       <td className="retail-col-sku">{product.sku}</td>
+      <td className="retail-col-stock">
+        {product.stock_qty != null && product.stock_qty > 0 ? (
+          <span className={`retail-product-stock-badge retail-stock-${stockLevel}`}>
+            {product.stock_qty}
+          </span>
+        ) : (
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>Out of stock</span>
+        )}
+      </td>
       <td className="retail-col-name">
         <button
           type="button"
@@ -2132,15 +2141,6 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
           <span>{product.name}</span>
           {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
         </button>
-      </td>
-      <td className="retail-col-stock">
-        {product.stock_qty != null && product.stock_qty > 0 ? (
-          <span className={`retail-product-stock-badge retail-stock-${stockLevel}`}>
-            {product.stock_qty}
-          </span>
-        ) : (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>Out of stock</span>
-        )}
       </td>
       <td className="retail-col-price">{formatMoney(product.price)}</td>
       <td className="retail-col-action">
