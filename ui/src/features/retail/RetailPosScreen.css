@@ -1047,11 +1047,18 @@
   }
 }
 
-/* ── Shift modal overlay ───────────────────────────────────── */
-.retail-shift-overlay {
+.retail-shift-overlay,
+.retail-discount-overlay,
+.retail-qty-overlay,
+.retail-customer-overlay,
+.retail-held-carts-overlay,
+.retail-shortcuts-overlay,
+.retail-preview-overlay,
+.retail-quick-return-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1059,14 +1066,22 @@
   animation: retail-modal-fade-in var(--duration-200) var(--ease-out);
 }
 
-.retail-shift-modal {
+.retail-shift-modal,
+.retail-discount-modal,
+.retail-qty-modal,
+.retail-customer-modal,
+.retail-held-carts-modal,
+.retail-shortcuts-modal,
+.retail-preview-modal,
+.retail-quick-return-modal {
   position: relative;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  background: #111827 !important;
+  border: 1px solid #374151 !important;
+  border-radius: var(--radius-xl) !important;
   padding: var(--space-5);
   min-width: 20rem;
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  color: #f9fafb !important;
   animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
 }
 
@@ -1154,53 +1169,68 @@
   }
 }
 
-.retail-shift-modal h3 {
+.retail-shift-modal h3,
+.retail-discount-modal h3,
+.retail-qty-modal h3,
+.retail-customer-modal h3,
+.retail-held-carts-modal h3,
+.retail-shortcuts-modal h3,
+.retail-preview-modal h3 {
   margin: 0 0 var(--space-3);
   font-size: var(--text-md);
-  color: var(--color-fg-primary);
+  color: #f9fafb !important;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.retail-shift-modal label {
+.retail-shift-modal label,
+.retail-discount-modal label,
+.retail-qty-modal label {
   display: block;
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   margin-bottom: var(--space-1);
-  color: var(--color-fg-secondary);
+  color: #9ca3af !important;
 }
 
 .retail-shift-modal input,
-.retail-shift-modal textarea {
+.retail-shift-modal textarea,
+.retail-discount-modal input,
+.retail-qty-modal input {
   width: 100%;
-  padding: var(--space-1_5) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-bg-elevated);
+  border: 1px solid #374151 !important;
+  background: #1f2937 !important;
+  color: #f9fafb !important;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   box-sizing: border-box;
 }
 
 .retail-shift-modal-actions {
   display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  gap: var(--space-3);
+  margin-top: var(--space-4);
 }
 
 .retail-shift-modal-actions button {
   flex: 1;
-  padding: var(--space-2) 0;
+  padding: var(--space-2_5) var(--space-4);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid #4b5563 !important;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-transform: uppercase;
-  background: var(--color-border-hover);
-  color: var(--color-fg-primary);
+  background: #374151 !important;
+  color: #f3f4f6 !important;
+  transition: background-color var(--duration-150) var(--ease-out);
 }
 
-.retail-shift-modal-actions button:hover {
-  background: var(--color-border-hover);
+.retail-shift-modal-actions button:hover:not(:disabled) {
+  background: #4b5563 !important;
+  color: #ffffff !important;
 }
 
 .retail-shift-modal-actions button:disabled {
@@ -1209,13 +1239,25 @@
 }
 
 .retail-shift-confirm-btn {
-  background: var(--color-primary-pos);
-  color: var(--color-pos-on-primary);
-  border-color: var(--color-primary-pos-dark);
+  background: #10b981 !important;
+  color: #ffffff !important;
+  border: 1px solid #10b981 !important;
 }
 
-.retail-shift-confirm-btn:hover {
-  background: var(--color-primary-pos-dark);
+.retail-shift-confirm-btn:hover:not(:disabled) {
+  background: #059669 !important;
+  border-color: #059669 !important;
+}
+
+.retail-shift-confirm-btn--danger {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+  border: 1px solid #ef4444 !important;
+}
+
+.retail-shift-confirm-btn--danger:hover:not(:disabled) {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
 }
 
 .retail-shift-error {

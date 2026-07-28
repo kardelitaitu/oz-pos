@@ -1758,7 +1758,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             </p>
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={retailClearConfirmExit.requestClose}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
+              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
             </div>
           </div>
         </button>

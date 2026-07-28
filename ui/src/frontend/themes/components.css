@@ -604,9 +604,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
   transform: translateZ(0);
   animation: modal-fade-in var(--duration-300) var(--ease-out);
@@ -619,10 +619,10 @@
 
 .modal-panel {
   position: relative;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  background: #111827;
+  border: 1px solid #374151;
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
   width: 90%;
   max-width: 560px;
   max-height: 85vh;
