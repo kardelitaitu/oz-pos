@@ -13,6 +13,8 @@ import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
+import { useTheme } from '@/frontend/shell/ThemeProvider';
+import type { ReactNode } from 'react';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 
@@ -182,6 +184,17 @@ const catFtl = `
   category-cat-food = Makanan
   category-cat-drink = Minuman
 `;
+
+function ToggleThemeWrapper({ children }: { children: ReactNode }) {
+  const { setTheme } = useTheme();
+  return (
+    <div>
+      <button type="button" onClick={() => setTheme('dark')}>Dark</button>
+      <button type="button" onClick={() => setTheme('light')}>Light</button>
+      {children}
+    </div>
+  );
+}
 
 // ── Helper to click "All Categories" button ──────────────────────
 
@@ -439,5 +452,30 @@ describe('RetailPosScreen — rendering', () => {
     await waitFor(() => expect(screen.getByText('F1')).toBeInTheDocument());
     await userEvent.keyboard('{F12}');
     expect(screen.queryByTestId('kds-screen')).not.toBeInTheDocument();
+  });
+
+  it('syncs the retail-pos root data-theme with the global theme provider', async () => {
+    await renderWithProviders(
+      <ToggleThemeWrapper><RetailPosScreen /></ToggleThemeWrapper>,
+      salesFtl, productsFtl, tablesFtl, catFtl,
+    );
+    await waitFor(() => expect(screen.getByText('TOKO TEST')).toBeInTheDocument());
+    const retailRoot = document.querySelector('.retail-pos') as HTMLElement;
+    expect(retailRoot).toBeInTheDocument();
+
+    const globalTheme = () => document.documentElement.getAttribute('data-theme') ?? 'default';
+
+    // Default theme: global <html> has no data-theme, component carries 'default'.
+    expect(retailRoot.getAttribute('data-theme')).toBe(globalTheme());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+    expect(retailRoot.getAttribute('data-theme')).toBe('dark');
+    expect(retailRoot.getAttribute('data-theme')).toBe(globalTheme());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Light' }));
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('light'));
+    expect(retailRoot.getAttribute('data-theme')).toBe('light');
+    expect(retailRoot.getAttribute('data-theme')).toBe(globalTheme());
   });
 });

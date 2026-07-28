@@ -222,7 +222,7 @@ Add `--color-ink` to each of the three theme blocks: dark navy in `:root`/dark, 
 
 The hue remains per-category; the surface blend now tracks `--color-bg-surface` which *does* theme correctly.
 
-**Step E — Migrate ThemeRegression test to render RetailPosScreen** so the orphan POS-token issue becomes caught by `themeRegression.test.tsx` going forward.
+**Step E — Runtime theme-sync guard for RetailPosScreen** so the orphan POS-token issue is caught by a rendered test going forward.
 
 ## Residual Risks
 
@@ -230,8 +230,8 @@ These items are out-of-scope for the initial audit closure but worth tracking:
 
 - **Unremediated colour-mix sites — CLOSED**: The six additional `color-mix(in srgb, …)` uses in `RetailPosScreen.css` (lines 73, 83, 122, 141, 1594, 1844) now have paired solid-token fallbacks (`--color-bg-elevated`, `--color-primary-pos`, `--color-primary-pos-light`, `--color-success-pos`) using the same `/* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */` dual-declaration pattern introduced for the cat-strip sites. The previous `unset` worst case is replaced by a predictable solid colour on older WebKit engines, while modern engines continue to render the mixed overlay.
 - **macOS ≤ 13.3 WKWebView floor**: `color-mix(in srgb, …)` shipped in Safari 16.4 (March 2023). Pre-13.3 macOS workstations fall back through the dual-declaration pattern but lose the hue-driven category blend; this is documented inline at the three cat-strip rules via `/* P1-5 fallback */` comments. New `color-mix` sites must follow the same dual-declaration convention.
-- **Vite-virtual-URL trap for source-grep tests**: vitest transforms `.tsx` test files under a virtual URL (e.g. `/@vite-stub/…`), so any new source-grep test that uses `new URL('<rel>', import.meta.url).pathname` will resolve against the virtual directory rather than the on-disk path and fail with `ENOENT`. The Step E test uses `path.resolve(__dirname, …)` (vitest polyfills `__dirname` for `.tsx` test files) — copy that pattern in any new source-grep test.
-- **Audit-stated — closed in this PR via the Step E regression test**: A source-grep guard in `ui/src/__tests__/themeRegressionRetailPosScreen.test.tsx` ensures the exact shadow-state anti-pattern (`'localStorage' retail-theme key`, `_setTheme` dead setter, narrowed `useState<'light' | 'dark'>`) cannot regrow unnoticed in `RetailPosScreen.tsx`.
+- **Vite-virtual-URL trap for source-grep tests**: mitigated. Vitest transforms `.tsx` test files under a virtual URL (e.g. `/@vite-stub/…`), so any new source-grep test that uses `new URL('<rel>', import.meta.url).pathname` will resolve against the virtual directory rather than the on-disk path and fail with `ENOENT`. The Step E source-grep guard uses `path.resolve(__dirname, …)` (vitest polyfills `__dirname` for `.tsx` test files) — copy that pattern in any new source-grep test.
+- **Theme-regression test coverage — CLOSED**: A runtime test in `ui/src/__tests__/RetailPosScreen.test.tsx` renders `<RetailPosScreen />` inside `ThemeProvider`, toggles the theme via `useTheme().setTheme('dark' | 'light')`, and asserts that the `.retail-pos` root's `data-theme` attribute stays in lockstep with the global `<html data-theme>` attribute. This closes the acceptance-criterion gap (previously called for `themeRegression.test.tsx`).
 
 ## Acceptance criteria for the fix
 
@@ -239,7 +239,7 @@ These items are out-of-scope for the initial audit closure but worth tracking:
 2. Retail POS primary colour tracks the brand accent palette (Settings → Display → primary colour) at runtime via a widened `applyAccentPalette` that also writes `--color-primary-pos*`.
 3. The single `#000` literal is gone; the design-exceptions register only documents POS-specific brand-locked escapes if absolutely necessary.
 4. `hsl(..., 30%, 70%)` / `40%, 92%` / `40%, 82%` are replaced with theme-aware colour-mix.
-5. `__tests__/themeRegression.test.tsx` mounts `<RetailPosScreen />` and flips theme via `useTheme().setTheme('dark')` — assert that the rendered DOM's `data-theme` attribute tracks and that --color-primary-pos resolves to a defined value (not `unset`).
+5. `__tests__/RetailPosScreen.test.tsx` mounts `<RetailPosScreen />`, flips the global theme via `useTheme().setTheme('dark' | 'light')`, and asserts that the `.retail-pos` root's `data-theme` attribute tracks the global `<html data-theme>` attribute. POS token resolution is guarded separately by `__tests__/themeRegression.test.tsx`, which includes `--color-primary-pos`, `--color-success-pos`, and `--color-warning-pos` in its theme-token resolution checks.
 6. Cargo check + npm typecheck + eslint + vitest stay green.
 7. Working-tree cleanliness: pre-existing dirty `LICENSE` and `docs/admin-guide.md` lines out of scope (no edits there).
 
