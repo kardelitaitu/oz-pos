@@ -119,6 +119,11 @@ pub struct AppState {
     /// Dropped on app shutdown to stop the listener thread gracefully.
     pub inventory_pubsub_shutdown: Option<std::sync::mpsc::Sender<()>>,
 
+    /// Kernel shutdown signal. Send `()` in [`Drop`] before attempting the
+    /// kernel lock retry loop (M-2). Long-running kernel operations can
+    /// listen on the corresponding receiver to abort early on shutdown.
+    pub kernel_shutdown: Option<tokio::sync::oneshot::Sender<()>>,
+
     /// In-memory session store mapping opaque session tokens to resolved
     /// [`SessionContext`] values. ADR #4 / ADR #7.
     ///
@@ -258,6 +263,11 @@ impl AppState {
             (None, None)
         };
 
+        // ── Kernel shutdown channel (M-2) ────────────────────────────
+        // The receiver is dropped here — the infrastructure is in place for
+        // future long-running kernel operations to listen for shutdown.
+        let (kernel_shutdown_tx, _kernel_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
         tracing::info!(
             cache_healthy = cache.is_healthy(),
             ?db_path,
@@ -279,6 +289,7 @@ impl AppState {
             sync_daemon: SyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
+            kernel_shutdown: Some(kernel_shutdown_tx),
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds,
             terminal_id,
@@ -514,8 +525,17 @@ impl Drop for AppState {
             tracing::info!("plugin hot-reload task cancelled");
         }
 
+        // Signal kernel shutdown (M-2). This tells any kernel command
+        // holding the lock to abort early, reducing contention during the
+        // retry loop below. The receiver is a no-op for now — infrastructure
+        // for future long-running kernel operations.
+        if let Some(tx) = self.kernel_shutdown.take() {
+            let _ = tx.send(());
+            tracing::info!("kernel shutdown signal sent");
+        }
+
         tracing::info!("stopping kernel modules");
-        // Retry the lock for up to 500ms before giving up. This addresses
+        // Retry the lock for up to 2000ms (200 × 10ms) before giving up. This addresses
         // a Windows window-lifecycle bottleneck where `try_lock()` would
         // silently skip `stop_all()` if a Tauri command was mid-execution.
         // A single `try_lock()` is too aggressive during shutdown because
@@ -523,8 +543,9 @@ impl Drop for AppState {
         // deadlock if a command holding the lock is waiting for the runtime
         // to shut down (circular dependency). The bounded retry loop
         // gives commands time to finish while guaranteeing the Drop
-        // doesn't hang indefinitely.
-        const DROP_LOCK_RETRIES: usize = 50;
+        // doesn't hang indefinitely. Increased from 50→200 for a more
+        // generous shutdown window (M-2).
+        const DROP_LOCK_RETRIES: usize = 200;
         let mut stopped = false;
         for _ in 0..DROP_LOCK_RETRIES {
             if let Ok(mut kernel) = self.kernel.try_lock() {
@@ -536,8 +557,9 @@ impl Drop for AppState {
         }
         if !stopped {
             tracing::warn!(
-                "kernel lock contended after 500ms, skipping stop_all — \
-                 modules may not have been stopped cleanly"
+                "kernel lock contended after {}ms, skipping stop_all — \
+                 modules may not have been stopped cleanly",
+                DROP_LOCK_RETRIES * 10,
             );
         }
     }
@@ -563,6 +585,7 @@ impl AppState {
             sync_daemon: SyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
+            kernel_shutdown: None,
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Arc::new(Mutex::new(None)),
