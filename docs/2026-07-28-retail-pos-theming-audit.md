@@ -13,7 +13,7 @@ Three compounding issues produce the user's observation: (1) shadow theme state 
 
 | # | Sev  | Location                                     | Issue (summary)                                                                                      |
 |---|------|----------------------------------------------|------------------------------------------------------------------------------------------------------|
-| 1 | **P0** | `RetailPosScreen.tsx:165–172`               | Shadow `theme` state shadows global ThemeProvider; never updates reactively.                         |
+| 1 | **P0** | `RetailPosScreen.tsx:166–172`               | Shadow `theme` state shadows global ThemeProvider; never updates reactively.                         |
 | 2 | **P0** | `RetailPosScreen.css` × 30+ usages of POS tokens | `--color-primary-pos` etc. have **0 definitions** anywhere in `ui/src/` (CSS-level orphan refs). |
 | 3 | **P0** | `RetailPosScreen.tsx:167`                   | Storage-key collision: `localStorage['retail-theme']` vs global `'oz-pos-theme-v4'`.                  |
 | 4 | **P1** | `RetailPosScreen.css:1068`                  | Hardcoded `#000` literal in `.retail-low-stock-banner` border-bottom (token-compliance violation).    |
@@ -23,7 +23,7 @@ Three compounding issues produce the user's observation: (1) shadow theme state 
 
 ## Finding 1 — shadow theme state (P0)
 
-**Where**: `ui/src/features/retail/RetailPosScreen.tsx:165–172`
+**Where**: `ui/src/features/retail/RetailPosScreen.tsx:166–172`
 
 ```tsx
 const [theme, _setTheme] = useState<'light' | 'dark'>(() => {
@@ -36,8 +36,9 @@ const [theme, _setTheme] = useState<'light' | 'dark'>(() => {
 
 Why this is broken:
 
-- **The setter `_setTheme` is never called** anywhere in the file (grep: zero call sites). The state is initialised from the OS preference on mount and then frozen — it is functionally a one-shot read of `prefers-color-scheme: dark` with a stale localStorage fallback persisted under a key the global ThemeProvider never sees.
-- **`data-theme={theme}` is set on multiple root wrappers** (the main `<div className="retail-pos">`, plus the wrapper divs that render SalesHistory, StockInquiry, TableManagement swap-ins — see `RetailPosScreen.tsx:691, 720, 749` for the three `data-theme={theme}` occurrences). This scopes a sub-tree's tokens under the *frozen* local value rather than the live global one on `<html>`.
+- **The setter `_setTheme` is never called** anywhere in the file (grep: zero call sites). The state is initialised from the OS preference on mount and then frozen — it is functionally a one-shot read of `prefers-color-scheme: dark` with a stale localStorage fallback persisted under a key the global ThemeProvider never sees.- **`data-theme={theme}` is set on multiple root wrappers** (the main `<div className="retail-pos">`, plus the wrapper divs that render SalesHistory, StockInquiry, TableManagement swap-ins — see `RetailPosScreen.tsx:692, 721, 750` for the three `data-theme={theme}` occurrences). This scopes a sub-tree's tokens under the *frozen* local value rather than the live global one on `<html>`.
+
+  > **Resolved by [`972e4b0c`]:** Step A replaced the shadow `useState` with `const theme = useOptionalTheme()?.theme;` so all four `data-theme={theme}` sites now consume the same live global theme — there is no longer a frozen local value sub-tree.
 - **Type set only contains `'light' | 'dark'`** while `ThemeProvider` exports `Theme = 'default' | 'light' | 'dark'` (see `ThemeProvider.tsx:24`). The two state machines never reconcile.
 
 **What the user observes in practice**:
@@ -158,7 +159,7 @@ Retail POS is the **only POS-class screen** that maintains its own theme state b
 
 ## Recommendation — minimum diff for full fix
 
-**Step A — Replace local shadow state with `useTheme()` consumption**:
+**Step A — [CLOSED via `972e4b0c`] Replace local shadow state with `useOptionalTheme()?.theme` consumption**:
 
 ```tsx
 // RetailPosScreen.tsx (where the local useState lives)
@@ -169,7 +170,7 @@ Retail POS is the **only POS-class screen** that maintains its own theme state b
 
 `useTheme()` already returns `Theme = 'default' | 'light' | 'dark'`. The `<div className="retail-pos">` `data-theme={theme}` continues to work, but now mirrors the live global value instead of the frozen initial one. **No other changes to the rendering tree are needed.**
 
-**Step B — Add POS-domain tokens to `tokens.css`** in **all three** theme blocks (`:root` + `[data-theme="light"]` + `[data-theme="dark"]`):
+**Step B — [CLOSED via `c888b142`] Add POS-domain tokens to `tokens.css`** in **all three** theme blocks (`:root` + `[data-theme="light"]` + `[data-theme="dark"]`):
 
 ```css
 :root {
@@ -201,7 +202,7 @@ Retail POS is the **only POS-class screen** that maintains its own theme state b
 
 POS palette tokens (`--color-primary-pos*`, `--color-fn-key-pos`, `--color-success-pos`, `--color-warning-pos`, `--color-danger*`) stay stable across themes (the navy/bronzy brand-locked identity). Surface tokens (`--color-bg-pos`, `--color-fg-primary`, `--color-fg-secondary`, `--color-fg-tertiary`, `--color-info-bg`, `--color-danger-bg`) flip per theme.
 
-**Step C — Tokenize the `#000` literal**:
+**Step C — [CLOSED via `c888b142`] Tokenize the `#000` literal**:
 
 ```css
 - border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, #000);
@@ -210,7 +211,7 @@ POS palette tokens (`--color-primary-pos*`, `--color-fn-key-pos`, `--color-succe
 
 Add `--color-ink` to each of the three theme blocks: dark navy in `:root`/dark, near-black in light.
 
-**Step D — Convert `hsl()` lightness/saturation escapes to theme-aware colour-mix**:
+**Step D — [CLOSED via `c888b142` + WKWebView fallback in `b274d860`] Convert `hsl()` lightness/saturation escapes to theme-aware colour-mix**:
 
 ```css
 - border-top: 0.1875rem solid hsl(var(--cat-hue, 210), 30%, 70%);
@@ -220,6 +221,15 @@ Add `--color-ink` to each of the three theme blocks: dark navy in `:root`/dark, 
 The hue remains per-category; the surface blend now tracks `--color-bg-surface` which *does* theme correctly.
 
 **Step E — Migrate ThemeRegression test to render RetailPosScreen** so the orphan POS-token issue becomes caught by `themeRegression.test.tsx` going forward.
+
+## Residual Risks
+
+These items are out-of-scope for the initial audit closure but worth tracking:
+
+- **Unremediated colour-mix sites**: Six additional `color-mix(in srgb, …)` uses WITHOUT a paired `var(--color-bg-surface)` fallback remain in `RetailPosScreen.css` (lines 73, 83, 122, 141, 1594, 1844). They reference already-tokenised POS colours (`--color-bg-elevated`, `--color-primary-pos`, `--color-success-pos`), so the worst-case visual regression is `unset` — less jarring than the cat-strip fall-through but still avoidable. Apply the dual-declaration fallback pattern uniformly across all eight `color-mix` sites if WKWebView macOS ≤ 13.3 visual defects are reported from the field.
+- **macOS ≤ 13.3 WKWebView floor**: `color-mix(in srgb, …)` shipped in Safari 16.4 (March 2023). Pre-13.3 macOS workstations fall back through the dual-declaration pattern but lose the hue-driven category blend; this is documented inline at the three cat-strip rules via `/* P1-5 fallback */` comments. New `color-mix` sites must follow the same dual-declaration convention.
+- **Vite-virtual-URL trap for source-grep tests**: vitest transforms `.tsx` test files under a virtual URL (e.g. `/@vite-stub/…`), so any new source-grep test that uses `new URL('<rel>', import.meta.url).pathname` will resolve against the virtual directory rather than the on-disk path and fail with `ENOENT`. The Step E test uses `path.resolve(__dirname, …)` (vitest polyfills `__dirname` for `.tsx` test files) — copy that pattern in any new source-grep test.
+- **Audit-stated — closed in this PR via the Step E regression test**: A source-grep guard in `ui/src/__tests__/themeRegressionRetailPosScreen.test.tsx` ensures the exact shadow-state anti-pattern (`'localStorage' retail-theme key`, `_setTheme` dead setter, narrowed `useState<'light' | 'dark'>`) cannot regrow unnoticed in `RetailPosScreen.tsx`.
 
 ## Acceptance criteria for the fix
 

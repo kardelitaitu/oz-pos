@@ -170,14 +170,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, []);
 
   // P0-1 (audit docs/2026-07-28-retail-pos-theming-audit.md): replace the
-  // shadow useState that read localStorage 'retail-theme' + prefers-color-scheme
-  // on mount and never updated afterwards. `useOptionalTheme()?.theme` returns
-  // `Theme | undefined` — `Theme` when AppProviders' ThemeProvider wraps,
-  // `undefined` for unwrapped renders (React strips undefined from JSX
-  // attributes; CSS falls back to :root via cascade).
-  // Implicitly also closes P0-3 (storage-key shadow `retail-theme`),
-  // P2-6 (dead setter `_setTheme`), and P2-7 (missing useTheme import)
-  // by deleting the shadow state entirely.
+  // shadow useState that read a per-component localStorage key and matched
+  // the OS dark-mode preference on mount but never updated afterwards.
+  // useOptionalTheme()?.theme returns Theme | undefined — Theme when
+  // AppProviders' ThemeProvider wraps, undefined for unwrapped renders
+  // (React strips undefined from JSX attributes; CSS falls back to :root
+  // via cascade).
+  // Implicitly also closes the P0-3 storage-key shadow, the P2-6 dead
+  // setter, and the P2-7 missing-useTheme import by deleting the
+  // shadow state entirely.
   const theme = useOptionalTheme()?.theme;
 
 
