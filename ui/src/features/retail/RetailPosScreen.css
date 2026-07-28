@@ -371,14 +371,15 @@
 }
 
 .retail-product-table td {
-  padding: var(--space-1) var(--space-2);
+  padding: 0 var(--space-2);
   border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
-  height: 2.25rem;
+  height: 1.5rem;
 }
 
 .retail-product-row {
   cursor: pointer;
+  height: 1.5rem;
   transition: background-color var(--duration-150) var(--ease-out);
 }
 
@@ -415,7 +416,7 @@
 
 .retail-col-name {
   font-weight: var(--font-weight-semibold);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-fg-primary);
 }
 
@@ -430,8 +431,10 @@
   text-align: left;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1_5);
   width: 100%;
+  height: 1.5rem;
+  line-height: 1.5rem;
 }
 
 .retail-col-name .retail-product-btn:hover:not(:disabled) {
@@ -447,7 +450,7 @@
   width: 120px;
   text-align: right;
   font-weight: var(--font-weight-bold);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -459,8 +462,10 @@
 }
 
 .retail-table-add-btn {
-  padding: 2px var(--space-2);
-  font-size: 11px;
+  padding: 0 6px;
+  height: 1.25rem;
+  line-height: 1.25rem;
+  font-size: 10px;
   font-weight: var(--font-weight-bold);
   font-family: inherit;
   background: var(--color-accent-subtle);
@@ -469,7 +474,6 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background-color var(--duration-150) var(--ease-out);
-  line-height: 1.4;
 }
 
 .retail-table-add-btn:hover:not(:disabled) {
