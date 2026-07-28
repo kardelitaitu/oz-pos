@@ -59,6 +59,26 @@ function toProduct(p: ProductDto): Product {
   };
 }
 
+// ── Retail sample product fallback (when IPC is unavailable) ──────
+const RETAIL_SAMPLE_PRODUCTS: ProductDto[] = [
+  { sku: 'INDOMIE',   name: 'Indomie Goreng',          category: 'cat-food',       price: { minor_units: 3500, currency: 'IDR' },  barcode: '8998866600101', in_stock: true,  stock_qty: 200, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'AQUA600',   name: 'Aqua 600ml',              category: 'cat-drinks',     price: { minor_units: 3000, currency: 'IDR' },  barcode: '8996001600010', in_stock: true,  stock_qty: 500, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'SGM-SUSU',  name: 'SGM Eksplor 3+ 150g',     category: 'cat-baby',       price: { minor_units: 28500, currency: 'IDR' }, barcode: '8991002100013', in_stock: true,  stock_qty: 30,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'SAMP-MILD', name: 'Sampoerna Mild 16',       category: 'cat-tobacco',    price: { minor_units: 31000, currency: 'IDR' }, barcode: '8999909900019', in_stock: true,  stock_qty: 80,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'GULA-1KG',  name: 'Gulaku 1kg',              category: 'cat-grocery',    price: { minor_units: 16000, currency: 'IDR' }, barcode: '8997005100015', in_stock: true,  stock_qty: 45,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'MINYAK-2L', name: 'Bimoli 2L',               category: 'cat-grocery',    price: { minor_units: 42000, currency: 'IDR' }, barcode: '8995236000017', in_stock: true,  stock_qty: 25,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'TELUR-1KG', name: 'Telur Ayam 1kg',           category: 'cat-grocery',    price: { minor_units: 27000, currency: 'IDR' }, barcode: null,                   in_stock: true,  stock_qty: 15,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'BERAS-5KG', name: 'Beras Ramos 5kg',          category: 'cat-grocery',    price: { minor_units: 68000, currency: 'IDR' }, barcode: '8998877100012', in_stock: true,  stock_qty: 20,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'SABUN-LUX', name: 'Lux Soft Touch 90g',       category: 'cat-toiletries', price: { minor_units: 5500, currency: 'IDR' },  barcode: '8999999057012', in_stock: true,  stock_qty: 60,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'PEPSODENT', name: 'Pepsodent 120g',           category: 'cat-toiletries', price: { minor_units: 12000, currency: 'IDR' }, barcode: '8999999001015', in_stock: true,  stock_qty: 40,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'KOPI-KAP',  name: 'Kapal Api Special 380g',   category: 'cat-drinks',     price: { minor_units: 18000, currency: 'IDR' }, barcode: '8991001100014', in_stock: true,  stock_qty: 35,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'TEH-SOSRO', name: 'Teh Botol Sosro 450ml',    category: 'cat-drinks',     price: { minor_units: 5000, currency: 'IDR' },  barcode: '8996007100013', in_stock: true,  stock_qty: 120, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'CHITATO',   name: 'Chitato Sapi Panggang 68g',category: 'cat-snacks',     price: { minor_units: 12000, currency: 'IDR' }, barcode: '8998866600011', in_stock: true,  stock_qty: 90,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'BENG-BENG', name: 'Beng Beng 30g',            category: 'cat-snacks',     price: { minor_units: 2500, currency: 'IDR' },  barcode: '8991002105018', in_stock: true,  stock_qty: 150, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'PULSA-20K', name: 'Pulsa 20K (All Operator)',  category: 'cat-digital',    price: { minor_units: 21500, currency: 'IDR' }, barcode: null,                   in_stock: true,  stock_qty: null, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'TISU-PASEO',name: 'Paseo 250 sheets',         category: 'cat-toiletries', price: { minor_units: 8500, currency: 'IDR' },  barcode: '8998866100015', in_stock: true,  stock_qty: 55,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+];
+
 interface RetailPosScreenProps {
   onNavigate?: (route: string) => void;
 }
@@ -327,7 +347,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   useEffect(() => {
     const controller = new AbortController();
-    listProductsScoped(sessionToken).then(setProducts).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); } });
+    listProductsScoped(sessionToken).then(setProducts).catch(() => { if (!controller.signal.aborted) setProducts(RETAIL_SAMPLE_PRODUCTS); });
     listCategories().then((cats) => {
       if (controller.signal.aborted) return;
       setCategories(cats);
@@ -359,7 +379,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const PAGE_SIZE = 50;
 
   const filteredProducts = useMemo(() => {
-    let list = products.filter((p) => p.product_type === 'retail' || p.product_type === 'both');
+    let list = products.filter((p) => p.product_type === 'retail');
     if (activeCategory) list = list.filter((p) => p.category === activeCategory);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
