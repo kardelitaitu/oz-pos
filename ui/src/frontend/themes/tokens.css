@@ -272,6 +272,8 @@
   /* ── POS Surface Tokens ─── Default = Steel Blue Glassmorphism ── */
   --color-bg-pos:             var(--color-bg);
   --color-ink:                #000000;
+  /* Text on POS primary-coloured surfaces — always light for contrast. */
+  --color-pos-on-primary:     #ffffff;
 }
 
 /* ── Light mode (Steel Blue Elevated) ────────────────────────────── */
@@ -377,6 +379,8 @@
   /* ── POS Surface Tokens (Light = Steel Blue Elevated) ──────── */
   --color-bg-pos:             var(--neutral-100);
   --color-ink:                #000000;
+  /* Text on POS primary-coloured surfaces — always light for contrast. */
+  --color-pos-on-primary:     #ffffff;
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -479,6 +483,8 @@
   /* ── POS Surface Tokens (Dark = Steel Blue Solid) ──────────── */
   --color-bg-pos:             var(--neutral-50);
   --color-ink:                #000000;
+  /* Text on POS primary-coloured surfaces — always light for contrast. */
+  --color-pos-on-primary:     #ffffff;
 }
 
 /* ── Smooth theme transitions ──────────────────── */

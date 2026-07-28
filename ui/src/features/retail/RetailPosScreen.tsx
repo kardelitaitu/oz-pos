@@ -1229,7 +1229,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                               style={{
                                 marginTop: 4, padding: '2px 4px', fontSize: 10,
                                 width: '100%', boxSizing: 'border-box',
-                                border: '1px solid #ccc', borderRadius: 2,
+                                border: '1px solid var(--color-border)', borderRadius: 2,
                               }}
                             />
                           )}
@@ -1469,7 +1469,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           <div className={`retail-shift-modal${retailCloseShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {closeShiftError && <div className="retail-shift-error">{closeShiftError}</div>}
-            <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--color-fg-secondary)', marginBottom: 10 }}>
               {l10n.getString('pos-close-shift-opened')}: {new Date(activeShift.openedAt).toLocaleString()}
             </div>
             <label htmlFor="retail-closing">{l10n.getString('pos-close-shift-counted-label')}</label>
@@ -1530,11 +1530,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           <div className={`retail-shift-modal${retailCreditListExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
             <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
             {creditSales.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
+              <div style={{ padding: 16, textAlign: 'center', color: 'var(--color-fg-tertiary)' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
             ) : (
               <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #ccc' }}>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
                     <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
                     <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
@@ -1543,7 +1543,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
                   </tr>
                 </thead>
                 <tbody>{creditSales.map((c) => (
-                    <tr key={c.saleId} style={{ borderBottom: '1px solid #eee' }}>
+                    <tr key={c.saleId} style={{ borderBottom: '1px solid var(--color-border-hover)' }}>
                       <td style={{ padding: 4 }}>{c.customerName || '—'}</td>
                       <td style={{ textAlign: 'right', padding: 4 }}>
                         {formatMoney({ minor_units: c.totalMinor, currency: c.currency })}
