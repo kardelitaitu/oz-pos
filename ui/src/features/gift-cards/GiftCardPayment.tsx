@@ -88,7 +88,7 @@ export default function GiftCardPayment({
   }, [cardInput, cardBalance, totalMinor, saleId, onApplied, onComplete, onError, l10n]);
 
   const formatMoney = (minor: number, cur: string): string => {
-    const known: Record<string, number> = { JPY: 0, KRW: 0, VND: 0, IDR: 2 };
+    const known: Record<string, number> = { JPY: 0, KRW: 0, VND: 0, IDR: 0 };
     const exp = known[cur] ?? 2;
     const val = (minor / 10 ** exp).toLocaleString(undefined, {
       minimumFractionDigits: exp,

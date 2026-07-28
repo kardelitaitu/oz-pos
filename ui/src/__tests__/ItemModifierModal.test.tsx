@@ -94,8 +94,8 @@ describe('ItemModifierModal', () => {
 
   it('shows price values in footer', () => {
     renderModal();
-    // formatMoney with IDR/id-ID: 150000 → "IDR 1.500,00"
-    const priceElements = screen.getAllByText(/1\.500/);
+    // formatMoney with IDR/id-ID: 150000 → "Rp 150.000"
+    const priceElements = screen.getAllByText(/150\.000/);
     expect(priceElements.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -283,8 +283,8 @@ describe('ItemModifierModal', () => {
 
   it('shows price suffix for paid modifier options', () => {
     renderModal();
-    // French Fries has priceMinor = 5000 → +Rp 50,00 (always visible)
-    expect(screen.getByText(/\+Rp 50/)).toBeInTheDocument();
+    // French Fries has priceMinor = 5000 → +Rp 5.000 (always visible)
+    expect(screen.getByText(/5\.000/)).toBeInTheDocument();
   });
 
   // ── Add-ons row ──

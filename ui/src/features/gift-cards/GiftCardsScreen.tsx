@@ -84,7 +84,7 @@ export default function GiftCardsScreen() {
   }, [topUpAmount, load, l10n]);
 
   const formatMoney = (minor: number, currency: string): string => {
-    const known: Record<string, number> = { JPY: 0, KRW: 0, VND: 0, IDR: 2 };
+    const known: Record<string, number> = { JPY: 0, KRW: 0, VND: 0, IDR: 0 };
     const exp = known[currency] ?? 2;
     const val = (minor / 10 ** exp).toLocaleString(undefined, {
       minimumFractionDigits: exp,

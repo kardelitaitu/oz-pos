@@ -103,18 +103,19 @@ export const formatMoney = (
 ): string => {
   const sep = decimalSep ?? getDecimalSep();
   const hideDecimals = sep === 'none';
-  const fmt = new Intl.NumberFormat(locale, {
-    style: 'decimal',
-    minimumFractionDigits: hideDecimals ? 0 : 2,
-    maximumFractionDigits: hideDecimals ? 0 : 2,
-  });
-  // ISO-4217 minor-unit exponent: USD/EUR/IDR = 2, JPY/KRW = 0, KWD = 3.
+  // ISO-4217 minor-unit exponent: USD/EUR = 2, IDR/JPY/KRW/VND = 0, KWD = 3.
   const known: Record<string, number> = {
-    JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
+    IDR: 0, JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
     KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
   };
   const exp = known[m.currency] ?? 2;
   const major = m.minor_units / 10 ** exp;
+  const decimals = hideDecimals || exp === 0 ? 0 : exp;
+  const fmt = new Intl.NumberFormat(locale, {
+    style: 'decimal',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
   // Known currency → symbol mapping
   const symbols: Record<string, string> = {
     USD: '$', IDR: 'Rp', EUR: '€', GBP: '£', JPY: '¥', KRW: '₩',
