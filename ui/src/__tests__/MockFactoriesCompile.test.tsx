@@ -194,7 +194,6 @@ describe('createReportsApiMock', () => {
 
 describe('existing factory imports compile', () => {
   // Dynamic import to prevent hoisting conflicts with the vi.mock() calls above.
-  // eslint-disable-next-line @typescript-eslint/require-await
   it('imports all factories without error', async () => {
     const mod = await import('@/__tests__/test-utils/mocks/api');
     expect(typeof mod.createSalesApiMock).toBe('function');

@@ -153,6 +153,8 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
   const [exiting, setExiting] = useState(false);
   const [pinAttempts, setPinAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pinSubmitted = useRef(false);
@@ -268,7 +270,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
     // exceeded 15 failed attempts across ALL usernames in 5 minutes.
     // This prevents username rotation attacks against the per-user limiter.
     if (isGloballyRateLimited()) {
-      setError(l10n.getString('staff-login-lockout', { seconds: String(Math.ceil(GLOBAL_WINDOW_MS / 1000)) }));
+      setError(l10nRef.current.getString('staff-login-lockout', { seconds: String(Math.ceil(GLOBAL_WINDOW_MS / 1000)) }));
       setLoading(false);
       return;
     }
@@ -314,7 +316,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
     } finally {
       setLoading(false);
     }
-  }, [pin, username, swapSession, swapSessionToken, onClose, onVerified, isLocked]);
+  }, [pin, username, swapSession, swapSessionToken, onClose, onVerified, isLocked]); /* l10n intentionally excluded via l10nRef — prevents infinite re-render loops from unstable l10n references */
 
   // ── Auto-submit when PIN reaches max length ─────────────────
 
