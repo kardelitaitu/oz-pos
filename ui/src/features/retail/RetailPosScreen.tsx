@@ -81,6 +81,16 @@ const RETAIL_SAMPLE_PRODUCTS: ProductDto[] = [
   { sku: 'PASTE-MX6',      name: 'Arctic MX-6 Thermal Paste 4g',  category: 'cat-cooling', price: { minor_units: 125000,  currency: 'IDR' }, barcode: '872767004500', in_stock: true,  stock_qty: 60, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
 ];
 
+const RETAIL_SAMPLE_CATEGORIES: CategoryDto[] = [
+  { id: 'cat-cpu', name: 'Processors (CPU)', colour: '#e74c3c', icon: 'cpu-1' },
+  { id: 'cat-gpu', name: 'Graphics Cards (GPU)', colour: '#2ecc71', icon: 'gpu-1' },
+  { id: 'cat-ram', name: 'Memory (RAM)', colour: '#9b59b6', icon: 'ram-1' },
+  { id: 'cat-storage', name: 'Storage (SSD/HDD)', colour: '#3498db', icon: 'hdd-1' },
+  { id: 'cat-mb', name: 'Motherboards', colour: '#f39c12', icon: 'mb-1' },
+  { id: 'cat-psu', name: 'Power Supply', colour: '#1abc9c', icon: 'psu-1' },
+  { id: 'cat-cooling', name: 'Cooling & Cases', colour: '#34495e', icon: 'cool-1' },
+];
+
 interface RetailPosScreenProps {
   onNavigate?: (route: string) => void;
 }
@@ -352,10 +362,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     listProductsScoped(sessionToken).then(setProducts).catch(() => { if (!controller.signal.aborted) setProducts(RETAIL_SAMPLE_PRODUCTS); });
     listCategories().then((cats) => {
       if (controller.signal.aborted) return;
-      setCategories(cats);
-      const first = cats[0];
-      if (first) setActiveCategory(first.id);
-    }).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-categories') || 'Failed to load categories', type: 'error' }); playError(); } });
+      setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
+    }).catch(() => {
+      if (!controller.signal.aborted) {
+        setCategories(RETAIL_SAMPLE_CATEGORIES);
+      }
+    });
     return () => { controller.abort(); };
   }, [addToast, l10n, playError, sessionToken]);
 
@@ -382,13 +394,21 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.product_type === 'retail');
-    if (activeCategory) list = list.filter((p) => p.category === activeCategory);
+    if (activeCategory) {
+      const activeCatObj = categories.find((c) => c.id === activeCategory);
+      list = list.filter(
+        (p) =>
+          p.category === activeCategory ||
+          (activeCatObj && p.category === activeCatObj.name) ||
+          p.category?.toLowerCase() === activeCategory.toLowerCase(),
+      );
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
     }
     return list;
-  }, [products, activeCategory, searchQuery]);
+  }, [products, activeCategory, searchQuery, categories]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
   const pagedProducts = useMemo(
@@ -1067,7 +1087,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       <div className="retail-main" ref={retailPosRef}>
         {/* Left: product grid */}
         <div className="retail-products">
-          <div className="retail-categories">
+          <div
+            className="retail-categories"
+            onWheel={(e) => {
+              if (e.deltaY) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+          >
             <button
               className={`retail-cat-btn${!activeCategory ? ' retail-cat-btn--active' : ''}`}
               onClick={() => setActiveCategory(null)}

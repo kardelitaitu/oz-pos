@@ -253,7 +253,12 @@
   background: var(--color-border-hover);
   border-bottom: 1px solid var(--color-border-strong);
   overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   flex-shrink: 0;
+  touch-action: pan-x;
+  scrollbar-width: thin;
 }
 
 .retail-categories::-webkit-scrollbar {
@@ -307,9 +312,9 @@
 .retail-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: var(--space-1);
-  padding: var(--space-1);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-1_5);
+  padding: var(--space-2);
   overflow-y: auto;
   align-content: start;
 }
@@ -319,14 +324,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-2_5) var(--space-1_5);
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-2);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-hover);
-  border-top: 0.1875rem solid var(--color-bg-surface); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix, so the preceding declaration wins */
-  border-top: 0.1875rem solid color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 12%);
+  border-top: 0.25rem solid var(--color-bg-surface); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix, so the preceding declaration wins */
+  border-top: 0.25rem solid color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 60% 50%) 40%);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  min-height: 4.375rem;
+  min-height: 5.5rem;
   transition:
     background-color var(--duration-150) var(--ease-out),
     border-color var(--duration-150) var(--ease-out),
