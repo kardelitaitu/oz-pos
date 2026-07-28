@@ -1,0 +1,248 @@
+# Retail POS Theming Audit — 2026-07-28
+
+<!-- Audit stamp: 2026-07-28 · Buffy · status: DRAFT (awaiting fix cycle) · branch: 0.0.24 -->
+<!-- Scope: ui/src/features/retail/RetailPosScreen.tsx + RetailPosScreen.css + sibling theme files -->
+
+## TL;DR
+
+`RetailPosScreen` does not participate in the global theme system. It declares a **shadow `theme` state** with its own localStorage key (`retail-theme` vs the global `oz-pos-theme-v4`), an outdated type set (`'light' \| 'dark'` vs the 3-value global `'default' \| 'light' \| 'dark'`), and an underscore-prefixed setter (`_setTheme`) that is never called. The component then writes `data-theme={theme}` onto its own `<div className="retail-pos">` sub-tree, creating a non-reactive scope that drifts away from the global `<html data-theme>` whenever the user toggles the global theme via `ThemeToggle`. Worse, the **POS-domain tokens it heavily relies on (`--color-primary-pos`, `--color-success-pos`, `--color-warning-pos`, `--color-bg-pos`, `--color-dark-bg-pos`, `--color-fn-key-pos`, `--color-dark-border-pos`) are RENDERED at the CSS level ~30 times but are DEFINED ZERO TIMES anywhere in `ui/src/`** — neither in `tokens.css` (`:root`, `[data-theme="light"]`, or `[data-theme="dark"]`), nor via runtime injection in `applyAccentPalette`. The CSS comment at RetailPosScreen.css:1–6 explicitly claims the POS tokens "live in that tokens file" but the claim is false.
+
+Three compounding issues produce the user's observation: (1) shadow theme state that goes stale, (2) sub-tree `data-theme` mismatch with `<html>` scope, (3) undefined POS tokens that should exist in every theme variant.
+
+## Findings — ranked
+
+| # | Sev  | Location                                     | Issue (summary)                                                                                      |
+|---|------|----------------------------------------------|------------------------------------------------------------------------------------------------------|
+| 1 | **P0** | `RetailPosScreen.tsx:165–172`               | Shadow `theme` state shadows global ThemeProvider; never updates reactively.                         |
+| 2 | **P0** | `RetailPosScreen.css` × 30+ usages of POS tokens | `--color-primary-pos` etc. have **0 definitions** anywhere in `ui/src/` (CSS-level orphan refs). |
+| 3 | **P0** | `RetailPosScreen.tsx:167`                   | Storage-key collision: `localStorage['retail-theme']` vs global `'oz-pos-theme-v4'`.                  |
+| 4 | **P1** | `RetailPosScreen.css:1068`                  | Hardcoded `#000` literal in `.retail-low-stock-banner` border-bottom (token-compliance violation).    |
+| 5 | **P1** | `RetailPosScreen.css:321 / 334 / 341`       | `hsl(var(--cat-hue, 210), 30%, 70%)` etc. — hardcoded lightness/saturation escape token rail.          |
+| 6 | **P2** | `RetailPosScreen.tsx:166`                   | Type set is `'light' \| 'dark'`, omitting global `'default'`; setter never invoked (`_setTheme`).     |
+| 7 | **P2** | `RetailPosScreen.tsx` (whole file)          | Zero `useTheme`/`ThemeProvider` imports — does not subscribe to global theme.                        |
+
+## Finding 1 — shadow theme state (P0)
+
+**Where**: `ui/src/features/retail/RetailPosScreen.tsx:165–172`
+
+```tsx
+const [theme, _setTheme] = useState<'light' | 'dark'>(() => {
+  const saved = localStorage.getItem('retail-theme');
+  if (saved === 'dark' || saved === 'light') return saved;
+  try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+  catch { return 'light'; }
+});
+```
+
+Why this is broken:
+
+- **The setter `_setTheme` is never called** anywhere in the file (grep: zero call sites). The state is initialised from the OS preference on mount and then frozen — it is functionally a one-shot read of `prefers-color-scheme: dark` with a stale localStorage fallback persisted under a key the global ThemeProvider never sees.
+- **`data-theme={theme}` is set on multiple root wrappers** (the main `<div className="retail-pos">`, plus the wrapper divs that render SalesHistory, StockInquiry, TableManagement swap-ins — see `RetailPosScreen.tsx:691, 720, 749` for the three `data-theme={theme}` occurrences). This scopes a sub-tree's tokens under the *frozen* local value rather than the live global one on `<html>`.
+- **Type set only contains `'light' | 'dark'`** while `ThemeProvider` exports `Theme = 'default' | 'light' | 'dark'` (see `ThemeProvider.tsx:24`). The two state machines never reconcile.
+
+**What the user observes in practice**:
+
+1. User opens retail POS at 09:00 with OS set to light. `prefers-color-scheme: dark` returns `false`, local state initialises to `'light'`. The screen renders in light mode.
+2. User opens `ThemeToggle` (in the global shell) and switches app theme to `dark`. `<html data-theme="dark">` flips. Other screens re-theme via token cascade.
+3. Retail POS does **not** pick this up. Its `<div className="retail-pos" data-theme="light">` is still light. Result: visual mismatch between retail POS chrome (light) and the rest of the app (dark).
+
+## Finding 2 — POS-domain tokens defined zero times (P0)
+
+The CSS at `RetailPosScreen.css:1–6` says:
+
+> "POS-domain extensions (navy primary, bronzy warning, F-key yellow) live in that tokens file so retail-pos and the cousin tablet-pos keep a single source of truth. There is intentionally no local :root here."
+
+This claim is **false**. Direct evidence:
+
+```
+ui/src/frontend/themes/tokens.css has 0 definitions of:
+  --color-primary-pos
+  --color-primary-pos-dark
+  --color-primary-pos-light
+  --color-success-pos
+  --color-success-pos-darker
+  --color-warning-pos
+  --color-fn-key-pos
+  --color-bg-pos
+  --color-dark-bg-pos
+  --color-dark-border-pos
+
+applyAccentPalette() injects at runtime:
+  --color-accent, --color-accent-hover, --color-accent-active,
+  --color-accent-subtle, --color-accent-fg, --color-accent-dim,
+  --color-accent-alpha, --color-accent-secondary,
+  --color-accent-subtle-fg, --color-accent-hover-fg, --color-accent-active-fg
+  (ui/src/utils/color.ts:129–139)
+```
+
+`-color-primary-pos` is referenced **30 times** in `RetailPosScreen.css` (lines 36, 40, 73, 122, 141, 161, 221, 270, 289, 296, 297, 335, 346, plus `color-mix(...)` variants). None of those references resolve to a defined CSS custom property — by the CSS spec they fall back to the property's initial value (or `unset` for substitutes like `background`), so:
+
+- `<div className="retail-pos">` background falls to `transparent` (the `--color-bg-pos` lookup fails).
+- `.retail-product-btn` border-top, hover/active backgrounds, outline fall back to defaults — category hue colour (`hsl(var(--cat-hue), 30%, 70%)`) inherits the parent `--cat-hue, 210` but the outer literal saturation/lightness are hardcoded (Finding 5).
+- `.retail-cart-action-btn--pay` (success colour), `--void` (danger), `--discount` (info) and primary-pos highlights all silently miss their navy / green / red colours.
+
+Peer audit screens in `__tests__/themeRegression.test.tsx` and `__tests__/colorContrastCompliance.test.ts` already encode an SOT model. Adding `--color-primary-pos` (etc.) as **unenforced design exceptions** is the only reason this regression stayed hidden from the theme-compliance test surface — the test doesn't track POS-only tokens because no POS-only tokens are *supposed* to exist as hardcoded escapes; the comment in `RetailPosScreen.css:1–6` is the only place that names them.
+
+## Finding 3 — storage key collision (P0)
+
+- `RetailPosScreen.tsx:172` writes **`localStorage['retail-theme']`**.
+- `ThemeProvider.tsx:42` writes **`localStorage['oz-pos-theme-v4']`** (a different v4-suffixed key, deliberately versioned to invalidate pre-existing settings).
+
+Two systems, one component ignored by the other, two storage entries that can disagree. App theme on `<html>` follows `oz-pos-theme-v4`; retail sub-tree follows `retail-theme`. A user who goes to Settings → Display → toggle theme updates `oz-pos-theme-v4`. Retail never notices — it still has the original `retail-theme` value (or `null`, which falls back to `prefers-color-scheme`).
+
+## Finding 4 — hardcoded `#000` literal (P1)
+
+`RetailPosScreen.css:1068`:
+
+```css
+border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, #000);
+```
+
+Why this is wrong:
+
+- The other 80+ colour references in the file are token-driven (`var(--color-...)`). This single `#000` is the only hardcoded hex in the entire file.
+- It was likely copy-pasted from the existing warning-pos border styling; the original intent was probably "darken the warning-pos by 60%" — but the darken target should be **a token** that itself responds to theme, not `#000`, which is permanently black in light/dark/default theme equally.
+- Documented register reference: this matches the `design-exceptions.md` "Adjustable" / "Hardcoded-Not-Allowed" pattern that the repo enumerates. The exception register (latest audit stamp: 2026-07-26) is the single source of truth for *why* a hardcoded escape exists; this `#000` is not listed there → outlier.
+
+Replacement candidate: `color-mix(in srgb, var(--color-warning-pos) 60%, var(--color-ink))` or define a new `--color-warning-pos-edge` token.
+
+## Finding 5 — `hsl()` saturation/lightness escapes (P1)
+
+`RetailPosScreen.css:321 / 334 / 341`:
+
+```css
+border-top: 0.1875rem solid hsl(var(--cat-hue, 210), 30%, 70%);
+background: hsl(var(--cat-hue, 210), 40%, 92%);  /* hover */
+background: hsl(var(--cat-hue, 210), 40%, 82%);  /* active */
+```
+
+Why this is wrong:
+
+- The `--cat-hue` hue *does* vary per category (good), but the lightness/saturation `30% / 40% / 70 / 82 / 92` are baked in. In a light theme the hover (`40%, 92%`) is near-white — fine for the background-elevated embedded inside a light-theme chrome. In the dark theme it would render as a near-white-on-dark hover (visible on dark surface) — but here the screen reads the dark-theme `--color-bg-elevated` would *flip* to the dark-theme value, and `hsl(cat-hue, 40%, 92%)` (no theme relation) would still render near-white, producing wrong contrast.
+- Better: derive colours from `--color-bg-surface` and `--cat-hue` only — `color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue) 60% 50%) 18%)` — so lightness tracks theme tokens. Or expose `--color-product-idle`, `--color-product-hover`, `--color-product-active` triplets and define them per theme.
+
+## Finding 6 — type set + dead setter (P2)
+
+- The setter returned by `useState` is renamed to `_setTheme` (TS/JS convention: underscore prefix signals "intentionally unused"). However, this is **not** a valid "intentionally unused" pattern when the value is declared with `const` at the top of a public React component. ESLint rules (`@typescript-eslint/no-unused-vars` ignoring `_`-prefix) will silent OK, but the rendering consequence is real.
+- The type `'light' | 'dark'` is **smaller** than the global `Theme = 'default' | 'light' | 'dark'`. The local state has no `'default'` representation; if the user toggles to `default`, the local state cannot mirror it.
+
+Fix concept: remove the local `useState` entirely. Consume `useTheme()` from `ThemeProvider` and pass `theme` directly into `data-theme={theme}` on the root wrapper so the React tree mirrors the global theme one-for-one.
+
+## Finding 7 — no `useTheme` / `ThemeProvider` import (P2)
+
+`RetailPosScreen.tsx` imports nothing from `@/frontend/shell/ThemeProvider.tsx`. None of:
+
+- `useTheme()` (live `{ theme, toggleTheme, setTheme }`)
+- `useOptionalTheme()` (safe variant)
+
+are referenced anywhere in the file. peer screens (`KdsScreen`, `SettingsPage`, `WorkspaceHome`) all subscribe to the global theme via `useTheme()` and reflect its value through the cascade — no per-screen shadow state.
+
+## Architecture comparison — peer screens
+
+| Screen                          | Local theme state? | useTheme? | data-theme attribute | Notes |
+|---------------------------------|--------------------|-----------|---------------------|-------|
+| `RetailPosScreen.tsx`           | YES (shadow)       | NO        | YES on `.retail-pos` divs | **the outlier** |
+| `KdsScreen.tsx` (kds/)          | NO                 | YES       | NO                  | Uses global tokens via cascade. |
+| `SettingsPage.tsx` (settings/)  | NO                 | YES       | NO                  | Scrollbar contrast handled at body. |
+| `WorkspaceHome.tsx`             | NO                 | YES       | NO                  | Brand accent + theme both via context. |
+| `PaymentModal.tsx`              | NO                 | YES       | NO                  | Modal backdrop uses `--color-bg-overlay` (themed). |
+
+Retail POS is the **only POS-class screen** that maintains its own theme state besides subscribing to nothing.
+
+## Risk assessment for users
+
+1. App set to `light`, OS dark mode off: retail POS shows light chrome ✓ — but if `retail-theme` localStorage exists from a prior session it might still be `dark`, producing mismatched chrome vs rest-of-app on first render.
+2. App set to `dark`, user toggles to `light` via ThemeToggle: retail POS still shows whatever it was initialised to (frozen).
+3. Brand accent changes (Settings → Display → primary colour): `applyAccentPalette` repaints `--color-accent*` runtime and `applyThemeContrasts` reconciles fg. Retail POS does *not* receive --color-primary-pos at runtime (it's not in the runtime injection list) so its primary colour never updates to brand — it's keyed to whatever undefined value it has.
+4. ThemeRegression test (`/__tests__/themeRegression.test.tsx`) does not render RetailPosScreen, so the orphan POS tokens don't fail the regression suite — silent visual drift.
+
+## Recommendation — minimum diff for full fix
+
+**Step A — Replace local shadow state with `useTheme()` consumption**:
+
+```tsx
+// RetailPosScreen.tsx (where the local useState lives)
+- const [theme, _setTheme] = useState<'light' | 'dark'>(() => { ... localStorage.getItem('retail-theme') ... });
++ import { useTheme } from '@/frontend/shell/ThemeProvider';
++ const { theme } = useTheme();
+```
+
+`useTheme()` already returns `Theme = 'default' | 'light' | 'dark'`. The `<div className="retail-pos">` `data-theme={theme}` continues to work, but now mirrors the live global value instead of the frozen initial one. **No other changes to the rendering tree are needed.**
+
+**Step B — Add POS-domain tokens to `tokens.css`** in **all three** theme blocks (`:root` + `[data-theme="light"]` + `[data-theme="dark"]`):
+
+```css
+:root {
+  --color-primary-pos: #1e3a5f;       /* navy */
+  --color-primary-pos-dark: #14253d;
+  --color-primary-pos-light: #2c5286;
+  --color-bg-pos: #0d0d14;            /* matches default theme bg */
+  --color-success-pos: #2e7d32;
+  --color-success-pos-darker: #1b5e20;
+  --color-warning-pos: #b7791f;
+  --color-danger: #c62828;
+  --color-danger-700: #8e0000;
+  --color-danger-hover: #b71c1c;
+  --color-danger-bg: #2a1010;
+  --color-info: #1976d2;
+  --color-info-bg: #0a1830;
+  --color-fn-key-pos: #ffd54f;
+  --color-dark-bg-pos: #06060c;
+  --color-dark-border-pos: #1a1a2e;
+  --color-fg-primary: #e0e0e0;
+  --color-fg-secondary: #b0b0b0;
+  --color-fg-tertiary: #808080;
+  /* ...etc, light and dark variants override background tiles
+     while keeping primary-pos palette stable across themes (POS brand-locked) */
+}
+[data-theme="light"] { --color-bg-pos: #f4f6fb; /* ... */ }
+[data-theme="dark"]  { --color-bg-pos: #0d0d14; /* matches defaults */ }
+```
+
+POS palette tokens (`--color-primary-pos*`, `--color-fn-key-pos`, `--color-success-pos`, `--color-warning-pos`, `--color-danger*`) stay stable across themes (the navy/bronzy brand-locked identity). Surface tokens (`--color-bg-pos`, `--color-fg-primary`, `--color-fg-secondary`, `--color-fg-tertiary`, `--color-info-bg`, `--color-danger-bg`) flip per theme.
+
+**Step C — Tokenize the `#000` literal**:
+
+```css
+- border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, #000);
++ border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, var(--color-ink));
+```
+
+Add `--color-ink` to each of the three theme blocks: dark navy in `:root`/dark, near-black in light.
+
+**Step D — Convert `hsl()` lightness/saturation escapes to theme-aware colour-mix**:
+
+```css
+- border-top: 0.1875rem solid hsl(var(--cat-hue, 210), 30%, 70%);
++ border-top-color: color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) 50% 50%) 18%);
+```
+
+The hue remains per-category; the surface blend now tracks `--color-bg-surface` which *does* theme correctly.
+
+**Step E — Migrate ThemeRegression test to render RetailPosScreen** so the orphan POS-token issue becomes caught by `themeRegression.test.tsx` going forward.
+
+## Acceptance criteria for the fix
+
+1. ThemeToggle (in `<html data-theme>`) and retail POS chrome (`<div className="retail-pos" data-theme>`) — when theme is changed — re-render in lockstep.
+2. Retail POS primary colour tracks the brand accent palette (Settings → Display → primary colour) at runtime via a widened `applyAccentPalette` that also writes `--color-primary-pos*`.
+3. The single `#000` literal is gone; the design-exceptions register only documents POS-specific brand-locked escapes if absolutely necessary.
+4. `hsl(..., 30%, 70%)` / `40%, 92%` / `40%, 82%` are replaced with theme-aware colour-mix.
+5. `__tests__/themeRegression.test.tsx` mounts `<RetailPosScreen />` and flips theme via `useTheme().setTheme('dark')` — assert that the rendered DOM's `data-theme` attribute tracks and that --color-primary-pos resolves to a defined value (not `unset`).
+6. Cargo check + npm typecheck + eslint + vitest stay green.
+7. Working-tree cleanliness: pre-existing dirty `LICENSE` and `docs/admin-guide.md` lines out of scope (no edits there).
+
+## Branch state
+
+```
+0.0.22 ───────► 0.0.23 ───────► 0.0.24 (current)
+                  (audit)         (audit + this file)
+```
+
+This audit doc is the only deliverable for 0.0.24's theming investigation. No code changes have landed yet — the fix cycle is staged for followup commit(s) on the same branch.
+
+## Open questions for the user
+
+1. Should POS brand colours (navy primary, bronzy warning, gold F-key) be **theme-locked** (same in all 3 themes, preserves brand), or **theme-adaptive** (light theme uses desaturated variants for contrast)?
+   - Brand-locked (recommended): POS keeps its visual identity in any theme; tokens stay brand-stable across themes.
+   - Theme-adaptive: POS blends with the rest of the UI; primary colour shifts per theme.
+2. Should `localStorage['oz-pos-theme-v4']` be **retired in favour of themed session** so that POS stops writing its own `retail-theme`? (yes, implicit in Step A — drop the local key entirely).
