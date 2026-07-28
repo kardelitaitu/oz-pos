@@ -37,17 +37,19 @@ interface FormData {
   taxRateIds: string[];
 }
 
-const EMPTY_FORM: FormData = {
-  sku: '',
-  name: '',
-  priceMinor: '',
-  currency: 'USD',
-  categoryId: '',
-  barcode: '',
-  initialStock: '0',
-  productType: 'retail',
-  taxRateIds: [],
-};
+function emptyForm(workspaceType: string): FormData {
+  return {
+    sku: '',
+    name: '',
+    priceMinor: '',
+    currency: 'USD',
+    categoryId: '',
+    barcode: '',
+    initialStock: '0',
+    productType: workspaceType === 'restaurant-pos' ? 'restaurant' : 'retail',
+    taxRateIds: [],
+  };
+}
 
 function dtoToProduct(dto: ProductDto): Product {
   return {
@@ -65,7 +67,7 @@ function dtoToProduct(dto: ProductDto): Product {
 
 /** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
-  const { sessionToken: rawToken } = useWorkspace();
+  const { sessionToken: rawToken, activeWorkspace } = useWorkspace();
   const sessionToken = rawToken || '';
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
@@ -77,7 +79,7 @@ export default function ProductManagementScreen() {
   const [editingSku, setEditingSku] = useState<string | null>(null);
 
   const modalExit = useExitAnimation(showModal, () => setShowModal(false));
-  const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [form, setForm] = useState<FormData>(() => emptyForm(activeWorkspace ?? ''));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -134,7 +136,7 @@ export default function ProductManagementScreen() {
   useEffect(() => { load(); }, [load]);
 
   const openCreate = useCallback(() => {
-    setForm(EMPTY_FORM);
+    setForm(emptyForm(activeWorkspace ?? ''));
     setEditingSku(null);
     setSaveError(null);
     setShowModal(true);
@@ -518,7 +520,6 @@ export default function ProductManagementScreen() {
                 >
                   <option value="retail">Retail</option>
                   <option value="restaurant">Restaurant</option>
-                  <option value="both">Both</option>
                   <option value="service">Service</option>
                 </select>
               </label>
