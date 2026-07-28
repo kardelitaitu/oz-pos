@@ -22,6 +22,7 @@ import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type Store
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { formatMoney, type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
+import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import ScaleIndicator from './ScaleIndicator';
 import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
@@ -168,12 +169,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setQuickReturnSale(null);
   }, []);
 
-  const [theme, _setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('retail-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
-    catch { return 'light'; }
-  });
+  // P0-1 (audit docs/2026-07-28-retail-pos-theming-audit.md): replace the
+  // shadow useState that read localStorage 'retail-theme' + prefers-color-scheme
+  // on mount and never updated afterwards. `useOptionalTheme()?.theme` returns
+  // `Theme | undefined` — `Theme` when AppProviders' ThemeProvider wraps,
+  // `undefined` for unwrapped renders (React strips undefined from JSX
+  // attributes; CSS falls back to :root via cascade).
+  const theme = useOptionalTheme()?.theme;
 
 
   // ── Cart panel resize state ───────────────────────────────────────
