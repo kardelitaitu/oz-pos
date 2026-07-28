@@ -1,7 +1,16 @@
 # Retail POS Theming Audit — 2026-07-28
 
-<!-- Audit stamp: 2026-07-28 · Buffy · status: DRAFT (awaiting fix cycle) · branch: 0.0.24 -->
+<!-- Audit stamp: 2026-07-28 · Buffy · status: VERIFIED (fix cycle closed) · branch: 0.0.24 -->
 <!-- Scope: ui/src/features/retail/RetailPosScreen.tsx + RetailPosScreen.css + sibling theme files -->
+
+## Verification Summary
+
+Verification completed on branch `0.0.24`:
+
+- `RetailPosScreen.tsx` consumes the global theme via `useOptionalTheme()?.theme`; no shadow `useState`, no `localStorage['retail-theme']` key, no `_setTheme` dead setter, and no narrowed `'light' | 'dark'` type remain. The four `data-theme={theme}` sites all mirror the live global value.
+- All POS-only CSS tokens used in `RetailPosScreen.css` are defined in `ui/src/frontend/themes/tokens.css` (`:root`) and inherited across all theme blocks (`[data-theme="light"]`, `[data-theme="dark"]`).
+- TypeScript typecheck passes.
+- Theme-related test suites pass: `RetailPosScreen.test.tsx` (25 tests), `themeRegression.test.tsx` (10 tests), `themeRegressionRetailPosScreen.test.tsx` (4 tests).
 
 ## TL;DR
 
