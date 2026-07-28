@@ -140,7 +140,7 @@ export default function ProductManagementScreen() {
     setEditingSku(null);
     setSaveError(null);
     setShowModal(true);
-  }, []);
+  }, [activeWorkspace]);
 
   const openEdit = useCallback((p: Product) => {
     const dto = productDtos.find((d) => d.sku === p.sku);
