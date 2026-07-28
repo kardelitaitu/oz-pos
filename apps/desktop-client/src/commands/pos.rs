@@ -45,14 +45,15 @@ impl PaymentKind {
     /// Resolve this payment kind to the wire-format string stored in
     /// `sales.payment_method`. Both variants earn their place: `Single`
     /// returns the user-supplied method verbatim; `Split` returns the
-    /// canonical ADR #20 marker. Associated function (no `&self`) —
-    /// callers don't need to construct a `PaymentKind` value just to
-    /// invoke it.
-    pub fn wire_method(has_splits: bool, single_method: &str) -> String {
-        if has_splits {
-            Self::SPLIT_MARKER.to_string()
-        } else {
-            single_method.to_string()
+    /// canonical ADR #20 marker.
+    ///
+    /// Instance method (not associated function) so the type system
+    /// forces callers to construct a `PaymentKind` value — keeps the
+    /// enum's variants from going orphan.
+    pub fn wire_method(&self, single_method: &str) -> String {
+        match self {
+            Self::Single => single_method.to_string(),
+            Self::Split => Self::SPLIT_MARKER.to_string(),
         }
     }
 }
@@ -751,9 +752,12 @@ pub async fn complete_sale(
 
     let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(args.user_id))
         .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
-    let has_splits = args.payment_splits.as_ref().is_some_and(|s| !s.is_empty());
-    let payment_method = PaymentKind::wire_method(has_splits, &args.payment_method);
-    sale.payment_method = Some(payment_method);
+    let kind = if args.payment_splits.as_ref().is_some_and(|s| !s.is_empty()) {
+        PaymentKind::Split
+    } else {
+        PaymentKind::Single
+    };
+    sale.payment_method = Some(kind.wire_method(&args.payment_method));
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
 
@@ -1151,8 +1155,12 @@ pub async fn complete_sale_scoped(
 
     let mut sale = oz_core::Sale::from_cart_with_user(&cart, Some(session.user_id.clone()))
         .ok_or_else(|| AppError::Invalid("cart total overflowed i64".into()))?;
-    let has_splits = args.payment_splits.as_ref().is_some_and(|s| !s.is_empty());
-    sale.payment_method = Some(PaymentKind::wire_method(has_splits, &args.payment_method));
+    let kind = if args.payment_splits.as_ref().is_some_and(|s| !s.is_empty()) {
+        PaymentKind::Split
+    } else {
+        PaymentKind::Single
+    };
+    sale.payment_method = Some(kind.wire_method(&args.payment_method));
     sale.tendered_minor = args.tendered_minor;
     sale.customer_id = args.customer_id.clone();
 
