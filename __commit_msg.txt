@@ -1,7 +1,0 @@
-fix(sync): add confirm_destructive guard + pre-pull backup to sync_pull (H-2)
-
-- Added SyncPullArgs with confirm_destructive: bool parameter
-- sync_pull now returns AppError if confirm_destructive is false
-- Before applying the server snapshot, creates a timestamped backup
-  via Store::backup at <db_path>.sync-pull-<timestamp>.backup.db
-- Added 3 unit tests for SyncPullArgs deserialization
