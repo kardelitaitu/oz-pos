@@ -339,17 +339,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setShowClearConfirm(false);
   }, [resetCart]);
 
-  // ── Recent products (last 8) ──────────────────────────────────────
-  const MAX_RECENT = 8;
-  const [recentProducts, setRecentProducts] = useState<ProductDto[]>([]);
 
-  const addToRecent = useCallback((p: ProductDto) => {
-    setRecentProducts((prev) => {
-      const filtered = prev.filter((x) => x.sku !== p.sku);
-      const next = [p, ...filtered].slice(0, MAX_RECENT);
-      return next;
-    });
-  }, []);
 
   // ── Products & Categories ────────────────────────────────────
 
@@ -435,8 +425,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
     }
     addProduct(toProduct(p));
-    addToRecent(p);
-  }, [addProduct, addToRecent, addToast, l10n, lines]);
+  }, [addProduct, addToast, l10n, lines]);
 
   const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
     const product = products.find((p) => p.sku === sku);
@@ -450,10 +439,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
     }
     addProduct(toProduct(product), qty);
-    addToRecent(product);
     setWeighTarget(null);
     addToast({ message: l10n.getString('scale-weigh-added', { name: product.name, weight: qty }) || `Added ${qty}g of ${product.name}`, type: 'success' });
-  }, [products, lines, addProduct, addToRecent, addToast, l10n]);
+  }, [products, lines, addProduct, addToast, l10n]);
 
   const handleSetWeighTarget = useCallback((p: ProductDto) => {
     if (weighTarget?.sku === p.sku) return;
@@ -1141,24 +1129,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             />
           )}
 
-          {/* ── Recent products ──────────────── */}
-          {recentProducts.length > 0 && !searchQuery.trim() && !activeCategory && (
-            <div className="retail-recent-strip">
-              <span className="retail-recent-label">{l10n.getString('retail-recent-label')}</span>
-              <div className="retail-recent-items">
-                {recentProducts.map((p) => (
-                  <button
-                    key={p.sku}
-                    className="retail-recent-btn"
-                    onClick={() => handleAdd(p)}
-                  >
-                    <span className="retail-recent-name">{p.name}</span>
-                    <span className="retail-recent-price">{formatMoney(p.price)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {filteredProducts.length === 0 ? (
             <div className="retail-grid-empty">
