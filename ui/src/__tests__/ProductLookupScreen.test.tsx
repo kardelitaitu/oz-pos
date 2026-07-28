@@ -13,6 +13,19 @@ import * as bundlesApi from '@/api/bundles';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import type { Product } from '@/types/domain';
 
+// ── Mock: make listProducts / listCategories reject so useProducts
+//    falls back to its own SAMPLE_PRODUCTS (coffee-shop items) instead
+//    of the dev-mock's PC hardware catalog. All other exports (e.g.
+//    lookupProductBySku) remain the real implementations.
+vi.mock('@/api/products', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/products')>();
+  return {
+    ...actual,
+    listProducts: vi.fn(() => Promise.reject(new Error('IPC unavailable'))),
+    listCategories: vi.fn(() => Promise.reject(new Error('IPC unavailable'))),
+  };
+});
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function fillInput(label: string | RegExp, value: string) {
