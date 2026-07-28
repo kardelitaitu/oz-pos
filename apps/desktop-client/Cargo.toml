@@ -63,9 +63,9 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 notify = { workspace = true }
 uuid = { workspace = true }
-hmac = "0.12"
-sha2 = "0.10"
-hex = "0.4"
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
