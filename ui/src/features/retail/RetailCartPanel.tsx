@@ -3,20 +3,7 @@ import { useLocalization, Localized } from '@fluent/react';
 import { formatMoney, type Money, type LineId, type Sku } from '@/types/domain';
 import type { CartLine } from '@/types/domain';
 import type { CustomerDto } from '@/api/customers';
-
-// ── Cart panel width constants (mirror RetailPosScreen.tsx) ─────────
-
-export const RETAIL_CART_WIDTH_MIN = 280;
-export const RETAIL_CART_WIDTH_DEFAULT = 340;
-export const RETAIL_CART_WIDTH_MAX_CAP = 800;
-
-export function clampRetailCartWidth(px: number, viewportWidth: number): number {
-  const max = Math.max(
-    RETAIL_CART_WIDTH_MIN,
-    Math.min(viewportWidth * 0.5, RETAIL_CART_WIDTH_MAX_CAP),
-  );
-  return Math.max(RETAIL_CART_WIDTH_MIN, Math.min(Math.round(px), max));
-}
+import { clampRetailCartWidth } from './RetailCartPanel.constants';
 
 // ── Grouped prop interfaces ────────────────────────────────────────
 
