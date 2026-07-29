@@ -190,7 +190,14 @@ export default function RetailCartPanel({
                         <span className="retail-cart-line-qty">
                           <button
                             className="retail-cart-qty-btn"
-                            onClick={() => lineActions.onUpdateQty(line.id, Math.max(1, line.qty - 1))}
+                            onClick={() => {
+                              const newQty = line.qty - 1;
+                              if (newQty <= 0) {
+                                lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty });
+                              } else {
+                                lineActions.onUpdateQty(line.id, newQty);
+                              }
+                            }}
                             aria-label={l10n.getString('retail-cart-qty-decrease-aria') || `Decrease quantity of ${line.sku}`}
                           >
                             &minus;
