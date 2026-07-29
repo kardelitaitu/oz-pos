@@ -59,7 +59,6 @@ export interface RetailCartPanelProps {
   overrideTarget: { id: LineId; name: string; unit_price: Money } | null;
   undoStack: { sku: Sku; name: string; category: string; unit_price: Money }[];
   undoBarExit: { shouldRender: boolean; exiting: boolean; requestClose: () => void };
-  creditSalesCount: number; // kept in interface for parent passthrough; rendered via RetailReminderPopup instead
 
   // Feature flags
   isSerialTracking: boolean;
@@ -94,7 +93,6 @@ export default function RetailCartPanel({
   trackSerialMap,
   undoStack,
   undoBarExit,
-  creditSalesCount: _creditSalesCount,
   isSerialTracking,
   isManager,
   activeShift,
