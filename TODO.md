@@ -65,28 +65,11 @@ in the retail surface.
 
 ---
 
-## 3. Attribute-Only FTL Sweep — Automated Bug Hunt
+## ✅ ~~3.~~ Attribute-Only FTL Sweep — COMPLETE (commit `104c4891`)
 
-**Why:** ~90+ FTL messages are attribute-only (e.g. `.aria-label = ...` with no
-message value). When called via `l10n.getString()`, they silently return `undefined`.
-We already fixed 3 instances of this class of bug (cycles 64–66). A scripted sweep
-will catch the rest.
-
-- [ ] **Step 1 — Extract attribute-only keys**
-  - [ ] Run the awk one-liner across all `ui/src/locales/*.ftl` to build a list of attribute-only message IDs
-- [ ] **Step 2 — Cross-reference with codebase usage**
-  - [ ] `grep -rn "l10n.getString" ui/src/ --include="*.tsx"` to find all usages
-  - [ ] For each match, check: is the key attribute-only? If yes, is there a fallback (`||` or `null,` fallback)?
-  - [ ] Flag every `l10n.getString(ATTR_ONLY_KEY)` with no fallback as a **BUG**
-- [ ] **Step 3 — Fix each bug**
-  - [ ] Option A (preferred): Convert the FTL message from attribute-only to simple key=value
-  - [ ] Option B: Add a `|| 'fallback'` in the code (only if the attribute-only format is needed for `<Localized attrs={...}>`)
-  - [ ] Update both `en` and `id` bundles
-- [ ] **Step 4 — Add a CI guard (optional but recommended)**
-  - [ ] Write a script `scripts/check-attribute-only-ftl.sh` that fails CI if any attribute-only key is used via `l10n.getString()` without a fallback
-  - [ ] Wire into `.github/workflows/` or the pre-commit hook
-- [ ] **Step 5 — Validate**
-  - [ ] `cd ui && npm run typecheck`
-  - [ ] `cd ui && npx vitest run`
-  - [ ] Bundle-parity on all FTL bundles
-  - [ ] Code review + commit
+> **Done:** Cross-referenced 268 attribute-only messages against 1212 `l10n.getString()`
+> calls. Found 75 keys silently returning `undefined` across 25 files.
+>
+> **Fix:** 72 safe keys converted to `key = value` via `scripts/convert-safe-attr-ftl.py`
+> (125 conversions, 16 bundles). 3 keys also used via `<Localized>` received `||`
+> fallbacks in code. 3324/3324 tests pass, bundle parity verified, typecheck clean.
