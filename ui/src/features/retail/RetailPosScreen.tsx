@@ -136,6 +136,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   useEffect(() => {
     const uniqueSkus = [...new Set(lines.map((l) => l.sku))];
+    // Clean up pending set: remove SKUs no longer in the cart
+    for (const sku of pendingTrackFetchRef.current) {
+      if (!uniqueSkus.includes(sku as Sku)) pendingTrackFetchRef.current.delete(sku);
+    }
     for (const sku of uniqueSkus) {
       if (trackSerialMap[sku] === undefined && !pendingTrackFetchRef.current.has(sku)) {
         pendingTrackFetchRef.current.add(sku);
@@ -727,6 +731,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const allCustomersRef = useRef<CustomerDto[]>([]);
 
+  // Fetch customer list when the modal opens; filter locally on keystrokes
   useEffect(() => {
     if (!showCustomerSearch) { setCustomerSearchResults([]); return; }
     setLoadingCustomers(true);
@@ -745,8 +750,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       })
       .catch(() => { addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, customerSearchQuery, addToast]); // l10n via ref
+  }, [showCustomerSearch, addToast]); // l10n via ref — fetch only when modal opens
 
+  // Filter cached customers locally on keystroke — avoids redundant API calls
   useEffect(() => {
     if (!showCustomerSearch) return;
     const customers = allCustomersRef.current;
@@ -760,7 +766,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           (c.email && c.email.toLowerCase().includes(q)),
       ),
     );
-  }, [showCustomerSearch, customerSearchQuery]);
+  }, [customerSearchQuery]); // runs on every keystroke, but only on cached data
 
   // ── Payment modal ────────────────────────────────────────────
 
@@ -962,23 +968,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       // Guard: block all hotkeys while any aria-modal is open (e.g. WorkspaceSettingsModal)
       if (isAnyModalOpen()) return;
 
-      // Escape: close any open overlay, most-recently-opened first.
-      if (e.key === 'Escape') {
-        if (!isAnyOverlayOpen()) return; // let browser handle it
-        e.preventDefault();
-        if (showShortcuts) { setShowShortcuts(false); return; }
-        if (showQtyPicker) { setShowQtyPicker(false); setPendingProduct(null); return; }
-        if (showDiscount) { setShowDiscount(false); return; }
-        if (showCustomerSearch) { setShowCustomerSearch(false); return; }
-        if (showHeldCartsList) { setShowHeldCartsList(false); return; }
-        if (showCreditList) { setShowCreditList(false); return; }
-        if (showClearConfirm) { setShowClearConfirm(false); return; }
-        if (showQuickReturn) { setShowQuickReturn(false); setQuickReturnBarcode(''); return; }
-        if (closedShiftSummary) { setClosedShiftSummary(null); return; }
-        if (showCloseShift) { retailCloseShiftExit.requestClose(); return; }
-        if (showOpenShift) { retailOpenShiftExit.requestClose(); return; }
-        return;
-      }
+      // Escape: handled per-modal by useFocusTrap (Phase A gave all overlays
+      // aria-modal="true", so isAnyModalOpen() above already returned).
 
       // Guard: block hotkeys while local overlays/dialogs are visible
       if (isAnyOverlayOpen()) return;
