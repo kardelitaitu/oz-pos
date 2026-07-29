@@ -54,6 +54,18 @@ impl Store<'_> {
 
     /// Register a new terminal.
     pub fn create_terminal(&self, terminal: &Terminal) -> Result<(), CoreError> {
+        if terminal.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "terminal name must not be empty".into(),
+            });
+        }
+        if terminal.device_id.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "device_id",
+                message: "terminal device_id must not be empty".into(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO terminals (id, name, device_id, terminal_secret, is_active,
                                     last_seen_at, metadata, created_at, updated_at)
@@ -75,6 +87,12 @@ impl Store<'_> {
 
     /// Update an existing terminal.
     pub fn update_terminal(&self, terminal: &Terminal) -> Result<(), CoreError> {
+        if terminal.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "terminal name must not be empty".into(),
+            });
+        }
         let affected = self.conn.execute(
             "UPDATE terminals SET name = ?1, device_id = ?2, terminal_secret = ?3,
                                    is_active = ?4, last_seen_at = ?5, metadata = ?6,
@@ -599,5 +617,41 @@ mod tests {
         let conn = fresh();
         let err = store(&conn).clear_terminal_binding("nope");
         assert!(matches!(err, Err(CoreError::NotFound { entity, .. }) if entity == "terminal"));
+    }
+
+    // ── Validation ─────────────────────────────────────────────────
+
+    #[test]
+    fn create_terminal_empty_name_rejected() {
+        let conn = fresh();
+        let t = make_terminal("v1", "", "dev-001");
+        let err = store(&conn).create_terminal(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_terminal_whitespace_name_rejected() {
+        let conn = fresh();
+        let t = make_terminal("v2", "   ", "dev-001");
+        let err = store(&conn).create_terminal(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_terminal_empty_device_id_rejected() {
+        let conn = fresh();
+        let t = make_terminal("v3", "Valid Name", "");
+        let err = store(&conn).create_terminal(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "device_id"));
+    }
+
+    #[test]
+    fn update_terminal_empty_name_rejected() {
+        let conn = fresh();
+        seed_terminals(&conn);
+        let mut t = store(&conn).get_terminal("term-1").unwrap().unwrap();
+        t.name = "".into();
+        let err = store(&conn).update_terminal(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 }
