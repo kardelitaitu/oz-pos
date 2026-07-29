@@ -360,7 +360,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--color-bg-body, #0f172a) !important;
+  background: var(--color-dark-bg-pos);
   padding: 6px var(--space-2);
   text-align: left;
   font-size: 12px;
