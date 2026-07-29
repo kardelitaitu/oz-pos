@@ -1,7 +1,7 @@
 .refund-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: var(--color-pos-modal-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
@@ -13,15 +13,15 @@
 }
 
 .refund-modal {
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   width: 35rem;
   max-width: 90vw;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: var(--color-pos-modal-shadow);
 }
 
 .refund-header {
@@ -41,21 +41,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--space-8);
-  min-height: var(--space-8);
+  min-width: var(--space-11);
+  min-height: var(--space-11);
   background: none;
   border: none;
   font-size: var(--text-2xl);
   cursor: pointer;
   padding: 0 var(--space-1);
   color: var(--color-fg-secondary);
-}
-
-@media (pointer: coarse) {
-  .refund-close {
-    width: var(--space-11);
-    height: var(--space-11);
-  }
 }
 
 .refund-sale-info {
@@ -118,8 +111,8 @@
 }
 
 .refund-qty-btn {
-  width: var(--space-8);
-  height: var(--space-8);
+  width: var(--space-11);
+  height: var(--space-11);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-elevated);
@@ -128,13 +121,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-@media (pointer: coarse) {
-  .refund-qty-btn {
-    width: var(--space-11);
-    height: var(--space-11);
-  }
 }
 
 .refund-qty-btn:disabled {
