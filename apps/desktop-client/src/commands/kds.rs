@@ -206,11 +206,14 @@ pub async fn create_kds_order_from_sale(
     sale_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
-    let orders = store.complete_sale_to_kds(&sale_id, None)?;
-    drop(db);
+    // Scope-limit the DB access so Store (which borrows from the MutexGuard)
+    // is dropped before any .await point — required for Tauri's Send bound.
+    let orders = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
+        store.complete_sale_to_kds(&sale_id, None)?
+    }; // db + store dropped here
 
     // Push real-time update to all KDS displays — skip if no kitchen items.
     if !orders.is_empty()
@@ -218,6 +221,9 @@ pub async fn create_kds_order_from_sale(
     {
         let _ = app.emit("kds:orders-changed", ());
     }
+
+    // Auto-print kitchen chits (3c: printer HAL — best-effort).
+    try_auto_print_kds_chits(&orders, &state.registry, state.app.as_ref()).await;
 
     Ok(orders)
 }
@@ -234,17 +240,19 @@ pub async fn create_kds_order_from_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    let db = conn
-        .lock()
-        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
-    let orders = store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?;
-    drop(db);
+    // Scope-limit the DB access so Store is dropped before .await.
+    let orders = {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
+        store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?
+    }; // conn, db, store dropped here
 
     // Push real-time update to all KDS displays — skip if no kitchen items.
     if !orders.is_empty()
@@ -252,6 +260,9 @@ pub async fn create_kds_order_from_sale_scoped(
     {
         let _ = app.emit("kds:orders-changed", ());
     }
+
+    // Auto-print kitchen chits (3c: printer HAL — best-effort).
+    try_auto_print_kds_chits(&orders, &state.registry, state.app.as_ref()).await;
 
     Ok(orders)
 }
@@ -293,6 +304,130 @@ pub async fn get_kds_order_scoped(
     let order = store.get_kds_order(&id)?;
     drop(db);
     Ok(order)
+}
+
+// ── Kitchen chit printing ───────────────────────────────
+
+/// Print a kitchen chit for a single KDS order.
+///
+/// Tries the "kitchen" printer first; falls back to the "default"
+/// receipt printer. Silently skips when no printer is registered
+/// (the kitchen may not have a dedicated printer).
+///
+/// Returns `true` when the chit was printed, `false` when skipped.
+pub async fn print_kds_chit_for_order(
+    order: &KdsOrder,
+    registry: &oz_hal::DriverRegistry,
+    app: Option<&tauri::AppHandle>,
+) -> bool {
+    // Find the best available printer — try "kitchen" first, then "default".
+    let printer = match registry.printer("kitchen").await {
+        Some(p) => Some(p),
+        None => registry.printer("default").await,
+    };
+    let printer = match printer {
+        Some(p) => p,
+        None => {
+            tracing::trace!(
+                order_id = %order.id,
+                "kitchen chit: no printer available, skipping"
+            );
+            return false;
+        }
+    };
+
+    // Format the chit.
+    let chit = oz_hal::drivers::kds_chit::format_kds_chit(
+        order.display_number,
+        order.table_number.as_deref(),
+        &order.items_summary,
+        order.item_count,
+        &order.notes,
+        &order.received_at,
+    );
+
+    // Print it.
+    match printer.print_raw(&chit.data).await {
+        Ok(_) => {
+            tracing::info!(
+                order_id = %order.id,
+                display_number = ?order.display_number,
+                "kitchen chit printed"
+            );
+            if let Some(app) = app {
+                let _ = app.emit(
+                    "kds:chit-printed",
+                    serde_json::json!({
+                        "orderId": order.id,
+                        "displayNumber": order.display_number,
+                    }),
+                );
+            }
+            true
+        }
+        Err(e) => {
+            tracing::warn!(
+                order_id = %order.id,
+                error = %e,
+                "kitchen chit print failed"
+            );
+            false
+        }
+    }
+}
+
+/// Print a kitchen chit for a specific KDS order by ID (scoped — ADR #7).
+///
+/// Useful for manual re-print from the KDS screen when a chit was lost
+/// or damaged. Returns`true` if the chit was printed, `false` if the
+/// order was not found or no printer was available.
+#[tauri::command]
+pub async fn print_kds_chit_scoped(
+    session_token: String,
+    order_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    // Scope-limit the DB access so Store is dropped before .await.
+    let order = {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
+        store.get_kds_order(&order_id)?
+    }; // conn, db, store dropped here
+
+    let Some(order) = order else {
+        return Ok(false);
+    };
+
+    let printed = print_kds_chit_for_order(&order, &state.registry, state.app.as_ref()).await;
+    Ok(printed)
+}
+
+/// Try to print kitchen chits for every order in the slice.
+///
+/// Best-effort: logs failures but does not return errors.
+/// Called automatically after KDS order creation.
+///
+/// Takes owned clones of registry and app so the caller can drop any
+/// Tauri state borrows before the first `.await`.
+pub async fn try_auto_print_kds_chits(
+    orders: &[KdsOrder],
+    registry: &oz_hal::DriverRegistry,
+    app: Option<&tauri::AppHandle>,
+) {
+    if orders.is_empty() {
+        return;
+    }
+    for order in orders {
+        print_kds_chit_for_order(order, registry, app).await;
+    }
 }
 
 #[cfg(test)]

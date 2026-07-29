@@ -52,8 +52,8 @@
 - [ ] **3b. No offline resilience:** If backend is unreachable, KDS shows an error banner with stale queue. No Service Worker cache or optimistic UI.
   - _Effort:_ Large (Service Worker + retry queue)
 
-- [ ] **3c. No bump bar / hardware integration:** Physical USB bump bars and parallel thermal printer chits are standard in production kitchens. HAL has printer drivers but they're not wired to KDS.
-  - _Files:_ `crates/oz-hal/src/drivers/`, `apps/desktop-client/src/commands/printer.rs`
+- [x] **3c. No bump bar / hardware integration:** Physical USB bump bars and parallel thermal printer chits are standard in production kitchens. HAL has printer drivers but they're not wired to KDS.
+  - _Files:_ `crates/oz-hal/src/drivers/kds_chit.rs`, `apps/desktop-client/src/commands/kds.rs`
   - _Effort:_ Medium (HAL input driver + KDS event wiring)
 
 - [x] **3d. No "order up" voice callout:** When a ticket hits "ready", there should be a distinct TTS "Order 42 up!" rather than just the red-threshold chime.

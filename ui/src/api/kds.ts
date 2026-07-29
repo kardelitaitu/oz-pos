@@ -81,3 +81,7 @@ export const updateKdsOrderItems = (userId: string, args: UpdateKdsOrderItemsInp
 /** Update KDS order items (scoped — ADR #7). */
 export const updateKdsOrderItemsScoped = (sessionToken: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
   loggedInvoke<KdsOrder>('update_kds_order_items_scoped', { sessionToken, args });
+
+/** Print a kitchen chit for a KDS order (scoped — ADR #7). */
+export const printKdsChitScoped = (sessionToken: string, orderId: string): Promise<boolean> =>
+  loggedInvoke<boolean>('print_kds_chit_scoped', { sessionToken, orderId });

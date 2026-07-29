@@ -381,6 +381,7 @@ pub fn run() {
             commands::kds::create_kds_order_from_sale_scoped,
             commands::kds::get_kds_order,
             commands::kds::get_kds_order_scoped,
+            commands::kds::print_kds_chit_scoped,
             commands::history::list_sales,
             commands::history::list_sales_scoped,
             commands::history::get_sale,
