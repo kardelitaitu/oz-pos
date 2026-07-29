@@ -4,6 +4,8 @@ import { Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { CategoryDto } from '@/api/products';
 
+let catCounter = 0;
+
 export interface AddCategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -38,7 +40,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
     if (!name.trim()) return;
 
     const newCategory: CategoryDto = {
-      id: `cat-${Date.now()}`,
+      id: `cat-${Date.now()}-${catCounter++}`,
       name: name.trim(),
       colour: '#10b981',
       icon: '',
