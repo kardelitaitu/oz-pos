@@ -2,6 +2,7 @@ import { useLocalization } from '@fluent/react';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
+import RetailHeader from './RetailHeader';
 import type { ProductDto } from '@/api/products';
 
 // ── Sales History sub-view ──────────────────────────────────────────
@@ -11,22 +12,16 @@ interface SalesHistoryViewProps {
   onBack: () => void;
 }
 
-/** Sales History full-screen sub-view with back button. */
+/** Sales History full-screen sub-view — reuses RetailHeader in minimal variant. */
 export function SalesHistoryView({ theme, onBack }: SalesHistoryViewProps) {
   const { l10n } = useLocalization();
   return (
     <div className="retail-pos" data-theme={theme}>
-      <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-        <div className="retail-header-store">
-          <span className="retail-header-name">{l10n.getString('retail-fn-history') || 'Sales History'}</span>
-        </div>
-        <button
-          className="retail-options-tab retail-options-tab--danger"
-          onClick={onBack}
-        >
-          &larr; {l10n.getString('back')}
-        </button>
-      </header>
+      <RetailHeader
+        variant="minimal"
+        title={l10n.getString('retail-fn-history') || 'Sales History'}
+        onBack={onBack}
+      />
       <div style={{ flex: 1, overflow: 'auto' }}>
         <SalesHistoryScreen />
       </div>
@@ -41,22 +36,16 @@ interface TableManagementViewProps {
   onBack: () => void;
 }
 
-/** Table Management full-screen sub-view with back button. */
+/** Table Management full-screen sub-view — reuses RetailHeader in minimal variant. */
 export function TableManagementView({ theme, onBack }: TableManagementViewProps) {
   const { l10n } = useLocalization();
   return (
     <div className="retail-pos" data-theme={theme}>
-      <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-        <div className="retail-header-store">
-          <span className="retail-header-name">{l10n.getString('tables-title') || 'Table Management'}</span>
-        </div>
-        <button
-          className="retail-options-tab retail-options-tab--danger"
-          onClick={onBack}
-        >
-          &larr; {l10n.getString('back')}
-        </button>
-      </header>
+      <RetailHeader
+        variant="minimal"
+        title={l10n.getString('tables-title') || 'Table Management'}
+        onBack={onBack}
+      />
       <div style={{ flex: 1, overflow: 'auto' }}>
         <TableManagementScreen />
       </div>
@@ -72,22 +61,16 @@ interface StockInquiryViewProps {
   onAddProduct: (p: ProductDto) => void;
 }
 
-/** Stock Inquiry full-screen sub-view with back button and product-add callback. */
+/** Stock Inquiry full-screen sub-view — reuses RetailHeader in minimal variant. */
 export function StockInquiryView({ theme, onBack, onAddProduct }: StockInquiryViewProps) {
   const { l10n } = useLocalization();
   return (
     <div className="retail-pos" data-theme={theme}>
-      <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-        <div className="retail-header-store">
-          <span className="retail-header-name">{l10n.getString('retail-fn-stok') || 'Stock Inquiry'}</span>
-        </div>
-        <button
-          className="retail-options-tab retail-options-tab--danger"
-          onClick={onBack}
-        >
-          &larr; {l10n.getString('back')}
-        </button>
-      </header>
+      <RetailHeader
+        variant="minimal"
+        title={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
+        onBack={onBack}
+      />
       <div style={{ flex: 1, overflow: 'auto' }}>
         <ProductLookupScreen onAddProduct={(p) => onAddProduct({
           sku: p.sku, name: p.name, category: p.category,

@@ -2051,29 +2051,8 @@
 }
 
 /* ── Shortcuts overlay ──────────────────────────────────────── */
-
-.retail-shortcuts-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: retail-modal-fade-in var(--duration-200) var(--ease-out);
-}
-
-.retail-shortcuts-modal {
-  position: relative;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
-  border-radius: var(--radius-xl);
-  padding: var(--space-5);
-  min-width: 360px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-  animation: retail-modal-slide-up var(--duration-200) var(--ease-out);
-}
+/* Base overlay/modal styles inherited from combined .retail-*-overlay / .retail-*-modal blocks above.
+   Only variant-specific properties are defined here. */
 
 .retail-shortcuts-heading {
   margin: 0 0 var(--space-4);

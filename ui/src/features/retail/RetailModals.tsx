@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { formatMoney, type Money, type LineId } from '@/types/domain';
 import type { CustomerDto } from '@/api/customers';
@@ -5,6 +6,7 @@ import type { HeldCartRow, SaleDetail } from '@/api/sales';
 import type { ShiftDto } from '@/api/shifts';
 import type { StoreSettingsDto, CreditSaleDto } from '@/api/settings';
 import type { ProductDto, CategoryDto } from '@/api/products';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { EditProductModal } from './EditProductModal';
 import { AddCategoryModal } from './AddCategoryModal';
@@ -156,7 +158,7 @@ export interface RetailModalsProps {
 
 // ── Component ──────────────────────────────────────────────────────
 
-/** All retail POS modals and overlays rendered at the bottom of the main return. */
+/** All retail POS modals and overlays — each with proper dialog semantics, focus trapping, and exit animations. */
 export default function RetailModals(props: RetailModalsProps) {
   const { l10n } = useLocalization();
   const {
@@ -181,17 +183,48 @@ export default function RetailModals(props: RetailModalsProps) {
     onCloseWorkspaceSettings,
   } = props;
 
+  // ── Panel refs for focus trapping ────────────────────────────
+  const openShiftPanelRef = useRef<HTMLDivElement>(null);
+  const closeShiftPanelRef = useRef<HTMLDivElement>(null);
+  const shiftSummaryPanelRef = useRef<HTMLDivElement>(null);
+  const creditPanelRef = useRef<HTMLDivElement>(null);
+  const clearPanelRef = useRef<HTMLDivElement>(null);
+  const discountPanelRef = useRef<HTMLDivElement>(null);
+  const customerPanelRef = useRef<HTMLDivElement>(null);
+  const qtyPanelRef = useRef<HTMLDivElement>(null);
+  const heldCartsPanelRef = useRef<HTMLDivElement>(null);
+  const shortcutsPanelRef = useRef<HTMLDivElement>(null);
+  const quickReturnPanelRef = useRef<HTMLDivElement>(null);
+
+  // ── Focus traps — one per modal ─────────────────────────────
+  useFocusTrap(openShiftPanelRef,    shift.openShiftExit.shouldRender && !shift.openShiftExit.exiting,        () => shift.openShiftExit.requestClose());
+  useFocusTrap(closeShiftPanelRef,   shift.closeShiftExit.shouldRender && !shift.closeShiftExit.exiting,      () => shift.closeShiftExit.requestClose());
+  useFocusTrap(shiftSummaryPanelRef, shift.shiftSummaryExit.shouldRender && !shift.shiftSummaryExit.exiting,  () => shift.shiftSummaryExit.requestClose());
+  useFocusTrap(creditPanelRef,       credit.exit.shouldRender && !credit.exit.exiting,                        () => credit.exit.requestClose());
+  useFocusTrap(clearPanelRef,        clearConfirm.exit.shouldRender && !clearConfirm.exit.exiting,            () => clearConfirm.exit.requestClose());
+  useFocusTrap(discountPanelRef,     discount.exit.shouldRender && !discount.exit.exiting,                    () => discount.exit.requestClose());
+  useFocusTrap(customerPanelRef,     customer.exit.shouldRender && !customer.exit.exiting,                    () => customer.exit.requestClose());
+  useFocusTrap(qtyPanelRef,          qtyPicker.exit.shouldRender && !qtyPicker.exit.exiting,                   () => qtyPicker.exit.requestClose());
+  useFocusTrap(heldCartsPanelRef,    heldCarts.exit.shouldRender && !heldCarts.exit.exiting,                   () => heldCarts.exit.requestClose());
+  useFocusTrap(shortcutsPanelRef,    shortcuts.exit.shouldRender && !shortcuts.exit.exiting,                   () => shortcuts.exit.requestClose());
+  useFocusTrap(quickReturnPanelRef,  quickReturn.exit.shouldRender && !quickReturn.exit.exiting,              () => quickReturn.exit.requestClose());
+
   return (
     <>
       {/* ── Open Shift modal ────────────────── */}
       {shift.openShiftExit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-shift-overlay${shift.openShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('pos-open-shift-title')}
           onClick={() => shift.openShiftExit.requestClose()}
         >
-          <div className={`retail-shift-modal${shift.openShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={openShiftPanelRef}
+            className={`retail-shift-modal${shift.openShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('pos-open-shift-title')}</h3>
             <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
             <input
@@ -208,18 +241,23 @@ export default function RetailModals(props: RetailModalsProps) {
               </button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Close Shift modal ───────────────── */}
       {shift.closeShiftExit.shouldRender && shift.activeShift && (
-        <button
-          type="button"
+        <div
           className={`retail-shift-overlay${shift.closeShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('pos-close-shift-title')}
           onClick={() => shift.closeShiftExit.requestClose()}
         >
-          <div className={`retail-shift-modal${shift.closeShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={closeShiftPanelRef}
+            className={`retail-shift-modal${shift.closeShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {shift.closeShiftError && <div className="retail-shift-error">{shift.closeShiftError}</div>}
             <div style={{ fontSize: 12, color: 'var(--color-fg-secondary)', marginBottom: 10 }}>
@@ -247,13 +285,23 @@ export default function RetailModals(props: RetailModalsProps) {
               </button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Closed Shift Summary ────────────── */}
       {(shift.shiftSummaryExit.shouldRender && shift.closedShiftSummary) && (
-        <div className={`retail-shift-overlay${shift.shiftSummaryExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}>
-          <div className={`retail-shift-modal${shift.shiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}>
+        <div
+          className={`retail-shift-overlay${shift.shiftSummaryExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('pos-shift-closed-title')}
+          onClick={() => shift.shiftSummaryExit.requestClose()}
+        >
+          <div
+            ref={shiftSummaryPanelRef}
+            className={`retail-shift-modal${shift.shiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('pos-shift-closed-title')}</h3>
             <div style={{ fontSize: 13, lineHeight: 1.8 }}>
               <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: shift.closedShiftSummary.totalSalesMinor, currency: shift.storeSettings.currency })}</div>
@@ -274,13 +322,19 @@ export default function RetailModals(props: RetailModalsProps) {
 
       {/* ── Credit list overlay ─────────────── */}
       {credit.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-shift-overlay${credit.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={credit.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-credit-reminders-title')}
+          onClick={() => credit.exit.requestClose()}
         >
-          <div className={`retail-shift-modal${credit.exit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
+          <div
+            ref={creditPanelRef}
+            className={`retail-shift-modal${credit.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}
+          >
             <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
             {credit.sales.length === 0 ? (
               <div style={{ padding: 16, textAlign: 'center', color: 'var(--color-fg-tertiary)' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
@@ -322,42 +376,52 @@ export default function RetailModals(props: RetailModalsProps) {
               </table>
             )}
             <div className="retail-shift-modal-actions">
-              <button type="button" className="retail-shift-confirm-btn" onClick={credit.exit.requestClose}>{l10n.getString('close')}</button>
+              <button type="button" className="retail-shift-confirm-btn" onClick={() => credit.exit.requestClose()}>{l10n.getString('close')}</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Clear confirm modal ────────────── */}
       {clearConfirm.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-shift-overlay${clearConfirm.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={clearConfirm.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-clear-cart-title')}
+          onClick={() => clearConfirm.exit.requestClose()}
         >
-          <div className={`retail-shift-modal${clearConfirm.exit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={clearPanelRef}
+            className={`retail-shift-modal${clearConfirm.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
             <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
               {l10n.getString('retail-clear-cart-confirm', { count: clearConfirm.lineCount }) || `Remove all ${clearConfirm.lineCount} item${clearConfirm.lineCount !== 1 ? 's' : ''} from the cart?`}
             </p>
             <div className="retail-shift-modal-actions">
-              <button type="button" onClick={clearConfirm.exit.requestClose}>{l10n.getString('cancel')}</button>
+              <button type="button" onClick={() => clearConfirm.exit.requestClose()}>{l10n.getString('cancel')}</button>
               <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" onClick={clearConfirm.onConfirm}>{l10n.getString('retail-clear-cart-clear')}</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Discount modal ──────────────────── */}
       {discount.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-discount-overlay${discount.exit.exiting ? ' retail-discount-overlay--exiting' : ''}`}
-          aria-label="Close"
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-discount-title')}
           onClick={() => discount.exit.requestClose()}
         >
-          <div className={`retail-discount-modal${discount.exit.exiting ? ' retail-discount-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={discountPanelRef}
+            className={`retail-discount-modal${discount.exit.exiting ? ' retail-discount-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('retail-discount-title')}</h3>
             <div className="retail-discount-tabs">
               <button
@@ -408,18 +472,23 @@ export default function RetailModals(props: RetailModalsProps) {
               )}
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Customer search modal ──────────── */}
       {customer.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-customer-overlay${customer.exit.exiting ? ' retail-customer-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={customer.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-customer-search-title')}
+          onClick={() => customer.exit.requestClose()}
         >
-          <div className={`retail-customer-modal${customer.exit.exiting ? ' retail-customer-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={customerPanelRef}
+            className={`retail-customer-modal${customer.exit.exiting ? ' retail-customer-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('retail-customer-search-title')}</h3>
             <input
               className="retail-customer-search-input"
@@ -457,21 +526,26 @@ export default function RetailModals(props: RetailModalsProps) {
                   {l10n.getString('retail-customer-clear')}
                 </button>
               )}
-              <button type="button" className="retail-customer-close-btn" onClick={customer.exit.requestClose}>{l10n.getString('close')}</button>
+              <button type="button" className="retail-customer-close-btn" onClick={() => customer.exit.requestClose()}>{l10n.getString('close')}</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Quantity picker modal ──────────── */}
       {qtyPicker.exit.shouldRender && qtyPicker.product && (
-        <button
-          type="button"
+        <div
           className={`retail-qty-overlay${qtyPicker.exit.exiting ? ' retail-qty-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={qtyPicker.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-qty-picker-title') || 'Select Quantity'}
+          onClick={() => qtyPicker.exit.requestClose()}
         >
-          <div className={`retail-qty-modal${qtyPicker.exit.exiting ? ' retail-qty-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={qtyPanelRef}
+            className={`retail-qty-modal${qtyPicker.exit.exiting ? ' retail-qty-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="retail-qty-heading">{qtyPicker.product.name}</h3>
             <div className="retail-qty-price">{formatMoney(qtyPicker.product.price)}</div>
             <div className="retail-qty-controls">
@@ -506,8 +580,17 @@ export default function RetailModals(props: RetailModalsProps) {
                       if (k === '⌫') qtyPicker.onInputChange(qtyPicker.input.length > 1 ? qtyPicker.input.slice(0, -1) : '1');
                       else qtyPicker.onInputChange(String(Math.max(1, parseInt(qtyPicker.input + String(k), 10) || 1)));
                     }}
+                    aria-label={k === '⌫' ? 'Backspace' : String(k)}
                   >
-                    {k}
+                    {k === '⌫' ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" />
+                        <line x1="18" y1="9" x2="12" y2="15" />
+                        <line x1="12" y1="9" x2="18" y2="15" />
+                      </svg>
+                    ) : (
+                      k
+                    )}
                   </button>
                 )
               ))}
@@ -523,18 +606,23 @@ export default function RetailModals(props: RetailModalsProps) {
               <button type="button" className="retail-qty-confirm" onClick={qtyPicker.onConfirm}>{l10n.getString('retail-qty-add')}</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Held carts list modal ──────────── */}
       {heldCarts.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-held-carts-overlay${heldCarts.exit.exiting ? ' retail-held-carts-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={heldCarts.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-held-carts-title')}
+          onClick={() => heldCarts.exit.requestClose()}
         >
-          <div className={`retail-held-carts-modal${heldCarts.exit.exiting ? ' retail-held-carts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={heldCartsPanelRef}
+            className={`retail-held-carts-modal${heldCarts.exit.exiting ? ' retail-held-carts-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('retail-held-carts-title')}</h3>
             {heldCarts.list.length === 0 ? (
               <p className="retail-held-carts-empty">{l10n.getString('retail-held-carts-empty')}</p>
@@ -556,21 +644,26 @@ export default function RetailModals(props: RetailModalsProps) {
               </div>
             )}
             <div className="retail-held-carts-actions">
-              <button type="button" onClick={heldCarts.exit.requestClose}>{l10n.getString('close')}</button>
+              <button type="button" onClick={() => heldCarts.exit.requestClose()}>{l10n.getString('close')}</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Shortcuts overlay ──────────────── */}
       {shortcuts.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-shortcuts-overlay${shortcuts.exit.exiting ? ' retail-shortcuts-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={shortcuts.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-shortcuts-title')}
+          onClick={() => shortcuts.exit.requestClose()}
         >
-          <div className={`retail-shortcuts-modal${shortcuts.exit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={shortcutsPanelRef}
+            className={`retail-shortcuts-modal${shortcuts.exit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
             <div className="retail-shortcuts-grid">
               <span className="retail-shortcuts-key">F1</span><span>{l10n.getString('retail-shortcut-pay')}</span>
@@ -588,9 +681,9 @@ export default function RetailModals(props: RetailModalsProps) {
               <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
               <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
             </div>
-            <button type="button" className="retail-shortcuts-close" onClick={shortcuts.exit.requestClose}>{l10n.getString('close')}</button>
+            <button type="button" className="retail-shortcuts-close" onClick={() => shortcuts.exit.requestClose()}>{l10n.getString('close')}</button>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Price Override modal ───────────── */}
@@ -629,13 +722,18 @@ export default function RetailModals(props: RetailModalsProps) {
 
       {/* ── Quick Return modal ──────────────── */}
       {quickReturn.exit.shouldRender && (
-        <button
-          type="button"
+        <div
           className={`retail-shift-overlay${quickReturn.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={quickReturn.exit.requestClose}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-quick-return-title') || 'Quick Return'}
+          onClick={() => quickReturn.exit.requestClose()}
         >
-          <div className={`retail-shift-modal${quickReturn.exit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={quickReturnPanelRef}
+            className={`retail-shift-modal${quickReturn.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
             <p style={{ fontSize: 12, color: 'var(--color-fg-tertiary)', marginBottom: 8 }}>
               {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
@@ -651,7 +749,7 @@ export default function RetailModals(props: RetailModalsProps) {
               aria-label={l10n.getString('retail-quick-return-aria') || 'Receipt barcode input'}
             />
             <div className="retail-shift-modal-actions">
-              <button type="button" onClick={quickReturn.exit.requestClose} disabled={quickReturn.loading}>
+              <button type="button" onClick={() => quickReturn.exit.requestClose()} disabled={quickReturn.loading}>
                 {l10n.getString('cancel')}
               </button>
               <button type="button" className="retail-shift-confirm-btn" onClick={quickReturn.onSubmit} disabled={quickReturn.loading || !quickReturn.barcode.trim()}>
@@ -659,7 +757,7 @@ export default function RetailModals(props: RetailModalsProps) {
               </button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* ── Quick Return Refund modal ───────── */}
