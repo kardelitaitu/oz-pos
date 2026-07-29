@@ -323,7 +323,7 @@ export default function RetailModals(props: RetailModalsProps) {
       {/* ── Credit list overlay ─────────────── */}
       {credit.exit.shouldRender && (
         <div
-          className={`retail-shift-overlay${credit.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          className={`retail-credit-overlay${credit.exit.exiting ? ' retail-credit-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-credit-reminders-title')}
@@ -331,7 +331,7 @@ export default function RetailModals(props: RetailModalsProps) {
         >
           <div
             ref={creditPanelRef}
-            className={`retail-shift-modal${credit.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            className={`retail-credit-modal${credit.exit.exiting ? ' retail-credit-modal--exiting' : ''}`}
             onClick={(e) => e.stopPropagation()}
             style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}
           >
@@ -385,7 +385,7 @@ export default function RetailModals(props: RetailModalsProps) {
       {/* ── Clear confirm modal ────────────── */}
       {clearConfirm.exit.shouldRender && (
         <div
-          className={`retail-shift-overlay${clearConfirm.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          className={`retail-clear-overlay${clearConfirm.exit.exiting ? ' retail-clear-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-clear-cart-title')}
@@ -393,7 +393,7 @@ export default function RetailModals(props: RetailModalsProps) {
         >
           <div
             ref={clearPanelRef}
-            className={`retail-shift-modal${clearConfirm.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
+            className={`retail-clear-modal${clearConfirm.exit.exiting ? ' retail-clear-modal--exiting' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>

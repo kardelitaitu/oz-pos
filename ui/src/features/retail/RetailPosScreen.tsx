@@ -1034,6 +1034,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   return (
     <>
     <div className="retail-pos" data-theme={theme}>
+      {/* ── Skip-to-content link ─────────────── */}
+      <a href="#retail-main" className="retail-skip-link">
+        {l10n.getString('retail-skip-to-main') || 'Skip to main content'}
+      </a>
+
       {/* ── Header ──────────────────────────── */}
       <RetailHeader
         storeSettings={storeSettings}
@@ -1057,7 +1062,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       )}
 
       {/* ── Main area ───────────────────────── */}
-      <div className="retail-main" ref={retailPosRef}>
+      <div id="retail-main" className="retail-main" ref={retailPosRef}>
         {/* Left: product grid */}
         <RetailProductGrid
           data={{

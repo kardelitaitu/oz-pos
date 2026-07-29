@@ -829,8 +829,11 @@
   font-size: var(--text-md);
   padding: var(--space-1) var(--space-1_5);
   line-height: 1;
-  min-width: var(--space-8);
-  min-height: var(--space-8);
+  min-width: var(--space-11);
+  min-height: var(--space-11);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .retail-cart-remove-btn:hover {
@@ -1111,7 +1114,9 @@
 .retail-held-carts-overlay,
 .retail-shortcuts-overlay,
 .retail-preview-overlay,
-.retail-quick-return-overlay {
+.retail-quick-return-overlay,
+.retail-credit-overlay,
+.retail-clear-overlay {
   position: fixed;
   inset: 0;
   background: var(--color-pos-modal-overlay);
@@ -1130,7 +1135,9 @@
 .retail-held-carts-modal,
 .retail-shortcuts-modal,
 .retail-preview-modal,
-.retail-quick-return-modal {
+.retail-quick-return-modal,
+.retail-credit-modal,
+.retail-clear-modal {
   position: relative;
   background: var(--color-pos-modal-bg);
   border: 1px solid var(--color-pos-modal-border);
@@ -1178,7 +1185,9 @@
 .retail-qty-overlay--exiting,
 .retail-customer-overlay--exiting,
 .retail-held-carts-overlay--exiting,
-.retail-shortcuts-overlay--exiting {
+.retail-shortcuts-overlay--exiting,
+.retail-credit-overlay--exiting,
+.retail-clear-overlay--exiting {
   animation: retail-modal-fade-out var(--duration-200) var(--ease-out) both;
   pointer-events: none;
 }
@@ -1188,7 +1197,9 @@
 .retail-qty-modal--exiting,
 .retail-customer-modal--exiting,
 .retail-held-carts-modal--exiting,
-.retail-shortcuts-modal--exiting {
+.retail-shortcuts-modal--exiting,
+.retail-credit-modal--exiting,
+.retail-clear-modal--exiting {
   animation: retail-modal-slide-down var(--duration-200) var(--ease-out) both;
 }
 
@@ -1203,15 +1214,21 @@
   .retail-held-carts-overlay,
   .retail-discount-overlay,
   .retail-shortcuts-overlay,
+  .retail-credit-overlay,
+  .retail-clear-overlay,
   .retail-shift-modal,
   .retail-qty-modal,
   .retail-customer-modal,
   .retail-held-carts-modal,
   .retail-discount-modal,
   .retail-shortcuts-modal,
+  .retail-credit-modal,
+  .retail-clear-modal,
   .retail-shift-overlay--exiting,
   .retail-discount-overlay--exiting,
   .retail-qty-overlay--exiting,
+  .retail-credit-overlay--exiting,
+  .retail-clear-overlay--exiting,
   .retail-customer-overlay--exiting,
   .retail-held-carts-overlay--exiting,
   .retail-shortcuts-overlay--exiting,
@@ -2048,6 +2065,32 @@
 
 .retail-qty-confirm:hover {
   background: var(--color-primary-pos-dark);
+}
+
+/* ── Skip-to-content link ──────────────────────────────────── */
+
+.retail-skip-link {
+  position: absolute;
+  top: -100%;
+  left: var(--space-2);
+  z-index: 2000;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary-pos);
+  color: var(--color-pos-on-primary);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: top var(--duration-150) var(--ease-out);
+}
+
+.retail-skip-link:focus {
+  top: var(--space-1);
+}
+
+.retail-skip-link:focus-visible {
+  outline: 2px solid var(--color-pos-on-primary);
+  outline-offset: 2px;
 }
 
 /* ── Shortcuts overlay ──────────────────────────────────────── */
