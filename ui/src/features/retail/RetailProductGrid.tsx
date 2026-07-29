@@ -66,7 +66,7 @@ export interface RetailProductGridProps {
 
 // ── ProductCard sub-component ──────────────────────────────────────
 
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget }: {
+function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, outOfStockLabel }: {
   product: ProductDto;
   catHue: (catId: string | null) => number;
   formatMoney: (m: Money) => string;
@@ -75,11 +75,19 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
   handleOpenQtyPicker: (p: ProductDto) => void;
   scaleEnabled: boolean;
   onSetWeighTarget: (p: ProductDto) => void;
+  outOfStockLabel: string;
 }) {
   const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
   const priceRecent = useMemo(() => isPriceRecent(product), [product]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
+  // Refs to avoid stale closures in the long-press timeout (P2-7).
+  const productRef = useRef(product);
+  productRef.current = product;
+  const handleOpenQtyPickerRef = useRef(handleOpenQtyPicker);
+  handleOpenQtyPickerRef.current = handleOpenQtyPicker;
+  const handleAddRef = useRef(handleAdd);
+  handleAddRef.current = handleAdd;
 
   const lowThreshold = product.low_stock_threshold ?? 5;
   const highThreshold = product.high_stock_threshold ?? 10;
@@ -95,14 +103,14 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
-      handleOpenQtyPicker(product);
+      handleOpenQtyPickerRef.current(productRef.current);
     }, 400);
-  }, [product, isOutOfStock, handleOpenQtyPicker]);
+  }, [isOutOfStock]);
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    if (!isLongPress.current && !isOutOfStock) handleAdd(product);
-  }, [product, isOutOfStock, handleAdd]);
+    if (!isLongPress.current && !isOutOfStock) handleAddRef.current(productRef.current);
+  }, [isOutOfStock]);
 
   const handlePointerLeave = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -124,7 +132,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
             {product.stock_qty}
           </span>
         ) : (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>Out of stock</span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>{outOfStockLabel}</span>
         )}
       </td>
       <td className="retail-col-name">
@@ -393,6 +401,7 @@ export default function RetailProductGrid({
                   handleOpenQtyPicker={actions.onOpenQtyPicker}
                   scaleEnabled={isScaleEnabled}
                   onSetWeighTarget={actions.onSetWeighTarget}
+                  outOfStockLabel={l10n.getString('retail-product-out-of-stock') || 'Out of stock'}
                 />
               ))}
             </tbody>

@@ -809,6 +809,7 @@ retail-col-name = Nama Produk
 retail-col-stock = Stok
 retail-col-price = Harga
 retail-col-action = Aksi
+retail-product-out-of-stock = Stok habis
 
 # ── Edit Product Modal ──
 retail-edit-product-title = Edit Produk

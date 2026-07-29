@@ -249,6 +249,7 @@ export function usePosState() {
     setDiscountLabel('');
     setTipPercentState(0);
     setServiceChargeEnabled(false);
+    setServiceChargePercentState(SERVICE_CHARGE_DEFAULT_PERCENT);
   }, []);
 
   return {

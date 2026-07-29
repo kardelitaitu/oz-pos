@@ -822,6 +822,7 @@ retail-col-name = Product Name
 retail-col-stock = Stock
 retail-col-price = Price
 retail-col-action = Action
+retail-product-out-of-stock = Out of stock
 
 # ── Edit Product Modal ──
 retail-edit-product-title = Edit Product
