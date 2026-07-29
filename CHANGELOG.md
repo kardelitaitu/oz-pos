@@ -73,9 +73,58 @@ Retail POS Theme Integration Audit: **all 7 findings resolved** (3 P0 + 2 P1 + 2
 
 - **Cross-file flake prevention (`test-setup.ts` + `RetailPosScreenCheckout.test.tsx`)** — Global `beforeEach` now clears `sessionStorage` in addition to `localStorage`, removes leaked `data-theme` / `is-theme-transitioning` from `<html>`, and deletes injected `<style>` tags. Added global `afterEach(cleanup)` to unmount rendered React trees. Wrapped synchronous `/Change/` assertions in `waitFor` to prevent cross-file render races.
 
+#### 🌐 i18n — Full-Codebase Audit (89 fixes across 6 cycles)
+
+Systematic audit of every feature directory for hardcoded English strings bypassing the `@fluent/react` localization layer. The headline fix is an automated sweep that identified 268 attribute-only FTL messages silently returning `undefined` when accessed via `l10n.getString()`, causing empty aria-labels and placeholders across 25 files. Five follow-up manual audits then closed the remaining hardcoded-string gaps in 7 high-impact screens.
+
+**Verification gate:** 3,324/3,324 vitest tests passing, TypeScript strict-mode clean, ESLint zero warnings, `cargo clippy` zero warnings, bundle parity zero missing keys across all 24 en + 24 id bundles.
+
+##### 🔴 Attribute-Only FTL Sweep — 75 keys across 16 bundles
+
+- **Root cause:** ~268 FTL messages were attribute-only (e.g. `.aria-label = Search products` with no message value). When accessed via `l10n.getString()` — the pattern used in 1,212 call sites — they silently returned `undefined`. Screens like PosScreen.tsx (26 instances), PaymentModal.tsx (18), StockCountsScreen.tsx (14), and StaffManagementScreen.tsx (9) were most affected.
+- **Fix:** Cross-referenced all `l10n.getString()` call sites against FTL bundle keys. Converted 75 attribute-only keys to simple key=value messages, added 3 defensive `||` fallbacks in TypeScript code where the same key is also used via `<Localized attrs>` wrappers (so the attribute path must remain). Bundles touched: `sales`, `inventory`, `staff`, `shared`, `categories`, `products`, `kds`, `purchasing`, `terminals`, `tax`, `shifts`, `currency`, `reports`, `multi-store`, `loyalty`, `settings` (en + id each).
+- **Prevention:** Documented the `attribute-only + l10n.getString()` anti-pattern in `TODO.md` as a permanent reference. A pre-commit or CI guard that cross-references attribute-only keys against `l10n.getString()` call sites would permanently close this bug class.
+
+##### 🟠 RestaurantMenu.tsx — 13 missing keys + 2 hardcoded aria-labels
+
+- **Missing FTL keys (13):** `restaurant-search-aria`, `restaurant-search-clear-aria`, `restaurant-context-pin`, `restaurant-context-unpin`, `restaurant-context-available`, `restaurant-context-unavailable`, `restaurant-card-pin-title`, `restaurant-sort-manual`, `restaurant-sort-a-z`, `restaurant-sort-date`, `restaurant-sort-popularity`, `restaurant-menu-items-aria`, `restaurant-color-swatch-aria`. All referenced in code but absent from `products.ftl` / `products.id.ftl` — silently rendering empty text. Added with proper English + Indonesian translations.
+- **Hardcoded aria-labels (2):** `aria-label="Menu items"` on the product grid and `aria-label={c}` (raw hex codes like `#10b981`) on 10 colour swatches — replaced with `l10n.getString()` calls with `||` fallbacks.
+- **Hook audit:** All `useEffect` / `useCallback` dep arrays correct, proper cleanup, no stale closures. CSS audit: 500+ lines, zero hardcoded hex colours — all `var(--color-*)` / `var(--bg-*)` tokens.
+
+##### 🟡 SettingsPage.tsx — 2 hardcoded strings
+
+- `placeholder="Search"` on the settings search input → `l10n.getString('settings-search-placeholder') || 'Search'`.
+- `Loading...` in the `Suspense` fallback → `<Localized id="settings-section-loading"><div>Loading...</div></Localized>`.
+- **CSS audit:** 244 tokens, zero hardcoded hex. Hook audit: all `useCallback`/`useEffect` dep arrays correct, proper cleanup, save-via-ref pattern consistent. At 1,081 lines, the largest UI file was also the cleanest.
+
+##### 🟡 PosScreen.tsx — 5 hardcoded English strings
+
+- Course fire button aria-label (`Fire ${course.label} (${holdCount} items)`) → `l10n.getString('pos-cart-course-fire-aria', { label, count }, fallback)`.
+- "Fire All" button text → `<Localized id="pos-cart-course-btn--all">`.
+- Override button aria-label (`Override price for ${line.name}`) + text → `l10n.getString('pos-cart-line-override-aria', { name }, fallback)` + `<Localized id="pos-cart-line-override">`.
+- **FTL keys added:** 6 across `sales.ftl` / `sales.id.ftl`. Indonesian: "Kirim { $label } ({ $count } item)", "Kirim Semua", "Timpa", "Timpa harga untuk { $name }".
+- **CSS audit:** 216 tokens, all hex inside `var()` fallbacks, zero true hardcoded hex. Hook audit: 40 hooks, `l10nRef` pattern correct, ESLint zero errors.
+
+##### 🟢 ProductManagementScreen + CategoryManagementScreen — 3 fixes
+
+- Category edit button: `aria-label={`Edit category ${cat.name}`}` → `l10n.getString('category-mgmt-edit-aria', { name }, fallback)`.
+- Product type dropdown: `Retail`/`Restaurant`/`Service` hardcoded options → `l10n.getString('product-type-retail') || 'Retail'` (and equivalents).
+- Stock alert bell aria-label: 3-way English logic → `l10n.getString()` with open/close/alert-count keys, all with `||` fallbacks.
+- **FTL keys added:** 7 across `products.ftl` / `products.id.ftl`. **CSS audit:** 92 + 135 tokens, zero hardcoded hex.
+
+##### 🟢 AuditLogScreen — 1 tooltip fix
+
+- Unreviewed-count badge title: `title={`${unreviewedCount} unreviewed events since last review`}` → `l10n.getString('audit-log-unreviewed-title', { count }, fallback)` with Fluent plural selector. **FTL key added:** 1 in `shared.ftl` / `shared.id.ftl`.
+
+##### ✅ CustomerManagementScreen — zero bugs (clean sweep)
+
+Both apparent hardcoded aria-labels (`aria-label="Search customers"` and `aria-label="Actions"`) were verified to be inside `<Localized attrs>` wrappers — legitimate fallbacks, not bugs. 71 CSS tokens, zero hardcoded hex, zero inline styles.
+
 #### 📚 Documentation
 
 - **Retail POS theming audit doc** — Created `docs/2026-07-28-retail-pos-theming-audit.md` documenting all 7 findings, remediation steps, residual risks, and verification summary. Marked VERIFIED after all fixes landed and pre-CI gates passed.
+- **i18n audit session summary** — Documented all 6 audit cycles with per-cycle breakdowns, fix counts, FTL key tallies, and verification gates in `JOURNAL.md` (July 29 entry).
+- **`TODO.md` audit roadmap** — Created tracking document with the 3-item audit backlog (attribute-only FTL sweep, RestaurantMenu, SettingsPage), marked all 3 complete after verification.
 
 ---
 
