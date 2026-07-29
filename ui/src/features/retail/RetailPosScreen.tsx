@@ -965,11 +965,35 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   useEffect(() => {
     const isAnyModalOpen = () => document.querySelector('[aria-modal="true"]') !== null;
+    const isAnyOverlayOpen = () =>
+      showCustomerSearch || showHeldCartsList || showQuickReturn ||
+      showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm ||
+      showOpenShift || (showCloseShift && !closedShiftSummary) || !!closedShiftSummary;
+
     const handler = (e: KeyboardEvent) => {
       // Guard: block all hotkeys while any aria-modal is open (e.g. WorkspaceSettingsModal)
       if (isAnyModalOpen()) return;
+
+      // Escape: close any open overlay, most-recently-opened first.
+      if (e.key === 'Escape') {
+        if (!isAnyOverlayOpen()) return; // let browser handle it
+        e.preventDefault();
+        if (showShortcuts) { setShowShortcuts(false); return; }
+        if (showQtyPicker) { setShowQtyPicker(false); setPendingProduct(null); return; }
+        if (showDiscount) { setShowDiscount(false); return; }
+        if (showCustomerSearch) { setShowCustomerSearch(false); return; }
+        if (showHeldCartsList) { setShowHeldCartsList(false); return; }
+        if (showCreditList) { setShowCreditList(false); return; }
+        if (showClearConfirm) { setShowClearConfirm(false); return; }
+        if (showQuickReturn) { setShowQuickReturn(false); setQuickReturnBarcode(''); return; }
+        if (closedShiftSummary) { setClosedShiftSummary(null); return; }
+        if (showCloseShift) { retailCloseShiftExit.requestClose(); return; }
+        if (showOpenShift) { retailOpenShiftExit.requestClose(); return; }
+        return;
+      }
+
       // Guard: block hotkeys while local overlays/dialogs are visible
-      if (showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showOpenShift || showCloseShift) return;
+      if (isAnyOverlayOpen()) return;
       switch (e.key) {
         case 'F1': handlePay(); break;
         case 'F2': if (lines.length > 0) handleRequestClear(); break;
@@ -987,7 +1011,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, handleOpenSettings]);
+  }, [showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, showHeldCartsList, showQuickReturn, closedShiftSummary, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, handleOpenSettings, retailOpenShiftExit, retailCloseShiftExit]);
 
   // ── Render ───────────────────────────────────────────────────
 
