@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS kds_orders (
     -- Estimated preparation time in seconds
     prep_time_seconds INTEGER DEFAULT 0,
     -- Notes from the POS (e.g., "no onions")
-    notes       TEXT NOT NULL DEFAULT ''
+    notes       TEXT NOT NULL DEFAULT '',
+    -- Priority/rush flag: when TRUE the ticket visually escalates above normal SLA
+    priority    INTEGER NOT NULL DEFAULT 0
 );
 
 -- Auto-increment counter per day for display numbers.

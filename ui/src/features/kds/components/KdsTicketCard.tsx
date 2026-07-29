@@ -56,9 +56,9 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
 
   return (
     <button
-      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}`}
+      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}`}
       onClick={handleClick}
-      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${l10n.getString('kds-urgent-badge') || 'URGENT'}` : ''}, ${display}`}
+      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${l10n.getString('kds-urgent-badge') || 'URGENT'}` : ''}${order.priority ? `, ${l10n.getString('kds-rush-badge') || 'RUSH'}` : ''}, ${display}`}
     >
       <div className="kds-ticket-header">
         <span className="kds-ticket-id-group">
@@ -69,6 +69,11 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
         </span>
         <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
       </div>
+      {order.priority && (
+        <span className="kds-ticket-rush-badge">
+          <Localized id="kds-rush-badge">RUSH</Localized>
+        </span>
+      )}
       {urgent && (
         <span className="kds-ticket-urgent-badge">
           <Localized id="kds-urgent-badge">URGENT</Localized>

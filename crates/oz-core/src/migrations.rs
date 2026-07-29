@@ -552,6 +552,11 @@ pub const ALL: &[Migration] = &[
         id: "101_kds_table_number.sql",
         sql: include_str!("../migrations/101_kds_table_number.sql"),
     },
+    // ── 103: KDS priority/rush flag ──────────────────────────────
+    Migration {
+        id: "103_kds_priority.sql",
+        sql: include_str!("../migrations/103_kds_priority.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

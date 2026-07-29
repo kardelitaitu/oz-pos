@@ -41,9 +41,9 @@ const baseOrder: KdsOrder = {
   ready_at: null,
   served_at: null,
   prep_time_seconds: 0,
-  kitchen_zone: null,
-  notes: '',
+  kitchen_zone: null,    notes: '',
     table_number: null,
+    priority: false,
 };
 
 function renderCard(order: Partial<KdsOrder> = {}) {

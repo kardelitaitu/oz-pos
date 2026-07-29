@@ -88,6 +88,9 @@ pub struct KdsOrder {
     /// Populated from the `tables` table at order-creation time via
     /// the sale's `active_sale_id` link. `None` for takeaway orders.
     pub table_number: Option<String>,
+    /// Priority/rush flag: when true the ticket visually escalates above normal SLA.
+    /// Set by FOH to signal an urgent order (e.g., VIP, long wait, special request).
+    pub priority: bool,
 }
 
 /// Input for creating a KDS order from a completed sale.
@@ -107,6 +110,8 @@ pub struct CreateKdsOrderInput {
     pub notes: String,
     /// Table number assigned to this order (e.g., "T5").
     pub table_number: Option<String>,
+    /// Priority/rush flag: when true the ticket visually escalates above normal SLA.
+    pub priority: bool,
 }
 
 #[cfg(test)]
@@ -183,6 +188,7 @@ mod tests {
             kitchen_zone: Some("front".into()),
             notes: "No onions".into(),
             table_number: None,
+            priority: true,
         };
         let json = serde_json::to_string(&order).unwrap();
         let back: KdsOrder = serde_json::from_str(&json).unwrap();
@@ -206,6 +212,7 @@ mod tests {
             kitchen_zone: None,
             notes: String::new(),
             table_number: None,
+            priority: true,
         };
         let json = serde_json::to_string(&input).unwrap();
         let back: CreateKdsOrderInput = serde_json::from_str(&json).unwrap();
@@ -213,6 +220,7 @@ mod tests {
         assert_eq!(back.items_summary, "Tea");
         assert_eq!(back.item_count, 1);
         assert_eq!(back.notes, "");
+        assert!(back.priority);
     }
 
     #[test]
@@ -233,6 +241,7 @@ mod tests {
             kitchen_zone: None,
             notes: String::new(),
             table_number: None,
+            priority: false,
         };
         assert_eq!(
             order.started_at.as_deref(),

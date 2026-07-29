@@ -47,6 +47,9 @@ kds-settings-density-compact = Compact
 kds-zone-filter-aria = Filter by kitchen zone
 kds-zone-all = All
 
+# ── 2c: Priority/rush flag ──
+kds-rush-badge = RUSH
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Order
 kds-ready-tts = up

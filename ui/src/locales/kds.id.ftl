@@ -49,6 +49,9 @@ kds-settings-density-compact = Padat
 kds-zone-filter-aria = Filter berdasarkan zona dapur
 kds-zone-all = Semua
 
+# ── 2c: Priority/rush flag ──
+kds-rush-badge = PRIORITAS
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Pesanan
 kds-ready-tts = siap

@@ -23,6 +23,8 @@ export interface KdsOrder {
   notes: string;
   /** Table number assigned to this order (e.g., "T5"), or null for takeaway. */
   table_number: string | null;
+  /** Priority/rush flag: when true the ticket visually escalates above normal SLA. */
+  priority: boolean;
 }
 
 /** List KDS orders, optionally filtered by status. */

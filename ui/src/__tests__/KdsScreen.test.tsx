@@ -100,6 +100,7 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
     kitchen_zone: null,
     notes: '',
     table_number: null,
+    priority: false,
     ...overrides,
   };
 }
