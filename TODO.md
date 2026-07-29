@@ -1,125 +1,92 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: AUDITED (living planning/QA doc — NOT a code-claim audit) · top header is "0.0.19 — Manual QA: Full App Walkthrough" (8/45 pages checked, updated 2026-07-22); this is an active QA checklist, not a claims-about-code document, so it is stamped as current-scope rather than judged ACCURATE/STALE against the codebase · do not auto-fix; re-audit when the walkthrough is completed or the version header changes -->
+# Top 3 High-Impact Improvements — July 29, 2026 Audit
 
-# 0.0.19 — Manual QA: Full App Walkthrough
-
-> **Goal:** Open each page/screen in the running Tauri desktop app, verify it renders correctly, has no console errors, and all interactive elements work. Check off each item as you go.
->
-> **Current state:** 8 / 45 pages checked · Updated 2026-07-22
+> From the July 29 full-codebase audit: 3324/3324 tests, zero type errors, zero clippy
+> warnings, ~77 hardcoded aria-labels across un-audited features, ~90+ attribute-only
+> FTL messages that may silently return `undefined`.
 
 ---
 
-## 🖥️ App Shell & Global
+## 1. SettingsPage.tsx (1081 lines) — Audit & Harden
 
-- [x] **Login flow + status** — StaffLoginScreen: username entry → PIN pad → Auth + Sync connection dots (green/red/yellow) with latency in bottom-right footer ✅
-- [x] **Wrong PIN handling** — 3 failed attempts → rate-limit warning → lockout countdown ✅
-- [x] **Session lock + status** — Idle timeout → lock screen → Auth + Sync connection dots (green/red/yellow) with latency at bottom-right ✅
-- [x] **Session lock** — Re-enter PIN to unlock ✅
-- [ ] **AppShell layout** — Sidebar nav renders with all sections, active page highlighted, responsive collapse on narrow viewport
-- [ ] **Header / StatusBar** — Shows current store name, version number, sync status dot (green/red/yellow), role badge with avatar
-- [ ] **Dark/Light mode** — Theme toggle works, all pages render without visual glitches in both modes
-- [ ] **Language selector** — Switch between EN and ID, all labels update, no Fluent errors in console
-- [ ] **Workspace picker** — If multi-store: workspace selector shows available instances, switching reloads context
-- [ ] **Global error boundary** — Navigate all pages, verify no unhandled crashes (check browser devtools console for errors)
+**Why:** Largest UI file in the entire codebase. Completely un-audited for dialog semantics,
+hardcoded strings, CSS tokens, focus trapping, and stale closures.
 
----
-
-## 🏪 Operations
-
-- [ ] **POS Terminal** (`/sales`) — Product grid renders, add item to cart, adjust quantity, remove item, subtotal updates
-- [ ] **Payment modal** — Cash (enter amount, change calculation), Card, QRIS QR code display, sale completes successfully
-- [ ] **Receipt printing** — After sale completes, receipt prints (or shows preview if no printer)
-- [ ] **KDS** (`/kds`) — Kitchen Display: incoming orders appear, status transitions (pending→preparing→ready→served), multi-layout switcher (Focus/Kanban/Metro)
-- [ ] **Kiosk** (`/kiosk`) — Self-service mode: fullscreen, large product grid, no nav, add to cart, checkout, idle timeout returns to attract screen
-- [ ] **Tables** (`/tables`) — Restaurant floor plan: table status colours (available/occupied/reserved), tap to open order, merge/split tables
-
----
-
-## 📦 Products & Inventory
-
-- [ ] **Product Lookup** (`/products`) — Search by name/SKU, barcode scan input, category filter chips, product cards with price/stock
-- [ ] **Product Management** (`/inventory`) — Data table with all products, add/edit/delete, barcode field, stock level per product
-- [ ] **Bundles** (`/bundles`) — Create/edit product bundles, bundle pricing, items listed on receipt
-- [ ] **Categories** (`/categories`) — Colour-coded list, add/delete, colour picker
-- [ ] **Suppliers** (`/suppliers`) — Supplier list, add/edit/delete, contact info fields
-- [ ] **Purchase Orders** (`/purchase-orders`) — Create PO from supplier, add line items, receive/ship, status tracking
-- [ ] **Stock Transfers** (`/stock-transfers`) — Transfer stock between locations, partial receive, audit trail
-- [ ] **Stock Counts** (`/stock-counts`) — Create count sheet, enter quantities, reconcile differences
-- [ ] **Inventory Adjustment** (`/inventory-adjustment`) — Manual stock-in/stock-out with reason, stock alert threshold config
+- [ ] **Phase A — Read & catalog**
+  - [ ] Read full file; list all `<Localized>` blocks, `l10n.getString()` calls, `useCallback`/`useEffect` hooks, inline styles, and hardcoded `aria-label`/`placeholder`
+  - [ ] Read `SettingsPage.css`; count CSS-token vs hardcoded hex usage
+- [ ] **Phase B — FTL sweep**
+  - [ ] Verify every `<Localized id="...">` key exists in both `settings.ftl` + `settings.id.ftl` (run bundle-parity)
+  - [ ] Verify every `l10n.getString(...)` has either a fallback `||` or its key is a simple-value (not attribute-only) message
+  - [ ] Add any missing FTL keys
+- [ ] **Phase C — Dialog semantics & a11y**
+  - [ ] Convert any `<button>` overlay panels to `<div role="dialog" aria-modal="true">` + `useFocusTrap`
+  - [ ] Add Escape-key-to-close on all modals and overlays
+  - [ ] Replace all hardcoded `aria-label="..."` with `l10n.getString()` || fallback
+- [ ] **Phase D — CSS tokenization**
+  - [ ] Replace any hardcoded hex colors with existing `var(--color-*)` / `var(--bg-*)` tokens
+  - [ ] Ensure 44px minimum touch targets on interactive elements
+- [ ] **Phase E — Logic audit**
+  - [ ] Check all `useCallback`/`useEffect` dep arrays against eslint `react-hooks/exhaustive-deps`
+  - [ ] Look for missing null guards, setState-after-unmount, and missing error boundaries
+  - [ ] Write regression tests for any bugs found
+- [ ] **Phase F — Validate**
+  - [ ] `cd ui && npm run typecheck`
+  - [ ] `cd ui && npx vitest run` (full suite)
+  - [ ] Bundle-parity check on settings FTL
+  - [ ] Code review + commit
 
 ---
 
-## 💰 Sales & Orders
+## 2. RestaurantMenu.tsx (795 lines) — Audit & Harden
 
-- [ ] **Sales History** (`/sales-history`) — Searchable list, date range filter, status filter chips, tap for detail view
-- [ ] **Sales Dashboard** (`/sales-dashboard`) — Today's revenue card, orders count, top product widget, low-stock alert widget
-- [ ] **EOD Report** (`/eod-report`) — End-of-Day: cash tally, payment breakdown, shift summary, print button
-- [ ] **Orders/Void** (`/orders`) — Order list with search, status filters, detail view, void with reason picker, refund flow
-- [ ] **Hold Order** — Park a sale, resume from held list in POS
-- [ ] **Split Bill** — Divide order across payment methods, even-split, remaining tracker
+**Why:** Completely un-audited restaurant/KDS subsystem. Has a known hardcoded
+`aria-label="Menu items"`. Likely shares the same patterns we fixed across 70 cycles
+in the retail surface.
 
----
-
-## 💵 Finance
-
-- [ ] **Tax Rates** (`/tax-config`) — Rate table, inclusive/exclusive toggle, category tax rates, add/edit/delete
-- [ ] **Exchange Rates** (`/exchange-rates`) — Currency selector, rate display, last-updated timestamp
-- [ ] **Promotions** (`/promotions`) — Promo list, create/edit (BuyXGetY, % off, fixed amount), schedule, enable/disable
-
----
-
-## 👥 Customers
-
-- [ ] **Customers** (`/customers`) — Searchable table, add/edit (name/email/phone/notes), delete
-- [ ] **Gift Cards** (`/gift-cards`) — Card list, top-up flow, freeze/unfreeze, redeem at checkout
-- [ ] **Loyalty** (`/loyalty`) — Account list, tier badge (Bronze/Silver/Gold/Platinum), point balance, redemption log
-
----
-
-## ⚙️ Management
-
-- [ ] **Staff** (`/staff`) — Staff table with role badges, add/edit modal with PIN hashing, deactivate/restore toggle
-- [ ] **Terminals** (`/terminals`) — Terminal list, per-terminal feature overrides, online/offline status
-- [ ] **Stores** (`/stores`) — Multi-store dashboard (if multi-store enabled): topology view, per-store revenue/orders/stock
-- [ ] **Features** (`/features`) — Feature toggle panel with grouped switches, dependency resolution, toast feedback
-- [ ] **Data Management** (`/data-management`) — Export wizard (select types, date range, password), import wizard (file upload, dry-run preview, progress)
-- [ ] **Audit Log** (`/audit-log`) — Searchable log table, date range filter, event type icons
-- [ ] **Offline Queue** (`/offline-queue`) — Pending/synced/failed items, retry button, sync status
-- [ ] **Shifts** (`/shifts`) — Open shift with opening balance, close shift with cash count, EOD summary
+- [ ] **Phase A — Read & catalog**
+  - [ ] Read full file + `RestaurantMenu.css`; catalog all i18n gaps, hardcoded colors, and inline styles
+  - [ ] Check related files: `RestaurantTableMap.tsx`, `RestaurantOrderPanel.tsx`, and any KDS components
+- [ ] **Phase B — FTL sweep**
+  - [ ] Check bundle-parity for all restaurant/KDS FTL keys (likely `sales.ftl` or `kds.ftl`)
+  - [ ] Add any missing keys; ensure Indonesian translations exist
+- [ ] **Phase C — Dialog semantics & a11y**
+  - [ ] Convert overlay panels to proper dialog roles with `useFocusTrap`
+  - [ ] Fix `aria-label="Menu items"` → `l10n.getString()` || fallback
+  - [ ] Add Escape-to-close on any modals
+- [ ] **Phase D — CSS tokenization**
+  - [ ] Replace hardcoded hex with CSS tokens; ensure contrast on all themes
+- [ ] **Phase E — Logic audit**
+  - [ ] Check all hook dep arrays; look for stale closures and missing cleanup
+  - [ ] Write regression tests for any bugs found
+- [ ] **Phase F — Validate**
+  - [ ] `cd ui && npm run typecheck`
+  - [ ] `cd ui && npx vitest run`
+  - [ ] Code review + commit
 
 ---
 
-## 📊 Reports
+## 3. Attribute-Only FTL Sweep — Automated Bug Hunt
 
-- [ ] **Reports Dashboard** (`/dashboard`) — Revenue chart, top products panel, inventory status widget
-- [ ] **Sales Report** (`/reports`) — Bar chart (revenue), pie chart (category), heatmap (hourly), date range toggle, CSV export, print
-- [ ] **Inventory Report** (`/inventory-report`) — Stock table with low-stock highlighting (amber/red), threshold input, CSV export
-- [ ] **Menu Engineering** (`/menu-engineering`) — Volume vs margin scatter plot, quadrant classification (Star/Plowhorse/Puzzle/Dog), product breakdown table
-- [ ] **Custom Report** (`/custom-report`) — NEW: Drag-and-drop column picker, 6 datasets (sales/inventory/customers/staff/tax_rates/shifts), search columns, run report, CSV export
+**Why:** ~90+ FTL messages are attribute-only (e.g. `.aria-label = ...` with no
+message value). When called via `l10n.getString()`, they silently return `undefined`.
+We already fixed 3 instances of this class of bug (cycles 64–66). A scripted sweep
+will catch the rest.
 
----
-
-## ⚡ Settings
-
-- [ ] **Settings sidebar** — All categories expand/collapse, search filters sections, keyboard navigation (Arrow keys), active section highlighted
-- [ ] **General settings** — Store name, address, tax ID, receipt footer, language selector
-- [ ] **Appearance** — Dark/light toggle, brand colour picker with live preview, logo upload
-- [ ] **Email Reports** — SMTP config (host/port/user/pass/TLS), test email button, schedule config (cadence/recipients/report types)
-- [ ] **Topology Editor** — Node canvas with drag-to-move, wire connectors between nodes, zoom, pan background, simulation mode
-- [ ] **Update banner** — Check for updates, dismissible banner, install action
-
----
-
-## 🧪 Dev Pages
-
-- [ ] **Design System** (`/design`) — Component showcase: buttons, inputs, cards, modals, badges, toasts, skeletons, spinners
-- [ ] **Tooltip Preview** (`/tooltips`) — Tooltip positioning and content examples
-
----
-
-## 🚀 Post-QA Items
-
-- [ ] **Search all pages for console errors** — Open browser devtools console, navigate through all pages, fix any errors/warnings
-- [ ] **Verify no Fluent key errors** — Check for `[@fluent/react] Error: The id "..." did not match` messages (fix missing FTL keys)
-- [ ] **Check loading/empty/error states** — On every screen with lists: verify empty state renders, loading spinner shows during data fetch, error state shows on API failure
-- [ ] **Responsive check (narrow viewport)** — Resize window to <768px: sidebar collapses, layouts stack vertically, touch targets remain ≥44px
-- [ ] **Keyboard navigation** — Tab through interactive elements, verify focus indicators are visible, modal traps focus, Escape closes modals/dropdowns
+- [ ] **Step 1 — Extract attribute-only keys**
+  - [ ] Run the awk one-liner across all `ui/src/locales/*.ftl` to build a list of attribute-only message IDs
+- [ ] **Step 2 — Cross-reference with codebase usage**
+  - [ ] `grep -rn "l10n.getString" ui/src/ --include="*.tsx"` to find all usages
+  - [ ] For each match, check: is the key attribute-only? If yes, is there a fallback (`||` or `null,` fallback)?
+  - [ ] Flag every `l10n.getString(ATTR_ONLY_KEY)` with no fallback as a **BUG**
+- [ ] **Step 3 — Fix each bug**
+  - [ ] Option A (preferred): Convert the FTL message from attribute-only to simple key=value
+  - [ ] Option B: Add a `|| 'fallback'` in the code (only if the attribute-only format is needed for `<Localized attrs={...}>`)
+  - [ ] Update both `en` and `id` bundles
+- [ ] **Step 4 — Add a CI guard (optional but recommended)**
+  - [ ] Write a script `scripts/check-attribute-only-ftl.sh` that fails CI if any attribute-only key is used via `l10n.getString()` without a fallback
+  - [ ] Wire into `.github/workflows/` or the pre-commit hook
+- [ ] **Step 5 — Validate**
+  - [ ] `cd ui && npm run typecheck`
+  - [ ] `cd ui && npx vitest run`
+  - [ ] Bundle-parity on all FTL bundles
+  - [ ] Code review + commit
