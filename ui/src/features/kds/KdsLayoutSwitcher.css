@@ -28,14 +28,14 @@
 /* ── Popover portal ────────────────────────────────────────────────── */
 
 .kds-layout-popover {
-  --kds-muted: #a0aec0;
-  --kds-text: #e0e0e0;
-  --kds-dim: #636e7a;
-  --kds-ticket-bg: #25254a;
-  --kds-ticket-border: #2d2d5e;
-  --kds-ticket-hover-border: #4a4a8a;
-  --kds-badge-text: #f0f0f0;
-  --kds-ready: #10b981;
+  --kds-muted: var(--color-fg-secondary);
+  --kds-text: var(--color-fg);
+  --kds-dim: var(--color-fg-disabled);
+  --kds-ticket-bg: var(--color-bg-elevated);
+  --kds-ticket-border: var(--color-border);
+  --kds-ticket-hover-border: var(--color-border-hover);
+  --kds-badge-text: var(--color-fg-primary);
+  --kds-ready: var(--color-success);
 
   position: fixed;
   top: var(--space-14);
