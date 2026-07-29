@@ -797,6 +797,7 @@ retail-held-cart-delete-aria = Hapus pesanan ditahan
 retail-held-cart-resume-aria = Lanjutkan pesanan
 retail-fn-quick-return = Retur Cepat
 retail-filtered-low-stock = Difilter: { $count } produk stok rendah
+retail-filter-indicator-aria = Filter stok rendah aktif
 
 # ── Quick Return ──────────────────────────────────────────────────────
 retail-quick-return-title = Retur Cepat

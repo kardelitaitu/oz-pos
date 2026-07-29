@@ -812,6 +812,7 @@ scale-clear-aria = Clear weigh target
 # ── Retail POS shortcut keys ───────────────────────────────────────────────
 retail-fn-quick-return = Quick Return
 retail-filtered-low-stock = Filtered: { $count } low-stock products
+retail-filter-indicator-aria = Low-stock filter active
 
 # ── Quick Return ──────────────────────────────────────────────────────
 retail-quick-return-title = Quick Return
