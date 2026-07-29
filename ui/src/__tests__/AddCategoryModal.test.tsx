@@ -55,7 +55,7 @@ describe('AddCategoryModal', () => {
     await user.click(screen.getByRole('button', { name: 'Save Category' }));
 
     expect(handleSave).toHaveBeenCalledWith({
-      id: expect.stringMatching(/^cat-\d+$/),
+      id: expect.stringMatching(/^cat-\d+-\d+$/),
       name: 'Cooling Solutions',
       colour: '#10b981',
       icon: '',
