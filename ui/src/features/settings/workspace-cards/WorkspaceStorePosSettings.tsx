@@ -5,8 +5,9 @@ import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
-import { setReceiptSettings } from '@/api/settings';
+import { setReceiptSettingsScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -25,6 +26,7 @@ export function WorkspaceStorePosSettings({
   onSaved,
 }: WorkspaceCardProps) {
   const { settings, markSettingsUpdated } = useSettings();
+  const { sessionToken } = useWorkspace();
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
@@ -76,7 +78,7 @@ export function WorkspaceStorePosSettings({
 
       // Persist receipt settings to the backend (unscoped)
       tasks.push(
-        setReceiptSettings({
+        setReceiptSettingsScoped(sessionToken ?? '', {
           showCurrency,
           decimalSeparator: settings.receipt.decimalSeparator,
           showTax,
@@ -87,7 +89,7 @@ export function WorkspaceStorePosSettings({
           marginBottom: settings.receipt.marginBottom,
           marginLeft: settings.receipt.marginLeft,
           marginRight: settings.receipt.marginRight,
-        }, userId ?? 'default'),
+        }),
       );
 
       // Save terminal hardware to filesystem via IPC
