@@ -31,6 +31,7 @@ settings-back-aria = Kembali
 settings-sidebar-collapse-all-aria = Tutup semua kategori
 settings-sidebar-search-aria = Cari pengaturan
 settings-sidebar-search-clear-aria = Hapus pencarian
+settings-search-placeholder = Cari
 settings-sidebar-no-results = Tidak ada bagian yang cocok
 settings-sidebar-clear-results = Hapus pencarian
 settings-theme-toggle-dark-aria = Alihkan ke mode gelap
@@ -206,6 +207,7 @@ ws-preview-name-admin = Admin
 # ── Settings Page (remaining) ──
 settings-page-title = Pengaturan
 settings-loading = Memuat pengaturan…
+settings-section-loading = Memuat…
 settings-load-failed = Gagal memuat pengaturan
 settings-load-partial = Sebagian pengaturan gagal dimuat. Coba lagi.
 settings-section-store = Toko

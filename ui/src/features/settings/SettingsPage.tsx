@@ -879,7 +879,7 @@ function SettingsPageContent() {
               name="settings-search"
               className="settings-topbar-search-input"
               type="text"
-              placeholder="Search"
+              placeholder={l10n.getString('settings-search-placeholder') || 'Search'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('settings-sidebar-search-aria')}
@@ -999,7 +999,7 @@ function SettingsPageContent() {
             )}
           </div>
           <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}><div key={activeSection}>
-              <Suspense fallback={<div className="section-loading">Loading...</div>}>
+              <Suspense fallback={<Localized id="settings-section-loading"><div className="section-loading">Loading...</div></Localized>}>
                 {renderSection(activeSection)}
               </Suspense>
             </div>
