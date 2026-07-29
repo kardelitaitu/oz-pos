@@ -846,13 +846,29 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     try {
       const full = await getHeldCartScoped(sessionToken, cartId);
       if (!full) return;
-      const data = JSON.parse(full.cart_data);
-      for (const l of data.lines) {
+      const cleanupCorrupt = async () => {
+        await deleteHeldCartScoped(sessionToken, cartId).catch(() => {});
+        setHeldCartId(null);
+        addToast({ message: l10nRef.current.getString('retail-toast-corrupt-cart') || 'Held cart data is corrupted and has been removed', type: 'error' });
+      };
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(full.cart_data);
+      } catch {
+        await cleanupCorrupt();
+        return;
+      }
+      if (!Array.isArray(data['lines'])) {
+        await cleanupCorrupt();
+        return;
+      }
+      const lines = data['lines'] as { sku: string; name: string; category: string; qty: number; unit_price: Money }[];
+      for (const l of lines) {
         for (let i = 0; i < (l.qty || 1); i++) {
           addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' });
         }
       }
-      if (data.discountPercent) setDiscount(data.discountPercent, data.discountLabel ?? '');
+      if (data['discountPercent']) setDiscount(data['discountPercent'] as number, (data['discountLabel'] as string) ?? '');
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartId(null);
       setShowHeldCartsList(false);
