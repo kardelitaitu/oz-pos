@@ -1208,7 +1208,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onShowSalesHistory={() => setShowSalesHistory(true)}
         onShowCustomerSearch={() => { if (!isAnyOverlayOpen()) setShowCustomerSearch(true); }}
         onShowStockInquiry={() => setShowStockInquiry(true)}
-        onToggleShift={() => { if (!isAnyOverlayOpen()) activeShift ? setShowCloseShift(true) : setShowOpenShift(true); }}
+        onToggleShift={() => { if (!isAnyOverlayOpen()) { if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); } }}
         onOpenSettings={handleOpenSettings}
         onShowQuickReturn={() => { if (!isAnyOverlayOpen()) setShowQuickReturn(true); }}
         onShowTables={() => setShowTables(true)}

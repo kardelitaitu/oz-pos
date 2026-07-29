@@ -103,6 +103,7 @@ const KNOWN_NOISE_SELECTORS = [
   '.retail-menu',
   '.pos-cart-undo-bar',
   ".pos-cart-tip-segment[aria-pressed='true']",
+  '.retail-reminder-popup',
   '.modifier-modal',
   '.pos-hold-modal',
   '.pos-held-list-modal',

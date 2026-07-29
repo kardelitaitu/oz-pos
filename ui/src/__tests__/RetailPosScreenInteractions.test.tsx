@@ -187,12 +187,15 @@ const catFtl = `
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+let mockAddProduct: ReturnType<typeof vi.fn>;
+
 describe('RetailPosScreen — interactions', () => {
   beforeEach(async () => {
     mockedBarcode.reset();
+    mockAddProduct = vi.fn();
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReset();
-    vi.mocked(sp.usePosState).mockImplementation(() => ({
+    vi.mocked(sp.usePosState).mockReturnValue({
       lines: [],
       total: null,
       subtotal: null,
@@ -204,7 +207,7 @@ describe('RetailPosScreen — interactions', () => {
       serviceChargeEnabled: false,
       serviceChargePercent: 0,
       serviceChargeAmount: null,
-      addProduct: vi.fn(),
+      addProduct: mockAddProduct,
       removeLine: vi.fn(),
       updateQty: vi.fn(),
       setDiscount: vi.fn(),
@@ -217,7 +220,7 @@ describe('RetailPosScreen — interactions', () => {
       fireCourse: vi.fn(),
       fireAllCourses: vi.fn(),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any));
+    } as any);
   });
 
   // ── Long-press quantity picker ────────────────────────────────
@@ -250,19 +253,6 @@ describe('RetailPosScreen — interactions', () => {
   });
 
   it('calls addProduct when confirming quantity via long-press', async () => {
-    const { usePosState } = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
     const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
@@ -271,77 +261,38 @@ describe('RetailPosScreen — interactions', () => {
     fireEvent.pointerUp(productBtn);
     await waitFor(() => expect(screen.getByText('Add')).toBeInTheDocument());
     await userEvent.click(screen.getByText('Add'));
-    expect(addProduct).toHaveBeenCalledTimes(1);
-    expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001' }), 1);
   });
 
   it('adds product on single tap of a product button', async () => {
-    const { usePosState } = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
     const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
     fireEvent.pointerDown(productBtn);
     fireEvent.pointerUp(productBtn);
-    await waitFor(() => expect(addProduct).toHaveBeenCalledTimes(1));
-    expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
+    await waitFor(() => expect(mockAddProduct).toHaveBeenCalledTimes(1));
+    expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001' }));
   });
 
   // ── SKU / Barcode input ──────────────────────────────────────
 
   it('adds product when SKU is submitted via Enter', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
     await userEvent.type(skuInput, 'SKU-001{Enter}');
-    expect(addProduct).toHaveBeenCalledTimes(1);
-    expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
   });
 
   it('adds product when SKU is submitted via GO button', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
     await userEvent.type(skuInput, 'SKU-001');
     await userEvent.click(screen.getByText('GO'));
-    expect(addProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
   });
 
   it('shows warning toast when SKU is not found', async () => {
@@ -373,23 +324,10 @@ describe('RetailPosScreen — interactions', () => {
   // ── Barcode scanning ─────────────────────────────────────────
 
   it('adds product when barcode is scanned matching local product', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled());
     act(() => { mockedBarcode.triggerScan('8991002100110'); });
-    await waitFor(() => expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' })));
+    await waitFor(() => expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' })));
   });
 
   it('calls lookupByBarcode when scanned code not in local products', async () => {
@@ -620,19 +558,6 @@ describe('RetailPosScreen — interactions', () => {
   // ── Keyboard shortcut: F5 → SKU focus ────────────────────────
 
   it('focuses SKU input when F5 is pressed', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0];

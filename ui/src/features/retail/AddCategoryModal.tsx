@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import type React from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { CategoryDto } from '@/api/products';
@@ -24,7 +25,11 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
 
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, isOpen, onClose);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (isOpen) nameInputRef.current?.focus();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -44,11 +49,11 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   };
 
   return (
-    <div className="retail-edit-modal-backdrop" onClick={onClose} role="presentation">
+    <>
+    <div className="retail-edit-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} role="presentation" tabIndex={-1}>
       <div
         ref={panelRef}
         className="retail-edit-modal-dialog"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="retail-add-category-title"
@@ -83,7 +88,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Storage, Peripherals, Accessories"
-              autoFocus
+              ref={nameInputRef}
               required
             />
           </div>
@@ -110,5 +115,6 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
         </form>
       </div>
     </div>
+    </>
   );
 };

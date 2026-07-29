@@ -12,6 +12,7 @@ vi.mock('@/api/inventory', () => ({
   startInventoryShift: vi.fn(),
   endInventoryShift: vi.fn(),
   listInventoryTransactions: vi.fn(),
+  listInventoryTransactionsForShift: vi.fn(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -35,6 +36,7 @@ import {
   startInventoryShift,
   endInventoryShift,
   listInventoryTransactions,
+  listInventoryTransactionsForShift,
 } from '@/api/inventory';
 
 const mockLocations = listInventoryLocations as ReturnType<typeof vi.fn>;
@@ -42,6 +44,7 @@ const mockGetActiveShift = getActiveInventoryShift as ReturnType<typeof vi.fn>;
 const mockStartShift = startInventoryShift as ReturnType<typeof vi.fn>;
 const mockEndShift = endInventoryShift as ReturnType<typeof vi.fn>;
 const mockListTransactions = listInventoryTransactions as ReturnType<typeof vi.fn>;
+const mockListTransactionsForShift = listInventoryTransactionsForShift as ReturnType<typeof vi.fn>;
 
 // ── Test data ─────────────────────────────────────────────────────
 
@@ -74,6 +77,7 @@ describe('ShiftBar', () => {
     mockStartShift.mockResolvedValue(activeShift);
     mockEndShift.mockResolvedValue(undefined);
     mockListTransactions.mockResolvedValue([]);
+    mockListTransactionsForShift.mockResolvedValue([]);
   });
 
   // ── Empty / Start Form State ──────────────────────────────────

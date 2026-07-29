@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import type React from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto } from '@/api/products';
@@ -62,11 +63,11 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   };
 
   return (
-    <div className="retail-edit-modal-backdrop" onClick={onClose} role="presentation">
+    <>
+    <div className="retail-edit-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} role="presentation" tabIndex={-1}>
       <div
         ref={panelRef}
         className="retail-edit-modal-dialog"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="retail-edit-modal-title"
@@ -230,5 +231,6 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
         </form>
       </div>
     </div>
+    </>
   );
 };

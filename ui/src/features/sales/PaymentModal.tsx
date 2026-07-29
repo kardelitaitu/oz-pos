@@ -1527,10 +1527,14 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-               
+              <>
+              {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
               <div
                 className="payment-customer-search-overlay"
-                onClick={() => setShowCustomerSearch(false)}
+                role="dialog"
+                onClick={(e) => { if (e.target === e.currentTarget) setShowCustomerSearch(false); }}
+                onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
+                tabIndex={-1}
               >
                 <div
                   ref={customerSearchPanelRef}
@@ -1538,7 +1542,6 @@ export default function PaymentModal({
                   role="dialog"
                   aria-modal="true"
                   aria-label={l10n.getString('payment-customer-search-heading', null, 'Select Customer')}
-                  onClick={(e) => e.stopPropagation()}
                 >
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>
@@ -1596,7 +1599,7 @@ export default function PaymentModal({
                   </Localized>
                 </div>
               </div>
-            )}
+            </>)}
 
             <div className="payment-actions">
               <Localized id="payment-cancel">

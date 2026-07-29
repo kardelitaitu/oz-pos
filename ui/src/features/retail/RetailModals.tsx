@@ -208,17 +208,19 @@ export default function RetailModals(props: RetailModalsProps) {
     <>
       {/* ── Open Shift modal ────────────────── */}
       {shift.openShiftExit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-shift-overlay${shift.openShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('pos-open-shift-title')}
-          onClick={() => shift.openShiftExit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) shift.openShiftExit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') shift.openShiftExit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={openShiftPanelRef}
             className={`retail-shift-modal${shift.openShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('pos-open-shift-title')}</h3>
             <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
@@ -237,21 +239,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Close Shift modal ───────────────── */}
       {shift.closeShiftExit.shouldRender && shift.activeShift && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-shift-overlay${shift.closeShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('pos-close-shift-title')}
-          onClick={() => shift.closeShiftExit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) shift.closeShiftExit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') shift.closeShiftExit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={closeShiftPanelRef}
             className={`retail-shift-modal${shift.closeShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {shift.closeShiftError && <div className="retail-shift-error">{shift.closeShiftError}</div>}
@@ -281,21 +285,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Closed Shift Summary ────────────── */}
       {(shift.shiftSummaryExit.shouldRender && shift.closedShiftSummary) && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-shift-overlay${shift.shiftSummaryExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('pos-shift-closed-title')}
-          onClick={() => shift.shiftSummaryExit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) shift.shiftSummaryExit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') shift.shiftSummaryExit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={shiftSummaryPanelRef}
             className={`retail-shift-modal${shift.shiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('pos-shift-closed-title')}</h3>
             <div style={{ fontSize: 13, lineHeight: 1.8 }}>
@@ -313,21 +319,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Credit list overlay ─────────────── */}
       {credit.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-credit-overlay${credit.exit.exiting ? ' retail-credit-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-credit-reminders-title')}
-          onClick={() => credit.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) credit.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') credit.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={creditPanelRef}
             className={`retail-credit-modal${credit.exit.exiting ? ' retail-credit-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
             style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}
           >
             <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
@@ -375,21 +383,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Clear confirm modal ────────────── */}
       {clearConfirm.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-clear-overlay${clearConfirm.exit.exiting ? ' retail-clear-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-clear-cart-title')}
-          onClick={() => clearConfirm.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) clearConfirm.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') clearConfirm.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={clearPanelRef}
             className={`retail-clear-modal${clearConfirm.exit.exiting ? ' retail-clear-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
             <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
@@ -401,21 +411,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Discount modal ──────────────────── */}
       {discount.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-discount-overlay${discount.exit.exiting ? ' retail-discount-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-discount-title')}
-          onClick={() => discount.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) discount.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') discount.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={discountPanelRef}
             className={`retail-discount-modal${discount.exit.exiting ? ' retail-discount-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('retail-discount-title')}</h3>
             <div className="retail-discount-tabs">
@@ -468,21 +480,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Customer search modal ──────────── */}
       {customer.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-customer-overlay${customer.exit.exiting ? ' retail-customer-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-customer-search-title')}
-          onClick={() => customer.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) customer.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') customer.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={customerPanelRef}
             className={`retail-customer-modal${customer.exit.exiting ? ' retail-customer-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('retail-customer-search-title')}</h3>
             <input
@@ -525,21 +539,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Quantity picker modal ──────────── */}
       {qtyPicker.exit.shouldRender && qtyPicker.product && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-qty-overlay${qtyPicker.exit.exiting ? ' retail-qty-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-qty-picker-title') || 'Select Quantity'}
-          onClick={() => qtyPicker.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) qtyPicker.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') qtyPicker.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={qtyPanelRef}
             className={`retail-qty-modal${qtyPicker.exit.exiting ? ' retail-qty-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3 className="retail-qty-heading">{qtyPicker.product.name}</h3>
             <div className="retail-qty-price">{formatMoney(qtyPicker.product.price)}</div>
@@ -602,21 +618,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Held carts list modal ──────────── */}
       {heldCarts.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-held-carts-overlay${heldCarts.exit.exiting ? ' retail-held-carts-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-held-carts-title')}
-          onClick={() => heldCarts.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) heldCarts.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') heldCarts.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={heldCartsPanelRef}
             className={`retail-held-carts-modal${heldCarts.exit.exiting ? ' retail-held-carts-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('retail-held-carts-title')}</h3>
             {heldCarts.list.length === 0 ? (
@@ -643,21 +661,23 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Shortcuts overlay ──────────────── */}
       {shortcuts.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-shortcuts-overlay${shortcuts.exit.exiting ? ' retail-shortcuts-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-shortcuts-title')}
-          onClick={() => shortcuts.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) shortcuts.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') shortcuts.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={shortcutsPanelRef}
             className={`retail-shortcuts-modal${shortcuts.exit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
             <div className="retail-shortcuts-grid">
@@ -679,7 +699,7 @@ export default function RetailModals(props: RetailModalsProps) {
             <button type="button" className="retail-shortcuts-close" onClick={() => shortcuts.exit.requestClose()}>{l10n.getString('close')}</button>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Price Override modal ───────────── */}
       {override.target && (
@@ -717,17 +737,19 @@ export default function RetailModals(props: RetailModalsProps) {
 
       {/* ── Quick Return modal ──────────────── */}
       {quickReturn.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
         <div
           className={`retail-shift-overlay${quickReturn.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
           aria-label={l10n.getString('retail-quick-return-title') || 'Quick Return'}
-          onClick={() => quickReturn.exit.requestClose()}
+          onClick={(e) => { if (e.target === e.currentTarget) quickReturn.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') quickReturn.exit.requestClose(); }}
+          tabIndex={-1}
         >
           <div
             ref={quickReturnPanelRef}
             className={`retail-shift-modal${quickReturn.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
             <p style={{ fontSize: 12, color: 'var(--color-fg-tertiary)', marginBottom: 8 }}>
@@ -753,7 +775,7 @@ export default function RetailModals(props: RetailModalsProps) {
             </div>
           </div>
         </div>
-      )}
+      </>)}
 
       {/* ── Quick Return Refund modal ───────── */}
       {showQuickReturnRefund && quickReturnSale && (
