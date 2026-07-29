@@ -1462,6 +1462,28 @@
   color: var(--color-accent);
 }
 
+/* Clickable rows */
+.retail-reminder-row {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  transition: background var(--duration-150) var(--ease-out);
+}
+
+.retail-reminder-row:hover {
+  background: var(--color-bg-hover);
+}
+
+.retail-reminder-row:focus-visible {
+  outline: 2px solid var(--color-primary-pos);
+  outline-offset: 1px;
+}
+
 .retail-reminder-dismiss {
   position: absolute;
   top: var(--space-1);

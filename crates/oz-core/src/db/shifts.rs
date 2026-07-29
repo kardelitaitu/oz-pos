@@ -373,6 +373,56 @@ mod tests {
         ).unwrap();
     }
 
+    fn seed_inactive_user(conn: &Connection) {
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-inact', 'inactive_role', 'Inactive', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-inactive', 'inactive', 'hash', 'Inactive', 'role-inact', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        ).unwrap();
+    }
+
+    #[test]
+    fn open_shift_with_inactive_user_rejected() {
+        let conn = fresh();
+        seed_inactive_user(&conn);
+        let s = store(&conn);
+        let err = s.open_shift("user-inactive", None, 100).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "user_id"),
+            "expected Validation error for inactive user, got: {err}"
+        );
+    }
+
+    #[test]
+    fn open_shift_duplicate_rejected() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        s.open_shift("user-1", None, 100).unwrap();
+        let err = s.open_shift("user-1", None, 200).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "user_id"),
+            "expected Validation error for duplicate shift, got: {err}"
+        );
+    }
+
+    #[test]
+    fn open_shift_succeeds_after_previous_closed() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        let shift = s.open_shift("user-1", None, 100).unwrap();
+        s.close_shift(&shift.id, 150, None).unwrap();
+
+        // Should be allowed to open a new shift after the previous one is closed.
+        let shift2 = s.open_shift("user-1", None, 200).unwrap();
+        assert_eq!(shift2.opening_balance_minor, 200);
+        assert!(shift2.is_open());
+    }
+
     #[test]
     fn open_shift_creates_open_shift() {
         let conn = fresh();

@@ -1167,7 +1167,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onNavigateKds={() => onNavigate?.('kds')}
         skuInputRef={skuInputRef}
       />
-      <RetailReminderPopup lowStockCount={lowStockCount} creditCount={creditSales.length} heldCartCount={heldCartsList.length} />
+      <RetailReminderPopup
+        lowStockCount={lowStockCount}
+        creditCount={creditSales.length}
+        heldCartCount={heldCartsList.length}
+        onClickLowStock={() => setActiveCategory('__low_stock__')}
+        onClickCredit={() => { if (!isAnyOverlayOpen()) setShowCreditList(true); }}
+        onClickHeldCarts={() => { if (!isAnyOverlayOpen()) setShowHeldCartsList(true); }}
+      />
       <RetailModals
         shift={{
           activeShift,

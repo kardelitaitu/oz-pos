@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import RetailReminderPopup from '@/features/retail/RetailReminderPopup';
 
@@ -116,7 +116,7 @@ describe('RetailReminderPopup — accessibility', () => {
     render(
       <RetailReminderPopup lowStockCount={1} creditCount={0} heldCartCount={0} />,
     );
-    const dismissBtn = screen.getByRole('button');
+    const dismissBtn = document.querySelector('.retail-reminder-dismiss')!;
     expect(dismissBtn).toHaveAttribute('aria-label');
     expect(dismissBtn.getAttribute('aria-label')).toBeTruthy();
   });
@@ -141,7 +141,7 @@ describe('RetailReminderPopup — dismiss behavior', () => {
     );
     expect(screen.getByRole('status')).toBeInTheDocument();
 
-    const dismissBtn = screen.getByRole('button');
+    const dismissBtn = document.querySelector('.retail-reminder-dismiss')!;
     fireEvent.click(dismissBtn);
 
     // Popup should be gone from the DOM
@@ -152,7 +152,7 @@ describe('RetailReminderPopup — dismiss behavior', () => {
     const { container, rerender } = render(
       <RetailReminderPopup lowStockCount={3} creditCount={0} heldCartCount={0} />,
     );
-    const dismissBtn = screen.getByRole('button');
+    const dismissBtn = document.querySelector('.retail-reminder-dismiss')!;
     fireEvent.click(dismissBtn);
     expect(container.querySelector('.retail-reminder-popup')).toBeNull();
 
@@ -171,7 +171,7 @@ describe('RetailReminderPopup — auto-reset on count change', () => {
     const { container, rerender } = render(
       <RetailReminderPopup lowStockCount={1} creditCount={0} heldCartCount={0} />,
     );
-    const dismissBtn = screen.getByRole('button');
+    const dismissBtn = document.querySelector('.retail-reminder-dismiss')!;
     fireEvent.click(dismissBtn);
     expect(container.querySelector('.retail-reminder-popup')).toBeNull();
 
@@ -187,7 +187,7 @@ describe('RetailReminderPopup — auto-reset on count change', () => {
     const { container, rerender } = render(
       <RetailReminderPopup lowStockCount={2} creditCount={0} heldCartCount={0} />,
     );
-    const dismissBtn = screen.getByRole('button');
+    const dismissBtn = document.querySelector('.retail-reminder-dismiss')!;
     fireEvent.click(dismissBtn);
     expect(container.querySelector('.retail-reminder-popup')).toBeNull();
 
@@ -203,7 +203,7 @@ describe('RetailReminderPopup — auto-reset on count change', () => {
     const { container, rerender } = render(
       <RetailReminderPopup lowStockCount={3} creditCount={1} heldCartCount={2} />,
     );
-    const dismissBtn = screen.getByRole('button');
+    const dismissBtn = document.querySelector('.retail-reminder-dismiss')!;
     fireEvent.click(dismissBtn);
     expect(container.querySelector('.retail-reminder-popup')).toBeNull();
 
@@ -212,5 +212,69 @@ describe('RetailReminderPopup — auto-reset on count change', () => {
       <RetailReminderPopup lowStockCount={3} creditCount={1} heldCartCount={1} />,
     );
     expect(container.querySelector('.retail-reminder-popup')).toBeInTheDocument();
+  });
+});
+
+// ── Click-to-action ──────────────────────────────────────────
+
+describe('RetailReminderPopup — click-to-action', () => {
+  const onClickLowStock = vi.fn();
+  const onClickCredit = vi.fn();
+  const onClickHeldCarts = vi.fn();
+
+  beforeEach(() => {
+    onClickLowStock.mockReset();
+    onClickCredit.mockReset();
+    onClickHeldCarts.mockReset();
+  });
+
+  it('calls onClickLowStock when low stock row is clicked', () => {
+    render(
+      <RetailReminderPopup
+        lowStockCount={3}
+        creditCount={0}
+        heldCartCount={0}
+        onClickLowStock={onClickLowStock}
+      />,
+    );
+    const row = document.querySelector('.retail-reminder-row--low-stock')!;
+    fireEvent.click(row);
+    expect(onClickLowStock).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClickCredit when credit row is clicked', () => {
+    render(
+      <RetailReminderPopup
+        lowStockCount={0}
+        creditCount={2}
+        heldCartCount={0}
+        onClickCredit={onClickCredit}
+      />,
+    );
+    const row = document.querySelector('.retail-reminder-row--credit')!;
+    fireEvent.click(row);
+    expect(onClickCredit).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClickHeldCarts when held cart row is clicked', () => {
+    render(
+      <RetailReminderPopup
+        lowStockCount={0}
+        creditCount={0}
+        heldCartCount={1}
+        onClickHeldCarts={onClickHeldCarts}
+      />,
+    );
+    const row = document.querySelector('.retail-reminder-row--held-cart')!;
+    fireEvent.click(row);
+    expect(onClickHeldCarts).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when clicked without onClick handler', () => {
+    render(
+      <RetailReminderPopup lowStockCount={3} creditCount={2} heldCartCount={1} />,
+    );
+    const row = document.querySelector('.retail-reminder-row--low-stock')!;
+    expect(() => fireEvent.click(row)).not.toThrow();
   });
 });

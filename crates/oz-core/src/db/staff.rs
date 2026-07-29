@@ -183,6 +183,8 @@ impl Store<'_> {
     }
 
     /// Insert a new user.
+    ///
+    /// Username is normalized to lowercase trimmed.
     pub fn create_user(
         &self,
         username: &str,
@@ -190,7 +192,8 @@ impl Store<'_> {
         display_name: &str,
         role_id: &str,
     ) -> Result<User, CoreError> {
-        if username.trim().is_empty() {
+        let username = username.trim().to_lowercase();
+        if username.is_empty() {
             return Err(CoreError::Validation {
                 field: "username",
                 message: "username must not be empty".into(),
@@ -209,7 +212,7 @@ impl Store<'_> {
         let result = self.conn.execute(
             "INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![id, username.trim(), pin_hash, display_name.trim(), role_id, now, now],
+            params![id, username, pin_hash, display_name.trim(), role_id, now, now],
         );
         match result {
             Err(rusqlite::Error::SqliteFailure(e, _))
@@ -226,7 +229,7 @@ impl Store<'_> {
 
         Ok(User {
             id,
-            username: username.trim().to_owned(),
+            username,
             pin_hash: pin_hash.to_owned(),
             display_name: display_name.trim().to_owned(),
             role_id: role_id.to_owned(),
@@ -237,6 +240,8 @@ impl Store<'_> {
     }
 
     /// Update an existing user.
+    ///
+    /// Username is normalized to lowercase trimmed.
     pub fn update_user(
         &self,
         id: &str,
@@ -245,6 +250,7 @@ impl Store<'_> {
         role_id: &str,
         is_active: bool,
     ) -> Result<User, CoreError> {
+        let username = username.trim().to_lowercase();
         if display_name.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "display_name",
@@ -255,7 +261,7 @@ impl Store<'_> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let rows = self.conn.execute(
             "UPDATE users SET username = ?1, display_name = ?2, role_id = ?3, is_active = ?4, updated_at = ?5 WHERE id = ?6",
-            params![username.trim(), display_name.trim(), role_id, is_active, now, id],
+            params![username, display_name.trim(), role_id, is_active, now, id],
         )?;
         if rows == 0 {
             return Err(CoreError::NotFound {
@@ -632,5 +638,52 @@ mod tests {
         let conn = fresh();
         let err = store(&conn).delete_user("nope").unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    // ── Username normalization ────────────────────────────────────
+
+    #[test]
+    fn create_user_uppercase_normalized_to_lowercase() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let u = store(&conn)
+            .create_user("ALICE_UPPER", "hash", "Alice Upper", "role-cashier")
+            .unwrap();
+        assert_eq!(u.username, "alice_upper", "username should be lowercased");
+    }
+
+    #[test]
+    fn create_user_mixed_case_normalized_to_lowercase() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let u = store(&conn)
+            .create_user("MiXeDcAsE", "hash", "Mixed", "role-cashier")
+            .unwrap();
+        assert_eq!(u.username, "mixedcase");
+    }
+
+    #[test]
+    fn get_user_by_username_case_insensitive_after_normalization() {
+        let conn = fresh();
+        seed_roles(&conn);
+        store(&conn)
+            .create_user("CASE_USER", "hash", "Case User", "role-cashier")
+            .unwrap();
+        // Lookup with the normalized (lowercase) form should find it.
+        let u = store(&conn)
+            .get_user_by_username("case_user")
+            .unwrap()
+            .expect("user should be found by normalized username");
+        assert_eq!(u.username, "case_user");
+    }
+
+    #[test]
+    fn update_user_normalizes_username_to_lowercase() {
+        let conn = fresh();
+        seed_users(&conn);
+        let updated = store(&conn)
+            .update_user("user-1", "ALICE_NEW", "Alice Updated", "role-owner", true)
+            .unwrap();
+        assert_eq!(updated.username, "alice_new");
     }
 }
