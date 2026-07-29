@@ -712,6 +712,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     resetCart();
     setDiscount(0, '');
     setUndoStack([]);
+    setSerialNumbers({});
     setSelectedCustomer(null);
     setShowClearConfirm(false);
   }, [resetCart, setDiscount, setSelectedCustomer]);
