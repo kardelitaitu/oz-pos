@@ -40,6 +40,12 @@ impl Store<'_> {
 
     /// Set the store display name.
     pub fn set_store_name(&self, name: &str) -> Result<(), CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "store_name",
+                message: "store name must not be empty".into(),
+            });
+        }
         Settings::set_store_name(self.conn, name)
     }
 
@@ -50,6 +56,12 @@ impl Store<'_> {
 
     /// Set the store address.
     pub fn set_store_address(&self, addr: &str) -> Result<(), CoreError> {
+        if addr.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "store_address",
+                message: "store address must not be empty".into(),
+            });
+        }
         Settings::set_store_address(self.conn, addr)
     }
 
@@ -60,6 +72,12 @@ impl Store<'_> {
 
     /// Set the store tax / VAT number.
     pub fn set_store_tax_id(&self, id: &str) -> Result<(), CoreError> {
+        if id.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "store_tax_id",
+                message: "store tax id must not be empty".into(),
+            });
+        }
         Settings::set_store_tax_id(self.conn, id)
     }
 
@@ -659,5 +677,91 @@ mod tests {
         s.set_setting("long.key", &long).unwrap();
         let got = s.get_setting("long.key").unwrap();
         assert_eq!(got, Some(long));
+    }
+
+    // ── Input validation ────────────────────────────────────────────────
+
+    #[test]
+    fn set_store_name_rejects_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.set_store_name("").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_name",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn set_store_name_rejects_whitespace() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.set_store_name("   ").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_name",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn set_store_address_rejects_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.set_store_address("").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_address",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn set_store_address_rejects_whitespace() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.set_store_address("   ").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_address",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn set_store_tax_id_rejects_empty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.set_store_tax_id("").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_tax_id",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn set_store_tax_id_rejects_whitespace() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.set_store_tax_id("   ").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_tax_id",
+                ..
+            }
+        ));
     }
 }
