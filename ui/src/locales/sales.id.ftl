@@ -732,6 +732,7 @@ retail-customer-search-loading = Memuat…
 retail-customer-search-empty = Tidak ada pelanggan
 retail-customer-clear = Hapus
 retail-qty-total = Total:
+retail-qty-picker-title = Pilih Jumlah
 retail-qty-add = Tambah
 retail-shortcuts-title = Pintasan Keyboard
 retail-shortcut-pay = Bayar / Charge
@@ -786,8 +787,20 @@ retail-low-stock-banner =
 retail-held-cart-delete-aria = Hapus pesanan ditahan
 retail-fn-quick-return = Retur Cepat
 retail-filtered-low-stock = Difilter: { $count } produk stok rendah
+
+# ── Quick Return ──────────────────────────────────────────────────────
+retail-quick-return-title = Retur Cepat
+retail-quick-return-desc = Pindai atau masukkan barcode struk untuk mencari transaksi retur.
+retail-quick-return-placeholder = Barcode struk
+retail-quick-return-aria = Input barcode struk
+retail-quick-return-lookup = Cari
+retail-quick-return-not-found = Transaksi tidak ditemukan untuk barcode ini
+retail-quick-return-error = Gagal mencari struk
 retail-header-workspaces-title = Kembali ke ruang kerja
 retail-resize-handle-aria = Ubah ukuran panel keranjang
+
+# ── Retail skip-to-content ────────────────────────────────────────────
+retail-skip-to-main = Lewati ke konten utama
 retail-header-workspaces-aria = Kembali ke ruang kerja
 
 # ── Retail POS table columns ──
@@ -819,6 +832,8 @@ retail-add-product-title = Tambah Produk
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
+scale-stable = Stabil
+scale-unstable = …
 scale-read-error = Error timbangan
 scale-weigh-add = Timbang & Tambah
 scale-clear-aria = Hapus target timbangan

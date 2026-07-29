@@ -732,6 +732,7 @@ retail-customer-search-loading = Loading...
 retail-customer-search-empty = No customers found
 retail-customer-clear = Clear
 retail-qty-total = Total:
+retail-qty-picker-title = Select Quantity
 retail-qty-add = Add
 retail-shortcuts-title = Keyboard Shortcuts
 retail-shortcut-pay = Pay / Charge
@@ -790,6 +791,8 @@ retail-held-cart-delete-aria = Delete held cart
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Scale weight indicator
 scale-idle = Scale
+scale-stable = Stable
+scale-unstable = …
 scale-read-error = Scale error
 scale-weigh-add = Weigh & Add
 scale-clear-aria = Clear weigh target
@@ -797,8 +800,20 @@ scale-clear-aria = Clear weigh target
 # ── Retail POS shortcut keys ───────────────────────────────────────────────
 retail-fn-quick-return = Quick Return
 retail-filtered-low-stock = Filtered: { $count } low-stock products
+
+# ── Quick Return ──────────────────────────────────────────────────────
+retail-quick-return-title = Quick Return
+retail-quick-return-desc = Scan or enter the receipt barcode to look up a sale for return.
+retail-quick-return-placeholder = Receipt barcode
+retail-quick-return-aria = Receipt barcode input
+retail-quick-return-lookup = Look Up
+retail-quick-return-not-found = Sale not found for this receipt barcode
+retail-quick-return-error = Failed to look up receipt
 retail-header-workspaces-title = Back to workspaces
 retail-resize-handle-aria = Resize cart panel
+
+# ── Retail skip-to-content ────────────────────────────────────────────
+retail-skip-to-main = Skip to main content
 retail-header-workspaces-aria = Back to workspaces
 
 # ── Retail POS table columns ──
