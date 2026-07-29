@@ -608,6 +608,51 @@ impl Store<'_> {
         Ok(thresholds)
     }
 
+    /// List inventory transactions for a given staff member, location, and
+    /// time window. Returns transactions ordered by created_at DESC.
+    ///
+    /// This is used by the inventory shift summary to avoid client-side
+    /// filtering of all transactions.
+    pub fn list_inventory_transactions_for_shift(
+        &self,
+        staff_id: &str,
+        location_id: &str,
+        since: &str,
+    ) -> Result<Vec<InventoryTransaction>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, type, location_id, staff_id, transfer_id, purchase_order_id, notes, created_at \
+             FROM inventory_transactions \
+             WHERE staff_id = ?1 AND location_id = ?2 AND created_at >= ?3 \
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![staff_id, location_id, since], |row| {
+            let type_str: String = row.get(1)?;
+            let ttype =
+                crate::inventory_transaction::InventoryTransactionType::from_stored_str(&type_str)
+                    .unwrap_or(
+                        crate::inventory_transaction::InventoryTransactionType::ManualAdjustment,
+                    );
+            Ok(InventoryTransaction {
+                id: crate::inventory_transaction::InventoryTransactionId::from(
+                    row.get::<_, String>(0)?,
+                ),
+                transaction_type: ttype,
+                location_id: row.get(2)?,
+                staff_id: row.get(3)?,
+                transfer_id: row.get(4)?,
+                purchase_order_id: row.get(5)?,
+                notes: row.get(6).unwrap_or_default(),
+                created_at: row.get(7)?,
+            })
+        })?;
+
+        let mut txs = Vec::new();
+        for r in rows {
+            txs.push(r?);
+        }
+        Ok(txs)
+    }
+
     /// Delete a stock threshold configuration by ID.
     pub fn delete_stock_threshold(&self, id: &str) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
@@ -954,6 +999,99 @@ mod tests {
         let s = store(&conn);
         let txns = s.list_inventory_transactions().unwrap();
         assert!(txns.is_empty());
+    }
+
+    #[test]
+    fn list_inventory_transactions_for_shift_filters_by_staff_location_and_time() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-inv3', 'InvRole3', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-a', 'a', 'hash', 'A', 'r-inv3')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-b', 'b', 'hash', 'B', 'r-inv3')",
+            [],
+        )
+        .unwrap();
+
+        let loc_a = s.create_inventory_location("Loc A", "store", "").unwrap();
+        let loc_b = s
+            .create_inventory_location("Loc B", "warehouse", "")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('p-shift', 'SKU-SHIFT', 'Shift Item', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('p-shift', ?1, 100)",
+            params![loc_a],
+        )
+        .unwrap();
+
+        let line = InventoryTransactionLineInput {
+            sku: "SKU-SHIFT".into(),
+            product_name: "Shift".into(),
+            qty: 1,
+            delta: 0,
+            barcode_scanned: None,
+        };
+
+        // Create a transaction for staff-a at loc-a (within window).
+        let tx_a = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_a,
+                "staff-a",
+                "staff-a at loc-a",
+                &[line.clone()],
+            )
+            .unwrap();
+
+        // Create a transaction for staff-a at loc-b (different location).
+        let _tx_a_loc_b = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_b,
+                "staff-a",
+                "staff-a at loc-b",
+                &[line.clone()],
+            )
+            .unwrap();
+
+        // Create a transaction for staff-b at loc-a (different staff).
+        let _tx_b = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_a,
+                "staff-b",
+                "staff-b at loc-a",
+                &[line.clone()],
+            )
+            .unwrap();
+
+        let since = "2020-01-01T00:00:00.000Z";
+
+        // Should only return staff-a at loc-a.
+        let filtered = s
+            .list_inventory_transactions_for_shift("staff-a", &loc_a, since)
+            .unwrap();
+        assert_eq!(filtered.len(), 1, "should only find the matching tx");
+        assert_eq!(filtered[0].id.as_str(), tx_a);
+
+        // Empty result for a different staff.
+        let none = s
+            .list_inventory_transactions_for_shift("staff-b", &loc_b, since)
+            .unwrap();
+        assert!(none.is_empty(), "no transactions for staff-b at loc-b");
     }
 
     #[test]

@@ -474,6 +474,24 @@ describe('RetailPosScreen — rendering', () => {
     expect(screen.queryByTestId('kds-screen')).not.toBeInTheDocument();
   });
 
+  // ── Low-stock filter (Ctrl+L) shortcut ─────────────────────
+
+  it('Ctrl+L toggles low-stock filter in the product grid', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // Toggle on: Ctrl+L
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.queryByText('Indomie Goreng')).not.toBeInTheDocument());
+    expect(screen.getByText('Aqua 600ml')).toBeInTheDocument();
+
+    // Toggle off: Ctrl+L again
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+    expect(screen.getByText('Teh Botol Sosro')).toBeInTheDocument();
+  });
+
   it('syncs the retail-pos root data-theme with the global theme provider', async () => {
     await renderWithProviders(
       <ToggleThemeWrapper><RetailPosScreen /></ToggleThemeWrapper>,

@@ -995,6 +995,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F10': handleOpenSettings(); break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': onNavigate?.('kds'); break;
+        case 'l': if (e.ctrlKey && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
       }
     };
     document.addEventListener('keydown', handler);

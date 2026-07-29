@@ -88,6 +88,10 @@ impl Store<'_> {
     /// Calculates `expected_cash_minor` (opening + cash sales) and
     /// `cash_difference_minor` (closing - expected). Updates all aggregated
     /// sales fields from the sales table.
+    ///
+    /// All reads and the final write run inside a single SQLite transaction
+    /// to prevent concurrent close operations from observing inconsistent
+    /// intermediate state.
     pub fn close_shift(
         &self,
         id: &str,
@@ -96,11 +100,32 @@ impl Store<'_> {
     ) -> Result<Shift, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
+        let tx = self.conn.unchecked_transaction()?;
+
         // Verify the shift exists and is open.
-        let shift = self.get_shift(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "shift",
-            id: id.to_owned(),
-        })?;
+        let shift: Shift = {
+            let mut stmt = tx.prepare(
+                "SELECT id, user_id, terminal_id, opened_at, closed_at,
+                        opening_balance_minor, closing_balance_minor,
+                        expected_cash_minor, cash_difference_minor,
+                        total_sales_minor, total_cash_minor, total_card_minor,
+                        total_other_minor, total_voids_minor, total_refunds_minor,
+                        total_payouts_minor,
+                        notes, status, created_at, updated_at
+                 FROM shifts WHERE id = ?1",
+            )?;
+            let result = stmt.query_row(params![id], Self::row_to_shift);
+            match result {
+                Ok(s) => s,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(CoreError::NotFound {
+                        entity: "shift",
+                        id: id.to_owned(),
+                    });
+                }
+                Err(e) => return Err(CoreError::Db(e)),
+            }
+        };
 
         if shift.is_closed() {
             return Err(CoreError::Validation {
@@ -110,7 +135,7 @@ impl Store<'_> {
         }
 
         // Calculate sales totals from the sales table for sales made during this shift.
-        let (total_sales, total_cash, total_card, total_other, total_voids): (i64, i64, i64, i64, i64) = self.conn.query_row(
+        let (total_sales, total_cash, total_card, total_other, total_voids): (i64, i64, i64, i64, i64) = tx.query_row(
             "SELECT
                 COALESCE(SUM(CASE WHEN status = 'completed' THEN total_minor ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN status = 'completed' AND payment_method = 'cash' THEN total_minor ELSE 0 END), 0),
@@ -123,7 +148,7 @@ impl Store<'_> {
         )?;
 
         // Calculate total refunds for sales made by this user during the shift.
-        let total_refunds: i64 = self.conn.query_row(
+        let total_refunds: i64 = tx.query_row(
             "SELECT COALESCE(SUM(r.total_minor), 0)
              FROM refunds r
              JOIN sales s ON r.sale_id = s.id
@@ -133,12 +158,16 @@ impl Store<'_> {
         )?;
 
         // Include cash payouts (safe drops) in the expected cash calculation.
-        let total_payouts = self.get_total_payouts_for_shift(id)?;
+        let total_payouts: i64 = tx.query_row(
+            "SELECT COALESCE(SUM(amount_minor), 0) FROM cash_payouts WHERE shift_id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
 
         let expected_cash = shift.opening_balance_minor + total_cash - total_payouts;
         let cash_difference = closing_balance_minor - expected_cash;
 
-        self.conn.execute(
+        tx.execute(
             "UPDATE shifts SET
                 closed_at = ?1, closing_balance_minor = ?2, expected_cash_minor = ?3,
                 cash_difference_minor = ?4, total_sales_minor = ?5, total_cash_minor = ?6,
@@ -163,6 +192,8 @@ impl Store<'_> {
                 id,
             ],
         )?;
+
+        tx.commit()?;
 
         self.get_shift(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "shift",
