@@ -31,6 +31,7 @@ import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
+import RetailFnBar from './RetailFnBar';
 import './RetailPosScreen.css';
 
 // ── Cart panel width, viewport-aware ──────────────────────────────────
@@ -1599,55 +1600,24 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       </div>
 
       {/* ── Function bar (bottom) ──────────── */}
-      <div className="retail-fn-bar" role="toolbar" aria-label={l10n.getString('retail-fn-bar-aria') || 'Function bar'}>
-        <button type="button" className="retail-fn-btn" onClick={handlePay} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F1</span> {l10n.getString('sale-pay-button')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={handleRequestClear} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F2</span> {l10n.getString('retail-fn-void')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowDiscount(true)} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F3</span> {l10n.getString('retail-fn-diskon')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={heldCartId ? handleResume : handleHold} disabled={!heldCartId && lines.length === 0}>
-          <span className="retail-fn-key">F4</span> {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
-          <span className="retail-fn-key">F5</span> {l10n.getString('retail-fn-cari')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowSalesHistory(true)}>
-          <span className="retail-fn-key">F6</span> {l10n.getString('retail-fn-history')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowCustomerSearch(true)}>
-          <span className="retail-fn-key">F7</span> {l10n.getString('retail-fn-pelanggan')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowStockInquiry(true)}>
-          <span className="retail-fn-key">F8</span> {l10n.getString('retail-fn-stok')}
-        </button>
-        <button
-          type="button"
-          className="retail-fn-btn"
-          onClick={() => activeShift ? setShowCloseShift(true) : setShowOpenShift(true)}
-        >
-          <span className="retail-fn-key">F9</span> {activeShift ? l10n.getString('pos-shift-close-btn') : l10n.getString('pos-shift-open-btn')} {l10n.getString('retail-fn-shift')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={handleOpenSettings}>
-          <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
-        </button>
-        {isEnabled(FEATURES.QUICK_RETURN) && (
-          <button type="button" className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
-            {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
-          </button>
-        )}
-        <button type="button" className="retail-fn-btn" onClick={() => onNavigate?.('kds')}>
-          <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
-        </button>
-        {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
-          <button type="button" className="retail-fn-btn" onClick={() => setShowTables(true)}>
-            🪑 {l10n.getString('tables-title') || 'Tables'}
-          </button>
-        )}
-      </div>
+      <RetailFnBar
+        linesLength={lines.length}
+        heldCartId={heldCartId}
+        activeShift={!!activeShift}
+        onPay={handlePay}
+        onRequestClear={handleRequestClear}
+        onShowDiscount={() => setShowDiscount(true)}
+        onHoldResume={heldCartId ? handleResume : handleHold}
+        onShowSalesHistory={() => setShowSalesHistory(true)}
+        onShowCustomerSearch={() => setShowCustomerSearch(true)}
+        onShowStockInquiry={() => setShowStockInquiry(true)}
+        onToggleShift={() => activeShift ? setShowCloseShift(true) : setShowOpenShift(true)}
+        onOpenSettings={handleOpenSettings}
+        onShowQuickReturn={() => setShowQuickReturn(true)}
+        onShowTables={() => setShowTables(true)}
+        onNavigateKds={() => onNavigate?.('kds')}
+        skuInputRef={skuInputRef}
+      />
 
       {/* ── Open Shift modal ────────────────── */}
       {retailOpenShiftExit.shouldRender && (
