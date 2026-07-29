@@ -793,7 +793,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           (c.email && c.email.toLowerCase().includes(q)),
       ),
     );
-  }, [customerSearchQuery]); // runs on every keystroke, but only on cached data
+  }, [customerSearchQuery, showCustomerSearch]);
 
   // ── Payment modal ────────────────────────────────────────────
 
