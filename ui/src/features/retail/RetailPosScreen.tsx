@@ -1116,7 +1116,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       <header className="retail-header">
         <div className="retail-header-store">
           {storeSettings.logo && (
-            <img src={`data:image/png;base64,${storeSettings.logo}`} alt="" className="retail-header-logo" style={{ height: 32, marginRight: 8 }} />
+            <img src={`data:image/png;base64,${storeSettings.logo}`} alt={storeSettings.name || l10n.getString('retail-store-logo-alt') || 'Store logo'} className="retail-header-logo" style={{ height: 32, marginRight: 8 }} />
           )}
           <div>
             <span className="retail-header-name">{storeSettings.name || l10n.getString('retail-store-name-fallback')}</span>
