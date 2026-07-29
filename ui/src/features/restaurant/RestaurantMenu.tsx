@@ -661,7 +661,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           </span>
         </div>
       ) : (
-        <div className="restaurant-grid" role="list" aria-label="Menu items">
+        <div className="restaurant-grid" role="list" aria-label={l10n.getString('restaurant-menu-items-aria') || 'Menu items'}>
           {filtered.map((product, i) => (
             <RestaurantCard
               key={product.sku}
@@ -717,7 +717,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 className={`restaurant-context-swatch${contextMenu.currentColor === c ? ' restaurant-context-swatch--active' : ''}`}
                 style={{ background: c }}
                 onClick={() => setColor(contextMenu.sku, c)}
-                aria-label={c}
+                aria-label={l10n.getString('restaurant-color-swatch-aria', { color: c }, c)}
               />
             ))}
             {contextMenu.currentColor && (
@@ -776,7 +776,7 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
     >
       <div className="restaurant-card-body">
         {pinned && (
-          <span className="restaurant-card-pin-badge" title={l10n.getString('restaurant-card-pin-title')}>
+          <span className="restaurant-card-pin-badge" title={l10n.getString('restaurant-card-pin-title') || 'Pinned to top'}>
             <PinIcon />
           </span>
         )}

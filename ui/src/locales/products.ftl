@@ -21,6 +21,19 @@ restaurant-size-label = Size
 restaurant-sort-label = Sort
 restaurant-card-add = Add
 restaurant-context-color-label = Color
+restaurant-search-aria = Search menu items
+restaurant-search-clear-aria = Clear search
+restaurant-context-pin = Pin to top
+restaurant-context-unpin = Unpin from top
+restaurant-context-available = Mark available
+restaurant-context-unavailable = Mark unavailable
+restaurant-card-pin-title = Pinned to top
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = By Date
+restaurant-sort-popularity = Popularity
+restaurant-menu-items-aria = Menu items
+restaurant-color-swatch-aria = Color { $color }
 
 # Product Lookup
 product-lookup-title = Products

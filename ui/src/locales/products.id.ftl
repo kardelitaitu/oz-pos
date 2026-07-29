@@ -30,6 +30,19 @@ restaurant-size-label = Ukuran
 restaurant-sort-label = Urutkan
 restaurant-card-add = Tambah
 restaurant-context-color-label = Warna
+restaurant-search-aria = Cari item menu
+restaurant-search-clear-aria = Hapus pencarian
+restaurant-context-pin = Sematkan ke atas
+restaurant-context-unpin = Lepas sematan
+restaurant-context-available = Tandai tersedia
+restaurant-context-unavailable = Tandai tidak tersedia
+restaurant-card-pin-title = Disematkan ke atas
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = Berdasarkan Tanggal
+restaurant-sort-popularity = Popularitas
+restaurant-menu-items-aria = Item menu
+restaurant-color-swatch-aria = Warna { $color }
 
 # Error Boundary
 product-lookup-title = Produk
