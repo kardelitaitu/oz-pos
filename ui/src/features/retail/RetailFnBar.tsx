@@ -84,8 +84,8 @@ export default function RetailFnBar({
         <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
       </button>
       {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
-        <button type="button" className="retail-fn-btn" onClick={onShowTables}>
-          🪑 {l10n.getString('tables-title') || 'Tables'}
+        <button type="button" className="retail-fn-btn" onClick={onShowTables} aria-label={l10n.getString('tables-title') || 'Tables'}>
+          <span aria-hidden="true">🪑</span> {l10n.getString('tables-title') || 'Tables'}
         </button>
       )}
     </div>
