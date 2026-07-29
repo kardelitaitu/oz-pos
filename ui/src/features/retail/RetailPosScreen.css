@@ -206,6 +206,11 @@
   color: var(--color-fg-secondary);
 }
 
+.retail-search-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-primary-pos);
+}
+
 .retail-search-clear {
   background: none;
   border: none;
@@ -370,7 +375,8 @@
   font-weight: var(--font-weight-bold);
   letter-spacing: 0.5px;
   line-height: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px var(--color-dark-bg-pos); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--color-dark-bg-pos) 45%, transparent);
 }
 
 .retail-col-sortable {
@@ -658,6 +664,28 @@
   background: var(--color-primary-pos-light);
   box-shadow: 0 0 0 3px var(--color-primary-pos); /* P1-5 fallback */
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary-pos) 20%, transparent);
+}
+
+.retail-sku-go-btn {
+  padding: 4px 12px;
+  background: var(--color-primary-pos);
+  color: var(--color-bg-elevated);
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+  font-family: inherit;
+  border-radius: var(--radius-sm);
+  transition: filter var(--duration-150) var(--ease-out);
+}
+
+.retail-sku-go-btn:hover {
+  filter: brightness(1.15);
+}
+
+.retail-sku-go-btn:focus-visible {
+  outline: 2px solid var(--color-primary-pos);
+  outline-offset: 2px;
 }
 
 /* ── Right panel: cart ─────────────────────────────────────── */

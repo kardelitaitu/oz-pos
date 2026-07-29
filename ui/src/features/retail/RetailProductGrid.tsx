@@ -394,9 +394,13 @@ export default function RetailProductGrid({
       )}
       {totalPages > 1 && (
         <div className="retail-page-nav" role="navigation" aria-label={l10n.getString('retail-page-nav-aria') || 'Product pages'}>
-          <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => actions.onSetProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>{'<'}</button>
+          <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => actions.onSetProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
           <span className="retail-page-info" aria-current="true">{productPage + 1} / {totalPages}</span>
-          <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => actions.onSetProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>{'>'}</button>
+          <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => actions.onSetProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
         </div>
       )}
       <div className="retail-sku-bar">
@@ -411,11 +415,9 @@ export default function RetailProductGrid({
           placeholder={l10n.getString('retail-sku-placeholder')}
         />
         <button
-          style={{
-            padding: '4px 12px', background: 'var(--color-primary-pos)', color: 'var(--color-bg-elevated)',
-            border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-          }}
+          className="retail-sku-go-btn"
           onClick={actions.onSkuSubmit}
+          aria-label="Look up SKU"
         >
           {l10n.getString('retail-sku-go')}
         </button>

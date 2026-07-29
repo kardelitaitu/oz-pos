@@ -1058,7 +1058,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       {/* ── Main area ───────────────────────── */}
       <div className="retail-main" ref={retailPosRef}>
         {/* Left: product grid */}
-        {/* Left: product grid */}
         <RetailProductGrid
           data={{
             productsLoading,
