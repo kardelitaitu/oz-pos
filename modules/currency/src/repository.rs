@@ -443,6 +443,142 @@ mod tests {
         assert_eq!(currencies[0].symbol, "\u{20ac}");
     }
 
+    // ── Input validation ────────────────────────────────────────────────
+
+    #[test]
+    fn create_exchange_rate_rejects_empty_from_currency() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .create_exchange_rate("", "USD", 100_000, "manual", "2026-01-01")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "from_currency",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_exchange_rate_rejects_empty_to_currency() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .create_exchange_rate("USD", "", 100_000, "manual", "2026-01-01")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "to_currency",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_exchange_rate_rejects_empty_source() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .create_exchange_rate("USD", "EUR", 100_000, "", "2026-01-01")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "source",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_exchange_rate_rejects_empty_effective_date() {
+        let conn = fresh();
+        seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
+        seed_currency(&conn, "EUR", "978", "Euro", 2, "\u{20ac}");
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .create_exchange_rate("USD", "EUR", 100_000, "manual", "")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "effective_date",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_empty_from_currency() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .upsert_exchange_rate("", "USD", 100_000, "manual", "2026-01-01")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "from_currency",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_empty_to_currency() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .upsert_exchange_rate("USD", "", 100_000, "manual", "2026-01-01")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "to_currency",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_empty_source() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .upsert_exchange_rate("USD", "EUR", 100_000, "", "2026-01-01")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "source",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn upsert_exchange_rate_rejects_empty_effective_date() {
+        let conn = fresh();
+        let repo = CurrencyRepository::new(&conn);
+        let err = repo
+            .upsert_exchange_rate("USD", "EUR", 100_000, "manual", "")
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CurrencyError::Validation {
+                field: "effective_date",
+                ..
+            }
+        ));
+    }
+
     #[test]
     fn list_currencies_ordered_by_code() {
         let conn = fresh();

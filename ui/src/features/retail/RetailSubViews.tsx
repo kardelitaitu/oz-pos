@@ -80,7 +80,7 @@ export function StockInquiryView({ theme, onBack, onAddProduct }: StockInquiryVi
           price: p.price, barcode: p.barcode ?? null,
           in_stock: p.inStock, stock_qty: p.stockQty ?? null,
           product_type: p.productType,
-          tax_rate_ids: [], created_at: '', price_updated_at: '',
+          tax_rate_ids: [], created_at: p.createdAt ?? '', price_updated_at: p.priceUpdatedAt ?? '',
         })} />
       </div>
     </div>
