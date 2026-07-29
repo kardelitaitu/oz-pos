@@ -638,9 +638,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [cartTax, setCartTax] = useState<number>(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (lines.length === 0 || !subtotal) {
       setCartTax(0);
-      return;
+      return () => { controller.abort(); };
     }
     const currency = subtotal.currency;
     const taxLines: CartLineTaxInput[] = lines.map((l) => ({
@@ -649,8 +650,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       unit_price_minor: l.unit_price.minor_units,
     }));
     computeCartTax(sessionToken, taxLines, currency)
-      .then(setCartTax)
-      .catch(() => setCartTax(0));
+      .then((tax) => { if (!controller.signal.aborted) setCartTax(tax); })
+      .catch(() => { if (!controller.signal.aborted) setCartTax(0); });
+    return () => { controller.abort(); };
   }, [lines, subtotal, sessionToken]);
 
   // ── Discount modal ───────────────────────────────────────────
