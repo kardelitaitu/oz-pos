@@ -47,6 +47,7 @@ export interface TerminalHardwareProfile {
   localPrefs: LocalPrefs;
   initialized: string;
   version: number;
+  schemaVersion: number;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────
@@ -90,6 +91,7 @@ export function createDefaultProfile(terminalId: string, storeId?: string): Term
     localPrefs: { ...DEFAULT_LOCAL_PREFS },
     initialized: new Date().toISOString(),
     version: 1,
+    schemaVersion: 1,
   };
 }
 
@@ -109,6 +111,7 @@ function toHardwareSettingsDto(profile: TerminalHardwareProfile): HardwareSettin
     scaleZeroOnBoot: profile.hardware.scale.zeroOnBoot,
     kitchenPrinterConnection: profile.hardware.kitchenPrinter.connection,
     kitchenPrinterDevicePath: profile.hardware.kitchenPrinter.devicePath,
+    schemaVersion: profile.schemaVersion,
     soundVolume: profile.localPrefs.soundVolume,
     darkMode: profile.localPrefs.darkMode,
     scaleAutoZero: profile.localPrefs.scaleAutoZero,
@@ -124,6 +127,7 @@ function fromHardwareSettingsDto(
   const defaults = createDefaultProfile(terminalId, storeId);
   return {
     ...defaults,
+    schemaVersion: dto.schemaVersion ?? defaults.schemaVersion,
     hardware: {
       ...defaults.hardware,
       printer: {

@@ -93,6 +93,12 @@ pub struct TerminalProfile {
     /// Scale auto-zero after each transaction.
     #[serde(default = "default_scale_auto_zero")]
     pub scale_auto_zero: bool,
+
+    // ── Schema version for forward-compatible evolution ──────────
+    /// Schema version of this profile (incremented when fields are
+    /// added, removed, or renamed). Starts at 1.
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
 }
 
 fn default_printer_connection() -> String {
@@ -127,6 +133,10 @@ fn default_kitchen_printer_connection() -> String {
     "disabled".into()
 }
 
+fn default_schema_version() -> u32 {
+    1
+}
+
 fn default_scale_auto_zero() -> bool {
     true
 }
@@ -145,6 +155,7 @@ impl Default for TerminalProfile {
             scale_zero_on_boot: default_scale_zero_on_boot(),
             kitchen_printer_connection: default_kitchen_printer_connection(),
             kitchen_printer_device_path: String::new(),
+            schema_version: default_schema_version(),
             sound_volume: default_sound_volume(),
             dark_mode: false,
             scale_auto_zero: default_scale_auto_zero(),
@@ -272,6 +283,8 @@ mod tests {
         // Kitchen printer defaults
         assert_eq!(p.kitchen_printer_connection, "disabled");
         assert_eq!(p.kitchen_printer_device_path, "");
+        // Schema version
+        assert_eq!(p.schema_version, 1);
         // Local-prefs defaults
         assert_eq!(p.sound_volume, 80);
         assert!(!p.dark_mode);
@@ -295,6 +308,7 @@ mod tests {
             scale_zero_on_boot: true,
             kitchen_printer_connection: "network".into(),
             kitchen_printer_device_path: "192.168.1.51".into(),
+            schema_version: 1,
             sound_volume: 60,
             dark_mode: true,
             scale_auto_zero: false,

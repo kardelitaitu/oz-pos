@@ -557,6 +557,13 @@ pub const ALL: &[Migration] = &[
         id: "103_kds_priority.sql",
         sql: include_str!("../migrations/103_kds_priority.sql"),
     },
+    // ── 104: Hardware profiles DB store (TODO 4e) ────────────────
+    // Stores per-terminal hardware config in the DB with schema versioning.
+    // The JSON files in terminal_profiles/ remain as fallback/cache.
+    Migration {
+        id: "104_hardware_profiles.sql",
+        sql: include_str!("../migrations/104_hardware_profiles.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

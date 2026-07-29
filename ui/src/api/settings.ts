@@ -125,6 +125,7 @@ export interface HardwareSettingsDto {
   scaleZeroOnBoot: boolean;
   kitchenPrinterConnection: string;
   kitchenPrinterDevicePath: string;
+  schemaVersion: number;
   soundVolume: number;
   darkMode: boolean;
   scaleAutoZero: boolean;
