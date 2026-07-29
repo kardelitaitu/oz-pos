@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { CSSProperties } from 'react';
 import { usePosState } from '@/features/sales/usePosState';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,21 +32,8 @@ import ProductLookupScreen from '@/features/products/ProductLookupScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import RetailFnBar from './RetailFnBar';
 import RetailHeader from './RetailHeader';
+import RetailCartPanel, { RETAIL_CART_WIDTH_MIN, RETAIL_CART_WIDTH_DEFAULT, RETAIL_CART_WIDTH_MAX_CAP, clampRetailCartWidth } from './RetailCartPanel';
 import './RetailPosScreen.css';
-
-// ── Cart panel width, viewport-aware ──────────────────────────────────
-
-const RETAIL_CART_WIDTH_MIN = 280;
-const RETAIL_CART_WIDTH_DEFAULT = 340;
-const RETAIL_CART_WIDTH_MAX_CAP = 800;
-
-function clampRetailCartWidth(px: number, viewportWidth: number): number {
-  const max = Math.max(
-    RETAIL_CART_WIDTH_MIN,
-    Math.min(viewportWidth * 0.5, RETAIL_CART_WIDTH_MAX_CAP),
-  );
-  return Math.max(RETAIL_CART_WIDTH_MIN, Math.min(Math.round(px), max));
-}
 
 function toProduct(p: ProductDto): Product {
   return {
@@ -1344,223 +1330,56 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         </div>
 
         {/* ── Resize handle ────────────────── */}
-        {/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- role=separator makes this interactive per ARIA spec */}
-        <div
-          className="retail-resize-handle"
-          onMouseDown={startResize}
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuenow={retailCartWidth}
-          aria-valuemin={RETAIL_CART_WIDTH_MIN}
-          aria-valuemax={clampRetailCartWidth(RETAIL_CART_WIDTH_MAX_CAP, window.innerWidth)}
-          aria-label={l10n.getString('retail-resize-handle-aria') || 'Resize cart panel'}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowLeft') {
-              setRetailCartWidth((w) => clampRetailCartWidth(w - 20, window.innerWidth));
-              e.preventDefault();
-            } else if (e.key === 'ArrowRight') {
-              setRetailCartWidth((w) => clampRetailCartWidth(w + 20, window.innerWidth));
-              e.preventDefault();
-            }
+        <RetailCartPanel
+          lines={lines}
+          lineCount={lineCount}
+          selectedCustomer={selectedCustomer}
+          totals={{
+            subtotal,
+            total,
+            discountPercent,
+            discountAmount,
+            cartTax,
           }}
+          retailCartWidth={retailCartWidth}
+          serialNumbers={serialNumbers}
+          trackSerialMap={trackSerialMap}
+          overrideTarget={overrideTarget}
+          undoStack={undoStack}
+          undoBarExit={{
+            shouldRender: undoBarExit.shouldRender,
+            exiting: undoBarExit.exiting,
+            requestClose: undoBarExit.requestClose,
+          }}
+          creditSalesCount={creditSales.length}
+          isSerialTracking={isEnabled(FEATURES.SERIAL_TRACKING)}
+          isManager={isManager}
+          activeShift={!!activeShift}
+          heldCartId={heldCartId}
+          cartWidthMin={RETAIL_CART_WIDTH_MIN}
+          cartWidthMaxCap={RETAIL_CART_WIDTH_MAX_CAP}
+          onResizeWidth={setRetailCartWidth}
+          onStartResize={startResize}
+          cartSwipe={cartSwipe as Record<string, unknown>}
+          lineActions={{
+            onRemoveLine: handleRemoveLine,
+            onIncreaseQty: handleIncreaseQty,
+            onUpdateQty: updateQty,
+            onSerialChange: handleSerialChange,
+            onSetOverrideTarget: setOverrideTarget,
+          }}
+          panelActions={{
+            onPay: handlePay,
+            onShowDiscount: () => setShowDiscount(true),
+            onHoldResume: heldCartId ? handleResume : handleHold,
+            onRequestClear: handleRequestClear,
+            onShowCreditList: () => setShowCreditList(true),
+            onLoadCreditSales: loadCreditSales,
+          }}
+          onUndoRemove={handleUndoRemove}
+          onDismissUndo={handleDismissUndo}
+          onEnsureCart={ensureCart}
         />
-        {/* eslint-enable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
-
-        {/* Right: cart */}
-        <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties} {...cartSwipe}>
-          <div className="retail-cart-header">
-            <span>{l10n.getString('cart-title')}</span>
-            <span>{l10n.getString('retail-cart-items', { count: lineCount }) || `${lineCount} item${lineCount !== 1 ? 's' : ''}`}</span>
-          </div>
-          {lines.length === 0 ? (
-            <div className="retail-cart-empty">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M6 2 4 6v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4H6z" />
-                <path d="M4 6h16" />
-                <path d="M9 10V8a3 3 0 0 1 6 0v2" />
-              </svg>
-              <span>{l10n.getString('pos-cart-empty')}</span>
-            </div>
-          ) : (
-            <>
-              <div className="retail-cart-table">
-                <table className="retail-cart-table-inner">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}>{l10n.getString('retail-cart-header-col')}</th>
-                      <th>{l10n.getString('retail-cart-header-item')}</th>
-                      <th style={{ width: 56 }}>{l10n.getString('retail-cart-header-qty')}</th>
-                      <th style={{ width: 72 }}>{l10n.getString('retail-cart-header-price')}</th>
-                      <th style={{ width: 80 }}>{l10n.getString('retail-cart-header-subtotal')}</th>
-                      { }
-                      <th style={{ width: 24 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>{lines.map((line, idx) => (
-                      <tr key={line.id}>
-                        <td className="retail-cart-line-sku">{idx + 1}</td>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 11 }}>{line.name ?? line.sku}</div>
-                          {isEnabled(FEATURES.SERIAL_TRACKING) && trackSerialMap[line.sku] && (
-                            <input
-                              type="text"
-                              className="retail-cart-serial-input"
-                              value={serialNumbers[line.id] ?? ''}
-                              onChange={(e) => handleSerialChange(line.id, e.target.value)}
-                              placeholder={l10n.getString('retail-serial-placeholder') || 'Serial #'}
-                              aria-label={l10n.getString('retail-serial-aria', { name: line.name ?? line.sku }) || `Serial number for ${line.name ?? line.sku}`}
-                              style={{
-                                marginTop: 4, padding: '2px 4px', fontSize: 10,
-                                width: '100%', boxSizing: 'border-box',
-                                border: '1px solid var(--color-border)', borderRadius: 2,
-                              }}
-                            />
-                          )}
-                        </td>
-                        <td>
-                          <span className="retail-cart-line-qty">
-                            <button
-                              className="retail-cart-qty-btn"
-                              onClick={() => updateQty(line.id, Math.max(1, line.qty - 1))}
-                              aria-label={l10n.getString('retail-cart-qty-decrease-aria') || `Decrease quantity of ${line.sku}`}
-                            >
-                              &minus;
-                            </button>
-                            <span className="retail-cart-qty-value">{line.qty}</span>
-                            <button
-                              className="retail-cart-qty-btn"
-                              onClick={() => handleIncreaseQty(line)}
-                              aria-label={l10n.getString('retail-cart-qty-increase-aria') || `Increase quantity of ${line.sku}`}
-                            >
-                              +
-                            </button>
-                          </span>
-                        </td>
-                        <td className="retail-cart-line-unit">
-                          {formatMoney(line.unit_price)}
-                          {isManager && (
-                            <button
-                              type="button"
-                              className="retail-cart-line-override"
-                              onClick={() => {
-                                setOverrideTarget({ id: line.id as LineId, name: line.name ?? line.sku, unit_price: line.unit_price });
-                                ensureCart(line.unit_price.currency);
-                              }}
-                              aria-label={l10n.getString('retail-override-aria', { name: line.name ?? line.sku }) || `Override price for ${line.name ?? line.sku}`}
-                            >
-                              <Localized id="retail-override-btn"><span>Override</span></Localized>
-                            </button>
-                          )}
-                        </td>
-                        <td className="retail-cart-line-subtotal">{formatMoney({ minor_units: line.unit_price.minor_units * line.qty, currency: line.unit_price.currency })}</td>
-                          <td>
-                            <button type="button" className="retail-cart-remove-btn" onClick={() => handleRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price })} aria-label={l10n.getString('retail-cart-remove-aria') || `Remove ${line.sku} from cart`}>
-                              &times;
-                            </button>
-                        </td>
-                      </tr>
-                    ))}
-</tbody>
-                </table>
-              </div>
-
-              {/* ── Undo bar ───────────── */}
-              {undoBarExit.shouldRender && (
-                <div
-                  className={`retail-undo-bar${undoBarExit.exiting ? ' retail-undo-bar--exiting' : ''}`}
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span className="retail-undo-bar-label">{l10n.getString('retail-undo-items-removed', { count: undoStack.length }) || `${undoStack.length} item${undoStack.length > 1 ? 's' : ''} removed`}</span>
-                  <button type="button" className="retail-undo-bar-btn" onClick={handleUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
-                  <button type="button" className="retail-undo-bar-dismiss" onClick={handleDismissUndo} aria-label={l10n.getString('pos-cart-undo-dismiss-aria')}>&times;</button>
-                </div>
-              )}
-
-              <div className="retail-cart-totals">
-                <div className="retail-total-row">
-                  <span>{l10n.getString('pos-cart-subtotal')}</span>
-                  <span>{subtotal ? formatMoney(subtotal) : '—'}</span>
-                </div>
-                {discountPercent > 0 && discountAmount && (
-                  <div className="retail-total-row">
-                    <span>{l10n.getString('retail-total-discount', { percent: discountPercent }) || `Discount ${discountPercent}%`}</span>
-                    <span style={{ color: 'var(--color-danger)' }}>&minus;{formatMoney(discountAmount)}</span>
-                  </div>
-                )}
-                {cartTax > 0 && (
-                  <div className="retail-total-row">
-                    <span>{l10n.getString('retail-total-tax')}</span>
-                    <span>{formatMoney({ minor_units: cartTax, currency: subtotal?.currency ?? 'IDR' })}</span>
-                  </div>
-                )}
-                <div className="retail-total-row retail-total-row--grand" aria-live="polite" aria-atomic="true">
-                  <span>{l10n.getString('cart-total-label')}</span>
-                  <span>{total ? formatMoney(total) : '—'}</span>
-                </div>
-              </div>
-              {selectedCustomer && (
-                <div className="retail-customer-badge">
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
-                  </svg>
-                  <span>{selectedCustomer.name}</span>
-                </div>
-              )}
-              <div className="retail-cart-actions">
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--pay"
-                  data-testid="pay-btn"
-                  onClick={handlePay}
-                  disabled={lines.length === 0 || !activeShift}
-                  aria-label={l10n.getString('sale-pay-button')}
-                >
-                  {l10n.getString('sale-pay-button')}
-                </button>
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--discount"
-                  onClick={() => setShowDiscount(true)}
-                  disabled={lines.length === 0}
-                  aria-label={l10n.getString('retail-discount-button')}
-                >
-                  {l10n.getString('retail-discount-button')}
-                </button>
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--hold"
-                  onClick={heldCartId ? handleResume : handleHold}
-                  disabled={!heldCartId && lines.length === 0}
-                  aria-label={heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
-                >
-                  {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
-                </button>
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--void"
-                  onClick={handleRequestClear}
-                  disabled={lines.length === 0}
-                  aria-label={l10n.getString('pos-cart-clear')}
-                >
-                  {l10n.getString('pos-cart-clear')}
-                </button>
-              </div>
-              {creditSales.length > 0 && (
-                <div className="retail-credit-reminder-container">
-                  <button
-                    type="button"
-                    className="retail-credit-reminder-btn"
-                    onClick={() => { setShowCreditList(true); loadCreditSales(); }}
-                  >
-                    {l10n.getString('retail-credit-reminders', { count: creditSales.length }) || `Credit Reminders (${creditSales.length})`}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
       </div>
 
       {/* ── Function bar (bottom) ──────────── */}
