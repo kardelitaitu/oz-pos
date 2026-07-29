@@ -38,7 +38,7 @@ export default function KdsScreen() {
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
-  const { prefs, setLayout, setShowOrderId, setShowTableNumber, loading: prefsLoading } = useKdsPreferences();
+  const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, loading: prefsLoading } = useKdsPreferences();
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);
@@ -102,6 +102,29 @@ export default function KdsScreen() {
     }
   }, [sessionToken]);
 
+  // 1c: Auto-acknowledge — when enabled, advance pending tickets to
+  // preparing after acknowledgeDelayMin minutes without manual tap.
+  // Must be placed AFTER advanceStatus declaration to avoid TDZ errors.
+  useEffect(() => {
+    if (!prefs.autoAcknowledge || prefs.acknowledgeDelayMin <= 0) return;
+
+    const delayMs = prefs.acknowledgeDelayMin * 60 * 1000;
+    const now = Date.now();
+
+    for (const order of orders) {
+      if (order.status !== 'pending') continue;
+      if (!order.received_at) continue;
+
+      const receivedAt = new Date(order.received_at).getTime();
+      if (isNaN(receivedAt)) continue;
+
+      if (now - receivedAt >= delayMs) {
+        // Fire-and-forget — advance silently without awaiting.
+        advanceStatus(order);
+      }
+    }
+  }, [orders, prefs.autoAcknowledge, prefs.acknowledgeDelayMin, advanceStatus]);
+
   // P7-3: Pull-to-refresh gesture on KDS ticket board
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
     onRefresh: fetchOrders,
@@ -124,11 +147,11 @@ export default function KdsScreen() {
         <div className="kds-header-right">
           {!prefsLoading && (<>
             <KdsSettingsPanel
-              settings={settings}
+              settings={{ ...settings, autoAcknowledge: prefs.autoAcknowledge }}
               onChangeSound={(v) => setSettings((s) => ({ ...s, soundEnabled: v }))}
               onChangeYellowThreshold={(v) => setSettings((s) => ({ ...s, yellowThresholdMin: v }))}
               onChangeRedThreshold={(v) => setSettings((s) => ({ ...s, redThresholdMin: v }))}
-              onChangeAutoAcknowledge={(v) => setSettings((s) => ({ ...s, autoAcknowledge: v }))}
+              onChangeAutoAcknowledge={(v) => setAutoAcknowledge(v)}
               onChangeDensity={(v) => setSettings((s) => ({ ...s, density: v }))}
             />
             <KdsLayoutSwitcher
