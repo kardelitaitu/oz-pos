@@ -348,19 +348,29 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    listProductsScoped(sessionToken).then(setProducts).catch(() => { if (!controller.signal.aborted) setProducts(RETAIL_SAMPLE_PRODUCTS); });
-    listCategories().then((cats) => {
-      if (controller.signal.aborted) return;
-      setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
-    }).catch(() => {
-      if (!controller.signal.aborted) {
-        setCategories(RETAIL_SAMPLE_CATEGORIES);
-      }
-    });
+    setProductsLoading(true);
+    setCategoriesLoading(true);
+    listProductsScoped(sessionToken)
+      .then((prods) => { if (!controller.signal.aborted) setProducts(prods); })
+      .catch(() => { if (!controller.signal.aborted) setProducts(RETAIL_SAMPLE_PRODUCTS); })
+      .finally(() => { if (!controller.signal.aborted) setProductsLoading(false); });
+    listCategories()
+      .then((cats) => {
+        if (controller.signal.aborted) return;
+        setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCategories(RETAIL_SAMPLE_CATEGORIES);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCategoriesLoading(false);
+      });
     return () => { controller.abort(); };
   }, [addToast, l10n, playError, sessionToken]);
 
@@ -378,7 +388,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [categories]); // l10n via ref
 
   const lowStockCount = useMemo(
-    () => products.filter((p) => p.stock_qty != null && p.stock_qty > 0 && p.stock_qty <= 5).length,
+    () => products.filter((p) => {
+      if (p.stock_qty == null || p.stock_qty <= 0) return false;
+      const threshold = p.low_stock_threshold ?? 5;
+      return p.stock_qty <= threshold;
+    }).length,
     [products],
   );
 
@@ -1215,9 +1229,22 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
 
 
-          {filteredProducts.length === 0 ? (
+          {productsLoading || categoriesLoading ? (
+            <div className="retail-grid">
+              <div className="retail-grid-loading" role="status" aria-label={l10n.getString('retail-products-loading') || 'Loading products'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
+                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                </svg>
+                <span>{l10n.getString('retail-products-loading') || 'Loading products…'}</span>
+              </div>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="retail-grid-empty">
-              {searchQuery.trim() ? (l10n.getString('retail-no-products-match') || 'No products match your search') : (l10n.getString('retail-no-products') || 'No products')}
+              {searchQuery.trim()
+                ? (l10n.getString('retail-no-products-match') || 'No products match your search')
+                : activeCategory
+                  ? (l10n.getString('retail-no-products-in-category') || 'No products in this category')
+                  : (l10n.getString('retail-no-products') || 'No products')}
             </div>
           ) : (
             <div className="retail-grid">

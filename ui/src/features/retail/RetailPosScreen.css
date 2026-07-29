@@ -1019,12 +1019,41 @@
 }
 
 .retail-grid-empty svg,
-.retail-cart-empty svg {
+.retail-cart-empty svg,
+.retail-grid-loading svg {
   width: var(--space-12);
   height: var(--space-12);
   opacity: 0.6;
   color: var(--color-accent);
   animation: retail-breathe var(--duration-3000) var(--ease-in-out) infinite;
+}
+
+.retail-grid-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  height: 100%;
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-sm);
+  font-style: italic;
+  padding: var(--space-6);
+  min-height: 200px;
+}
+
+.retail-grid-loading svg {
+  animation: retail-loading-spin 1s linear infinite;
+}
+
+@keyframes retail-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retail-grid-loading svg {
+    animation: none;
+  }
 }
 
 .retail-cart-empty span {
