@@ -1052,15 +1052,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onWorkspacePicker={goToWorkspacePicker}
       />
 
-      {/* ── Low-stock banner ──────────────── */}
-      {lowStockCount > 0 && (
-        <div className="retail-low-stock-banner">
-          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-            <path d="M10 2a1 1 0 011 1v8a1 1 0 11-2 0V3a1 1 0 011-1zM10 16a1 1 0 100-2 1 1 0 000 2z"/>
-          </svg>
-          <span>{l10n.getString('retail-low-stock-banner', { count: lowStockCount }) || `${lowStockCount} product${lowStockCount > 1 ? 's' : ''} low on stock`}</span>
-        </div>
-      )}
 
       {/* ── Main area ───────────────────────── */}
       <div id="retail-main" className="retail-main" ref={retailPosRef}>

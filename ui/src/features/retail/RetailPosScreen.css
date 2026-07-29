@@ -1412,23 +1412,9 @@
   text-align: center;
 }
 
-/* ── Low-stock banner ─────────────────────────────────────── */
-
-.retail-low-stock-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  padding: var(--space-1) var(--space-4);
-  background: var(--color-warning-pos); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
-  background: linear-gradient(90deg, var(--color-warning-pos) 0%, color-mix(in srgb, var(--color-warning-pos) 88%, var(--color-bg-elevated)) 100%);
-  color: var(--color-pos-on-primary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--color-warning-pos); /* P1-5 fallback: WKWebView <Safari 16.4 ignores colour-mix */
-  border-bottom: 1px solid color-mix(in srgb, var(--color-warning-pos) 60%, var(--color-ink));
-  text-shadow: var(--shadow-sm);
-}
+/* ── Low-stock banner ───────────────────────────────────────
+ * Removed 2026-07-29 — centralized to RetailReminderPopup (bottom-right corner).
+ * Keep the selector block as a tombstone to prevent accidental re-adds. */
 
 /* ── Reminder popup (bottom-right corner) ─────────────────── */
 
