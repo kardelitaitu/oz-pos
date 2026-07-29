@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
-import { formatMoney, type Money, type LineId, type Sku } from '@/types/domain';
+import { formatMoney, type Money, type LineId, type Sku, type CourseId } from '@/types/domain';
+import { COURSES, courseLabel, courseEmoji } from '@/types/domain';
 import type { CartLine } from '@/types/domain';
 import type { CustomerDto } from '@/api/customers';
 import { clampRetailCartWidth } from './RetailCartPanel.constants';
@@ -21,6 +22,10 @@ export interface CartLineActions {
   onUpdateQty: (lineId: LineId, qty: number) => void;
   onSerialChange: (lineId: string, serial: string) => void;
   onSetOverrideTarget: (target: { id: LineId; name: string; unit_price: Money } | null) => void;
+  /** Assign a course to a cart line (restaurant coursing). */
+  onAssignCourse: (lineId: LineId, courseId: CourseId) => void;
+  /** Open modifier editor for a cart line. */
+  onEditModifiers: (line: CartLine) => void;
 }
 
 export interface CartPanelActions {
@@ -35,6 +40,8 @@ export interface CartPanelActions {
 export interface RetailCartPanelProps {
   // Cart data
   lines: CartLine[];
+  /** Whether to show course chips (restaurant mode or product has category mapping). */
+  showCourseSelector?: boolean;
   lineCount: number;
   selectedCustomer: CustomerDto | null;
   totals: CartTotalsData;
@@ -94,8 +101,12 @@ export default function RetailCartPanel({
   onUndoRemove,
   onDismissUndo,
   onEnsureCart,
+  showCourseSelector = false,
 }: RetailCartPanelProps) {
   const { l10n } = useLocalization();
+
+  // ── Course dropdown state ────────────────────────────────────
+  const [courseDropdownLine, setCourseDropdownLine] = useState<LineId | null>(null);
 
   return (
     <>
@@ -156,7 +167,61 @@ export default function RetailCartPanel({
                     <tr key={line.id}>
                       <td className="retail-cart-line-sku">{idx + 1}</td>
                       <td>
-                        <div style={{ fontWeight: 600, fontSize: 11 }}>{line.name ?? line.sku}</div>
+                        <div style={{ fontWeight: 600, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                          {line.name ?? line.sku}
+                          {/* ── Course chip ──────────── */}
+                          {showCourseSelector && (
+                            <span className="retail-cart-course-chip-group">
+                              <button
+                                type="button"
+                                className={`retail-cart-course-chip${line.courseId ? ' retail-cart-course-chip--set' : ''}`}
+                                onClick={() => setCourseDropdownLine(courseDropdownLine === line.id ? null : line.id)}
+                                aria-label={l10n.getString('retail-cart-course-aria', { name: line.name ?? line.sku }) || `Course for ${line.name ?? line.sku}`}
+                                title={line.courseId ? `${courseEmoji(line.courseId)} ${courseLabel(line.courseId)}` : 'Set course'}
+                              >
+                                {line.courseId ? `${courseEmoji(line.courseId)} ${courseLabel(line.courseId)}` : '🍽️ Course'}
+                              </button>
+                              {/* ── Course dropdown ──── */}
+                              {courseDropdownLine === line.id && (
+                                <span className="retail-cart-course-dropdown" role="listbox" aria-label="Select course">
+                                  <button
+                                    type="button"
+                                    className={`retail-cart-course-option${!line.courseId ? ' retail-cart-course-option--active' : ''}`}
+                                    onClick={() => { lineActions.onAssignCourse(line.id as LineId, '' as CourseId); setCourseDropdownLine(null); }}
+                                    role="option"
+                                    aria-selected={!line.courseId}
+                                  >
+                                    None
+                                  </button>
+                                  {COURSES.map((c) => (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      className={`retail-cart-course-option${line.courseId === c.id ? ' retail-cart-course-option--active' : ''}`}
+                                      onClick={() => { lineActions.onAssignCourse(line.id as LineId, c.id); setCourseDropdownLine(null); }}
+                                      role="option"
+                                      aria-selected={line.courseId === c.id}
+                                    >
+                                      {c.emoji} {c.label}
+                                    </button>
+                                  ))}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {/* ── Modifier badge ──────── */}
+                          {line.modifiers && line.modifiers.length > 0 && (
+                            <span className="retail-cart-modifier-badge">
+                              +{line.modifiers.length}
+                            </span>
+                          )}
+                        </div>
+                        {/* ── Modifier names line ──── */}
+                        {line.modifiers && line.modifiers.length > 0 && (
+                          <div style={{ fontSize: 10, color: 'var(--color-fg-tertiary)', marginTop: 2, lineHeight: 1.3 }}>
+                            {line.modifiers.map((m) => m.modifierName).join(', ')}
+                          </div>
+                        )}
                         {isSerialTracking && trackSerialMap[line.sku] && (
                           <input
                             type="text"
@@ -198,6 +263,19 @@ export default function RetailCartPanel({
                             +
                           </button>
                         </span>
+                        {/* ── Edit modifiers ──────── */}
+                        {showCourseSelector && (
+                          <button
+                            type="button"
+                            className="retail-cart-modifier-btn"
+                            onClick={() => lineActions.onEditModifiers(line)}
+                            aria-label={l10n.getString('retail-cart-modifier-aria', { name: line.name ?? line.sku }) || `Modifiers for ${line.name ?? line.sku}`}
+                          >
+                            <Localized id="retail-cart-modifier-btn">
+                              <span>Modifiers</span>
+                            </Localized>
+                          </button>
+                        )}
                       </td>
                       <td className="retail-cart-line-unit">
                         {formatMoney(line.unit_price)}

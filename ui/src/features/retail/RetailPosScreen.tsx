@@ -7,6 +7,7 @@ import { useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
+import ItemModifierModal from '@/features/sales/components/ItemModifierModal';
 import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerial, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
@@ -17,7 +18,7 @@ import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto 
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
-import { type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
+import { type CartId, type CartLine, type CourseId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import RetailFnBar from './RetailFnBar';
@@ -95,7 +96,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
-    addProduct, removeLine, updateQty, updateLinePrice, setDiscount, resetCart,
+    addProduct, removeLine, updateQty, updateLinePrice, assignCourse, setDiscount, resetCart,
   } = usePosState();
 
   const lineCount = lines.reduce((a, l) => a + l.qty, 0);
@@ -531,6 +532,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     updateQty(line.id, line.qty + 1);
   }, [products, lines, updateQty, addToast, l10n]);
 
+  /** Open the modifier editor for a cart line. */
+  const handleEditModifiers = useCallback((line: CartLine) => {
+    setModifierLine(line);
+  }, []);
+
   // ── SKU / Barcode input ──────────────────────────────────────
 
   const productsRef = useRef(products);
@@ -704,6 +710,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<{ id: LineId; name: string; unit_price: Money } | null>(null);
   const [cartId, setCartId] = useState<CartId | null>(null);
+
+  // ── Modifier modal state ──────────────────────────────────────
+  const [modifierLine, setModifierLine] = useState<CartLine | null>(null);
 
   // Moved below [selectedCustomer, setSelectedCustomer] so it can reset
   // discount and customer on cart clear (was previously defined before
@@ -1180,12 +1189,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           onResizeWidth={setRetailCartWidth}
           onStartResize={startResize}
           cartSwipe={cartSwipe as Record<string, unknown>}
+          showCourseSelector={true}
           lineActions={{
             onRemoveLine: handleRemoveLine,
             onIncreaseQty: handleIncreaseQty,
             onUpdateQty: updateQty,
             onSerialChange: handleSerialChange,
             onSetOverrideTarget: setOverrideTarget,
+            onAssignCourse: (lineId, courseId) => { assignCourse(lineId, courseId as CourseId); },
+            onEditModifiers: handleEditModifiers,
           }}
           panelActions={{
             onPay: handlePay,
@@ -1338,6 +1350,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         quickReturnSale={quickReturnSale}
         quickReturnRefundDone={handleQuickReturnRefundDone}
         scanFlash={scanFlash}
+      />
+
+      {/* ── Item modifier modal ──────────── */}
+      <ItemModifierModal
+        open={!!modifierLine}
+        productName={modifierLine?.name ?? modifierLine?.sku ?? ''}
+        basePriceMinor={modifierLine?.unit_price.minor_units ?? 0}
+        currency={modifierLine?.unit_price.currency ?? 'IDR'}
+        groups={[]}
+        onConfirm={() => setModifierLine(null)}
+        onClose={() => setModifierLine(null)}
       />
     </div>
   </>

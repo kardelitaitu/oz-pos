@@ -33,6 +33,15 @@ export const COURSES: { id: CourseId; label: string; emoji: string }[] = [
   { id: 'drinks', label: 'Drinks', emoji: '🥤' },
 ];
 
+/** A modifier selection for a cart line. Mirrors the backend KdsModifier type. */
+export interface ModifierSelection {
+  groupId: string;
+  groupName: string;
+  modifierId: string;
+  modifierName: string;
+  priceMinor: number;
+}
+
 /** Label for a given course ID. */
 export function courseLabel(courseId: CourseId): string {
   return COURSES.find((c) => c.id === courseId)?.label ?? courseId;
@@ -57,6 +66,8 @@ export interface CartLine {
   readonly courseId?: CourseId;
   /** Coursing status — hold (not yet sent to kitchen) or fired. */
   readonly coursingStatus?: CoursingStatus;
+  /** Optional modifier selections attached to this line. */
+  readonly modifiers?: ModifierSelection[];
 }
 
 /**

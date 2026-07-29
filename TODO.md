@@ -31,7 +31,7 @@
   - [x] Pipeline: `complete_sale_to_kds` persists structured line items
   - [x] `get_kds_order_lines_scoped` Tauri command + TS API wrapper
   - [x] **Phase 2 — KDS front-end display** (course-grouped ticket cards)
-  - [ ] **Phase 3 — POS cart input** (course selector + modifier UI)
+  - [x] **Phase 3 — POS cart input** (course selector + modifier UI)
 
 - [x] **2b. No recall / history view:** Once a ticket advances to "served", it vanishes from the queue. Kitchen staff can't pull up completed orders.
   - _Files:_ `ui/src/features/kds/KdsScreen.tsx` (queue only shows pending/preparing/ready)
