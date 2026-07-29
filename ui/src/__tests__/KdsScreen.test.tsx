@@ -7,7 +7,7 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, mockUseWorkspaceScope } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
   mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
@@ -16,6 +16,7 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, m
     display: '2m 0s',
   })),
   mockPlayAlert: vi.fn(),
+  mockSpeak: vi.fn(),
   mockUseWorkspaceScope: vi.fn<() => { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
 }));
 
@@ -45,6 +46,7 @@ vi.mock('@/frontend/shared/useSound', () => ({
     playBeep: vi.fn(),
     playError: vi.fn(),
     playSuccess: vi.fn(),
+    speak: mockSpeak,
     setSoundEnabled: vi.fn(),
   }),
 }));
@@ -105,6 +107,7 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
 describe('KdsScreen', () => {
   beforeEach(() => {
     mockGetKdsQueue.mockResolvedValue([]);
+    mockSpeak.mockClear();
   });
 
   it('renders the title', async () => {
@@ -542,6 +545,50 @@ describe('KdsScreen', () => {
       expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
       expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
     });
+  });
+
+  // ── 3d: Voice callout tests ────────────────────────────────────
+
+  it('announces order up via TTS when ticket advances to ready', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'preparing', display_number: 42 }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
+
+    const ticket = document.querySelector('.kds-ticket')!;
+    await userEvent.click(ticket);
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
+    );
+
+    // Should have called speak with the TTS string
+    await waitFor(() =>
+      expect(mockSpeak).toHaveBeenCalledWith('Order 42 up!'),
+    );
+  });
+
+  it('does not announce when advancing to preparing (only on ready)', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 42 }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
+
+    const ticket = document.querySelector('.kds-ticket')!;
+    await userEvent.click(ticket);
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
+    );
+
+    // speak should NOT have been called (not advancing to ready)
+    expect(mockSpeak).not.toHaveBeenCalled();
   });
 
   it('navigates selection with ArrowDown and ArrowUp', async () => {

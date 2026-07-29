@@ -6,6 +6,7 @@ import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
+import { useSound } from '@/frontend/shared/useSound';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
 import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
@@ -45,6 +46,7 @@ export default function KdsScreen() {
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);
+  const { speak } = useSound();
 
   const fetchOrders = useCallback(() => {
     const zone = prefs.kdsZone || undefined;
@@ -99,11 +101,15 @@ export default function KdsScreen() {
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
     try {
       await updateKdsStatusScoped(sessionToken, order.id, nextStatus);
+      // 3d: Voice callout when a ticket hits 'ready' — "Order 42 up!"
+      if (nextStatus === 'ready') {
+        speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${order.display_number} ${l10n.getString('kds-ready-tts') || 'up'}!`);
+      }
       // No manual fetchOrders() — the kds:orders-changed event triggers a refresh.
     } catch (e) {
       setError(String(e));
     }
-  }, [sessionToken]);
+  }, [sessionToken, speak, l10n]);
 
   // 1c: Auto-acknowledge — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.

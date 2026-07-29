@@ -46,3 +46,7 @@ kds-settings-density-compact = Compact
 # ── 3a: Zone switching ──
 kds-zone-filter-aria = Filter by kitchen zone
 kds-zone-all = All
+
+# ── 3d: Voice callout ──
+kds-order-up-tts = Order
+kds-ready-tts = up
