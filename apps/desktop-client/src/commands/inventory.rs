@@ -427,6 +427,38 @@ pub async fn list_inventory_transactions(
     Ok(txs)
 }
 
+/// List inventory transactions for a specific shift (staff + location + time window).
+///
+/// Used by the inventory shift-bar summary to avoid client-side filtering
+/// of all transactions. Requires `SALES_PROCESS` permission.
+#[tauri::command]
+pub async fn list_inventory_transactions_for_shift(
+    session_token: String,
+    staff_id: String,
+    location_id: String,
+    since: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<InventoryTransaction>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(
+        &store,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )?;
+
+    let txs = store.list_inventory_transactions_for_shift(&staff_id, &location_id, &since)?;
+    Ok(txs)
+}
+
 /// Retrieve details of a single transaction, including its lines.
 ///
 /// Requires `SALES_PROCESS` permission.

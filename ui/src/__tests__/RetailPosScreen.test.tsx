@@ -476,6 +476,23 @@ describe('RetailPosScreen — rendering', () => {
 
   // ── Low-stock filter (Ctrl+L) shortcut ─────────────────────
 
+  it('shows filtered indicator when low-stock filter is active', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // No indicator before filtering
+    expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
+
+    // Toggle on
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.getByText(/filtered/i)).toBeInTheDocument());
+
+    // Toggle off — indicator disappears
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument());
+  });
+
   it('Ctrl+L toggles low-stock filter in the product grid', async () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await showAllProducts();

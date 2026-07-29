@@ -1065,6 +1065,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       {/* ── Main area ───────────────────────── */}
       <div id="retail-main" className="retail-main" ref={retailPosRef}>
         {/* Left: product grid */}
+        {filterLowStock && (
+          <div className="retail-filter-indicator" role="status" aria-label="Low-stock filter active">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
+              <path fillRule="evenodd" d="M3 3a1 1 0 011 0v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+            <span>{l10n.getString('retail-filtered-low-stock') || `Filtered: ${lowStockCount} low-stock products`}</span>
+          </div>
+        )}
         <RetailProductGrid
           data={{
             productsLoading,

@@ -359,6 +359,7 @@ pub fn run() {
             commands::inventory::list_inventory_shifts,
             commands::inventory::create_inventory_transaction,
             commands::inventory::list_inventory_transactions,
+            commands::inventory::list_inventory_transactions_for_shift,
             commands::inventory::get_inventory_transaction,
             commands::inventory::set_stock_threshold,
             commands::inventory::get_stock_thresholds,
