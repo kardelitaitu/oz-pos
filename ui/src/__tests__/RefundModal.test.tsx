@@ -266,4 +266,20 @@ describe('RefundModal', () => {
     fireEvent.click(checkbox);
     expect(checkbox).not.toBeChecked();
   });
+
+  it('closes when backdrop overlay is clicked', async () => {
+    const onClose = vi.fn();
+    renderWithFluentSync(<RefundModal {...defaultProps} onClose={onClose} />, salesFtl, refundFtl);
+    const overlay = screen.getByRole('dialog');
+    fireEvent.click(overlay);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not close when modal panel is clicked', () => {
+    const onClose = vi.fn();
+    renderWithFluentSync(<RefundModal {...defaultProps} onClose={onClose} />, salesFtl, refundFtl);
+    const panel = screen.getByRole('dialog').querySelector('.refund-modal')!;
+    fireEvent.click(panel);
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

@@ -28,7 +28,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const toggleLine = useCallback((lineId: string, _sku: string, maxQty: number) => {
+  const toggleLine = useCallback((lineId: string, maxQty: number) => {
     setSelectedLines((prev) => {
       const current = prev[lineId] ?? 0;
       if (current > 0) {
@@ -125,11 +125,15 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   // codebase for dialog overlays (PaymentModal, ShiftManagementScreen,
   // every *ManagementScreen modal) so it's the safer choice here.
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       className={`refund-overlay${exit.exiting ? ' refund-overlay--exiting' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={l10n.getString('refund-dialog-aria')}
+      onClick={(e) => { if (e.target === e.currentTarget) exit.requestClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') exit.requestClose(); }}
+      tabIndex={-1}
     >
       <div
         className={`refund-modal${exit.exiting ? ' refund-modal--exiting' : ''}`}
@@ -198,7 +202,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                           <input
                             type="checkbox"
                             checked={selectedQty > 0}
-                            onChange={() => toggleLine(line.id, line.sku, line.qty ?? 1)}
+                            onChange={() => toggleLine(line.id, line.qty ?? 1)}
                             aria-label={`Refund ${line.sku}`}
                           />
                         </Localized>
