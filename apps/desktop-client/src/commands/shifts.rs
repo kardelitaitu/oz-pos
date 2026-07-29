@@ -559,6 +559,7 @@ mod tests {
         let store = Store::new(&conn);
 
         let s1 = store.open_shift("user-1", None, 100).unwrap();
+        store.close_shift(&s1.id, 150, None).unwrap();
         let s2 = store.open_shift("user-1", None, 200).unwrap();
 
         let shifts = store.list_shifts().unwrap();

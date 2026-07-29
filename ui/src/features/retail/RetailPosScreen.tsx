@@ -474,7 +474,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   );
 
   // Reset page when filter changes
-  useEffect(() => { setProductPage(0); }, [activeCategory, searchQuery]);
+  useEffect(() => { setProductPage(0); }, [activeCategory, searchQuery, filterLowStock]);
 
   const catHue = useCallback((catId: string | null) => {
     if (!catId) return 210;
