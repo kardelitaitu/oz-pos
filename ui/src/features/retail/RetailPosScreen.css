@@ -669,7 +669,7 @@
 .retail-sku-go-btn {
   padding: 4px 12px;
   background: var(--color-primary-pos);
-  color: var(--color-bg-elevated);
+  color: var(--color-pos-on-primary);
   border: none;
   cursor: pointer;
   font-weight: 700;
