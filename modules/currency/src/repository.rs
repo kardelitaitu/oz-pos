@@ -80,6 +80,30 @@ impl<'a> CurrencyRepository<'a> {
                 "rate must be strictly positive; zero and negative exchange rates are not valid",
             ));
         }
+        if from_currency.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "from_currency",
+                "from_currency must not be empty",
+            ));
+        }
+        if to_currency.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "to_currency",
+                "to_currency must not be empty",
+            ));
+        }
+        if source.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "source",
+                "source must not be empty",
+            ));
+        }
+        if effective_date.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "effective_date",
+                "effective_date must not be empty",
+            ));
+        }
         let id = uuid::Uuid::now_v7().to_string();
         self.conn.execute(
             "INSERT INTO exchange_rates (id, from_currency, to_currency, rate_millionths, source, effective_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -120,6 +144,30 @@ impl<'a> CurrencyRepository<'a> {
             return Err(CurrencyError::validation(
                 "rate_millionths",
                 "rate must be strictly positive; zero and negative exchange rates are not valid",
+            ));
+        }
+        if from_currency.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "from_currency",
+                "from_currency must not be empty",
+            ));
+        }
+        if to_currency.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "to_currency",
+                "to_currency must not be empty",
+            ));
+        }
+        if source.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "source",
+                "source must not be empty",
+            ));
+        }
+        if effective_date.trim().is_empty() {
+            return Err(CurrencyError::validation(
+                "effective_date",
+                "effective_date must not be empty",
             ));
         }
         let id = uuid::Uuid::now_v7().to_string();
