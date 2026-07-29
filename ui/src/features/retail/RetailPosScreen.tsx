@@ -26,6 +26,7 @@ import RetailCartPanel, { RETAIL_CART_WIDTH_MIN, RETAIL_CART_WIDTH_DEFAULT, RETA
 import RetailProductGrid, { type SortField, type SortOrder } from './RetailProductGrid';
 import { SalesHistoryView, TableManagementView, StockInquiryView } from './RetailSubViews';
 import RetailModals from './RetailModals';
+import RetailReminderPopup from './RetailReminderPopup';
 import './RetailPosScreen.css';
 
 function toProduct(p: ProductDto): Product {
@@ -1175,6 +1176,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onNavigateKds={() => onNavigate?.('kds')}
         skuInputRef={skuInputRef}
       />
+      <RetailReminderPopup lowStockCount={lowStockCount} creditCount={creditSales.length} />
       <RetailModals
         shift={{
           activeShift,

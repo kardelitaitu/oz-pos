@@ -1430,6 +1430,85 @@
   text-shadow: var(--shadow-sm);
 }
 
+/* ── Reminder popup (bottom-right corner) ─────────────────── */
+
+.retail-reminder-popup {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 16rem;
+  max-width: 20rem;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: retail-reminder-slide-in var(--duration-300) var(--ease-out);
+}
+
+.retail-reminder-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  line-height: 1.4;
+}
+
+.retail-reminder-row svg {
+  flex-shrink: 0;
+  color: var(--color-warning-pos);
+}
+
+.retail-reminder-row--low-stock svg {
+  color: var(--color-warning);
+}
+
+.retail-reminder-row--credit svg {
+  color: var(--color-warning-pos);
+}
+
+.retail-reminder-dismiss {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-11);
+  min-height: var(--space-11);
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-fg-tertiary);
+  cursor: pointer;
+  transition: background var(--duration-150) var(--ease-out), color var(--duration-150) var(--ease-out);
+}
+
+.retail-reminder-dismiss:hover {
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+}
+
+.retail-reminder-dismiss:focus-visible {
+  outline: 2px solid var(--color-primary-pos);
+  outline-offset: 1px;
+}
+
+@keyframes retail-reminder-slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retail-reminder-popup { animation: none; }
+}
+
 /* ── Scrollbar ─────────────────────────────────────────────── */
 
 .retail-grid::-webkit-scrollbar,

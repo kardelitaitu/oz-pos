@@ -59,7 +59,7 @@ export interface RetailCartPanelProps {
   overrideTarget: { id: LineId; name: string; unit_price: Money } | null;
   undoStack: { sku: Sku; name: string; category: string; unit_price: Money }[];
   undoBarExit: { shouldRender: boolean; exiting: boolean; requestClose: () => void };
-  creditSalesCount: number;
+  creditSalesCount: number; // kept in interface for parent passthrough; rendered via RetailReminderPopup instead
 
   // Feature flags
   isSerialTracking: boolean;
@@ -94,7 +94,7 @@ export default function RetailCartPanel({
   trackSerialMap,
   undoStack,
   undoBarExit,
-  creditSalesCount,
+  creditSalesCount: _creditSalesCount,
   isSerialTracking,
   isManager,
   activeShift,
@@ -317,17 +317,6 @@ export default function RetailCartPanel({
                 {l10n.getString('pos-cart-clear')}
               </button>
             </div>
-            {creditSalesCount > 0 && (
-              <div className="retail-credit-reminder-container">
-                <button
-                  type="button"
-                  className="retail-credit-reminder-btn"
-                  onClick={() => { panelActions.onShowCreditList(); panelActions.onLoadCreditSales(); }}
-                >
-                  {l10n.getString('retail-credit-reminders', { count: creditSalesCount }) || `Credit Reminders (${creditSalesCount})`}
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>
