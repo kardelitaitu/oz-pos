@@ -37,31 +37,11 @@ hardcoded strings, CSS tokens, focus trapping, and stale closures.
 
 ---
 
-## 2. RestaurantMenu.tsx (795 lines) — Audit & Harden
+## ✅ ~~2.~~ RestaurantMenu.tsx (795 lines) — COMPLETE (commit `b3307810`)
 
-**Why:** Completely un-audited restaurant/KDS subsystem. Has a known hardcoded
-`aria-label="Menu items"`. Likely shares the same patterns we fixed across 70 cycles
-in the retail surface.
-
-- [ ] **Phase A — Read & catalog**
-  - [ ] Read full file + `RestaurantMenu.css`; catalog all i18n gaps, hardcoded colors, and inline styles
-  - [ ] Check related files: `RestaurantTableMap.tsx`, `RestaurantOrderPanel.tsx`, and any KDS components
-- [ ] **Phase B — FTL sweep**
-  - [ ] Check bundle-parity for all restaurant/KDS FTL keys (likely `sales.ftl` or `kds.ftl`)
-  - [ ] Add any missing keys; ensure Indonesian translations exist
-- [ ] **Phase C — Dialog semantics & a11y**
-  - [ ] Convert overlay panels to proper dialog roles with `useFocusTrap`
-  - [ ] Fix `aria-label="Menu items"` → `l10n.getString()` || fallback
-  - [ ] Add Escape-to-close on any modals
-- [ ] **Phase D — CSS tokenization**
-  - [ ] Replace hardcoded hex with CSS tokens; ensure contrast on all themes
-- [ ] **Phase E — Logic audit**
-  - [ ] Check all hook dep arrays; look for stale closures and missing cleanup
-  - [ ] Write regression tests for any bugs found
-- [ ] **Phase F — Validate**
-  - [ ] `cd ui && npm run typecheck`
-  - [ ] `cd ui && npx vitest run`
-  - [ ] Code review + commit
+> **Done:** Full audit — 13 FTL keys added (11 missing + 2 for hardcoded labels),
+> 2 hardcoded aria-labels fixed, 1 fallback added. CSS all tokens, hooks all clean,
+> dialog semantics correct (role=menu/tablist with Escape handling). 11/11 tests pass.
 
 ---
 
