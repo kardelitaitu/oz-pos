@@ -570,9 +570,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [storeSettings, setStoreSettings] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
   useEffect(() => {
     let mounted = true;
-    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
+    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10nRef.current.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
     return () => { mounted = false; };
-  }, [addToast, l10n, sessionToken]);
+  }, [addToast, sessionToken]);
 
   // ── Shift management ─────────────────────────────────────────
 
