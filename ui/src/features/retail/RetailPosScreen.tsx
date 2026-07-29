@@ -312,6 +312,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Barcode scan flash ───────────────────────────────────────────
   const [scanFlash, setScanFlash] = useState(false);
+  const scanFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up the scan-flash timer on unmount
+  useEffect(() => {
+    return () => {
+      if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current);
+    };
+  }, []);
 
   // ── Confirm clear cart ────────────────────────────────────────────
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -555,10 +563,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleBarcode = useCallback(async (payload: { code: string }) => {
     const list = productsRef.current;
     const found = list.find((x) => x.barcode === payload.code);
-    if (found) { handleAdd(found); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
+    if (found) { handleAdd(found); setScanFlash(true); playBeep(); clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     try {
       const p = await lookupByBarcodeScoped(sessionToken, payload.code);
-      if (p) { handleAdd(p); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
+      if (p) { handleAdd(p); setScanFlash(true); playBeep(); clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     } catch { /* unreachable */ }
     playError();
     addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
