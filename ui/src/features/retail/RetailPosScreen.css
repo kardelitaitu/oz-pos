@@ -368,7 +368,7 @@
   background: var(--color-dark-bg-pos);
   padding: 6px var(--space-2);
   text-align: left;
-  font-size: 12px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   color: var(--color-fg-secondary);
   border-bottom: 2px solid var(--color-border-strong);
@@ -458,7 +458,7 @@
 
 .retail-col-name {
   font-weight: var(--font-weight-semibold);
-  font-size: 14px;
+  font-size: var(--text-base);
   color: var(--color-fg-primary);
   line-height: 1.25;
   text-align: left !important;
@@ -497,7 +497,7 @@
   width: 140px;
   text-align: right;
   font-weight: var(--font-weight-bold);
-  font-size: 14px;
+  font-size: var(--text-base);
   color: var(--color-accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -673,7 +673,7 @@
   border: none;
   cursor: pointer;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-family: inherit;
   border-radius: var(--radius-sm);
   transition: filter var(--duration-150) var(--ease-out);
@@ -2357,8 +2357,8 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2369,10 +2369,10 @@
 .retail-edit-modal-dialog {
   width: 100%;
   max-width: 500px;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-md);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: var(--color-pos-modal-shadow);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -2383,15 +2383,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  background: #1f2937 !important;
-  border-bottom: 1px solid #374151 !important;
+  background: var(--color-pos-modal-input-bg);
+  border-bottom: 1px solid var(--color-pos-modal-border);
 }
 
 .retail-edit-modal-title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-md);
   font-weight: 700;
-  color: #f9fafb !important;
+  color: var(--color-pos-modal-fg);
 }
 
 .retail-edit-modal-close {
@@ -2399,7 +2399,7 @@
   border: none;
   font-size: 1.5rem;
   line-height: 1;
-  color: #9ca3af !important;
+  color: var(--color-pos-modal-label);
   cursor: pointer;
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
@@ -2407,15 +2407,15 @@
 }
 
 .retail-edit-modal-close:hover {
-  color: #f9fafb !important;
+  color: var(--color-pos-modal-fg);
 }
 
 .retail-edit-modal-form {
-  padding: 20px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  background: #111827 !important;
+  gap: var(--space-4);
+  background: var(--color-pos-modal-bg);
 }
 
 .retail-edit-form-group {
@@ -2427,39 +2427,39 @@
 
 .retail-edit-form-row {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .retail-edit-label {
   font-size: 11px;
   font-weight: 600;
-  color: #9ca3af !important;
+  color: var(--color-pos-modal-label);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .retail-edit-input {
   padding: 10px 14px;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-family: inherit;
-  background: #1f2937 !important;
-  color: #f9fafb !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-input-bg);
+  color: var(--color-pos-modal-fg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-sm);
   text-align: left !important;
   transition: border-color var(--duration-150) var(--ease-out);
 }
 
 .retail-edit-input:focus {
-  outline: 2px solid #10b981 !important;
+  outline: 2px solid var(--color-success-pos);
   outline-offset: -1px;
-  border-color: #10b981 !important;
+  border-color: var(--color-success-pos);
 }
 
 .retail-edit-input--readonly {
-  background: #111827 !important;
-  color: #9ca3af !important;
-  border-color: #374151 !important;
+  background: var(--color-pos-modal-bg);
+  color: var(--color-pos-modal-label);
+  border-color: var(--color-pos-modal-border);
   font-family: var(--font-mono);
   cursor: not-allowed;
   opacity: 0.8;
@@ -2469,15 +2469,15 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--space-3);
   margin-top: 8px;
-  padding-top: 16px;
-  border-top: 1px solid #374151 !important;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-pos-modal-border);
 }
 
 .retail-edit-modal-btn {
   padding: 10px 20px;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 700;
   font-family: inherit;
   border-radius: var(--radius-sm);
@@ -2486,25 +2486,25 @@
 }
 
 .retail-edit-modal-btn--secondary {
-  background: #374151 !important;
-  color: #f3f4f6 !important;
-  border: 1px solid #4b5563 !important;
+  background: var(--color-pos-modal-btn-bg);
+  color: var(--color-pos-modal-btn-fg);
+  border: 1px solid var(--color-pos-modal-btn-border);
 }
 
 .retail-edit-modal-btn--secondary:hover {
-  background: #4b5563 !important;
-  color: #ffffff !important;
+  background: var(--color-pos-modal-btn-hover-bg);
+  color: var(--color-pos-modal-btn-hover-fg);
 }
 
 .retail-edit-modal-btn--primary {
-  background: #10b981 !important;
-  color: #ffffff !important;
-  border: 1px solid #10b981 !important;
+  background: var(--color-success-pos);
+  color: var(--color-pos-modal-btn-hover-fg);
+  border: 1px solid var(--color-success-pos);
 }
 
 .retail-edit-modal-btn--primary:hover {
-  background: #059669 !important;
-  border-color: #059669 !important;
+  background: var(--color-success-pos-darker);
+  border-color: var(--color-success-pos-darker);
 }
 
 /* ── Retail Credit Reminder Banner ─────────────────────────── */
@@ -2519,7 +2519,7 @@
   font-weight: var(--font-weight-bold);
   font-family: inherit;
   background: var(--color-warning-pos-darker, #d97706);
-  color: #ffffff;
+  color: var(--color-pos-on-primary);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;

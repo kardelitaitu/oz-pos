@@ -32,7 +32,7 @@ import { join, resolve } from 'path';
 // Decrement as existing violations are fixed.
 // Current value: 81 — pre-existing fallback patterns across ~20 CSS files.
 // Baseline reduced from 193 on 2026-07-19.
-const KNOWN_VIOLATIONS_BASELINE = 49;
+const KNOWN_VIOLATIONS_BASELINE = 8;
 
 /* ── File discovery ───────────────────────────────────────────── */
 
