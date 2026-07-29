@@ -329,15 +329,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setShowClearConfirm(true);
   }, [lines.length]);
 
-  const handleConfirmClear = useCallback(() => {
-    setCartId(null);
-    resetCart();
-    setUndoStack([]);
-    setShowClearConfirm(false);
-  }, [resetCart]);
-
-
-
   // ── Products & Categories ────────────────────────────────────
 
   const [products, setProducts] = useState<ProductDto[]>([]);
@@ -563,10 +554,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleBarcode = useCallback(async (payload: { code: string }) => {
     const list = productsRef.current;
     const found = list.find((x) => x.barcode === payload.code);
-    if (found) { handleAdd(found); setScanFlash(true); playBeep(); clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
+    if (found) { handleAdd(found); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     try {
       const p = await lookupByBarcodeScoped(sessionToken, payload.code);
-      if (p) { handleAdd(p); setScanFlash(true); playBeep(); clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
+      if (p) { handleAdd(p); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     } catch { /* unreachable */ }
     playError();
     addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
@@ -712,6 +703,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<{ id: LineId; name: string; unit_price: Money } | null>(null);
   const [cartId, setCartId] = useState<CartId | null>(null);
+
+  // Moved below [selectedCustomer, setSelectedCustomer] so it can reset
+  // discount and customer on cart clear (was previously defined before
+  // those states existed, causing a TDZ bug when they were added to deps).
+  const handleConfirmClear = useCallback(() => {
+    setCartId(null);
+    resetCart();
+    setDiscount(0, '');
+    setUndoStack([]);
+    setSelectedCustomer(null);
+    setShowClearConfirm(false);
+  }, [resetCart, setDiscount, setSelectedCustomer]);
+
   const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
     if (cartId) return cartId;
     try {

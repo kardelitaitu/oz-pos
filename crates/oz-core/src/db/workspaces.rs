@@ -1996,4 +1996,66 @@ mod tests {
         assert_eq!(row.type_key, "store-pos");
         assert_eq!(row.store_id, "default");
     }
+
+    // ── Input validation ────────────────────────────────────────────────
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_id() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("", "store-pos", "store-1", "Name", "desc", None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "id", .. }));
+    }
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_type_key() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("ws-1", "", "store-1", "Name", "desc", None)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "type_key",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_store_id() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("ws-1", "store-pos", "", "Name", "desc", None)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_id",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_name() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("ws-1", "store-pos", "store-1", "", "desc", None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "name", .. }));
+    }
+
+    #[test]
+    fn update_workspace_instance_rejects_empty_name() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance("ws-1", "store-pos", "store-1", "Name", "desc", None)
+            .unwrap();
+        let err = store
+            .update_workspace_instance("ws-1", "", None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "name", .. }));
+    }
 }
