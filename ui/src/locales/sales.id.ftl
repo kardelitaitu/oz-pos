@@ -844,6 +844,8 @@ retail-add-category-title = Tambah Kategori
 retail-add-category-field-name = Nama Kategori
 retail-add-product-btn = + Produk
 retail-add-product-title = Tambah Produk
+retail-add-product-category-label = Kategori
+retail-add-product-name-placeholder = mis. Logitech G Pro X Wireless Mouse
 
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan

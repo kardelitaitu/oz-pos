@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { useLocalization, Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto, CategoryDto } from '@/api/products';
 
@@ -17,6 +17,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { l10n } = useLocalization();
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -95,14 +96,16 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               Add New Product
             </h3>
           </Localized>
-          <button
-            type="button"
-            className="retail-edit-modal-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            &times;
-          </button>
+          <Localized id="retail-edit-modal-close-aria">
+            <button
+              type="button"
+              className="retail-edit-modal-close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              &times;
+            </button>
+          </Localized>
         </div>
 
         <form onSubmit={handleSubmit} className="retail-edit-modal-form">
@@ -124,9 +127,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
 
             <div className="retail-edit-form-group">
-              <label htmlFor="add-product-category" className="retail-edit-label">
-                Category
-              </label>
+              <Localized id="retail-add-product-category-label">
+                <label htmlFor="add-product-category" className="retail-edit-label">
+                  Category
+                </label>
+              </Localized>
               <select
                 id="add-product-category"
                 className="retail-edit-input"
@@ -154,7 +159,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               className="retail-edit-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Logitech G Pro X Wireless Mouse"
+              placeholder={l10n.getString('retail-add-product-name-placeholder') || 'e.g. Logitech G Pro X Wireless Mouse'}
               ref={nameInputRef}
               required
             />

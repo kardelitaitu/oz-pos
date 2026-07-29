@@ -857,6 +857,8 @@ retail-add-category-title = Add Category
 retail-add-category-field-name = Category Name
 retail-add-product-btn = + Product
 retail-add-product-title = Add Product
+retail-add-product-category-label = Category
+retail-add-product-name-placeholder = e.g. Logitech G Pro X Wireless Mouse
 
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...

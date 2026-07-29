@@ -80,7 +80,7 @@ export default function RetailFnBar({
           <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
         </button>
       )}
-      <button type="button" className="retail-fn-btn" onClick={onNavigateKds}>
+      <button type="button" className="retail-fn-btn" onClick={onNavigateKds} disabled={!onNavigateKds}>
         <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
       </button>
       {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
