@@ -29,6 +29,25 @@ impl Store<'_> {
 
     /// Create a KDS order from input, auto-incrementing the display number per day.
     pub fn create_kds_order(&self, input: CreateKdsOrderInput) -> Result<KdsOrder, CoreError> {
+        if input.sale_id.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "sale_id must not be empty".into(),
+            });
+        }
+        if input.items_summary.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "items_summary",
+                message: "items_summary must not be empty".into(),
+            });
+        }
+        if input.item_count <= 0 {
+            return Err(CoreError::Validation {
+                field: "item_count",
+                message: "item_count must be positive".into(),
+            });
+        }
+
         let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
@@ -1218,5 +1237,99 @@ mod tests {
         // Most recent first.
         assert_eq!(all[0].id, o2.id);
         assert_eq!(all[1].id, o1.id);
+    }
+
+    // ── KDS order input validation ──────────────────────────────────────
+
+    #[test]
+    fn create_kds_order_rejects_empty_sale_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "".into(),
+                store_id: None,
+                items_summary: "Items".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "sale_id",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_kds_order_rejects_empty_items_summary() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "sale-1".into(),
+                store_id: None,
+                items_summary: "".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "items_summary",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_kds_order_rejects_zero_item_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "sale-1".into(),
+                store_id: None,
+                items_summary: "Items".into(),
+                item_count: 0,
+                kitchen_zone: None,
+                notes: String::new(),
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "item_count",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_kds_order_rejects_negative_item_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "sale-1".into(),
+                store_id: None,
+                items_summary: "Items".into(),
+                item_count: -1,
+                kitchen_zone: None,
+                notes: String::new(),
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "item_count",
+                ..
+            }
+        ));
     }
 }
