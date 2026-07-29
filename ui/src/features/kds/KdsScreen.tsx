@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, Profiler } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
@@ -59,64 +60,35 @@ export default function KdsScreen() {
       .catch((e) => setError(e.message ?? String(e)));
   }, [sessionToken, workspaceScope?.storeId, prefs.kdsZone]);
 
-  // P2-3: Adaptive polling with dynamic interval based on idle time.
-  // Uses recursive setTimeout so the duration recalculates after every
-  // fetch. Polls 2s when active, backs off to 10s after 30s idle, 30s
-  // after 2min idle. Pauses when the tab is hidden. Idle resets when
-  // orders.length changes (via effect dependency re-run).
+  // 1a: Real-time push via Tauri events — replaces adaptive polling.
+  // Listens for kds:orders-changed emitted by the Rust backend after
+  // order creation or status updates. Falls back to re-fetch on tab
+  // visibility change to catch any events missed while hidden.
   useEffect(() => {
-    let idleMs = 0;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    let isPaused = document.hidden;
+    let unlisten: (() => void) | undefined;
 
-    const getInterval = (idle: number): number => {
-      if (idle < 30_000) return 2_000;   // active: 2s
-      if (idle < 120_000) return 10_000;  // idle 30s+: 10s
-      return 30_000;                        // idle 2min+: 30s
-    };
-
-    const clearTimer = () => {
-      if (timerId !== null) {
-        clearTimeout(timerId);
-        timerId = null;
-      }
-    };
-
-    // Recursive tick — recalculates interval after every fetch
-    const tick = () => {
-      if (!isPaused) {
-        fetchOrders();
-      }
-
-      // Advance idle time by the current interval, then schedule next tick
-      idleMs += getInterval(idleMs);
-      timerId = setTimeout(tick, getInterval(idleMs));
-    };
-
-    // Visibility change handler — pause polling when tab hidden
-    const onVisibilityChange = () => {
-      isPaused = document.hidden;
-      if (!isPaused) {
-        // Immediately fetch when tab becomes visible, then restart with fresh idle
-        clearTimer();
-        fetchOrders();
-        idleMs = 0;
-        timerId = setTimeout(tick, getInterval(0));
-      }
-    };
-
-    // Initial fetch and start polling
+    // Initial fetch on mount.
     fetchOrders();
-    timerId = setTimeout(tick, getInterval(0));
 
-    // Wire up visibility change listener
+    // Subscribe to real-time KDS order changes (push, not poll).
+    listen<null>('kds:orders-changed', () => {
+      fetchOrders();
+    }).then((fn) => { unlisten = fn; });
+
+    // Visibility change fallback — re-fetch when tab becomes visible
+    // to catch any events missed while the tab was hidden.
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchOrders();
+      }
+    };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
-      clearTimer();
+      if (unlisten) unlisten();
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [fetchOrders, orders.length]);
+  }, [fetchOrders]);
 
   const advanceStatus = useCallback(async (order: KdsOrder) => {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
@@ -124,11 +96,11 @@ export default function KdsScreen() {
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
     try {
       await updateKdsStatusScoped(sessionToken, order.id, nextStatus);
-      fetchOrders();
+      // No manual fetchOrders() — the kds:orders-changed event triggers a refresh.
     } catch (e) {
       setError(String(e));
     }
-  }, [sessionToken, fetchOrders]);
+  }, [sessionToken]);
 
   // P7-3: Pull-to-refresh gesture on KDS ticket board
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({

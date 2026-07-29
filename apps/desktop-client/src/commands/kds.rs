@@ -5,7 +5,7 @@
 //!
 //! All KDS commands require `kds:view` or `kds:update` permission.
 
-use tauri::State;
+use tauri::{Emitter, State};
 
 use oz_core::KdsOrder;
 use oz_core::db::Store;
@@ -108,6 +108,12 @@ pub async fn update_kds_status(
     require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
     let order = store.update_kds_status(&id, &status)?;
     drop(db);
+
+    // Push real-time update to all KDS displays (1a: real-time push).
+    if let Some(app) = state.app.as_ref() {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
     Ok(order)
 }
 
@@ -131,6 +137,12 @@ pub async fn update_kds_status_scoped(
     require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let order = store.update_kds_status(&id, &status)?;
     drop(db);
+
+    // Push real-time update to all KDS displays (1a: real-time push).
+    if let Some(app) = state.app.as_ref() {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
     Ok(order)
 }
 
@@ -148,6 +160,14 @@ pub async fn create_kds_order_from_sale(
     require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
     let orders = store.complete_sale_to_kds(&sale_id, None)?;
     drop(db);
+
+    // Push real-time update to all KDS displays — skip if no kitchen items.
+    if !orders.is_empty()
+        && let Some(app) = state.app.as_ref()
+    {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
     Ok(orders)
 }
 
@@ -174,6 +194,14 @@ pub async fn create_kds_order_from_sale_scoped(
     require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let orders = store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?;
     drop(db);
+
+    // Push real-time update to all KDS displays — skip if no kitchen items.
+    if !orders.is_empty()
+        && let Some(app) = state.app.as_ref()
+    {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
     Ok(orders)
 }
 
