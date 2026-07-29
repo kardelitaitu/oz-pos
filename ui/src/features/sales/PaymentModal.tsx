@@ -105,6 +105,7 @@ export default function PaymentModal({
   const [leaving, setLeaving] = useState(false);
   const leaveCb = useRef<(() => void) | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const customerSearchPanelRef = useRef<HTMLDivElement>(null);
 
   const MS_200 = animDuration(200);
 
@@ -849,6 +850,9 @@ export default function PaymentModal({
     if (!showCustomerSearch && !showQr) animateLeave(onClose);
   });
 
+  // ── Focus trap for nested customer search modal ────────────
+  useFocusTrap(customerSearchPanelRef, showCustomerSearch, () => setShowCustomerSearch(false));
+
   // Parse PartialStockResult from Tauri error messages
   const tryParsePartialStockResult = (msg: string): PartialStockResult | null => {
     try {
@@ -1527,19 +1531,14 @@ export default function PaymentModal({
               <div
                 className="payment-customer-search-overlay"
                 onClick={() => setShowCustomerSearch(false)}
-                onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
-                role="button"
-                tabIndex={-1}
-                aria-label={l10n.getString('modal-close-aria') || 'Close customer search'}
               >
-                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onClick stops propagation to backdrop, Escape provides keyboard dismissal */}
                 <div
+                  ref={customerSearchPanelRef}
                   className="payment-customer-search-modal"
                   role="dialog"
                   aria-modal="true"
-                  tabIndex={-1}
+                  aria-label={l10n.getString('payment-customer-search-heading', null, 'Select Customer')}
                   onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
                 >
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>

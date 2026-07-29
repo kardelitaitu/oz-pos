@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: var(--color-pos-modal-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
@@ -39,10 +39,10 @@
   position: relative;
   width: 26.25rem;
   max-width: 92vw;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: var(--color-pos-modal-shadow);
   overflow: hidden;
 }
 
@@ -96,8 +96,8 @@
   cursor: pointer;
   color: var(--color-fg-tertiary);
   padding: 0;
-  width: var(--space-8);
-  height: var(--space-8);
+  width: var(--space-11);
+  height: var(--space-11);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -492,6 +492,11 @@
   padding: 0 var(--space-1);
   opacity: 0.6;
   flex-shrink: 0;
+  min-width: var(--space-11);
+  min-height: var(--space-11);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .payment-split-remove:hover:not(:disabled) {
