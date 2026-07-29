@@ -1,6 +1,62 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings — living 2026-07-02 dev journal) · referenced code entities verified present: ui/src/contexts/BrandContext.tsx, ui/src/hooks/useAnimatedModal.ts; i18n-wrap targets (SalesHistoryScreen/VoidOrdersScreen/PaymentModal/TaxConfigurationScreen/CustomerManagementScreen/LoyaltyManagementScreen) and FTL files (sales/settings/tax/customers/loyalty.ftl) all exist · journal is a dated change-log, not a drift-prone spec; no code-claim contradiction found -->
+<!-- Audit stamp: 2026-07-29 · Codebuff · status: UPDATED — July 29 full-codebase i18n audit session appended -->
 
 # OZ-POS Development Journal
+
+## 2026-07-29 — Full-Codebase i18n Audit & FTL Sweep
+
+### Attribute-Only FTL Sweep (TODO #3)
+**Problem:** ~268 attribute-only FTL messages (`.aria-label = ...` with no message value) silently returned `undefined` when accessed via `l10n.getString()`, causing empty aria-labels and placeholders across 25 files.
+
+**Solution:** Cross-referenced all 1212 `l10n.getString()` calls against the 268 attribute-only keys. Found 75 keys used without fallbacks across 25 files. Verified `<Localized>` usage: 72 keys safe to convert to simple `key = value` format (125 conversions, 16 bundles via `scripts/convert-safe-attr-ftl.py`). 3 keys shared with `<Localized attrs>` received `||` fallbacks in code.
+
+**Commits:** `104c4891`, `ee5a4f96`
+
+### RestaurantMenu.tsx Audit (TODO #2)
+**Problem:** 795-line restaurant/KDS screen was completely un-audited, with 11 missing FTL keys and 2 hardcoded English strings (`aria-label="Menu items"`, hex color codes as aria-labels).
+
+**Solution:** Added 13 FTL keys (en + id): search-aria, search-clear-aria, context-pin/unpin, context-available/unavailable, card-pin-title, sort-manual/a-z/date/popularity, menu-items-aria, color-swatch-aria. Localized the grid aria-label and color swatch labels. CSS audit: 0 hardcoded hex, all tokens. Hooks: all cleanup + deps correct.
+
+**Commits:** `b3307810`, `446a88f3`
+
+### SettingsPage.tsx Audit (TODO #1)
+**Problem:** Largest UI file (1081 lines) was surprisingly clean — 244 CSS tokens, zero hardcoded hex, correct hook deps. Only 2 hardcoded strings: `placeholder="Search"` and Suspense fallback `Loading...`.
+
+**Solution:** Added `settings-search-placeholder` and `settings-section-loading` FTL keys (en + id). Localized both strings with `l10n.getString()` and `<Localized>`.
+
+**Commits:** `533247bc`, `de1517dc`
+
+### PosScreen.tsx Audit
+**Problem:** Largest file in codebase (2212 lines TSX + 682 CSS). 26 attribute-only bugs already fixed by the FTL sweep. After sweep: 216 CSS tokens (all hex in var() fallbacks), 40 hooks with correct deps, ESLint zero errors.
+
+**Bugs found:** 5 hardcoded strings missed by the sweep:
+- Course fire button: `aria-label={`Fire ${course.label} (${holdCount} items)`}` — not inside `<Localized>`
+- Fire All button: `<span>Fire All</span>` — not wrapped in `<Localized>`
+- Override button in CartLineItem: `aria-label={...}` and `Override` text — both hardcoded
+- Missing FTL keys: `pos-cart-course-fire-aria`, `pos-cart-course-btn--all`, `pos-cart-line-override`, `pos-cart-line-override-aria`
+
+**Commit:** `0796d835`
+
+### ProductManagementScreen + CategoryManagementScreen Audit
+**Problem:** Two ~640-line screens flagged in the original audit for hardcoded aria-labels. Both were clean after the attribute-only sweep: 92+135 CSS tokens, zero true hardcoded hex.
+
+**Bugs found:** 3 hardcoded strings:
+- CategoryManagementScreen: `aria-label={`Edit category ${cat.name}`}` — not inside `<Localized>`
+- ProductManagementScreen: Stock alert bell aria-label in English
+- ProductManagementScreen: Product type dropdown options (Retail/Restaurant/Service) — not localized
+
+**Commit:** `13023004`
+
+### Session Totals
+| Metric | Count |
+|--------|-------|
+| Bugs fixed | **88** |
+| FTL keys added | **28** (en + id) |
+| Files changed | **25** |
+| Commits | **5** fix + **4** docs |
+| Tests | **3324/3324 passing, 221/221 files** |
+| TypeScript | Clean (0 errors) |
+| Bundle parity | 0 missing keys |
+
 
 ## 2026-07-02 — i18n Migration & Test Fixes
 
