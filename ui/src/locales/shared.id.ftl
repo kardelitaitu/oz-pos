@@ -202,6 +202,11 @@ audit-log-load-more = Muat Lebih Banyak
 audit-log-error-load = Gagal memuat log audit
 audit-log-mark-reviewed = Tandai Ditinjau
 audit-log-reviewed-at = Ditinjau: { $date }
+audit-log-unreviewed-title =
+    { $count ->
+        [one] { $count } kejadian belum ditinjau sejak tinjauan terakhir
+       *[other] { $count } kejadian belum ditinjau sejak tinjauan terakhir
+    }
 audit-log-user-system = sistem
 audit-log-loading = Memuat…
 audit-log-refresh = Segarkan

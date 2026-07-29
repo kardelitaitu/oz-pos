@@ -66,6 +66,11 @@ audit-log-load-more = Load More
 audit-log-error-load = Failed to load audit log
 audit-log-mark-reviewed = Mark Reviewed
 audit-log-reviewed-at = Reviewed: { $date }
+audit-log-unreviewed-title =
+    { $count ->
+        [one] { $count } unreviewed event since last review
+       *[other] { $count } unreviewed events since last review
+    }
 audit-log-user-system = system
 audit-log-loading = Loading…
 audit-log-refresh = Refresh

@@ -180,7 +180,7 @@ export default function AuditLogScreen() {
             <h1 className="audit-log-title"><span>Audit Log</span></h1>
           </Localized>
           {unreviewedCount > 0 && (
-            <span className="audit-log-unreviewed-badge" title={`${unreviewedCount} unreviewed events since last review`}>
+            <span className="audit-log-unreviewed-badge" title={l10n.getString('audit-log-unreviewed-title', { count: String(unreviewedCount) }, `${unreviewedCount} unreviewed events since last review`)}>
               {unreviewedCount} new
             </span>
           )}
