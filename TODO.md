@@ -1,33 +1,112 @@
-# Top 3 High-Impact Improvements — July 29, 2026 Audit
+# Improvement Opportunities — July 29, 2026 Audits
 
-> From the July 29 full-codebase audit: 3324/3324 tests, zero type errors, zero clippy
-> warnings, ~77 hardcoded aria-labels across un-audited features, ~90+ attribute-only
-> FTL messages that may silently return `undefined`.
-
----
-
-## ✅ ~~1.~~ SettingsPage.tsx (1081 lines) — COMPLETE (commit `533247bc`)
-
-> **Done:** Full audit of the largest UI file. Surprisingly clean — 244 CSS tokens,
-> zero hardcoded hex, correct hook deps, proper cleanup. Only 2 hardcoded strings
-> found: `placeholder="Search"` + Suspense fallback `Loading...`. Both fixed with
-> new FTL keys. 49/49 tests pass, typecheck clean.
+> From two feature audits: **KDS (Kitchen Display System)** and **ADR #22 Workspace Settings**.
+> 3324/3324 tests, zero type errors, zero clippy warnings, bundle parity clean.
 
 ---
 
-## ✅ ~~2.~~ RestaurantMenu.tsx (795 lines) — COMPLETE (commit `b3307810`)
+## 1. KDS — Production Kitchen Readiness
 
-> **Done:** Full audit — 13 FTL keys added (11 missing + 2 for hardcoded labels),
-> 2 hardcoded aria-labels fixed, 1 fallback added. CSS all tokens, hooks all clean,
-> dialog semantics correct (role=menu/tablist with Escape handling). 11/11 tests pass.
+### 🔴 Tier 1 — Blockers
+
+- [ ] **1a. No real-time push (polling only):** KDS polls at 2-30s intervals. A production kitchen needs sub-second delivery. Add a Tauri WebSocket or SSE stream so the POS pushes orders to KDS instantly rather than waiting for the next poll tick.
+  - _Files:_ `ui/src/features/kds/KdsScreen.tsx` (polling useEffect), `crates/oz-core/src/db/kds.rs` (queue query), needs new event-bus emitter on `create_kds_order`.
+  - _Effort:_ Medium (new backend event + frontend stream subscription)
+
+- [ ] **1b. Table number is an `as unknown` hack:** `KdsTicketCard.tsx` reads table numbers via `(order as unknown as Record<string, unknown>)['table_number']`. The `KdsOrder` Rust struct and DB schema have no `table_number` field.
+  - _Files:_ `ui/src/features/kds/components/KdsTicketCard.tsx:80-82`, `crates/oz-core/src/kds.rs` (KdsOrder struct), `crates/oz-core/migrations/032_kds_orders.sql`, `crates/oz-core/src/db/kds.rs` (row_to_kds_order)
+  - _Effort:_ Small (add column + field + wire through)
+
+- [ ] **1c. Auto-acknowledge toggle does nothing:** `KdsSettingsPanel` stores `autoAcknowledge` in component state, but nothing reads it to auto-advance tickets. The toggle is a placebo.
+  - _Files:_ `ui/src/features/kds/KdsSettingsPanel.tsx`, `ui/src/features/kds/KdsScreen.tsx`
+  - _Effort:_ Small (add `useEffect` timer in `KdsScreen` that calls `advanceStatus` after configurable delay when enabled)
+
+### 🟠 Tier 2 — Significant Gaps
+
+- [ ] **2a. Course/modifier data discarded:** `complete_sale_to_kds` builds a flat `items_summary` string like "Steak x2, Salad". Course structure (appetizer → main → dessert) and modifier details ("medium rare, no onions") never reach the KDS ticket.
+  - _Files:_ `crates/oz-core/src/db/kds.rs:complete_sale_to_kds`, `ui/src/features/kds/components/KdsTicketCard.tsx`
+  - _Effort:_ Large (schema change + POS-to-KDS data pipeline)
+
+- [ ] **2b. No recall / history view:** Once a ticket advances to "served", it vanishes from the queue. Kitchen staff can't pull up completed orders.
+  - _Files:_ `ui/src/features/kds/KdsScreen.tsx` (queue only shows pending/preparing/ready)
+  - _Effort:_ Medium (add history tab/panel, `list_kds_orders` API already exists)
+
+- [ ] **2c. No priority / rush flag:** FOH can't signal an urgent ticket that visually escalates above normal SLA.
+  - _Files:_ `crates/oz-core/src/kds.rs` (KdsOrder struct needs `priority` field), `crates/oz-core/migrations/032_kds_orders.sql`, `ui/src/features/kds/components/KdsTicketCard.tsx`
+  - _Effort:_ Small (add boolean + CSS class)
+
+- [ ] **2d. No keyboard shortcuts:** Kitchen staff must tap individual tickets on a tablet. Add number keys (1-9) to select, Space to advance, arrows to navigate.
+  - _Files:_ `ui/src/features/kds/KdsScreen.tsx` (add `onKeyDown` handler)
+  - _Effort:_ Small
+
+- [ ] **2e. Hardcoded dark theme (not tokenized):** KDS CSS uses private `--kds-bg: #1a1a2e` etc. Doesn't respond to global light/dark theme toggle. A KDS tablet in a bright daytime kitchen can't switch to light mode.
+  - _Files:_ `ui/src/features/kds/KdsScreen.css:3-26` (all `--kds-*` custom properties)
+  - _Effort:_ Medium (redefine `--kds-*` as `var(--color-*)` references per theme)
+
+### 🟡 Tier 3 — Polish
+
+- [ ] **3a. No zone-switching UI on the KDS screen:** The `kdsZone` preference exists in `useKdsPreferences` but there's no visible toggle. A shared tablet covering "grill" and "fry" stations can't switch zones.
+  - _Files:_ `ui/src/features/kds/KdsScreen.tsx`, `ui/src/features/kds/hooks/useKdsPreferences.ts`
+  - _Effort:_ Small (add zone chip/tab bar in header)
+
+- [ ] **3b. No offline resilience:** If backend is unreachable, KDS shows an error banner with stale queue. No Service Worker cache or optimistic UI.
+  - _Effort:_ Large (Service Worker + retry queue)
+
+- [ ] **3c. No bump bar / hardware integration:** Physical USB bump bars and parallel thermal printer chits are standard in production kitchens. HAL has printer drivers but they're not wired to KDS.
+  - _Files:_ `crates/oz-hal/src/drivers/`, `apps/desktop-client/src/commands/printer.rs`
+  - _Effort:_ Medium (HAL input driver + KDS event wiring)
+
+- [ ] **3d. No "order up" voice callout:** When a ticket hits "ready", there should be a distinct TTS "Order 42 up!" rather than just the red-threshold chime.
+  - _Files:_ `ui/src/features/kds/hooks/useNewTicketSound.ts`, `ui/src/frontend/shared/useSound.ts`
+  - _Effort:_ Small (add TTS call in KdsScreen `advanceStatus` when new status is "ready")
+
+- [ ] **3e. Item-level status (all-day view):** Tickets have one status for the entire order. In reality, the steak takes 12min but the salad takes 2min. A split-status display per line item would match how real kitchens work.
+  - _Effort:_ Large (schema redesign — ticket items table + per-item status)
+
+- [ ] **3f. No ticket editing post-creation:** If a customer adds an item mid-preparation, the KDS ticket is frozen. No "on the fly" additions or modifier edits.
+  - _Effort:_ Medium (add `update_kds_order_items` API + UI)
 
 ---
 
-## ✅ ~~3.~~ Attribute-Only FTL Sweep — COMPLETE (commit `104c4891`)
+## 2. Workspace Settings — Cross-Card Reactivity & F10 Modal
 
-> **Done:** Cross-referenced 268 attribute-only messages against 1212 `l10n.getString()`
-> calls. Found 75 keys silently returning `undefined` across 25 files.
->
-> **Fix:** 72 safe keys converted to `key = value` via `scripts/convert-safe-attr-ftl.py`
-> (125 conversions, 16 bundles). 3 keys also used via `<Localized>` received `||`
-> fallbacks in code. 3324/3324 tests pass, bundle parity verified, typecheck clean.
+### 🔴 Quick Wins (one-line fixes)
+
+- [ ] **4a. Wire `markSettingsUpdated` in all 5 save handlers:** The `SettingsContext` supports cross-card reactivity via `markSettingsUpdated(keys)`, but none of the workspace cards call it after save. Changing receipt paper width in Store POS Settings won't update Restaurant POS Settings without a page reload.
+  - _Files:_ `WorkspaceStorePosSettings.tsx`, `WorkspaceRestaurantPosSettings.tsx`, `WorkspaceKdsSettings.tsx`, `WorkspaceInventorySettings.tsx`, `TerminalPreferencesCard.tsx`
+  - _Each call site needs:_ `markSettingsUpdated([...changed keys])` after successful save + originals update
+  - _Effort:_ ~5 lines per card
+
+- [ ] **4b. Register F10 keybinding to open WorkspaceSettingsModal:** The modal exists and works, but nothing opens it. The JSDoc says "Opens via F10 inside a workspace" but no `onKeyDown` handler triggers it.
+  - _Files:_ Needs a `useEffect` in the workspace screen shells (`AppShell.tsx`, `KdsScreen.tsx`, `PosScreen.tsx`, `RetailPosScreen.tsx`) that listens for F10 and toggles the modal
+  - _Effort:_ Small (per-screen keyboard listener)
+
+### 🟠 Feature Gaps
+
+- [ ] **4c. Kitchen printer needs its own hardware profile field:** `WorkspaceRestaurantPosSettings` reuses `hw.profile.hardware.printer` (the receipt printer) for kitchen printing. In a real restaurant these are different devices — the receipt printer is at the POS station, the kitchen printer is in the kitchen.
+  - _Files:_ `useTerminalHardware` (hook), `HardwareSettingsDto` (Rust DTO), `terminal_profile.json` (schema), `WorkspaceRestaurantPosSettings.tsx`
+  - _Effort:_ Medium (schema change + DTO + UI field)
+
+- [ ] **4d. Migrate unscoped `setReceiptSettings` to scoped variants:** `WorkspaceStorePosSettings` and `WorkspaceRestaurantPosSettings` call `setReceiptSettings(...userId)` (unscoped) instead of `setReceiptSettingsScoped(sessionToken, ...)`. ADR #7 migrated 84 other commands to scoped — these two slipped through.
+  - _Files:_ `WorkspaceStorePosSettings.tsx:71`, `WorkspaceRestaurantPosSettings.tsx:78`
+  - _Effort:_ Small (swap API call + add sessionToken from context)
+
+- [ ] **4e. `terminal_profile.json` not in DB migration system:** The `useTerminalHardware` hook reads/writes a flat JSON file outside the DB migration system. If the schema changes (add `kitchenPrinter` field), existing files silently break with missing defaults.
+  - _Files:_ `useTerminalHardware` hook, `terminal_profile.json` schema (Rust side)
+  - _Effort:_ Medium (migration 070+ to store hardware profile in DB with JSON schema versioning)
+
+- [ ] **4f. Missing FTL keys for some workspace card labels:** Several `aria-label` attributes in workspace cards are still hardcoded English: `aria-label="Sound volume"`, `aria-label="Yellow escalation threshold in minutes"`, `aria-label="Red escalation threshold in minutes"`.
+  - _Files:_ `TerminalPreferencesCard.tsx:118`, `WorkspaceKdsSettings.tsx:130,145`
+  - _Effort:_ Small (add 3 FTL keys + wire them)
+
+---
+
+## 3. Completed (Prior Session)
+
+- [x] **SettingsPage.tsx** — 2 hardcoded strings fixed (`533247bc`)
+- [x] **RestaurantMenu.tsx** — 13 FTL keys + 2 aria-labels (`b3307810`)
+- [x] **Attribute-only FTL sweep** — 75 keys across 16 bundles (`104c4891`)
+- [x] **PosScreen.tsx** — 5 hardcoded English strings (`0796d835`)
+- [x] **ProductManagement + CategoryManagement** — 3 fixes (`13023004`)
+- [x] **AuditLogScreen** — 1 unreviewed badge title (`268ecd81`)
+- [x] **CustomerManagement** — zero bugs (clean sweep)
