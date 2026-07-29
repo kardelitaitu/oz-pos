@@ -43,10 +43,8 @@ tax-config-modal-aria = { $editing ->
     [true] Edit tax rate
    *[other] Add tax rate
 }
-tax-config-field-name-placeholder =
-    .placeholder = e.g. Sales Tax
-tax-config-field-rate-placeholder =
-    .placeholder = 825
+tax-config-field-name-placeholder = e.g. Sales Tax
+tax-config-field-rate-placeholder = 825
 tax-config-rate-hint = Enter rate in basis points (e.g. 825 = 8.25%)
 tax-config-tax-type = Tax Type
 tax-config-tax-type-aria = Tax type

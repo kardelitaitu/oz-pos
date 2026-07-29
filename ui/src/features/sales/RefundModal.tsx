@@ -254,7 +254,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder={l10n.getString('refund-reason-placeholder')}
+                    placeholder={l10n.getString('refund-reason-placeholder') || 'e.g. Customer changed mind'}
                     aria-label={l10n.getString('refund-reason-aria')}
                   />
                 </Localized>
@@ -269,7 +269,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder={l10n.getString('refund-note-placeholder')}
+                    placeholder={l10n.getString('refund-note-placeholder') || 'Optional internal note'}
                     aria-label={l10n.getString('refund-note-aria')}
                   />
                 </Localized>

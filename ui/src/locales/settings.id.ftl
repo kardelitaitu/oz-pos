@@ -30,8 +30,7 @@ settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
 settings-back-aria = Kembali
 settings-sidebar-collapse-all-aria = Tutup semua kategori
 settings-sidebar-search-aria = Cari pengaturan
-settings-sidebar-search-clear-aria =
-    .aria-label = Hapus pencarian
+settings-sidebar-search-clear-aria = Hapus pencarian
 settings-sidebar-no-results = Tidak ada bagian yang cocok
 settings-sidebar-clear-results = Hapus pencarian
 settings-theme-toggle-dark-aria = Alihkan ke mode gelap
@@ -503,8 +502,7 @@ data-mgmt-password-show-aria = Tampilkan kata sandi
 data-mgmt-password-hide-aria = Sembunyikan kata sandi
 
 # ── Sales History ──
-category-colour-picker-aria =
-    .aria-label = Pemilih warna
+category-colour-picker-aria = Pemilih warna
 category-colour-swatch-aria =
     .aria-label = Contoh warna
 category-delete-aria =

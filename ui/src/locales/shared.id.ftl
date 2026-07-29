@@ -72,12 +72,9 @@ toast-success = Operasi berhasil
 toast-error = Terjadi kesalahan
 toast-warning = Silakan periksa input Anda
 toast-info = Ini adalah pesan informasional
-toast-dismiss-aria =
-    .aria-label = Tutup notifikasi
-toast-notifications-aria =
-    .aria-label = Notifikasi
-modal-close-aria =
-    .aria-label = Tutup dialog
+toast-dismiss-aria = Tutup notifikasi
+toast-notifications-aria = Notifikasi
+modal-close-aria = Tutup dialog
 
 # Empty state
 empty-state-title = Belum ada apa pun di sini
@@ -99,8 +96,7 @@ theme-toggle-aria =
 
 # Language selector
 language-selector-label = Bahasa
-language-selector-select-aria =
-    .aria-label = Pilih bahasa
+language-selector-select-aria = Pilih bahasa
 locale-en = English
 locale-id = Bahasa Indonesia
 
@@ -134,8 +130,7 @@ update-banner-install-aria =
     .aria-label = Unduh dan pasang pembaruan
 update-banner-installing-aria =
     .aria-label = Memasang pembaruan…
-update-banner-dismiss-aria =
-    .aria-label = Tutup notifikasi pembaruan
+update-banner-dismiss-aria = Tutup notifikasi pembaruan
 update-banner-dismiss = Tutup
 update-banner-backing-up = Mencadangkan…
 update-banner-backing-up-aria =
@@ -198,10 +193,8 @@ nav-section-app = Aplikasi
 nav-sidebar-collapse = Tutup sidebar
 nav-sidebar-expand = Buka sidebar
 nav-switch-workspace = Ganti Ruang Kerja
-nav-main-aria =
-    .aria-label = Navigasi utama
-nav-tablist-aria =
-    .aria-label = Tab navigasi
+nav-main-aria = Navigasi utama
+nav-tablist-aria = Tab navigasi
 
 # Audit Log
 audit-log-title = Log Audit
@@ -227,12 +220,9 @@ audit-log-col-outcome = Hasil
 audit-log-col-details = Detail
 audit-log-count = { $count } entri
 audit-log-table-label = Entri log audit
-audit-log-search-placeholder =
-    .placeholder = Cari tindakan, target, atau pengguna…
-audit-log-search-label =
-    .aria-label = Cari log audit
-audit-log-filter-label =
-    .aria-label = Saring berdasarkan hasil
+audit-log-search-placeholder = Cari tindakan, target, atau pengguna…
+audit-log-search-label = Cari log audit
+audit-log-filter-label = Saring berdasarkan hasil
 
 # Audit action labels
 audit-action-sale-void = Batalkan Penjualan

@@ -565,7 +565,7 @@ export default function CategoryManagementScreen() {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             ref={editInputRef}
-            aria-label={l10n.getString('categories-name-aria')}
+            aria-label={l10n.getString('categories-name-aria') || 'Category Name'}
           />
         </div>
 

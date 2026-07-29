@@ -101,19 +101,15 @@ staff-toast-restored = { $name } diaktifkan kembali
 staff-login-subtitle = Login Staf
 staff-login-step-username = Masukkan nama pengguna Anda
 staff-login-step-pin = Masukkan PIN Anda
-staff-login-progress-aria =
-    .aria-label = Kemajuan login
+staff-login-progress-aria = Kemajuan login
 staff-login-username-placeholder =
     .placeholder = Nama Pengguna
 staff-login-username-aria =
     .aria-label = Nama Pengguna
 staff-login-next = Lanjut
-staff-login-pin-section-aria =
-    .aria-label = Entri PIN — ketik digit di keyboard atau gunakan papan tombol di layar
-staff-login-pin-aria =
-    .aria-label = Entri PIN: { $length } dari { $max } digit
-staff-login-keypad-aria =
-    .aria-label = Papan tombol numerik
+staff-login-pin-section-aria = Entri PIN — ketik digit di keyboard atau gunakan papan tombol di layar
+staff-login-pin-aria = Entri PIN: { $length } dari { $max } digit
+staff-login-keypad-aria = Papan tombol numerik
 staff-login-clear = Hapus
 staff-login-clear-aria =
     .aria-label = Hapus
@@ -129,10 +125,8 @@ staff-ws-custom = Kustom
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
-staff-login-close-aria =
-    .aria-label = Tutup
-staff-login-next-aria =
-    .aria-label = Lanjut
+staff-login-close-aria = Tutup
+staff-login-next-aria = Lanjut
 
 fastpin-switch-user = Ganti Pengguna
 fastpin-active-user = Aktif: { $name }

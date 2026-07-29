@@ -55,8 +55,7 @@ staff-error-pin-length = PIN must be at least 4 characters
 staff-error-save-failed = Failed to save staff member
 staff-error-workspaces-failed = Failed to load workspace settings
 staff-table-aria = Staff members
-staff-field-username-aria =
-    .aria-label = Username
+staff-field-username-aria = Username
 staff-field-name-aria = Display Name
 staff-field-pin-aria = PIN
 staff-error-generic = { $message }
@@ -77,19 +76,15 @@ staff-login-title = OZ-POS
 staff-login-subtitle = Staff Login
 staff-login-step-username = Enter your username
 staff-login-step-pin = Enter your PIN
-staff-login-progress-aria =
-    .aria-label = Login progress
+staff-login-progress-aria = Login progress
 staff-login-username-placeholder =
     .placeholder = Username
 staff-login-username-aria =
     .aria-label = Username
 staff-login-next = Next
-staff-login-pin-section-aria =
-    .aria-label = PIN entry — type digits on your keyboard or use the on-screen keypad
-staff-login-pin-aria =
-    .aria-label = PIN entry: { $length } of { $max } digits
-staff-login-keypad-aria =
-    .aria-label = Numeric keypad
+staff-login-pin-section-aria = PIN entry — type digits on your keyboard or use the on-screen keypad
+staff-login-pin-aria = PIN entry: { $length } of { $max } digits
+staff-login-keypad-aria = Numeric keypad
 staff-login-clear = Clear
 staff-login-clear-aria =
     .aria-label = Clear
@@ -110,10 +105,8 @@ staff-login-lockout = Locked out. Try again in { $seconds }s
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
-staff-login-close-aria =
-    .aria-label = Close
-staff-login-next-aria =
-    .aria-label = Next
+staff-login-close-aria = Close
+staff-login-next-aria = Next
 
 fastpin-switch-user = Switch User
 fastpin-active-user = Active: { $name }

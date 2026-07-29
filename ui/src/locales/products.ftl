@@ -1,29 +1,20 @@
 # ui/src/locales/products.ftl — Product management, lookup, variants
 
 # ── Restaurant Menu ──────────────────────────────────────────────────
-restaurant-menu-search-placeholder =
-    .placeholder = Search Menu
-restaurant-menu-hamburger-aria =
-    .aria-label = Menu
-restaurant-menu-back-aria =
-    .aria-label = Back to workspaces
-restaurant-size-decrease-aria =
-    .aria-label = Decrease size
-restaurant-size-increase-aria =
-    .aria-label = Increase size
-restaurant-font-size-decrease-aria =
-    .aria-label = Decrease font size
-restaurant-font-size-increase-aria =
-    .aria-label = Increase font size
+restaurant-menu-search-placeholder = Search Menu
+restaurant-menu-hamburger-aria = Menu
+restaurant-menu-back-aria = Back to workspaces
+restaurant-size-decrease-aria = Decrease size
+restaurant-size-increase-aria = Increase size
+restaurant-font-size-decrease-aria = Decrease font size
+restaurant-font-size-increase-aria = Increase font size
 restaurant-font-size-label = Font Size
 restaurant-theme-light = Light Mode
 restaurant-theme-dark = Dark Mode
 restaurant-lock-terminal = Lock Terminal
 restaurant-toggle-fullscreen = Toggle Fullscreen
-restaurant-clear-color-aria =
-    .aria-label = Clear color
-restaurant-categories-aria =
-    .aria-label = Menu categories
+restaurant-clear-color-aria = Clear color
+restaurant-categories-aria = Menu categories
 restaurant-menu-loading = Loading menu…
 restaurant-menu-empty = Menu is empty
 restaurant-size-label = Size
@@ -107,8 +98,7 @@ product-mgmt-actions-aria =
 product-mgmt-variants = Variants
 product-mgmt-variants-aria =
     .aria-label = Variants for { $name }
-product-mgmt-modal-aria =
-    .aria-label = { $mode ->
+product-mgmt-modal-aria = { $mode ->
         [add] Add product
        *[edit] Edit product
     }
@@ -215,10 +205,8 @@ categories-delete-warning = This will unlink all products in this category.
 categories-preview = Preview
 categories-name-aria =
     .aria-label = Category Name
-categories-icon-picker-aria =
-    .aria-label = Pick an icon
-categories-colour-picker-aria =
-    .aria-label = Pick a colour
+categories-icon-picker-aria = Pick an icon
+categories-colour-picker-aria = Pick a colour
 categories-icon-food = Food
 categories-icon-snack = Snack
 categories-icon-hot-drink = Hot drink

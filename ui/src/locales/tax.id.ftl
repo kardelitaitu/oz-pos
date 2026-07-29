@@ -39,14 +39,11 @@ tax-config-modal-aria =
         [true] Ubah tarif pajak
        *[other] Tambah tarif pajak
     }
-tax-config-field-name-placeholder =
-    .placeholder = mis. PPN
-tax-config-field-rate-placeholder =
-    .placeholder = 1100
+tax-config-field-name-placeholder = mis. PPN
+tax-config-field-rate-placeholder = 1100
 tax-config-rate-hint = Masukkan tarif dalam basis poin (mis. 1100 = 11%%)
 tax-config-tax-type = Tipe Pajak
-tax-config-tax-type-aria =
-    .aria-label = Tipe pajak
+tax-config-tax-type-aria = Tipe pajak
 tax-config-type-exclusive-label = Eksklusif
 tax-config-type-exclusive-desc = Ditambahkan saat checkout
 tax-config-type-inclusive-label = Inklusif
