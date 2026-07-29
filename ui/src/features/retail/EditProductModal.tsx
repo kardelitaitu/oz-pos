@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto } from '@/api/products';
 
 export interface EditProductModalProps {
@@ -31,21 +32,9 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
     }
   }, [product]);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    },
-    [onClose],
-  );
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, isOpen, onClose);
 
-  useEffect(() => {
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, handleKeyDown]);
 
   if (!isOpen || !product) {
     return null;
@@ -75,6 +64,7 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   return (
     <div className="retail-edit-modal-backdrop" onClick={onClose} role="presentation">
       <div
+        ref={panelRef}
         className="retail-edit-modal-dialog"
         onClick={(e) => e.stopPropagation()}
         role="dialog"

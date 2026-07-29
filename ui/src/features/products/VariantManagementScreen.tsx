@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   listProductVariants,
   createProductVariant,
@@ -50,6 +51,8 @@ export default function VariantManagementScreen({ productSku, productName, onClo
   const [confirmDeleteSku, setConfirmDeleteSku] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, true, onClose);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,7 +145,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
 
   return (
     <div className="product-mgmt-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('variant-mgmt-overlay-aria', { name: productName })}>
-      <div className="product-mgmt-modal" style={{ width: '640px' }}>
+      <div ref={panelRef} className="product-mgmt-modal" style={{ width: '640px' }}>
         <div className="product-mgmt-modal-header">
           <Localized id="variant-mgmt-title" vars={{ product: productName }}>
             <h2>Variants — {productName}</h2>

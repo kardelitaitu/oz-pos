@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listProductsScoped,
@@ -116,6 +117,8 @@ export default function ProductManagementScreen() {
   }, [sessionToken, selectedLocationId]);
 
   const { l10n } = useLocalization();
+  const productModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(productModalRef, showModal && modalExit.shouldRender && !modalExit.exiting, modalExit.requestClose);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -394,7 +397,7 @@ export default function ProductManagementScreen() {
 
       {modalExit.shouldRender && showModal && (
         <div className={`product-mgmt-overlay${modalExit.exiting ? ' product-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
-          <div className={`product-mgmt-modal${modalExit.exiting ? ' product-mgmt-modal--exiting' : ''}`}>
+          <div ref={productModalRef} className={`product-mgmt-modal${modalExit.exiting ? ' product-mgmt-modal--exiting' : ''}`}>
             <div className="product-mgmt-modal-header">
               <Localized id={editingSku ? 'product-mgmt-modal-edit-title' : 'product-mgmt-modal-add-title'}>
                 <h2>{editingSku ? 'Edit Product' : 'Add Product'}</h2>

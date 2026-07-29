@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Localized } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto, CategoryDto } from '@/api/products';
 
 export interface AddProductModalProps {
@@ -36,21 +37,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
     }
   }, [isOpen, categories]);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    },
-    [onClose],
-  );
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, isOpen, onClose);
 
-  useEffect(() => {
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, handleKeyDown]);
 
   if (!isOpen) return null;
 
@@ -84,6 +73,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   return (
     <div className="retail-edit-modal-backdrop" onClick={onClose} role="presentation">
       <div
+        ref={panelRef}
         className="retail-edit-modal-dialog"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
