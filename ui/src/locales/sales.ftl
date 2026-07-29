@@ -805,6 +805,8 @@ scale-stable = Stable
 scale-unstable = …
 scale-read-error = Scale error
 scale-weigh-add = Weigh & Add
+scale-weigh-added = Added { $weight }g of { $name }
+scale-target-set = { $name } selected for weighing
 scale-clear-aria = Clear weigh target
 
 # ── Retail POS shortcut keys ───────────────────────────────────────────────

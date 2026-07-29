@@ -856,6 +856,8 @@ scale-stable = Stabil
 scale-unstable = …
 scale-read-error = Error timbangan
 scale-weigh-add = Timbang & Tambah
+scale-weigh-added = Ditambahkan { $weight }g dari { $name }
+scale-target-set = { $name } dipilih untuk ditimbang
 scale-clear-aria = Hapus target timbangan
 
 # ── Gift Cards ─────────────────────────────────────────────────────

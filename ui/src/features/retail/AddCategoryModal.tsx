@@ -66,14 +66,16 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               Add New Category
             </h3>
           </Localized>
-          <button
-            type="button"
-            className="retail-edit-modal-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            &times;
-          </button>
+          <Localized id="retail-edit-modal-close-aria">
+            <button
+              type="button"
+              className="retail-edit-modal-close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              &times;
+            </button>
+          </Localized>
         </div>
 
         <form onSubmit={handleSubmit} className="retail-edit-modal-form">

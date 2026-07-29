@@ -14,6 +14,9 @@ const sampleCategories: CategoryDto[] = [
 
 const ftl = `
 retail-add-product-title = Add New Product
+retail-add-product-category-label = Category
+retail-add-product-name-placeholder = e.g. Logitech G Pro X Wireless Mouse
+retail-edit-modal-close-aria = Close
 retail-edit-field-sku = SKU / Code
 retail-edit-field-name = Product Name
 retail-edit-field-price = Price (IDR)
