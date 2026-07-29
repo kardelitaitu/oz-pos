@@ -951,7 +951,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [addToast, l10n, sessionToken]);
 
   // ── Retail modal exit animations ───────────────────────────────
-  const retailCustomerExit = useExitAnimation(showCustomerSearch, () => setShowCustomerSearch(false));
+  const retailCustomerExit = useExitAnimation(showCustomerSearch, () => { setShowCustomerSearch(false); setCustomerSearchQuery(''); });
   const retailQtyExit = useExitAnimation(showQtyPicker && !!pendingProduct, () => { setShowQtyPicker(false); setPendingProduct(null); });
   const retailHeldCartsExit = useExitAnimation(showHeldCartsList, () => setShowHeldCartsList(false));
   const retailShortcutsExit = useExitAnimation(showShortcuts, () => setShowShortcuts(false));
