@@ -26,13 +26,11 @@ import { EditProductModal } from './EditProductModal';
 import { AddCategoryModal } from './AddCategoryModal';
 import { AddProductModal } from './AddProductModal';
 import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
-import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
-import ProductLookupScreen from '@/features/products/ProductLookupScreen';
-import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import RetailFnBar from './RetailFnBar';
 import RetailHeader from './RetailHeader';
 import RetailCartPanel, { RETAIL_CART_WIDTH_MIN, RETAIL_CART_WIDTH_DEFAULT, RETAIL_CART_WIDTH_MAX_CAP, clampRetailCartWidth } from './RetailCartPanel';
 import RetailProductGrid, { type SortField, type SortOrder } from './RetailProductGrid';
+import { SalesHistoryView, TableManagementView, StockInquiryView } from './RetailSubViews';
 import './RetailPosScreen.css';
 
 function toProduct(p: ProductDto): Product {
@@ -1024,74 +1022,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Sales History screen ────────────────────────────────────
   if (showSalesHistory) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('retail-fn-history') || 'Sales History'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowSalesHistory(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <SalesHistoryScreen />
-        </div>
-      </div>
-    );
+    return <SalesHistoryView theme={theme} onBack={() => setShowSalesHistory(false)} />;
   }
 
   // ── Table Management screen ────────────────────────────────
   if (showTables) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('tables-title') || 'Table Management'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowTables(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <TableManagementScreen />
-        </div>
-      </div>
-    );
+    return <TableManagementView theme={theme} onBack={() => setShowTables(false)} />;
   }
 
   // ── Stock Inquiry screen ────────────────────────────────────
   if (showStockInquiry) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('retail-fn-stok') || 'Stock Inquiry'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowStockInquiry(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <ProductLookupScreen onAddProduct={(p) => handleAdd({
-            sku: p.sku, name: p.name, category: p.category,
-            price: p.price, barcode: p.barcode ?? null,
-            in_stock: p.inStock, stock_qty: p.stockQty ?? null,
-            product_type: p.productType,
-            tax_rate_ids: [], created_at: '', price_updated_at: '',
-          })} />
-        </div>
-      </div>
-    );
+    return <StockInquiryView theme={theme} onBack={() => setShowStockInquiry(false)} onAddProduct={handleAdd} />;
   }
 
   return (
