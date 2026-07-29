@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Profiler } from 'react';
+import { useEffect, useState, useCallback, useRef, Profiler } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -21,6 +21,8 @@ export interface KdsLayoutProps {
   onAdvance: (order: KdsOrder) => void;
   showOrderId: boolean;
   showTableNumber: boolean;
+  /** Currently keyboard-selected order ID (highlighted card). */
+  selectedOrderId: string | null;
 }
 
 const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
@@ -37,6 +39,7 @@ export default function KdsScreen() {
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, loading: prefsLoading } = useKdsPreferences();
 
@@ -125,6 +128,62 @@ export default function KdsScreen() {
     }
   }, [orders, prefs.autoAcknowledge, prefs.acknowledgeDelayMin, advanceStatus]);
 
+  // 2d: Keyboard shortcuts — number keys to select, Space to advance, Arrows/Escape to navigate.
+  const kdsRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef(selectedOrderId);
+  selectedRef.current = selectedOrderId;
+
+  // Auto-focus the container on mount so keyboard shortcuts work immediately.
+  useEffect(() => {
+    kdsRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const el = kdsRef.current;
+    if (!el) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when focus is inside an input/textarea.
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      if (e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx < orders.length) {
+          setSelectedOrderId(orders[idx]!.id);
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedOrderId((prev) => {
+          const currentIdx = prev ? orders.findIndex((o) => o.id === prev) : -1;
+          const nextIdx = Math.min(currentIdx + 1, orders.length - 1);
+          return nextIdx >= 0 ? orders[nextIdx]!.id : null;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedOrderId((prev) => {
+          const currentIdx = prev ? orders.findIndex((o) => o.id === prev) : orders.length;
+          const nextIdx = Math.max(currentIdx - 1, 0);
+          return orders.length > 0 ? orders[nextIdx]!.id : null;
+        });
+      } else if (e.key === ' ' && selectedRef.current) {
+        // Skip if a ticket button already has focus (its onClick will handle advance).
+        if ((e.target as HTMLElement).closest('.kds-ticket')) return;
+        e.preventDefault();
+        const selected = orders.find((o) => o.id === selectedRef.current);
+        if (selected) {
+          advanceStatus(selected);
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedOrderId(null);
+      }
+    };
+
+    el.addEventListener('keydown', handleKeyDown);
+    return () => el.removeEventListener('keydown', handleKeyDown);
+  }, [orders, advanceStatus]);
+
   // P7-3: Pull-to-refresh gesture on KDS ticket board
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
     onRefresh: fetchOrders,
@@ -138,7 +197,7 @@ export default function KdsScreen() {
         console.debug('[Profiler] KdsScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
       }
     }}>
-    <div className="kds" role="region" aria-label={l10n.getString('kds-screen-aria') || 'Kitchen Display System'}>
+    <div ref={kdsRef} className="kds" tabIndex={-1} role="region" aria-label={l10n.getString('kds-screen-aria') || 'Kitchen Display System'}>
       <div className="kds-header">
         <div className="kds-header-left">
           <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
@@ -187,6 +246,7 @@ export default function KdsScreen() {
             onAdvance={advanceStatus}
             showOrderId={prefs.showOrderId}
             showTableNumber={prefs.showTableNumber}
+            selectedOrderId={selectedOrderId}
           />
         </div>
       )}

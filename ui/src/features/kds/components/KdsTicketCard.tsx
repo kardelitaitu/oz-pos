@@ -14,6 +14,8 @@ export interface KdsTicketCardProps {
   showOrderId?: boolean;
   /** Whether to show the table number. */
   showTableNumber?: boolean;
+  /** Whether this ticket is keyboard-selected (highlighted). */
+  selected?: boolean;
 }
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -22,7 +24,7 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
  * KdsTicketCard renders a single KDS ticket with SLA aging indicators
  * and plays an audio alert when the ticket enters the red threshold.
  */
-export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true }: KdsTicketCardProps) {
+export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true, selected = false }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, urgent, display } = useTicketSla(order.received_at);
   const { playAlert } = useSound();
@@ -54,7 +56,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
 
   return (
     <button
-      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}`}
+      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}`}
       onClick={handleClick}
       aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${l10n.getString('kds-urgent-badge') || 'URGENT'}` : ''}, ${display}`}
     >

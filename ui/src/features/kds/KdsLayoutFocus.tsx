@@ -19,7 +19,7 @@ function slaWeight(order: KdsOrder): number {
   return age;
 }
 
-export function KdsLayoutFocus({ orders, onAdvance, showOrderId, showTableNumber }: KdsLayoutProps) {
+export function KdsLayoutFocus({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId }: KdsLayoutProps) {
   const [filter, setFilter] = useState<StatusFilter>('all');
 
   const filtered = useMemo(() => {
@@ -62,6 +62,7 @@ export function KdsLayoutFocus({ orders, onAdvance, showOrderId, showTableNumber
               onAdvance={onAdvance}
               showOrderId={showOrderId}
               showTableNumber={showTableNumber}
+              selected={selectedOrderId === order.id}
             />
           ))
         )}

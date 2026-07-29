@@ -61,6 +61,7 @@ const defaultProps = {
   onAdvance: vi.fn(),
   showOrderId: true,
   showTableNumber: true,
+  selectedOrderId: null,
 };
 
 describe('KdsLayoutKanban', () => {

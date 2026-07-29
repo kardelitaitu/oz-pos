@@ -3,7 +3,7 @@ import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import type { KdsLayoutProps } from './KdsScreen';
 import './KdsLayoutMetro.css';
 
-export function KdsLayoutMetro({ orders, onAdvance, showOrderId, showTableNumber }: KdsLayoutProps) {
+export function KdsLayoutMetro({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId }: KdsLayoutProps) {
   return (
     <div className="kds-metro">
       {orders.length === 0 ? (
@@ -16,6 +16,7 @@ export function KdsLayoutMetro({ orders, onAdvance, showOrderId, showTableNumber
             onAdvance={onAdvance}
             showOrderId={showOrderId}
             showTableNumber={showTableNumber}
+            selected={selectedOrderId === order.id}
           />
         ))
       )}

@@ -120,6 +120,21 @@
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
+/* ── 2d: Keyboard-selected ticket highlight ──────────────────────────── */
+
+.kds-ticket--selected {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent, #3b82f6), 0 0 16px color-mix(in srgb, var(--color-accent, #3b82f6) 40%, transparent);
+  transform: translateY(-0.125rem);
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kds-ticket--selected {
+    transition: box-shadow var(--duration-100), transform var(--duration-100);
+  }
+}
+
 .kds-ticket:active {
   transform: translateY(0);
   box-shadow: 0 2px 8px var(--kds-shadow);

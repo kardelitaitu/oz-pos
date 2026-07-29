@@ -395,4 +395,117 @@ describe('KdsScreen', () => {
     const countEl = document.querySelector('.kds-order-count');
     expect(countEl?.textContent).toMatch(/2/);
   });
+
+  // ── 2d: Keyboard shortcuts tests ─────────────────────────────────
+
+  it('selects the first order when pressing key 1', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101 }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102 }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+
+    // First ticket should have selected class
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[0]?.classList.contains('kds-ticket--selected')).toBe(true);
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(false);
+    });
+  });
+
+  it('selects the second order when pressing key 2', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101 }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102 }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }));
+
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[0]?.classList.contains('kds-ticket--selected')).toBe(false);
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+  });
+
+  it('advances selected order when pressing Space', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    // Select the first order
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    // Then advance it with Space
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--selected')).not.toBeNull();
+    });
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
+    );
+  });
+
+  it('deselects on Escape key', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    // Select first order then deselect
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--selected')).not.toBeNull();
+    });
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--selected')).toBeNull();
+    });
+  });
+
+  it('navigates selection with ArrowDown and ArrowUp', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102 }),
+      makeOrder({ id: 'o-3', status: 'pending', display_number: 103 }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    // Start at second order
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }));
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+
+    // ArrowDown goes to third
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[2]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+
+    // ArrowUp goes back to second
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+  });
 });
