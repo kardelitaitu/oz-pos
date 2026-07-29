@@ -1,0 +1,689 @@
+import { useLocalization } from '@fluent/react';
+import { formatMoney, type Money, type LineId } from '@/types/domain';
+import type { CustomerDto } from '@/api/customers';
+import type { HeldCartRow, SaleDetail } from '@/api/sales';
+import type { ShiftDto } from '@/api/shifts';
+import type { StoreSettingsDto, CreditSaleDto } from '@/api/settings';
+import type { ProductDto, CategoryDto } from '@/api/products';
+import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
+import { EditProductModal } from './EditProductModal';
+import { AddCategoryModal } from './AddCategoryModal';
+import { AddProductModal } from './AddProductModal';
+import RefundModal from '@/features/sales/RefundModal';
+import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
+
+// ── Exit animation helper type ─────────────────────────────────────
+
+export interface ExitAnim {
+  shouldRender: boolean;
+  exiting: boolean;
+  requestClose: () => void;
+}
+
+// ── Props interface ────────────────────────────────────────────────
+
+export interface RetailModalsProps {
+  // ── Shift modals ────────────────────
+  shift: {
+    activeShift: ShiftDto | null;
+    openShiftExit: ExitAnim;
+    closeShiftExit: ExitAnim;
+    shiftSummaryExit: ExitAnim;
+    closedShiftSummary: ShiftDto | null;
+    openingBalance: string;
+    closingBalance: string;
+    shiftNotes: string;
+    openingShift: boolean;
+    closingShift: boolean;
+    closeShiftError: string | null;
+    storeSettings: Pick<StoreSettingsDto, 'currency'>;
+    onOpeningBalanceChange: (v: string) => void;
+    onClosingBalanceChange: (v: string) => void;
+    onShiftNotesChange: (v: string) => void;
+    onOpenShift: () => void;
+    onCloseShift: () => void;
+  };
+
+  // ── Discount modal ──────────────────
+  discount: {
+    exit: ExitAnim;
+    tab: 'pct' | 'rp';
+    input: string;
+    rpInput: string;
+    onTabChange: (t: 'pct' | 'rp') => void;
+    onInputChange: (v: string) => void;
+    onRpInputChange: (v: string) => void;
+    onApplyPct: () => void;
+    onApplyRp: () => void;
+    onCancel: () => void;
+  };
+
+  // ── Customer search ─────────────────
+  customer: {
+    exit: ExitAnim;
+    query: string;
+    results: CustomerDto[];
+    loading: boolean;
+    selected: CustomerDto | null;
+    onQueryChange: (v: string) => void;
+    onSelect: (c: CustomerDto) => void;
+    onClear: () => void;
+    onClose: () => void;
+  };
+
+  // ── Qty picker ──────────────────────
+  qtyPicker: {
+    exit: ExitAnim;
+    product: { name: string; price: Money } | null;
+    input: string;
+    onInputChange: (v: string) => void;
+    onConfirm: () => void;
+    onCancel: () => void;
+  };
+
+  // ── Held carts ──────────────────────
+  heldCarts: {
+    exit: ExitAnim;
+    list: HeldCartRow[];
+    onResume: (id: string) => void;
+    onDelete: (id: string) => void;
+    onClose: () => void;
+  };
+
+  // ── Credit list ─────────────────────
+  credit: {
+    exit: ExitAnim;
+    sales: CreditSaleDto[];
+    settlingId: string | null;
+    onSettle: (saleId: string) => void;
+    onClose: () => void;
+  };
+
+  // ── Quick return ────────────────────
+  quickReturn: {
+    exit: ExitAnim;
+    barcode: string;
+    loading: boolean;
+    onBarcodeChange: (v: string) => void;
+    onSubmit: () => void;
+    onClose: () => void;
+  };
+
+  // ── Generics ────────────────────────
+  clearConfirm: {
+    exit: ExitAnim;
+    lineCount: number;
+    onConfirm: () => void;
+    onClose: () => void;
+  };
+  shortcuts: {
+    exit: ExitAnim;
+    onClose: () => void;
+  };
+
+  // ── Override / Edit / Add modals ────
+  override: {
+    target: { id: LineId; name: string; unit_price: Money } | null;
+    onConfirm: (minor: number) => Promise<void>;
+    onClose: () => void;
+  };
+  editProduct: {
+    product: ProductDto | null;
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (p: ProductDto) => void;
+  };
+  addCategory: {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (c: CategoryDto) => void;
+  };
+  addProduct: {
+    categories: CategoryDto[];
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (p: ProductDto) => void;
+  };
+
+  // ── Refund / Scan flash / Workspace ─
+  showQuickReturnRefund: boolean;
+  quickReturnSale: SaleDetail | null;
+  quickReturnRefundDone: () => void;
+  scanFlash: boolean;
+  showWorkspaceSettings: boolean;
+  onCloseWorkspaceSettings: () => void;
+}
+
+// ── Component ──────────────────────────────────────────────────────
+
+/** All retail POS modals and overlays rendered at the bottom of the main return. */
+export default function RetailModals(props: RetailModalsProps) {
+  const { l10n } = useLocalization();
+  const {
+    shift,
+    discount,
+    customer,
+    qtyPicker,
+    heldCarts,
+    credit,
+    quickReturn,
+    clearConfirm,
+    shortcuts,
+    override,
+    editProduct,
+    addCategory,
+    addProduct,
+    showQuickReturnRefund,
+    quickReturnSale,
+    quickReturnRefundDone,
+    scanFlash,
+    showWorkspaceSettings,
+    onCloseWorkspaceSettings,
+  } = props;
+
+  return (
+    <>
+      {/* ── Open Shift modal ────────────────── */}
+      {shift.openShiftExit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-shift-overlay${shift.openShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={() => shift.openShiftExit.requestClose()}
+        >
+          <div className={`retail-shift-modal${shift.openShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('pos-open-shift-title')}</h3>
+            <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
+            <input
+              id="retail-opening"
+              type="number"
+              min="0"
+              value={shift.openingBalance}
+              onChange={(e) => shift.onOpeningBalanceChange(e.target.value)}
+            />
+            <div className="retail-shift-modal-actions">
+              <button type="button" onClick={() => shift.openShiftExit.requestClose()} disabled={shift.openingShift}>{l10n.getString('cancel')}</button>
+              <button type="button" className="retail-shift-confirm-btn" onClick={shift.onOpenShift} disabled={shift.openingShift}>
+                {shift.openingShift ? l10n.getString('retail-open-shift-opening') : l10n.getString('pos-shift-open-btn')}
+              </button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Close Shift modal ───────────────── */}
+      {shift.closeShiftExit.shouldRender && shift.activeShift && (
+        <button
+          type="button"
+          className={`retail-shift-overlay${shift.closeShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={() => shift.closeShiftExit.requestClose()}
+        >
+          <div className={`retail-shift-modal${shift.closeShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('pos-close-shift-title')}</h3>
+            {shift.closeShiftError && <div className="retail-shift-error">{shift.closeShiftError}</div>}
+            <div style={{ fontSize: 12, color: 'var(--color-fg-secondary)', marginBottom: 10 }}>
+              {l10n.getString('pos-close-shift-opened')}: {shift.activeShift ? new Date(shift.activeShift.openedAt).toLocaleString() : ''}
+            </div>
+            <label htmlFor="retail-closing">{l10n.getString('pos-close-shift-counted-label')}</label>
+            <input
+              id="retail-closing"
+              type="number"
+              min="0"
+              value={shift.closingBalance}
+              onChange={(e) => shift.onClosingBalanceChange(e.target.value)}
+            />
+            <label htmlFor="retail-notes" style={{ marginTop: 8 }}>{l10n.getString('pos-shift-notes')}</label>
+            <textarea
+              id="retail-notes"
+              rows={2}
+              value={shift.shiftNotes}
+              onChange={(e) => shift.onShiftNotesChange(e.target.value)}
+            />
+            <div className="retail-shift-modal-actions">
+              <button type="button" onClick={() => shift.closeShiftExit.requestClose()} disabled={shift.closingShift}>{l10n.getString('cancel')}</button>
+              <button type="button" className="retail-shift-confirm-btn" onClick={shift.onCloseShift} disabled={shift.closingShift}>
+                {shift.closingShift ? l10n.getString('loading') : l10n.getString('pos-shift-close-btn')}
+              </button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Closed Shift Summary ────────────── */}
+      {(shift.shiftSummaryExit.shouldRender && shift.closedShiftSummary) && (
+        <div className={`retail-shift-overlay${shift.shiftSummaryExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}>
+          <div className={`retail-shift-modal${shift.shiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}>
+            <h3>{l10n.getString('pos-shift-closed-title')}</h3>
+            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+              <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: shift.closedShiftSummary.totalSalesMinor, currency: shift.storeSettings.currency })}</div>
+              <div>{l10n.getString('retail-shift-closed-cash-sales')} {formatMoney({ minor_units: shift.closedShiftSummary.totalCashMinor, currency: shift.storeSettings.currency })}</div>
+              <div>{l10n.getString('pos-shift-expected-cash')}: {shift.closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: shift.closedShiftSummary.expectedCashMinor, currency: shift.storeSettings.currency }) : '—'}</div>
+              <div>{l10n.getString('pos-shift-difference')}: {shift.closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: shift.closedShiftSummary.cashDifferenceMinor, currency: shift.storeSettings.currency }) : '—'}</div>
+            </div>
+            <div className="retail-shift-modal-actions">
+              <button
+                type="button"
+                className="retail-shift-confirm-btn"
+                onClick={() => shift.shiftSummaryExit.requestClose()}
+              >{l10n.getString('pos-shift-summary-done')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Credit list overlay ─────────────── */}
+      {credit.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-shift-overlay${credit.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={credit.exit.requestClose}
+        >
+          <div className={`retail-shift-modal${credit.exit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
+            <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
+            {credit.sales.length === 0 ? (
+              <div style={{ padding: 16, textAlign: 'center', color: 'var(--color-fg-tertiary)' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
+            ) : (
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
+                    <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
+                    <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
+                    { }
+                    <th style={{ padding: 4 }}></th>
+                  </tr>
+                </thead>
+                <tbody>{credit.sales.map((c) => (
+                    <tr key={c.saleId} style={{ borderBottom: '1px solid var(--color-border-hover)' }}>
+                      <td style={{ padding: 4 }}>{c.customerName || '—'}</td>
+                      <td style={{ textAlign: 'right', padding: 4 }}>
+                        {formatMoney({ minor_units: c.totalMinor, currency: c.currency })}
+                      </td>
+                      <td style={{ textAlign: 'center', padding: 4, fontSize: 11 }}>
+                        {new Date(c.createdAt).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: 4 }}>
+                        <button
+                          onClick={() => credit.onSettle(c.saleId)}
+                          disabled={credit.settlingId === c.saleId}
+                          style={{
+                            padding: '4px 8px', fontSize: 11, background: 'var(--color-success-pos)',
+                            color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer',
+                          }}
+                        >
+                          {credit.settlingId === c.saleId ? '…' : l10n.getString('retail-credit-settle')}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+</tbody>
+              </table>
+            )}
+            <div className="retail-shift-modal-actions">
+              <button type="button" className="retail-shift-confirm-btn" onClick={credit.exit.requestClose}>{l10n.getString('close')}</button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Clear confirm modal ────────────── */}
+      {clearConfirm.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-shift-overlay${clearConfirm.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={clearConfirm.exit.requestClose}
+        >
+          <div className={`retail-shift-modal${clearConfirm.exit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-clear-cart-title')}</h3>
+            <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
+              {l10n.getString('retail-clear-cart-confirm', { count: clearConfirm.lineCount }) || `Remove all ${clearConfirm.lineCount} item${clearConfirm.lineCount !== 1 ? 's' : ''} from the cart?`}
+            </p>
+            <div className="retail-shift-modal-actions">
+              <button type="button" onClick={clearConfirm.exit.requestClose}>{l10n.getString('cancel')}</button>
+              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" onClick={clearConfirm.onConfirm}>{l10n.getString('retail-clear-cart-clear')}</button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Discount modal ──────────────────── */}
+      {discount.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-discount-overlay${discount.exit.exiting ? ' retail-discount-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={() => discount.exit.requestClose()}
+        >
+          <div className={`retail-discount-modal${discount.exit.exiting ? ' retail-discount-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-discount-title')}</h3>
+            <div className="retail-discount-tabs">
+              <button
+                className={`retail-discount-tab${discount.tab === 'pct' ? ' retail-discount-tab--active' : ''}`}
+                onClick={() => discount.onTabChange('pct')}
+              >
+                {l10n.getString('retail-discount-pct-tab')}
+              </button>
+              <button
+                className={`retail-discount-tab${discount.tab === 'rp' ? ' retail-discount-tab--active' : ''}`}
+                onClick={() => discount.onTabChange('rp')}
+              >
+                {l10n.getString('retail-discount-rp-tab')}
+              </button>
+            </div>
+            {discount.tab === 'pct' ? (
+              <>
+                <label htmlFor="discount-pct">{l10n.getString('retail-discount-pct-label')}</label>
+                <input
+                  id="discount-pct"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={discount.input}
+                  onChange={(e) => discount.onInputChange(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') discount.onApplyPct(); }}
+                />
+              </>
+            ) : (
+              <>
+                <label htmlFor="discount-rp">{l10n.getString('retail-discount-rp-label')}</label>
+                <input
+                  id="discount-rp"
+                  type="number"
+                  min="0"
+                  value={discount.rpInput}
+                  onChange={(e) => discount.onRpInputChange(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') discount.onApplyRp(); }}
+                />
+              </>
+            )}
+            <div className="retail-discount-actions">
+              <button type="button" onClick={discount.onCancel}>{l10n.getString('cancel')}</button>
+              {discount.tab === 'pct' ? (
+                <button type="button" onClick={discount.onApplyPct}>{l10n.getString('pos-cart-apply')}</button>
+              ) : (
+                <button type="button" onClick={discount.onApplyRp}>{l10n.getString('pos-cart-apply')}</button>
+              )}
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Customer search modal ──────────── */}
+      {customer.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-customer-overlay${customer.exit.exiting ? ' retail-customer-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={customer.exit.requestClose}
+        >
+          <div className={`retail-customer-modal${customer.exit.exiting ? ' retail-customer-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-customer-search-title')}</h3>
+            <input
+              className="retail-customer-search-input"
+              type="text"
+              placeholder={l10n.getString('retail-customer-search-placeholder')}
+              value={customer.query}
+              onChange={(e) => customer.onQueryChange(e.target.value)}
+            />
+            <div className="retail-customer-search-list">
+              {customer.loading ? (
+                <div className="retail-customer-search-loading">{l10n.getString('retail-customer-search-loading')}</div>
+              ) : customer.results.length === 0 ? (
+                <div className="retail-customer-search-empty">{l10n.getString('retail-customer-search-empty')}</div>
+              ) : (
+                customer.results.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`retail-customer-search-item${customer.selected?.id === c.id ? ' retail-customer-search-item--selected' : ''}`}
+                    onClick={() => customer.onSelect(c)}
+                  >
+                    <span className="retail-customer-search-item-name">{c.name}</span>
+                    {(c.phone || c.email) && (
+                      <span className="retail-customer-search-item-detail">{c.phone || c.email}</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="retail-customer-modal-actions">
+              {customer.selected && (
+                <button
+                  className="retail-customer-clear-btn"
+                  onClick={customer.onClear}
+                >
+                  {l10n.getString('retail-customer-clear')}
+                </button>
+              )}
+              <button type="button" className="retail-customer-close-btn" onClick={customer.exit.requestClose}>{l10n.getString('close')}</button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Quantity picker modal ──────────── */}
+      {qtyPicker.exit.shouldRender && qtyPicker.product && (
+        <button
+          type="button"
+          className={`retail-qty-overlay${qtyPicker.exit.exiting ? ' retail-qty-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={qtyPicker.exit.requestClose}
+        >
+          <div className={`retail-qty-modal${qtyPicker.exit.exiting ? ' retail-qty-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3 className="retail-qty-heading">{qtyPicker.product.name}</h3>
+            <div className="retail-qty-price">{formatMoney(qtyPicker.product.price)}</div>
+            <div className="retail-qty-controls">
+              <button
+                className="retail-qty-btn"
+                onClick={() => qtyPicker.onInputChange(String(Math.max(1, (parseInt(qtyPicker.input, 10) || 1) - 1)))}
+              >
+                &minus;
+              </button>
+              <input
+                className="retail-qty-input"
+                type="number"
+                min={1}
+                value={qtyPicker.input}
+                onChange={(e) => qtyPicker.onInputChange(e.target.value)}
+                onFocus={(e) => e.target.select()}
+              />
+              <button
+                className="retail-qty-btn"
+                onClick={() => qtyPicker.onInputChange(String((parseInt(qtyPicker.input, 10) || 1) + 1))}
+              >
+                +
+              </button>
+            </div>
+            <div className="retail-qty-numpad">
+              {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((k) => (
+                k === '' ? <span key="spacer" /> : (
+                  <button
+                    key={String(k)}
+                    className="retail-qty-num-btn"
+                    onClick={() => {
+                      if (k === '⌫') qtyPicker.onInputChange(qtyPicker.input.length > 1 ? qtyPicker.input.slice(0, -1) : '1');
+                      else qtyPicker.onInputChange(String(Math.max(1, parseInt(qtyPicker.input + String(k), 10) || 1)));
+                    }}
+                  >
+                    {k}
+                  </button>
+                )
+              ))}
+            </div>
+            <div className="retail-qty-total">
+              {l10n.getString('retail-qty-total')} {formatMoney({
+                minor_units: qtyPicker.product.price.minor_units * Math.max(1, parseInt(qtyPicker.input, 10) || 1),
+                currency: qtyPicker.product.price.currency,
+              })}
+            </div>
+            <div className="retail-qty-actions">
+              <button type="button" className="retail-qty-cancel" onClick={qtyPicker.exit.requestClose}>{l10n.getString('cancel')}</button>
+              <button type="button" className="retail-qty-confirm" onClick={qtyPicker.onConfirm}>{l10n.getString('retail-qty-add')}</button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Held carts list modal ──────────── */}
+      {heldCarts.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-held-carts-overlay${heldCarts.exit.exiting ? ' retail-held-carts-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={heldCarts.exit.requestClose}
+        >
+          <div className={`retail-held-carts-modal${heldCarts.exit.exiting ? ' retail-held-carts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-held-carts-title')}</h3>
+            {heldCarts.list.length === 0 ? (
+              <p className="retail-held-carts-empty">{l10n.getString('retail-held-carts-empty')}</p>
+            ) : (
+              <div className="retail-held-carts-list">
+                {heldCarts.list.map((c) => (
+                  <div key={c.id} className="retail-held-cart-row">
+                    <button type="button" className="retail-held-cart-info" aria-label="Resume cart" onClick={() => heldCarts.onResume(c.id)}>
+                      <span className="retail-held-cart-label">{c.label}</span>
+                      <span className="retail-held-cart-meta">
+                        {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
+                      </span>
+                    </button>
+                    <button type="button" className="retail-held-cart-delete" onClick={() => heldCarts.onDelete(c.id)} aria-label={l10n.getString('retail-held-cart-delete-aria')}>
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="retail-held-carts-actions">
+              <button type="button" onClick={heldCarts.exit.requestClose}>{l10n.getString('close')}</button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Shortcuts overlay ──────────────── */}
+      {shortcuts.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-shortcuts-overlay${shortcuts.exit.exiting ? ' retail-shortcuts-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={shortcuts.exit.requestClose}
+        >
+          <div className={`retail-shortcuts-modal${shortcuts.exit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
+            <div className="retail-shortcuts-grid">
+              <span className="retail-shortcuts-key">F1</span><span>{l10n.getString('retail-shortcut-pay')}</span>
+              <span className="retail-shortcuts-key">F2</span><span>{l10n.getString('retail-shortcut-clear')}</span>
+              <span className="retail-shortcuts-key">F3</span><span>{l10n.getString('retail-shortcut-discount')}</span>
+              <span className="retail-shortcuts-key">F4</span><span>{l10n.getString('retail-shortcut-hold')}</span>
+              <span className="retail-shortcuts-key">F5</span><span>{l10n.getString('retail-shortcut-sku')}</span>
+              <span className="retail-shortcuts-key">F6</span><span>{l10n.getString('retail-fn-history')}</span>
+              <span className="retail-shortcuts-key">F7</span><span>{l10n.getString('retail-fn-pelanggan')}</span>
+              <span className="retail-shortcuts-key">F8</span><span>{l10n.getString('retail-fn-stok')}</span>
+              <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
+              <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
+              <span className="retail-shortcuts-key">F11</span><span>{l10n.getString('retail-shortcut-fullscreen') || 'Toggle Fullscreen'}</span>
+              <span className="retail-shortcuts-key">?</span><span>{l10n.getString('retail-shortcut-list')}</span>
+              <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
+              <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
+            </div>
+            <button type="button" className="retail-shortcuts-close" onClick={shortcuts.exit.requestClose}>{l10n.getString('close')}</button>
+          </div>
+        </button>
+      )}
+
+      {/* ── Price Override modal ───────────── */}
+      {override.target && (
+        <PriceOverrideModal
+          open
+          lineDescription={`${override.target.name} — ${formatMoney(override.target.unit_price)}`}
+          currentPrice={override.target.unit_price}
+          onConfirm={override.onConfirm}
+          onClose={override.onClose}
+        />
+      )}
+
+      {/* ── Edit Product modal ──────────────── */}
+      <EditProductModal
+        product={editProduct.product}
+        isOpen={editProduct.isOpen}
+        onClose={editProduct.onClose}
+        onSave={editProduct.onSave}
+      />
+
+      {/* ── Add Category modal ──────────────── */}
+      <AddCategoryModal
+        isOpen={addCategory.isOpen}
+        onClose={addCategory.onClose}
+        onSave={addCategory.onSave}
+      />
+
+      {/* ── Add Product modal ───────────────── */}
+      <AddProductModal
+        categories={addProduct.categories}
+        isOpen={addProduct.isOpen}
+        onClose={addProduct.onClose}
+        onSave={addProduct.onSave}
+      />
+
+      {/* ── Quick Return modal ──────────────── */}
+      {quickReturn.exit.shouldRender && (
+        <button
+          type="button"
+          className={`retail-shift-overlay${quickReturn.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
+          aria-label="Close"
+          onClick={quickReturn.exit.requestClose}
+        >
+          <div className={`retail-shift-modal${quickReturn.exit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
+            <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
+            <p style={{ fontSize: 12, color: 'var(--color-fg-tertiary)', marginBottom: 8 }}>
+              {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
+            </p>
+            <input
+              type="text"
+              className="retail-sku-input"
+              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+              value={quickReturn.barcode}
+              onChange={(e) => quickReturn.onBarcodeChange(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') quickReturn.onSubmit(); }}
+              placeholder={l10n.getString('retail-quick-return-placeholder') || 'Receipt barcode'}
+              aria-label={l10n.getString('retail-quick-return-aria') || 'Receipt barcode input'}
+            />
+            <div className="retail-shift-modal-actions">
+              <button type="button" onClick={quickReturn.exit.requestClose} disabled={quickReturn.loading}>
+                {l10n.getString('cancel')}
+              </button>
+              <button type="button" className="retail-shift-confirm-btn" onClick={quickReturn.onSubmit} disabled={quickReturn.loading || !quickReturn.barcode.trim()}>
+                {quickReturn.loading ? l10n.getString('loading') : (l10n.getString('retail-quick-return-lookup') || 'Look Up')}
+              </button>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {/* ── Quick Return Refund modal ───────── */}
+      {showQuickReturnRefund && quickReturnSale && (
+        <RefundModal
+          open
+          sale={quickReturnSale}
+          onClose={quickReturnRefundDone}
+          onRefunded={quickReturnRefundDone}
+        />
+      )}
+
+      {/* ── Scan flash overlay ─────────────── */}
+      {scanFlash && <div className="retail-scan-flash" />}
+
+      {/* ── Workspace Settings Modal ────────── */}
+      {showWorkspaceSettings && (
+        <WorkspaceSettingsModal
+          open={showWorkspaceSettings}
+          onClose={onCloseWorkspaceSettings}
+          workspaceType="store-pos"
+          presentation="overlay"
+        />
+      )}
+    </>
+  );
+}
