@@ -164,7 +164,7 @@
   font-weight: var(--font-weight-bold);
   line-height: 1rem;
   text-align: center;
-  color: var(--color-bg-elevated);
+  color: var(--color-pos-on-primary);
   background: var(--color-danger);
   border-radius: var(--radius-full);
   pointer-events: none;

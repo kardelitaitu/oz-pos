@@ -91,7 +91,7 @@
 .audit-log-chip--active {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: var(--color-bg-primary);
+  color: var(--color-accent-fg);
 }
 
 /* ── States ───────────────────────────────────────────────── */
