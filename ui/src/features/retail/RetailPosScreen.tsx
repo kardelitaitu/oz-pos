@@ -743,9 +743,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   // Fetch customer list when the modal opens; filter locally on keystrokes
   useEffect(() => {
     if (!showCustomerSearch) { setCustomerSearchResults([]); return; }
+    let cancelled = false;
     setLoadingCustomers(true);
     listCustomers()
       .then((customers) => {
+        if (cancelled) return;
         allCustomersRef.current = customers;
         const q = customerSearchQuery.trim().toLowerCase();
         setCustomerSearchResults(
@@ -757,8 +759,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ),
         );
       })
-      .catch(() => { addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
-      .finally(() => setLoadingCustomers(false));
+      .catch(() => { if (cancelled) return; addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
+      .finally(() => { if (cancelled) return; setLoadingCustomers(false); });
+    return () => { cancelled = true; };
   }, [showCustomerSearch, addToast]); // l10n via ref — fetch only when modal opens
 
   // Filter cached customers locally on keystroke — avoids redundant API calls

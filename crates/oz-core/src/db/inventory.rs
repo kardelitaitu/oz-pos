@@ -1052,7 +1052,7 @@ mod tests {
                 &loc_a,
                 "staff-a",
                 "staff-a at loc-a",
-                &[line.clone()],
+                std::slice::from_ref(&line),
             )
             .unwrap();
 
@@ -1063,7 +1063,7 @@ mod tests {
                 &loc_b,
                 "staff-a",
                 "staff-a at loc-b",
-                &[line.clone()],
+                std::slice::from_ref(&line),
             )
             .unwrap();
 
@@ -1074,7 +1074,7 @@ mod tests {
                 &loc_a,
                 "staff-b",
                 "staff-b at loc-a",
-                &[line.clone()],
+                std::slice::from_ref(&line),
             )
             .unwrap();
 
