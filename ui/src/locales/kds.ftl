@@ -42,3 +42,7 @@ kds-settings-auto-ack = Auto-acknowledge
 kds-settings-density = Density
 kds-settings-density-comfortable = Comfortable
 kds-settings-density-compact = Compact
+
+# ── 3a: Zone switching ──
+kds-zone-filter-aria = Filter by kitchen zone
+kds-zone-all = All

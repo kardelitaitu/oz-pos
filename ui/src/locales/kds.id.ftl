@@ -45,4 +45,8 @@ kds-settings-density = Kepadatan
 kds-settings-density-comfortable = Nyaman
 kds-settings-density-compact = Padat
 
+# ── 3a: Zone switching ──
+kds-zone-filter-aria = Filter berdasarkan zona dapur
+kds-zone-all = Semua
+
 # ── Kiosk (remaining) ──

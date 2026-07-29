@@ -477,6 +477,73 @@ describe('KdsScreen', () => {
     });
   });
 
+  // ── 3a: Zone-switching tests ───────────────────────────────────
+
+  it('shows zone chips when orders have kitchen zones', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Should show "All" chip and both zone chips
+    expect(screen.getByText('All')).toBeDefined();
+    expect(screen.getByText('Grill')).toBeDefined();
+    expect(screen.getByText('Fry')).toBeDefined();
+  });
+
+  it('hides zone chips when no orders have kitchen zones', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', kitchen_zone: null }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // "All" chip should NOT be shown since the zone bar is hidden entirely
+    expect(screen.queryByText('All')).toBeNull();
+  });
+
+  it('activates clicked zone chip', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the "Grill" zone chip
+    await userEvent.click(screen.getByText('Grill'));
+
+    // The Grill chip should have the active class (zones sorted: Fry, Grill → index 2)
+    await waitFor(() => {
+      const chips = document.querySelectorAll('.kds-zone-chip');
+      expect(chips[0]?.classList.contains('kds-zone-chip--active')).toBe(false);
+      expect(chips[2]?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+  });
+
+  it('resets to All zone when All chip is clicked', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // First click Grill to activate a specific zone
+    await userEvent.click(screen.getByText('Grill'));
+    await waitFor(() => {
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+
+    // Then click All to reset
+    await userEvent.click(screen.getByText('All'));
+    await waitFor(() => {
+      expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
+    });
+  });
+
   it('navigates selection with ArrowDown and ArrowUp', async () => {
     mockGetKdsQueue.mockResolvedValue([
       makeOrder({ id: 'o-1', status: 'pending' }),

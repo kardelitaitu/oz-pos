@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, Profiler } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, Profiler } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
@@ -41,7 +41,7 @@ export default function KdsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
-  const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, loading: prefsLoading } = useKdsPreferences();
+  const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);
@@ -189,6 +189,15 @@ export default function KdsScreen() {
     onRefresh: fetchOrders,
   });
 
+  // 3a: Extract unique kitchen zones from orders for the zone-switching chips.
+  const zones = useMemo(() => {
+    const zoneSet = new Set<string>();
+    for (const order of orders) {
+      if (order.kitchen_zone) zoneSet.add(order.kitchen_zone);
+    }
+    return [...zoneSet].sort();
+  }, [orders]);
+
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 
   return (
@@ -202,6 +211,31 @@ export default function KdsScreen() {
         <div className="kds-header-left">
           <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
           <span className="kds-order-count"><Localized id="kds-order-count" vars={{ count: orders.length }}><span>{orders.length} orders</span></Localized></span>
+        </div>
+        <div className="kds-header-center">
+          {zones.length > 0 && (
+            <div className="kds-zone-chips" role="tablist" aria-label={l10n.getString('kds-zone-filter-aria') || 'Filter by kitchen zone'}>
+              <button
+                className={`kds-zone-chip${!prefs.kdsZone ? ' kds-zone-chip--active' : ''}`}
+                onClick={() => setKdsZone('')}
+                role="tab"
+                aria-selected={!prefs.kdsZone}
+              >
+                <Localized id="kds-zone-all">All</Localized>
+              </button>
+              {zones.map((zone) => (
+                <button
+                  key={zone}
+                  className={`kds-zone-chip${prefs.kdsZone === zone ? ' kds-zone-chip--active' : ''}`}
+                  onClick={() => setKdsZone(zone)}
+                  role="tab"
+                  aria-selected={prefs.kdsZone === zone}
+                >
+                  {zone}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="kds-header-right">
           {!prefsLoading && (<>

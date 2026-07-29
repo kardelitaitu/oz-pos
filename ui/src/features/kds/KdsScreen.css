@@ -53,6 +53,12 @@
   gap: var(--space-4);
 }
 
+.kds-header-center {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .kds-header-right {
   display: flex;
   align-items: center;
@@ -71,6 +77,46 @@
   font-weight: 600;
   color: var(--kds-muted);
   user-select: none;
+}
+
+/* ── 3a: Zone-switching chips ──────────────────────────────────────── */
+
+.kds-zone-chips {
+  display: flex;
+  gap: var(--space-1_5);
+  align-items: center;
+}
+
+.kds-zone-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2_5);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--kds-muted);
+  background: transparent;
+  border: 1px solid var(--kds-ticket-border);
+  border-radius: var(--radius-2xl);
+  cursor: pointer;
+  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
+}
+
+.kds-zone-chip:hover {
+  background: var(--kds-ticket-bg);
+  color: var(--kds-text);
+  border-color: var(--kds-ticket-hover-border);
+}
+
+.kds-zone-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.kds-zone-chip--active {
+  color: var(--kds-text);
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent);
 }
 
 /* ── Error banner ──────────────────────────────────────────────────── */
