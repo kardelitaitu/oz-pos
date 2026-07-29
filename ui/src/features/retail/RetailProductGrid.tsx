@@ -1,4 +1,4 @@
-import { useMemo, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { formatMoney, type Money, type Sku } from '@/types/domain';
 import type { ProductDto, CategoryDto } from '@/api/products';
@@ -106,6 +106,13 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
 
   const handlePointerLeave = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
+
+  // Clear the long-press timer on unmount (stale timeout after product list change)
+  useEffect(() => {
+    return () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    };
   }, []);
 
   return (

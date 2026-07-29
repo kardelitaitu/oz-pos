@@ -35,6 +35,14 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
+        // Validate name is not empty
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "location name must not be empty".into(),
+            });
+        }
+
         // Validate location type against allowed values
         match location_type {
             "store" | "warehouse" | "transit" | "damaged" | "virtual" => {}
@@ -91,6 +99,14 @@ impl Store<'_> {
         location_type: &str,
         description: &str,
     ) -> Result<(), CoreError> {
+        // Validate name is not empty
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "location name must not be empty".into(),
+            });
+        }
+
         // Validate location type against allowed values
         match location_type {
             "store" | "warehouse" | "transit" | "damaged" | "virtual" => {}
