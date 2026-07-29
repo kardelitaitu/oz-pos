@@ -34,6 +34,17 @@ export function useBarcodeScanner({
 }: UseBarcodeScannerOptions) {
   const startedRef = useRef(false);
 
+  // Keep callbacks in refs so the event subscription doesn't re-register
+  // every time the parent passes a fresh inline callback (e.g. on every
+  // cart change in RetailPosScreen). Matches the ref pattern used by
+  // useFocusTrap and useExitAnimation.
+  const onProductFoundRef = useRef(onProductFound);
+  onProductFoundRef.current = onProductFound;
+  const onProductNotFoundRef = useRef(onProductNotFound);
+  onProductNotFoundRef.current = onProductNotFound;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -63,25 +74,25 @@ export function useBarcodeScanner({
       try {
         const product = await lookupByBarcode(payload.code);
         if (product) {
-          onProductFound(payload);
+          onProductFoundRef.current(payload);
         } else {
-          onProductNotFound?.(payload.code);
+          onProductNotFoundRef.current?.(payload.code);
         }
       } catch {
-        onProductNotFound?.(payload.code);
+        onProductNotFoundRef.current?.(payload.code);
       }
     },
-    [onProductFound, onProductNotFound],
+    [], // stable — reads latest callbacks via refs
   );
 
   const handleError = useCallback(
     (error: string) => {
-      onError?.(error);
+      onErrorRef.current?.(error);
     },
-    [onError],
+    [], // stable — reads latest callback via ref
   );
 
-  // Subscribe to barcode events while mounted.
+  // Subscribe to barcode events once on mount — stable callbacks.
   useEffect(() => {
     const unsubScan = onBarcodeScanned(handleScan);
     const unsubErr = onBarcodeError(handleError);
