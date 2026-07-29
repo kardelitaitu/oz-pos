@@ -823,6 +823,13 @@ retail-col-stock = Stock
 retail-col-price = Price
 retail-col-action = Action
 retail-product-out-of-stock = Out of stock
+retail-product-add-title = Add to Cart
+retail-product-add-aria = Add { $name } to cart
+retail-product-edit-title = Edit Product
+retail-product-edit-aria = Edit { $name }
+retail-product-weigh-aria = Weigh { $name }
+retail-price-volatility-hint = Price changed recently
+retail-edit-modal-close-aria = Close
 
 # ── Edit Product Modal ──
 retail-edit-product-title = Edit Product

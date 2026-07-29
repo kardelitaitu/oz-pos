@@ -810,6 +810,13 @@ retail-col-stock = Stok
 retail-col-price = Harga
 retail-col-action = Aksi
 retail-product-out-of-stock = Stok habis
+retail-product-add-title = Tambah ke Keranjang
+retail-product-add-aria = Tambah { $name } ke keranjang
+retail-product-edit-title = Edit Produk
+retail-product-edit-aria = Edit { $name }
+retail-product-weigh-aria = Timbang { $name }
+retail-price-volatility-hint = Harga baru saja berubah
+retail-edit-modal-close-aria = Tutup
 
 # ── Edit Product Modal ──
 retail-edit-product-title = Edit Produk

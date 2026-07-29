@@ -66,7 +66,7 @@ export interface RetailProductGridProps {
 
 // ── ProductCard sub-component ──────────────────────────────────────
 
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, outOfStockLabel }: {
+function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, outOfStockLabel, addToCartTitle, addToCartAria, editProductTitle, editProductAria, weighProductAria, priceChangedHint }: {
   product: ProductDto;
   catHue: (catId: string | null) => number;
   formatMoney: (m: Money) => string;
@@ -76,6 +76,12 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
   scaleEnabled: boolean;
   onSetWeighTarget: (p: ProductDto) => void;
   outOfStockLabel: string;
+  addToCartTitle: string;
+  addToCartAria: string;
+  editProductTitle: string;
+  editProductAria: string;
+  weighProductAria: string;
+  priceChangedHint: string;
 }) {
   const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
   const priceRecent = useMemo(() => isPriceRecent(product), [product]);
@@ -143,12 +149,12 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
-          aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
+          aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ` (${outOfStockLabel.toLowerCase()})` : ''}`}
           aria-disabled={isOutOfStock}
           disabled={isOutOfStock}
         >
           <span>{product.name}</span>
-          {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
+          {priceRecent && <span className="retail-price-volatility-hint" title={priceChangedHint} />}
         </button>
       </td>
       <td className="retail-col-price">{formatMoney(product.price)}</td>
@@ -161,8 +167,8 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
             onClick={() => {
               if (!isOutOfStock) handleAdd(product);
             }}
-            title="Add to Cart"
-            aria-label={`Add ${product.name} to cart`}
+            title={addToCartTitle}
+            aria-label={addToCartAria}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
               <circle cx="9" cy="21" r="1" />
@@ -178,8 +184,8 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
               e.preventDefault();
               handleEdit(product);
             }}
-            title="Edit Product"
-            aria-label={`Edit ${product.name}`}
+            title={editProductTitle}
+            aria-label={editProductAria}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -191,7 +197,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
               type="button"
               className="retail-product-weigh-btn"
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
-              aria-label={`Weigh ${product.name}`}
+              aria-label={weighProductAria}
             >
               ⚖
             </button>
@@ -402,6 +408,12 @@ export default function RetailProductGrid({
                   scaleEnabled={isScaleEnabled}
                   onSetWeighTarget={actions.onSetWeighTarget}
                   outOfStockLabel={l10n.getString('retail-product-out-of-stock') || 'Out of stock'}
+                  addToCartTitle={l10n.getString('retail-product-add-title') || 'Add to Cart'}
+                  addToCartAria={l10n.getString('retail-product-add-aria', { name: p.name }) || `Add ${p.name} to cart`}
+                  editProductTitle={l10n.getString('retail-product-edit-title') || 'Edit Product'}
+                  editProductAria={l10n.getString('retail-product-edit-aria', { name: p.name }) || `Edit ${p.name}`}
+                  weighProductAria={l10n.getString('retail-product-weigh-aria', { name: p.name }) || `Weigh ${p.name}`}
+                  priceChangedHint={l10n.getString('retail-price-volatility-hint') || 'Price changed recently'}
                 />
               ))}
             </tbody>
