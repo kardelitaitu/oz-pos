@@ -388,6 +388,134 @@
   font-weight: 700;
 }
 
+.kds-ticket-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-0_5) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--kds-subtle);
+  background: transparent;
+  border: 1px solid var(--kds-ticket-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-100), color var(--duration-100);
+  align-self: flex-start;
+}
+
+.kds-ticket-edit-btn:hover {
+  color: var(--kds-text);
+  background: var(--kds-column-bg);
+}
+
+.kds-ticket-edit-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.kds-ticket-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--kds-column-bg);
+  border-radius: var(--radius-md);
+}
+
+.kds-ticket-edit-input {
+  width: 100%;
+  padding: var(--space-1_5) var(--space-2);
+  font-size: var(--text-base);
+  font-family: inherit;
+  color: var(--kds-text);
+  background: var(--kds-ticket-bg);
+  border: 1px solid var(--kds-ticket-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.kds-ticket-edit-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+.kds-ticket-edit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.kds-ticket-edit-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--kds-subtle);
+}
+
+.kds-ticket-edit-count {
+  width: 4rem;
+  padding: var(--space-0_5) var(--space-1);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  color: var(--kds-text);
+  background: var(--kds-ticket-bg);
+  border: 1px solid var(--kds-ticket-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.kds-ticket-edit-count:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+.kds-ticket-edit-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.kds-ticket-edit-save,
+.kds-ticket-edit-cancel {
+  padding: var(--space-0_5) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-100);
+}
+
+.kds-ticket-edit-save {
+  color: var(--color-accent-fg, #fff);
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+}
+
+.kds-ticket-edit-save:hover {
+  filter: brightness(1.1);
+}
+
+.kds-ticket-edit-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.kds-ticket-edit-cancel {
+  color: var(--kds-subtle);
+  background: transparent;
+  border: 1px solid var(--kds-ticket-border);
+}
+
+.kds-ticket-edit-cancel:hover {
+  color: var(--kds-text);
+  background: var(--kds-column-bg);
+}
+
 .kds-ticket-items {
   font-size: var(--text-lg);
   font-weight: 500;

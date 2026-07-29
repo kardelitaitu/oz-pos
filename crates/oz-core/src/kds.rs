@@ -114,6 +114,20 @@ pub struct CreateKdsOrderInput {
     pub priority: bool,
 }
 
+/// Input for updating the items on an existing KDS order.
+///
+/// Used when FOH adds items to an order mid-preparation, or when
+/// kitchen staff need to correct the items shown on a ticket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateKdsOrderItemsInput {
+    /// KDS order ID to update.
+    pub id: String,
+    /// Updated comma-separated item display names.
+    pub items_summary: String,
+    /// Updated total item count.
+    pub item_count: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

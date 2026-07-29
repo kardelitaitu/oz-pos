@@ -59,6 +59,17 @@ kds-history-empty = No completed orders yet
 kds-history-received = Received
 kds-history-served = Served
 
+# ── 3f: Ticket editing ──
+kds-edit-items-btn = Edit Items
+kds-edit-items-btn-aria = Edit ticket items
+kds-edit-items-aria = Edit items
+kds-edit-count-label = Count
+kds-edit-count-aria = Item count
+kds-edit-save = Save
+kds-edit-save-aria = Save items
+kds-edit-cancel = Cancel
+kds-edit-cancel-aria = Cancel edit
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Order
 kds-ready-tts = up

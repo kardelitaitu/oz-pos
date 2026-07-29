@@ -3,7 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
-import { getKdsQueueScoped, updateKdsStatusScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
+import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
@@ -25,6 +25,8 @@ export interface KdsLayoutProps {
   showTableNumber: boolean;
   /** Currently keyboard-selected order ID (highlighted card). */
   selectedOrderId: string | null;
+  /** Called when the items on a ticket are edited. */
+  onSaveItems?: (orderId: string, itemsSummary: string, itemCount: number) => void;
 }
 
 const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
@@ -300,11 +302,17 @@ export default function KdsScreen() {
           <LayoutComponent
             orders={orders}
             onAdvance={advanceStatus}
-            showOrderId={prefs.showOrderId}
-            showTableNumber={prefs.showTableNumber}
-            selectedOrderId={selectedOrderId}
-          />
-        </div>
+            showOrderId={prefs.showOrderId}              showTableNumber={prefs.showTableNumber}
+              selectedOrderId={selectedOrderId}
+              onSaveItems={async (orderId, itemsSummary, itemCount) => {
+                try {
+                  await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
+                } catch (e) {
+                  setError(String(e));
+                }
+              }}
+            />
+          </div>
       )}
       {!prefsLoading && showHistory && (
         <KdsHistoryPanel />

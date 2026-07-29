@@ -117,6 +117,57 @@ pub async fn update_kds_status(
     Ok(order)
 }
 
+/// Update the items (summary + count) on an existing KDS order.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `update_kds_order_items_scoped`.
+#[tauri::command]
+pub async fn update_kds_order_items(
+    user_id: String,
+    args: oz_core::UpdateKdsOrderItemsInput,
+    state: State<'_, AppState>,
+) -> Result<KdsOrder, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &user_id, permissions::KDS_UPDATE)?;
+    let order = store.update_kds_order_items(args)?;
+    drop(db);
+
+    // Push real-time update to all KDS displays.
+    if let Some(app) = state.app.as_ref() {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
+    Ok(order)
+}
+
+/// Update the items on a KDS order in the store resolved from a session token. ADR #7.
+#[tauri::command]
+pub async fn update_kds_order_items_scoped(
+    session_token: String,
+    args: oz_core::UpdateKdsOrderItemsInput,
+    state: State<'_, AppState>,
+) -> Result<KdsOrder, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
+    let order = store.update_kds_order_items(args)?;
+    drop(db);
+
+    // Push real-time update to all KDS displays.
+    if let Some(app) = state.app.as_ref() {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
+    Ok(order)
+}
+
 /// Update a KDS order's status in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn update_kds_status_scoped(

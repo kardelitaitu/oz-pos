@@ -66,3 +66,18 @@ export const getKdsOrder = (userId: string, id: string): Promise<KdsOrder | null
 /** Get a KDS order by id (scoped — ADR #7). */
 export const getKdsOrderScoped = (sessionToken: string, id: string): Promise<KdsOrder | null> =>
   loggedInvoke<KdsOrder | null>('get_kds_order_scoped', { sessionToken, id });
+
+/** Input for updating items on an existing KDS order. */
+export interface UpdateKdsOrderItemsInput {
+  id: string;
+  items_summary: string;
+  item_count: number;
+}
+
+/** Update the items (summary + count) on an existing KDS order. */
+export const updateKdsOrderItems = (userId: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
+  loggedInvoke<KdsOrder>('update_kds_order_items', { userId, args });
+
+/** Update KDS order items (scoped — ADR #7). */
+export const updateKdsOrderItemsScoped = (sessionToken: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
+  loggedInvoke<KdsOrder>('update_kds_order_items_scoped', { sessionToken, args });

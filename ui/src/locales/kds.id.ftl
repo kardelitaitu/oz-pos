@@ -61,6 +61,17 @@ kds-history-empty = Belum ada pesanan selesai
 kds-history-received = Diterima
 kds-history-served = Selesai
 
+# ── 3f: Ticket editing ──
+kds-edit-items-btn = Edit Item
+kds-edit-items-btn-aria = Edit item tiket
+kds-edit-items-aria = Edit item
+kds-edit-count-label = Jumlah
+kds-edit-count-aria = Jumlah item
+kds-edit-save = Simpan
+kds-edit-save-aria = Simpan item
+kds-edit-cancel = Batal
+kds-edit-cancel-aria = Batal edit
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Pesanan
 kds-ready-tts = siap

@@ -191,7 +191,7 @@ pub use inventory_transaction::{
     InventoryTransaction, InventoryTransactionId, InventoryTransactionLine,
     InventoryTransactionType,
 };
-pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus, UpdateKdsOrderItemsInput};
 pub use location_resolver::{
     get_default_location_id, resolve_all_locations, resolve_location_chain_for_sku,
     resolve_primary_location,

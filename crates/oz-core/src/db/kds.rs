@@ -154,6 +154,46 @@ impl Store<'_> {
         }
     }
 
+    /// Update the items (summary + count) on an existing KDS order.
+    ///
+    /// Used when FOH adds items to an order mid-preparation, or when
+    /// kitchen staff correct the items shown on a ticket.
+    pub fn update_kds_order_items(
+        &self,
+        input: crate::UpdateKdsOrderItemsInput,
+    ) -> Result<KdsOrder, CoreError> {
+        if input.items_summary.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "items_summary",
+                message: "items_summary must not be empty".into(),
+            });
+        }
+        if input.item_count <= 0 {
+            return Err(CoreError::Validation {
+                field: "item_count",
+                message: "item_count must be positive".into(),
+            });
+        }
+
+        let rows = self.conn.execute(
+            "UPDATE kds_orders SET items_summary = ?1, item_count = ?2 WHERE id = ?3",
+            rusqlite::params![input.items_summary, input.item_count, input.id],
+        )?;
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "kds_order",
+                id: input.id,
+            });
+        }
+
+        self.get_kds_order(&input.id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "kds_order",
+                id: input.id,
+            })
+    }
+
     /// Update the status of a KDS order. Automatically sets the corresponding
     /// timestamp field (started_at, ready_at, served_at) based on the new status.
     pub fn update_kds_status(&self, id: &str, new_status: &str) -> Result<KdsOrder, CoreError> {
@@ -1287,6 +1327,110 @@ mod tests {
         // Most recent first.
         assert_eq!(all[0].id, o2.id);
         assert_eq!(all[1].id, o1.id);
+    }
+
+    // ── update_kds_order_items tests ─────────────────────────────────
+
+    #[test]
+    fn update_kds_order_items_updates_summary_and_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        let test_sale = Sale {
+            id: sale_id.clone(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            lines: vec![],
+            version: 1,
+        };
+        s.create_sale(&test_sale).unwrap();
+
+        let order = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id,
+                store_id: None,
+                items_summary: "Coffee x2".into(),
+                item_count: 2,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap();
+
+        // Update items.
+        let updated = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: order.id.clone(),
+                items_summary: "Coffee x2, Bagel x1".into(),
+                item_count: 3,
+            })
+            .unwrap();
+
+        assert_eq!(updated.items_summary, "Coffee x2, Bagel x1");
+        assert_eq!(updated.item_count, 3);
+        assert_eq!(updated.status, "pending"); // Other fields unchanged
+    }
+
+    #[test]
+    fn update_kds_order_items_nonexistent_order_fails() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let err = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: "no-such-order".into(),
+                items_summary: "New items".into(),
+                item_count: 1,
+            })
+            .unwrap_err();
+
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+    }
+
+    #[test]
+    fn update_kds_order_items_rejects_empty_summary() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let err = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: "any-id".into(),
+                items_summary: "".into(),
+                item_count: 1,
+            })
+            .unwrap_err();
+
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "items_summary"));
+    }
+
+    #[test]
+    fn update_kds_order_items_rejects_zero_count() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let err = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: "any-id".into(),
+                items_summary: "Items".into(),
+                item_count: 0,
+            })
+            .unwrap_err();
+
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "item_count"));
     }
 
     // ── KDS order input validation ──────────────────────────────────────
