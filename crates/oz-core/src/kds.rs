@@ -83,6 +83,11 @@ pub struct KdsOrder {
     pub kitchen_zone: Option<String>,
     /// Special notes from the POS (e.g., "no onions").
     pub notes: String,
+    /// Table number assigned to this order (e.g., "T5").
+    ///
+    /// Populated from the `tables` table at order-creation time via
+    /// the sale's `active_sale_id` link. `None` for takeaway orders.
+    pub table_number: Option<String>,
 }
 
 /// Input for creating a KDS order from a completed sale.
@@ -100,6 +105,8 @@ pub struct CreateKdsOrderInput {
     pub kitchen_zone: Option<String>,
     /// Special notes.
     pub notes: String,
+    /// Table number assigned to this order (e.g., "T5").
+    pub table_number: Option<String>,
 }
 
 #[cfg(test)]
@@ -175,6 +182,7 @@ mod tests {
             prep_time_seconds: 300,
             kitchen_zone: Some("front".into()),
             notes: "No onions".into(),
+            table_number: None,
         };
         let json = serde_json::to_string(&order).unwrap();
         let back: KdsOrder = serde_json::from_str(&json).unwrap();
@@ -197,6 +205,7 @@ mod tests {
             item_count: 1,
             kitchen_zone: None,
             notes: String::new(),
+            table_number: None,
         };
         let json = serde_json::to_string(&input).unwrap();
         let back: CreateKdsOrderInput = serde_json::from_str(&json).unwrap();
@@ -223,6 +232,7 @@ mod tests {
             prep_time_seconds: 720,
             kitchen_zone: None,
             notes: String::new(),
+            table_number: None,
         };
         assert_eq!(
             order.started_at.as_deref(),

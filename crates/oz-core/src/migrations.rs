@@ -546,6 +546,12 @@ pub const ALL: &[Migration] = &[
         id: "100_setting_updated.sql",
         sql: include_str!("../migrations/100_setting_updated.sql"),
     },
+    // 101: adds table_number column to kds_orders so KDS ticket cards
+    // can display the assigned table number without the `as unknown` hack.
+    Migration {
+        id: "101_kds_table_number.sql",
+        sql: include_str!("../migrations/101_kds_table_number.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

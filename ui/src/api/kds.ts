@@ -21,6 +21,8 @@ export interface KdsOrder {
   /** Kitchen zone this order is assigned to (e.g., "front", "back"). */
   kitchen_zone: string | null;
   notes: string;
+  /** Table number assigned to this order (e.g., "T5"), or null for takeaway. */
+  table_number: string | null;
 }
 
 /** List KDS orders, optionally filtered by status. */

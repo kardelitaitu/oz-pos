@@ -279,6 +279,7 @@ const defaultKdsOrder = {
   received_at: new Date().toISOString(), started_at: null,
   ready_at: null, served_at: null, prep_time_seconds: 0,
   kitchen_zone: null, notes: '',
+    table_number: null,
 };
 
 export function createKdsApiMock(overrides: KdsApiOverrides = {}) {

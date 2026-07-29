@@ -61,8 +61,8 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
       <div className="kds-ticket-header">
         <span className="kds-ticket-id-group">
           {showOrderId && <span className="kds-ticket-number">#{order.display_number}</span>}
-          {showTableNumber && !!((order as unknown as Record<string, unknown>)['table_number']) && (
-            <span className="kds-ticket-table">{(order as unknown as Record<string, unknown>)['table_number'] as string}</span>
+          {showTableNumber && order.table_number && (
+            <span className="kds-ticket-table">{order.table_number}</span>
           )}
         </span>
         <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>

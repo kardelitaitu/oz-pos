@@ -24,6 +24,7 @@ impl Store<'_> {
             prep_time_seconds: row.get("prep_time_seconds")?,
             kitchen_zone: row.get("kitchen_zone")?,
             notes: row.get("notes")?,
+            table_number: row.get("table_number")?,
         })
     }
 
@@ -73,8 +74,8 @@ impl Store<'_> {
 
         tx.execute(
             "INSERT INTO kds_orders (id, sale_id, store_id, status, items_summary, item_count,
-                                     display_number, received_at, kitchen_zone, notes)
-             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8, ?9)",
+                                     display_number, received_at, kitchen_zone, notes, table_number)
+             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 id,
                 input.sale_id,
@@ -85,6 +86,7 @@ impl Store<'_> {
                 now,
                 input.kitchen_zone,
                 input.notes,
+                input.table_number,
             ],
         )?;
 
@@ -100,7 +102,7 @@ impl Store<'_> {
         let mut sql = String::from(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number
              FROM kds_orders",
         );
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let Some(s) = status_filter {
@@ -123,7 +125,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number
              FROM kds_orders WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], Self::row_to_kds_order);
@@ -139,7 +141,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number
              FROM kds_orders WHERE sale_id = ?1",
         )?;
         let result = stmt.query_row(params![sale_id], Self::row_to_kds_order);
@@ -199,7 +201,7 @@ impl Store<'_> {
         let mut sql = String::from(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number
              FROM kds_orders
              WHERE status IN ('pending', 'preparing', 'ready')",
         );
@@ -279,6 +281,18 @@ impl Store<'_> {
             by_zone.entry(zone).or_default().push(line);
         }
 
+        // Look up the table name assigned to this sale (TODO 1b).
+        let table_number: Option<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT name FROM tables WHERE active_sale_id = ?1")?;
+            match stmt.query_row(params![sale_id], |row| row.get::<_, String>(0)) {
+                Ok(name) => Some(name),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e.into()),
+            }
+        };
+
         let mut orders = Vec::with_capacity(by_zone.len());
         for (zone, lines) in by_zone {
             let items_summary = lines
@@ -307,6 +321,7 @@ impl Store<'_> {
                 item_count,
                 kitchen_zone: zone,
                 notes: String::new(),
+                table_number: table_number.clone(),
             })?);
         }
 
@@ -420,6 +435,7 @@ mod tests {
                 item_count: 3,
                 kitchen_zone: None,
                 notes: "No onions".into(),
+                table_number: None,
             })
             .unwrap();
 
@@ -480,6 +496,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -523,6 +540,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -578,6 +596,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -632,6 +651,7 @@ mod tests {
             item_count: 1,
             kitchen_zone: None,
             notes: String::new(),
+            table_number: None,
         })
         .unwrap();
 
@@ -642,6 +662,7 @@ mod tests {
             item_count: 2,
             kitchen_zone: None,
             notes: String::new(),
+            table_number: None,
         })
         .unwrap();
 
@@ -696,6 +717,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -707,6 +729,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -718,6 +741,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -801,6 +825,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -812,6 +837,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -961,6 +987,7 @@ mod tests {
                     item_count: 1,
                     kitchen_zone: None,
                     notes: String::new(),
+                    table_number: None,
                 })
                 .unwrap();
             if *st != "pending" {
@@ -1010,6 +1037,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: Some(zone.to_string()),
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
         }
@@ -1059,6 +1087,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: zone.map(|z| z.to_string()),
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
         }
@@ -1195,6 +1224,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -1229,6 +1259,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap();
 
@@ -1253,6 +1284,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap_err();
         assert!(matches!(
@@ -1276,6 +1308,7 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap_err();
         assert!(matches!(
@@ -1299,6 +1332,7 @@ mod tests {
                 item_count: 0,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap_err();
         assert!(matches!(
@@ -1322,6 +1356,7 @@ mod tests {
                 item_count: -1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
             })
             .unwrap_err();
         assert!(matches!(
