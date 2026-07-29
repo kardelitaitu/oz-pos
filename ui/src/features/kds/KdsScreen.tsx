@@ -27,6 +27,8 @@ export interface KdsLayoutProps {
   selectedOrderId: string | null;
   /** Called when the items on a ticket are edited. */
   onSaveItems?: (orderId: string, itemsSummary: string, itemCount: number) => void;
+  /** Session token for scoped API calls (e.g., fetching line items). */
+  sessionToken: string;
 }
 
 const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
@@ -304,6 +306,7 @@ export default function KdsScreen() {
             onAdvance={advanceStatus}
             showOrderId={prefs.showOrderId}              showTableNumber={prefs.showTableNumber}
               selectedOrderId={selectedOrderId}
+              sessionToken={sessionToken}
               onSaveItems={async (orderId, itemsSummary, itemCount) => {
                 try {
                   await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });

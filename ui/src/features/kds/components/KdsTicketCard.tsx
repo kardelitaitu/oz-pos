@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, memo, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
-import type { KdsOrder, KdsStatus } from '@/api/kds';
+import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
 
 /** Props for the KdsTicketCard component. */
 export interface KdsTicketCardProps {
@@ -18,15 +18,58 @@ export interface KdsTicketCardProps {
   selected?: boolean;
   /** Called when the items on this ticket are edited. */
   onSaveItems?: (orderId: string, itemsSummary: string, itemCount: number) => void;
+  /** Session token for scoped API calls (e.g., fetching line items). */
+  sessionToken: string;
+}
+
+/** Course display order — items without a course map to "other" at the end. */
+const COURSE_ORDER = ['appetizer', 'main', 'side', 'dessert', 'beverage'] as const;
+
+const COURSE_L10N_KEYS: Record<string, string> = {
+  appetizer: 'kds-course-appetizer',
+  main: 'kds-course-main',
+  side: 'kds-course-side',
+  dessert: 'kds-course-dessert',
+  beverage: 'kds-course-beverage',
+};
+
+/** Group line items by course, preserving course order. Returns entries in display order. */
+function groupByCourse(items: KdsLineItem[]): { course: string | null; items: KdsLineItem[] }[] {
+  const groups = new Map<string | null, KdsLineItem[]>();
+  for (const item of items) {
+    const course = item.course ?? null;
+    if (!groups.has(course)) groups.set(course, []);
+    groups.get(course)!.push(item);
+  }
+
+  const ordered: { course: string | null; items: KdsLineItem[] }[] = [];
+  for (const c of COURSE_ORDER) {
+    if (groups.has(c)) {
+      ordered.push({ course: c, items: groups.get(c)! });
+      groups.delete(c);
+    }
+  }
+  // Remaining courses (including null/unknown) come last.
+  for (const [course, courseItems] of groups) {
+    ordered.push({ course, items: courseItems });
+  }
+  return ordered;
 }
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
 
 /**
- * KdsTicketCard renders a single KDS ticket with SLA aging indicators
- * and plays an audio alert when the ticket enters the red threshold.
+ * KdsTicketCard renders a single KDS ticket with SLA aging indicators,
+ * course-grouped line items (Phase 2), and audio alerts at escalation thresholds.
+ *
+ * Line items are lazy-fetched via getKdsOrderLinesScoped when the card mounts
+ * and cached for the lifetime of the component. Falls back to the flat
+ * items_summary string when line items are unavailable (old orders, loading).
  */
-export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, showOrderId = true, showTableNumber = true, selected = false, onSaveItems }: KdsTicketCardProps) {
+export const KdsTicketCard = memo(function KdsTicketCard({
+  order, onAdvance, showOrderId = true, showTableNumber = true,
+  selected = false, onSaveItems, sessionToken,
+}: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, urgent, display } = useTicketSla(order.received_at);
   const { playAlert } = useSound();
@@ -53,6 +96,35 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
   const [editSummary, setEditSummary] = useState(order.items_summary);
   const [editCount, setEditCount] = useState(String(order.item_count));
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // ── Line items: lazy-fetch + cache ──────────────────────────────
+  const [lineItems, setLineItems] = useState<KdsLineItem[] | null>(null);
+  const [lineItemsLoading, setLineItemsLoading] = useState(false);
+  const lineItemsFetched = useRef(false);
+
+  useEffect(() => {
+    // Only fetch once per mount. If line items are already loaded, don't re-fetch.
+    if (lineItemsFetched.current) return;
+    lineItemsFetched.current = true;
+    setLineItemsLoading(true);
+
+    getKdsOrderLinesScoped(sessionToken, order.id)
+      .then((items) => {
+        setLineItems(items);
+        setLineItemsLoading(false);
+      })
+      .catch(() => {
+        // Silently fall back to items_summary — the flat display works for all orders.
+        setLineItemsLoading(false);
+      });
+  }, [sessionToken, order.id]);
+
+  // Group items by course for structured display.
+  const courseGroups = lineItems && lineItems.length > 0
+    ? groupByCourse(lineItems)
+    : null;
+
+  // ── Edit state ───────────────────────────────────────────────────
 
   // Sync edit state when order changes (e.g., after save).
   useEffect(() => {
@@ -98,6 +170,14 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
     setEditing(true);
   };
 
+  // ── Course label resolver ────────────────────────────────────────
+  const courseLabel = useCallback((course: string | null): string => {
+    if (!course) return l10n.getString('kds-course-other') || 'OTHER';
+    const key = COURSE_L10N_KEYS[course];
+    if (key) return l10n.getString(key) || course.toUpperCase();
+    return l10n.getString('kds-course-other') || 'OTHER';
+  }, [l10n]);
+
   return (
     <button
       className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}`}
@@ -123,7 +203,41 @@ export const KdsTicketCard = memo(function KdsTicketCard({ order, onAdvance, sho
           <Localized id="kds-urgent-badge">URGENT</Localized>
         </span>
       )}
-      <span className="kds-ticket-items">{order.items_summary}</span>
+
+      {/* ── Course-grouped line items ─────────────────────────────── */}
+      {courseGroups ? (
+        <div className="kds-ticket-line-items">
+          {courseGroups.map((group) => (
+            <div key={group.course ?? '__other__'} className="kds-ticket-course-group">
+              <span className="kds-ticket-course-header">{courseLabel(group.course)}</span>
+              {group.items.map((item) => (
+                <div key={item.id} className="kds-ticket-item-row">
+                  <span className="kds-ticket-item-name">
+                    {item.qty > 1 ? `${item.display_name} x${item.qty}` : item.display_name}
+                  </span>
+                  {item.modifiers.length > 0 && (
+                    <span className="kds-ticket-modifiers">
+                      {item.modifiers.map((mod, mi) => (
+                        <span key={mi} className="kds-ticket-modifier-row">
+                          {mod.choice}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* ── Fallback: flat items_summary (loading, old orders) ──── */
+        <span className="kds-ticket-items">
+          {lineItemsLoading
+            ? l10n.getString('kds-course-loading') || 'Loading items...'
+            : order.items_summary}
+        </span>
+      )}
+
       {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}
       {editing && (
         <div className="kds-ticket-edit" onClick={(e) => e.stopPropagation()}>

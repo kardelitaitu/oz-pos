@@ -70,6 +70,16 @@ kds-edit-save-aria = Save items
 kds-edit-cancel = Cancel
 kds-edit-cancel-aria = Cancel edit
 
+# ── 2a: Course names (Phase 2) ──
+kds-course-appetizer = APPETIZER
+kds-course-main = MAIN
+kds-course-side = SIDE
+kds-course-dessert = DESSERT
+kds-course-beverage = BEVERAGE
+kds-course-other = OTHER
+kds-course-loading = Loading items...
+kds-course-modifier-separator =: 
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Order
 kds-ready-tts = up

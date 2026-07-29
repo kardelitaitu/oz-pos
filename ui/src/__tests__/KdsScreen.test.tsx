@@ -7,10 +7,11 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKdsOrderLines, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
   mockListKdsOrdersScoped: vi.fn().mockResolvedValue([]),
+  mockGetKdsOrderLines: vi.fn().mockResolvedValue([]),
   mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
     level: 'green',
     elapsedSeconds: 120,
@@ -32,6 +33,7 @@ vi.mock('@/api/kds', () => ({
     id: string,
     status: string,
   ) => mockUpdateKdsStatus(id, status),
+  getKdsOrderLinesScoped: (_token: string, _orderId: string) => mockGetKdsOrderLines(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({

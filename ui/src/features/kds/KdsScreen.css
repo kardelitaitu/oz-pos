@@ -527,6 +527,73 @@
   overflow: hidden;
 }
 
+/* ── 2a: Course-grouped line items ────────────────────────────────── */
+
+.kds-ticket-line-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.kds-ticket-course-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_5);
+}
+
+.kds-ticket-course-group + .kds-ticket-course-group {
+  padding-top: var(--space-1_5);
+  border-top: 1px dashed var(--kds-ticket-border);
+}
+
+.kds-ticket-course-header {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--kds-subtle);
+  padding: var(--space-0_25) var(--space-1_5);
+  background: var(--kds-column-bg);
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+  margin-bottom: var(--space-0_5);
+  user-select: none;
+}
+
+.kds-ticket-item-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_25);
+  padding-left: var(--space-0_5);
+}
+
+.kds-ticket-item-name {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--kds-accent);
+  line-height: 1.3;
+}
+
+.kds-ticket-modifiers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0_25);
+}
+
+.kds-ticket-modifier-row {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--kds-subtle);
+  padding-left: var(--space-4);
+  line-height: 1.3;
+}
+
+.kds-ticket-modifier-row::before {
+  content: '• ';
+  color: var(--kds-dim);
+}
+
 .kds-ticket-notes {
   font-size: var(--text-base);
   color: var(--kds-note-text);

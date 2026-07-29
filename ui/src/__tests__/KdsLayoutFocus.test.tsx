@@ -63,6 +63,7 @@ const defaultProps = {
   showOrderId: true,
   showTableNumber: true,
   selectedOrderId: null,
+  sessionToken: 'test-token',
 };
 
 describe('KdsLayoutFocus', () => {

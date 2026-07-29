@@ -76,4 +76,14 @@ kds-edit-cancel-aria = Batal edit
 kds-order-up-tts = Pesanan
 kds-ready-tts = siap
 
+# ── 2a: Course names (Phase 2) ──
+kds-course-appetizer = PEMBUKA
+kds-course-main = UTAMA
+kds-course-side = PELENGKAP
+kds-course-dessert = PENCUCI MULUT
+kds-course-beverage = MINUMAN
+kds-course-other = LAINNYA
+kds-course-loading = Memuat item...
+kds-course-modifier-separator =: 
+
 # ── Kiosk (remaining) ──

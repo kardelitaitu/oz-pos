@@ -23,9 +23,15 @@
 
 ### 🟠 Tier 2 — Significant Gaps
 
-- [ ] **2a. Course/modifier data discarded:** `complete_sale_to_kds` builds a flat `items_summary` string like "Steak x2, Salad". Course structure (appetizer → main → dessert) and modifier details ("medium rare, no onions") never reach the KDS ticket.
-  - _Files:_ `crates/oz-core/src/db/kds.rs:complete_sale_to_kds`, `ui/src/features/kds/components/KdsTicketCard.tsx`
-  - _Effort:_ Large (schema change + POS-to-KDS data pipeline)
+- [x] **2a. Phase 1 — Schema + Pipeline** ✅ (committed `409c471b`)
+  - [x] Migration 105: `kds_line_items` table
+  - [x] Migration 106: `sale_lines` enriched with `course` + `modifiers_json`
+  - [x] Rust types: `KdsLineItem`, `KdsModifier`, `CreateKdsLineItemInput`
+  - [x] DB methods: `create_kds_line_items`, `get_kds_order_lines`
+  - [x] Pipeline: `complete_sale_to_kds` persists structured line items
+  - [x] `get_kds_order_lines_scoped` Tauri command + TS API wrapper
+  - [x] **Phase 2 — KDS front-end display** (course-grouped ticket cards)
+  - [ ] **Phase 3 — POS cart input** (course selector + modifier UI)
 
 - [x] **2b. No recall / history view:** Once a ticket advances to "served", it vanishes from the queue. Kitchen staff can't pull up completed orders.
   - _Files:_ `ui/src/features/kds/KdsScreen.tsx` (queue only shows pending/preparing/ready)

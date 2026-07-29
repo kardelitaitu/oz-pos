@@ -8,7 +8,12 @@ import { withFluent } from '@/locales/test-utils';
 import type { KdsOrder } from '@/api/kds';
 
 const mockPlayAlert = vi.fn();
+const mockGetKdsOrderLines = vi.fn().mockResolvedValue([]);
 const mockSlaResult: { level: string; display: string; elapsedSeconds: number } = { level: 'green', display: '0s', elapsedSeconds: 0 };
+
+vi.mock('@/api/kds', () => ({
+  getKdsOrderLinesScoped: (_token: string, _orderId: string) => mockGetKdsOrderLines(),
+}));
 
 vi.mock('@/features/kds/hooks/useTicketSla', () => ({
   useTicketSla: () => mockSlaResult,
@@ -48,7 +53,7 @@ const baseOrder: KdsOrder = {
 
 function renderCard(order: Partial<KdsOrder> = {}) {
   const merged = { ...baseOrder, ...order };
-  return renderWithFluentSync(<KdsTicketCard order={merged} onAdvance={onAdvance} />, sharedFtl, kdsFtl);
+  return renderWithFluentSync(<KdsTicketCard order={merged} onAdvance={onAdvance} sessionToken="test-token" />, sharedFtl, kdsFtl);
 }
 
 const onAdvance = vi.fn();
@@ -59,9 +64,11 @@ describe('KdsTicketCard', () => {
     expect(screen.getByText('#42')).toBeTruthy();
   });
 
-  it('renders items summary', () => {
+  it('renders items summary', async () => {
     renderCard();
-    expect(screen.getByText('2x Nasi Goreng, 1x Es Teh')).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(screen.getByText('2x Nasi Goreng, 1x Es Teh')).toBeTruthy();
+    });
   });
 
   it('renders item count', () => {
@@ -117,7 +124,7 @@ describe('KdsTicketCard', () => {
     mockSlaResult.level = 'red';
     rerender(
       withFluent(
-        <KdsTicketCard order={{ ...baseOrder, notes: 'trigger' }} onAdvance={onAdvance} />,
+        <KdsTicketCard order={{ ...baseOrder, notes: 'trigger' }} onAdvance={onAdvance} sessionToken="test-token" />,
         sharedFtl, kdsFtl,
       ),
     );

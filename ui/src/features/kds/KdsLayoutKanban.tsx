@@ -40,7 +40,7 @@ function useCountAnim(count: number): AnimDir {
   return anim;
 }
 
-export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId, onSaveItems }: KdsLayoutProps) {
+export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId, onSaveItems, sessionToken }: KdsLayoutProps) {
   const grouped = (status: ColumnStatus) =>
     orders.filter((o) => o.status === status);
 
@@ -70,14 +70,14 @@ export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumbe
               {count === 0 ? (
                 <p className="kds-empty"><Localized id="kds-no-orders">No orders yet</Localized></p>
               ) : (
-                grouped(status).map((order) => (
-                  <KdsTicketCard
+                grouped(status).map((order) => (                    <KdsTicketCard
                     key={order.id}
                     order={order}
                     onAdvance={onAdvance}
                     showOrderId={showOrderId}
                     showTableNumber={showTableNumber}
                     selected={selectedOrderId === order.id}
+                    sessionToken={sessionToken}
                     {...(onSaveItems ? { onSaveItems } : {})}
                   />
                 ))
