@@ -159,7 +159,7 @@ describe('PriceOverrideModal', () => {
     typePin('12');
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(2);
 
-    fireEvent.click(screen.getByText('\u232B')); // ⌫ Unicode
+    fireEvent.click(screen.getByRole('button', { name: /backspace/i }));
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(1);
   });
 
