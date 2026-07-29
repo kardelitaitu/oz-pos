@@ -943,12 +943,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Keyboard shortcuts ────────────────────────────────────────
 
+  const isAnyModalOpen = useCallback(
+    () => document.querySelector('[aria-modal="true"]') !== null,
+    []);
+
+  const isAnyOverlayOpen = useCallback(() =>
+    showCustomerSearch || showHeldCartsList || showQuickReturn ||
+    showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm ||
+    showOpenShift || (showCloseShift && !closedShiftSummary) || !!closedShiftSummary ||
+    !!editingProduct || isAddCategoryOpen || isAddProductOpen,
+  [showCustomerSearch, showHeldCartsList, showQuickReturn, showDiscount, showQtyPicker,
+    showShortcuts, showCreditList, showClearConfirm, showOpenShift, showCloseShift,
+    closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen]);
+
   useEffect(() => {
-    const isAnyModalOpen = () => document.querySelector('[aria-modal="true"]') !== null;
-    const isAnyOverlayOpen = () =>
-      showCustomerSearch || showHeldCartsList || showQuickReturn ||
-      showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm ||
-      showOpenShift || (showCloseShift && !closedShiftSummary) || !!closedShiftSummary;
 
     const handler = (e: KeyboardEvent) => {
       // Guard: block all hotkeys while any aria-modal is open (e.g. WorkspaceSettingsModal)
@@ -1158,15 +1166,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         heldCartId={heldCartId}
         activeShift={!!activeShift}
         onPay={handlePay}
-        onRequestClear={handleRequestClear}
-        onShowDiscount={() => setShowDiscount(true)}
+        onRequestClear={() => { if (!isAnyOverlayOpen()) handleRequestClear(); }}
+        onShowDiscount={() => { if (!isAnyOverlayOpen()) setShowDiscount(true); }}
         onHoldResume={heldCartId ? handleResume : handleHold}
         onShowSalesHistory={() => setShowSalesHistory(true)}
-        onShowCustomerSearch={() => setShowCustomerSearch(true)}
+        onShowCustomerSearch={() => { if (!isAnyOverlayOpen()) setShowCustomerSearch(true); }}
         onShowStockInquiry={() => setShowStockInquiry(true)}
-        onToggleShift={() => activeShift ? setShowCloseShift(true) : setShowOpenShift(true)}
+        onToggleShift={() => { if (!isAnyOverlayOpen()) activeShift ? setShowCloseShift(true) : setShowOpenShift(true); }}
         onOpenSettings={handleOpenSettings}
-        onShowQuickReturn={() => setShowQuickReturn(true)}
+        onShowQuickReturn={() => { if (!isAnyOverlayOpen()) setShowQuickReturn(true); }}
         onShowTables={() => setShowTables(true)}
         onNavigateKds={() => onNavigate?.('kds')}
         skuInputRef={skuInputRef}
