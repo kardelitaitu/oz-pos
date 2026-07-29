@@ -124,6 +124,7 @@ payment-customer-name-label = Customer Name
 payment-customer-change = Change
 payment-customer-select = Select Customer
 payment-customer-remove-aria = Remove customer
+payment-loyalty-use-points = Use Points
 payment-loyalty-points-label = Points
 payment-loyalty-discount-label = Discount: -{ $amount }
 payment-customer-search-heading = Select Customer

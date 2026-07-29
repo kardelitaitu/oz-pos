@@ -638,6 +638,7 @@ payment-customer-name-label = Nama Pelanggan
 payment-customer-change = Ganti
 payment-customer-select = Pilih Pelanggan
 payment-customer-remove-aria = Hapus pelanggan
+payment-loyalty-use-points = Gunakan Poin
 payment-loyalty-points-label = Poin
 payment-loyalty-discount-label = Diskon: -{ $amount }
 payment-customer-search-heading = Pilih Pelanggan
