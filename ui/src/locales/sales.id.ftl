@@ -151,9 +151,15 @@ pos-cart-line-qty-aria = Jumlah: { $qty }
 pos-cart-line-increase-aria = Tambah jumlah { $sku }
 pos-cart-line-remove-aria = Hapus { $sku } dari keranjang
 pos-cart-line-swipe-remove-aria = Hapus { $sku }
+pos-cart-line-override = Timpa
+pos-cart-line-override-aria = Timpa harga untuk { $name }
 
 # POS Cart Panel
 pos-cart-panel-aria = Keranjang
+
+# Cart course firing
+pos-cart-course-fire-aria = Kirim { $label } ({ $count } item)
+pos-cart-course-btn--all = Kirim Semua
 
 # POS Cart Actions
 pos-cart-table-aria = Nomor meja

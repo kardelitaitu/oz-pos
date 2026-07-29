@@ -239,9 +239,9 @@ function CartLineItem({
               type="button"
               className="pos-cart-line-override"
               onClick={() => onOverride(line)}
-              aria-label={`Override price for ${line.name ?? line.sku}`}
+              aria-label={l10n.getString('pos-cart-line-override-aria', { name: line.name ?? line.sku }, 'Override price')}
             >
-              Override
+              <Localized id="pos-cart-line-override">Override</Localized>
             </button>
           )}
         </div>
@@ -1416,7 +1416,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   className="pos-cart-course-btn"
                   onClick={() => fireCourse(course.id)}
                   data-testid={`fire-course-${course.id}`}
-                  aria-label={`Fire ${course.label} (${holdCount} items)`}
+                  aria-label={l10n.getString('pos-cart-course-fire-aria', { label: course.label, count: String(holdCount) }, `Fire ${course.label} (${holdCount} items)`)}
                 >
                   <span className="pos-cart-course-emoji" aria-hidden="true">{course.emoji}</span>
                   <span className="pos-cart-course-label">{course.label}</span>
@@ -1431,7 +1431,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 onClick={fireAllCourses}
                 data-testid="fire-all-courses"
               >
-                <span className="pos-cart-course-label">Fire All</span>
+                <Localized id="pos-cart-course-btn--all"><span className="pos-cart-course-label">Fire All</span></Localized>
               </button>
             )}
           </div>

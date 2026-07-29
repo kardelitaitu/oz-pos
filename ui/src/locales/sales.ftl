@@ -607,9 +607,15 @@ pos-cart-line-qty-aria = Quantity: { $qty }
 pos-cart-line-increase-aria = Increase quantity of { $sku }
 pos-cart-line-remove-aria = Remove { $sku } from cart
 pos-cart-line-swipe-remove-aria = Remove { $sku }
+pos-cart-line-override = Override
+pos-cart-line-override-aria = Override price for { $name }
 
 # Cart panel
 pos-cart-panel-aria = Cart
+
+# Cart course firing
+pos-cart-course-fire-aria = Fire { $label } ({ $count } items)
+pos-cart-course-btn--all = Fire All
 
 # Shift modal overlay labels
 pos-close-shift-overlay-aria = Close shift
