@@ -914,6 +914,13 @@ impl Store<'_> {
         description: Option<&str>,
         colour: Option<&str>,
     ) -> Result<(), CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "workspace instance name must not be empty".into(),
+            });
+        }
+
         let affected = self.conn.execute(
             "UPDATE workspace_instances
              SET name = ?2,
