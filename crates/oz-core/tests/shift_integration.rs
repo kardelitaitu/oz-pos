@@ -329,8 +329,10 @@ fn shift_list_ordered_by_opened_at_desc() {
     let s = store(&conn);
 
     let s1 = s.open_shift("user-alice", None, 100).unwrap();
+    s.close_shift(&s1.id, 150, None).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(5));
     let s2 = s.open_shift("user-alice", None, 200).unwrap();
+    s.close_shift(&s2.id, 250, None).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(5));
     let s3 = s.open_shift("user-bob", None, 300).unwrap();
 

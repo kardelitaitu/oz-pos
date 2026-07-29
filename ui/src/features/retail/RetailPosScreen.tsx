@@ -337,6 +337,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [productsLoading, setProductsLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [filterLowStock, setFilterLowStock] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -420,12 +421,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           p.category?.toLowerCase() === activeCategory.toLowerCase(),
       );
     }
+    if (filterLowStock) {
+      list = list.filter((p) => {
+        if (p.stock_qty == null || p.stock_qty <= 0) return false;
+        const threshold = p.low_stock_threshold ?? 5;
+        return p.stock_qty <= threshold;
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
     }
     return list;
-  }, [products, activeCategory, searchQuery, categories]);
+  }, [products, activeCategory, searchQuery, categories, filterLowStock]);
 
   const [sortField, setSortField] = useState<SortField>('sku');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -1171,7 +1179,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         lowStockCount={lowStockCount}
         creditCount={creditSales.length}
         heldCartCount={heldCartsList.length}
-        onClickLowStock={() => setActiveCategory('__low_stock__')}
+        onClickLowStock={() => setFilterLowStock((prev) => !prev)}
         onClickCredit={() => { if (!isAnyOverlayOpen()) setShowCreditList(true); }}
         onClickHeldCarts={() => { if (!isAnyOverlayOpen()) setShowHeldCartsList(true); }}
       />

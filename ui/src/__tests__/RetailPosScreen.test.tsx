@@ -282,6 +282,28 @@ describe('RetailPosScreen — rendering', () => {
     await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument());
   });
 
+  it('filters to low-stock products when reminder row is clicked', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // Click the low-stock reminder row — filter on
+    const lowStockRow = document.querySelector('.retail-reminder-row--low-stock')!;
+    expect(lowStockRow).toBeInTheDocument();
+    await userEvent.click(lowStockRow);
+
+    // Only Aqua (stock_qty=3 <= 5) should remain visible
+    await waitFor(() => expect(screen.queryByText('Indomie Goreng')).not.toBeInTheDocument());
+    expect(screen.queryByText('Teh Botol Sosro')).not.toBeInTheDocument();
+    expect(screen.getByText('Aqua 600ml')).toBeInTheDocument();
+
+    // Click again — filter off, all products return
+    await userEvent.click(lowStockRow);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+    expect(screen.getByText('Teh Botol Sosro')).toBeInTheDocument();
+    expect(screen.getByText('Aqua 600ml')).toBeInTheDocument();
+  });
+
   it('renders category filter buttons', async () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText(/All Categories/i)).toBeInTheDocument());

@@ -9,6 +9,9 @@ use super::Store;
 
 impl Store<'_> {
     /// Open a new shift for a user.
+    ///
+    /// Validates that the user exists and is active, and that there is no
+    /// other open shift for the same user.
     pub fn open_shift(
         &self,
         user_id: &str,
@@ -25,6 +28,43 @@ impl Store<'_> {
             return Err(CoreError::Validation {
                 field: "opening_balance_minor",
                 message: "opening_balance_minor must be ≥ 0".into(),
+            });
+        }
+
+        // Verify the user exists and is active.
+        let active: bool = self
+            .conn
+            .query_row(
+                "SELECT is_active FROM users WHERE id = ?1",
+                params![user_id.trim()],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|v| v != 0)
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::Validation {
+                    field: "user_id",
+                    message: "user not found".into(),
+                },
+                _ => CoreError::Db(e),
+            })?;
+
+        if !active {
+            return Err(CoreError::Validation {
+                field: "user_id",
+                message: "user account is deactivated".into(),
+            });
+        }
+
+        // Ensure no duplicate open shift for this user.
+        let open_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM shifts WHERE user_id = ?1 AND status = 'open'",
+            params![user_id.trim()],
+            |row| row.get(0),
+        )?;
+        if open_count > 0 {
+            return Err(CoreError::Validation {
+                field: "user_id",
+                message: "user already has an open shift".into(),
             });
         }
 
@@ -562,6 +602,7 @@ mod tests {
         let s = store(&conn);
 
         let s1 = s.open_shift("user-1", None, 100).unwrap();
+        s.close_shift(&s1.id, 150, None).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
         let s2 = s.open_shift("user-1", None, 200).unwrap();
 
