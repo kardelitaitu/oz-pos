@@ -649,6 +649,81 @@
 
 /* ── 2b: History panel ───────────────────────────────────────────── */
 
+/* ── 3b: Offline banner ──────────────────────────────────────────── */
+
+.kds-offline-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-warning-bg);
+  border-bottom: 1px solid var(--color-warning);
+  color: var(--color-warning-dim);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.kds-offline-banner svg {
+  flex-shrink: 0;
+  color: var(--color-warning);
+}
+
+.kds-offline-banner-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.kds-offline-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-0_5) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: filter var(--duration-100);
+  flex-shrink: 0;
+}
+
+.kds-offline-retry-btn:hover {
+  filter: brightness(1.15);
+}
+
+.kds-offline-retry-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.kds-offline-dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: var(--text-base);
+  color: var(--kds-dim);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--duration-100);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.kds-offline-dismiss-btn:hover {
+  color: var(--kds-text);
+}
+
+.kds-offline-dismiss-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 .kds-history-toggle {
   display: inline-flex;
   align-items: center;

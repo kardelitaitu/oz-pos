@@ -72,6 +72,14 @@ kds-edit-save-aria = Simpan item
 kds-edit-cancel = Batal
 kds-edit-cancel-aria = Batal edit
 
+# ── 3b: Offline resilience ──
+kds-offline-label = Luring — menampilkan pesanan tersimpan
+kds-offline-queued = { $count } pembaruan antri — luring
+kds-offline-queued-update = Pembaruan antri — akan sinkron saat online
+kds-offline-retry = Coba Lagi
+kds-offline-retry-aria = Coba lagi pembaruan tertunda
+kds-offline-dismiss-aria = Tutup banner luring
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Pesanan
 kds-ready-tts = siap

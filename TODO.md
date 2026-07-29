@@ -55,8 +55,9 @@
   - _Files:_ `ui/src/features/kds/KdsScreen.tsx`, `ui/src/features/kds/hooks/useKdsPreferences.ts`
   - _Effort:_ Small (add zone chip/tab bar in header)
 
-- [ ] **3b. No offline resilience:** If backend is unreachable, KDS shows an error banner with stale queue. No Service Worker cache or optimistic UI.
-  - _Effort:_ Large (Service Worker + retry queue)
+- [x] **3b. No offline resilience:** If backend is unreachable, KDS shows an error banner with stale queue.
+  - _Solution:_ localStorage cache + retry queue + optimistic updates — download-and-go, no Service Worker needed (see `useKdsOffline` hook)
+  - _Effort:_ Large (localStorage cache + retry queue + optimistic UI)
 
 - [x] **3c. No bump bar / hardware integration:** Physical USB bump bars and parallel thermal printer chits are standard in production kitchens. HAL has printer drivers but they're not wired to KDS.
   - _Files:_ `crates/oz-hal/src/drivers/kds_chit.rs`, `apps/desktop-client/src/commands/kds.rs`

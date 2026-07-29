@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef, Profiler } from 'rea
 import { Localized, useLocalization } from '@fluent/react';
 import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
 import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
@@ -50,26 +51,46 @@ export default function KdsScreen() {
   const [showHistory, setShowHistory] = useState(false);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
+  // 3b: Offline resilience — cache, retry queue, optimistic updates.
+  const {
+    online, pendingQueueLength,
+    wrapFetch, wrapUpdate, retryPending,
+  } = useKdsOffline();
+
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);
   const { speak } = useSound();
 
-  const fetchOrders = useCallback(() => {
+  const fetchOrders = useCallback(async () => {
     const zone = prefs.kdsZone || undefined;
-    getKdsQueueScoped(sessionToken, zone)
-      .then((allOrders) => {
-        const activeStoreId = workspaceScope?.storeId;
-        if (activeStoreId) {
-          const filtered = allOrders.filter((order) =>
-            !order.store_id || order.store_id === activeStoreId,
-          );
-          setOrders(filtered);
-        } else {
-          setOrders(allOrders);
+    const { orders: fetchedOrders, fromCache } = await wrapFetch(() =>
+      getKdsQueueScoped(sessionToken, zone),
+    );
+    const activeStoreId = workspaceScope?.storeId;
+    let filtered = fetchedOrders;
+    if (activeStoreId) {
+      filtered = fetchedOrders.filter((order) =>
+        !order.store_id || order.store_id === activeStoreId,
+      );
+    }
+    setOrders(filtered);
+
+    // On reconnect (fetch succeeded, not from cache), flush pending queue.
+    if (!fromCache && pendingQueueLength > 0) {
+      retryPending(async (action) => {
+        try {
+          await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
+          // Voice callout if reconnected action targeted 'ready'.
+          if (action.targetStatus === 'ready') {
+            speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${l10n.getString('kds-ready-tts') || 'up'}!`);
+          }
+          return true;
+        } catch {
+          return false;
         }
-      })
-      .catch((e) => setError(e.message ?? String(e)));
-  }, [sessionToken, workspaceScope?.storeId, prefs.kdsZone]);
+      });
+    }
+  }, [sessionToken, workspaceScope?.storeId, prefs.kdsZone, wrapFetch, pendingQueueLength, retryPending, speak, l10n]);
 
   // 1a: Real-time push via Tauri events — replaces adaptive polling.
   // Listens for kds:orders-changed emitted by the Rust backend after
@@ -105,17 +126,27 @@ export default function KdsScreen() {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
     if (currentIdx < 0 || currentIdx >= STATUS_ORDER.length - 1) return;
     const nextStatus = STATUS_ORDER[currentIdx + 1]!;
-    try {
-      await updateKdsStatusScoped(sessionToken, order.id, nextStatus);
+
+    // 3b: Offline-aware status update — queue on failure + optimistic local update.
+    const ok = await wrapUpdate(order.id, nextStatus, () =>
+      updateKdsStatusScoped(sessionToken, order.id, nextStatus),
+    );
+
+    if (ok) {
       // 3d: Voice callout when a ticket hits 'ready' — "Order 42 up!"
       if (nextStatus === 'ready') {
         speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${order.display_number} ${l10n.getString('kds-ready-tts') || 'up'}!`);
       }
       // No manual fetchOrders() — the kds:orders-changed event triggers a refresh.
-    } catch (e) {
-      setError(String(e));
+    } else {
+      // Optimistic update: advance locally so the kitchen can keep working.
+      setOrders((prev) => prev.map((o) =>
+        o.id === order.id ? { ...o, status: nextStatus } : o,
+      ));
+      // Show a user-friendly banner instead of raw error.
+      setError(l10n.getString('kds-offline-queued-update') || 'Update queued — will sync when online');
     }
-  }, [sessionToken, speak, l10n]);
+  }, [sessionToken, speak, l10n, wrapUpdate]);
 
   // 1c: Auto-acknowledge — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.
@@ -271,6 +302,46 @@ export default function KdsScreen() {
         </div>
       </div>
       {error && <p className="kds-error">{error}</p>}
+      {/* 3b: Offline banner — shown when backend is unreachable or actions are queued */}
+      {!online && (
+        <div className="kds-offline-banner" role="alert">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-.47.81c-.54.5-1.1 1.36-1.1 2.52V8l4.89-4.89c-.04-.26-.14-.52-.34-.73zM5.99 5.58l-2.84 2.84a1.532 1.532 0 000 2.16l7.29 7.29c.39.39 1.02.39 1.41 0l2.84-2.84-5.99-5.99-2.71-2.76v.3zm10.02 2.46l2.13 2.13a1.532 1.532 0 010 2.16l-2.13 2.13a.5.5 0 01-.71-.71l2.13-2.13a.532.532 0 000-.75l-2.13-2.13a.5.5 0 01.71-.71zm-5.02 5.32a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z" clipRule="evenodd" />
+          </svg>
+          <span className="kds-offline-banner-text">
+            {pendingQueueLength > 0
+              ? l10n.getString('kds-offline-queued', { count: pendingQueueLength }) || `${pendingQueueLength} update(s) queued — offline`
+              : l10n.getString('kds-offline-label') || 'Offline — showing cached orders'}
+          </span>
+          {pendingQueueLength > 0 && (
+            <button
+              className="kds-offline-retry-btn"
+              onClick={() => {
+                retryPending(async (action) => {
+                  try {
+                    await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
+                    return true;
+                  } catch {
+                    return false;
+                  }
+                });
+                // The backend will emit kds:orders-changed on success,
+                // which triggers fetchOrders via the event listener.
+              }}
+              aria-label={l10n.getString('kds-offline-retry-aria') || 'Retry pending updates'}
+            >
+              <Localized id="kds-offline-retry">Retry</Localized>
+            </button>
+          )}
+          <button
+            className="kds-offline-dismiss-btn"
+            onClick={() => setError(null)}
+            aria-label={l10n.getString('kds-offline-dismiss-aria') || 'Dismiss offline banner'}
+          >
+            &times;
+          </button>
+        </div>
+      )}
       {/* P7-3: Pull-to-refresh indicator */}
       {pullState !== 'idle' && (
         <div

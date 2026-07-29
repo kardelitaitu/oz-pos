@@ -80,6 +80,14 @@ kds-course-other = OTHER
 kds-course-loading = Loading items...
 kds-course-modifier-separator =: 
 
+# ── 3b: Offline resilience ──
+kds-offline-label = Offline — showing cached orders
+kds-offline-queued = { $count } update(s) queued — offline
+kds-offline-queued-update = Update queued — will sync when online
+kds-offline-retry = Retry
+kds-offline-retry-aria = Retry pending updates
+kds-offline-dismiss-aria = Dismiss offline banner
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Order
 kds-ready-tts = up

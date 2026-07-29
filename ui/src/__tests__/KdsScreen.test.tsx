@@ -216,10 +216,13 @@ describe('KdsScreen', () => {
     );
   });
 
-  it('displays error when getKdsQueue fails', async () => {
+  it('shows offline banner when getKdsQueue fails', async () => {
     mockGetKdsQueue.mockRejectedValue(new Error('Network down'));
     renderScreen();
-    await waitFor(() => expect(screen.getByText('Network down')).toBeDefined());
+    // The offline banner should show instead of the raw error.
+    await waitFor(() => {
+      expect(document.querySelector('.kds-offline-banner')).not.toBeNull();
+    });
   });
 
   it('shows time ago on tickets', async () => {
