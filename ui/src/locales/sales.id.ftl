@@ -707,6 +707,7 @@ retail-shift-closed-cash-sales = Penjualan Tunai:
 retail-shift-closed-expected-label = Diharapkan:
 retail-shift-closed-difference-label = Selisih:
 retail-credit-reminders-title = Pengingat Piutang
+retail-reminder-dismiss-aria = Tutup notifikasi
 retail-credit-no-outstanding = Tidak ada piutang
 retail-credit-col-customer = Pelanggan
 retail-credit-col-amount = Jumlah
@@ -750,6 +751,7 @@ retail-toast-open-shift-first = Buka shift terlebih dahulu
 retail-toast-order-held = Pesanan ditahan
 retail-toast-failed-hold = Gagal menahan pesanan
 retail-toast-failed-resume = Gagal melanjutkan pesanan
+retail-toast-corrupt-cart = Data pesanan ditahan rusak dan telah dihapus
 retail-toast-sale-complete = Transaksi selesai
 retail-toast-credit-settled = Piutang dibayar
 retail-toast-failed-settle = Gagal membayar piutang
@@ -783,7 +785,9 @@ retail-low-stock-banner =
     }
 retail-held-cart-delete-aria = Hapus pesanan ditahan
 retail-fn-quick-return = Retur Cepat
+retail-filtered-low-stock = Difilter: { $count } produk stok rendah
 retail-header-workspaces-title = Kembali ke ruang kerja
+retail-resize-handle-aria = Ubah ukuran panel keranjang
 retail-header-workspaces-aria = Kembali ke ruang kerja
 
 # ── Retail POS table columns ──
@@ -816,6 +820,8 @@ retail-add-product-title = Tambah Produk
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
 scale-read-error = Error timbangan
+scale-weigh-add = Timbang & Tambah
+scale-clear-aria = Hapus target timbangan
 
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Memuat...

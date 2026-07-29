@@ -707,6 +707,7 @@ retail-shift-closed-cash-sales = Cash Sales:
 retail-shift-closed-expected-label = Expected:
 retail-shift-closed-difference-label = Difference:
 retail-credit-reminders-title = Credit Reminders
+retail-reminder-dismiss-aria = Dismiss notifications
 retail-credit-no-outstanding = No outstanding credits
 retail-credit-col-customer = Customer
 retail-credit-col-amount = Amount
@@ -750,6 +751,7 @@ retail-toast-open-shift-first = Open a shift first
 retail-toast-order-held = Order held
 retail-toast-failed-hold = Failed to hold order
 retail-toast-failed-resume = Failed to resume order
+retail-toast-corrupt-cart = Held cart data is corrupted and has been removed
 retail-toast-sale-complete = Sale complete
 retail-toast-credit-settled = Credit settled
 retail-toast-failed-settle = Failed to settle credit
@@ -789,10 +791,14 @@ retail-held-cart-delete-aria = Delete held cart
 scale-indicator-aria = Scale weight indicator
 scale-idle = Scale
 scale-read-error = Scale error
+scale-weigh-add = Weigh & Add
+scale-clear-aria = Clear weigh target
 
 # ── Retail POS shortcut keys ───────────────────────────────────────────────
 retail-fn-quick-return = Quick Return
+retail-filtered-low-stock = Filtered: { $count } low-stock products
 retail-header-workspaces-title = Back to workspaces
+retail-resize-handle-aria = Resize cart panel
 retail-header-workspaces-aria = Back to workspaces
 
 # ── Retail POS table columns ──
