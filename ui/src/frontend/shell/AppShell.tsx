@@ -19,6 +19,8 @@ import type { WizardState } from '@/features/setup/SetupWizard';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import PosScreen from '@/features/sales/PosScreen';
 import KdsScreen from '@/features/kds/KdsScreen';
+import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
+import type { WorkspaceType } from '@/features/settings/WorkspaceSettingsModal';
 import { getLicenseStatus } from '@/api/license';
 import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
 import CreatePinScreen from '@/features/auth/CreatePinScreen';
@@ -70,6 +72,7 @@ export default function AppShell() {
   addToastRef.current = addToast;
 
   const [isLocked, setIsLocked] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   useIdleTimer(() => {
     if (session) {
@@ -225,6 +228,40 @@ export default function AppShell() {
     setHasActiveLicense(true);
   }, []);
 
+  // ── 4b: F10 opens the WorkspaceSettingsModal across all workspace screens ─
+  useEffect(() => {
+    if (!activeWorkspace) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F10') {
+        e.preventDefault();
+        // Don't open if a modal is already active (e.g., a nested modal).
+        if (!document.querySelector('[aria-modal="true"]')) {
+          setSettingsModalOpen((p) => !p);
+        }
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [activeWorkspace]);
+
+  // Map active workspace to the modal's WorkspaceType.
+  const WORKSPACE_TO_TYPE: Record<string, WorkspaceType> = {
+    'restaurant-pos': 'restaurant-pos',
+    'store-pos': 'store-pos',
+    kds: 'kds',
+    inventory: 'inventory',
+  };
+  const workspaceType: WorkspaceType | null = activeWorkspace ? (WORKSPACE_TO_TYPE[activeWorkspace] ?? null) : null;
+
+  // Shared settings modal extracted once to avoid duplicating JSX across 6+ branches.
+  const settingsModal = settingsModalOpen && workspaceType ? (
+    <WorkspaceSettingsModal
+      open={settingsModalOpen}
+      onClose={() => setSettingsModalOpen(false)}
+      workspaceType={workspaceType}
+    />
+  ) : null;
+
   // ── F11 toggles fullscreen across all workpaces ───────────────
   useFullscreen((isFullscreen) => {
     addToast({
@@ -306,11 +343,14 @@ export default function AppShell() {
   // ── KDS Kiosk — force KDS route, hide header, no workspace picker ──
   if (isKdsKiosk) {
     return (
-      <div className="workspace-fullscreen">
-        <div className="kds-workspace">
-          <KdsScreen />
+      <>
+        <div className="workspace-fullscreen">
+          <div className="kds-workspace">
+            <KdsScreen />
+          </div>
         </div>
-      </div>
+        {settingsModal}
+      </>
     );
   }
 
@@ -332,28 +372,34 @@ export default function AppShell() {
   if (activeWorkspace === 'restaurant-pos') {
     if (currentRoute === 'kds') {
       return (
-        <div className="workspace-fullscreen">
-          <div className="kds-workspace">
-            <div className="kds-workspace-header">
-              { }
-              <button
-                className="kds-workspace-back"
-                onClick={() => handleNavigate('sales')}
-              >
-                <Localized id="back">
-                  <span>&larr; Back</span>
-                </Localized>
-              </button>
+        <>
+          <div className="workspace-fullscreen">
+            <div className="kds-workspace">
+              <div className="kds-workspace-header">
+                { }
+                <button
+                  className="kds-workspace-back"
+                  onClick={() => handleNavigate('sales')}
+                >
+                  <Localized id="back">
+                    <span>&larr; Back</span>
+                  </Localized>
+                </button>
+              </div>
+              <KdsScreen />
             </div>
-            <KdsScreen />
           </div>
-        </div>
+          {settingsModal}
+        </>
       );
     }
     return (
-      <div className="workspace-fullscreen">
-        <PosScreen onNavigate={handleNavigate} />
-      </div>
+      <>
+        <div className="workspace-fullscreen">
+          <PosScreen onNavigate={handleNavigate} />
+        </div>
+        {settingsModal}
+      </>
     );
   }
 
@@ -362,37 +408,46 @@ export default function AppShell() {
   if (activeWorkspace === 'store-pos') {
     if (currentRoute === 'kds') {
       return (
-        <div className="workspace-fullscreen">
-          <div className="kds-workspace">
-            <div className="kds-workspace-header">
-              { }
-              <button
-                className="kds-workspace-back"
-                onClick={() => handleNavigate('products')}
-              >
-                <Localized id="back">
-                  <span>&larr; Back</span>
-                </Localized>
-              </button>
+        <>
+          <div className="workspace-fullscreen">
+            <div className="kds-workspace">
+              <div className="kds-workspace-header">
+                { }
+                <button
+                  className="kds-workspace-back"
+                  onClick={() => handleNavigate('products')}
+                >
+                  <Localized id="back">
+                    <span>&larr; Back</span>
+                  </Localized>
+                </button>
+              </div>
+              <KdsScreen />
             </div>
-            <KdsScreen />
           </div>
-        </div>
+          {settingsModal}
+        </>
       );
     }
     return (
-      <div className="workspace-fullscreen">
-        <RetailPosScreen onNavigate={handleNavigate} />
-      </div>
+      <>
+        <div className="workspace-fullscreen">
+          <RetailPosScreen onNavigate={handleNavigate} />
+        </div>
+        {settingsModal}
+      </>
     );
   }
 
   // Fullscreen workspace — KDS.
   if (activeWorkspace === 'kds') {
     return (
-      <div className="workspace-fullscreen">
-        <KdsScreen />
-      </div>
+      <>
+        <div className="workspace-fullscreen">
+          <KdsScreen />
+        </div>
+        {settingsModal}
+      </>
     );
   }
 
@@ -409,21 +464,24 @@ export default function AppShell() {
   }
 
   return (
-    <AppLayout
-      route={currentRoute}
-      onNavigate={handleNavigate}
-      sessionToken={sessionToken}
-      {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
-    >
-      {pageDenied ? (
-        <PermissionDenied
-          action={pageRegistration!.label}
-          requiredRole={pageRegistration!.requiredRole!}
-        />
-      ) : PageComponent ? (
-        <PageComponent />
-      ) : null}
-    </AppLayout>
+    <>
+      <AppLayout
+        route={currentRoute}
+        onNavigate={handleNavigate}
+        sessionToken={sessionToken}
+        {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
+      >
+        {pageDenied ? (
+          <PermissionDenied
+            action={pageRegistration!.label}
+            requiredRole={pageRegistration!.requiredRole!}
+          />
+        ) : PageComponent ? (
+          <PageComponent />
+        ) : null}
+      </AppLayout>
+      {settingsModal}
+    </>
   );
 }
 
