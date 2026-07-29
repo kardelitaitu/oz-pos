@@ -93,6 +93,51 @@ pub struct KdsOrder {
     pub priority: bool,
 }
 
+/// A modifier choice attached to a line item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KdsModifier {
+    /// Modifier group name (e.g., "Temperature", "Add-ons").
+    pub name: String,
+    /// Selected option (e.g., "Medium Rare", "Extra Cheese").
+    pub choice: String,
+    /// Price impact in minor units (0 when included).
+    #[serde(default)]
+    pub price_minor: i64,
+}
+
+/// A single line item on a KDS order ticket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KdsLineItem {
+    /// Primary key (UUIDv7).
+    pub id: String,
+    /// FK to the parent KDS order.
+    pub kds_order_id: String,
+    /// Product SKU.
+    pub sku: String,
+    /// Product display name (resolved at creation time).
+    pub display_name: String,
+    /// Quantity (≥ 1).
+    pub qty: i64,
+    /// Course assignment ("appetizer", "main", "dessert", "beverage", or NULL).
+    pub course: Option<String>,
+    /// Modifier choices (empty vec when no modifiers).
+    #[serde(default)]
+    pub modifiers: Vec<KdsModifier>,
+    /// Display order within the ticket.
+    pub line_position: i64,
+    /// Per-item status.
+    #[serde(default)]
+    pub item_status: String,
+    /// ISO-8601 timestamp of when preparation started.
+    pub started_at: Option<String>,
+    /// ISO-8601 timestamp of when preparation finished.
+    pub ready_at: Option<String>,
+    /// ISO-8601 timestamp of when the item was served.
+    pub served_at: Option<String>,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+}
+
 /// Input for creating a KDS order from a completed sale.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateKdsOrderInput {
@@ -100,9 +145,9 @@ pub struct CreateKdsOrderInput {
     pub sale_id: String,
     /// The store where this order belongs (ADR #8).
     pub store_id: Option<String>,
-    /// Comma-separated item display names.
+    /// Derived flat summary (e.g. "Steak x2, Salad") — populated from items.
     pub items_summary: String,
-    /// Total item count.
+    /// Total item count — derived from items.
     pub item_count: i64,
     /// Kitchen zone to assign (e.g., "front", "back").
     pub kitchen_zone: Option<String>,
@@ -112,6 +157,21 @@ pub struct CreateKdsOrderInput {
     pub table_number: Option<String>,
     /// Priority/rush flag: when true the ticket visually escalates above normal SLA.
     pub priority: bool,
+}
+
+/// Input for creating a KDS line item.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateKdsLineItemInput {
+    /// Product SKU.
+    pub sku: String,
+    /// Product display name.
+    pub display_name: String,
+    /// Quantity (≥ 1).
+    pub qty: i64,
+    /// Course assignment.
+    pub course: Option<String>,
+    /// Modifier choices.
+    pub modifiers: Vec<KdsModifier>,
 }
 
 /// Input for updating the items on an existing KDS order.

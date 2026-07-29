@@ -3,6 +3,32 @@ import { loggedInvoke } from '@/utils/logged-invoke';
 /** Status of a Kitchen Display System order. */
 export type KdsStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled';
 
+/** A modifier choice attached to a line item. */
+export interface KdsModifier {
+  name: string;
+  choice: string;
+  price_minor: number;
+}
+
+/** A single line item on a KDS order ticket. */
+export interface KdsLineItem {
+  id: string;
+  kds_order_id: string;
+  sku: string;
+  display_name: string;
+  qty: number;
+  /** Course assignment: "appetizer", "main", "dessert", "beverage", or null. */
+  course: string | null;
+  /** Modifier choices. */
+  modifiers: KdsModifier[];
+  line_position: number;
+  item_status: string;
+  started_at: string | null;
+  ready_at: string | null;
+  served_at: string | null;
+  created_at: string;
+}
+
 /** A Kitchen Display System order. */
 export interface KdsOrder {
   id: string;
@@ -85,3 +111,7 @@ export const updateKdsOrderItemsScoped = (sessionToken: string, args: UpdateKdsO
 /** Print a kitchen chit for a KDS order (scoped — ADR #7). */
 export const printKdsChitScoped = (sessionToken: string, orderId: string): Promise<boolean> =>
   loggedInvoke<boolean>('print_kds_chit_scoped', { sessionToken, orderId });
+
+/** Get all line items for a KDS order (scoped — ADR #7). */
+export const getKdsOrderLinesScoped = (sessionToken: string, orderId: string): Promise<KdsLineItem[]> =>
+  loggedInvoke<KdsLineItem[]>('get_kds_order_lines_scoped', { sessionToken, orderId });

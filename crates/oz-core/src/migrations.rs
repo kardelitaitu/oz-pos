@@ -564,6 +564,20 @@ pub const ALL: &[Migration] = &[
         id: "104_hardware_profiles.sql",
         sql: include_str!("../migrations/104_hardware_profiles.sql"),
     },
+    // ── 105: KDS line items (TODO 2a) ────────────────────────────
+    // Structured per-item data for kitchen tickets — replaces the flat
+    // items_summary string with course, modifier, and per-item status.
+    Migration {
+        id: "105_kds_line_items.sql",
+        sql: include_str!("../migrations/105_kds_line_items.sql"),
+    },
+    // ── 106: Sale lines course + modifier enrichment (TODO 2a) ───
+    // Adds course and modifiers_json columns so the POS → KDS pipeline
+    // carries structured item data instead of a flat summary string.
+    Migration {
+        id: "106_sale_lines_course_modifier.sql",
+        sql: include_str!("../migrations/106_sale_lines_course_modifier.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

@@ -1,523 +1,291 @@
-# Workspace Topology Editor — Implementation Plan
+# Design: Course/Modifier Data Pipeline — POS → KDS
 
-**Status:** Implemented (Phase 1 & 2); Phase 3 pending
-**Date:** 2026-07-21 (updated 2026-07-22)
-**Author:** Architecture Team
-**Tags:** workspace-editor, node-topology, settings, ui, multi-store, inventory-routing
-
----
-
-## Implementation Status (2026-07-22)
-
-The editor is **shipped and wired to the backend**. `NodeTopologyEditor` seeds
-real entities (`listWorkspacesScoped`, stores, terminals) on load and its
-`onSave` callback is bridged by `TopologyScreen` to the scoped workspace
-CRUD commands (`create`/`update`/`archive_workspace_instance_scoped`). The
-presets (`PRESET_RETAIL`/`PRESET_RESTAURANT`) remain only as the initial
-fallback state and as the "Load Preset" buttons — they are **not** the sole
-data source.
-
-Topology is **not** embedded inside Stores. Per the IA refactor, the
-`topology` nav entry renders the standalone `TopologyScreen`
-(`ui/src/features/stores/TopologyScreen.tsx`); `MultiStoreDashboardScreen`
-is stores-only and no longer has a cards/topology view-mode toggle.
-
-Phase 3 (polish/edge cases) remains a backlog.
-
-## Implementation Checklist
-
-### Phase 1 — Wire to Real Data
-- [x] 1. Add `sessionToken` prop to `NodeTopologyEditor`
-- [x] 2. Load real stores on mount → Store nodes
-- [x] 3. Load real workspace instances → Workspace nodes
-- [x] 4. Load real inventory locations → Warehouse nodes
-- [x] 5. Load real terminals → Hardware nodes
-- [x] 6. Load existing wires from inventory location bindings
-- [x] 7. "+ Store Node" → create store via API
-- [x] 8. "+ Workspace Node" → create workspace via API
-- [x] 9. "+ Warehouse Node" → create inventory location via API
-- [x] 10. "+ Hardware Node" → register terminal via API
-- [x] 11. Wire: Store→Workspace (implicit via store_id)
-- [x] 12. Wire: Workspace→Warehouse → `setWorkspaceInventoryLocations()`
-- [x] 13. Wire: Workspace→Hardware → bind terminal to workspace
-- [x] 14. "Apply Topology Changes" → batch commit (via `onSave` → CRUD bridge)
-- [x] 15. Node Inspector drawer → real metadata
-- [x] 16. Simulation debugger → real `getWorkspaceLocations()`
-- [ ] 17. Load/save canvas node positions (topology_layouts DB table) — deferred; positions live in the saved diagram JSON
-- [ ] 18. Create `topology_layouts` migration SQL — deferred (see 17)
-- [ ] 19. Create `crates/oz-core/src/db/topology.rs` module — deferred; reuse workspace_instances + diagram persistence
-- [ ] 20. Create `apps/desktop-client/src/commands/topology.rs` Tauri commands — deferred; existing scoped workspace/inventory commands cover the cases
-- [ ] 21. Register topology module in `lib.rs`, `db/mod.rs`, `commands/mod.rs` — deferred (see 19/20)
-
-### Phase 2 — Move to Settings
-- [x] 1. Add `topology` nav item to `NAV_ITEMS` in `SettingsPage.tsx`
-- [x] 2. Add `topology` to **Management** category in `CATEGORIES`
-- [x] 3. Add `'topology': 'settings-nav-topology'` to `NAV_L10N_KEYS`
-- [x] 4. Add `case 'topology':` to `renderSection()` rendering `<TopologyScreen>` (standalone, not inline `NodeTopologyEditor`)
-- [x] 5. Remove topology toggle from `MultiStoreDashboardScreen.tsx`
-- [x] 6. Add Fluent l10n keys in all locale `settings.ftl` files
-- [x] 7. Adjust CSS for settings content area
-
-### Phase 3 — Polish & Edge Cases
-- [ ] 1. Zoom-to-fit on load and after add/remove
-- [ ] 2. Real telemetry with live terminal status polling
-- [ ] 3. Node filter/search bar
-- [ ] 4. Undo/redo (Ctrl+Z / Ctrl+Y) state stack
-- [ ] 5. Export/import topology as JSON
-- [ ] 6. Toast error handling for failed backend calls
-- [ ] 7. Loading states (skeleton/spinner)
-- [ ] 8. ARIA labels and keyboard navigation
-- [ ] 9. Empty state with preset buttons
-- [ ] 10. Double-click inline node rename
+> TODO 2a assessment: Large effort. This is a cross-cutting change touching
+> the POS cart, Sale/SaleLine model, DB schema, KDS data pipeline, and
+> front-end ticket card. Estimated 2–4 days of focused work.
 
 ---
 
-## Table of Contents
+## 1. Problem Statement
 
-1. [Overview](#1-overview)
-2. [Current State](#2-current-state)
-3. [Implementation Phases](#3-implementation-phases)
-   - [Phase 1: Wire to Real Data](#phase-1-wire-to-real-data)
-   - [Phase 2: Move to Settings](#phase-2-move-to-settings)
-   - [Phase 3: Polish & Edge Cases](#phase-3-polish--edge-cases)
-4. [Node Type Specification](#4-node-type-specification)
-5. [Wire Connection Specification](#5-wire-connection-specification)
-6. [Backend API Reference](#6-backend-api-reference)
-7. [Key Architectural Decisions](#7-key-architectural-decisions)
-8. [Testing Strategy](#8-testing-strategy)
-9. [Files to Change](#9-files-to-change)
+Currently `complete_sale_to_kds` builds a flat `items_summary` string like:
+
+```
+"Steak x2, Salad, Fries x3"
+```
+
+This loses three critical pieces of information:
+
+1. **Course structure** — Which items are appetizers vs mains vs desserts?
+   A real kitchen prints separate chits per course, or displays them with
+   visual separators. Receiving all items at once causes the kitchen to
+   cook everything simultaneously rather than pacing the meal.
+
+2. **Modifier details** — "Medium rare, no onions" on the steak and
+   "extra dressing" on the salad are both flattened into the `notes` field
+   (if at all). Modifiers should follow their parent item, not the order.
+
+3. **Per-item identity** — KDS cannot track item-level status (TODO 3e)
+   because there is no `kds_line_items` table. The entire order has one
+   status even though the steak takes 12 min and the salad takes 2 min.
 
 ---
 
-## 1. Overview
+## 2. Proposed Schema
 
-The Node Topology Editor is a visual canvas-based tool (inspired by node graph interfaces in **Blender**, **Grasshopper**, and **Node-RED**) that allows store owners to visually assemble and wire up their enterprise hierarchy using node cards and directional arrow connections.
+### 2a. Enrich `sale_lines` with course + modifier data
 
-Now **implemented and wired to the backend** in `ui/src/features/stores/NodeTopologyEditor.tsx`. It seeds real entities (`listWorkspacesScoped`, stores, terminals) on load; the `PRESET_RETAIL`/`PRESET_RESTAURANT` constants remain only as the initial fallback state and the "Load Preset" buttons. Its `onSave` callback is bridged by `TopologyScreen` to the scoped workspace CRUD commands. The remaining work is Phase 3 polish (see checklist).
-
----
-
-## 2. Current State
-
-### Frontend
-
-| Component | Status | Purpose |
-|-----------|--------|---------|
-| `ui/src/features/stores/NodeTopologyEditor.tsx` | Shipping | Visual canvas with drag-and-drop nodes, SVG arrow wires, pan/zoom, simulation debugger, license tier enforcement. Seeds real entities on load; `PRESET_RETAIL`/`PRESET_RESTAURANT` are the fallback initial state and "Load Preset" sources. |
-| `ui/src/features/stores/NodeTopologyEditor.css` | Shipping | Styling for the editor canvas + inspector. |
-| `ui/src/features/stores/TopologyScreen.tsx` | Shipping | Standalone topology screen (the `topology` nav entry). Owns the `onSave` CRUD bridge to scoped workspace commands. |
-| `ui/src/features/stores/MultiStoreDashboardScreen.tsx` | Shipping | Stores-only dashboard (stat cards + store cards). No topology toggle — topology lives in `TopologyScreen`. |
-
-### Backend (Production-Ready)
-
-All required backend APIs exist and are scoped via session tokens (ADR #7):
-
-| Command | Purpose |
-|---------|---------|
-| `list_workspaces_scoped` | List instances for current user/store |
-| `create_workspace_instance_scoped` | Create a new workspace instance |
-| `get_workspace_instance_scoped` | Get single instance |
-| `list_all_workspaces_scoped` | List all workspace types (for dropdown) |
-| `list_workspace_screens_scoped` | List screens for a workspace type |
-| `set_user_workspace_instances_scoped` | Assign instances to users |
-| `list_stores` | List store profiles |
-| `create_store_profile` | Create a new store |
-| `list_inventory_locations` | List inventory storage locations |
-| `set_workspace_inventory_locations` | Bind locations to workspace with priority |
-| `get_workspace_inventory_locations` | Get location bindings |
-| `get_workspace_locations_scoped` | Unified resolver for workspace locations |
-| `list_terminals_scoped` | List registered terminals |
-
-### Data Flow (Current)
-
-```
-NodeTopologyEditor
-  ├── mount: uses hardcoded PRESET_RETAIL data
-  ├── nodes: TopologyNodeData[] in-memory state
-  ├── wires: TopologyWireData[] in-memory state
-  └── onSave?: callback prop — NEVER CALLED
-```
-
-### Data Flow (Target)
-
-```
-NodeTopologyEditor
-  ├── mount: listStores() → populate Store nodes
-  │          listWorkspacesScoped() → populate Workspace nodes
-  │          listInventoryLocations() → populate Warehouse nodes
-  │          listTerminalsScoped() → populate Hardware nodes
-  │          getWorkspaceInventoryLocations() → populate wires
-  ├── nodes: state derived from real entities
-  ├── wires: state derived from real bindings
-  └── "Apply" → batch commit: create entities, set bindings
-```
-
----
-
-## 3. Implementation Phases
-
-### Phase 1: Wire to Real Data
-
-**Goal:** Replace all hardcoded demo data with real backend calls.
-
-| # | Step | Backend API | Frontend File |
-|---|------|-------------|---------------|
-| 1 | Add `sessionToken` prop to `NodeTopologyEditor` (passed from parent or from `useAuth()`) | — | `NodeTopologyEditor.tsx` |
-| 2 | Load real stores on mount → convert to Store nodes | `listStores()` | `NodeTopologyEditor.tsx` |
-| 3 | Load real workspace instances → convert to Workspace nodes | `listWorkspacesScoped(sessionToken)` | `NodeTopologyEditor.tsx` |
-| 4 | Load real inventory locations → convert to Warehouse nodes | `listInventoryLocations(sessionToken)` | `NodeTopologyEditor.tsx` |
-| 5 | Load real terminals → convert to Hardware nodes | `listTerminalsScoped(sessionToken)` | `NodeTopologyEditor.tsx` |
-| 6 | Load existing wires: for each workspace node, fetch its inventory location bindings | `getWorkspaceInventoryLocations(sessionToken, instanceId)` | `NodeTopologyEditor.tsx` |
-| 7 | "+ Store Node" → prompt for store name → call `createStore()` → add node | `createStoreProfile()` | `NodeTopologyEditor.tsx` |
-| 8 | "+ Workspace Node" → prompt for name + type + colour → call `createWorkspaceInstanceScoped()` → add node with real ID | `createWorkspaceInstanceScoped()` | `NodeTopologyEditor.tsx` |
-| 9 | "+ Warehouse Node" → create inventory location → add node | inventory location API | `NodeTopologyEditor.tsx` |
-| 10 | "+ Hardware Node" → register terminal → add node | `registerTerminalScoped()` | `NodeTopologyEditor.tsx` |
-| 11 | Wire: Store→Workspace → sets `workspace_instances.store_id` (automatic when created in-store) | (implicit) | `NodeTopologyEditor.tsx` |
-| 12 | Wire: Workspace→Warehouse → calls `setWorkspaceInventoryLocations()` with priority | `setWorkspaceInventoryLocations()` | `NodeTopologyEditor.tsx` |
-| 13 | Wire: Workspace→Hardware → binds terminal to workspace instance | terminal bind API | `NodeTopologyEditor.tsx` |
-| 14 | "Apply Topology Changes" → serializes all pending changes and commits | batch of create/set calls | `NodeTopologyEditor.tsx` |
-| 15 | Node Inspector drawer → show real metadata (store address, workspace type, warehouse stock, terminal status) | various get/status calls | `NodeTopologyEditor.tsx` |
-| 16 | Simulation debugger → use real `getWorkspaceLocations()` to trace a test sale | `getWorkspaceLocationsScoped()` | `NodeTopologyEditor.tsx` |
-| 17 | Load and save canvas node positions | `get_topology_layout` / `set_topology_layout` | `NodeTopologyEditor.tsx` |
-
-**Estimated effort:** 3–5 days
-**Risk:** Medium — many API calls to wire, but all endpoints exist.
-
-### Phase 2: Move to Settings
-
-**Goal:** Give the topology editor its own dedicated home in the Settings sidebar.
-
-| # | Step | Files |
-|---|------|-------|
-| 1 | Add `topology` nav item to `NAV_ITEMS` in `SettingsPage.tsx` with an appropriate icon (e.g., connected nodes SVG) | `SettingsPage.tsx` |
-| 2 | Add `topology` to a category in `CATEGORIES` — recommend **Management** alongside `stores` | `SettingsPage.tsx` |
-| 3 | Add `'topology': 'settings-nav-topology'` to `NAV_L10N_KEYS` | `SettingsPage.tsx` |
-| 4 | Add `case 'topology':` to `renderSection()` that renders `<NodeTopologyEditor sessionToken={...} />` | `SettingsPage.tsx` |
-| 5 | Remove the topology tab/toggle from `MultiStoreDashboardScreen.tsx` (keep only card view) | `MultiStoreDashboardScreen.tsx` |
-| 6 | Add Fluent l10n keys for the new nav item in all supported locales | `*.ftl` files |
-| 7 | Adjust CSS so the editor fits properly inside the settings content area (the editor currently assumes full canvas width) | `NodeTopologyEditor.css` |
-
-**Settings page nav hierarchy after change:**
-
-```
-Management
-  ├── Staff
-  ├── Terminals
-  ├── Stores          ← card view only, no topology toggle
-  ├── Topology        ← NEW — the node editor
-  ├── Audit Log
-  ├── Offline Queue
-  ├── Shifts
-  ├── Tax Rates
-  ├── Exchange Rates
-  └── Promotions
-```
-
-**Estimated effort:** 1 day
-**Risk:** Low — purely UI restructuring.
-
-### Phase 3: Polish & Edge Cases
-
-**Goal:** Make the editor production-quality.
-
-| # | Step | Details |
-|---|------|---------|
-| 1 | **Zoom-to-fit** | Auto-scale canvas on initial load and after add/remove to show all nodes |
-| 2 | **Real telemetry** | Show live terminal online/offline status from `listTerminalsScoped()` with polling |
-| 3 | **Node filter/search** | Search bar to filter nodes by name/type |
-| 4 | **Undo/redo** | State history stack (Ctrl+Z / Ctrl+Y) for canvas operations |
-| 5 | **Export/import** | Save topology as JSON, import to restore |
-| 6 | **Error handling** | Toast notifications for failed backend operations per node/wire |
-| 7 | **Loading states** | Skeleton/spinner while initial data loads |
-| 8 | **Accessibility** | ARIA labels for node cards, port sockets, wires; keyboard navigation for adding nodes and drawing wires |
-| 9 | **Empty state** | When no nodes exist, show a welcome prompt with preset buttons |
-| 10 | **Node inline editing** | Double-click a node title to rename it directly on the canvas |
-
-**Estimated effort:** 3–5 days (spread across multiple PRs)
-**Risk:** Low-Medium — mostly UI work, no schema changes.
-
----
-
-## 4. Node Type Specification
-
-### Node → Entity Mapping
-
-| Node Type | Backend Entity | Creation API | Identifier |
-|-----------|---------------|--------------|------------|
-| 🏢 **Store** | `store_profiles` row | `create_store_profile()` | `store.id` |
-| 🛒 **Workspace** | `workspace_instances` row | `create_workspace_instance_scoped()` | `workspace.instance_id` |
-| 📦 **Warehouse** | `inventory_locations` row | inventory location creation | `location.id` |
-| 🖨️ **Hardware** | `terminals` row | `register_terminal_scoped()` | `terminal.id` |
-
-### Node Card Data (from real entities)
-
-```typescript
-interface TopologyNodeData {
-  id: string;                     // Backend entity ID
-  type: 'store' | 'workspace' | 'warehouse' | 'hardware';
-  name: string;                   // Entity name
-  subtitle?: string;              // Type label or location description
-  x: number;                      // Canvas X position (persisted locally or in metadata)
-  y: number;                      // Canvas Y position
-  entityId: string;               // The real backend ID
-  telemetryBadge?: string;        // Live status (e.g. "Online (2 POS)", "1,250 items")
-  telemetryStatus?: 'online' | 'warning' | 'offline';
-  metadata?: Record<string, string>;  // Extra entity fields (address, colour, stock count, etc.)
-}
-```
-
-### Canvas Position Persistence
-
-Canvas node positions (x, y) are **not** stored in the backend entity tables. Options:
-
-| Option | Approach | Pros | Cons |
-|--------|----------|------|------|
-| A | Store positions in a local `topology_layouts` JSON blob per store (new DB table) | Survives reinstall; shared across devices | New migration; sync complexity |
-| B | Store in `localStorage` keyed by store ID | Simple; no backend changes | Lost on browser data clear; per-device |
-| C | Store in `topology_editor_metadata` JSON column on a settings table | Survives data export | Minor schema change |
-
-**Recommendation:** **Option A** — add a `topology_layouts` table keyed by `(store_id, topology_id)` with a JSON column for node positions. This keeps layout separate from entity data and allows multi-store layouts.
-
----
-
-## 5. Wire Connection Specification
-
-### Wire → Backend Mapping
-
-| Wire (From → To) | Backend Action | API |
-|-----------------|----------------|-----|
-| 🏢 Store → 🛒 Workspace | Set `workspace_instances.store_id = store.id` | (implicit — done at instance creation) |
-| 🛒 Workspace → 📦 Warehouse | Insert/Update `workspace_inventory_locations` row with priority | `set_workspace_inventory_locations()` |
-| 🛒 Workspace → 🖨️ Hardware | Set `terminals.bound_workspace_instance_id = instance.id` | Terminal update API |
-| 🏢 Store → 🖨️ Hardware | Set `terminals.bound_store_id = store.id` | Terminal update API |
-| 📦 Warehouse ↔ 📦 Warehouse | 2-way transfer capability (UI-only for now — future inventory transfer) | (Phase 3) |
-
-### Wire Priority Semantics
-
-When a Workspace node has multiple wires to Warehouse nodes, each wire automatically gets a priority label:
-
-| Wire Count | Label |
-|------------|-------|
-| 1st wire | `Stock Deduct (P1)` |
-| 2nd wire | `Fallback (P2)` |
-| 3rd+ wire | `Fallback (P3+)` |
-
-Priorities are stored in `workspace_inventory_locations.sort_order`.
-
----
-
-## 6. Backend API Reference
-
-### Workspace APIs (`@/api/workspaces.ts`)
-
-```typescript
-listWorkspacesScoped(sessionToken): WorkspaceDto[]
-createWorkspaceInstanceScoped(sessionToken, req): WorkspaceDto
-getWorkspaceInstanceScoped(sessionToken, instanceId): WorkspaceDto
-listAllWorkspacesScoped(sessionToken): WorkspaceTypeDto[]
-listWorkspaceScreensScoped(sessionToken, typeKey): WorkspaceScreenDto[]
-```
-
-### Store APIs (`@/api/stores.ts`)
-
-```typescript
-listStores(): StoreProfile[]
-createStore(args): StoreProfile
-updateStore(args): StoreProfile
-deleteStore(id): void
-```
-
-### Inventory APIs (`@/api/inventory.ts`)
-
-```typescript
-listInventoryLocations(sessionToken): InventoryLocation[]
-setWorkspaceInventoryLocations(sessionToken, instanceId, locations): void
-getWorkspaceInventoryLocations(sessionToken, instanceId): WorkspaceInventoryLocation[]
-getWorkspaceLocations(sessionToken, instanceId, typeKey): WorkspaceLocationBinding[]
-```
-
-### Terminal APIs (`@/api/terminals.ts`)
-
-```typescript
-listTerminalsScoped(sessionToken): TerminalDto[]
-registerTerminalScoped(sessionToken, args): TerminalDto
-```
-
----
-
-## 7. Zone-Based Access Control
-
-### Role Model for the Topology Editor
-
-| Role | Topology Editor Access | Visibility | Edit Scope |
-|------|----------------------|------------|------------|
-| **Owner** (`role-owner`) | Full access | All stores, all nodes, all wires | Create/edit/delete anything |
-| **Manager** (`role-manager`) | Restricted | Only stores in `user_store_access` | Only within assigned stores (zone) |
-| **Cashier** (`role-cashier`) | None | — | — |
-| **Kitchen** (`role-kitchen`) | None | — | — |
-
-### Zone = Store Boundary
-
-A **zone** maps 1:1 to a store. A manager can be assigned to one or more zones via the `user_store_access` table:
+Add two columns to the existing `sale_lines` table:
 
 ```sql
--- Manager "Alice" can manage Downtown and Mall stores
-INSERT INTO user_store_access (user_id, store_id, access_level)
-VALUES ('user-alice', 'store-downtown', 'manager'),
-       ('user-alice', 'store-mall', 'manager');
+ALTER TABLE sale_lines ADD COLUMN course TEXT;      -- NULL | "appetizer" | "main" | "dessert" | "beverage"
+ALTER TABLE sale_lines ADD COLUMN modifiers_json TEXT; -- NULL | JSON array of modifier objects
 ```
 
-In the topology editor:
-- **Owner** sees every store node on the canvas with full edit capability
-- **Manager** only sees nodes belonging to their assigned stores — other stores are invisible
-- When a manager opens the topology editor, the canvas only contains nodes within their zone(s)
+The `course` column is set at POS cart-build time per line. The
+`modifiers_json` stores a stringified JSON array:
 
-### Current Code Gap
+```json
+[
+  { "name": "Temperature", "choice": "Medium Rare", "price_minor": 0 },
+  { "name": "Add-ons", "choice": "Extra Cheese", "price_minor": 200 }
+]
+```
 
-The `list_workspaces_inner` function in `crates/oz-core/src/db/workspaces.rs` currently treats both `role-owner` and `role-manager` as bypass roles:
+Both columns are nullable — backwards-compatible with existing sales.
+
+### 2b. New `kds_line_items` table
+
+This is the core change. Replace the single `items_summary: String` on
+`KdsOrder` with a structured `kds_line_items` table that preserves:
+
+- Which product (sku, name)
+- Quantity
+- Course assignment
+- Modifiers
+- Per-item display order
+- Per-item status (for TODO 3e item-level status)
+
+```sql
+CREATE TABLE kds_line_items (
+    id              TEXT PRIMARY KEY,          -- UUIDv7
+    kds_order_id    TEXT NOT NULL REFERENCES kds_orders(id) ON DELETE CASCADE,
+    sku             TEXT NOT NULL,
+    display_name    TEXT NOT NULL,             -- resolved product name at creation time
+    qty             INTEGER NOT NULL CHECK(qty > 0),
+    course          TEXT,                      -- NULL | "appetizer" | "main" | "dessert" | "beverage"
+    modifiers_json  TEXT,                      -- NULL | JSON array
+    line_position   INTEGER NOT NULL DEFAULT 0,
+    item_status     TEXT NOT NULL DEFAULT 'pending'
+                    CHECK(item_status IN ('pending','preparing','ready','served','cancelled')),
+    started_at      TEXT,
+    ready_at        TEXT,
+    served_at       TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE INDEX idx_kds_line_items_order ON kds_line_items(kds_order_id, line_position);
+CREATE INDEX idx_kds_line_items_status ON kds_line_items(kds_order_id, item_status);
+```
+
+This enables:
+- `.join(", ")` for the legacy flat summary (derived, not stored)
+- Course-grouped display
+- Per-item modifier display
+- Item-level status tracking (TODO 3e)
+
+### 2c. Keep `items_summary` on `kds_orders` as a denormalized cache
+
+Do **not** remove the `items_summary` column. Keep it as a generated/
+derived value so that:
+- The `print_kds_chit` command can still format chits without a JOIN
+- The queue list endpoint can return summary rows without loading items
+- The legacy flat string is available for simple displays
+
+Update it on every `update_kds_order_items` call to stay in sync.
+
+---
+
+## 3. Rust Type Changes
+
+### 3a. New `KdsLineItem` struct
 
 ```rust
-// TODO(ADR #4 Phase 2): Check user_store_access before returning all instances.
-if role_id == "role-owner" || role_id == "role-manager" {
-    return self.list_store_instances(store_id, user_id);
+/// A single line item on a KDS order ticket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KdsLineItem {
+    pub id: String,
+    pub kds_order_id: String,
+    pub sku: String,
+    pub display_name: String,
+    pub qty: i64,
+    pub course: Option<String>,
+    pub modifiers: Vec<KdsModifier>,
+    pub line_position: i64,
+    pub item_status: String,
+    pub started_at: Option<String>,
+    pub ready_at: Option<String>,
+    pub served_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KdsModifier {
+    pub name: String,
+    pub choice: String,
+    pub price_minor: i64,
 }
 ```
 
-This needs to be updated to check `user_store_access` for managers (and owners in multi-store mode) so the topology editor only returns nodes within the user's zone. This is a **prerequisite** for Phase 1 — the topology editor must not show stores the user shouldn't see.
+### 3b. Enriched `SaleLine`
 
-### Resolution Order (Updated)
+Add `course` and `modifiers` fields (matching the new DB columns):
 
-```
-1. role-owner + empty user_store_access → all stores (single-store mode)
-2. role-owner + has user_store_access rows → ONLY those stores (multi-store mode)
-3. role-manager + has user_store_access rows → ONLY those stores (zone)
-4. Otherwise → single store fallback
-```
-
----
-
-## 8. Key Architectural Decisions
-
-### Decision 1: Live Edit vs Draft-and-Apply
-
-| Approach | Description | Pros | Cons |
-|----------|-------------|------|------|
-| **Live** | Every node add/delete immediately calls backend | Simple UI; no "unsaved changes"; data always consistent | Each action is a separate DB write; slower for bulk ops |
-| **Draft-and-Apply** | Edit in-memory, click "Apply" to batch commit | Batched transaction; undo/redo simpler; can preview diff | "Unsaved changes" complexity; risk of data loss on page close |
-| **Hybrid** (recommended) | Create/delete node actions are live; wire edits and property changes are draft and batch-applied | Best of both: entities are created immediately, but topology structure is committed atomically | Two-tier save logic is slightly more complex |
-
-**Decision: Hybrid.** Entity creation/deletion is immediate. Wire connections, property changes, and node position changes are draft state until "Apply Topology Changes" is clicked.
-
-### Decision 2: Where in Settings?
-
-**Decision: Dedicated "Topology" nav item in the Management category.** This gives the editor room to breathe and doesn't conflate it with store profile management. The Settings sidebar will list it as "Topology" between "Stores" and "Audit Log".
-
-### Decision 3: Canvas Position Persistence
-
-**Decision: New `topology_layouts` table** in the per-store database:
-
-```sql
-CREATE TABLE topology_layouts (
-    id          TEXT PRIMARY KEY,
-    store_id    TEXT NOT NULL,
-    layout_json TEXT NOT NULL,  -- JSON: { nodes: [{id, type, x, y, ...}], wires: [{...}] }
-    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-CREATE INDEX idx_topology_layouts_store ON topology_layouts(store_id);
+```rust
+pub struct SaleLine {
+    // ... existing fields ...
+    pub course: Option<String>,
+    pub modifiers: Vec<KdsModifier>,  // empty vec when no modifiers
+}
 ```
 
-This keeps layout data separate from entity data and survives reinstallation.
+### 3c. Updated `CreateKdsOrderInput`
 
-### Decision 4: Session Token Access
+Replace `items_summary: String` + `item_count: i64` with structured data,
+while keeping the summary as a derived convenience:
 
-The `NodeTopologyEditor` will accept `sessionToken` as a prop. The parent (`SettingsPage`) obtains it from `WorkspaceContext`:
+```rust
+pub struct CreateKdsOrderInput {
+    pub sale_id: String,
+    pub store_id: Option<String>,
+    pub kitchen_zone: Option<String>,
+    pub notes: String,
+    pub table_number: Option<String>,
+    pub priority: bool,
+    pub items: Vec<CreateKdsLineItemInput>,
+}
 
-```typescript
-const { sessionToken } = useWorkspaceContext();
-// ...
-<NodeTopologyEditor sessionToken={sessionToken} />
+pub struct CreateKdsLineItemInput {
+    pub sku: String,
+    pub display_name: String,
+    pub qty: i64,
+    pub course: Option<String>,
+    pub modifiers: Vec<KdsModifier>,
+}
+```
+
+### 3d. Course ordering constants
+
+```rust
+/// Priority ordering for courses on the KDS display.
+/// Lower number = displayed first.
+pub const COURSE_ORDER: &[(&str, i64)] = &[
+    ("appetizer", 0),
+    ("main",      1),
+    ("side",      2),
+    ("dessert",   3),
+    ("beverage",  4),
+];
+
+pub fn course_sort_key(course: Option<&str>) -> i64 {
+    match course {
+        Some(c) => COURSE_ORDER.iter()
+            .find(|(name, _)| *name == c)
+            .map(|(_, order)| *order)
+            .unwrap_or(99),
+        None => 99,
+    }
+}
 ```
 
 ---
 
-## 8. Testing Strategy
+## 4. Implementation Plan
 
-### Unit Tests (Rust)
+### Phase 1 — Schema + Backend (Day 1)
 
-| Test | What it covers |
-|------|---------------|
-| `create_workspace_instance_scoped` creates a real node | Workspace creation via scoped command |
-| `set_workspace_inventory_locations` creates/updates wires | Wire binding persistence |
-| Topology serializer: canvas JSON → SQLite commands | Diff-to-apply correctness |
+| Step | Files | Changes |
+|------|-------|---------|
+| 1. Migration 105 | `crates/oz-core/migrations/105_kds_line_items.sql` | New `kds_line_items` table |
+| 2. Migration 106 | `crates/oz-core/migrations/106_sale_lines_course_modifier.sql` | ALTER TABLE for `course` + `modifiers_json` on `sale_lines` |
+| 3. Rust types | `crates/oz-core/src/kds.rs` | Add `KdsLineItem`, `KdsModifier`, `CreateKdsLineItemInput` structs |
+| 4. Enrich SaleLine | `modules/sales/src/models/sale.rs` | Add `course`, `modifiers` fields to `SaleLine` |
+| 5. Update `CreateKdsOrderInput` | `crates/oz-core/src/kds.rs` | Replace `items_summary`/`item_count` with `items: Vec<CreateKdsLineItemInput>` |
+| 6. DB: insert line items | `crates/oz-core/src/db/kds.rs` | New `create_kds_line_items` method + update `create_kds_order` to call it |
 
-### Component Tests (Vitest)
+### Phase 2 — KDS Pipeline (Day 2)
 
-| Test | What it covers |
-|------|---------------|
-| `NodeTopologyEditor` mounts and loads real data | API calls on mount |
-| Adding a Store node calls `createStoreProfile` | Node creation wiring |
-| Drawing a wire calls `setWorkspaceInventoryLocations` | Wire creation wiring |
-| Undo/redo state stack | Canvas UX |
+| Step | Files | Changes |
+|------|-------|---------|
+| 7. Rewrite `complete_sale_to_kds` | `crates/oz-core/src/db/kds.rs` | Build structured `CreateKdsLineItemInput` per line with course + modifiers from sale lines; still group by zone |
+| 8. Derive `items_summary` | `crates/oz-core/src/db/kds.rs` | After inserting line items, derive the flat summary by joining display names |
+| 9. Update `row_to_kds_order` | `crates/oz-core/src/db/kds.rs` | Remove items_summary derivation; keep legacy field but set from derived |
+| 10. Update `get_kds_order` | `crates/oz-core/src/db/kds.rs` | Load line items alongside the order (or lazy via `with_lines()`) |
+| 11. New API: `get_kds_order_lines` | `crates/oz-core/src/db/kds.rs` | Query kds_line_items by kds_order_id, ordered by course_sort_key + line_position |
+| 12. New Tauri command | `apps/desktop-client/src/commands/kds.rs` | `get_kds_order_lines_scoped` returning `Vec<KdsLineItem>` |
 
-### Integration Tests
+### Phase 3 — Frontend Display (Day 3)
 
-| Test | What it covers |
-|------|---------------|
-| Open Settings → Topology → see real nodes | Full front-to-back flow |
-| Add workspace → see it on canvas → refresh → it persists | CRUD persistence |
-| Draw warehouse wire → run simulation → see debugger trace | Location resolver integration |
+| Step | Files | Changes |
+|------|-------|---------|
+| 13. KDS types | `ui/src/api/kds.ts` | Add `KdsLineItem`, `KdsModifier` interfaces |
+| 14. API wrapper | `ui/src/api/kds.ts` | Add `getKdsOrderLinesScoped()` |
+| 15. Course-grouped display | `ui/src/features/kds/components/KdsTicketCard.tsx` | Replace flat `<span>{order.items_summary}</span>` with course-grouped item list. Each course gets a header badge ("APPETIZER", "MAIN"). Modifiers shown as indented sub-lines below each item. |
+| 16. CSS for course groups | `ui/src/features/kds/KdsScreen.css` | New `kds-course-header`, `kds-item-modifier` classes |
+| 17. FTL keys | `ui/src/locales/kds.ftl` + `kds.id.ftl` | Course header labels, modifier prefix text |
+| 18. Per-item status display | `ui/src/features/kds/components/KdsTicketCard.tsx` | Show per-item status badge when available (future: TODO 3e) |
 
----
+### Phase 4 — POS Integration (Day 4)
 
-## 9. Files to Change
-
-### Phase 1 — Wire to Real Data
-
-| File | Change |
-|------|--------|
-| `ui/src/features/stores/NodeTopologyEditor.tsx` | Major rewrite: replace hardcoded data with API calls, add sessionToken prop, wire every node/wire action to backend |
-| `ui/src/features/stores/NodeTopologyEditor.css` | Minor adjustments for loading states, error display, empty state |
-| `crates/oz-core/migrations/XXX_topology_layouts.sql` | New migration for position persistence |
-| `crates/oz-core/src/db/topology.rs` | New module for topology CRUD |
-| `apps/desktop-client/src/commands/topology.rs` | New Tauri commands for save/load layout |
-
-### Phase 2 — Move to Settings
-
-| File | Change |
-|------|--------|
-| `ui/src/features/settings/SettingsPage.tsx` | Add `topology` nav item, category mapping, l10n key, render case |
-| `ui/src/features/stores/MultiStoreDashboardScreen.tsx` | Remove topology toggle; keep only card view |
-| `ui/src/locales/*/settings.ftl` | Add `settings-nav-topology` fluent key |
-| `ui/src/locales/*/settings.ftl` | Add `topology-builder-title` fluent key (if not already present) |
-
-### Phase 3 — Polish
-
-| File | Change |
-|------|--------|
-| `ui/src/features/stores/NodeTopologyEditor.tsx` | Undo/redo, accessibility, search, export/import, zoom-to-fit |
-| `ui/src/features/stores/NodeTopologyEditor.css` | All polish styling |
-
-### Phase 1 — Rust Backend Additions
-
-| File | Change |
-|------|--------|
-| `crates/oz-core/Cargo.toml` | (no change — serde_json already a dep) |
-| `crates/oz-core/src/lib.rs` | Add `pub mod topology;` |
-| `crates/oz-core/src/db/mod.rs` | Add `pub mod topology;` |
-| `apps/desktop-client/src/commands/mod.rs` | Add `pub mod topology;` |
+| Step | Files | Changes |
+|------|-------|---------|
+| 19. Cart: course assignment | `ui/src/features/retail/RetailCartPanel.tsx` + `ui/src/features/pos/PosCartPanel.tsx` | UI to assign course (dropdown/badge) per line item in restaurant mode |
+| 20. Cart: modifiers | `ui/src/features/retail/RetailCartPanel.tsx` | "Add modifier" button per line → modal with modifier groups from product |
+| 21. Cart → SaleLine | `crates/oz-core/src/cart.rs` | Carry `course` and `modifiers` through CartLine → SaleLine |
+| 22. Sale completion | `crates/oz-core/src/db/sales.rs` | Write `course` + `modifiers_json` on `sale_lines` INSERT |
 
 ---
 
-## Appendix: ADR Cross-References
+## 5. Display Mockup (KDS Ticket Card)
 
-| ADR | Relation |
-|-----|----------|
-| [ADR #4](decisions/2026-07-10-workspace-type-instance-design.md) | Workspace types/instances — the entities the topology editor manages |
-| [ADR #19](decisions/2026-07-19-sale-deduction-multi-location.md) | Workspace→Location wire semantics (priority, fallback) |
-| [ADR #22](decisions/2026-07-20-node-based-store-topology-builder.md) | Original node topology editor proposal document |
-| [ADR #7](decisions/2026-07-10-workspace-instance-analysis.md) | Session token scoping — how APIs are called |
+```
+┌──────────────────────────────────┐
+│  #42      T5           ⏱ 08:12  │
+│ ── APPETIZER ─────────────────── │
+│  • Caesar Salad x1              │
+│       dressing: Ranch (+$0.50)  │
+│ ── MAIN ─────────────────────── │
+│  • Ribeye Steak x2              │
+│       temp: Medium Rare         │
+│       add: Mushrooms (+$2.00)   │
+│  • Fries x3                     │
+│ ── DESSERT ──────────────────── │
+│  • Cheesecake x1                │
+│       special: No berries        │
+│ ── NOTES ─────────────────────── │
+│  Birthday celebration            │
+│  3 items          [Edit Items]   │
+└──────────────────────────────────┘
+```
 
 ---
 
-> **Next step:** Toggle to ACT MODE to begin implementation of Phase 1.
+## 6. Backward Compatibility
+
+| Concern | Mitigation |
+|---------|------------|
+| Existing `kds_orders` have no line items | `get_kds_order_lines` returns empty vec; `items_summary` column is preserved and populated |
+| Existing `sale_lines` have NULL `course` | Displayed as "OTHER" course group (sorted last) |
+| Existing `sale_lines` have NULL `modifiers_json` | Treated as empty vec; no modifiers displayed |
+| Old `items_summary` still works for chit printing | `complete_sale_to_kds` derives `items_summary` from the structured data after insertion |
+| `update_kds_order_items` still works | Updates both the `kds_line_items` rows AND regenerates the flat summary |
+
+---
+
+## 7. Risks
+
+| Risk | Likelihood | Mitigation |
+|------|-----------|------------|
+| **Schema migration conflicts** on existing deployments with pending migrations | Low | Number migrations 105+106 as the next available; no reordering of existing |
+| **POS cart changes are complex** (course UI, modifier selection UX) | Medium | Can ship Phase 1–3 (KDS display only) first. Phase 4 (POS input) is additive and optional. Pre-existing sales without course data display gracefully. |
+| **Performance**: loading line items for every queue ticket | Low | KDS queue typically has <50 active tickets. Single JOIN per ticket is negligible. Could add eager loading in a single query if needed. |

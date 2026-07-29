@@ -43,6 +43,17 @@ pub struct SaleLine {
     /// Serial number captured at checkout for this line item.
     #[serde(default)]
     pub serial_number: Option<String>,
+
+    /// Course assignment (e.g. "appetizer", "main", "dessert").
+    /// `None` for non-restaurant sales or legacy records.
+    #[serde(default)]
+    pub course: Option<String>,
+
+    /// Modifier choices as JSON array string.
+    /// Each element: `{ "name": "Temperature", "choice": "Medium Rare", "price_minor": 0 }`.
+    /// `None` or empty string when no modifiers.
+    #[serde(default)]
+    pub modifiers_json: Option<String>,
 }
 
 /// A point-of-sale transaction with line items and a state machine.
@@ -138,6 +149,8 @@ impl Sale {
                     tax_amount: Money::zero(currency),
                     tax_rate_id: None,
                     serial_number: None,
+                    course: None,
+                    modifiers_json: None,
                 })
             })
             .collect::<Option<Vec<_>>>()?;

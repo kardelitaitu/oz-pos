@@ -390,6 +390,8 @@ mod tests {
             tax_amount: Money::zero(usd()),
             tax_rate_id: None,
             serial_number: None,
+            course: None,
+            modifiers_json: None,
         }
     }
 

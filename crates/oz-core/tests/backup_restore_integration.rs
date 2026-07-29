@@ -228,6 +228,8 @@ fn backup_restore_preserves_sales() {
                 tax_amount: price(0),
                 tax_rate_id: None,
                 serial_number: None,
+                course: None,
+                modifiers_json: None,
             }],
             subtotal: price(450),
             tax_total: price(0),

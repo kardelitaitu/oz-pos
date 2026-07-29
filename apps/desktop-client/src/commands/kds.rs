@@ -410,6 +410,34 @@ pub async fn print_kds_chit_scoped(
     Ok(printed)
 }
 
+// ── KDS line items (TODO 2a) ────────────────────────────
+
+/// Get all line items for a KDS order (scoped — ADR #7).
+///
+/// Returns structured line items with course and modifier data,
+/// ordered by course priority then line position.
+#[tauri::command]
+pub async fn get_kds_order_lines_scoped(
+    session_token: String,
+    order_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_core::KdsLineItem>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let order = {
+        let conn = state
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        let db = conn
+            .lock()
+            .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+        let store = Store::new(&db);
+        require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
+        store.get_kds_order_lines(&order_id)?
+    };
+    Ok(order)
+}
+
 /// Try to print kitchen chits for every order in the slice.
 ///
 /// Best-effort: logs failures but does not return errors.

@@ -47,6 +47,8 @@ fn new_sale_line(sale_id: &str, sku: &str, qty: i64, unit_minor: i64, position: 
         tax_amount: price(0),
         tax_rate_id: None,
         serial_number: None,
+        course: None,
+        modifiers_json: None,
     }
 }
 

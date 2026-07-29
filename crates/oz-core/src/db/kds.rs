@@ -3,7 +3,9 @@
 use rusqlite::params;
 
 use crate::error::CoreError;
-use crate::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+use crate::{
+    CreateKdsLineItemInput, CreateKdsOrderInput, KdsLineItem, KdsModifier, KdsOrder, KdsStatus,
+};
 
 use super::Store;
 
@@ -337,26 +339,37 @@ impl Store<'_> {
 
         let mut orders = Vec::with_capacity(by_zone.len());
         for (zone, lines) in by_zone {
-            let items_summary = lines
+            // Build structured line items with course + modifier data (TODO 2a).
+            let structured_items: Vec<CreateKdsLineItemInput> = lines
                 .iter()
                 .map(|l| {
-                    let name = self
+                    let display_name = self
                         .product_name_by_sku(&l.sku)
                         .ok()
                         .flatten()
                         .unwrap_or_else(|| l.sku.clone());
-                    if l.qty > 1 {
-                        format!("{name} x{}", l.qty)
-                    } else {
-                        name
+
+                    // Parse modifiers_json from the sale line.
+                    let modifiers: Vec<KdsModifier> = l
+                        .modifiers_json
+                        .as_deref()
+                        .filter(|j| !j.is_empty())
+                        .and_then(|j| serde_json::from_str(j).ok())
+                        .unwrap_or_default();
+
+                    CreateKdsLineItemInput {
+                        sku: l.sku.clone(),
+                        display_name,
+                        qty: l.qty,
+                        course: l.course.clone(),
+                        modifiers,
                     }
                 })
-                .collect::<Vec<_>>()
-                .join(", ");
+                .collect();
 
-            let item_count: i64 = lines.iter().map(|l| l.qty).sum();
+            let (items_summary, item_count) = Store::derive_kds_summary(&structured_items);
 
-            orders.push(self.create_kds_order(CreateKdsOrderInput {
+            let order = self.create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id.to_owned(),
                 store_id: store_id.map(|s| s.to_owned()),
                 items_summary,
@@ -365,7 +378,12 @@ impl Store<'_> {
                 notes: String::new(),
                 table_number: table_number.clone(),
                 priority: false,
-            })?);
+            })?;
+
+            // Create the structured line items in the new kds_line_items table.
+            self.create_kds_line_items(&order.id, &structured_items)?;
+
+            orders.push(order);
         }
 
         Ok(orders)
@@ -405,6 +423,117 @@ impl Store<'_> {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    // ── KDS line items (TODO 2a) ────────────────────────────────────
+
+    fn row_to_kds_line_item(row: &rusqlite::Row) -> rusqlite::Result<KdsLineItem> {
+        let modifiers_json: Option<String> = row.get("modifiers_json")?;
+        let modifiers: Vec<KdsModifier> = match modifiers_json {
+            Some(json) if !json.is_empty() => serde_json::from_str(&json).unwrap_or_default(),
+            _ => vec![],
+        };
+        Ok(KdsLineItem {
+            id: row.get("id")?,
+            kds_order_id: row.get("kds_order_id")?,
+            sku: row.get("sku")?,
+            display_name: row.get("display_name")?,
+            qty: row.get("qty")?,
+            course: row.get("course")?,
+            modifiers,
+            line_position: row.get("line_position")?,
+            item_status: row.get("item_status")?,
+            started_at: row.get("started_at")?,
+            ready_at: row.get("ready_at")?,
+            served_at: row.get("served_at")?,
+            created_at: row.get("created_at")?,
+        })
+    }
+
+    /// Create KDS line items for an order.
+    pub fn create_kds_line_items(
+        &self,
+        order_id: &str,
+        items: &[CreateKdsLineItemInput],
+    ) -> Result<Vec<KdsLineItem>, CoreError> {
+        if items.is_empty() {
+            return Ok(vec![]);
+        }
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+
+        for (i, item) in items.iter().enumerate() {
+            let id = uuid::Uuid::now_v7().to_string();
+            let modifiers_json = if item.modifiers.is_empty() {
+                None
+            } else {
+                Some(
+                    serde_json::to_string(&item.modifiers).map_err(|e| CoreError::Validation {
+                        field: "modifiers",
+                        message: format!("serializing modifiers: {e}"),
+                    })?,
+                )
+            };
+            self.conn.execute(
+                "INSERT INTO kds_line_items
+                    (id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                     line_position, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    id,
+                    order_id,
+                    item.sku,
+                    item.display_name,
+                    item.qty,
+                    item.course,
+                    modifiers_json,
+                    i as i64,
+                    now,
+                ],
+            )?;
+        }
+
+        self.get_kds_order_lines(order_id)
+    }
+
+    /// Get all line items for a KDS order, ordered by course then position.
+    pub fn get_kds_order_lines(&self, order_id: &str) -> Result<Vec<KdsLineItem>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                    line_position, item_status, started_at, ready_at, served_at, created_at
+             FROM kds_line_items
+             WHERE kds_order_id = ?1
+             ORDER BY
+                 CASE course
+                     WHEN 'appetizer' THEN 0
+                     WHEN 'main' THEN 1
+                     WHEN 'side' THEN 2
+                     WHEN 'dessert' THEN 3
+                     WHEN 'beverage' THEN 4
+                     ELSE 99
+                 END,
+                 line_position",
+        )?;
+        let rows = stmt.query_map(params![order_id], Self::row_to_kds_line_item)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Derive the flat items_summary and item_count from structured line items.
+    pub fn derive_kds_summary(items: &[CreateKdsLineItemInput]) -> (String, i64) {
+        let summary = items
+            .iter()
+            .map(|i| {
+                if i.qty > 1 {
+                    format!("{} x{}", i.display_name, i.qty)
+                } else {
+                    i.display_name.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let count: i64 = items.iter().map(|i| i.qty).sum();
+        (summary, count)
     }
 }
 

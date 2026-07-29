@@ -382,8 +382,8 @@ impl Store<'_> {
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
                                          currency, line_position, tax_minor, tax_rate_id,
-                                         serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                         serial_number, course, modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     line.id,
                     line.sale_id,
@@ -396,6 +396,8 @@ impl Store<'_> {
                     line.tax_amount.minor_units,
                     line.tax_rate_id,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }
@@ -743,8 +745,8 @@ impl Store<'_> {
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
                                          currency, line_position, tax_minor, tax_rate_id,
-                                         serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                         serial_number, course, modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     line.id,
                     line.sale_id,
@@ -757,6 +759,8 @@ impl Store<'_> {
                     line.tax_amount.minor_units,
                     line.tax_rate_id,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }
@@ -952,6 +956,8 @@ impl Store<'_> {
             },
             tax_rate_id: row.get("tax_rate_id")?,
             serial_number: row.get("serial_number")?,
+            course: row.get("course")?,
+            modifiers_json: row.get("modifiers_json")?,
         })
     }
 
@@ -989,14 +995,17 @@ impl Store<'_> {
             })?;
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                                        tax_minor, tax_rate_id, serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                        tax_minor, tax_rate_id, serial_number,
+                                        course, modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 params![
                     line.id, line.sale_id, line.sku, line.qty,
                     line.unit_price.minor_units, line.line_total.minor_units,
                     unit_cur, line.line_position,
                     line.tax_amount.minor_units, line.tax_rate_id,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }
@@ -1118,7 +1127,7 @@ impl Store<'_> {
 
         let mut line_stmt = self.conn.prepare(
             "SELECT id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                    tax_minor, tax_rate_id, serial_number
+                    tax_minor, tax_rate_id, serial_number, course, modifiers_json
              FROM sale_lines WHERE sale_id = ?1 ORDER BY line_position",
         )?;
         let line_rows = line_stmt.query_map(params![id], Self::row_to_sale_line)?;
@@ -2319,6 +2328,8 @@ mod tests {
                 tax_amount: price(0),
                 tax_rate_id: None,
                 serial_number: None,
+                course: None,
+                modifiers_json: None,
             }],
         }
     }
@@ -2419,6 +2430,8 @@ mod tests {
             tax_amount: price(0),
             tax_rate_id: None,
             serial_number: None,
+            course: None,
+            modifiers_json: None,
         };
         let line2 = SaleLine {
             id: uuid::Uuid::now_v7().to_string(),
@@ -2431,6 +2444,8 @@ mod tests {
             tax_amount: price(0),
             tax_rate_id: None,
             serial_number: None,
+            course: None,
+            modifiers_json: None,
         };
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut sale = Sale {
