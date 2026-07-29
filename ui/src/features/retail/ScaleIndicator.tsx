@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { readScaleWeight, type WeightReading } from '@/api/hardware';
 import type { Sku } from '@/types/domain';
@@ -15,9 +15,14 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
   const [reading, setReading] = useState<WeightReading | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
+      if (cancelled) return;
       try {
         const r = await readScaleWeight();
         if (!cancelled) {
@@ -25,13 +30,13 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
           setError(null);
         }
       } catch {
-        if (!cancelled) setError(l10n.getString('scale-read-error') || 'Scale error');
+        if (!cancelled) setError(l10nRef.current.getString('scale-read-error') || 'Scale error');
       }
+      if (!cancelled) timeoutId = setTimeout(poll, 2000);
     };
     poll();
-    const id = setInterval(poll, 2000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [l10n]);
+    return () => { cancelled = true; if (timeoutId !== null) clearTimeout(timeoutId); };
+  }, []);
 
   const formatWeight = (g: number): string => {
     if (g >= 1000) return `${(g / 1000).toFixed(2)} kg`;

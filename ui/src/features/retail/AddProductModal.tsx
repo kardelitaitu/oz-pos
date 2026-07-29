@@ -19,13 +19,15 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
-  const [priceMinor, setPriceMinor] = useState<number>(0);
-  const [stockQty, setStockQty] = useState<number>(10);
-  const [lowThreshold, setLowThreshold] = useState<number>(5);
-  const [highThreshold, setHighThreshold] = useState<number>(10);
+  const [priceMinor, setPriceMinor] = useState<number | ''>(0);
+  const [stockQty, setStockQty] = useState<number | ''>(10);
+  const [lowThreshold, setLowThreshold] = useState<number | ''>(5);
+  const [highThreshold, setHighThreshold] = useState<number | ''>(10);
+
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !hasInitialized.current) {
       const generatedSku = `PROD-${Math.floor(1000 + Math.random() * 9000)}`;
       setSku(generatedSku);
       setName('');
@@ -34,7 +36,9 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setStockQty(10);
       setLowThreshold(5);
       setHighThreshold(10);
+      hasInitialized.current = true;
     }
+    if (!isOpen) hasInitialized.current = false;
   }, [isOpen, categories]);
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -52,18 +56,18 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       name: name.trim(),
       category: category || categories[0]?.name || 'General',
       price: {
-        minor_units: Math.max(0, priceMinor),
+        minor_units: Math.max(0, priceMinor === '' ? 0 : priceMinor),
         currency: 'IDR',
       },
       barcode: null,
-      in_stock: stockQty > 0,
-      stock_qty: Math.max(0, stockQty),
+      in_stock: (stockQty === '' ? 0 : Math.max(0, stockQty)) > 0,
+      stock_qty: Math.max(0, stockQty === '' ? 0 : stockQty),
       tax_rate_ids: [],
       created_at: new Date().toISOString(),
       price_updated_at: new Date().toISOString(),
       product_type: 'retail',
-      low_stock_threshold: Math.max(0, lowThreshold),
-      high_stock_threshold: Math.max(0, highThreshold),
+      low_stock_threshold: Math.max(0, lowThreshold === '' ? 0 : lowThreshold),
+      high_stock_threshold: Math.max(0, highThreshold === '' ? 0 : highThreshold),
     };
 
     onSave(newProduct);
@@ -165,7 +169,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="1"
                 className="retail-edit-input"
                 value={priceMinor}
-                onChange={(e) => setPriceMinor(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPriceMinor(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                }}
                 required
               />
             </div>
@@ -183,7 +190,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="1"
                 className="retail-edit-input"
                 value={stockQty}
-                onChange={(e) => setStockQty(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setStockQty(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                }}
                 required
               />
             </div>
@@ -203,7 +213,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="1"
                 className="retail-edit-input"
                 value={lowThreshold}
-                onChange={(e) => setLowThreshold(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setLowThreshold(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                }}
                 required
               />
             </div>
@@ -221,7 +234,10 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 step="1"
                 className="retail-edit-input"
                 value={highThreshold}
-                onChange={(e) => setHighThreshold(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setHighThreshold(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                }}
                 required
               />
             </div>
