@@ -21,8 +21,9 @@ export function SalesHistoryView({ theme, onBack }: SalesHistoryViewProps) {
         variant="minimal"
         title={l10n.getString('retail-fn-history') || 'Sales History'}
         onBack={onBack}
+        skipTarget="retail-subview-main"
       />
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div id="retail-subview-main" style={{ flex: 1, overflow: 'auto' }}>
         <SalesHistoryScreen />
       </div>
     </div>
@@ -45,8 +46,9 @@ export function TableManagementView({ theme, onBack }: TableManagementViewProps)
         variant="minimal"
         title={l10n.getString('tables-title') || 'Table Management'}
         onBack={onBack}
+        skipTarget="retail-subview-main"
       />
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div id="retail-subview-main" style={{ flex: 1, overflow: 'auto' }}>
         <TableManagementScreen />
       </div>
     </div>
@@ -70,8 +72,9 @@ export function StockInquiryView({ theme, onBack, onAddProduct }: StockInquiryVi
         variant="minimal"
         title={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
         onBack={onBack}
+        skipTarget="retail-subview-main"
       />
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div id="retail-subview-main" style={{ flex: 1, overflow: 'auto' }}>
         <ProductLookupScreen onAddProduct={(p) => onAddProduct({
           sku: p.sku, name: p.name, category: p.category,
           price: p.price, barcode: p.barcode ?? null,

@@ -22,6 +22,8 @@ interface RetailHeaderProps {
   title?: string;
   /** Back button handler. When provided (and variant is 'minimal'), renders a back button. */
   onBack?: () => void;
+  /** Skip-to-content target ID. When provided, renders a visually-hidden skip link before the header (keyboard-accessible on focus). */
+  skipTarget?: string;
 }
 
 /** Retail POS header — full variant with store info/shift/cashier/clock, or minimal variant with title + back button for sub-views. */
@@ -37,26 +39,34 @@ export default function RetailHeader({
   onWorkspacePicker,
   title,
   onBack,
+  skipTarget,
 }: RetailHeaderProps) {
   const { l10n } = useLocalization();
 
   if (variant === 'minimal') {
     return (
-      <header className="retail-header">
-        <div className="retail-header-store">
-          <span className="retail-header-name">{title}</span>
-        </div>
-        {onBack && (
-          <button
-            type="button"
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={onBack}
-            aria-label={l10n.getString('back') || 'Back'}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
+      <>
+        {skipTarget && (
+          <a href={`#${skipTarget}`} className="retail-skip-link">
+            {l10n.getString('retail-skip-to-main') || 'Skip to main content'}
+          </a>
         )}
-      </header>
+        <header className="retail-header">
+          <div className="retail-header-store">
+            <span className="retail-header-name">{title}</span>
+          </div>
+          {onBack && (
+            <button
+              type="button"
+              className="retail-options-tab retail-options-tab--danger"
+              onClick={onBack}
+              aria-label={l10n.getString('back') || 'Back'}
+            >
+              &larr; {l10n.getString('back')}
+            </button>
+          )}
+        </header>
+      </>
     );
   }
 
