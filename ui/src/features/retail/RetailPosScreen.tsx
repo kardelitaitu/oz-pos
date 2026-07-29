@@ -898,9 +898,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     return () => { mounted = false; };
   }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
-  // ── Options / Workspace Settings ──────────────────────────
+  // ── Options / Sub-views ────────────────────────────────
 
-  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
   const [showTables, setShowTables] = useState(false);
@@ -1318,8 +1317,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         quickReturnSale={quickReturnSale}
         quickReturnRefundDone={handleQuickReturnRefundDone}
         scanFlash={scanFlash}
-        showWorkspaceSettings={showWorkspaceSettings}
-        onCloseWorkspaceSettings={() => setShowWorkspaceSettings(false)}
       />
     </div>
   </>

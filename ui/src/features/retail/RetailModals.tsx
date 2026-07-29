@@ -12,7 +12,6 @@ import { EditProductModal } from './EditProductModal';
 import { AddCategoryModal } from './AddCategoryModal';
 import { AddProductModal } from './AddProductModal';
 import RefundModal from '@/features/sales/RefundModal';
-import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 
 // ── Exit animation helper type ─────────────────────────────────────
 
@@ -152,8 +151,6 @@ export interface RetailModalsProps {
   quickReturnSale: SaleDetail | null;
   quickReturnRefundDone: () => void;
   scanFlash: boolean;
-  showWorkspaceSettings: boolean;
-  onCloseWorkspaceSettings: () => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -179,8 +176,6 @@ export default function RetailModals(props: RetailModalsProps) {
     quickReturnSale,
     quickReturnRefundDone,
     scanFlash,
-    showWorkspaceSettings,
-    onCloseWorkspaceSettings,
   } = props;
 
   // ── Panel refs for focus trapping ────────────────────────────
@@ -772,16 +767,6 @@ export default function RetailModals(props: RetailModalsProps) {
 
       {/* ── Scan flash overlay ─────────────── */}
       {scanFlash && <div className="retail-scan-flash" />}
-
-      {/* ── Workspace Settings Modal ────────── */}
-      {showWorkspaceSettings && (
-        <WorkspaceSettingsModal
-          open={showWorkspaceSettings}
-          onClose={onCloseWorkspaceSettings}
-          workspaceType="store-pos"
-          presentation="overlay"
-        />
-      )}
     </>
   );
 }
