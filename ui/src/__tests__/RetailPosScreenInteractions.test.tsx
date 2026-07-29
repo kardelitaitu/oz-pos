@@ -225,13 +225,13 @@ describe('RetailPosScreen — interactions', () => {
 
   it('opens quantity picker on long-press of a product button', async () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
-    const productBtns = await screen.findAllByRole('button', { name: /indomie goreng/i });
-    const productBtn = productBtns[0]!;
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+    const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
     fireEvent.pointerDown(productBtn);
     await act(async () => { await new Promise(r => setTimeout(r, 500)); });
     fireEvent.pointerUp(productBtn);
-    await waitFor(() => expect(screen.getByRole('button', { name: /add/i })).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Add')).toBeInTheDocument());
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1')).toBeInTheDocument();
   });
 
@@ -488,7 +488,8 @@ describe('RetailPosScreen — interactions', () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
     await userEvent.click(diskonBtn);
-    const discountInput = screen.getByLabelText(/Discount/);
+    // Use getByRole to avoid ambiguity with the dialog's aria-label="Discount"
+    const discountInput = screen.getByRole('spinbutton', { name: /discount/i });
     await userEvent.type(discountInput, '10');
     await userEvent.click(screen.getByRole('button', { name: /apply/i }));
     expect(setDiscount).toHaveBeenCalledWith(10, '');
