@@ -23,6 +23,9 @@ export function TerminalPreferencesCard({
   onSaved,
 }: WorkspaceCardProps) {
   const hw = useTerminalHardware(terminalId ?? '');
+  // Note: no markSettingsUpdated call here because TerminalPreferencesCard
+  // saves to terminal_profile.json (local file), not to server-side settings
+  // that SettingsContext tracks. No other card needs to react to these changes.
 
   // ── Draft state derived from hardware profile ────────────────
 

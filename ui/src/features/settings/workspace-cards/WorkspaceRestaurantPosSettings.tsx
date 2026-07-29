@@ -26,7 +26,7 @@ export function WorkspaceRestaurantPosSettings({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
-  const { settings } = useSettings();
+  const { settings, markSettingsUpdated } = useSettings();
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
@@ -104,6 +104,9 @@ export function WorkspaceRestaurantPosSettings({
       await Promise.all(tasks);
 
       originalsRef.current = { tableManagement, courseFiring };
+
+      // Notify other cards that receipt and restaurant settings changed
+      markSettingsUpdated(['receipt.showTableNumber', 'restaurant.course_firing']);
 
       onSaved?.();
     } catch {

@@ -4,6 +4,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { useSettings } from '@/contexts/SettingsContext';
 import { getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
@@ -46,6 +47,7 @@ export function WorkspaceKdsSettings({
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { markSettingsUpdated } = useSettings();
 
   const [draft, setDraft] = useState<KdsDraftState>(DEFAULT_KDS);
   const [saving, setSaving] = useState(false);
@@ -111,6 +113,16 @@ export function WorkspaceKdsSettings({
         'kds.density': draft.density,
       }, userId ?? 'default');
       originalsRef.current = { ...draft };
+
+      // Notify other cards that KDS settings changed
+      markSettingsUpdated([
+        'kds.sound_enabled',
+        'kds.yellow_threshold_min',
+        'kds.red_threshold_min',
+        'kds.auto_acknowledge',
+        'kds.density',
+      ]);
+
       onSaved?.();
     } catch {
       addToast({ message: l10n.getString('settings-save-error'), type: 'error' });

@@ -24,7 +24,7 @@ export function WorkspaceStorePosSettings({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
-  const { settings } = useSettings();
+  const { settings, markSettingsUpdated } = useSettings();
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
@@ -99,6 +99,9 @@ export function WorkspaceStorePosSettings({
 
       // Update originals so dirty tracking resets
       originalsRef.current = { paperWidth, showCurrency, showTax, showTableNumber, footer };
+
+      // Notify other cards that receipt settings changed
+      markSettingsUpdated(['receipt.paperWidth', 'receipt.showCurrency', 'receipt.showTax', 'receipt.showTableNumber', 'receipt.footer']);
 
       onSaved?.();
     } catch {

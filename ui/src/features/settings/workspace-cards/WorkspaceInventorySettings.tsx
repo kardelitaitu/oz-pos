@@ -4,6 +4,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { useSettings } from '@/contexts/SettingsContext';
 import { getSetting, setSettings } from '@/api/settings';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -26,6 +27,7 @@ export function WorkspaceInventorySettings({
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { markSettingsUpdated } = useSettings();
 
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const [deductionPreferWarehouse, setDeductionPreferWarehouse] = useState(false);
@@ -74,6 +76,10 @@ export function WorkspaceInventorySettings({
         'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
       }, userId ?? 'default');
       originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
+
+      // Notify other cards that inventory settings changed
+      markSettingsUpdated(['inventory.low_stock_threshold', 'inventory.deduction_prefer_warehouse']);
+
       onSaved?.();
     } catch {
       addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
