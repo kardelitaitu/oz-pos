@@ -376,7 +376,7 @@ export default function CategoryManagementScreen() {
                   type="button"
                   className="cat-mgmt-edit-btn"
                   onClick={() => openEdit(cat)}
-                  aria-label={`Edit category ${cat.name}`}
+                  aria-label={l10n.getString('category-mgmt-edit-aria', { name: cat.name }, `Edit category ${cat.name}`)}
                 >
                   ✎
                 </button>

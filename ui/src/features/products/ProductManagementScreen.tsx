@@ -237,7 +237,7 @@ export default function ProductManagementScreen() {
             type="button"
             className="product-mgmt-alert-toggle"
             onClick={() => setShowAlertPanel((prev) => !prev)}
-            aria-label={showAlertPanel ? 'Close stock alerts' : `Open stock alerts${alertCount > 0 ? ` (${alertCount} active)` : ''}`}
+            aria-label={showAlertPanel ? l10n.getString('product-mgmt-stock-alert-close') || 'Close stock alerts' : (alertCount > 0 ? l10n.getString('product-mgmt-alert-count', { count: String(alertCount) }) : l10n.getString('product-mgmt-stock-alert-open') || 'Open stock alerts')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -521,9 +521,9 @@ export default function ProductManagementScreen() {
                   value={form.productType}
                   onChange={(e) => setForm({ ...form, productType: e.target.value })}
                 >
-                  <option value="retail">Retail</option>
-                  <option value="restaurant">Restaurant</option>
-                  <option value="service">Service</option>
+                  <option value="retail">{l10n.getString('product-type-retail') || 'Retail'}</option>
+                  <option value="restaurant">{l10n.getString('product-type-restaurant') || 'Restaurant'}</option>
+                  <option value="service">{l10n.getString('product-type-service') || 'Service'}</option>
                 </select>
               </label>
 
