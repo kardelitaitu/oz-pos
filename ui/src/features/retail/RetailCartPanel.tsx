@@ -29,7 +29,7 @@ export interface CartTotalsData {
 }
 
 export interface CartLineActions {
-  onRemoveLine: (id: string, line: { sku: Sku; name: string; category: string; unit_price: Money }) => void;
+  onRemoveLine: (id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }) => void;
   onIncreaseQty: (line: { sku: string; id: LineId; qty: number }) => void;
   onUpdateQty: (lineId: LineId, qty: number) => void;
   onSerialChange: (lineId: string, serial: string) => void;
@@ -57,7 +57,7 @@ export interface RetailCartPanelProps {
   serialNumbers: Record<string, string>;
   trackSerialMap: Record<string, boolean>;
   overrideTarget: { id: LineId; name: string; unit_price: Money } | null;
-  undoStack: { sku: Sku; name: string; category: string; unit_price: Money }[];
+  undoStack: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }[];
   undoBarExit: { shouldRender: boolean; exiting: boolean; requestClose: () => void };
 
   // Feature flags
@@ -223,7 +223,7 @@ export default function RetailCartPanel({
                       </td>
                       <td className="retail-cart-line-subtotal">{formatMoney({ minor_units: line.unit_price.minor_units * line.qty, currency: line.unit_price.currency })}</td>
                         <td>
-                          <button type="button" className="retail-cart-remove-btn" onClick={() => lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price })} aria-label={l10n.getString('retail-cart-remove-aria') || `Remove ${line.sku} from cart`}>
+                          <button type="button" className="retail-cart-remove-btn" onClick={() => lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty })} aria-label={l10n.getString('retail-cart-remove-aria') || `Remove ${line.sku} from cart`}>
                             &times;
                           </button>
                       </td>

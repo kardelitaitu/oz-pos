@@ -258,9 +258,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Undo stack ───────────────────────────────────────────────────
   const MAX_UNDO = 5;
-  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money }[]>([]);
+  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money; qty: number }[]>([]);
 
-  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money }) => {
+  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }) => {
     removeLine(id as LineId);
     setUndoStack((prev) => [line, ...prev].slice(0, MAX_UNDO));
   }, [removeLine]);
@@ -268,7 +268,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleUndoRemove = useCallback(() => {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
-    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null });
+    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty);
     setUndoStack((prev) => prev.slice(1));
   }, [undoStack, addProduct]);
 
