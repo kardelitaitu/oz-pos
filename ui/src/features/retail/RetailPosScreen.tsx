@@ -1179,6 +1179,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         lowStockCount={lowStockCount}
         creditCount={creditSales.length}
         heldCartCount={heldCartsList.length}
+        lowStockActive={filterLowStock}
         onClickLowStock={() => setFilterLowStock((prev) => !prev)}
         onClickCredit={() => { if (!isAnyOverlayOpen()) setShowCreditList(true); }}
         onClickHeldCarts={() => { if (!isAnyOverlayOpen()) setShowHeldCartsList(true); }}

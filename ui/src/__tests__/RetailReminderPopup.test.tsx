@@ -277,4 +277,32 @@ describe('RetailReminderPopup — click-to-action', () => {
     const row = document.querySelector('.retail-reminder-row--low-stock')!;
     expect(() => fireEvent.click(row)).not.toThrow();
   });
+
+  it('low-stock row has active class and aria-pressed when lowStockActive is true', () => {
+    render(
+      <RetailReminderPopup lowStockCount={3} creditCount={0} heldCartCount={0} lowStockActive />,
+    );
+    const row = document.querySelector('.retail-reminder-row--low-stock')!;
+    expect(row.classList.contains('retail-reminder-row--active')).toBe(true);
+    expect(row.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('low-stock row has aria-pressed=false when lowStockActive is false', () => {
+    render(
+      <RetailReminderPopup lowStockCount={3} creditCount={0} heldCartCount={0} lowStockActive={false} />,
+    );
+    const row = document.querySelector('.retail-reminder-row--low-stock')!;
+    expect(row.classList.contains('retail-reminder-row--active')).toBe(false);
+    expect(row.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('low-stock row does not have active class by default', () => {
+    render(
+      <RetailReminderPopup lowStockCount={3} creditCount={0} heldCartCount={0} />,
+    );
+    const row = document.querySelector('.retail-reminder-row--low-stock')!;
+    expect(row.classList.contains('retail-reminder-row--active')).toBe(false);
+    // aria-pressed defaults to false when lowStockActive is undefined
+    expect(row.getAttribute('aria-pressed')).toBe('false');
+  });
 });

@@ -759,6 +759,32 @@ mod tests {
     }
 
     #[test]
+    fn close_shift_atomic_within_transaction() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        let shift = s.open_shift("user-1", None, 200).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Insert a cash sale and a payout.
+        conn.execute_batch(&format!(
+            "INSERT INTO sales (id, user_id, status, total_minor, payment_method, currency, line_count, created_at, updated_at) VALUES
+             ('sale-tx', 'user-1', 'completed', 1000, 'cash', 'USD', 1, '{now}', '{now}');"
+        )).unwrap();
+        s.create_cash_payout(&shift.id, 300, "safe drop").unwrap();
+
+        // Close the shift — should see both the sale and the payout.
+        let closed = s.close_shift(&shift.id, 1000, None).unwrap();
+
+        // expected_cash = opening(200) + cash_sales(1000) - payouts(300) = 900
+        assert_eq!(closed.expected_cash_minor, Some(900));
+        assert_eq!(closed.cash_difference_minor, Some(100)); // 1000 - 900
+        assert_eq!(closed.total_cash_minor, 1000);
+        assert_eq!(closed.total_payouts_minor, 300);
+    }
+
+    #[test]
     fn get_shift_report_empty_shift() {
         let conn = fresh();
         seed_user(&conn);

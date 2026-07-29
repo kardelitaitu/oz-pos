@@ -14,11 +14,13 @@ export interface RetailReminderPopupProps {
   onClickCredit?: () => void;
   /** Called when the held-carts row is clicked. */
   onClickHeldCarts?: () => void;
+  /** Whether the low-stock filter is currently active (visual indicator). */
+  lowStockActive?: boolean;
 }
 
 /** Floating corner popup showing low-stock and credit reminders.
  *  Dismissed once per session (resets on page reload). */
-export default function RetailReminderPopup({ lowStockCount, creditCount, heldCartCount, onClickLowStock, onClickCredit, onClickHeldCarts }: RetailReminderPopupProps) {
+export default function RetailReminderPopup({ lowStockCount, creditCount, heldCartCount, onClickLowStock, onClickCredit, onClickHeldCarts, lowStockActive }: RetailReminderPopupProps) {
   const { l10n } = useLocalization();
   const [dismissed, setDismissed] = useState(false);
 
@@ -36,9 +38,10 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
       {lowStockCount > 0 && (
         <button
           type="button"
-          className="retail-reminder-row retail-reminder-row--low-stock"
+          className={`retail-reminder-row retail-reminder-row--low-stock${lowStockActive ? ' retail-reminder-row--active' : ''}`}
           onClick={onClickLowStock}
           aria-label={`View ${lowStockCount} low-stock products`}
+          aria-pressed={lowStockActive ?? false}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
             <path d="M10 2a1 1 0 011 1v8a1 1 0 11-2 0V3a1 1 0 011-1zM10 16a1 1 0 100-2 1 1 0 000 2z" />

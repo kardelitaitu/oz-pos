@@ -1484,6 +1484,15 @@
   outline-offset: 1px;
 }
 
+.retail-reminder-row--active {
+  background: var(--color-primary-pos-light);
+}
+
+.retail-reminder-row--active:hover {
+  background: var(--color-primary-pos); /* P1-5 fallback */
+  background: color-mix(in srgb, var(--color-primary-pos) 20%, var(--color-bg-elevated));
+}
+
 .retail-reminder-dismiss {
   position: absolute;
   top: var(--space-1);

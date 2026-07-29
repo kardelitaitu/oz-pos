@@ -105,10 +105,9 @@ fn shift_open_nonexistent_user_rejected() {
     let s = store(&conn);
 
     let err = s.open_shift("user-ghost", None, 100).unwrap_err();
-    // FK constraint on users(id) — should produce an error
     assert!(
-        err.to_string().contains("constraint")
-            || matches!(err, oz_core::CoreError::NotFound { .. })
+        matches!(err, oz_core::CoreError::Validation { field, .. } if field == "user_id"),
+        "expected Validation error for nonexistent user, got: {err}"
     );
 }
 
