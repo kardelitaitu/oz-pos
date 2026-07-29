@@ -358,7 +358,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         if (!controller.signal.aborted) setCategoriesLoading(false);
       });
     return () => { controller.abort(); };
-  }, [addToast, l10n, playError, sessionToken]);
+  }, [sessionToken]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
