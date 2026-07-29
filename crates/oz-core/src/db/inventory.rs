@@ -837,6 +837,22 @@ mod tests {
     }
 
     #[test]
+    fn create_inventory_location_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.create_inventory_location("", "store", "").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_inventory_location_whitespace_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.create_inventory_location("   ", "store", "").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
     fn update_inventory_location_nonexistent_errors() {
         let conn = fresh();
         let s = store(&conn);
@@ -1239,6 +1255,17 @@ mod tests {
             .update_inventory_location(&loc_id, "Bad", "invalid_type", "")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field: "type", .. }));
+    }
+
+    #[test]
+    fn update_inventory_location_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = s.create_inventory_location("Valid", "store", "").unwrap();
+        let err = s
+            .update_inventory_location(&loc_id, "", "store", "")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 
     #[test]
