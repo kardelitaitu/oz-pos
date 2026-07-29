@@ -302,7 +302,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         return;
       }
     }
-    for (let i = 0; i < qty; i++) addProduct(toProduct(pendingProduct));
+    addProduct(toProduct(pendingProduct), qty);
     setShowQtyPicker(false);
     setPendingProduct(null);
   }, [pendingProduct, qtyInput, addProduct, addToast, l10n, lines]);
@@ -686,7 +686,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleApplyDiscountRp = useCallback(() => {
     const rp = parseFloat(discountRpInput);
-    if (Number.isNaN(rp) || rp <= 0 || !subtotal) return;
+    if (Number.isNaN(rp) || rp <= 0 || !subtotal || subtotal.minor_units === 0) return;
     const rpMinor = Math.min(subtotal.minor_units, Math.round(rp * 100));
     const pct = Math.round((rpMinor / subtotal.minor_units) * 100 * 100) / 100;
     setDiscount(pct, '');
@@ -864,9 +864,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
       const lines = data['lines'] as { sku: string; name: string; category: string; qty: number; unit_price: Money }[];
       for (const l of lines) {
-        for (let i = 0; i < (l.qty || 1); i++) {
-          addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' });
-        }
+        addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' }, l.qty || 1);
       }
       if (data['discountPercent']) setDiscount(data['discountPercent'] as number, (data['discountLabel'] as string) ?? '');
       await deleteHeldCartScoped(sessionToken, cartId);
@@ -1014,19 +1012,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       // Guard: block hotkeys while local overlays/dialogs are visible
       if (isAnyOverlayOpen()) return;
       switch (e.key) {
-        case 'F1': handlePay(); break;
-        case 'F2': if (lines.length > 0) handleRequestClear(); break;
-        case 'F3': if (lines.length > 0) setShowDiscount(true); break;
-        case 'F4': if (heldCartId) handleResume(); else handleHold(); break;
-        case 'F5': skuInputRef.current?.focus(); break;
-        case 'F6': setShowSalesHistory(true); break;
-        case 'F7': setShowCustomerSearch(true); break;
-        case 'F8': setShowStockInquiry(true); break;
-        case 'F9': if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
-        case 'F10': handleOpenSettings(); break;
+        case 'F1': if (e.cancelable) e.preventDefault(); handlePay(); break;
+        case 'F2': if (e.cancelable) e.preventDefault(); if (lines.length > 0) handleRequestClear(); break;
+        case 'F3': if (e.cancelable) e.preventDefault(); if (lines.length > 0) setShowDiscount(true); break;
+        case 'F4': if (e.cancelable) e.preventDefault(); if (heldCartId) handleResume(); else handleHold(); break;
+        case 'F5': if (e.cancelable) e.preventDefault(); skuInputRef.current?.focus(); break;
+        case 'F6': if (e.cancelable) e.preventDefault(); setShowSalesHistory(true); break;
+        case 'F7': if (e.cancelable) e.preventDefault(); setShowCustomerSearch(true); break;
+        case 'F8': if (e.cancelable) e.preventDefault(); setShowStockInquiry(true); break;
+        case 'F9': if (e.cancelable) e.preventDefault(); if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
+        case 'F10': if (e.cancelable) e.preventDefault(); handleOpenSettings(); break;
         case 'F11': if (e.cancelable) e.preventDefault(); setShowQuickReturn(true); break;
         case '?': setShowShortcuts((v) => !v); break;
-        case 'F12': onNavigate?.('kds'); break;
+        case 'F12': if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
         case 'l': if (e.ctrlKey && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
       }
     };
