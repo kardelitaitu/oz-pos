@@ -481,6 +481,14 @@ pub struct HardwareSettingsDto {
     /// Dark mode enabled.
     #[serde(default)]
     pub dark_mode: bool,
+    /// Kitchen printer connection type.
+    #[serde(default = "default_kitchen_printer_connection")]
+    pub kitchen_printer_connection: String,
+
+    /// Kitchen printer device path or IP.
+    #[serde(default)]
+    pub kitchen_printer_device_path: String,
+
     /// Scale auto-zero after each transaction.
     #[serde(default = "default_scale_auto_zero")]
     pub scale_auto_zero: bool,
@@ -491,6 +499,9 @@ fn default_scale_connection() -> String {
 }
 fn default_scale_baud_rate() -> i64 {
     9600
+}
+fn default_kitchen_printer_connection() -> String {
+    "disabled".into()
 }
 fn default_sound_volume() -> i64 {
     80
@@ -511,6 +522,8 @@ impl From<TerminalProfile> for HardwareSettingsDto {
             scale_device_path: p.scale_device_path,
             scale_baud_rate: p.scale_baud_rate as i64,
             scale_zero_on_boot: p.scale_zero_on_boot,
+            kitchen_printer_connection: p.kitchen_printer_connection,
+            kitchen_printer_device_path: p.kitchen_printer_device_path,
             sound_volume: p.sound_volume as i64,
             dark_mode: p.dark_mode,
             scale_auto_zero: p.scale_auto_zero,
@@ -530,6 +543,8 @@ impl From<HardwareSettingsDto> for TerminalProfile {
             scale_device_path: dto.scale_device_path,
             scale_baud_rate: dto.scale_baud_rate as u32,
             scale_zero_on_boot: dto.scale_zero_on_boot,
+            kitchen_printer_connection: dto.kitchen_printer_connection,
+            kitchen_printer_device_path: dto.kitchen_printer_device_path,
             sound_volume: dto.sound_volume as u32,
             dark_mode: dto.dark_mode,
             scale_auto_zero: dto.scale_auto_zero,
@@ -1276,6 +1291,8 @@ mod tests {
             scale_device_path: "COM3".into(),
             scale_baud_rate: 115200,
             scale_zero_on_boot: true,
+            kitchen_printer_connection: "network".into(),
+            kitchen_printer_device_path: "192.168.1.51".into(),
             sound_volume: 60,
             dark_mode: true,
             scale_auto_zero: false,
@@ -1433,6 +1450,8 @@ mod tests {
             scale_device_path: "/dev/hidraw0".into(),
             scale_baud_rate: 9600,
             scale_zero_on_boot: false,
+            kitchen_printer_connection: "network".into(),
+            kitchen_printer_device_path: "10.0.0.50".into(),
             sound_volume: 80,
             dark_mode: false,
             scale_auto_zero: true,

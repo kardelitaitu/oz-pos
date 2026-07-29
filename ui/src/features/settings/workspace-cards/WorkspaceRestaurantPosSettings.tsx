@@ -200,7 +200,7 @@ export function WorkspaceRestaurantPosSettings({
         </div>
       </Card>
 
-      {/* Kitchen printer */}
+      {/* Kitchen printer — separate from receipt printer */}
       {terminalId && (
         <Card
           shadow="sm"
@@ -217,16 +217,17 @@ export function WorkspaceRestaurantPosSettings({
               </label>
               <SettingsSelect
                 id="resto-kp-conn"
-                value={hw.profile?.hardware.printer.connection ?? 'auto'}
-                onChange={(v) => hw.updatePrinter({ connection: v as 'network' | 'usb' | 'serial' | 'auto' })}
+                value={hw.profile?.hardware.kitchenPrinter.connection ?? 'disabled'}
+                onChange={(v) => hw.updateKitchenPrinter({ connection: v as 'network' | 'usb' | 'serial' | 'auto' | 'disabled' })}
                 options={[
-                  { value: 'auto', label: 'Auto' },
+                  { value: 'disabled', label: l10n.getString('workspace-resto-kp-disabled') || 'Disabled' },
                   { value: 'network', label: 'Network' },
                   { value: 'usb', label: 'USB' },
+                  { value: 'serial', label: 'Serial' },
                 ]}
               />
             </div>
-            {hw.profile?.hardware.printer.connection === 'network' && (
+            {hw.profile?.hardware.kitchenPrinter.connection === 'network' && (
               <div className="settings-field settings-field--horizontal">
                 <label htmlFor="resto-kp-ip" className="settings-label">
                   <Localized id="workspace-resto-kp-ip">Kitchen Printer IP</Localized>
@@ -235,9 +236,9 @@ export function WorkspaceRestaurantPosSettings({
                   id="resto-kp-ip"
                   type="text"
                   className="settings-input"
-                  value={hw.profile?.hardware.printer.devicePath ?? ''}
+                  value={hw.profile?.hardware.kitchenPrinter.devicePath ?? ''}
                   onChange={(e) => {
-                    hw.updatePrinter({ devicePath: e.target.value });
+                    hw.updateKitchenPrinter({ devicePath: e.target.value });
                   }}
                   placeholder="192.168.1.50"
                 />

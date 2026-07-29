@@ -857,6 +857,7 @@ workspace-resto-courses-enable = Aktifkan Pengiriman Course
 workspace-resto-courses-hint = Kirim hidangan pembuka, utama, dan penutup ke dapur secara berurutan
 workspace-resto-kitchen-printer-heading = Printer Dapur
 workspace-resto-kp-connection = Koneksi
+workspace-resto-kp-disabled = Nonaktif
 workspace-resto-kp-ip = IP Printer Dapur
 workspace-kds-sla-heading = Eskalasi SLA
 workspace-kds-sound = Suara Pesanan Baru

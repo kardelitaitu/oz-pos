@@ -877,6 +877,7 @@ workspace-resto-courses-enable = Enable Course Firing
 workspace-resto-courses-hint = Send appetizers, mains, and desserts to the kitchen in sequence
 workspace-resto-kitchen-printer-heading = Kitchen Printer
 workspace-resto-kp-connection = Connection
+workspace-resto-kp-disabled = Disabled
 workspace-resto-kp-ip = Kitchen Printer IP
 workspace-kds-sla-heading = SLA Escalation
 workspace-kds-sound = New Order Sound
