@@ -708,6 +708,14 @@ retail-shift-closed-expected-label = Expected:
 retail-shift-closed-difference-label = Difference:
 retail-credit-reminders-title = Credit Reminders
 retail-reminder-dismiss-aria = Dismiss notifications
+retail-reminder-low-stock-aria = View { $count } low-stock products
+retail-reminder-credit-aria = View { $count } credit sales
+retail-reminder-held-cart-aria = View { $count } held carts
+retail-held-cart-reminders =
+    { $count ->
+        [one] { $count } held cart
+       *[other] { $count } held carts
+    }
 retail-credit-no-outstanding = No outstanding credits
 retail-credit-col-customer = Customer
 retail-credit-col-amount = Amount

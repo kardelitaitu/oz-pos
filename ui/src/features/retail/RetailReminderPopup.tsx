@@ -40,7 +40,7 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
           type="button"
           className={`retail-reminder-row retail-reminder-row--low-stock${lowStockActive ? ' retail-reminder-row--active' : ''}`}
           onClick={onClickLowStock}
-          aria-label={`View ${lowStockCount} low-stock products`}
+          aria-label={l10n.getString('retail-reminder-low-stock-aria', { count: lowStockCount }) || `View ${lowStockCount} low-stock products`}
           aria-pressed={lowStockActive ?? false}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
@@ -56,7 +56,7 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
           type="button"
           className="retail-reminder-row retail-reminder-row--credit"
           onClick={onClickCredit}
-          aria-label={`View ${creditCount} credit sales`}
+          aria-label={l10n.getString('retail-reminder-credit-aria', { count: creditCount }) || `View ${creditCount} credit sales`}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
             <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
@@ -72,7 +72,7 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
           type="button"
           className="retail-reminder-row retail-reminder-row--held-cart"
           onClick={onClickHeldCarts}
-          aria-label={`View ${heldCartCount} held carts`}
+          aria-label={l10n.getString('retail-reminder-held-cart-aria', { count: heldCartCount }) || `View ${heldCartCount} held carts`}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
             <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 1h2a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zm8 0h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1V5a1 1 0 011-1zm-8 8a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zm0 1h2a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2a1 1 0 011-1zm8 0h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1v-2a1 1 0 011-1z" />

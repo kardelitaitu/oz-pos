@@ -708,6 +708,14 @@ retail-shift-closed-expected-label = Diharapkan:
 retail-shift-closed-difference-label = Selisih:
 retail-credit-reminders-title = Pengingat Piutang
 retail-reminder-dismiss-aria = Tutup notifikasi
+retail-reminder-low-stock-aria = Lihat { $count } produk stok rendah
+retail-reminder-credit-aria = Lihat { $count } penjualan kredit
+retail-reminder-held-cart-aria = Lihat { $count } pesanan ditahan
+retail-held-cart-reminders =
+    { $count ->
+        [one] { $count } pesanan ditahan
+       *[other] { $count } pesanan ditahan
+    }
 retail-credit-no-outstanding = Tidak ada piutang
 retail-credit-col-customer = Pelanggan
 retail-credit-col-amount = Jumlah
