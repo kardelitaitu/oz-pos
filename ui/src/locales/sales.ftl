@@ -140,8 +140,7 @@ payment-toast-loyalty-failed = Failed to load loyalty account
 payment-toast-points-value-failed = Failed to load points value
 payment-customer-placeholder =
     .placeholder = e.g. John Doe
-payment-loyalty-points-aria =
-    .aria-label = Points
+payment-loyalty-points-aria = Points
 payment-search-customers-aria = Search customers
 payment-search-customers-placeholder = Search by name, phone, or email...
 
