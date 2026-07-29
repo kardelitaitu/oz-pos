@@ -42,6 +42,32 @@ impl Store<'_> {
 
     /// Insert a new promotion.
     pub fn create_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
+        if promo.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "promotion name must not be empty".into(),
+            });
+        }
+        if promo.promo_type.trim().is_empty()
+            || crate::PromotionType::from_str(promo.promo_type.trim()).is_none()
+        {
+            return Err(CoreError::Validation {
+                field: "promo_type",
+                message: "invalid promotion type".into(),
+            });
+        }
+        if promo.value_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "value_minor",
+                message: "value_minor must not be negative".into(),
+            });
+        }
+        if promo.min_order_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "min_order_minor",
+                message: "min_order_minor must not be negative".into(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO promotions (id, name, description, promo_type, value_minor,
                                      min_qty, trigger_sku, reward_sku, reward_qty,
@@ -72,6 +98,12 @@ impl Store<'_> {
 
     /// Update an existing promotion by id.
     pub fn update_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
+        if promo.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "promotion name must not be empty".into(),
+            });
+        }
         let rows = self.conn.execute(
             "UPDATE promotions
              SET name = ?1, description = ?2, promo_type = ?3, value_minor = ?4,
@@ -146,6 +178,12 @@ impl Store<'_> {
         &self,
         app: &PromotionApplication,
     ) -> Result<PromotionApplication, CoreError> {
+        if app.discount_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "discount_minor",
+                message: "discount_minor must not be negative".into(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
