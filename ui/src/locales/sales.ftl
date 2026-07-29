@@ -856,12 +856,18 @@ retail-edit-btn-aria = Edit product { $name }
 
 # ── Add Category / Add Product Modals ──
 retail-add-category-btn = + Category
+retail-add-category-btn-aria = Add new category
+retail-add-category-btn-title = Add new category
 retail-add-category-title = Add Category
 retail-add-category-field-name = Category Name
+retail-add-category-name-placeholder = e.g. Storage, Peripherals, Accessories
 retail-add-product-btn = + Product
+retail-add-product-btn-aria = Add new product
+retail-add-product-btn-title = Add new product
 retail-add-product-title = Add Product
 retail-add-product-category-label = Category
 retail-add-product-name-placeholder = e.g. Logitech G Pro X Wireless Mouse
+retail-sku-lookup-aria = Look up SKU
 
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...

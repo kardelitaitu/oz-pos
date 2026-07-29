@@ -270,8 +270,8 @@ export default function RetailProductGrid({
             type="button"
             className="retail-cat-btn retail-cat-btn--add"
             onClick={actions.onAddCategory}
-            title="Add new category"
-            aria-label="Add new category"
+            title={l10n.getString('retail-add-category-btn-title') || 'Add new category'}
+            aria-label={l10n.getString('retail-add-category-btn-aria') || 'Add new category'}
           >
             + Category
           </button>
@@ -300,8 +300,8 @@ export default function RetailProductGrid({
             type="button"
             className="retail-add-product-btn"
             onClick={actions.onAddNewProduct}
-            title="Add new product"
-            aria-label="Add new product"
+            title={l10n.getString('retail-add-product-btn-title') || 'Add new product'}
+            aria-label={l10n.getString('retail-add-product-btn-aria') || 'Add new product'}
           >
             + Product
           </button>
@@ -445,7 +445,7 @@ export default function RetailProductGrid({
         <button
           className="retail-sku-go-btn"
           onClick={actions.onSkuSubmit}
-          aria-label="Look up SKU"
+          aria-label={l10n.getString('retail-sku-lookup-aria') || 'Look up SKU'}
         >
           {l10n.getString('retail-sku-go')}
         </button>

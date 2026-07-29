@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { useLocalization, Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { CategoryDto } from '@/api/products';
 
@@ -17,6 +17,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { l10n } = useLocalization();
   const [name, setName] = useState('');
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               className="retail-edit-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Storage, Peripherals, Accessories"
+              placeholder={l10n.getString('retail-add-category-name-placeholder') || 'e.g. Storage, Peripherals, Accessories'}
               ref={nameInputRef}
               required
             />

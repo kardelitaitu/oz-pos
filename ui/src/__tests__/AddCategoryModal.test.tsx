@@ -9,6 +9,8 @@ import { AddCategoryModal } from '@/features/retail/AddCategoryModal';
 const ftl = `
 retail-add-category-title = Add New Category
 retail-add-category-field-name = Category Name
+retail-add-category-name-placeholder = e.g. Storage, Peripherals, Accessories
+retail-edit-modal-close-aria = Close
 retail-edit-save = Save Category
 retail-edit-cancel = Cancel
 `;

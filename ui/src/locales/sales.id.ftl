@@ -841,12 +841,18 @@ retail-edit-btn-aria = Edit produk { $name }
 
 # ── Add Category / Add Product Modals ──
 retail-add-category-btn = + Kategori
+retail-add-category-btn-aria = Tambah kategori baru
+retail-add-category-btn-title = Tambah kategori baru
 retail-add-category-title = Tambah Kategori
 retail-add-category-field-name = Nama Kategori
+retail-add-category-name-placeholder = mis. Penyimpanan, Periferal, Aksesoris
 retail-add-product-btn = + Produk
+retail-add-product-btn-aria = Tambah produk baru
+retail-add-product-btn-title = Tambah produk baru
 retail-add-product-title = Tambah Produk
 retail-add-product-category-label = Kategori
 retail-add-product-name-placeholder = mis. Logitech G Pro X Wireless Mouse
+retail-sku-lookup-aria = Cari berdasarkan SKU
 
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
