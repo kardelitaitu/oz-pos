@@ -1458,6 +1458,10 @@
   color: var(--color-warning-pos);
 }
 
+.retail-reminder-row--held-cart svg {
+  color: var(--color-accent);
+}
+
 .retail-reminder-dismiss {
   position: absolute;
   top: var(--space-1);

@@ -6,20 +6,22 @@ export interface RetailReminderPopupProps {
   lowStockCount: number;
   /** Number of outstanding (unsettled) credit sales. */
   creditCount: number;
+  /** Number of held (parked) carts available for resume. */
+  heldCartCount: number;
 }
 
 /** Floating corner popup showing low-stock and credit reminders.
  *  Dismissed once per session (resets on page reload). */
-export default function RetailReminderPopup({ lowStockCount, creditCount }: RetailReminderPopupProps) {
+export default function RetailReminderPopup({ lowStockCount, creditCount, heldCartCount }: RetailReminderPopupProps) {
   const { l10n } = useLocalization();
   const [dismissed, setDismissed] = useState(false);
 
   // Re-show if new reminders arrive after dismissal (count goes up)
   useEffect(() => {
     setDismissed(false);
-  }, [lowStockCount, creditCount]);
+  }, [lowStockCount, creditCount, heldCartCount]);
 
-  const hasReminders = lowStockCount > 0 || creditCount > 0;
+  const hasReminders = lowStockCount > 0 || creditCount > 0 || heldCartCount > 0;
   if (!hasReminders || dismissed) return null;
 
   return (
@@ -42,6 +44,16 @@ export default function RetailReminderPopup({ lowStockCount, creditCount }: Reta
             <path d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" />
           </svg>
           <span>{l10n.getString('retail-credit-reminders', { count: creditCount }) || `Credit Reminders (${creditCount})`}</span>
+        </div>
+      )}
+
+      {/* ── Held carts ─────────────────────────── */}
+      {heldCartCount > 0 && (
+        <div className="retail-reminder-row retail-reminder-row--held-cart">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+            <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 1h2a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zm8 0h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1V5a1 1 0 011-1zm-8 8a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zm0 1h2a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2a1 1 0 011-1zm8 0h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1v-2a1 1 0 011-1z" />
+          </svg>
+          <span>{l10n.getString('retail-held-cart-reminders', { count: heldCartCount }) || `${heldCartCount} held cart${heldCartCount > 1 ? 's' : ''}`}</span>
         </div>
       )}
 

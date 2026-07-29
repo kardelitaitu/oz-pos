@@ -1167,7 +1167,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onNavigateKds={() => onNavigate?.('kds')}
         skuInputRef={skuInputRef}
       />
-      <RetailReminderPopup lowStockCount={lowStockCount} creditCount={creditSales.length} />
+      <RetailReminderPopup lowStockCount={lowStockCount} creditCount={creditSales.length} heldCartCount={heldCartsList.length} />
       <RetailModals
         shift={{
           activeShift,
