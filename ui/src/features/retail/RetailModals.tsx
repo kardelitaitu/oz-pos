@@ -364,7 +364,7 @@ export default function RetailModals(props: RetailModalsProps) {
                           disabled={credit.settlingId === c.saleId}
                           style={{
                             padding: '4px 8px', fontSize: 11, background: 'var(--color-success-pos)',
-                            color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer',
+                            color: 'var(--color-accent-fg)', border: 'none', cursor: 'pointer',
                           }}
                         >
                           {credit.settlingId === c.saleId ? '…' : l10n.getString('retail-credit-settle')}
