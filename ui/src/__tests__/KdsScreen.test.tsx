@@ -7,9 +7,10 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
+  mockListKdsOrdersScoped: vi.fn().mockResolvedValue([]),
   mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
     level: 'green',
     elapsedSeconds: 120,
@@ -23,6 +24,7 @@ const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, m
 vi.mock('@/api/kds', () => ({
   getKdsQueue: (_userId: string) => mockGetKdsQueue(),
   getKdsQueueScoped: (_token: string, _userId: string) => mockGetKdsQueue(),
+  listKdsOrdersScoped: (_token: string, _status: string) => mockListKdsOrdersScoped(),
   updateKdsStatus: (_userId: string, id: string, status: string) =>
     mockUpdateKdsStatus(id, status),
   updateKdsStatusScoped: (
@@ -545,6 +547,35 @@ describe('KdsScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
       expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
+    });
+  });
+
+  // ── 2b: History view tests ─────────────────────────────────────
+
+  it('renders history toggle button', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const toggle = document.querySelector('.kds-history-toggle');
+      expect(toggle).not.toBeNull();
+    });
+  });
+
+  it('shows history panel when toggle is clicked', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const toggle = document.querySelector('.kds-history-toggle');
+      expect(toggle).not.toBeNull();
+    });
+
+    // Click the history toggle
+    const toggle = document.querySelector('.kds-history-toggle') as HTMLButtonElement;
+    await userEvent.click(toggle);
+
+    // History panel should render
+    await waitFor(() => {
+      expect(document.querySelector('.kds-history')).not.toBeNull();
     });
   });
 

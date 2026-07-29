@@ -52,6 +52,15 @@ kds-zone-all = Semua
 # ── 2c: Priority/rush flag ──
 kds-rush-badge = PRIORITAS
 
+# ── 2b: History/recall view ──
+kds-history-toggle-aria = Tampilkan riwayat pesanan
+kds-history-toggle-title = Riwayat pesanan
+kds-history-filter-aria = Filter berdasarkan status
+kds-history-loading = Memuat riwayat...
+kds-history-empty = Belum ada pesanan selesai
+kds-history-received = Diterima
+kds-history-served = Selesai
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Pesanan
 kds-ready-tts = siap

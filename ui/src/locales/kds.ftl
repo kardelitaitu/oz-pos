@@ -50,6 +50,15 @@ kds-zone-all = All
 # ── 2c: Priority/rush flag ──
 kds-rush-badge = RUSH
 
+# ── 2b: History/recall view ──
+kds-history-toggle-aria = Toggle order history
+kds-history-toggle-title = Order history
+kds-history-filter-aria = Filter by status
+kds-history-loading = Loading history...
+kds-history-empty = No completed orders yet
+kds-history-received = Received
+kds-history-served = Served
+
 # ── 3d: Voice callout ──
 kds-order-up-tts = Order
 kds-ready-tts = up

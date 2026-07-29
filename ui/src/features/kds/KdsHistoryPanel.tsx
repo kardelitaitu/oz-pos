@@ -1,0 +1,105 @@
+import { useEffect, useState, useCallback } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { listKdsOrdersScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
+
+const STATUS_ORDER: { key: KdsStatus; label: string }[] = [
+  { key: 'served', label: 'kds-served' },
+  { key: 'cancelled', label: 'kds-cancelled' },
+];
+
+/** Displays served and cancelled orders (recall/history view for KDS). */
+export function KdsHistoryPanel() {
+  const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
+  const [orders, setOrders] = useState<KdsOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<KdsStatus>('served');
+
+  const fetchHistory = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listKdsOrdersScoped(sessionToken, statusFilter);
+      setOrders(result);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionToken, statusFilter]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  return (
+    <div className="kds-history">
+      {/* Filter tabs */}
+      <div className="kds-history-tabs" role="tablist" aria-label={l10n.getString('kds-history-filter-aria') || 'Filter by status'}>
+        {STATUS_ORDER.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`kds-history-tab${statusFilter === key ? ' kds-history-tab--active' : ''}`}
+            onClick={() => setStatusFilter(key)}
+            role="tab"
+            aria-selected={statusFilter === key}
+          >
+            <Localized id={label}>{key}</Localized>
+          </button>
+        ))}
+      </div>
+
+      {/* Error */}
+      {error && <p className="kds-history-error">{error}</p>}
+
+      {/* Loading */}
+      {loading && (
+        <div className="kds-history-loading">
+          <span className="kds-refresh-spinner" />
+          <Localized id="kds-history-loading">Loading history...</Localized>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && !error && orders.length === 0 && (
+        <div className="kds-history-empty">
+          <Localized id="kds-history-empty">No completed orders yet</Localized>
+        </div>
+      )}
+
+      {/* Order list */}
+      {!loading && orders.length > 0 && (
+        <div className="kds-history-list">
+          {orders.map((order) => (
+            <div key={order.id} className="kds-history-card">
+              <div className="kds-history-card-header">
+                <span className="kds-history-card-number">#{order.display_number}</span>
+                {order.table_number && (
+                  <span className="kds-ticket-table">{order.table_number}</span>
+                )}
+                <span className={`kds-history-card-status kds-history-card-status--${order.status}`}>
+                  <Localized id={`kds-${order.status}`}>{order.status}</Localized>
+                </span>
+              </div>
+              <span className="kds-ticket-items">{order.items_summary}</span>
+              <div className="kds-history-card-meta">
+                <span className="kds-history-card-time">
+                  <Localized id="kds-history-received">Received</Localized>: {new Date(order.received_at).toLocaleString()}
+                </span>
+                {order.served_at && (
+                  <span className="kds-history-card-time">
+                    <Localized id="kds-history-served">Served</Localized>: {new Date(order.served_at).toLocaleString()}
+                  </span>
+                )}
+                {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

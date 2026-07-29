@@ -12,6 +12,7 @@ import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
 import { KdsLayoutSwitcher } from '@/features/kds/KdsLayoutSwitcher';
 import { KdsSettingsPanel, type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
+import { KdsHistoryPanel } from '@/features/kds/KdsHistoryPanel';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -42,6 +43,7 @@ export default function KdsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
+  const [showHistory, setShowHistory] = useState(false);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
@@ -279,7 +281,21 @@ export default function KdsScreen() {
           {pullState === 'ready' && <Localized id="kds-release-to-refresh">Release to refresh</Localized>}
         </div>
       )}
+      {/* 2b: History/recall toggle button */}
       {!prefsLoading && (
+        <button
+          className={`kds-history-toggle${showHistory ? ' kds-history-toggle--active' : ''}`}
+          onClick={() => setShowHistory((p) => !p)}
+          aria-label={l10n.getString('kds-history-toggle-aria') || 'Toggle order history'}
+          aria-pressed={showHistory}
+          title={l10n.getString('kds-history-toggle-title') || 'Order history'}
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+          </svg>
+        </button>
+      )}
+      {!prefsLoading && !showHistory && (
         <div {...pullRefreshProps}>
           <LayoutComponent
             orders={orders}
@@ -289,6 +305,9 @@ export default function KdsScreen() {
             selectedOrderId={selectedOrderId}
           />
         </div>
+      )}
+      {!prefsLoading && showHistory && (
+        <KdsHistoryPanel />
       )}
     </div>
     </Profiler>
