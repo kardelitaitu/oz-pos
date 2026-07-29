@@ -3,7 +3,7 @@ import { usePosState } from '@/features/sales/usePosState';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
-import { Localized, useLocalization } from '@fluent/react';
+import { useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -22,7 +22,6 @@ import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { formatMoney, type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
-import ScaleIndicator from './ScaleIndicator';
 import { EditProductModal } from './EditProductModal';
 import { AddCategoryModal } from './AddCategoryModal';
 import { AddProductModal } from './AddProductModal';
@@ -33,6 +32,7 @@ import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import RetailFnBar from './RetailFnBar';
 import RetailHeader from './RetailHeader';
 import RetailCartPanel, { RETAIL_CART_WIDTH_MIN, RETAIL_CART_WIDTH_DEFAULT, RETAIL_CART_WIDTH_MAX_CAP, clampRetailCartWidth } from './RetailCartPanel';
+import RetailProductGrid, { type SortField, type SortOrder } from './RetailProductGrid';
 import './RetailPosScreen.css';
 
 function toProduct(p: ProductDto): Product {
@@ -428,9 +428,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     }
     return list;
   }, [products, activeCategory, searchQuery, categories]);
-
-  type SortField = 'sku' | 'name' | 'stock' | 'price';
-  type SortOrder = 'asc' | 'desc';
 
   const [sortField, setSortField] = useState<SortField>('sku');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -1125,209 +1122,45 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       {/* ── Main area ───────────────────────── */}
       <div className="retail-main" ref={retailPosRef}>
         {/* Left: product grid */}
-        <div className="retail-products">
-          <div
-            className="retail-categories"
-            onWheel={(e) => {
-              if (e.deltaY) {
-                e.currentTarget.scrollLeft += e.deltaY;
-              }
-            }}
-          >
-            <button
-              className={`retail-cat-btn${!activeCategory ? ' retail-cat-btn--active' : ''}`}
-              onClick={() => setActiveCategory(null)}
-            >
-              {allLabel}
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                className={`retail-cat-btn${activeCategory === cat.id ? ' retail-cat-btn--active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-                aria-label={catLabels.get(cat.id) ?? cat.name}
-                aria-pressed={activeCategory === cat.id}
-              >
-                {catLabels.get(cat.id) ?? cat.name}
-              </button>
-            ))}
-            <Localized id="retail-add-category-btn">
-              <button
-                type="button"
-                className="retail-cat-btn retail-cat-btn--add"
-                onClick={() => setIsAddCategoryOpen(true)}
-                title="Add new category"
-                aria-label="Add new category"
-              >
-                + Category
-              </button>
-            </Localized>
-          </div>
-
-          {/* ── Search bar ────────────────────── */}
-          <div className="retail-search-bar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              className="retail-search-input"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={l10n.getString('retail-search-placeholder')}
-            />
-            {searchQuery && (
-              <button type="button" className="retail-search-clear" onClick={() => setSearchQuery('')} aria-label={l10n.getString('retail-search-clear-aria')}>
-                &times;
-              </button>
-            )}
-            <Localized id="retail-add-product-btn">
-              <button
-                type="button"
-                className="retail-add-product-btn"
-                onClick={() => setIsAddProductOpen(true)}
-                title="Add new product"
-                aria-label="Add new product"
-              >
-                + Product
-              </button>
-            </Localized>
-          </div>
-
-          {isEnabled(FEATURES.USB_SCALE) && (
-            <ScaleIndicator
-              weighTarget={weighTarget}
-              onWeighAdd={handleWeighAdd}
-              onClearWeighTarget={() => setWeighTarget(null)}
-            />
-          )}
-
-
-
-          {productsLoading || categoriesLoading ? (
-            <div className="retail-grid">
-              <div className="retail-grid-loading" role="status" aria-label={l10n.getString('retail-products-loading') || 'Loading products'}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
-                  <path d="M21 12a9 9 0 11-6.219-8.56" />
-                </svg>
-                <span>{l10n.getString('retail-products-loading') || 'Loading products…'}</span>
-              </div>
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="retail-grid-empty">
-              {searchQuery.trim()
-                ? (l10n.getString('retail-no-products-match') || 'No products match your search')
-                : activeCategory
-                  ? (l10n.getString('retail-no-products-in-category') || 'No products in this category')
-                  : (l10n.getString('retail-no-products') || 'No products')}
-            </div>
-          ) : (
-            <div className="retail-grid">
-              <table className="retail-product-table">
-                <thead>
-                  <tr>
-                    <th
-                      className="retail-col-sku retail-col-sortable"
-                      onClick={() => handleSort('sku')}
-                      role="columnheader"
-                      aria-sort={sortField === 'sku' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      <div className="retail-th-content">
-                        <span>{l10n.getString('retail-col-sku') || 'SKU / Code'}</span>
-                        <span className="retail-sort-icon">
-                          {sortField === 'sku' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                        </span>
-                      </div>
-                    </th>
-                    <th
-                      className="retail-col-stock retail-col-sortable"
-                      onClick={() => handleSort('stock')}
-                      role="columnheader"
-                      aria-sort={sortField === 'stock' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      <div className="retail-th-content" style={{ justifyContent: 'center' }}>
-                        <span>{l10n.getString('retail-col-stock') || 'Stock'}</span>
-                        <span className="retail-sort-icon">
-                          {sortField === 'stock' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                        </span>
-                      </div>
-                    </th>
-                    <th
-                      className="retail-col-name retail-col-sortable"
-                      onClick={() => handleSort('name')}
-                      role="columnheader"
-                      aria-sort={sortField === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      <div className="retail-th-content">
-                        <span>{l10n.getString('retail-col-name') || 'Product Name'}</span>
-                        <span className="retail-sort-icon">
-                          {sortField === 'name' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                        </span>
-                      </div>
-                    </th>
-                    <th
-                      className="retail-col-price retail-col-sortable"
-                      onClick={() => handleSort('price')}
-                      role="columnheader"
-                      aria-sort={sortField === 'price' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      <div className="retail-th-content" style={{ justifyContent: 'flex-end' }}>
-                        <span>{l10n.getString('retail-col-price') || 'Price'}</span>
-                        <span className="retail-sort-icon">
-                          {sortField === 'price' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-                        </span>
-                      </div>
-                    </th>
-                    <th className="retail-col-action">{l10n.getString('retail-col-action') || 'Action'}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedProducts.map((p) => (
-                    <ProductCard
-                      key={p.sku}
-                      product={p}
-                      catHue={catHue}
-                      formatMoney={formatMoney}
-                      handleAdd={handleAdd}
-                      handleEdit={handleEditProduct}
-                      handleOpenQtyPicker={handleOpenQtyPicker}
-                      scaleEnabled={isEnabled(FEATURES.USB_SCALE)}
-                      onSetWeighTarget={handleSetWeighTarget}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {totalPages > 1 && (
-            <div className="retail-page-nav" role="navigation" aria-label={l10n.getString('retail-page-nav-aria') || 'Product pages'}>
-              <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => setProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>{'<'}</button>
-              <span className="retail-page-info" aria-current="true">{productPage + 1} / {totalPages}</span>
-              <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => setProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>{'>'}</button>
-            </div>
-          )}
-          <div className="retail-sku-bar">
-            <span className="retail-sku-label">{l10n.getString('retail-sku-label')}</span>
-            <input
-              ref={skuInputRef}
-              className="retail-sku-input"
-              type="text"
-              value={skuInput}
-              onChange={(e) => setSkuInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSkuSubmit(); }}
-              placeholder={l10n.getString('retail-sku-placeholder')}
-            />
-            <button
-              style={{
-                padding: '4px 12px', background: 'var(--color-primary-pos)', color: 'var(--color-bg-elevated)',
-                border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-              }}
-              onClick={handleSkuSubmit}
-            >
-              {l10n.getString('retail-sku-go')}
-            </button>
-          </div>
-        </div>
+        {/* Left: product grid */}
+        <RetailProductGrid
+          data={{
+            productsLoading,
+            categoriesLoading,
+            categories,
+            activeCategory,
+            searchQuery,
+            filteredProducts,
+            pagedProducts,
+            totalPages,
+            productPage,
+            sortField,
+            sortOrder,
+            allLabel,
+            catLabels,
+            skuInput,
+            weighTarget,
+          }}
+          actions={{
+            onSetActiveCategory: setActiveCategory,
+            onSetSearchQuery: setSearchQuery,
+            onSort: handleSort,
+            onSetProductPage: setProductPage,
+            onAddProduct: handleAdd,
+            onEditProduct: handleEditProduct,
+            onOpenQtyPicker: handleOpenQtyPicker,
+            onSetWeighTarget: handleSetWeighTarget,
+            onClearWeighTarget: () => setWeighTarget(null),
+            onAddCategory: () => setIsAddCategoryOpen(true),
+            onAddNewProduct: () => setIsAddProductOpen(true),
+            onSkuInputChange: setSkuInput,
+            onSkuSubmit: handleSkuSubmit,
+            onWeighAdd: handleWeighAdd,
+          }}
+          isScaleEnabled={isEnabled(FEATURES.USB_SCALE)}
+          catHue={catHue}
+          skuInputRef={skuInputRef}
+        />
 
         {/* ── Resize handle ────────────────── */}
         <RetailCartPanel
@@ -1913,136 +1746,5 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       />
     )}
   </>
-  );
-}
-
-// ── Product card with single-tap / long-press ─────────────────
-
-const PRICE_VOLATILITY_MS = 24 * 60 * 60 * 1000; // 24 h
-
-function isPriceRecent(p: ProductDto): boolean {
-  if (!p.price_updated_at) return false;
-  const elapsed = Date.now() - new Date(p.price_updated_at).getTime();
-  return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
-}
-
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget }: {
-  product: ProductDto;
-  catHue: (catId: string | null) => number;
-  formatMoney: (m: Money) => string;
-  handleAdd: (p: ProductDto) => void;
-  handleEdit: (p: ProductDto) => void;
-  handleOpenQtyPicker: (p: ProductDto) => void;
-  scaleEnabled: boolean;
-  onSetWeighTarget: (p: ProductDto) => void;
-}) {
-  const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
-  const priceRecent = useMemo(() => isPriceRecent(product), [product]);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLongPress = useRef(false);
-
-  const lowThreshold = product.low_stock_threshold ?? 5;
-  const highThreshold = product.high_stock_threshold ?? 10;
-  const stockLevel =
-    product.stock_qty != null && product.stock_qty <= lowThreshold
-      ? 'low'
-      : product.stock_qty != null && product.stock_qty <= highThreshold
-      ? 'medium'
-      : 'high';
-
-  const handlePointerDown = useCallback(() => {
-    if (isOutOfStock) return;
-    isLongPress.current = false;
-    longPressTimer.current = setTimeout(() => {
-      isLongPress.current = true;
-      handleOpenQtyPicker(product);
-    }, 400);
-  }, [product, isOutOfStock, handleOpenQtyPicker]);
-
-  const handlePointerUp = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    if (!isLongPress.current && !isOutOfStock) handleAdd(product);
-  }, [product, isOutOfStock, handleAdd]);
-
-  const handlePointerLeave = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  }, []);
-
-  return (
-    <tr className={`retail-product-row${isOutOfStock ? ' retail-product-row--out-of-stock' : ''}`}>
-      <td className="retail-col-sku">{product.sku}</td>
-      <td className="retail-col-stock">
-        {product.stock_qty != null && product.stock_qty > 0 ? (
-          <span className={`retail-product-stock-badge retail-stock-${stockLevel}`}>
-            {product.stock_qty}
-          </span>
-        ) : (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>Out of stock</span>
-        )}
-      </td>
-      <td className="retail-col-name">
-        <button
-          type="button"
-          className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
-          style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
-          aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
-          aria-disabled={isOutOfStock}
-          disabled={isOutOfStock}
-        >
-          <span>{product.name}</span>
-          {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
-        </button>
-      </td>
-      <td className="retail-col-price">{formatMoney(product.price)}</td>
-      <td className="retail-col-action">
-        <div className="retail-col-action-group">
-          <button
-            type="button"
-            className="retail-table-add-btn"
-            disabled={isOutOfStock}
-            onClick={() => {
-              if (!isOutOfStock) handleAdd(product);
-            }}
-            title="Add to Cart"
-            aria-label={`Add ${product.name} to cart`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-              <circle cx="9" cy="21" r="1" />
-              <circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="retail-table-edit-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              handleEdit(product);
-            }}
-            title="Edit Product"
-            aria-label={`Edit ${product.name}`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
-          {scaleEnabled && (
-            <button
-              type="button"
-              className="retail-product-weigh-btn"
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
-              aria-label={`Weigh ${product.name}`}
-            >
-              ⚖
-            </button>
-          )}
-        </div>
-      </td>
-    </tr>
   );
 }
