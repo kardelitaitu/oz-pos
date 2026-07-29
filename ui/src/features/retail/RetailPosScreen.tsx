@@ -878,16 +878,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [addProduct, setDiscount, addToast, l10n, sessionToken]);
 
   const handleResume = useCallback(async () => {
-    const carts = await listHeldCartsScoped(sessionToken);
-    const held = carts.filter((c) => c.bill_type === 'hold');
-    if (held.length === 0) return;
-    if (held.length === 1) {
-      await handleResumeCart(held[0]!.id);
-      return;
+    try {
+      const carts = await listHeldCartsScoped(sessionToken);
+      const held = carts.filter((c) => c.bill_type === 'hold');
+      if (held.length === 0) return;
+      if (held.length === 1) {
+        await handleResumeCart(held[0]!.id);
+        return;
+      }
+      setHeldCartsList(held);
+      setShowHeldCartsList(true);
+    } catch {
+      addToast({ message: l10nRef.current.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' });
     }
-    setHeldCartsList(held);
-    setShowHeldCartsList(true);
-  }, [handleResumeCart, sessionToken]);
+  }, [handleResumeCart, addToast, sessionToken]);
 
   const handleDeleteHeldCart = useCallback(async (cartId: string) => {
     try {
