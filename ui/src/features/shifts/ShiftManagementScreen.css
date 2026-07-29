@@ -328,7 +328,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: var(--color-pos-modal-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
@@ -389,15 +389,15 @@
 
 .shift-mgmt-modal {
   position: relative;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 28.75rem;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: var(--color-pos-modal-shadow);
 }
 
 .shift-mgmt-modal-header {

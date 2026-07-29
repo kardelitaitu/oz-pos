@@ -124,7 +124,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: var(--color-pos-modal-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
@@ -142,13 +142,13 @@
 }
 
 .shift-summary-modal {
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-2xl);
   width: 90%;
   max-width: 500px;
   padding: var(--space-6);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: var(--color-pos-modal-shadow);
   color: var(--color-fg-primary);
   font-family: var(--font-sans);
   transform: scale(0.98);
