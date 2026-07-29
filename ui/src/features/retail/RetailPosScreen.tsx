@@ -752,6 +752,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [overrideTarget, cartId, addToast, l10n, updateLinePrice, sessionToken]);
 
   const allCustomersRef = useRef<CustomerDto[]>([]);
+  const customerSearchQueryRef = useRef(customerSearchQuery);
+  customerSearchQueryRef.current = customerSearchQuery;
 
   // Fetch customer list when the modal opens; filter locally on keystrokes
   useEffect(() => {
@@ -762,7 +764,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       .then((customers) => {
         if (cancelled) return;
         allCustomersRef.current = customers;
-        const q = customerSearchQuery.trim().toLowerCase();
+        const q = customerSearchQueryRef.current.trim().toLowerCase();
         setCustomerSearchResults(
           !q ? customers : customers.filter(
             (c) =>
