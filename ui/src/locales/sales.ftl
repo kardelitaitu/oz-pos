@@ -742,6 +742,7 @@ retail-customer-clear = Clear
 retail-qty-total = Total:
 retail-qty-picker-title = Select Quantity
 retail-qty-add = Add
+retail-qty-backspace-aria = Backspace
 retail-shortcuts-title = Keyboard Shortcuts
 retail-shortcut-pay = Pay / Charge
 retail-shortcut-clear = Clear cart (Void)
@@ -793,6 +794,7 @@ retail-low-stock-banner =
        *[other] { $count } products low on stock
     }
 retail-held-cart-delete-aria = Delete held cart
+retail-held-cart-resume-aria = Resume cart
 
 
 

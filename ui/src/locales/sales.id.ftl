@@ -742,6 +742,7 @@ retail-customer-clear = Hapus
 retail-qty-total = Total:
 retail-qty-picker-title = Pilih Jumlah
 retail-qty-add = Tambah
+retail-qty-backspace-aria = Hapus
 retail-shortcuts-title = Pintasan Keyboard
 retail-shortcut-pay = Bayar / Charge
 retail-shortcut-clear = Hapus keranjang (Void)
@@ -793,6 +794,7 @@ retail-low-stock-banner =
        *[other] { $count } produk stok menipis
     }
 retail-held-cart-delete-aria = Hapus pesanan ditahan
+retail-held-cart-resume-aria = Lanjutkan pesanan
 retail-fn-quick-return = Retur Cepat
 retail-filtered-low-stock = Difilter: { $count } produk stok rendah
 

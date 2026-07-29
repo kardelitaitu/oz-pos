@@ -591,7 +591,7 @@ export default function RetailModals(props: RetailModalsProps) {
                       if (k === '⌫') qtyPicker.onInputChange(qtyPicker.input.length > 1 ? qtyPicker.input.slice(0, -1) : '1');
                       else qtyPicker.onInputChange(String(Math.max(1, parseInt(qtyPicker.input + String(k), 10) || 1)));
                     }}
-                    aria-label={k === '⌫' ? 'Backspace' : String(k)}
+                    aria-label={k === '⌫' ? (l10n.getString('retail-qty-backspace-aria') || 'Backspace') : String(k)}
                   >
                     {k === '⌫' ? (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
@@ -643,7 +643,7 @@ export default function RetailModals(props: RetailModalsProps) {
               <div className="retail-held-carts-list">
                 {heldCarts.list.map((c) => (
                   <div key={c.id} className="retail-held-cart-row">
-                    <button type="button" className="retail-held-cart-info" aria-label="Resume cart" onClick={() => heldCarts.onResume(c.id)}>
+                    <button type="button" className="retail-held-cart-info" aria-label={l10n.getString('retail-held-cart-resume-aria') || 'Resume cart'} onClick={() => heldCarts.onResume(c.id)}>
                       <span className="retail-held-cart-label">{c.label}</span>
                       <span className="retail-held-cart-meta">
                         {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
