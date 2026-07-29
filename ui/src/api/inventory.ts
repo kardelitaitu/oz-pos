@@ -143,6 +143,15 @@ export const createInventoryTransaction = (
 export const listInventoryTransactions = (sessionToken: string): Promise<InventoryTransaction[]> =>
   loggedInvoke<InventoryTransaction[]>('list_inventory_transactions', { sessionToken });
 
+/** List inventory transactions for a specific shift (staff + location + time window). */
+export const listInventoryTransactionsForShift = (
+  sessionToken: string,
+  staffId: string,
+  locationId: string,
+  since: string,
+): Promise<InventoryTransaction[]> =>
+  loggedInvoke<InventoryTransaction[]>('list_inventory_transactions_for_shift', { sessionToken, staffId, locationId, since });
+
 export const getInventoryTransaction = (
   sessionToken: string,
   id: string

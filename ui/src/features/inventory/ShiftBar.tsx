@@ -9,7 +9,7 @@ import {
   endInventoryShift,
   getActiveInventoryShift,
   listInventoryLocations,
-  listInventoryTransactions,
+  listInventoryTransactionsForShift,
   type InventoryShift,
   type InventoryLocation,
   type InventoryTransaction,
@@ -78,7 +78,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         
         const hrs = Math.floor(diff / 3600000);
         const mins = Math.floor((diff % 3600000) / 60000);
-        const secs = Math.floor((diff % 6000) / 1000);
+        const secs = Math.floor((diff % 60000) / 1000);
         
         const pad = (n: number) => n.toString().padStart(2, '0');
         setElapsedText(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
@@ -113,21 +113,12 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     if (!sessionToken || !activeShift) return;
 
     try {
-      // Fetch transactions before ending to summarize activity
-      const allTxs = await listInventoryTransactions(sessionToken);
-      const startTime = new Date(activeShift.started_at).getTime();
-      
-      const shiftLocId = activeShift.location_id;
-      const filtered: InventoryTransaction[] = [];
-      for (const tx of allTxs) {
-        const txTime = new Date(tx.created_at).getTime();
-        const uid = session?.user_id;
-        if (uid != null && tx.staff_id === uid &&
-            tx.location_id === shiftLocId &&
-            txTime >= startTime) {
-          filtered.push(tx);
-        }
-      }
+      // Fetch transactions server-side for this shift window.
+      const uid = session?.user_id ?? '';
+      const since = activeShift.started_at;
+      const filtered = await listInventoryTransactionsForShift(
+        sessionToken, uid, activeShift.location_id, since,
+      );
 
       await endInventoryShift(sessionToken, activeShift.id);
       setShiftSummaryTxs(filtered);

@@ -882,6 +882,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'create_inventory_transaction': () => 'txn-new',
   'list_inventory_transactions': () => [],
+  'list_inventory_transactions_for_shift': () => [],
   'get_inventory_transaction': () => null,
 
   'set_stock_threshold': () => null,
