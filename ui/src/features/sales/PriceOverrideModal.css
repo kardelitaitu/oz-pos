@@ -12,9 +12,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.8) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
   transform: translateZ(0);
   animation: po-overlay-in var(--duration-200) var(--ease-out);
@@ -64,11 +64,11 @@
 .price-override-modal {
   width: 360px;
   max-width: 92vw;
-  background: #111827 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-  color: #f9fafb !important;
+  box-shadow: var(--color-pos-modal-shadow);
+  color: var(--color-pos-modal-fg);
   padding: var(--space-5);
   position: relative;
   display: flex;
@@ -83,12 +83,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  min-width: var(--space-11);
+  min-height: var(--space-11);
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: #9ca3af;
+  color: var(--color-pos-modal-label);
   font-size: var(--text-xl);
   cursor: pointer;
   transition: background-color var(--duration-100) var(--ease-out),
@@ -96,33 +96,27 @@
 }
 
 .price-override-close:hover {
-  background: #1f2937;
-  color: #ffffff;
+  background: var(--color-pos-modal-btn-hover-bg);
+  color: var(--color-pos-modal-fg);
 }
 
 .price-override-close:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--color-border-focus);
-}
-
-@media (pointer: coarse) {
-  .price-override-close {
-    width: 2.75rem;
-    height: 2.75rem;
-  }
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .price-override-title {
   margin: 0;
   font-size: var(--text-lg);
   font-weight: var(--font-weight-semibold);
-  color: #f9fafb !important;
+  color: var(--color-pos-modal-heading);
   padding-right: var(--space-6);
 }
 
 .price-override-item {
   margin: 0;
   font-size: var(--text-sm);
-  color: #9ca3af !important;
+  color: var(--color-pos-modal-label);
   line-height: var(--leading-relaxed);
 }
 
@@ -139,35 +133,35 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--space-2) var(--space-3);
-  background: #1f2937 !important;
-  border: 1px solid #374151 !important;
+  background: var(--color-pos-modal-input-bg);
+  border: 1px solid var(--color-pos-modal-input-border);
   border-radius: var(--radius-md);
 }
 
 .price-override-current-label {
   font-size: var(--text-sm);
-  color: #9ca3af !important;
+  color: var(--color-pos-modal-label);
 }
 
 .price-override-current-value {
   font-size: var(--text-base);
   font-weight: var(--font-weight-bold);
-  color: #f9fafb !important;
+  color: var(--color-pos-modal-fg);
 }
 
 .price-override-new-label {
   font-size: var(--text-sm);
   font-weight: var(--font-weight-medium);
-  color: #9ca3af !important;
+  color: var(--color-pos-modal-label);
 }
 
 .price-override-input {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-xl);
   font-weight: var(--font-weight-bold);
-  color: #f9fafb !important;
-  background: #1f2937 !important;
-  border: 1px solid #374151 !important;
+  color: var(--color-pos-modal-input-fg);
+  background: var(--color-pos-modal-input-bg);
+  border: 1px solid var(--color-pos-modal-input-border);
   border-radius: var(--radius-lg);
   text-align: center;
   transition: border-color var(--duration-150) var(--ease-out),
@@ -193,9 +187,9 @@
   font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
   font-family: var(--font-sans);
-  color: #f3f4f6 !important;
-  background: #374151 !important;
-  border: 1px solid #4b5563 !important;
+  color: var(--color-pos-modal-btn-fg);
+  background: var(--color-pos-modal-btn-bg);
+  border: 1px solid var(--color-pos-modal-btn-border);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color var(--duration-100) var(--ease-out),
@@ -203,12 +197,13 @@
 }
 
 .price-override-cancel-btn:hover:not(:disabled) {
-  background: #4b5563 !important;
-  color: #ffffff !important;
+  background: var(--color-pos-modal-btn-hover-bg);
+  color: var(--color-pos-modal-btn-hover-fg);
 }
 
 .price-override-cancel-btn:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .price-override-cancel-btn:disabled {
@@ -221,21 +216,22 @@
   font-size: var(--text-sm);
   font-weight: var(--font-weight-bold);
   font-family: var(--font-sans);
-  color: #ffffff !important;
-  background: #10b981 !important;
-  border: 1px solid #10b981 !important;
+  color: var(--color-pos-on-primary);
+  background: var(--color-success-pos);
+  border: 1px solid var(--color-success-pos);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background-color var(--duration-100) var(--ease-out);
 }
 
 .price-override-next-btn:hover:not(:disabled) {
-  background: #059669 !important;
-  border-color: #059669 !important;
+  background: var(--color-success-pos-darker);
+  border-color: var(--color-success-pos-darker);
 }
 
 .price-override-next-btn:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
 }
 
 .price-override-next-btn:disabled {

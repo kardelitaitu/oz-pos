@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { completeSaleWithResolvedShortfalls, type CompleteSaleWithResolvedShortfallsArgs, type ResolvedShortfall, type LocationAllocation, type PartialStockResult, type CartLineData, type PaymentSplitArg, type SerialNumberArg } from '@/api/sales';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Button } from '@/components/Button';
 import './StockShortfallDialog.css';
 
@@ -74,6 +75,10 @@ export default function StockShortfallDialog({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Focus trap: Tab cycling + Escape → cancel, disabled during loading
+  useFocusTrap(panelRef, !loading, onCancel);
 
   // Initialize resolution state for each shortfall
   const [resolutions, setResolutions] = useState<ShortfallResolutionState[]>(
@@ -249,9 +254,13 @@ export default function StockShortfallDialog({
 
   return (
     <div className="shortfall-overlay" role="dialog" aria-modal="true" aria-label={l10n.getString('shortfall-dialog-aria')}>
-      <div className="shortfall-modal">
+      <div className="shortfall-modal" ref={panelRef}>
         <div className="shortfall-header">
-          <div className="shortfall-header-icon">⚠</div>
+          <div className="shortfall-header-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="28" height="28">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </div>
           <div>
             <Localized id="shortfall-title">
               <h2 className="shortfall-title">Insufficient Stock</h2>
