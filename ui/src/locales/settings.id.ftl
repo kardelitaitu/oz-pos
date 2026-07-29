@@ -899,3 +899,8 @@ workspace-modal-title = Pengaturan Workspace
 workspace-modal-admin-settings = Admin Settings ↗
 workspace-modal-role-manager = Manajer
 workspace-modal-role-cashier = Kasir
+
+# ── 4f: Workspace card aria-labels ──
+terminal-sound-volume-aria = Volume suara
+workspace-kds-yellow-threshold-aria = Ambang batas eskalasi kuning dalam menit
+workspace-kds-red-threshold-aria = Ambang batas eskalasi merah dalam menit

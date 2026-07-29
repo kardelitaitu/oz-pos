@@ -26,6 +26,7 @@ const testL10n = {
       'workspace-terminal-sound': 'Sound Volume',
       'workspace-terminal-dark-mode': 'Dark Mode',
       'workspace-terminal-scale-zero': 'Auto-Zero Scale on Boot',
+      'terminal-sound-volume-aria': 'Sound volume',
       'save': 'Save',
     };
     return defaults[id] ?? id;

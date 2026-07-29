@@ -23,6 +23,8 @@ const testL10n = {
       'workspace-kds-sound': 'New Order Sound',
       'workspace-kds-yellow-threshold': 'Yellow Alert (min)',
       'workspace-kds-red-threshold': 'Red Alert (min)',
+      'workspace-kds-yellow-threshold-aria': 'Yellow escalation threshold in minutes',
+      'workspace-kds-red-threshold-aria': 'Red escalation threshold in minutes',
       'workspace-kds-display-heading': 'Ticket Display',
       'workspace-kds-auto-ack': 'Auto-Acknowledge',
       'workspace-kds-density': 'Density',

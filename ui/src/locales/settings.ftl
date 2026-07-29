@@ -919,3 +919,8 @@ workspace-modal-title = Workspace Settings
 workspace-modal-admin-settings = Admin Settings ↗
 workspace-modal-role-manager = Manager
 workspace-modal-role-cashier = Cashier
+
+# ── 4f: Workspace card aria-labels ──
+terminal-sound-volume-aria = Sound volume
+workspace-kds-yellow-threshold-aria = Yellow escalation threshold in minutes
+workspace-kds-red-threshold-aria = Red escalation threshold in minutes

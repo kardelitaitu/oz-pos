@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -22,6 +22,7 @@ export function TerminalPreferencesCard({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
+  const { l10n } = useLocalization();
   const hw = useTerminalHardware(terminalId ?? '');
   // Note: no markSettingsUpdated call here because TerminalPreferencesCard
   // saves to terminal_profile.json (local file), not to server-side settings
@@ -116,7 +117,7 @@ export function TerminalPreferencesCard({
               step={5}
               value={soundVolume}
               onChange={(e) => updateSoundVolume(Number(e.target.value))}
-              aria-label="Sound volume"
+              aria-label={l10n.getString('terminal-sound-volume-aria') || 'Sound volume'}
             />
             {!isCompact && (
               <span className="settings-range-value">{soundVolume}%</span>
