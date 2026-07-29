@@ -58,6 +58,18 @@ impl Store<'_> {
 
     /// Insert a new table; assigns a UUID if `table.id` is empty.
     pub fn create_table(&self, table: &Table) -> Result<Table, CoreError> {
+        if table.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "table name must not be empty".into(),
+            });
+        }
+        if table.capacity < 0 {
+            return Err(CoreError::Validation {
+                field: "capacity",
+                message: "capacity must not be negative".into(),
+            });
+        }
         let active_int: i64 = if table.active { 1 } else { 0 };
         let id = if table.id.is_empty() {
             uuid::Uuid::now_v7().to_string()
@@ -84,6 +96,18 @@ impl Store<'_> {
 
     /// Update all fields of an existing table.
     pub fn update_table(&self, table: &Table) -> Result<Table, CoreError> {
+        if table.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "table name must not be empty".into(),
+            });
+        }
+        if table.capacity < 0 {
+            return Err(CoreError::Validation {
+                field: "capacity",
+                message: "capacity must not be negative".into(),
+            });
+        }
         let active_int: i64 = if table.active { 1 } else { 0 };
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let rows = self.conn.execute(
@@ -135,8 +159,14 @@ impl Store<'_> {
         Ok(())
     }
 
-    /// Update just the status field (availabe / occupied / reserved / cleaning).
+    /// Update just the status field (available / occupied / reserved / cleaning).
     pub fn update_table_status(&self, id: &str, status: &str) -> Result<Table, CoreError> {
+        if crate::TableStatus::from_str(status).is_none() {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "invalid table status".into(),
+            });
+        }
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let rows = self.conn.execute(
             "UPDATE tables SET status = ?1, updated_at = ?2 WHERE id = ?3",
@@ -450,5 +480,68 @@ mod tests {
         let sections = s.list_sections().unwrap();
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0], "Main");
+    }
+
+    // ── Validation tests ────────────────────────────────────────
+
+    #[test]
+    fn create_table_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.name = "".into();
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_table_whitespace_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.name = "   ".into();
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_table_negative_capacity_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.capacity = -1;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "capacity"));
+    }
+
+    #[test]
+    fn update_table_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        s.create_table(&t).unwrap();
+        t.name = "".into();
+        let err = s.update_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn update_table_negative_capacity_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        s.create_table(&t).unwrap();
+        t.capacity = -5;
+        let err = s.update_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "capacity"));
+    }
+
+    #[test]
+    fn update_table_status_invalid_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        let err = s.update_table_status("t1", "invalid_status").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
     }
 }

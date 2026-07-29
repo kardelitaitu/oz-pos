@@ -542,4 +542,85 @@ mod tests {
             .unwrap();
         assert!(apps.is_empty());
     }
+
+    // ── Validation tests ────────────────────────────────────────
+
+    #[test]
+    fn create_promotion_empty_name_rejected() {
+        let store = setup();
+        let mut p = test_promo("v1");
+        p.name = "".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_promotion_whitespace_name_rejected() {
+        let store = setup();
+        let mut p = test_promo("v2");
+        p.name = "   ".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_promotion_empty_type_rejected() {
+        let store = setup();
+        let mut p = test_promo("v3");
+        p.promo_type = "".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "promo_type"));
+    }
+
+    #[test]
+    fn create_promotion_invalid_type_rejected() {
+        let store = setup();
+        let mut p = test_promo("v4");
+        p.promo_type = "invalid_type".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "promo_type"));
+    }
+
+    #[test]
+    fn create_promotion_negative_value_rejected() {
+        let store = setup();
+        let mut p = test_promo("v5");
+        p.value_minor = -1;
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+    }
+
+    #[test]
+    fn create_promotion_negative_min_order_rejected() {
+        let store = setup();
+        let mut p = test_promo("v6");
+        p.min_order_minor = -50;
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "min_order_minor"));
+    }
+
+    #[test]
+    fn update_promotion_empty_name_rejected() {
+        let store = setup();
+        let mut p = test_promo("v7");
+        store.create_promotion(&p).unwrap();
+        p.name = "".into();
+        let err = store.update_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn record_application_negative_discount_rejected() {
+        let store = setup();
+        let app = PromotionApplication {
+            id: "app1".into(),
+            promotion_id: "p1".into(),
+            sale_id: "s1".into(),
+            discount_minor: -100,
+            description: "test".into(),
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let err = store.record_promotion_application(&app).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "discount_minor"));
+    }
 }

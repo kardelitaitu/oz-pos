@@ -77,7 +77,7 @@ export default function RetailFnBar({
       </button>
       {isEnabled(FEATURES.QUICK_RETURN) && (
         <button type="button" className="retail-fn-btn" onClick={onShowQuickReturn}>
-          {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
+          <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
         </button>
       )}
       <button type="button" className="retail-fn-btn" onClick={onNavigateKds}>
