@@ -507,7 +507,7 @@ export default function DataManagementScreen() {
                     <input
                       id="type-select-all"
                       type="checkbox"
-                      aria-label="Select all / none"
+                      aria-label={l10n.getString('data-mgmt-export-select-all')}
                       checked={exportState.selectedTypes.size === DATA_TYPES.length}
                       onChange={toggleAll}
                     />
@@ -525,7 +525,7 @@ export default function DataManagementScreen() {
                       <input
                         id={`type-${dt.key}`}
                         type="checkbox"
-                        aria-label={dt.label}
+                        aria-label={l10n.getString(`data-mgmt-type-${dt.key}`)}
                         checked={exportState.selectedTypes.has(dt.key)}
                         onChange={() => toggleType(dt.key)}
                       />
