@@ -23,24 +23,22 @@ const {
 }));
 
 vi.mock('@/api/shifts', () => ({
-  listShifts: (...args: unknown[]) => mockListShifts(...args),
   listShiftsScoped: (...args: unknown[]) => mockListShifts(...args),
-  getActiveShift: (...args: unknown[]) => mockGetActiveShift(...args),
   getActiveShiftScoped: (...args: unknown[]) => mockGetActiveShift(...args),
-  openShift: (...args: unknown[]) => mockOpenShift(...args),
   openShiftScoped: (...args: unknown[]) => mockOpenShift(...args),
-  closeShift: (...args: unknown[]) => mockCloseShift(...args),
   closeShiftScoped: (...args: unknown[]) => mockCloseShift(...args),
   getShiftReport: (...args: unknown[]) => mockGetShiftReport(...args),
-  getShiftReportScoped: (...args: unknown[]) => mockGetShiftReport(...args),
   createCashPayout: (...args: unknown[]) => mockCreateCashPayout(...args),
-  createCashPayoutScoped: (...args: unknown[]) => mockCreateCashPayout(...args),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     session: { user_id: 'user-1', display_name: 'Cashier', role_name: 'cashier' },
   }),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'mock-session-token' }),
 }));
 
 vi.mock('@/contexts/CurrencyContext', () => ({

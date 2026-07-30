@@ -146,63 +146,14 @@
 5. **P2-I6 — `Ctrl+I` keyboard focus** (🟢 nice-to-have, optional)
 6. **P2-I4 — Richer telemetry badges** (🔵 deferred — blocked on `SettingsContext`)
 
-### 🟡 Remaining Gaps
+### ✅ Completed (commit `5ab2bf74`)
 
-- [ ] **P2-I1. `sessionToken` not passed to inspector cards** — `renderWorkspaceCard` only passes `variant` and `terminalId`. The cards can't make scoped API calls (`setReceiptSettingsScoped`, etc.). Need to thread `sessionToken` from `TopologyScreen` → `NodeTopologyEditor` props → `renderWorkspaceCard`.
-
-  **Acceptance:**
-  - `NodeTopologyEditorProps` gains optional `sessionToken?: string`
-  - `TopologyScreen` passes `sessionToken={sessionToken}` to editor
-  - `renderWorkspaceCard` spreads `sessionToken` into `cardProps`
-  - No type errors, no lint errors
-
-  _Files:_ `NodeTopologyEditor.tsx`, `TopologyScreen.tsx`
-  _Effort:_ Small (~5 lines)
-
-- [ ] **P2-I2. No `ErrorBoundary` around inspector cards** — If a workspace card throws (e.g., null pointer on malformed settings), the entire editor crashes since there's no error boundary around the inspector. The cards already import `ErrorBoundary` internally for their own content, but the inspector section itself needs one.
-
-  **Acceptance:**
-  - Import `ErrorBoundary` in `NodeTopologyEditor.tsx`
-  - Wrap `<div className="inspector-content">` in `<ErrorBoundary>`
-  - A crashing card shows a fallback UI instead of taking down the canvas
-
-  _Files:_ `NodeTopologyEditor.tsx`
-  _Effort:_ Small (add import + wrapper)
-
-- [ ] **P2-I3. No test coverage for inspector integration** — Unit tests exist for `NodeTopologyEditor.test.tsx` but none verify that selecting a workspace node renders the correct settings card, or that `StoreInfoCard` appears for store nodes.
-
-  **Tests (7):**
-  1. Select store node → `StoreInfoCard` renders with store name/address/branch
-  2. Select workspace node (typeKey='store-pos') → `WorkspaceStorePosSettings` renders
-  3. Select workspace node (typeKey='kds') → `WorkspaceKdsSettings` renders
-  4. Select warehouse node → `WorkspaceInventorySettings` renders
-  5. Select hardware node → no inspector shown (not implemented yet)
-  6. Deselect node (Escape) → inspector drawer disappears
-  7. Change workspace typeKey in dropdown → settings card switches
-
-  _Files:_ New `InspectorIntegration.test.tsx`
-  _Effort:_ Medium (~80 lines)
-
-- [ ] **P2-I5. Inspector drawer width may overflow at 300px** — Spec requires 300px accommodates card content without horizontal scroll. Verify with each card variant. If cards overflow, increase to 340px or make collapsible.
-
-  **Acceptance:**
-  - Open topology, add workspace node, select it → inspector shows `WorkspaceStorePosSettings`
-  - No horizontal scrollbar in the drawer at 300px
-  - If overflow detected, bump `.node-inspector-drawer { width: 340px; }` or add `overflow-y: auto`
-
-  _Files:_ `NodeTopologyEditor.css`
-  _Effort:_ Trivial (measure + adjust)
-
-- [ ] **P2-I6. No keyboard shortcut to focus the inspector** — When a node is selected, there's no way to jump focus to the inspector fields via keyboard. Add `Ctrl+I` or similar to move focus into the first inspector input.
-
-  **Acceptance:**
-  - With a node selected, `Ctrl+I` moves focus to the first input in the inspector drawer
-  - Guarded by the existing editable-element check (no activation while typing)
-
-  _Files:_ `NodeTopologyEditor.tsx` (keydown handler)
-  _Effort:_ Small
-
-- [ ] **P2-I4. Telemetry badges need richer live data** — Current badges are basic. Deferred until `settings.kds` and `settings.inventory` scopes are added to `SettingsContext`.
+- [x] **P2-I1. `sessionToken` not passed to inspector cards** — Threaded `sessionToken` from `useWorkspace()` into all inspector cards via conditional spread (`...(sessionToken ? { sessionToken } : {})`). Handles `exactOptionalPropertyTypes` correctly.
+- [x] **P2-I2. No `ErrorBoundary` around inspector cards** — Wrapped `<div className="inspector-content">` in `<ErrorBoundary>` so a crashing card shows a fallback instead of taking down the canvas.
+- [x] **P2-I3. Test coverage for inspector integration** — New `InspectorIntegration.test.tsx` (11 tests) covering store→StoreInfoCard, workspace→correct card per typeKey, typeKey change→card switches, warehouse→InventorySettings, hardware→no crash, Escape→closes drawer, Ctrl+I→focuses first input, name editing→canvas updates.
+- [x] **P2-I5. Drawer width 300px overflow** — Bumped `.node-inspector-drawer` width to 340px.
+- [x] **P2-I6. No keyboard shortcut to focus inspector** — Added `Ctrl+I` handler that focuses the first `.inspector-content input`, guarded by the existing editable-element check.
+- [ ] **P2-I4. Telemetry badges need richer live data** — Deferred until `settings.kds` and `settings.inventory` scopes are added to `SettingsContext`.
   - Store: "Active" / "Unconfigured" (reads `settings.store.name`)
   - Workspace KDS: "KDS Ready" (static — should show SLA, ticket count)
   - Workspace POS: "Receipt ✓" / "Receipt 58mm" (reads `settings.receipt.paperWidth`)
