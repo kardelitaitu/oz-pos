@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef, Profiler } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listSales,
@@ -23,6 +23,7 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { EmptyState } from '@/frontend/shared';
 import { NoSalesIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
 
@@ -446,14 +447,16 @@ export default function SalesHistoryScreen() {
     a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    a.remove();
   }, [filteredSales, cashierName, l10n]);
 
+  // ── Focus trap refs ───────────────────────────────
+  const voidPanelRef = useRef<HTMLDivElement>(null);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(voidPanelRef, voidExit.shouldRender && !voidExit.exiting, voidExit.requestClose);
+  useFocusTrap(detailPanelRef, detailExit.shouldRender && !detailExit.exiting, detailExit.requestClose);
+
   return (
-    <Profiler id="SalesHistoryScreen" onRender={(...args) => {
-      if (typeof args[2] === 'number' && args[2] > 1) {
-        console.debug('[Profiler] SalesHistoryScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
-      }
-    }}>
     <div className="sales-history" {...pullRefreshProps}>
       {/* P7-3: Pull-to-refresh indicator */}
       {pullState !== 'idle' && (
@@ -843,7 +846,7 @@ export default function SalesHistoryScreen() {
       {voidExit.shouldRender && voidTarget && (
         <Localized id="sales-history-void-overlay-aria" attrs={{ 'aria-label': true }}>
         <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Void order">
-          <div className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
+          <div ref={voidPanelRef} className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-void-title">
                 <h2><span>Void Order</span></h2>
@@ -921,7 +924,7 @@ export default function SalesHistoryScreen() {
       {detailExit.shouldRender && detail && (
         <Localized id="sales-history-detail-overlay-aria" attrs={{ 'aria-label': true }}>
         <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Sale detail">
-          <div className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
+          <div ref={detailPanelRef} className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-detail-title">
                 <h2>Sale Detail</h2>
@@ -1126,6 +1129,5 @@ export default function SalesHistoryScreen() {
         </Localized>
       )}
     </div>
-    </Profiler>
   );
 }
