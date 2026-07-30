@@ -906,3 +906,10 @@ workspace-modal-role-cashier = Kasir
 terminal-sound-volume-aria = Volume suara
 workspace-kds-yellow-threshold-aria = Ambang batas eskalasi kuning dalam menit
 workspace-kds-red-threshold-aria = Ambang batas eskalasi merah dalam menit
+
+terminal-feature-group-sales = Penjualan
+terminal-feature-group-payments = Pembayaran
+terminal-feature-group-inventory-products = Inventaris & Produk
+terminal-feature-group-hardware = Perangkat Keras
+terminal-feature-group-staff-security = Staf & Keamanan
+terminal-feature-group-system = Sistem

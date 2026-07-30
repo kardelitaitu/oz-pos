@@ -27,9 +27,10 @@ import './TerminalManagementScreen.css';
 
 // ── Feature groups for the override toggle UI ─────────────────────
 
-const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
+const FEATURE_GROUPS: { label: string; i18nKey: string; keys: string[] }[] = [
   {
     label: 'Sales',
+    i18nKey: 'terminal-feature-group-sales',
     keys: [
       FEATURES.SIMPLE_RETAIL,
       FEATURES.RESTAURANT,
@@ -44,6 +45,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Payments',
+    i18nKey: 'terminal-feature-group-payments',
     keys: [
       FEATURES.CASH_PAYMENT,
       FEATURES.CARD_PAYMENT,
@@ -52,6 +54,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Inventory & Products',
+    i18nKey: 'terminal-feature-group-inventory-products',
     keys: [
       FEATURES.INVENTORY_TRACKING,
       FEATURES.PRODUCT_VARIANTS,
@@ -61,6 +64,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Hardware',
+    i18nKey: 'terminal-feature-group-hardware',
     keys: [
       FEATURES.RECEIPT_PRINTING,
       FEATURES.CASH_DRAWER,
@@ -70,6 +74,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Staff & Security',
+    i18nKey: 'terminal-feature-group-staff-security',
     keys: [
       FEATURES.STAFF_LOGIN,
       FEATURES.STAFF_ROLES,
@@ -79,6 +84,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'System',
+    i18nKey: 'terminal-feature-group-system',
     keys: [
       FEATURES.CLOUD_SYNC,
       FEATURES.MULTI_STORE,
@@ -726,7 +732,7 @@ export default function TerminalManagementScreen() {
                     <div key={group.label} className="terminal-mgmt-feature-group">
                       <div className="terminal-mgmt-feature-group-header">
                         <span className="terminal-mgmt-feature-group-label">
-                          {group.label}
+                          {l10n.getString(group.i18nKey)}
                         </span>
                         {groupOverrides.length > 0 && (
                           <span className="terminal-mgmt-feature-group-count">
