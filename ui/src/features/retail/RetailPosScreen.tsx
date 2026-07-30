@@ -339,14 +339,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [filterLowStock, setFilterLowStock] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadProductsAndCategories = useCallback((token: string) => {
     const controller = new AbortController();
     setProductsLoading(true);
     setCategoriesLoading(true);
-    listProductsScoped(sessionToken)
+    setLoadError(null);
+    listProductsScoped(token)
       .then((prods) => { if (!controller.signal.aborted) setProducts(prods); })
-      .catch(() => { if (!controller.signal.aborted) setProducts(RETAIL_SAMPLE_PRODUCTS); })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setProducts(RETAIL_SAMPLE_PRODUCTS);
+        setLoadError(l10nRef.current.getString('retail-load-error') || 'Failed to load products. Showing demo data.');
+      })
       .finally(() => { if (!controller.signal.aborted) setProductsLoading(false); });
     listCategories()
       .then((cats) => {
@@ -354,13 +360,21 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setCategories(RETAIL_SAMPLE_CATEGORIES);
+        if (controller.signal.aborted) return;
+        setCategories(RETAIL_SAMPLE_CATEGORIES);
+        setLoadError(l10nRef.current.getString('retail-load-error') || 'Failed to load products. Showing demo data.');
       })
       .finally(() => {
         if (!controller.signal.aborted) setCategoriesLoading(false);
       });
     return () => { controller.abort(); };
-  }, [sessionToken]);
+  }, []);
+
+  useEffect(() => loadProductsAndCategories(sessionToken), [sessionToken, loadProductsAndCategories]);
+
+  const handleRetryLoad = useCallback(() => {
+    loadProductsAndCategories(sessionToken);
+  }, [sessionToken, loadProductsAndCategories]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1117,6 +1131,33 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               <path fillRule="evenodd" d="M3 3a1 1 0 011 0v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
             <span>{l10n.getString('retail-filtered-low-stock') || `Filtered: ${lowStockCount} low-stock products`}</span>
+          </div>
+        )}
+        {/* ── Error banner ──────────────── */}
+        {loadError && (
+          <div className="retail-load-error" role="alert">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="retail-load-error-text">{loadError}</span>
+            <button
+              type="button"
+              className="retail-load-error-retry"
+              onClick={handleRetryLoad}
+              aria-label={l10n.getString('retail-load-error-retry-aria') || 'Retry loading products'}
+            >
+              {l10n.getString('retry') || 'Retry'}
+            </button>
+            <button
+              type="button"
+              className="retail-load-error-dismiss"
+              onClick={() => setLoadError(null)}
+              aria-label={l10n.getString('dismiss') || 'Dismiss'}
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
           </div>
         )}
         <RetailProductGrid

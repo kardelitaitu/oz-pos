@@ -640,6 +640,10 @@ pos-open-bills-close-aria = Close open bills list
 pos-open-bills-empty = No open bills.
 pos-open-bills-resume = Resume
 
+# ── Retail POS load error / retry ──
+retail-load-error = Failed to load products. Showing demo data.
+retail-load-error-retry-aria = Retry loading products
+
 # ── Retail POS screen ──
 retail-store-name-fallback = TOKO
 retail-shift-label = Shift

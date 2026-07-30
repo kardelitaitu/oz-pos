@@ -632,6 +632,10 @@ pos-shift-open-aria = Buka shift baru
 
 # ── Spinner ──
 
+# ── Retail POS load error / retry ──
+retail-load-error = Gagal memuat produk. Menampilkan data demo.
+retail-load-error-retry-aria = Coba lagi memuat produk
+
 # ── Retail POS screen ──
 retail-store-name-fallback = TOKO
 retail-shift-label = Shift

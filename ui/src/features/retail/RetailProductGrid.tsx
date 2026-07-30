@@ -319,13 +319,29 @@ export default function RetailProductGrid({
 
 
       {productsLoading || categoriesLoading ? (
-        <div className="retail-grid">
-          <div className="retail-grid-loading" role="status" aria-label={l10n.getString('retail-products-loading') || 'Loading products'}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
-              <path d="M21 12a9 9 0 11-6.219-8.56" />
-            </svg>
-            <span>{l10n.getString('retail-products-loading') || 'Loading products…'}</span>
-          </div>
+        <div className="retail-skeleton-grid">
+          <table className="retail-skeleton-table">
+            <thead>
+              <tr>
+                <th className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></th>
+                <th className="retail-col-stock"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--stock">&nbsp;</span></th>
+                <th className="retail-col-name"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--wide">&nbsp;</span></th>
+                <th className="retail-col-price"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--price">&nbsp;</span></th>
+                <th className="retail-col-action"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--action">&nbsp;</span></th>
+              </tr>
+            </thead>
+            <tbody role="status" aria-label={l10n.getString('retail-products-loading') || 'Loading products'}>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="retail-skeleton-row">
+                  <td className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></td>
+                  <td className="retail-col-stock"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--stock">&nbsp;</span></td>
+                  <td className="retail-col-name"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--wide">&nbsp;</span></td>
+                  <td className="retail-col-price"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--price">&nbsp;</span></td>
+                  <td className="retail-col-action"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--action">&nbsp;</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : filteredProducts.length === 0 ? (
         <div className="retail-grid-empty">
