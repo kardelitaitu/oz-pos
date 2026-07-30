@@ -91,3 +91,22 @@ kds-offline-dismiss-aria = Dismiss offline banner
 # ── 3d: Voice callout ──
 kds-order-up-tts = Order
 kds-ready-tts = up
+
+# ── 3f: Add items button + product picker (TODO 3f) ──
+kds-add-items-btn = Add Items
+kds-add-items-btn-aria = Add items to order
+kds-picker-title = Add Items to Order
+kds-picker-close-aria = Close picker
+kds-picker-search-placeholder = Search products...
+kds-picker-search-aria = Search products
+kds-picker-loading = Loading products...
+kds-picker-no-products = No products found
+kds-picker-selected = Selected
+kds-picker-picked-empty = Click products to add them
+kds-picker-course-aria = Course
+kds-picker-qty-decrease = Decrease quantity
+kds-picker-qty-increase = Increase quantity
+kds-picker-remove-aria = Remove { $name }
+kds-picker-cancel = Cancel
+kds-picker-add-btn = Add { $count } item(s)
+kds-picker-added-label = added

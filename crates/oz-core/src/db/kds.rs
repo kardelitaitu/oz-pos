@@ -160,34 +160,56 @@ impl Store<'_> {
     ///
     /// Used when FOH adds items to an order mid-preparation, or when
     /// kitchen staff correct the items shown on a ticket.
+    ///
+    /// When `input.line_items` is `Some`, the existing kds_line_items
+    /// for this order are deleted and replaced with the new ones, and
+    /// the summary/count are re-derived from the structured data.
     pub fn update_kds_order_items(
         &self,
         input: crate::UpdateKdsOrderItemsInput,
     ) -> Result<KdsOrder, CoreError> {
-        if input.items_summary.trim().is_empty() {
-            return Err(CoreError::Validation {
-                field: "items_summary",
-                message: "items_summary must not be empty".into(),
-            });
-        }
-        if input.item_count <= 0 {
-            return Err(CoreError::Validation {
-                field: "item_count",
-                message: "item_count must be positive".into(),
-            });
+        // ── Resolve final summary/count ────────────────────────────
+        let (final_summary, final_count) = if let Some(ref line_items) = input.line_items {
+            if line_items.is_empty() {
+                return Err(CoreError::Validation {
+                    field: "line_items",
+                    message: "line_items must not be empty when provided".into(),
+                });
+            }
+            Store::derive_kds_summary(line_items)
+        } else {
+            if input.items_summary.trim().is_empty() {
+                return Err(CoreError::Validation {
+                    field: "items_summary",
+                    message: "items_summary must not be empty".into(),
+                });
+            }
+            if input.item_count <= 0 {
+                return Err(CoreError::Validation {
+                    field: "item_count",
+                    message: "item_count must be positive".into(),
+                });
+            }
+            (input.items_summary.clone(), input.item_count)
+        };
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        // ── Replace line items when provided ───────────────────────
+        if let Some(ref line_items) = input.line_items {
+            tx.execute(
+                "DELETE FROM kds_line_items WHERE kds_order_id = ?1",
+                rusqlite::params![input.id],
+            )?;
+            self.create_kds_line_items_in_tx(&tx, &input.id, line_items)?;
         }
 
-        let rows = self.conn.execute(
+        tx.execute(
             "UPDATE kds_orders SET items_summary = ?1, item_count = ?2 WHERE id = ?3",
-            rusqlite::params![input.items_summary, input.item_count, input.id],
+            rusqlite::params![final_summary, final_count, input.id],
         )?;
 
-        if rows == 0 {
-            return Err(CoreError::NotFound {
-                entity: "kds_order",
-                id: input.id,
-            });
-        }
+        tx.commit()?;
 
         self.get_kds_order(&input.id)?
             .ok_or_else(|| CoreError::NotFound {
@@ -459,9 +481,29 @@ impl Store<'_> {
         if items.is_empty() {
             return Ok(vec![]);
         }
+        let tx = self.conn.unchecked_transaction()?;
+        let result = self.create_kds_line_items_in_tx(&tx, order_id, items)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Internal: Insert line items inside an existing transaction.
+    ///
+    /// Used by both `create_kds_line_items` (for initial creation) and
+    /// `update_kds_order_items` (for replacement after deletion).
+    fn create_kds_line_items_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        order_id: &str,
+        items: &[CreateKdsLineItemInput],
+    ) -> Result<Vec<KdsLineItem>, CoreError> {
+        if items.is_empty() {
+            return Ok(vec![]);
+        }
         let now = chrono::Utc::now()
             .format("%Y-%m-%dT%H:%M:%S%.3fZ")
             .to_string();
+        let mut ids = Vec::with_capacity(items.len());
 
         for (i, item) in items.iter().enumerate() {
             let id = uuid::Uuid::now_v7().to_string();
@@ -475,7 +517,7 @@ impl Store<'_> {
                     })?,
                 )
             };
-            self.conn.execute(
+            tx.execute(
                 "INSERT INTO kds_line_items
                     (id, kds_order_id, sku, display_name, qty, course, modifiers_json,
                      line_position, created_at)
@@ -492,9 +534,25 @@ impl Store<'_> {
                     now,
                 ],
             )?;
+            ids.push(id);
         }
 
-        self.get_kds_order_lines(order_id)
+        // Read back the inserted items.
+        let placeholders: Vec<String> = (0..ids.len()).map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "SELECT id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                    line_position, item_status, started_at, ready_at, served_at, created_at
+             FROM kds_line_items WHERE id IN ({})
+             ORDER BY line_position",
+            placeholders.join(",")
+        );
+        let mut stmt = tx.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = ids
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(params_refs.as_slice(), Self::row_to_kds_line_item)?;
+        rows.map(|r| Ok(r?)).collect()
     }
 
     /// Get all line items for a KDS order, ordered by course then position.
@@ -1567,6 +1625,7 @@ mod tests {
                 id: order.id.clone(),
                 items_summary: "Coffee x2, Bagel x1".into(),
                 item_count: 3,
+                line_items: None,
             })
             .unwrap();
 
@@ -1585,6 +1644,7 @@ mod tests {
                 id: "no-such-order".into(),
                 items_summary: "New items".into(),
                 item_count: 1,
+                line_items: None,
             })
             .unwrap_err();
 
@@ -1601,6 +1661,7 @@ mod tests {
                 id: "any-id".into(),
                 items_summary: "".into(),
                 item_count: 1,
+                line_items: None,
             })
             .unwrap_err();
 
@@ -1617,6 +1678,7 @@ mod tests {
                 id: "any-id".into(),
                 items_summary: "Items".into(),
                 item_count: 0,
+                line_items: None,
             })
             .unwrap_err();
 

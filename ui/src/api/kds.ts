@@ -93,11 +93,22 @@ export const getKdsOrder = (userId: string, id: string): Promise<KdsOrder | null
 export const getKdsOrderScoped = (sessionToken: string, id: string): Promise<KdsOrder | null> =>
   loggedInvoke<KdsOrder | null>('get_kds_order_scoped', { sessionToken, id });
 
+/** Input for creating a KDS line item (mirrors Rust CreateKdsLineItemInput). */
+export interface CreateKdsLineItemInput {
+  sku: string;
+  display_name: string;
+  qty: number;
+  course: string | null;
+  modifiers: KdsModifier[];
+}
+
 /** Input for updating items on an existing KDS order. */
 export interface UpdateKdsOrderItemsInput {
   id: string;
   items_summary: string;
   item_count: number;
+  /** Structured line items to replace kds_line_items. When provided, summary/count are re-derived. */
+  line_items?: CreateKdsLineItemInput[] | null;
 }
 
 /** Update the items (summary + count) on an existing KDS order. */

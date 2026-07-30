@@ -94,4 +94,23 @@ kds-course-other = LAINNYA
 kds-course-loading = Memuat item...
 kds-course-modifier-separator =: 
 
+# ── 3f: Add items button + product picker (TODO 3f) ──
+kds-add-items-btn = Tambah Item
+kds-add-items-btn-aria = Tambah item ke pesanan
+kds-picker-title = Tambah Item ke Pesanan
+kds-picker-close-aria = Tutup pemilih
+kds-picker-search-placeholder = Cari produk...
+kds-picker-search-aria = Cari produk
+kds-picker-loading = Memuat produk...
+kds-picker-no-products = Produk tidak ditemukan
+kds-picker-selected = Dipilih
+kds-picker-picked-empty = Klik produk untuk menambahkannya
+kds-picker-course-aria = Kursus
+kds-picker-qty-decrease = Kurangi jumlah
+kds-picker-qty-increase = Tambah jumlah
+kds-picker-remove-aria = Hapus { $name }
+kds-picker-cancel = Batal
+kds-picker-add-btn = Tambah { $count } item
+kds-picker-added-label = ditambahkan
+
 # ── Kiosk (remaining) ──

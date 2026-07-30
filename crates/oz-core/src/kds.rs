@@ -186,6 +186,14 @@ pub struct UpdateKdsOrderItemsInput {
     pub items_summary: String,
     /// Updated total item count.
     pub item_count: i64,
+    /// Structured line items to replace the existing kds_line_items.
+    ///
+    /// When `Some`, the existing line items are deleted and replaced
+    /// with these. The `items_summary` and `item_count` fields are
+    /// re-derived from this data (the string/count inputs are ignored).
+    /// When `None`, only the summary/count are updated (legacy behaviour).
+    #[serde(default)]
+    pub line_items: Option<Vec<CreateKdsLineItemInput>>,
 }
 
 #[cfg(test)]

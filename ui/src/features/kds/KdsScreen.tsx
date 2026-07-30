@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
-import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
+import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem, type CreateKdsLineItemInput } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
@@ -14,6 +14,8 @@ import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
 import { KdsLayoutSwitcher } from '@/features/kds/KdsLayoutSwitcher';
 import { KdsSettingsPanel, type KdsSettings, DEFAULT_SETTINGS } from '@/features/kds/KdsSettingsPanel';
 import { KdsHistoryPanel } from '@/features/kds/KdsHistoryPanel';
+import { KdsProductPickerModal } from '@/features/kds/components/KdsProductPickerModal';
+import type { ProductPickerResult } from '@/features/kds/components/KdsProductPickerModal';
 import './KdsScreen.css';
 
 const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
@@ -32,6 +34,8 @@ export interface KdsLayoutProps {
   sessionToken: string;
   /** Called when a single line item is tapped to advance its status (TODO 3e). */
   onAdvanceItem?: (item: KdsLineItem) => void;
+  /** Called to open the product picker for adding items to a KDS order (TODO 3f). */
+  onAddItems?: (orderId: string) => void;
 }
 
 const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
@@ -51,6 +55,8 @@ export default function KdsScreen() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
   const [showHistory, setShowHistory] = useState(false);
+  // 3f: Product picker state — which order is being edited.
+  const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // 3b: Offline resilience — cache, retry queue, optimistic updates.
@@ -406,12 +412,46 @@ export default function KdsScreen() {
                 }
               }}
               onAdvanceItem={advanceItemStatus}
+              onAddItems={setPickerOrderId}
             />
           </div>
       )}
       {!prefsLoading && showHistory && (
         <KdsHistoryPanel />
       )}
+
+      {/* 3f: Product picker modal for adding items mid-preparation */}
+      <KdsProductPickerModal
+        orderId={pickerOrderId ?? ''}
+        sessionToken={sessionToken}
+        isOpen={pickerOrderId !== null}
+        onConfirm={async (result: ProductPickerResult) => {
+          try {
+            // Re-fetch existing line items to merge with new ones.
+            const existing = await getKdsOrderLinesScoped(sessionToken, result.orderId);
+            const mergedItems: CreateKdsLineItemInput[] = [
+              ...existing.map((item) => ({
+                sku: item.sku,
+                display_name: item.display_name,
+                qty: item.qty,
+                course: item.course,
+                modifiers: item.modifiers,
+              })),
+              ...result.items,
+            ];
+            await updateKdsOrderItemsScoped(sessionToken, {
+              id: result.orderId,
+              items_summary: '', // ignored — will be re-derived from line_items
+              item_count: 0,     // ignored — will be re-derived from line_items
+              line_items: mergedItems,
+            });
+          } catch (e) {
+            setError(String(e));
+          }
+          setPickerOrderId(null);
+        }}
+        onClose={() => setPickerOrderId(null)}
+      />
     </div>
     </Profiler>
   );

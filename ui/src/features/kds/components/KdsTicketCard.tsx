@@ -22,6 +22,8 @@ export interface KdsTicketCardProps {
   sessionToken: string;
   /** Called when a single line item is tapped to advance its status. */
   onAdvanceItem?: (item: KdsLineItem) => void;
+  /** Called to open the product picker for adding items to this order (TODO 3f). */
+  onAddItems?: (orderId: string) => void;
 }
 
 /** Course display order — items without a course map to "other" at the end. */
@@ -70,7 +72,7 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
  */
 export const KdsTicketCard = memo(function KdsTicketCard({
   order, onAdvance, showOrderId = true, showTableNumber = true,
-  selected = false, onSaveItems, sessionToken, onAdvanceItem,
+  selected = false, onSaveItems, sessionToken, onAdvanceItem, onAddItems,
 }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, urgent, display } = useTicketSla(order.received_at);
@@ -322,15 +324,29 @@ export const KdsTicketCard = memo(function KdsTicketCard({
           {`${order.item_count} items`}
         </Localized>
       </span>
-      {onSaveItems && !editing && (
-        <button
-          className="kds-ticket-edit-btn"
-          onClick={startEditing}
-          aria-label={l10n.getString('kds-edit-items-btn-aria') || 'Edit ticket items'}
-        >
-          <Localized id="kds-edit-items-btn">Edit Items</Localized>
-        </button>
-      )}
+      <div className="kds-ticket-actions">
+        {onSaveItems && !editing && (
+          <button
+            className="kds-ticket-edit-btn"
+            onClick={startEditing}
+            aria-label={l10n.getString('kds-edit-items-btn-aria') || 'Edit ticket items'}
+          >
+            <Localized id="kds-edit-items-btn">Edit Items</Localized>
+          </button>
+        )}
+        {onAddItems && !editing && (
+          <button
+            className="kds-ticket-add-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddItems(order.id);
+            }}
+            aria-label={l10n.getString('kds-add-items-btn-aria') || 'Add items to order'}
+          >
+            <Localized id="kds-add-items-btn">Add Items</Localized>
+          </button>
+        )}
+      </div>
     </button>
   );
 });
