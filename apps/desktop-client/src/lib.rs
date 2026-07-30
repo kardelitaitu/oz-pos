@@ -382,6 +382,7 @@ pub fn run() {
             commands::kds::get_kds_order,
             commands::kds::get_kds_order_scoped,
             commands::kds::get_kds_order_lines_scoped,
+            commands::kds::update_kds_line_item_status_scoped,
             commands::kds::print_kds_chit_scoped,
             commands::history::list_sales,
             commands::history::list_sales_scoped,

@@ -40,7 +40,7 @@ function useCountAnim(count: number): AnimDir {
   return anim;
 }
 
-export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId, onSaveItems, sessionToken }: KdsLayoutProps) {
+export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId, onSaveItems, sessionToken, onAdvanceItem }: KdsLayoutProps) {
   const grouped = (status: ColumnStatus) =>
     orders.filter((o) => o.status === status);
 
@@ -79,6 +79,7 @@ export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumbe
                     selected={selectedOrderId === order.id}
                     sessionToken={sessionToken}
                     {...(onSaveItems ? { onSaveItems } : {})}
+                    {...(onAdvanceItem ? { onAdvanceItem } : {})}
                   />
                 ))
               )}

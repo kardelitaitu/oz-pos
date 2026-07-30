@@ -438,6 +438,38 @@ pub async fn get_kds_order_lines_scoped(
     Ok(order)
 }
 
+/// Update the status of a single KDS line item in the store resolved
+/// from a session token. ADR #7.
+///
+/// Returns the updated line item with the new status and timestamp.
+#[tauri::command]
+pub async fn update_kds_line_item_status_scoped(
+    session_token: String,
+    item_id: String,
+    status: String,
+    state: State<'_, AppState>,
+) -> Result<oz_core::KdsLineItem, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
+    let item = store.update_kds_line_item_status(&item_id, &status)?;
+    drop(db);
+
+    // Push real-time update to all KDS displays.
+    if let Some(app) = state.app.as_ref() {
+        let _ = app.emit("kds:orders-changed", ());
+    }
+
+    Ok(item)
+}
+
 /// Try to print kitchen chits for every order in the slice.
 ///
 /// Best-effort: logs failures but does not return errors.

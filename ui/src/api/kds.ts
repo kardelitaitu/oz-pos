@@ -115,3 +115,11 @@ export const printKdsChitScoped = (sessionToken: string, orderId: string): Promi
 /** Get all line items for a KDS order (scoped — ADR #7). */
 export const getKdsOrderLinesScoped = (sessionToken: string, orderId: string): Promise<KdsLineItem[]> =>
   loggedInvoke<KdsLineItem[]>('get_kds_order_lines_scoped', { sessionToken, orderId });
+
+/** Update the status of a single KDS line item (scoped — ADR #7). */
+export const updateKdsLineItemStatusScoped = (
+  sessionToken: string,
+  itemId: string,
+  status: KdsStatus,
+): Promise<KdsLineItem> =>
+  loggedInvoke<KdsLineItem>('update_kds_line_item_status_scoped', { sessionToken, itemId, status });

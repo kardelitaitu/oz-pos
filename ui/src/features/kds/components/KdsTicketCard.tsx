@@ -20,6 +20,8 @@ export interface KdsTicketCardProps {
   onSaveItems?: (orderId: string, itemsSummary: string, itemCount: number) => void;
   /** Session token for scoped API calls (e.g., fetching line items). */
   sessionToken: string;
+  /** Called when a single line item is tapped to advance its status. */
+  onAdvanceItem?: (item: KdsLineItem) => void;
 }
 
 /** Course display order — items without a course map to "other" at the end. */
@@ -68,7 +70,7 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
  */
 export const KdsTicketCard = memo(function KdsTicketCard({
   order, onAdvance, showOrderId = true, showTableNumber = true,
-  selected = false, onSaveItems, sessionToken,
+  selected = false, onSaveItems, sessionToken, onAdvanceItem,
 }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, urgent, display } = useTicketSla(order.received_at);
@@ -210,11 +212,38 @@ export const KdsTicketCard = memo(function KdsTicketCard({
           {courseGroups.map((group) => (
             <div key={group.course ?? '__other__'} className="kds-ticket-course-group">
               <span className="kds-ticket-course-header">{courseLabel(group.course)}</span>
-              {group.items.map((item) => (
-                <div key={item.id} className="kds-ticket-item-row">
-                  <span className="kds-ticket-item-name">
-                    {item.qty > 1 ? `${item.display_name} x${item.qty}` : item.display_name}
-                  </span>
+              {group.items.map((item) => {
+                const canAdvanceItem = item.item_status !== 'served' && item.item_status !== 'cancelled';
+                return (
+                <div
+                  key={item.id}
+                  className={`kds-ticket-item-row${canAdvanceItem ? ' kds-ticket-item-row--actionable' : ''}`}
+                  onClick={(e) => {
+                    if (canAdvanceItem && onAdvanceItem) {
+                      e.stopPropagation();
+                      onAdvanceItem(item);
+                    }
+                  }}
+                  role={canAdvanceItem ? 'button' : undefined}
+                  tabIndex={canAdvanceItem ? 0 : undefined}
+                  onKeyDown={canAdvanceItem ? (e) => {
+                    // Satisfy jsx-a11y/click-events-have-key-events —
+                    // role="button" handles Enter natively via onClick.
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                    }
+                  } : undefined}
+                  aria-label={canAdvanceItem ? `${item.display_name} — ${item.item_status}` : undefined}
+                >
+                  <div className="kds-ticket-item-status-row">
+                    <span className={`kds-ticket-item-status-dot kds-ticket-item-status-dot--${item.item_status}`} aria-hidden="true" />
+                    <span className="kds-ticket-item-name">
+                      {item.qty > 1 ? `${item.display_name} x${item.qty}` : item.display_name}
+                    </span>
+                    <span className="kds-ticket-item-status-label">
+                      {l10n.getString(`kds-item-status-${item.item_status}`) || item.item_status}
+                    </span>
+                  </div>
                   {item.modifiers.length > 0 && (
                     <span className="kds-ticket-modifiers">
                       {item.modifiers.map((mod, mi) => (
@@ -224,8 +253,8 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                       ))}
                     </span>
                   )}
-                </div>
-              ))}
+                </div>);
+              })}
             </div>
           ))}
         </div>

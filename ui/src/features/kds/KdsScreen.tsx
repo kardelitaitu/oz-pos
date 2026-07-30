@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useKdsOffline } from '@/hooks/useKdsOffline';
 import { useWorkspaceScope, useWorkspace } from '@/contexts/WorkspaceContext';
-import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
+import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, updateKdsLineItemStatusScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
@@ -30,6 +30,8 @@ export interface KdsLayoutProps {
   onSaveItems?: (orderId: string, itemsSummary: string, itemCount: number) => void;
   /** Session token for scoped API calls (e.g., fetching line items). */
   sessionToken: string;
+  /** Called when a single line item is tapped to advance its status (TODO 3e). */
+  onAdvanceItem?: (item: KdsLineItem) => void;
 }
 
 const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
@@ -147,6 +149,24 @@ export default function KdsScreen() {
       setError(l10n.getString('kds-offline-queued-update') || 'Update queued — will sync when online');
     }
   }, [sessionToken, speak, l10n, wrapUpdate]);
+
+  // ── Per-item status advance (TODO 3e) ──────────────────────────
+  const advanceItemStatus = useCallback(async (item: KdsLineItem) => {
+    const ITEM_STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
+    const currentIdx = ITEM_STATUS_ORDER.indexOf(item.item_status as KdsStatus);
+    if (currentIdx < 0 || currentIdx >= ITEM_STATUS_ORDER.length - 1) return;
+    const nextStatus = ITEM_STATUS_ORDER[currentIdx + 1]!;
+
+    try {
+      await updateKdsLineItemStatusScoped(sessionToken, item.id, nextStatus);
+      // 3d: Voice callout when an item hits 'ready'.
+      if (nextStatus === 'ready') {
+        speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${item.display_name} ${l10n.getString('kds-ready-tts') || 'up'}!`);
+      }
+    } catch {
+      // Silent — the backend will emit kds:orders-changed on next poll.
+    }
+  }, [sessionToken, speak, l10n]);
 
   // 1c: Auto-acknowledge — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.
@@ -385,6 +405,7 @@ export default function KdsScreen() {
                   setError(String(e));
                 }
               }}
+              onAdvanceItem={advanceItemStatus}
             />
           </div>
       )}

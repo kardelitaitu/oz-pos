@@ -519,6 +519,67 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// Update the status of a single KDS line item. Automatically sets
+    /// the corresponding timestamp (started_at, ready_at, served_at)
+    /// based on the new status.
+    pub fn update_kds_line_item_status(
+        &self,
+        item_id: &str,
+        new_status: &str,
+    ) -> Result<KdsLineItem, CoreError> {
+        if KdsStatus::from_str(new_status).is_none() {
+            return Err(CoreError::Validation {
+                field: "item_status",
+                message: format!("invalid KDS line item status: {new_status}"),
+            });
+        }
+
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+
+        let timestamp_col = match new_status {
+            "preparing" => "started_at",
+            "ready" => "ready_at",
+            "served" => "served_at",
+            _ => "",
+        };
+
+        let rows = if timestamp_col.is_empty() {
+            self.conn.execute(
+                "UPDATE kds_line_items SET item_status = ?1 WHERE id = ?2",
+                params![new_status, item_id],
+            )?
+        } else {
+            let sql = format!(
+                "UPDATE kds_line_items SET item_status = ?1, {timestamp_col} = ?2 WHERE id = ?3"
+            );
+            self.conn.execute(&sql, params![new_status, now, item_id])?
+        };
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "kds_line_item",
+                id: item_id.to_owned(),
+            });
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                    line_position, item_status, started_at, ready_at, served_at, created_at
+             FROM kds_line_items WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![item_id], Self::row_to_kds_line_item);
+        match result {
+            Ok(item) => Ok(item),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(CoreError::NotFound {
+                entity: "kds_line_item",
+                id: item_id.to_owned(),
+            }),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Derive the flat items_summary and item_count from structured line items.
     pub fn derive_kds_summary(items: &[CreateKdsLineItemInput]) -> (String, i64) {
         let summary = items
