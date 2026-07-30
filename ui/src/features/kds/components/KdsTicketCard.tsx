@@ -24,6 +24,8 @@ export interface KdsTicketCardProps {
   onAdvanceItem?: (item: KdsLineItem) => void;
   /** Called to open the product picker for adding items to this order (TODO 3f). */
   onAddItems?: (orderId: string) => void;
+  /** Whether this ticket just arrived (brief highlight animation). */
+  isNew?: boolean;
 }
 
 /** Course display order — items without a course map to "other" at the end. */
@@ -73,6 +75,7 @@ const STATUS_ORDER: KdsStatus[] = ['pending', 'preparing', 'ready', 'served'];
 export const KdsTicketCard = memo(function KdsTicketCard({
   order, onAdvance, showOrderId = true, showTableNumber = true,
   selected = false, onSaveItems, sessionToken, onAdvanceItem, onAddItems,
+  isNew = false,
 }: KdsTicketCardProps) {
   const { l10n } = useLocalization();
   const { level, urgent, display } = useTicketSla(order.received_at);
@@ -183,7 +186,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
 
   return (
     <button
-      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}`}
+      className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}${isNew ? ' kds-ticket--new' : ''}`}
       onClick={handleClick}
       aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${l10n.getString('kds-urgent-badge') || 'URGENT'}` : ''}${order.priority ? `, ${l10n.getString('kds-rush-badge') || 'RUSH'}` : ''}, ${display}`}
     >

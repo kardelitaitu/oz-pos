@@ -36,6 +36,8 @@ export interface KdsLayoutProps {
   onAdvanceItem?: (item: KdsLineItem) => void;
   /** Called to open the product picker for adding items to a KDS order (TODO 3f). */
   onAddItems?: (orderId: string) => void;
+  /** Set of order IDs that just arrived — used for brief highlight animation. */
+  newOrderIds: ReadonlySet<string>;
 }
 
 const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
@@ -43,6 +45,14 @@ const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
   focus: KdsLayoutFocus,
   metro: KdsLayoutMetro,
 };
+
+/** Keyboard shortcut descriptions for the help popover. */
+const SHORTCUTS: { key: string; label: string; id: string }[] = [
+  { key: '1-9', label: 'Select ticket by position', id: 'kds-shortcut-select' },
+  { key: 'Space', label: 'Advance selected ticket', id: 'kds-shortcut-advance' },
+  { key: '↑↓', label: 'Navigate tickets', id: 'kds-shortcut-navigate' },
+  { key: 'Esc', label: 'Deselect / close', id: 'kds-shortcut-deselect' },
+];
 
 /** KDS (Kitchen Display System) screen — real-time order queue with switchable layouts and per-user preferences. */
 export default function KdsScreen() {
@@ -55,9 +65,40 @@ export default function KdsScreen() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [settings, setSettings] = useState<KdsSettings>(DEFAULT_SETTINGS);
   const [showHistory, setShowHistory] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
+  const shortcutsRef = useRef<HTMLDivElement>(null);
   // 3f: Product picker state — which order is being edited.
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
+
+  // Track previous order IDs for new-ticket arrival animation.
+  const prevOrderIdsRef = useRef(new Set<string>());
+  const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
+  const arrivalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close shortcuts popover on Escape or outside click.
+  useEffect(() => {
+    if (!showShortcuts) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowShortcuts(false);
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        shortcutsRef.current && !shortcutsRef.current.contains(e.target as Node) &&
+        shortcutsBtnRef.current && !shortcutsBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowShortcuts(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showShortcuts]);
 
   // 3b: Offline resilience — cache, retry queue, optimistic updates.
   const {
@@ -81,7 +122,25 @@ export default function KdsScreen() {
         !order.store_id || order.store_id === activeStoreId,
       );
     }
+
+    // Track new ticket IDs for arrival animation.
+    const currentIds = new Set(filtered.map((o) => o.id));
+    const arrivedIds = new Set<string>();
+    for (const id of currentIds) {
+      if (!prevOrderIdsRef.current.has(id)) {
+        arrivedIds.add(id);
+      }
+    }
+    prevOrderIdsRef.current = currentIds;
+    if (arrivedIds.size > 0) {
+      setNewOrderIds(arrivedIds);
+      // Clear the arrival highlight after 3s.
+      if (arrivalTimerRef.current !== null) clearTimeout(arrivalTimerRef.current);
+      arrivalTimerRef.current = setTimeout(() => setNewOrderIds(new Set()), 3000);
+    }
+
     setOrders(filtered);
+    setInitialLoading(false);
 
     // On reconnect (fetch succeeded, not from cache), flush pending queue.
     if (!fromCache && pendingQueueLength > 0) {
@@ -127,8 +186,11 @@ export default function KdsScreen() {
     return () => {
       if (unlisten) unlisten();
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (arrivalTimerRef.current !== null) clearTimeout(arrivalTimerRef.current);
     };
   }, [fetchOrders]);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const advanceStatus = useCallback(async (order: KdsOrder) => {
     const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
@@ -269,6 +331,57 @@ export default function KdsScreen() {
 
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 
+  // ── Initial loading skeleton ──────────────────────────────────
+  const renderContent = () => {
+    if (initialLoading) {
+      return (
+        <div className="kds-loading-container">
+          <div className="kds-loading-columns">
+            {['pending', 'preparing', 'ready'].map((status) => (
+              <div key={status} className="kds-loading-column">
+                <div className="kds-loading-header" />
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="kds-loading-card">
+                    <div className="kds-loading-line kds-loading-line--short" />
+                    <div className="kds-loading-line kds-loading-line--long" />
+                    <div className="kds-loading-line kds-loading-line--medium" />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (showHistory) {
+      return <KdsHistoryPanel />;
+    }
+
+    return (
+      <div {...pullRefreshProps}>
+        <LayoutComponent
+          orders={orders}
+          onAdvance={advanceStatus}
+          showOrderId={prefs.showOrderId}
+          showTableNumber={prefs.showTableNumber}
+          selectedOrderId={selectedOrderId}
+          sessionToken={sessionToken}
+          onSaveItems={async (orderId, itemsSummary, itemCount) => {
+            try {
+              await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
+            } catch (e) {
+              setError(String(e));
+            }
+          }}
+          onAdvanceItem={advanceItemStatus}
+          onAddItems={setPickerOrderId}
+          newOrderIds={newOrderIds}
+        />
+      </div>
+    );
+  };
+
   return (
     <Profiler id="KdsScreen" onRender={(...args) => {
       if (typeof args[2] === 'number' && args[2] > 1) {
@@ -307,6 +420,46 @@ export default function KdsScreen() {
           )}
         </div>
         <div className="kds-header-right">
+          {/* Shortcut help button — always visible */}
+          <button
+            ref={shortcutsBtnRef}
+            className="kds-shortcuts-btn"
+            onClick={() => setShowShortcuts((p) => !p)}
+            aria-label={l10n.getString('kds-shortcuts-aria') || 'Keyboard shortcuts'}
+            aria-expanded={showShortcuts}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+          </button>
+          {showShortcuts && (
+            <div
+              ref={shortcutsRef}
+              className="kds-shortcuts-popover"
+              role="tooltip"
+              aria-label={l10n.getString('kds-shortcuts-label') || 'Keyboard shortcuts'}
+            >
+              {SHORTCUTS.map((s) => (
+                <div key={s.id} className="kds-shortcut-row">
+                  <kbd className="kds-shortcut-key">{s.key}</kbd>
+                  <span className="kds-shortcut-desc">{l10n.getString(s.id) || s.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* History toggle — always visible when not loading */}
+          <button
+            className={`kds-history-toggle${showHistory ? ' kds-history-toggle--active' : ''}`}
+            onClick={() => setShowHistory((p) => !p)}
+            aria-label={l10n.getString('kds-history-toggle-aria') || 'Toggle order history'}
+            aria-pressed={showHistory}
+            title={l10n.getString('kds-history-toggle-title') || 'Order history'}
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            </svg>
+          </button>
+          {/* Settings + layout — only when prefs loaded */}
           {!prefsLoading && (<>
             <KdsSettingsPanel
               settings={{ ...settings, autoAcknowledge: prefs.autoAcknowledge }}
@@ -327,7 +480,31 @@ export default function KdsScreen() {
           </>)}
         </div>
       </div>
-      {error && <p className="kds-error">{error}</p>}
+
+      {/* ── Error banner (dismissible + retry) ──────────────────── */}
+      {error && (
+        <div className="kds-error-banner" role="alert">
+          <span className="kds-error-banner-text">{error}</span>
+          <button
+            className="kds-error-retry-btn"
+            onClick={() => {
+              clearError();
+              fetchOrders();
+            }}
+            aria-label={l10n.getString('kds-error-retry-aria') || 'Retry'}
+          >
+            <Localized id="kds-offline-retry">Retry</Localized>
+          </button>
+          <button
+            className="kds-error-dismiss-btn"
+            onClick={clearError}
+            aria-label={l10n.getString('kds-error-dismiss-aria') || 'Dismiss'}
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* 3b: Offline banner — shown when backend is unreachable or actions are queued */}
       {!online && (
         <div className="kds-offline-banner" role="alert">
@@ -368,6 +545,7 @@ export default function KdsScreen() {
           </button>
         </div>
       )}
+
       {/* P7-3: Pull-to-refresh indicator */}
       {pullState !== 'idle' && (
         <div
@@ -382,43 +560,9 @@ export default function KdsScreen() {
           {pullState === 'ready' && <Localized id="kds-release-to-refresh">Release to refresh</Localized>}
         </div>
       )}
-      {/* 2b: History/recall toggle button */}
-      {!prefsLoading && (
-        <button
-          className={`kds-history-toggle${showHistory ? ' kds-history-toggle--active' : ''}`}
-          onClick={() => setShowHistory((p) => !p)}
-          aria-label={l10n.getString('kds-history-toggle-aria') || 'Toggle order history'}
-          aria-pressed={showHistory}
-          title={l10n.getString('kds-history-toggle-title') || 'Order history'}
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-          </svg>
-        </button>
-      )}
-      {!prefsLoading && !showHistory && (
-        <div {...pullRefreshProps}>
-          <LayoutComponent
-            orders={orders}
-            onAdvance={advanceStatus}
-            showOrderId={prefs.showOrderId}              showTableNumber={prefs.showTableNumber}
-              selectedOrderId={selectedOrderId}
-              sessionToken={sessionToken}
-              onSaveItems={async (orderId, itemsSummary, itemCount) => {
-                try {
-                  await updateKdsOrderItemsScoped(sessionToken, { id: orderId, items_summary: itemsSummary, item_count: itemCount });
-                } catch (e) {
-                  setError(String(e));
-                }
-              }}
-              onAdvanceItem={advanceItemStatus}
-              onAddItems={setPickerOrderId}
-            />
-          </div>
-      )}
-      {!prefsLoading && showHistory && (
-        <KdsHistoryPanel />
-      )}
+
+      {/* ── Main content: loading skeleton, history panel, or layout ── */}
+      {renderContent()}
 
       {/* 3f: Product picker modal for adding items mid-preparation */}
       <KdsProductPickerModal

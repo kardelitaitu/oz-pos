@@ -113,4 +113,14 @@ kds-picker-cancel = Batal
 kds-picker-add-btn = Tambah { $count } item
 kds-picker-added-label = ditambahkan
 
+# ── UX audit: keyboard shortcuts + error retry ──
+kds-shortcuts-aria = Pintasan keyboard
+kds-shortcuts-label = Pintasan keyboard
+kds-shortcut-select = Pilih tiket berdasarkan posisi
+kds-shortcut-advance = Lanjutkan tiket yang dipilih
+kds-shortcut-navigate = Navigasi tiket
+kds-shortcut-deselect = Batalkan pilihan / tutup
+kds-error-retry-aria = Coba Lagi
+kds-error-dismiss-aria = Tutup
+
 # ── Kiosk (remaining) ──

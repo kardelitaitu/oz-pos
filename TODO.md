@@ -67,11 +67,25 @@
   - _Files:_ `ui/src/features/kds/hooks/useNewTicketSound.ts`, `ui/src/frontend/shared/useSound.ts`
   - _Effort:_ Small (add TTS call in KdsScreen `advanceStatus` when new status is "ready")
 
-- [ ] **3e. Item-level status (all-day view):** Tickets have one status for the entire order. In reality, the steak takes 12min but the salad takes 2min. A split-status display per line item would match how real kitchens work.
-  - _Effort:_ Large (schema redesign — ticket items table + per-item status)
+- [x] **3e. Item-level status (all-day view):** Tickets with per-line-item cooked/served/bumped status via `item_status` column on `kds_line_items`. ✅ (`ad406c4c`)
+  - [x] DB method: `update_kds_line_item_status` — validates status, auto-sets `started_at`/`ready_at`/`served_at` timestamps
+  - [x] Tauri command: `update_kds_line_item_status_scoped` — scoped + `kds:orders-changed` event emission
+  - [x] TS API wrapper: `updateKdsLineItemStatusScoped`
+  - [x] Per-item status dots (5 colors: pending→grey, preparing→amber, ready→green, served→accent, cancelled→red)
+  - [x] Click-to-advance on actionable items + `e.stopPropagation()` to avoid tripping ticket-level advance
+  - [x] Wired through all 3 layouts (kanban, focus, metro)
+  - _Effort:_ Large ✅
 
-- [ ] **3f. No ticket editing post-creation:** If a customer adds an item mid-preparation, the KDS ticket is frozen. No "on the fly" additions or modifier edits.
-  - _Effort:_ Medium (add `update_kds_order_items` API + UI)
+- [x] **3f. No ticket editing post-creation:** If a customer adds an item mid-preparation, the KDS ticket is frozen. No "on the fly" additions or modifier edits. ✅ (`5b86ff8e`)
+  - [x] `UpdateKdsOrderItemsInput` extended with `line_items: Option<Vec<CreateKdsLineItemInput>>` (`#[serde(default)]` for backward compat)
+  - [x] DB method `update_kds_order_items` now handles `line_items` — when provided, DELETEs existing + INSERTs new in a transaction, re-derives summary/count
+  - [x] `create_kds_line_items_in_tx` refactored to avoid nested transactions
+  - [x] `CreateKdsLineItemInput` TS interface + `line_items` field on `UpdateKdsOrderItemsInput`
+  - [x] `KdsProductPickerModal` — searchable product list (restaurant/both), course dropdown, quantity stepper, remove, focus trap, Escape/backdrop
+  - [x] `onAddItems` callback wired through KdsLayoutProps → 3 layouts → KdsTicketCard
+  - [x] KdsScreen `onConfirm` merges existing line items with picked items, calls API
+  - [x] 15 new FTL keys (EN + ID)
+  - _Effort:_ Medium ✅
 
 ---
 
@@ -98,9 +112,8 @@
   - _Files:_ `WorkspaceStorePosSettings.tsx:71`, `WorkspaceRestaurantPosSettings.tsx:78`
   - _Effort:_ Small (swap API call + add sessionToken from context)
 
-- [ ] **4e. `terminal_profile.json` not in DB migration system:** The `useTerminalHardware` hook reads/writes a flat JSON file outside the DB migration system. If the schema changes (add `kitchenPrinter` field), existing files silently break with missing defaults.
-  - _Files:_ `useTerminalHardware` hook, `terminal_profile.json` schema (Rust side)
-  - _Effort:_ Medium (migration 070+ to store hardware profile in DB with JSON schema versioning)
+- [x] **4e. `terminal_profile.json` migrated to DB with schema versioning:** Hardware profiles now live in the DB with migration 104 (`hardware_profiles` table with `schema_version` column). Backward-compat writes to JSON preserved. (`1032c907`)
+  - _Effort:_ Medium ✅
 
 - [x] **4f. Missing FTL keys for some workspace card labels:** Several `aria-label` attributes in workspace cards are still hardcoded English: `aria-label="Sound volume"`, `aria-label="Yellow escalation threshold in minutes"`, `aria-label="Red escalation threshold in minutes"`.
   - _Files:_ `TerminalPreferencesCard.tsx:118`, `WorkspaceKdsSettings.tsx:130,145`

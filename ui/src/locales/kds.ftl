@@ -110,3 +110,13 @@ kds-picker-remove-aria = Remove { $name }
 kds-picker-cancel = Cancel
 kds-picker-add-btn = Add { $count } item(s)
 kds-picker-added-label = added
+
+# ── UX audit: keyboard shortcuts + error retry ──
+kds-shortcuts-aria = Keyboard shortcuts
+kds-shortcuts-label = Keyboard shortcuts
+kds-shortcut-select = Select ticket by position
+kds-shortcut-advance = Advance selected ticket
+kds-shortcut-navigate = Navigate tickets
+kds-shortcut-deselect = Deselect / close
+kds-error-retry-aria = Retry
+kds-error-dismiss-aria = Dismiss
