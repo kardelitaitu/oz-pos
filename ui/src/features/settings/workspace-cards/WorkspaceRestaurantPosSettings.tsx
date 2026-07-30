@@ -116,7 +116,7 @@ export function WorkspaceRestaurantPosSettings({
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, userId, tableManagement, courseFiring, settings.receipt, onSaved, addToast, l10n]);
+  }, [terminalId, hw, userId, tableManagement, courseFiring, settings.receipt, onSaved, addToast, l10n, markSettingsUpdated, sessionToken]);
 
   const isCompact = variant === 'inspector-drawer';
 

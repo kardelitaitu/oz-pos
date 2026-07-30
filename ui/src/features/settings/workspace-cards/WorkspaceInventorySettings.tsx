@@ -86,7 +86,7 @@ export function WorkspaceInventorySettings({
     } finally {
       setSaving(false);
     }
-  }, [userId, lowStockThreshold, deductionPreferWarehouse, onSaved, addToast, l10n]);
+  }, [userId, lowStockThreshold, deductionPreferWarehouse, onSaved, addToast, l10n, markSettingsUpdated]);
 
   const isCompact = variant === 'inspector-drawer';
 

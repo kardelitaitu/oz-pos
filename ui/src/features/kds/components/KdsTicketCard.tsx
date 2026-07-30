@@ -240,7 +240,13 @@ export const KdsTicketCard = memo(function KdsTicketCard({
 
       {order.notes && <span className="kds-ticket-notes">{order.notes}</span>}
       {editing && (
-        <div className="kds-ticket-edit" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="kds-ticket-edit"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => { if (e.key === 'Escape') handleCancelEdit(); }}
+          role="presentation"
+          tabIndex={-1}
+        >
           <input
             ref={inputRef}
             className="kds-ticket-edit-input"

@@ -129,7 +129,7 @@ export function WorkspaceKdsSettings({
     } finally {
       setSaving(false);
     }
-  }, [userId, draft, onSaved, addToast, l10n]);
+  }, [userId, draft, onSaved, addToast, l10n, markSettingsUpdated]);
 
   const isCompact = variant === 'inspector-drawer';
 
