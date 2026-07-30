@@ -116,7 +116,9 @@ const MOCK_WORKSPACES = [
 ];
 
 // ── Mock KDS orders ──────────────────────────────────────────────
-const MOCK_KDS_ORDERS = [
+// ── Mock KDS orders ──────────────────────────────────────────────
+// Use let + mutable array so complete_sale can push new orders for E2E tests.
+const _initialKdsOrders = [
   {
     id: 'kds-order-1',
     display_number: 101,
@@ -154,6 +156,28 @@ const MOCK_KDS_ORDERS = [
     store_id: 'store-1',
   },
 ];
+let mockKdsOrders: Record<string, unknown>[] = [..._initialKdsOrders];
+let kdsDisplayCounter = 104;
+
+/** Push a new KDS order derived from cart lines into the mock queue. */
+function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
+  const displayNumber = kdsDisplayCounter++;
+  const itemsSummary = lines.map((l) => `${l.qty}x ${l.name}`).join(', ');
+  const itemCount = lines.reduce((sum, l) => sum + l.qty, 0);
+  const now = new Date().toISOString();
+  mockKdsOrders.push({
+    id: `kds-order-e2e-${Date.now()}`,
+    display_number: displayNumber,
+    status: 'pending',
+    received_at: now,
+    items_summary: itemsSummary,
+    item_count: itemCount,
+    order_type: 'dine_in',
+    table_number: 'T' + (Math.floor(Math.random() * 20) + 1),
+    notes: null,
+    store_id: storeId,
+  });
+}
 
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
 const loginAttempts: Record<string, number> = {};
@@ -653,6 +677,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         tax_amount: null, tax_rate_id: null,
       })),
     };
+    // Push a KDS mock order so POS → KDS E2E flow works.
+    pushKdsOrderFromCart(cartState.lines, 'store-1');
     cartState = { lines: [] };
     return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
@@ -676,6 +702,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         tax_amount: null, tax_rate_id: null,
       })),
     };
+    pushKdsOrderFromCart(cartState.lines, 'store-1');
     cartState = { lines: [] };
     return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
@@ -699,6 +726,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         tax_amount: null, tax_rate_id: null,
       })),
     };
+    pushKdsOrderFromCart(cartState.lines, 'store-1');
     cartState = { lines: [] };
     return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
   },
@@ -925,10 +953,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // KDS
   // ═══════════════════════════════════════════════════════════════
 
-  'list_kds_orders': () => MOCK_KDS_ORDERS,
-  'list_kds_orders_scoped': () => MOCK_KDS_ORDERS,
-  'get_kds_queue': () => MOCK_KDS_ORDERS,
-  'get_kds_queue_scoped': () => MOCK_KDS_ORDERS,
+  'list_kds_orders': () => mockKdsOrders,
+  'list_kds_orders_scoped': () => mockKdsOrders,
+  'get_kds_queue': () => mockKdsOrders,
+  'get_kds_queue_scoped': () => mockKdsOrders,
   'update_kds_status': () => null,
   'update_kds_status_scoped': () => null,
   'create_kds_order_from_sale': () => [],
