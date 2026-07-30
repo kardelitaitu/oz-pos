@@ -735,8 +735,8 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
                 type="button"
                 className="settings-shortcut-btn"
                 onClick={() => setShowShortcuts((p) => !p)}
-                aria-label="Keyboard shortcuts"
-                title="Keyboard shortcuts"
+                aria-label={l10n.getString('settings-shortcut-btn-aria')}
+                title={l10n.getString('settings-shortcut-btn-aria')}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
                   <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -745,7 +745,7 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
               </button>
               {showShortcuts && (
                 <div className="settings-shortcuts-popover" role="tooltip">
-                  <div className="settings-shortcuts-title">Keyboard shortcuts</div>
+                  <div className="settings-shortcuts-title">{l10n.getString('settings-shortcuts-title')}</div>
                   {KEYBOARD_SHORTCUTS.map((shortcut) => (
                     <div key={shortcut.keys.join('')} className="settings-shortcuts-row">
                       <kbd className="settings-shortcuts-kbd">
@@ -792,11 +792,11 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
         <div
           className="settings-sidebar-nav"
           role="treegrid"
-          aria-label="Settings"
+          aria-label={l10n.getString('settings-sidebar-nav-aria')}
         >
           {/* ── Pinned sections (P60-blog-1) ────────────────── */}
           {!q && pinnedSections.length > 0 && !sidebarCollapsed && (
-            <div className="settings-sidebar-pinned" role="group" aria-label="Pinned sections">
+            <div className="settings-sidebar-pinned" role="group" aria-label={l10n.getString('settings-sidebar-pinned-group-aria')}>
               {pinnedSections.map((key) => {
                 const item = NAV_ITEMS.find((n) => n.key === key);
                 if (!item) return null;
@@ -820,8 +820,8 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
                       type="button"
                       className="settings-nav-pin-btn pinned"
                       onClick={() => togglePin(key)}
-                      aria-label={`Unpin ${item.label}`}
-                      title="Unpin"
+                      aria-label={l10n.getString('settings-nav-unpin-aria', { name: item.label })}
+                      title={l10n.getString('settings-nav-unpin-title')}
                     >
                       <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
                         <path d="M12 2L9.5 10L2 11l6 6l-1.5 7L12 18l6.5 6L17 17l6-6l-7.5-1z" />
@@ -876,7 +876,7 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
                         <Localized id={CATEGORY_I18N_KEYS[cat.label] ?? ''}>{cat.label}</Localized>
                       </span>
                       {!sidebarCollapsed && (
-                        <span className="settings-sidebar-count" key={cat.keys.length} title={`${cat.keys.length} items`} aria-label={`${cat.keys.length} items`}>
+                        <span className="settings-sidebar-count" key={cat.keys.length} title={l10n.getString('settings-sidebar-count-title', { count: cat.keys.length })} aria-label={l10n.getString('settings-sidebar-count-aria', { count: cat.keys.length })}>
                           {cat.keys.length}
                         </span>
                       )}
@@ -929,8 +929,8 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
                                   type="button"
                                   className={`settings-nav-pin-btn${pinnedSections.includes(key) ? ' pinned' : ''}`}
                                   onClick={() => togglePin(key)}
-                                  aria-label={pinnedSections.includes(key) ? `Unpin ${item.label}` : `Pin ${item.label}`}
-                                  title={pinnedSections.includes(key) ? 'Unpin' : 'Pin'}
+                                  aria-label={pinnedSections.includes(key) ? l10n.getString('settings-nav-unpin-aria', { name: item.label }) : l10n.getString('settings-nav-pin-aria', { name: item.label })}
+                                  title={pinnedSections.includes(key) ? l10n.getString('settings-nav-unpin-title') : l10n.getString('settings-nav-pin-title')}
                                 >
                                   <svg viewBox="0 0 24 24" fill={pinnedSections.includes(key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="12" height="12" aria-hidden="true">
                                     <path d="M12 2L9.5 10L2 11l6 6l-1.5 7L12 18l6.5 6L17 17l6-6l-7.5-1z" />
@@ -954,7 +954,7 @@ const SettingsNavTree = forwardRef<SettingsNavTreeHandle, SettingsNavTreeProps>(
             type="button"
             className="settings-sidebar-resize-handle"
             onMouseDown={handleResizeStart}
-            aria-label="Resize sidebar"
+            aria-label={l10n.getString('settings-sidebar-resize-aria')}
             onKeyDown={(e) => {
               if (e.key === 'ArrowRight') {
                 e.preventDefault();
