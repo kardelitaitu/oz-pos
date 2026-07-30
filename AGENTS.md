@@ -65,22 +65,30 @@ starts fresh.
 
 | Task | Command (run from `ui/`) |
 |------|--------------------------|
+| All UI gates (chained) | `npm run check:all` |
 | Type-check | `npm run typecheck` |
 | Lint | `npm run lint` |
 | Lint + auto-fix | `npm run lint:fix` |
 | Build (type-check + bundle) | `npm run build` |
 | Tests | `npm run test` |
+| E2E suite (Docker → Vite → Playwright → cleanup) | `npm run e2e` |
+| E2E with browser visible | `npm run e2e:headed` |
+| E2E API tests only | `npm run e2e:api` |
+| E2E UI tests only | `npm run e2e:ui` |
 
 ```powershell
 # Always run from the ui/ directory
 cd "ui"
-npm run typecheck
-npm run lint
+npm run check:all   # full validation: lint → typecheck → test → i18n → E2E
 ```
 
 > **Rule:** Agents must use `npm run <script>` (not bare `tsc`/`eslint`) unless the
 > PATH prefix pattern above is applied first. Never assume `tsc` or `eslint` are
 > globally available on this machine.
+>
+> The `check:all` runner (`scripts/check-ui.mjs`) detects Docker availability
+> and skips the E2E gate gracefully if Docker is not running. For the full E2E
+> lifecycle with Docker backend provisioning, use `npm run e2e`.
 
 ### If node_modules is missing
 
