@@ -89,6 +89,37 @@ The `e2e` job in `.github/workflows/ci.yml`:
 | `new-flows.spec.ts` | Workspace picker, session lock, KDS, audit | E2E-26→29 |
 | `tablet-viewport.spec.ts` | Tablet viewport smoke, touch targets | E2E-30 |
 | `api.spec.ts` | Cloud server / license server HTTP API | — |
+| `e2e-sale-to-history.spec.ts` | **Critical Path:** complete sale → verify in Sales History | CP #1 |
+| `e2e-shift-reconciliation.spec.ts` | **Critical Path:** open shift → sale → close → verify summary | CP #2 |
+| `e2e-settings-persist.spec.ts` | **Critical Path:** change setting → navigate → return → verify persist | CP #3 |
+
+## npm run e2e — Unified Runner
+
+A cross-platform Node.js runner that handles the full E2E lifecycle:
+
+```bash
+# Full suite (starts Docker + Vite + Playwright)
+npm run e2e
+
+# Watch the browser
+npm run e2e:headed
+
+# API tests only
+npm run e2e:api
+
+# UI tests only
+npm run e2e:ui
+
+# Skip Docker (use existing servers)
+npm run e2e -- --no-docker
+
+# Single spec
+npm run e2e -- e2e/auth.spec.ts
+```
+
+The runner detects Docker availability gracefully — if Docker is not
+installed or the daemon isn't running, it skips the Docker services
+and runs only the Playwright tests against the Vite dev server.
 
 ## Writing New Tests
 

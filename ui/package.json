@@ -7,6 +7,7 @@
   "license": "SEE LICENSE IN ../LICENSE",
   "scripts": {
     "dev": "vite",
+    "check:all": "node ../scripts/check-ui.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
@@ -20,6 +21,11 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test --config e2e/playwright.config.ts --headed",
+    "test:scripts": "node --test ../scripts/__tests__/run-e2e.test.mjs",
+    "e2e": "node ../scripts/run-e2e.mjs",
+    "e2e:headed": "node ../scripts/run-e2e.mjs --headed",
+    "e2e:api": "node ../scripts/run-e2e.mjs --api-only e2e/api.spec.ts",
+    "e2e:ui": "node ../scripts/run-e2e.mjs --ui-only",
     "docs": "npx -y typedoc --skipErrorChecking --entryPointStrategy expand ./src/api ./src/types ./src/hooks --out ../docs/html/ui-docs"
   },
   "dependencies": {
