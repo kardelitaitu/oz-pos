@@ -19,10 +19,18 @@ React 18 + TypeScript + Vite 6 + Tauri v2 webview.
 ```bash
 npm install            # one-time
 npm run dev            # vite dev server on http://localhost:1420
+npm run check:all      # chained validation: lint → typecheck → test → i18n → E2E*
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
 npm run test           # vitest run (214 files, 3230+ tests)
 npm run build          # tsc -b && vite build
+npm run e2e            # Full E2E suite: Docker → Vite → Playwright → cleanup
+npm run e2e:headed     # E2E with browser visible
+npm run e2e:api        # API integration tests only
+npm run e2e:ui         # All UI E2E tests (excl. API)
+
+# * E2E requires Docker; check:all skips it gracefully if Docker is unavailable
+#   See e2e/README.md for full E2E documentation
 ```
 
 ## Install script approvals

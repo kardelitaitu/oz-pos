@@ -159,10 +159,17 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
 | Command | Action |
 |---|---|
 | `npm run dev` | Development server |
+| `npm run check:all` | Chained validation: lint → typecheck → test → i18n → E2E* |
 | `npm run build` | Production build |
 | `npm run typecheck` | TypeScript validation |
 | `npm run lint` | ESLint + jsx-a11y |
 | `npm run test` | Vitest (214 files, 3,230+ tests) |
+| `npm run e2e` | Full E2E suite: Docker → Vite → Playwright → cleanup |
+| `npm run e2e:headed` | E2E with browser visible |
+| `npm run e2e:api` | API integration tests only |
+| `npm run e2e:ui` | All UI E2E tests (excl. API) |
+
+> * E2E requires Docker; check:all skips it gracefully if unavailable. See [`ui/README.md`](./ui/README.md) and [`ui/e2e/README.md`](./ui/e2e/README.md) for details.
 
 ### Backend (root)
 
@@ -171,6 +178,7 @@ See [docs/QUICKSTART.md](./docs/QUICKSTART.md) for detailed setup instructions.
 | `cargo fmt --all` | Format Rust code |
 | `cargo clippy --all-targets -- -D warnings` | Lint |
 | `cargo test --workspace` | Run tests (5,200+) |
+| `bash scripts/check.sh` | Full local pre-push gate (Rust + UI + migrations) |
 | `bash scripts/coverage.sh` | Rust + UI coverage reports |
 
 ---
