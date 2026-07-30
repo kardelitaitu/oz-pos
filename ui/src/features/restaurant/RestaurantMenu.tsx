@@ -301,6 +301,13 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     }).catch(() => { /* offline — keep localStorage values */ });
   }, [userId, sessionToken]);
 
+  // Sync pinned/colors/unavailable to localStorage whenever state changes.
+  // Extracted from setState updaters to avoid side effects in pure functions
+  // (React 18 strict mode calls updaters twice, causing duplicate writes).
+  useEffect(() => { savePinned(pinned, userId); }, [pinned, userId]);
+  useEffect(() => { saveColors(colors, userId); }, [colors, userId]);
+  useEffect(() => { saveUnavailable(unavailable, userId); }, [unavailable, userId]);
+
   // ── Context menu state ──────────────────────────────
   const [contextMenu, setContextMenu] = useState<{
     sku: string;
@@ -377,41 +384,38 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       const next = new Set(prev);
       if (next.has(sku)) next.delete(sku);
       else next.add(sku);
-      savePinned(next, userId);
       return next;
     });
     setContextMenu(null);
-  }, [userId]);
+  }, []);
 
   const toggleUnavailable = useCallback((sku: string) => {
     setUnavailable((prev) => {
       const next = new Set(prev);
       if (next.has(sku)) next.delete(sku);
       else next.add(sku);
-      saveUnavailable(next, userId);
       return next;
     });
     setContextMenu(null);
-  }, [userId]);
+  }, []);
 
   const setColor = useCallback((sku: string, color: string) => {
     setColors((prev) => {
-      const next = color === prev[sku] ? { ...prev } : { ...prev, [sku]: color };
-      saveColors(next, userId);
-      return next;
+      if (color === prev[sku]) return prev;
+      return { ...prev, [sku]: color };
     });
     setContextMenu(null);
-  }, [userId]);
+  }, []);
 
   const clearColor = useCallback((sku: string) => {
     setColors((prev) => {
+      if (!(sku in prev)) return prev;
       const next = { ...prev };
       delete next[sku];
-      saveColors(next, userId);
       return next;
     });
     setContextMenu(null);
-  }, [userId]);
+  }, []);
 
   const categoryOptions = useMemo<Category[]>(
     () => ['All', ...categories],
@@ -682,7 +686,10 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         <div
           ref={menuRef}
           className="restaurant-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={{
+            left: Math.max(4, Math.min(contextMenu.x, window.innerWidth - 180)),
+            top: Math.max(4, Math.min(contextMenu.y, window.innerHeight - 280)),
+          }}
           role="menu"
         >
           <button
@@ -760,6 +767,18 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
     onContextMenu(product.sku, e);
   }, [product.sku, onContextMenu]);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      onContextMenu(product.sku, {
+        preventDefault: () => {},
+        clientX: rect.right,
+        clientY: rect.top,
+      } as unknown as React.MouseEvent);
+    }
+  }, [product.sku, onContextMenu]);
+
   let cardClass = 'restaurant-card';
   if (pinned) cardClass += ' restaurant-card--pinned';
   if (!product.inStock) cardClass += ' restaurant-card--disabled';
@@ -772,6 +791,7 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
       tabIndex={product.inStock ? 0 : -1}
       onClick={handleClick}
       onContextMenu={handleContext}
+      onKeyDown={handleKeyDown}
       style={{ '--btn-color': color ?? 'var(--color-accent)', animationDelay: `${(index ?? 0) * 35}ms` } as React.CSSProperties}
     >
       <div className="restaurant-card-body">
