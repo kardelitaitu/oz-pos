@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-07-24 · Hermes-Agent · status: ACCURATE · F1: 10/10 modules active (loyalty included) · F2: 31 ADRs in docs/decisions/ (ADR #30 oz-core modularization & ADR #31 decentralized UI self-registration) · F3: 29 workspace crates/modules · F4: module-README rule met by 10/10 modules · verified: ui/src/features/*/register.tsx self-registration active -->
+<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: CORRECTED (7 drifts fixed Jul 31) · F1: 10/10 modules active · F2: 32 ADRs in docs/decisions/ · F3: 11 crates + 4 apps + 10 modules + 4 platform = 29 workspace members · F4: 10/10 modules have README -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -34,13 +34,14 @@ codebase from a flat monolith to the modular architecture described below.
 | Frontend         | React                 |
 | Database         | SQLite                 |
 | API              | Rust (Tauri IPC + HTTP)|
-| State Management | Solid Store*           |
-| Build System     | Cargo Workspace        |
-| Testing          | Rust Test + Playwright |
+| State Management | React hooks (useState, useCallback, useContext) |
+| Build System     | Cargo Workspace                                    |
+| Testing          | Rust Test + Vitest + Playwright                    |
 | Documentation    | Markdown + ADRs        |
 
 
-The architecture is designed to be framework-agnostic at the module level.*
+The architecture was originally designed to be framework-agnostic but was unified
+under React exclusively per ADR #31 (2026-07-24 react-only-decision).
 
 ---
 
@@ -103,8 +104,10 @@ the authoritative data store. Cloud sync is eventual and non-blocking.
 oz-pos/
 │
 ├─ apps/              Deployable applications
-│   ├─ desktop-client/  Windows + Linux (keyboard/mouse)
-│   └─ tablet-client/   Android + iPad (touch)
+│   ├─ cloud-server/    Cloud HTTP API (axum, for hosted tenants)
+│   ├─ desktop-client/  Windows + Linux (keyboard/mouse, Tauri v2)
+│   ├─ license-server/  License activation & validation (Go)
+│   └─ tablet-client/   Android + iPad (touch, Tauri v2)
 │
 ├─ platform/          System infrastructure
 │   ├─ kernel/         Module system (load, unload, lifecycle)
@@ -318,6 +321,7 @@ Structure (Target — Long-Term Vision)** section above.
 oz-pos/
 │
 ├─ apps/              Deployable applications
+│   ├─ cloud-server/    Cloud HTTP API (axum, for hosted tenants)
 │   ├─ desktop-client/  Windows + Linux (moved from src-tauri/)
 │   │   └─ src/
 │   │       ├─ commands/  IPC command handlers
@@ -325,6 +329,7 @@ oz-pos/
 │   │       ├─ lib.rs     (uses platform_startup::init_module_system)
 │   │       ├─ main.rs
 │   │       └─ state.rs
+│   ├─ license-server/  License activation & validation (Go)
 │   └─ tablet-client/   Android + iPad (touch-optimized shell)
 │       └─ src/
 │           ├─ commands/  (shared with desktop-client)
@@ -355,7 +360,9 @@ oz-pos/
 │   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers)
 │   ├─ oz-logging/     Structured logging setup
 │   ├─ oz-lua/         Lua scripting integration
-│   ├─ oz-payment/     Card payment processing
+│   ├─ oz-notification/ Email & push notification dispatching
+│   ├─ oz-payment/     Card payment processing (Stripe, QRIS, Square, mock)
+│   ├─ oz-plugin/      Plugin sandbox & lifecycle (Lua scripting bridge)
 │   ├─ oz-reporting/   Report generation (PDF, CSV)
 │   └─ oz-security/    Auth, hashing, encryption
 │
@@ -444,14 +451,22 @@ Every module must contain:
 - `CHANGELOG.md` — Version history
 
 Every architectural change must create an Architecture Decision Record (ADR).
-Key ADRs in `docs/decisions/` include:
+As of July 2026 there are 32 ADRs in `docs/decisions/`. Key documents include:
 ```
 docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md
 docs/decisions/2026-03-01-frontend-restructure.md
+docs/decisions/2026-07-10-workspace-type-instance-design.md
+docs/decisions/2026-07-10-subscription-tier-entitlement.md
+docs/decisions/2026-07-15-whitelabel-branding-system.md
+docs/decisions/2026-07-18-kds-multi-layout-system.md
+docs/decisions/2026-07-20-node-based-store-topology-builder.md
 docs/decisions/2026-07-24-domain-module-extraction.md
-docs/decisions/2026-07-24-decentralized-ui-module-registration.md
+docs/decisions/2026-07-24-react-only-decision.md
+docs/decisions/2026-07-25-db-extraction-and-platform-split.md
 ```
+
+For the full list see the `docs/decisions/` directory.
 
 ---
 
