@@ -1051,7 +1051,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F7': if (e.cancelable) e.preventDefault(); setShowCustomerSearch(true); break;
         case 'F8': if (e.cancelable) e.preventDefault(); setShowStockInquiry(true); break;
         case 'F9': if (e.cancelable) e.preventDefault(); if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
-        case 'F10': if (e.cancelable) e.preventDefault(); handleOpenSettings(); break;
+        // F10 is handled globally by AppShell.tsx — opens the WorkspaceSettingsModal.
+        // The button-based settings navigation (onOpenSettings) still works via RetailFnBar.
         case 'F11': if (e.cancelable) e.preventDefault(); setShowQuickReturn(true); break;
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
@@ -1060,7 +1061,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [isAnyModalOpen, isAnyOverlayOpen, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, showHeldCartsList, showQuickReturn, closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, handleOpenSettings]);
+  // handleOpenSettings deliberately excluded — F10 removed (handled by AppShell).
+  }, [isAnyModalOpen, isAnyOverlayOpen, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, showHeldCartsList, showQuickReturn, closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate]);
 
   // ── Render ───────────────────────────────────────────────────
 
