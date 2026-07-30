@@ -60,7 +60,7 @@ export default function AppShell() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session } = useAuth();
-  const { activeWorkspace, sessionToken } = useWorkspace();
+  const { activeWorkspace, sessionToken, terminalId } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
   const { addToast } = useToast();
@@ -259,6 +259,7 @@ export default function AppShell() {
       open={settingsModalOpen}
       onClose={() => setSettingsModalOpen(false)}
       workspaceType={workspaceType}
+      terminalId={terminalId}
     />
   ) : null;
 
