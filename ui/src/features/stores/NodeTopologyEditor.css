@@ -572,7 +572,7 @@
 
 /* Right Inspector Drawer */
 .node-inspector-drawer {
-  width: 300px;
+  width: 340px;
   background-color: var(--color-bg-surface);
   border-left: 1px solid var(--color-border);
   padding: var(--space-5);

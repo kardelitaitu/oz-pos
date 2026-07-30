@@ -121,7 +121,96 @@
 
 ---
 
-## 3. Completed (Prior Session)
+## 3. Topology Phase 2 — Inspector Drawer Integration
+
+> **Baseline:** The core Phase 2 work (rendering shared workspace cards in the inspector, telemetry from `SettingsContext`, `StoreInfoCard`) was already implemented during the audit fix sessions. The remaining items are **polish, resilience, and test coverage**.
+
+### Verified Already Done
+
+- [x] Workspace type → card mapping (`renderWorkspaceCard` in `NodeTopologyEditor.tsx`)
+  - `store-pos` → `WorkspaceStorePosSettings`
+  - `restaurant-pos` → `WorkspaceRestaurantPosSettings`
+  - `kds` → `WorkspaceKdsSettings`
+- [x] `WorkspaceInventorySettings` rendered for warehouse nodes
+- [x] `StoreInfoCard` rendered for store nodes (exists with `variant='inspector-drawer'`)
+- [x] `getTelemetry` uses `useSettings()` for live badges (store name, receipt config, etc.)
+- [x] `WorkspaceCardVariant` type includes `'inspector-drawer'`
+- [x] `WorkspaceCardProps` has all needed fields (`sessionToken`, `terminalId`, `locationId`, `onSaved`)
+
+### Execution Order (recommended)
+
+1. **P2-I1 — Missing `sessionToken`** (🔴 real bug, 5 lines)
+2. **P2-I2 — No `ErrorBoundary`** (🔴 crash risk, 2 lines)
+3. **P2-I5 — Verify 300px drawer width** (🟡 measure + adjust)
+4. **P2-I3 — Test coverage** (🟡 7 tests, validates I1+I2)
+5. **P2-I6 — `Ctrl+I` keyboard focus** (🟢 nice-to-have, optional)
+6. **P2-I4 — Richer telemetry badges** (🔵 deferred — blocked on `SettingsContext`)
+
+### 🟡 Remaining Gaps
+
+- [ ] **P2-I1. `sessionToken` not passed to inspector cards** — `renderWorkspaceCard` only passes `variant` and `terminalId`. The cards can't make scoped API calls (`setReceiptSettingsScoped`, etc.). Need to thread `sessionToken` from `TopologyScreen` → `NodeTopologyEditor` props → `renderWorkspaceCard`.
+
+  **Acceptance:**
+  - `NodeTopologyEditorProps` gains optional `sessionToken?: string`
+  - `TopologyScreen` passes `sessionToken={sessionToken}` to editor
+  - `renderWorkspaceCard` spreads `sessionToken` into `cardProps`
+  - No type errors, no lint errors
+
+  _Files:_ `NodeTopologyEditor.tsx`, `TopologyScreen.tsx`
+  _Effort:_ Small (~5 lines)
+
+- [ ] **P2-I2. No `ErrorBoundary` around inspector cards** — If a workspace card throws (e.g., null pointer on malformed settings), the entire editor crashes since there's no error boundary around the inspector. The cards already import `ErrorBoundary` internally for their own content, but the inspector section itself needs one.
+
+  **Acceptance:**
+  - Import `ErrorBoundary` in `NodeTopologyEditor.tsx`
+  - Wrap `<div className="inspector-content">` in `<ErrorBoundary>`
+  - A crashing card shows a fallback UI instead of taking down the canvas
+
+  _Files:_ `NodeTopologyEditor.tsx`
+  _Effort:_ Small (add import + wrapper)
+
+- [ ] **P2-I3. No test coverage for inspector integration** — Unit tests exist for `NodeTopologyEditor.test.tsx` but none verify that selecting a workspace node renders the correct settings card, or that `StoreInfoCard` appears for store nodes.
+
+  **Tests (7):**
+  1. Select store node → `StoreInfoCard` renders with store name/address/branch
+  2. Select workspace node (typeKey='store-pos') → `WorkspaceStorePosSettings` renders
+  3. Select workspace node (typeKey='kds') → `WorkspaceKdsSettings` renders
+  4. Select warehouse node → `WorkspaceInventorySettings` renders
+  5. Select hardware node → no inspector shown (not implemented yet)
+  6. Deselect node (Escape) → inspector drawer disappears
+  7. Change workspace typeKey in dropdown → settings card switches
+
+  _Files:_ New `InspectorIntegration.test.tsx`
+  _Effort:_ Medium (~80 lines)
+
+- [ ] **P2-I5. Inspector drawer width may overflow at 300px** — Spec requires 300px accommodates card content without horizontal scroll. Verify with each card variant. If cards overflow, increase to 340px or make collapsible.
+
+  **Acceptance:**
+  - Open topology, add workspace node, select it → inspector shows `WorkspaceStorePosSettings`
+  - No horizontal scrollbar in the drawer at 300px
+  - If overflow detected, bump `.node-inspector-drawer { width: 340px; }` or add `overflow-y: auto`
+
+  _Files:_ `NodeTopologyEditor.css`
+  _Effort:_ Trivial (measure + adjust)
+
+- [ ] **P2-I6. No keyboard shortcut to focus the inspector** — When a node is selected, there's no way to jump focus to the inspector fields via keyboard. Add `Ctrl+I` or similar to move focus into the first inspector input.
+
+  **Acceptance:**
+  - With a node selected, `Ctrl+I` moves focus to the first input in the inspector drawer
+  - Guarded by the existing editable-element check (no activation while typing)
+
+  _Files:_ `NodeTopologyEditor.tsx` (keydown handler)
+  _Effort:_ Small
+
+- [ ] **P2-I4. Telemetry badges need richer live data** — Current badges are basic. Deferred until `settings.kds` and `settings.inventory` scopes are added to `SettingsContext`.
+  - Store: "Active" / "Unconfigured" (reads `settings.store.name`)
+  - Workspace KDS: "KDS Ready" (static — should show SLA, ticket count)
+  - Workspace POS: "Receipt ✓" / "Receipt 58mm" (reads `settings.receipt.paperWidth`)
+  - Warehouse: "Inventory: n/a" (acknowledged stub — needs low-stock from settings)
+
+---
+
+## 4. Completed (Prior Sessions)
 
 - [x] **SettingsPage.tsx** — 2 hardcoded strings fixed (`533247bc`)
 - [x] **RestaurantMenu.tsx** — 13 FTL keys + 2 aria-labels (`b3307810`)
@@ -130,3 +219,4 @@
 - [x] **ProductManagement + CategoryManagement** — 3 fixes (`13023004`)
 - [x] **AuditLogScreen** — 1 unreviewed badge title (`268ecd81`)
 - [x] **CustomerManagement** — zero bugs (clean sweep)
+- [x] **Topology audit (TOPOLOGY_AUDIT.md)** — All 15 findings resolved (Critical #1-5, Major #6-11, Moderate #12-15)
