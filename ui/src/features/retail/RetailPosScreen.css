@@ -2081,7 +2081,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-medium);
   border: none;
   border-radius: var(--radius-sm);

@@ -49,10 +49,10 @@ pub fn format_kds_chit(
     lines.push(format!("Order: {order_str}"));
 
     // Table number
-    if let Some(table) = table_number {
-        if !table.is_empty() {
-            lines.push(format!("Table: {table}"));
-        }
+    if let Some(table) = table_number
+        && !table.is_empty()
+    {
+        lines.push(format!("Table: {table}"));
     }
 
     // Items count

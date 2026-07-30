@@ -189,11 +189,12 @@ describe('useKdsOffline', () => {
       });
 
       // Second fetch with different data
+      const secondOrder = makeOrder({ id: 'o-2' });
       await act(async () => {
-        await result.current.wrapFetch(() => Promise.resolve([makeOrder({ id: 'o-2' })]));
+        await result.current.wrapFetch(() => Promise.resolve([secondOrder]));
       });
 
-      expect(result.current.cachedOrders).toEqual([makeOrder({ id: 'o-2' })]);
+      expect(result.current.cachedOrders).toEqual([secondOrder]);
     });
   });
 
@@ -489,14 +490,15 @@ describe('useKdsOffline', () => {
       const { result } = renderHook(() => useKdsOffline());
 
       // wrapFetch should still work despite storage failure
+      const insertedOrder = makeOrder();
       await act(async () => {
-        const r = await result.current.wrapFetch(() => Promise.resolve([makeOrder()]));
+        const r = await result.current.wrapFetch(() => Promise.resolve([insertedOrder]));
         expect(r.orders).toHaveLength(1);
         expect(r.fromCache).toBe(false);
       });
 
       // In-memory cache should be updated even if localStorage failed
-      expect(result.current.cachedOrders).toEqual([makeOrder()]);
+      expect(result.current.cachedOrders).toEqual([insertedOrder]);
 
       setItemSpy.mockRestore();
     });
@@ -540,16 +542,13 @@ describe('useKdsOffline', () => {
       const { result } = renderHook(() => useKdsOffline());
 
       // Queue 3 actions sequentially
-      await act(async () => {
-        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('err')));
-      });
-      await act(async () => {
-        await result.current.wrapUpdate('o-2', 'preparing', () => Promise.reject(new Error('err')));
-      });
-      await act(async () => {
-        await result.current.wrapUpdate('o-3', 'preparing', () => Promise.reject(new Error('err')));
-      });
+      for (const id of ['o-1', 'o-2', 'o-3']) {
+        await act(async () => {
+          await result.current.wrapUpdate(id, 'preparing', () => Promise.reject(new Error('err')));
+        });
+      }
 
+      // Read React state to confirm all 3 are queued
       expect(result.current.pendingQueueLength).toBe(3);
 
       // Retry all 3
