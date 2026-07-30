@@ -99,15 +99,12 @@ export const KdsTicketCard = memo(function KdsTicketCard({
   const [editCount, setEditCount] = useState(String(order.item_count));
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Line items: lazy-fetch + cache ──────────────────────────────
+  // ── Line items: lazy-fetch + re-fetch on save (TODO 3f) ────────
   const [lineItems, setLineItems] = useState<KdsLineItem[] | null>(null);
   const [lineItemsLoading, setLineItemsLoading] = useState(false);
-  const lineItemsFetched = useRef(false);
+  const [fetchKey, setFetchKey] = useState(0);
 
   useEffect(() => {
-    // Only fetch once per mount. If line items are already loaded, don't re-fetch.
-    if (lineItemsFetched.current) return;
-    lineItemsFetched.current = true;
     setLineItemsLoading(true);
 
     getKdsOrderLinesScoped(sessionToken, order.id)
@@ -119,7 +116,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
         // Silently fall back to items_summary — the flat display works for all orders.
         setLineItemsLoading(false);
       });
-  }, [sessionToken, order.id]);
+  }, [sessionToken, order.id, fetchKey]);
 
   // Group items by course for structured display.
   const courseGroups = lineItems && lineItems.length > 0
@@ -146,6 +143,8 @@ export const KdsTicketCard = memo(function KdsTicketCard({
     if (!editSummary.trim() || isNaN(parsed) || parsed <= 0) return;
     onSaveItems?.(order.id, editSummary.trim(), parsed);
     setEditing(false);
+    // Re-fetch line items so the structured display reflects the saved items.
+    setFetchKey((k) => k + 1);
   }, [editSummary, editCount, onSaveItems, order.id]);
 
   const handleCancelEdit = useCallback(() => {
