@@ -898,6 +898,7 @@ settings-nav-inventory = Inventaris
 # ── Workspace Settings Modal (ADR #22 Phase 4) ──
 workspace-modal-title = Pengaturan Workspace
 workspace-modal-admin-settings = Admin Settings ↗
+workspace-modal-close-aria = Tutup pengaturan
 workspace-modal-role-manager = Manajer
 workspace-modal-role-cashier = Kasir
 

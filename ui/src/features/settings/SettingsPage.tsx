@@ -802,7 +802,7 @@ function SettingsPageContent() {
       case 'restaurant-pos':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} />
+            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
           </Suspense>
         );
 
@@ -816,6 +816,8 @@ function SettingsPageContent() {
       case 'inventory':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            {/* TODO: pass locationId from workspace context when available
+                to enable the Deduction Rules card section */}
             <WorkspaceInventorySettings variant="full-page" userId={userId} />
           </Suspense>
         );

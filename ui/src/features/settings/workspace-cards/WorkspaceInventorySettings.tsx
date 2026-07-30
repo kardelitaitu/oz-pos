@@ -33,6 +33,7 @@ export function WorkspaceInventorySettings({
   const [deductionPreferWarehouse, setDeductionPreferWarehouse] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   const originalsRef = useRef<Record<string, unknown>>({
     lowStockThreshold, deductionPreferWarehouse,
@@ -41,7 +42,7 @@ export function WorkspaceInventorySettings({
   const dirty = useMemo(() => hasChanges(
     { lowStockThreshold, deductionPreferWarehouse } as Record<string, unknown>,
     originalsRef.current,
-  ), [lowStockThreshold, deductionPreferWarehouse, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [lowStockThreshold, deductionPreferWarehouse, loaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load from backend ───────────────────────────────────────
 
@@ -76,6 +77,7 @@ export function WorkspaceInventorySettings({
         'inventory.deduction_prefer_warehouse': String(deductionPreferWarehouse),
       }, userId ?? 'default');
       originalsRef.current = { lowStockThreshold, deductionPreferWarehouse };
+      setDirtyVersion((v) => v + 1);
 
       // Notify other cards that inventory settings changed
       markSettingsUpdated(['inventory.low_stock_threshold', 'inventory.deduction_prefer_warehouse']);

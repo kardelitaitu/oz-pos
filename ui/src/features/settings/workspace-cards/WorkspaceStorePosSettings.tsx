@@ -39,6 +39,7 @@ export function WorkspaceStorePosSettings({
   const [showTableNumber, setShowTableNumber] = useState(false);
   const [footer, setFooter] = useState('');
   const [saving, setSaving] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   // Original values for dirty tracking — captured after initial load
   const originalsRef = useRef<Record<string, unknown>>({});
@@ -47,7 +48,7 @@ export function WorkspaceStorePosSettings({
   const dirty = useMemo(() => hasChanges(
     { paperWidth, showCurrency, showTax, showTableNumber, footer } as Record<string, unknown>,
     originalsRef.current,
-  ), [paperWidth, showCurrency, showTax, showTableNumber, footer, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [paperWidth, showCurrency, showTax, showTableNumber, footer, originalsLoaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise from context ──────────────────────────────────
 
@@ -101,6 +102,7 @@ export function WorkspaceStorePosSettings({
 
       // Update originals so dirty tracking resets
       originalsRef.current = { paperWidth, showCurrency, showTax, showTableNumber, footer };
+      setDirtyVersion((v) => v + 1);
 
       // Notify other cards that receipt settings changed
       markSettingsUpdated(['receipt.paperWidth', 'receipt.showCurrency', 'receipt.showTax', 'receipt.showTableNumber', 'receipt.footer']);

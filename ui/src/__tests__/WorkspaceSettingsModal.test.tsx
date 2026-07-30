@@ -177,6 +177,7 @@ const testL10n = {
     const defaults: Record<string, string> = {
       'workspace-modal-title': 'Workspace Settings',
       'workspace-modal-admin-settings': 'Admin Settings',
+      'workspace-modal-close-aria': 'Close settings',
       'workspace-modal-role-manager': 'Manager',
       'workspace-modal-role-cashier': 'Cashier',
     };

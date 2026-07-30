@@ -39,6 +39,7 @@ export function WorkspaceRestaurantPosSettings({
   const [courseFiring, setCourseFiring] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   // Originals for dirty tracking — captured after initial load
   const originalsRef = useRef<Record<string, unknown>>({ tableManagement, courseFiring });
@@ -47,7 +48,7 @@ export function WorkspaceRestaurantPosSettings({
   const dirty = useMemo(() => hasChanges(
     { tableManagement, courseFiring } as Record<string, unknown>,
     originalsRef.current,
-  ), [tableManagement, courseFiring, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [tableManagement, courseFiring, originalsLoaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise ───────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ export function WorkspaceRestaurantPosSettings({
       await Promise.all(tasks);
 
       originalsRef.current = { tableManagement, courseFiring };
+      setDirtyVersion((v) => v + 1);
 
       // Notify other cards that receipt and restaurant settings changed
       markSettingsUpdated(['receipt.showTableNumber', 'restaurant.course_firing']);

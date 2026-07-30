@@ -51,6 +51,7 @@ export function WorkspaceKdsSettings({
 
   const [draft, setDraft] = useState<KdsDraftState>(DEFAULT_KDS);
   const [saving, setSaving] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   // Originals for dirty tracking — captured after initial load
   const originalsRef = useRef<KdsDraftState>({ ...draft });
@@ -58,7 +59,7 @@ export function WorkspaceKdsSettings({
   const dirty = useMemo(() => hasChanges(
     draft as unknown as Record<string, unknown>,
     originalsRef.current as unknown as Record<string, unknown>,
-  ), [draft, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [draft, originalsLoaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise from backend ─────────────────────────────────
 
@@ -113,6 +114,7 @@ export function WorkspaceKdsSettings({
         'kds.density': draft.density,
       }, userId ?? 'default');
       originalsRef.current = { ...draft };
+      setDirtyVersion((v) => v + 1);
 
       // Notify other cards that KDS settings changed
       markSettingsUpdated([
