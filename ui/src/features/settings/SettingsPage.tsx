@@ -102,7 +102,7 @@ interface SettingsSnapshot {
 
 function useClock(): string {
   const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
   );
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -114,7 +114,7 @@ function useClock(): string {
     const timeout = setTimeout(() => {
       const tick = () =>
         setClock(
-          new Date().toLocaleTimeString([], {
+          new Date().toLocaleTimeString(undefined, {
             hour: '2-digit',
             minute: '2-digit',
           }),
@@ -326,7 +326,9 @@ function SettingsPageContent() {
         // WebView2 (Windows) and Chromium require returnValue to be set
         // to a non-empty string for the beforeunload dialog to appear.
         // e.preventDefault() alone is insufficient on WebView2.
-        e.returnValue = '';
+        // The string value is never displayed — browsers show their own
+        // generic dialog regardless of the custom string.
+        e.returnValue = 'unsaved';
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -365,6 +367,8 @@ function SettingsPageContent() {
     setSyncApiKey('');
     setSyncApiKeyVisible(false);
     setTokenExpiresAt(null);
+  // All dependencies are stable (state setters + imported functions),
+  // so an empty array is correct — the callback is created once.
   }, []);
 
   // Sync font-smoothing to <html> whenever it changes
