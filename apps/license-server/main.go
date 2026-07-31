@@ -73,8 +73,10 @@ func main() {
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
-		// P8-4: Public health endpoint for Docker healthcheck and monitoring.
-		se.Router.GET("/api/health", handleHealth(app))
+		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).
+		// The custom handler (health.go) is retained for reference but NOT registered
+		// to avoid a route-conflict panic with PocketBase's own /api/health route.
+		// se.Router.GET("/api/health", handleHealth(app))
 		return se.Next()
 	})
 
