@@ -342,7 +342,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadProductsAndCategories = useCallback((token: string) => {
+    // Abort any previous in-flight request to prevent race condition
+    if (loadProductsAbortRef.current) {
+      loadProductsAbortRef.current.abort();
+    }
     const controller = new AbortController();
+    loadProductsAbortRef.current = controller;
     setProductsLoading(true);
     setCategoriesLoading(true);
     setLoadError(null);
@@ -375,6 +380,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleRetryLoad = useCallback(() => {
     loadProductsAndCategories(sessionToken);
   }, [sessionToken, loadProductsAndCategories]);
+
+  // Tracks the latest AbortController so handleRetryLoad and rapid
+  // sessionToken changes abort the previous in-flight fetch,
+  // preventing stale data from overwriting fresh results.
+  const loadProductsAbortRef = useRef<AbortController | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
 
