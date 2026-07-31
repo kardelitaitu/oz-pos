@@ -117,6 +117,13 @@ export interface RetailModalsProps {
     onConfirm: () => void;
     onClose: () => void;
   };
+  /** Confirm dialog before deleting a held cart (P1-3). */
+  deleteHeldCartConfirm: {
+    exit: ExitAnim;
+    label: string;
+    onConfirm: () => void;
+    onClose: () => void;
+  };
   shortcuts: {
     exit: ExitAnim;
     onClose: () => void;
@@ -167,6 +174,7 @@ export default function RetailModals(props: RetailModalsProps) {
     credit,
     quickReturn,
     clearConfirm,
+    deleteHeldCartConfirm,
     shortcuts,
     override,
     editProduct,
@@ -184,6 +192,7 @@ export default function RetailModals(props: RetailModalsProps) {
   const shiftSummaryPanelRef = useRef<HTMLDivElement>(null);
   const creditPanelRef = useRef<HTMLDivElement>(null);
   const clearPanelRef = useRef<HTMLDivElement>(null);
+  const deleteHeldCartPanelRef = useRef<HTMLDivElement>(null);
   const discountPanelRef = useRef<HTMLDivElement>(null);
   const customerPanelRef = useRef<HTMLDivElement>(null);
   const qtyPanelRef = useRef<HTMLDivElement>(null);
@@ -197,6 +206,7 @@ export default function RetailModals(props: RetailModalsProps) {
   useFocusTrap(shiftSummaryPanelRef, shift.shiftSummaryExit.shouldRender && !shift.shiftSummaryExit.exiting,  () => shift.shiftSummaryExit.requestClose());
   useFocusTrap(creditPanelRef,       credit.exit.shouldRender && !credit.exit.exiting,                        () => credit.exit.requestClose());
   useFocusTrap(clearPanelRef,        clearConfirm.exit.shouldRender && !clearConfirm.exit.exiting,            () => clearConfirm.exit.requestClose());
+  useFocusTrap(deleteHeldCartPanelRef, deleteHeldCartConfirm.exit.shouldRender && !deleteHeldCartConfirm.exit.exiting, () => deleteHeldCartConfirm.exit.requestClose());
   useFocusTrap(discountPanelRef,     discount.exit.shouldRender && !discount.exit.exiting,                    () => discount.exit.requestClose());
   useFocusTrap(customerPanelRef,     customer.exit.shouldRender && !customer.exit.exiting,                    () => customer.exit.requestClose());
   useFocusTrap(qtyPanelRef,          qtyPicker.exit.shouldRender && !qtyPicker.exit.exiting,                   () => qtyPicker.exit.requestClose());
@@ -408,6 +418,34 @@ export default function RetailModals(props: RetailModalsProps) {
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => clearConfirm.exit.requestClose()}>{l10n.getString('cancel')}</button>
               <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" onClick={clearConfirm.onConfirm}>{l10n.getString('retail-clear-cart-clear')}</button>
+            </div>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── Held-cart delete confirm modal ──── */}
+      {deleteHeldCartConfirm.exit.shouldRender && (
+        <>{/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+        <div
+          className={`retail-clear-overlay${deleteHeldCartConfirm.exit.exiting ? ' retail-clear-overlay--exiting' : ''}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={l10n.getString('retail-held-cart-delete-title') || 'Delete Held Cart'}
+          onClick={(e) => { if (e.target === e.currentTarget) deleteHeldCartConfirm.exit.requestClose(); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') deleteHeldCartConfirm.exit.requestClose(); }}
+          tabIndex={-1}
+        >
+          <div
+            ref={deleteHeldCartPanelRef}
+            className={`retail-clear-modal${deleteHeldCartConfirm.exit.exiting ? ' retail-clear-modal--exiting' : ''}`}
+          >
+            <h3>{l10n.getString('retail-held-cart-delete-title') || 'Delete Held Cart'}</h3>
+            <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
+              {l10n.getString('retail-held-cart-delete-confirm', { label: deleteHeldCartConfirm.label }) || `Delete "${deleteHeldCartConfirm.label}"? This cannot be undone.`}
+            </p>
+            <div className="retail-shift-modal-actions">
+              <button type="button" onClick={() => deleteHeldCartConfirm.exit.requestClose()}>{l10n.getString('cancel')}</button>
+              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" onClick={deleteHeldCartConfirm.onConfirm}>{l10n.getString('retail-held-cart-delete-btn') || 'Delete'}</button>
             </div>
           </div>
         </div>
@@ -693,6 +731,7 @@ export default function RetailModals(props: RetailModalsProps) {
               <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
               <span className="retail-shortcuts-key">F11</span><span>{l10n.getString('retail-shortcut-fullscreen') || 'Toggle Fullscreen'}</span>
               <span className="retail-shortcuts-key">?</span><span>{l10n.getString('retail-shortcut-list')}</span>
+              <span className="retail-shortcuts-key">Ctrl+K</span><span>{l10n.getString('retail-shortcut-credit') || 'Credit reminders'}</span>
               <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
               <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
             </div>

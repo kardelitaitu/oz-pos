@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 
 export interface RetailReminderPopupProps {
@@ -18,16 +18,22 @@ export interface RetailReminderPopupProps {
   lowStockActive?: boolean;
 }
 
-/** Floating corner popup showing low-stock and credit reminders.
- *  Dismissed once per session (resets on page reload). */
+/** Floating corner popup showing low-stock, credit, and held-cart reminders.
+ *  Dismissed once per session, but re-shows if the total reminder count goes up. */
 export default function RetailReminderPopup({ lowStockCount, creditCount, heldCartCount, onClickLowStock, onClickCredit, onClickHeldCarts, lowStockActive }: RetailReminderPopupProps) {
   const { l10n } = useLocalization();
   const [dismissed, setDismissed] = useState(false);
+  const prevTotalRef = useRef(0);
 
-  // Re-show if new reminders arrive after dismissal (count goes up)
+  // Only re-show if the total reminder count has increased (not on every fluctuation)
+  const total = lowStockCount + creditCount + heldCartCount;
   useEffect(() => {
-    setDismissed(false);
-  }, [lowStockCount, creditCount, heldCartCount]);
+    if (total > prevTotalRef.current) {
+      prevTotalRef.current = total;
+      setDismissed(false);
+    }
+    prevTotalRef.current = total;
+  }, [total]);
 
   const hasReminders = lowStockCount > 0 || creditCount > 0 || heldCartCount > 0;
   if (!hasReminders || dismissed) return null;

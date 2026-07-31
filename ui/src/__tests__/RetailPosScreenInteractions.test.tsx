@@ -302,7 +302,8 @@ describe('RetailPosScreen — interactions', () => {
     await userEvent.type(skuInput, 'INVALID-SKU{Enter}');
     await waitFor(() => {
       const toast = screen.getByRole('alert');
-      expect(toast.textContent).toMatch(/No product.*matches this barcode/);
+      // P1-7: SKU lookups use a distinct message (not the barcode one)
+      expect(toast.textContent).toMatch(/No product matches this SKU/);
     });
   });
 

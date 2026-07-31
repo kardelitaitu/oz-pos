@@ -94,6 +94,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const sessionToken = rawToken || '';
   const userId = session?.user_id ?? '';
 
+  // ── Screen-reader announcements (declared early — used by add handlers) ──
+  const announceRef = useRef<HTMLDivElement>(null);
+  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const announce = useCallback((msg: string) => {
+    if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    if (announceRef.current) {
+      announceRef.current.textContent = msg;
+      announceTimerRef.current = setTimeout(() => {
+        if (announceRef.current) announceRef.current.textContent = '';
+      }, 3000);
+    }
+  }, []);
+
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
     addProduct, removeLine, updateQty, updateLinePrice, assignCourse, setDiscount, resetCart,
@@ -274,8 +287,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
     addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty);
+    announce(l10nRef.current.getString('retail-added-to-cart', { name: item.name }) || `Added ${item.name}`);
     setUndoStack((prev) => prev.slice(1));
-  }, [undoStack, addProduct]);
+  }, [undoStack, addProduct, announce]);
 
   const undoBarExit = useExitAnimation(
     undoStack.length > 0,
@@ -308,9 +322,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
     }
     addProduct(toProduct(pendingProduct), qty);
+    announce(l10nRef.current.getString('retail-added-to-cart', { name: pendingProduct.name }) || `Added ${pendingProduct.name}`);
     setShowQtyPicker(false);
     setPendingProduct(null);
-  }, [pendingProduct, qtyInput, addProduct, addToast, l10n]);
+  }, [pendingProduct, qtyInput, addProduct, addToast, l10n, announce]);
 
   // ── Keyboard shortcut overlay ────────────────────────────────────
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -319,10 +334,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [scanFlash, setScanFlash] = useState(false);
   const scanFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clean up the scan-flash timer on unmount
+  // Clean up the scan-flash and announce timers on unmount
   useEffect(() => {
     return () => {
       if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current);
+      if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
     };
   }, []);
 
@@ -333,6 +349,24 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (lines.length === 0) return;
     setShowClearConfirm(true);
   }, [lines.length]);
+
+  // ── Scroll preservation ──────────────────────────────────────
+  const [savedScrollTop, setSavedScrollTop] = useState(0);
+
+  // Save scroll position before swapping to a sub-view; restore after remount.
+  // The real scroll container is .retail-grid (overflow-y: auto); .retail-main
+  // itself is overflow-y: hidden, so read from the grid element.
+  const getScrollContainer = useCallback(() => {
+    return retailPosRef.current?.querySelector<HTMLElement>('.retail-grid') ?? null;
+  }, []);
+  const saveScroll = useCallback(() => {
+    const el = getScrollContainer();
+    if (el) setSavedScrollTop(el.scrollTop);
+  }, [getScrollContainer]);
+  const goToSubView = useCallback((setter: (v: boolean) => void) => {
+    saveScroll();
+    setter(true);
+  }, [saveScroll]);
 
   // ── Products & Categories ────────────────────────────────────
 
@@ -520,7 +554,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
     }
     addProduct(toProduct(p));
-  }, [addProduct, addToast, l10n]);
+    announce(l10nRef.current.getString('retail-added-to-cart', { name: p.name }) || `Added ${p.name}`);
+  }, [addProduct, addToast, l10n, announce]);
 
   const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
     const product = products.find((p) => p.sku === sku);
@@ -534,9 +569,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
     }
     addProduct(toProduct(product), qty);
+    announce(l10nRef.current.getString('retail-added-to-cart', { name: product.name }) || `Added ${product.name}`);
     setWeighTarget(null);
     addToast({ message: l10n.getString('scale-weigh-added', { name: product.name, weight: qty }) || `Added ${qty}g of ${product.name}`, type: 'success' });
-  }, [products, addProduct, addToast, l10n]);
+  }, [products, addProduct, addToast, l10n, announce]);
 
   const handleSetWeighTarget = useCallback((p: ProductDto) => {
     if (weighTarget?.sku === p.sku) return;
@@ -582,10 +618,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       const found = await lookupProductBySkuScoped(sessionToken, val);
       if (found) { handleAdd(found); return; }
     } catch { /* unreachable */ }
-    addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
+    addToast({ message: l10n.getString('retail-sku-not-found') || `No product matches SKU "${val}"`, type: 'warning' });
   }, [skuInput, handleAdd, addToast, l10n, sessionToken]);
 
   const handleBarcode = useCallback(async (payload: { code: string }) => {
+
     const list = productsRef.current;
     const found = list.find((x) => x.barcode === payload.code);
     if (found) { handleAdd(found); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
@@ -594,7 +631,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       if (p) { handleAdd(p); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     } catch { /* unreachable */ }
     playError();
-    addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
+    addToast({ message: l10n.getString('pos-no-barcode-match') || 'No product or bundle matches this barcode', type: 'warning' });
   }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken]);
 
   useBarcodeScanner({ onProductFound: handleBarcode });
@@ -941,6 +978,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     }
   }, [handleResumeCart, addToast, sessionToken]);
 
+  // ── Held cart delete confirm (P1-3) ────────────────────────────
+  const [deleteHeldTarget, setDeleteHeldTarget] = useState<HeldCartRow | null>(null);
+  const retailDeleteHeldExit = useExitAnimation(!!deleteHeldTarget, () => setDeleteHeldTarget(null));
+
   const handleDeleteHeldCart = useCallback(async (cartId: string) => {
     try {
       await deleteHeldCartScoped(sessionToken, cartId);
@@ -949,6 +990,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       addToast({ type: 'success', message: l10nRef.current.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
     } catch {
       addToast({ type: 'error', message: l10nRef.current.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
+    } finally {
+      setDeleteHeldTarget(null);
     }
   }, [sessionToken, heldCartId, addToast]); // l10n via ref
 
@@ -971,6 +1014,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
   const [showTables, setShowTables] = useState(false);
+
+  const inSubView = showSalesHistory || showTables || showStockInquiry;
+  // Restore scroll only when returning from a sub-view (element remounts),
+  // not while inside one — the effect keyed on inSubView flips to false on return.
+  useEffect(() => {
+    if (inSubView) return;
+    if (savedScrollTop > 0) {
+      const el = getScrollContainer();
+      if (el) {
+        el.scrollTop = savedScrollTop;
+        setSavedScrollTop(0);
+      }
+    }
+  }, [inSubView, savedScrollTop, getScrollContainer]);
 
   // ── Credit reminders ──────────────────────────────────────────
 
@@ -1049,10 +1106,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     showCustomerSearch || showHeldCartsList || showQuickReturn ||
     showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm ||
     showOpenShift || (showCloseShift && !closedShiftSummary) || !!closedShiftSummary ||
-    !!editingProduct || isAddCategoryOpen || isAddProductOpen,
+    !!editingProduct || isAddCategoryOpen || isAddProductOpen || !!deleteHeldTarget,
   [showCustomerSearch, showHeldCartsList, showQuickReturn, showDiscount, showQtyPicker,
     showShortcuts, showCreditList, showClearConfirm, showOpenShift, showCloseShift,
-    closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen]);
+    closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen, deleteHeldTarget]);
 
   useEffect(() => {
 
@@ -1071,9 +1128,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case 'F3': if (e.cancelable) e.preventDefault(); if (lines.length > 0) setShowDiscount(true); break;
         case 'F4': if (e.cancelable) e.preventDefault(); if (heldCartId) handleResume(); else handleHold(); break;
         case 'F5': if (e.cancelable) e.preventDefault(); skuInputRef.current?.focus(); break;
-        case 'F6': if (e.cancelable) e.preventDefault(); setShowSalesHistory(true); break;
+        case 'F6': if (e.cancelable) e.preventDefault(); goToSubView(setShowSalesHistory); break;
         case 'F7': if (e.cancelable) e.preventDefault(); setShowCustomerSearch(true); break;
-        case 'F8': if (e.cancelable) e.preventDefault(); setShowStockInquiry(true); break;
+        case 'F8': if (e.cancelable) e.preventDefault(); goToSubView(setShowStockInquiry); break;
         case 'F9': if (e.cancelable) e.preventDefault(); if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
         // F10 is handled globally by AppShell.tsx — opens the WorkspaceSettingsModal.
         // The button-based settings navigation (onOpenSettings) still works via RetailFnBar.
@@ -1081,6 +1138,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case '?': setShowShortcuts((v) => !v); break;
         case 'F12': if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
         case 'l': if (e.ctrlKey && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
+        case 'k': if (e.ctrlKey && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); setShowCreditList(true); } break;
       }
     };
     document.addEventListener('keydown', handler);
@@ -1150,6 +1208,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
       {/* ── Main area ───────────────────────── */}
       <div id="retail-main" className="retail-main" ref={retailPosRef}>
+        {/* Screen-reader announcement (visually hidden) */}
+        <div ref={announceRef} className="retail-sr-only" role="status" aria-live="polite" aria-atomic="true" />
         {/* Left: product grid */}
         {filterLowStock && (
           <div className="retail-filter-indicator" role="status" aria-label={l10n.getString('retail-filter-indicator-aria') || 'Low-stock filter active'}>
@@ -1203,6 +1263,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
             catLabels,
             skuInput,
             weighTarget,
+            filterLowStock,
           }}
           actions={{
             onSetActiveCategory: setActiveCategory,
@@ -1289,13 +1350,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onRequestClear={() => { if (!isAnyOverlayOpen()) handleRequestClear(); }}
         onShowDiscount={() => { if (!isAnyOverlayOpen()) setShowDiscount(true); }}
         onHoldResume={heldCartId ? handleResume : handleHold}
-        onShowSalesHistory={() => setShowSalesHistory(true)}
+        onShowSalesHistory={() => goToSubView(setShowSalesHistory)}
         onShowCustomerSearch={() => { if (!isAnyOverlayOpen()) setShowCustomerSearch(true); }}
-        onShowStockInquiry={() => setShowStockInquiry(true)}
+        onShowStockInquiry={() => goToSubView(setShowStockInquiry)}
         onToggleShift={() => { if (!isAnyOverlayOpen()) { if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); } }}
         onOpenSettings={handleOpenSettings}
         onShowQuickReturn={() => { if (!isAnyOverlayOpen()) setShowQuickReturn(true); }}
-        onShowTables={() => setShowTables(true)}
+        onShowTables={() => goToSubView(setShowTables)}
         onNavigateKds={() => onNavigate?.('kds')}
         skuInputRef={skuInputRef}
       />
@@ -1363,8 +1424,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           exit: { shouldRender: retailHeldCartsExit.shouldRender, exiting: retailHeldCartsExit.exiting, requestClose: retailHeldCartsExit.requestClose },
           list: heldCartsList,
           onResume: handleResumeCart,
-          onDelete: handleDeleteHeldCart,
+          onDelete: (id) => { const row = heldCartsList.find((c) => c.id === id) ?? null; setDeleteHeldTarget(row); },
           onClose: () => retailHeldCartsExit.requestClose(),
+        }}
+        deleteHeldCartConfirm={{
+          exit: { shouldRender: retailDeleteHeldExit.shouldRender, exiting: retailDeleteHeldExit.exiting, requestClose: retailDeleteHeldExit.requestClose },
+          label: deleteHeldTarget?.label ?? '',
+          onConfirm: () => { if (deleteHeldTarget) handleDeleteHeldCart(deleteHeldTarget.id); },
+          onClose: () => retailDeleteHeldExit.requestClose(),
         }}
         credit={{
           exit: { shouldRender: retailCreditListExit.shouldRender, exiting: retailCreditListExit.exiting, requestClose: retailCreditListExit.requestClose },

@@ -37,6 +37,8 @@ export interface ProductGridData {
   catLabels: Map<string, string>;
   skuInput: string;
   weighTarget: { sku: Sku; name: string } | null;
+  /** Whether the low-stock filter is active (shows a filter-specific empty state). */
+  filterLowStock: boolean;
 }
 
 export interface ProductGridActions {
@@ -236,6 +238,7 @@ export default function RetailProductGrid({
     catLabels,
     skuInput,
     weighTarget,
+    filterLowStock,
   } = data;
 
   return (
@@ -344,12 +347,14 @@ export default function RetailProductGrid({
           </table>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="retail-grid-empty">
-          {searchQuery.trim()
-            ? (l10n.getString('retail-no-products-match') || 'No products match your search')
-            : activeCategory
-              ? (l10n.getString('retail-no-products-in-category') || 'No products in this category')
-              : (l10n.getString('retail-no-products') || 'No products')}
+        <div className="retail-grid-empty" role="status">
+          {filterLowStock
+            ? (l10n.getString('retail-no-low-stock-products') || 'No products below the low-stock threshold')
+            : searchQuery.trim()
+              ? (l10n.getString('retail-no-products-match') || 'No products match your search')
+              : activeCategory
+                ? (l10n.getString('retail-no-products-in-category') || 'No products in this category')
+                : (l10n.getString('retail-no-products') || 'No products')}
         </div>
       ) : (
         <div className="retail-grid">

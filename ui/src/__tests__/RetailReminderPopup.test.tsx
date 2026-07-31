@@ -199,7 +199,7 @@ describe('RetailReminderPopup — auto-reset on count change', () => {
     expect(document.querySelector('.retail-reminder-row--credit')).toBeInTheDocument();
   });
 
-  it('reappears when count drops after dismissal (any change triggers reset)', () => {
+  it('stays hidden when counts drop after dismissal (only increases re-show)', () => {
     const { container, rerender } = render(
       <RetailReminderPopup lowStockCount={3} creditCount={1} heldCartCount={2} />,
     );
@@ -207,11 +207,11 @@ describe('RetailReminderPopup — auto-reset on count change', () => {
     fireEvent.click(dismissBtn);
     expect(container.querySelector('.retail-reminder-popup')).toBeNull();
 
-    // One held cart resumed, count drops — popup still reappears due to change
+    // One held cart resumed, total drops 6 → 5 — popup stays dismissed
     rerender(
       <RetailReminderPopup lowStockCount={3} creditCount={1} heldCartCount={1} />,
     );
-    expect(container.querySelector('.retail-reminder-popup')).toBeInTheDocument();
+    expect(container.querySelector('.retail-reminder-popup')).toBeNull();
   });
 });
 

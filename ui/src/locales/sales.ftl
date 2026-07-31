@@ -740,6 +740,7 @@ retail-shortcut-options = Options
 retail-shortcut-list = This shortcut list
 retail-shortcut-close = Close modal / Options
 retail-shortcut-fullscreen = Toggle Fullscreen
+retail-shortcut-credit = Credit reminders
 retail-toast-failed-products = Failed to load products
 retail-toast-failed-categories = Failed to load categories
 retail-toast-failed-settings = Failed to load store settings
@@ -779,6 +780,9 @@ retail-cart-qty-increase-aria = Increase quantity
 retail-cart-remove-aria = Remove from cart
 retail-toast-insufficient-stock = Insufficient stock
 retail-toast-customers-failed = Failed to load customers
+retail-sku-not-found = No product matches this SKU
+retail-added-to-cart = Added { $name }
+retail-no-low-stock-products = No products below the low-stock threshold
 retail-low-stock-banner =
     { $count ->
         [one] { $count } product low on stock
@@ -786,6 +790,9 @@ retail-low-stock-banner =
     }
 retail-held-cart-delete-aria = Delete held cart
 retail-held-cart-resume-aria = Resume cart
+retail-held-cart-delete-title = Delete Held Cart
+retail-held-cart-delete-confirm = Delete "{ $label }"? This cannot be undone.
+retail-held-cart-delete-btn = Delete
 
 
 

@@ -732,6 +732,7 @@ retail-shortcut-options = Opsi
 retail-shortcut-list = Daftar pintasan
 retail-shortcut-close = Tutup modal / Opsi
 retail-shortcut-fullscreen = Alihkan Layar Penuh
+retail-shortcut-credit = Pengingat kredit
 retail-toast-failed-products = Gagal memuat produk
 retail-toast-failed-categories = Gagal memuat kategori
 retail-toast-failed-settings = Gagal memuat pengaturan toko
@@ -771,6 +772,11 @@ retail-cart-qty-increase-aria = Tambah jumlah
 retail-cart-remove-aria = Hapus dari keranjang
 retail-toast-insufficient-stock = Stok tidak mencukupi
 retail-toast-customers-failed = Gagal memuat pelanggan
+retail-sku-not-found = Tidak ada produk yang cocok dengan SKU ini
+retail-added-to-cart = { $name } ditambahkan
+retail-no-low-stock-products = Tidak ada produk di bawah ambang stok minimum
+retail-held-cart-delete-confirm = Hapus "{ $label }"? Tindakan ini tidak dapat dibatalkan.
+retail-held-cart-delete-btn = Hapus
 retail-low-stock-banner =
     { $count ->
         [one] { $count } produk stok menipis
@@ -778,6 +784,7 @@ retail-low-stock-banner =
     }
 retail-held-cart-delete-aria = Hapus pesanan ditahan
 retail-held-cart-resume-aria = Lanjutkan pesanan
+retail-held-cart-delete-title = Hapus Pesanan Ditahan
 retail-fn-quick-return = Retur Cepat
 retail-filtered-low-stock = Difilter: { $count } produk stok rendah
 retail-filter-indicator-aria = Filter stok rendah aktif
