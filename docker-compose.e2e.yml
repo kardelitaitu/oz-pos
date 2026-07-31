@@ -46,6 +46,7 @@ services:
 
   # ── License Server ───────────────────────────────────────────────
   e2e-license-server:
+    image: e2e-license-server:latest
     build:
       context: ./apps/license-server
       dockerfile: Dockerfile
