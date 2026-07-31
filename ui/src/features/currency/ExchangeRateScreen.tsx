@@ -5,6 +5,7 @@ import {
   createExchangeRate,
   deleteExchangeRate,
   listCurrencies,
+  formatExchangeRate,
   type ExchangeRateDto,
   type CurrencyDto,
 } from '@/api/currency';
@@ -79,15 +80,16 @@ export default function ExchangeRateScreen() {
     setSaving(true);
     try {
       const rate = parseFloat(form.rate);
-      if (Number.isNaN(rate) || rate <= 0) return;
+      const rateMillionths = Math.round(rate * 1_000_000);
+      if (!Number.isFinite(rate) || rate <= 0 || !Number.isSafeInteger(rateMillionths) || rateMillionths <= 0) return;
 
       const args: Parameters<typeof createExchangeRate>[0] = {
-        fromCurrency: form.fromCurrency,
-        toCurrency: form.toCurrency,
-        rate,
+        from_currency: form.fromCurrency,
+        to_currency: form.toCurrency,
+        rate_millionths: rateMillionths,
       };
       if (form.source) args.source = form.source;
-      if (form.effectiveDate) args.effectiveDate = form.effectiveDate;
+      if (form.effectiveDate) args.effective_date = form.effectiveDate;
       await createExchangeRate(args);
       setShowModal(false);
       await load();
@@ -201,7 +203,7 @@ export default function ExchangeRateScreen() {
                 <tr key={r.id}>
                   <td>{r.from_currency}</td>
                   <td>{r.to_currency}</td>
-                  <td>{r.rate}</td>
+                  <td>{formatExchangeRate(r)}</td>
                   <td>{r.source === 'manual' ? <Localized id="currency-source-manual"><span>manual</span></Localized> : r.source}</td>
                   <td>{r.effective_date}</td>
                   <td className="exchange-rate-cell-actions">

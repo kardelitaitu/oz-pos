@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   ScatterChart,
@@ -111,6 +112,7 @@ function ScatterDot(props: Record<string, unknown>) {
 /** Menu engineering report — scatter chart of menu items by popularity and profitability with quadrant classification (Star, Plowhorse, Puzzle, Dog). */
 export default function MenuEngineeringScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(monthAgo());
@@ -122,7 +124,7 @@ export default function MenuEngineeringScreen() {
     setLoading(true);
     setError(null);
 
-    getMenuEngineering(startDate, endDate)
+    getMenuEngineering(startDate, endDate, sessionToken)
       .then((res) => {
         setResult(res);
       })
@@ -132,7 +134,7 @@ export default function MenuEngineeringScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, [startDate, endDate]);
+  }, [startDate, endDate, sessionToken]);
 
   useEffect(() => {
     fetchData();

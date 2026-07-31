@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getDailyRevenue,
@@ -33,6 +34,7 @@ function fmtCurrency(minor: number, currency: string): string {
 /** Dashboard screen — daily revenue summary, weekly trend, top products, and low-stock alerts in a card-based overview. */
 export default function DashboardScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revenue, setRevenue] = useState<DailyRevenueRow[]>([]);
@@ -44,10 +46,10 @@ export default function DashboardScreen() {
     const t = today();
     const w = weekAgo();
     Promise.all([
-      getDailyRevenue(t, t),
-      getDailyRevenue(w, t),
-      getTopProducts(t, t, 1),
-      getLowStockAlerts(10),
+      getDailyRevenue(t, t, sessionToken),
+      getDailyRevenue(w, t, sessionToken),
+      getTopProducts(t, t, 1, sessionToken),
+      getLowStockAlerts(10, sessionToken),
     ])
       .then(([rev, weekRev, top, stock]) => {
         setRevenue(rev);
@@ -61,7 +63,7 @@ export default function DashboardScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, []);
+  }, [sessionToken]);
 
   if (loading) {
     return (

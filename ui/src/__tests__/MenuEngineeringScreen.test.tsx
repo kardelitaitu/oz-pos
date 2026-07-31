@@ -168,6 +168,7 @@ describe('MenuEngineeringScreen', () => {
       expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
+        '',
       );
     });
   });
@@ -381,7 +382,7 @@ describe('MenuEngineeringScreen', () => {
     fireEvent.change(startInput, { target: { value: '2026-06-01' } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String));
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String), '');
     });
   });
 
@@ -399,7 +400,7 @@ describe('MenuEngineeringScreen', () => {
     fireEvent.change(endInput, { target: { value: '2026-08-15' } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-08-15');
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-08-15', '');
     });
   });
 

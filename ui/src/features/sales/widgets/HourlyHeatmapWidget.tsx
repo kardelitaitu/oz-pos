@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useContext, useState, useCallback, useEffect } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getHourlyHeatmap } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
@@ -8,6 +9,7 @@ import type { HeatmapCell } from '@/components/charts/CanvasHeatmap';
 /** Canvas 2D hourly heatmap widget for the reporting dashboard. */
 export default function HourlyHeatmapWidget() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [cells, setCells] = useState<HeatmapCell[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,7 @@ export default function HourlyHeatmapWidget() {
       const rows = await getHourlyHeatmap(
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10),
+        sessionToken,
       );
       setCells(
         rows.map((r) => ({
@@ -35,7 +38,7 @@ export default function HourlyHeatmapWidget() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

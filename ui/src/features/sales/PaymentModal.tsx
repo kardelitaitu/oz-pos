@@ -11,6 +11,7 @@ import {
   listCurrencies,
   listExchangeRates,
   getDefaultCurrency,
+  exchangeRateToDecimal,
   type CurrencyDto,
   type ExchangeRateDto,
 } from '@/api/currency';
@@ -199,14 +200,16 @@ export default function PaymentModal({
     const rate = exchangeRates.find(
       (r) => r.from_currency === total.currency && r.to_currency === selectedCurrency,
     );
-    if (rate) return rate;
+    if (rate) {
+      return { ...rate, rate: exchangeRateToDecimal(rate) };
+    }
     const inverse = exchangeRates.find(
       (r) => r.from_currency === selectedCurrency && r.to_currency === total.currency,
     );
     if (inverse) {
       return {
         ...inverse,
-        rate: 1 / inverse.rate,
+        rate: 1 / exchangeRateToDecimal(inverse),
         from_currency: total.currency,
         to_currency: selectedCurrency,
       };

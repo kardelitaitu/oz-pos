@@ -143,38 +143,38 @@ import * as rptApi from '@/api/reports';
 
 describe('createReportsApiMock', () => {
   it('returns DailyRevenueRow[] from getDailyRevenue', async () => {
-    const rows = await rptApi.getDailyRevenue('2026-07-01', '2026-07-31');
+    const rows = await rptApi.getDailyRevenue('2026-07-01', '2026-07-31', 'session-1');
     expect(Array.isArray(rows)).toBe(true);
     expect(rows[0]?.total_minor).toBe(1250000);
     expect(rows[0]?.currency).toBe('IDR');
   });
 
   it('returns WeeklyRevenueRow[] from getWeeklyRevenue', async () => {
-    const rows = await rptApi.getWeeklyRevenue('2026-07-01', '2026-07-31');
+    const rows = await rptApi.getWeeklyRevenue('2026-07-01', '2026-07-31', 'session-1');
     expect(Array.isArray(rows)).toBe(true);
     expect(rows[0]?.total_minor).toBe(8500000);
   });
 
   it('returns TopProductRow[] from getTopProducts', async () => {
-    const rows = await rptApi.getTopProducts('2026-07-01', '2026-07-31', 10);
+    const rows = await rptApi.getTopProducts('2026-07-01', '2026-07-31', 10, 'session-1');
     expect(Array.isArray(rows)).toBe(true);
     expect(rows[0]?.sku).toBe('SKU-001');
   });
 
   it('returns HourlyHeatmapRow[] from getHourlyHeatmap', async () => {
-    const rows = await rptApi.getHourlyHeatmap('2026-07-01', '2026-07-31');
+    const rows = await rptApi.getHourlyHeatmap('2026-07-01', '2026-07-31', 'session-1');
     expect(Array.isArray(rows)).toBe(true);
     expect(rows[0]?.hour).toBe(10);
   });
 
   it('returns LowStockAlert[] from getLowStockAlerts', async () => {
-    const alerts = await rptApi.getLowStockAlerts(5);
+    const alerts = await rptApi.getLowStockAlerts(5, 'session-1');
     expect(Array.isArray(alerts)).toBe(true);
     expect(alerts).toEqual([]);
   });
 
   it('returns MenuEngineeringResult from getMenuEngineering', async () => {
-    const result = await rptApi.getMenuEngineering('2026-07-01', '2026-07-31');
+    const result = await rptApi.getMenuEngineering('2026-07-01', '2026-07-31', 'session-1');
     expect(result.rows).toBeDefined();
     expect(result.median_volume).toBe(25);
     expect(result.median_margin).toBe(5000);
@@ -187,7 +187,7 @@ describe('createReportsApiMock', () => {
       columns: ['SKU', 'Name'],
       start_date: null,
       end_date: null,
-    });
+    }, 'session-1');
     expect(result.columns).toEqual(['SKU', 'Name']);
     expect(result.rows[0]).toEqual(['SKU-001', 'Test']);
   });

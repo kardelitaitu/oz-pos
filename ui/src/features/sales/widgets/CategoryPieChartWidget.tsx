@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useContext, useState, useCallback, useEffect } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getCategoryBreakdown } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
@@ -8,6 +9,7 @@ import type { PieSlice } from '@/components/charts/CanvasPieChart';
 /** Canvas 2D category breakdown donut chart widget for the reporting dashboard. */
 export default function CategoryPieChartWidget() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [slices, setSlices] = useState<PieSlice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,7 @@ export default function CategoryPieChartWidget() {
       const rows = await getCategoryBreakdown(
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10),
+        sessionToken,
       );
       setSlices(
         rows.map((r) => ({
@@ -34,7 +37,7 @@ export default function CategoryPieChartWidget() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

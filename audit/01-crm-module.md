@@ -2,7 +2,7 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** 01 — CRM module
-> **Status:** AUDITED · findings require follow-up
+> **Status:** PARTIALLY REMEDIATED · CRM-01 resolved; CRM-02–CRM-11 remain open
 > **Scope:** Customer management UI, customer APIs and Tauri commands, CRM module code, persistence and migrations, event wiring, localization, authorization, tests, and module documentation.
 
 ## Executive summary

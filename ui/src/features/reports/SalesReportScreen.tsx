@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
@@ -69,6 +70,7 @@ function monthAgo(): string {
 /** Sales report screen — daily/weekly/monthly revenue charts, top products, hourly heatmap, and category breakdown with CSV export. */
 export default function SalesReportScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('daily');
@@ -98,21 +100,21 @@ export default function SalesReportScreen() {
     let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
-        revenuePromise = getDailyRevenue(startDate, endDate);
+        revenuePromise = getDailyRevenue(startDate, endDate, sessionToken);
         break;
       case 'weekly':
-        revenuePromise = getWeeklyRevenue(startDate, endDate);
+        revenuePromise = getWeeklyRevenue(startDate, endDate, sessionToken);
         break;
       case 'monthly':
-        revenuePromise = getMonthlyRevenue(startDate, endDate);
+        revenuePromise = getMonthlyRevenue(startDate, endDate, sessionToken);
         break;
     }
 
     Promise.all([
       revenuePromise,
-      getTopProducts(startDate, endDate, 10),
-      getHourlyHeatmap(startDate, endDate),
-      getCategoryBreakdown(startDate, endDate),
+      getTopProducts(startDate, endDate, 10, sessionToken),
+      getHourlyHeatmap(startDate, endDate, sessionToken),
+      getCategoryBreakdown(startDate, endDate, sessionToken),
     ])
       .then(([rev, top, heat, cat]) => {
         setRevenueData(rev);
@@ -126,7 +128,7 @@ export default function SalesReportScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, [view, startDate, endDate]);
+  }, [view, startDate, endDate, sessionToken]);
 
   // P9-3: Fetch previous period data when comparison is enabled
   const calcPrevRange = useCallback(() => {
@@ -152,13 +154,13 @@ export default function SalesReportScreen() {
     let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
-        revenuePromise = getDailyRevenue(prevStart, prevEnd);
+        revenuePromise = getDailyRevenue(prevStart, prevEnd, sessionToken);
         break;
       case 'weekly':
-        revenuePromise = getWeeklyRevenue(prevStart, prevEnd);
+        revenuePromise = getWeeklyRevenue(prevStart, prevEnd, sessionToken);
         break;
       case 'monthly':
-        revenuePromise = getMonthlyRevenue(prevStart, prevEnd);
+        revenuePromise = getMonthlyRevenue(prevStart, prevEnd, sessionToken);
         break;
     }
 
@@ -166,7 +168,7 @@ export default function SalesReportScreen() {
       .then(setPrevRevenueData)
       .catch(() => { /* period comparison is best-effort; silently clear on failure */ setPrevRevenueData([]); })
 
-  }, [comparePeriod, view, calcPrevRange]);
+  }, [comparePeriod, view, calcPrevRange, sessionToken]);
 
   useEffect(() => {
     fetchData();

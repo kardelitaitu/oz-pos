@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized } from '@fluent/react';
 import { getDailyRevenue } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
@@ -7,6 +8,7 @@ import type { LineChartPoint } from '@/components/charts/CanvasLineChart';
 
 /** Canvas 2D revenue line chart widget for the reporting dashboard. */
 export default function RevenueLineChartWidget() {
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [data, setData] = useState<LineChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +23,7 @@ export default function RevenueLineChartWidget() {
       const rows = await getDailyRevenue(
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10),
+        sessionToken,
       );
       // Convert to chart points — show MM/DD labels
       const points: LineChartPoint[] = rows.map((r) => ({
@@ -33,7 +36,7 @@ export default function RevenueLineChartWidget() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useContext, useState, useCallback, useMemo, useRef } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { buildCustomReport, type CustomReportRequest, type CustomReportResponse } from '@/api/reports';
 import { Card } from '@/components/Card';
@@ -61,6 +62,7 @@ type DatasetKey = keyof typeof DATASETS;
 
 export default function CustomReportScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [dataset, setDataset] = useState<DatasetKey>('sales');
   const [startDate, setStartDate] = useState(monthAgo());
   const [endDate, setEndDate] = useState(today());
@@ -184,14 +186,14 @@ export default function CustomReportScreen() {
         start_date: dsDef.hasDateFilter ? startDate : null,
         end_date: dsDef.hasDateFilter ? endDate : null,
       };
-      const resp = await buildCustomReport(req);
+      const resp = await buildCustomReport(req, sessionToken);
       setResult(resp);
     } catch (e: unknown) {
       setError((e as Error).message ?? String(e));
     } finally {
       setLoading(false);
     }
-  }, [dataset, columnOrder, selectedCols, startDate, endDate, dsDef]);
+  }, [dataset, columnOrder, selectedCols, startDate, endDate, dsDef, sessionToken]);
 
   const exportCsv = useCallback(() => {
     if (!result || result.rows.length === 0) return;

@@ -19,6 +19,8 @@ vi.mock('@/api/currency', () => ({
   listCurrencies: (...args: unknown[]) => mockListCurrencies(...args),
   createExchangeRate: (...args: unknown[]) => mockCreateExchangeRate(...args),
   deleteExchangeRate: (...args: unknown[]) => mockDeleteExchangeRate(...args),
+  formatExchangeRate: (rate: { rate_millionths: number }) =>
+    (rate.rate_millionths / 1_000_000).toString(),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -28,7 +30,7 @@ function makeRate(overrides: Record<string, unknown> = {}) {
     id: 'rate-1',
     from_currency: 'USD',
     to_currency: 'IDR',
-    rate: 16000,
+    rate_millionths: 16_000_000_000,
     source: 'manual',
     effective_date: '2025-07-07',
     created_at: '2025-07-07T00:00:00.000Z',
@@ -107,8 +109,8 @@ describe('ExchangeRateScreen', () => {
 
   it('renders a table with rate rows', async () => {
     mockListExchangeRates.mockResolvedValue([
-      makeRate({ id: 'r1', from_currency: 'USD', to_currency: 'IDR', rate: 16000 }),
-      makeRate({ id: 'r2', from_currency: 'EUR', to_currency: 'IDR', rate: 17000 }),
+      makeRate({ id: 'r1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 }),
+      makeRate({ id: 'r2', from_currency: 'EUR', to_currency: 'IDR', rate_millionths: 17_000_000_000 }),
     ]);
     mockListCurrencies.mockResolvedValue([]);
     renderScreen();
@@ -228,7 +230,12 @@ describe('ExchangeRateScreen', () => {
     await user.click(screen.getByText('Save'));
 
     await waitFor(() => {
-      expect(mockCreateExchangeRate).toHaveBeenCalled();
+      expect(mockCreateExchangeRate).toHaveBeenCalledWith({
+        from_currency: 'USD',
+        to_currency: 'IDR',
+        rate_millionths: 16_000_000_000,
+        effective_date: expect.any(String),
+      });
     });
   });
 
