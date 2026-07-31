@@ -63,7 +63,12 @@ jobs:
           cache-dependency-path: 'ui/package-lock.json'
 
       - name: Install UI dependencies
-        run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
+        run: cd ui && npm ci --no-audit --no-fund
+
+      - name: Verify esbuild binary
+        run: |
+          cd ui
+          node -e "try { require('esbuild'); console.log('esbuild OK'); } catch (e) { console.error('esbuild missing', e); process.exit(1); }"
 
       - name: Install Playwright browsers
         run: cd ui && npx playwright install chromium --with-deps
@@ -94,6 +99,8 @@ jobs:
       - name: Run E2E tests
         env:
           OZ_API_SECRET: ci-test-secret
+          VITE_STARTUP_TIMEOUT: 120000
+          VITE_LOG_LEVEL: info
         run: |
           cd ui
 

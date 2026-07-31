@@ -199,9 +199,14 @@ function startVite() {
     });
 
     let outputBuffer = '';
+    const startupTimeout = Number(process.env.VITE_STARTUP_TIMEOUT || '120000');
     const timeout = setTimeout(() => {
-      reject(new Error('Vite dev server failed to start within 60s'));
-    }, 60_000);
+      const tail = outputBuffer.split('\n').filter(Boolean).slice(-40).join('\n');
+      reject(new Error(
+        `Vite dev server failed to start within ${startupTimeout / 1000}s.\n` +
+        `--- last Vite output (${process.env.VITE_LOG_LEVEL || 'default'}): ---\n${tail || '(no output captured)'}`
+      ));
+    }, startupTimeout);
 
     const onData = (data) => {
       outputBuffer += data.toString();
