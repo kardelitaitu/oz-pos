@@ -10,8 +10,11 @@
 // smoke tests.  Real feature tests live in the per-screen test files
 // (e.g. KdsScreen.test.tsx, GiftCardsScreen.test.tsx).
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, expectTypeOf } from 'vitest';
 import { createKdsApiMock, createGiftCardsApiMock, createLoyaltyApiMock, createReportsApiMock } from '@/__tests__/test-utils/mocks/api';
+// Type-only imports — erased at runtime (no vi.mock cycle).
+import type { UsePosStateMockShape } from '@/__tests__/test-utils/mocks/usePosState';
+import type { usePosState } from '@/features/sales/usePosState';
 
 // ── KDS ─────────────────────────────────────────────────────────
 
@@ -221,6 +224,15 @@ describe('existing factory imports compile', () => {
     const override = mod.createUsePosStateMock({ discountPercent: 10, resetCart: vi.fn() });
     expect(override.discountPercent).toBe(10);
     expect(override.resetCart).toBeTypeOf('function');
+  });
+
+  it('usePosState mock shape covers every key the real hook returns (compile-time drift guard)', () => {
+    // Compile-time only (no runtime assertion): if `usePosState` gains a
+    // field that `UsePosStateMockShape` lacks, the Exclude result is
+    // non-never and `npm run typecheck` fails here.
+    expectTypeOf<
+      Exclude<keyof ReturnType<typeof usePosState>, keyof UsePosStateMockShape>
+    >().toEqualTypeOf<never>();
   });
 
   it('imports the barcode-scanner mock singleton without error', async () => {

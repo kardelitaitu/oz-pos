@@ -33,31 +33,58 @@ import type { usePosState } from '@/features/sales/usePosState';
 
 type UsePosStateReturn = ReturnType<typeof usePosState>;
 
-export interface UsePosStateMockOverrides {
-  lines?: CartLine[];
-  total?: Money | null;
-  subtotal?: Money | null;
-  discountPercent?: number;
-  discountLabel?: string;
-  discountAmount?: Money | null;
-  tipPercent?: number;
-  tipAmount?: Money | null;
-  serviceChargeEnabled?: boolean;
-  serviceChargePercent?: number;
-  serviceChargeAmount?: Money | null;
-  addProduct?: ReturnType<typeof vi.fn>;
-  removeLine?: ReturnType<typeof vi.fn>;
-  updateQty?: ReturnType<typeof vi.fn>;
-  setDiscount?: ReturnType<typeof vi.fn>;
-  updateLinePrice?: ReturnType<typeof vi.fn>;
-  setTipPercent?: ReturnType<typeof vi.fn>;
-  setServiceCharge?: ReturnType<typeof vi.fn>;
-  resetCart?: ReturnType<typeof vi.fn>;
-  setLines?: ReturnType<typeof vi.fn>;
-  assignCourse?: ReturnType<typeof vi.fn>;
-  fireCourse?: ReturnType<typeof vi.fn>;
-  fireAllCourses?: ReturnType<typeof vi.fn>;
+/**
+ * Concrete shape the factory builds. Data fields mirror `usePosState`
+ * exactly; function fields use the loose `vi.fn()` type (see the
+ * boundary-cast note on `createUsePosStateMock`). Single source of
+ * truth — both the overrides type and the drift guard derive from it.
+ */
+export interface UsePosStateMockShape {
+  lines: CartLine[];
+  total: Money | null;
+  subtotal: Money | null;
+  discountPercent: number;
+  discountLabel: string;
+  discountAmount: Money | null;
+  tipPercent: number;
+  tipAmount: Money | null;
+  serviceChargeEnabled: boolean;
+  serviceChargePercent: number;
+  serviceChargeAmount: Money | null;
+  addProduct: ReturnType<typeof vi.fn>;
+  removeLine: ReturnType<typeof vi.fn>;
+  updateQty: ReturnType<typeof vi.fn>;
+  setDiscount: ReturnType<typeof vi.fn>;
+  updateLinePrice: ReturnType<typeof vi.fn>;
+  setTipPercent: ReturnType<typeof vi.fn>;
+  setServiceCharge: ReturnType<typeof vi.fn>;
+  resetCart: ReturnType<typeof vi.fn>;
+  setLines: ReturnType<typeof vi.fn>;
+  assignCourse: ReturnType<typeof vi.fn>;
+  fireCourse: ReturnType<typeof vi.fn>;
+  fireAllCourses: ReturnType<typeof vi.fn>;
 }
+
+/** Per-test overrides — derived from the shape so they can't drift. */
+export type UsePosStateMockOverrides = Partial<UsePosStateMockShape>;
+
+// ── Compile-time drift guard ────────────────────────────────────────
+// Fails compilation if `usePosState` returns a field that the mock shape
+// doesn't provide. Without this, the boundary cast below would silently
+// mask the gap and tests would read `undefined` for the new field.
+
+type _MissingUsePosStateMockKeys = Exclude<keyof UsePosStateReturn, keyof UsePosStateMockShape>;
+
+/**
+ * Resolves to `true` when the mock covers every hook key; otherwise the
+ * assignment fails with an object naming the missing key(s).
+ */
+export const usePosStateMockKeyGuard: _MissingUsePosStateMockKeys extends never
+  ? true
+  : {
+      error: 'createUsePosStateMock is missing keys returned by usePosState';
+      missing: _MissingUsePosStateMockKeys;
+    } = true;
 
 /**
  * Fresh `usePosState` mock — empty cart, no money, vi.fn() actions.
@@ -65,18 +92,18 @@ export interface UsePosStateMockOverrides {
  * without per-test `as any` casts.
  */
 export function createUsePosStateMock(overrides: UsePosStateMockOverrides = {}): UsePosStateReturn {
-  return {
-    lines: [] as CartLine[],
-    total: null as Money | null,
-    subtotal: null as Money | null,
+  const mock: UsePosStateMockShape = {
+    lines: [],
+    total: null,
+    subtotal: null,
     discountPercent: 0,
     discountLabel: '',
-    discountAmount: null as Money | null,
+    discountAmount: null,
     tipPercent: 0,
-    tipAmount: null as Money | null,
+    tipAmount: null,
     serviceChargeEnabled: false,
     serviceChargePercent: 0,
-    serviceChargeAmount: null as Money | null,
+    serviceChargeAmount: null,
     addProduct: vi.fn(),
     removeLine: vi.fn(),
     updateQty: vi.fn(),
@@ -90,5 +117,11 @@ export function createUsePosStateMock(overrides: UsePosStateMockOverrides = {}):
     fireCourse: vi.fn(),
     fireAllCourses: vi.fn(),
     ...overrides,
-  } as unknown as UsePosStateReturn;
+  };
+  // Boundary cast only: `vi.fn()` returns `Mock<Procedure | Constructable>`,
+  // which isn't structurally assignable to the hook's concrete function
+  // signatures — so `mockReturnValue(...)` needs the declared return type.
+  // Drift (a new hook field) is caught by `usePosStateMockKeyGuard` and the
+  // MockFactoriesCompile keyof check, not masked by this cast.
+  return mock as unknown as UsePosStateReturn;
 }
