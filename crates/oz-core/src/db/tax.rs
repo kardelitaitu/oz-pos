@@ -273,12 +273,37 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Validate that every id in `tax_rate_ids` resolves to an active
+    /// (`is_active = 1`) tax rate.
+    ///
+    /// TAX-03: archived rates are immutable and hidden — an assignment
+    /// must not silently point a product/category at one. Unknown ids are
+    /// rejected with the same structured `NotFound` so a stale/malformed
+    /// payload cannot wedge a junction row against a missing rate.
+    fn ensure_active_tax_rate_ids(&self, tax_rate_ids: &[String]) -> Result<(), CoreError> {
+        for id in tax_rate_ids {
+            if self.get_tax_rate(id)?.is_none() {
+                return Err(CoreError::NotFound {
+                    entity: "tax_rate",
+                    id: id.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Assign tax rates to a product.
+    ///
+    /// TAX-03: every id must resolve to an active rate — archived or
+    /// unknown ids are rejected up front so the junction can never point
+    /// at a hidden/immutable rate (defense-in-depth on top of the UI only
+    /// listing active rates).
     pub fn set_product_tax_rates(
         &self,
         sku: &str,
         tax_rate_ids: &[String],
     ) -> Result<(), CoreError> {
+        self.ensure_active_tax_rate_ids(tax_rate_ids)?;
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
             "DELETE FROM product_taxes WHERE product_sku = ?1",
@@ -306,11 +331,16 @@ impl Store<'_> {
     }
 
     /// Assign tax rates to a category.
+    ///
+    /// TAX-03: every id must resolve to an active rate — archived or
+    /// unknown ids are rejected up front (see
+    /// [`Self::ensure_active_tax_rate_ids`]).
     pub fn set_category_tax_rates(
         &self,
         category_id: &str,
         tax_rate_ids: &[String],
     ) -> Result<(), CoreError> {
+        self.ensure_active_tax_rate_ids(tax_rate_ids)?;
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
             "DELETE FROM category_taxes WHERE category_id = ?1",
@@ -872,5 +902,109 @@ mod tests {
         assert_eq!(counts.products, 1);
         assert_eq!(counts.categories, 1);
         assert_eq!(counts.sale_lines, 0);
+    }
+
+    // ── TAX-03 residual: assignments reject archived rate ids ────────
+
+    #[test]
+    fn set_product_tax_rates_rejects_archived_rate_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        let currency = foundation::Currency::from_str("USD").unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        s.create_product("SKU-ARCH", "Item", money, None, None, 0, None)
+            .unwrap();
+
+        let rate = s.create_tax_rate("VAT", 1000, true, false).unwrap();
+        s.delete_tax_rate(&rate.id).unwrap();
+
+        // TAX-03: an archived (immutable) rate must not be assignable.
+        let err = s
+            .set_product_tax_rates("SKU-ARCH", std::slice::from_ref(&rate.id))
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "tax_rate",
+                ..
+            }
+        ));
+        // Junction rows must be untouched by the rejected assignment.
+        assert!(s.get_product_tax_rates("SKU-ARCH").unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_category_tax_rates_rejects_archived_rate_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_category("cat-arch", "Cat", "#fff", "").unwrap();
+
+        let rate = s.create_tax_rate("VAT", 1000, true, false).unwrap();
+        s.delete_tax_rate(&rate.id).unwrap();
+
+        let err = s
+            .set_category_tax_rates("cat-arch", std::slice::from_ref(&rate.id))
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "tax_rate",
+                ..
+            }
+        ));
+        assert!(s.get_category_tax_rates("cat-arch").unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_product_tax_rates_rejects_mixed_list_without_partial_write() {
+        let conn = fresh();
+        let s = store(&conn);
+        let currency = foundation::Currency::from_str("USD").unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        s.create_product("SKU-MIX", "Item", money, None, None, 0, None)
+            .unwrap();
+
+        let active = s.create_tax_rate("Active", 500, false, false).unwrap();
+        let archived = s.create_tax_rate("Archived", 1000, false, false).unwrap();
+        s.delete_tax_rate(&archived.id).unwrap();
+
+        // One archived id poisons the whole assignment — nothing is written.
+        let err = s
+            .set_product_tax_rates("SKU-MIX", &[active.id.clone(), archived.id.clone()])
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "tax_rate",
+                ..
+            }
+        ));
+        assert!(s.get_product_tax_rates("SKU-MIX").unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_category_tax_rates_rejects_unknown_rate_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_category("cat-unk", "Cat", "#fff", "").unwrap();
+
+        // Unknown ids are rejected with the same structured error as archived.
+        let err = s
+            .set_category_tax_rates("cat-unk", &["no-such-rate".into()])
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "tax_rate",
+                ..
+            }
+        ));
+        assert!(s.get_category_tax_rates("cat-unk").unwrap().is_empty());
     }
 }

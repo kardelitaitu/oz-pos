@@ -131,6 +131,44 @@ fn repository_returns_none_for_unknown_id() {
     );
 }
 
+#[test]
+fn repository_list_tax_rates_filters_archived_and_matches_store() {
+    let conn = fresh_db();
+    let store = Store::new(&conn);
+    let active = store
+        .create_tax_rate("Active VAT", 1000, true, false)
+        .unwrap();
+    let archived = store
+        .create_tax_rate("Archived Old", 500, false, false)
+        .unwrap();
+    store.delete_tax_rate(&archived.id).unwrap();
+
+    // The module repository must observe the SAME active row set as the
+    // oz-core store — archived (is_active = 0) rates must be filtered out.
+    let via_module = TaxService::list_tax_rates(&conn).unwrap();
+    let via_store = store.list_tax_rates().unwrap();
+
+    assert_eq!(
+        via_module, via_store,
+        "module and store must agree on the active tax-rate row set"
+    );
+    assert_eq!(via_module.len(), 1, "archived rate must be hidden");
+    assert_eq!(via_module[0].id, active.id);
+    assert!(
+        via_module.iter().all(|r| r.id != archived.id),
+        "archived rate id must not appear in the module listing"
+    );
+}
+
+#[test]
+fn repository_list_tax_rates_empty_db() {
+    let conn = fresh_db();
+    assert!(
+        TaxService::list_tax_rates(&conn).unwrap().is_empty(),
+        "empty database must yield an empty module listing"
+    );
+}
+
 // ── 4. Serde wire-shape contract ────────────────────────────────────
 
 #[test]
