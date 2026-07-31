@@ -343,7 +343,6 @@ pub fn run() {
             commands::pos::list_open_bills_scoped,
             commands::pos::get_held_cart,
             commands::pos::get_held_cart_scoped,
-            commands::pos::compute_cart_tax,
             commands::pos::compute_cart_tax_scoped,
             commands::pos::delete_held_cart,
             commands::pos::delete_held_cart_scoped,

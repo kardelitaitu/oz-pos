@@ -1286,29 +1286,6 @@ pub async fn complete_sale_scoped(
 
 // ── Compute Cart Tax ──────────────────────────────────────────────────
 
-/// Compute tax for a live cart from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `compute_cart_tax_scoped`.
-#[tauri::command]
-pub async fn compute_cart_tax(
-    lines: Vec<oz_core::db::CartLineTaxInput>,
-    currency: String,
-    state: State<'_, AppState>,
-) -> Result<i64, AppError> {
-    let parsed: oz_core::Currency = currency
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let tax = store.compute_cart_tax(
-        &lines,
-        parsed,
-        oz_core::Settings::get_tax_rounding_mode(&db)?,
-    )?;
-    drop(db);
-    Ok(tax.minor_units)
-}
-
 /// Compute cart tax for the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.

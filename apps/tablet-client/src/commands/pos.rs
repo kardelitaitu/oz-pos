@@ -893,27 +893,6 @@ pub async fn complete_sale_scoped(
 
 // ── Compute Cart Tax ──────────────────────────────────────────────────
 
-/// Compute the total tax for a live cart (front-end preview).
-#[command]
-pub async fn compute_cart_tax(
-    lines: Vec<oz_core::db::CartLineTaxInput>,
-    currency: String,
-    state: State<'_, AppState>,
-) -> Result<i64, AppError> {
-    let parsed: oz_core::Currency = currency
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let tax = store.compute_cart_tax(
-        &lines,
-        parsed,
-        oz_core::Settings::get_tax_rounding_mode(&db)?,
-    )?;
-    drop(db);
-    Ok(tax.minor_units)
-}
-
 /// Compute tax within the session scope. ADR #7.
 #[command]
 pub async fn compute_cart_tax_scoped(

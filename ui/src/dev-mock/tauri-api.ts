@@ -1017,7 +1017,6 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // TAX
   // ═══════════════════════════════════════════════════════════════
 
-  'compute_cart_tax': () => 0,
   'compute_cart_tax_scoped': () => 0,
   'list_tax_rates_scoped': () => [],
   'create_tax_rate_scoped': () => null,

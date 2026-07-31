@@ -23,7 +23,7 @@
 2. Loyalty module — LoyaltyScreen, points, rewards, tier configuration
 3. Reporting module — ReportingScreen, report generation, export, filters
 4. Currency module — CurrencyScreen, exchange rates, currency formatting
-5. Tax module — TaxScreen, tax rules, tax categories, tax calculation
+5. Tax module — TaxScreen, tax rules, tax categories, tax calculation — ✅ **FULLY REMEDIATED** (all five phases; see [05-tax-module.md](05-tax-module.md) — residuals documented under [Residual follow-ups](05-tax-module.md#residual-follow-ups-documented-not-blocking))
 6. Staff module — StaffManagementScreen, roles, permissions, shifts
 7. Inventory module — InventoryScreen, StockInquiry, stock adjustments, transfers
 8. Plugin system — Lua plugin engine, example-discount, plugin sandbox
