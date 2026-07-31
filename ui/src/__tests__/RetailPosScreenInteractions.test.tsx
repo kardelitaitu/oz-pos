@@ -615,6 +615,77 @@ describe('RetailPosScreen — interactions', () => {
     expect(screen.getByText('Stock Inquiry')).toBeInTheDocument();
   });
 
+  // ── P1-7: distinct SKU vs barcode failure messages ───────────
+
+  it('shows the distinct barcode-not-found message when a scan fails', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled());
+    act(() => { mockedBarcode.triggerScan('UNKNOWN-CODE'); });
+    await waitFor(() => {
+      const toast = screen.getByRole('alert');
+      // P1-7: barcode failures keep the barcode message (distinct from retail-sku-not-found)
+      expect(toast.textContent).toMatch(/No product or bundle matches this barcode/);
+    });
+  });
+
+  // ── P1-3: held cart delete confirmation ──────────────────────
+
+  it('requires confirmation before deleting a held cart', async () => {
+    const salesApi = await import('@/api/sales');
+    const heldCarts = [
+      { id: 'held-1', label: 'Hold #100', item_count: 2, total_minor: 8500, currency: 'IDR', created_at: '2026-01-01T00:00:00Z', bill_type: 'hold', customer_name: null },
+      { id: 'held-2', label: 'Hold #200', item_count: 1, total_minor: 3500, currency: 'IDR', created_at: '2026-01-01T00:00:00Z', bill_type: 'hold', customer_name: null },
+    ];
+    vi.mocked(salesApi.listHeldCartsScoped).mockResolvedValue(heldCarts);
+
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // F4 with a held cart id → handleResume opens the held carts list
+    await userEvent.keyboard('{F4}');
+    await waitFor(() => expect(screen.getByRole('heading', { name: /held carts/i })).toBeInTheDocument());
+
+    // Click the delete button on the first row → confirm dialog appears, no immediate delete
+    const deleteBtns = document.querySelectorAll('.retail-held-cart-delete');
+    expect(deleteBtns.length).toBeGreaterThanOrEqual(1);
+    await userEvent.click(deleteBtns[0]!);
+    await waitFor(() => expect(screen.getByRole('heading', { name: /delete held cart/i })).toBeInTheDocument());
+    expect(salesApi.deleteHeldCartScoped).not.toHaveBeenCalled();
+
+    // Confirm → deleteHeldCartScoped called with the cart id
+    const confirmBtn = document.querySelector('.retail-clear-modal .retail-shift-confirm-btn--danger') as HTMLButtonElement;
+    expect(confirmBtn).toBeInTheDocument();
+    await userEvent.click(confirmBtn);
+    await waitFor(() => expect(salesApi.deleteHeldCartScoped).toHaveBeenCalledWith(expect.any(String), 'held-1'));
+
+    // Reset the persistent mock so held carts don't leak into later tests
+    // (both the mount effect and handleResume call listHeldCartsScoped).
+    vi.mocked(salesApi.listHeldCartsScoped).mockResolvedValue([]);
+  });
+
+  // ── P1-4: scroll position preservation ───────────────────────
+
+  it('restores product grid scroll position after returning from a sub-view', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // The scroll container is .retail-grid — set a non-zero scrollTop
+    const grid = document.querySelector('.retail-grid') as HTMLElement;
+    expect(grid).toBeInTheDocument();
+    grid.scrollTop = 120;
+
+    // F6 → Sales History sub-view (goToSubView saves scroll position)
+    await userEvent.keyboard('{F6}');
+    await waitFor(() => expect(screen.getByTestId('sales-history-screen')).toBeInTheDocument());
+
+    // Back → main view remounts and the restore effect reapplies scrollTop
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+    await waitFor(() => expect(screen.queryByTestId('sales-history-screen')).not.toBeInTheDocument());
+    const restoredGrid = document.querySelector('.retail-grid') as HTMLElement;
+    expect(restoredGrid).toBeInTheDocument();
+    await waitFor(() => expect(restoredGrid.scrollTop).toBe(120));
+  });
+
   it('resets cart when clear is confirmed', async () => {
     const posState = await import('@/features/sales/usePosState');
     const resetCart = vi.fn();

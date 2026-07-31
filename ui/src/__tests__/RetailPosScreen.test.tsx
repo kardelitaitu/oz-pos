@@ -493,6 +493,13 @@ describe('RetailPosScreen — rendering', () => {
     await waitFor(() => expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument());
   });
 
+  it('Ctrl+K opens the credit reminders list', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('F1')).toBeInTheDocument());
+    await userEvent.keyboard('{Control>}k{/Control}');
+    await waitFor(() => expect(screen.getByRole('heading', { name: /credit reminders/i })).toBeInTheDocument());
+  });
+
   it('F11 key badge is present in the function bar', async () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('F1')).toBeInTheDocument());
