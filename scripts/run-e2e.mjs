@@ -120,15 +120,44 @@ function ensureLicenseKey() {
   log('License', 'Throwaway key generated (valid for this session only).');
 }
 
+/**
+ * Dump recent logs from all E2E services for diagnosis.
+ * Called on docker compose failure, before cleanup removes containers.
+ */
+function dumpContainerLogs() {
+  try {
+    log('Docker', 'Dumping service logs for diagnosis...');
+    execSync(
+      `docker compose -f "${ROOT}/docker-compose.e2e.yml" logs --tail 100`,
+      { stdio: 'inherit', timeout: 15_000 },
+    );
+    log('Docker', 'Container status:');
+    execSync(
+      `docker compose -f "${ROOT}/docker-compose.e2e.yml" ps -a`,
+      { stdio: 'inherit', timeout: 10_000 },
+    );
+  } catch {
+    // Log dumping is best-effort — don't mask the original error.
+    log('Docker', '(Could not retrieve container logs — containers may already be gone.)');
+  }
+}
+
 /** Start Docker E2E services. */
 function startDocker() {
   log('Docker', 'Starting E2E services...');
-  execSync(
-    `docker compose -f "${ROOT}/docker-compose.e2e.yml" up -d --wait`,
-    { stdio: 'inherit', timeout: 120_000 },
-  );
-  dockerStarted = true;
-  log('Docker', 'Services ready.');
+  try {
+    execSync(
+      `docker compose -f "${ROOT}/docker-compose.e2e.yml" up -d --wait`,
+      { stdio: 'inherit', timeout: 120_000 },
+    );
+    dockerStarted = true;
+    log('Docker', 'Services ready.');
+  } catch (err) {
+    dockerStarted = true; // containers may be partially up — let cleanup tear them down
+    log('Docker', `${RED}Failed to start services.${NC}`);
+    dumpContainerLogs();
+    throw new Error(`Docker compose failed: ${err.message || err}`);
+  }
 }
 
 /** Stop Docker E2E services. */
