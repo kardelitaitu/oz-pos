@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { formatMoney, type Money, type LineId, type Sku, type CourseId } from '@/types/domain';
 import { COURSES, courseLabel, courseEmoji } from '@/types/domain';
@@ -107,6 +107,20 @@ export default function RetailCartPanel({
 
   // ── Course dropdown state ────────────────────────────────────
   const [courseDropdownLine, setCourseDropdownLine] = useState<LineId | null>(null);
+  const courseDropdownGroupRef = useRef<HTMLSpanElement>(null);
+
+  // Close course dropdown when clicking outside
+  useEffect(() => {
+    if (!courseDropdownLine) return;
+    const handler = (e: MouseEvent) => {
+      if (courseDropdownGroupRef.current && !courseDropdownGroupRef.current.contains(e.target as Node)) {
+        setCourseDropdownLine(null);
+      }
+    };
+    // Use mousedown so it fires before the toggle button's onClick on re-click
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [courseDropdownLine]);
 
   return (
     <>
@@ -175,7 +189,7 @@ export default function RetailCartPanel({
                               <button
                                 type="button"
                                 className={`retail-cart-course-chip${line.courseId ? ' retail-cart-course-chip--set' : ''}`}
-                                onClick={() => setCourseDropdownLine(courseDropdownLine === line.id ? null : line.id)}
+                                onClick={(e) => { e.stopPropagation(); setCourseDropdownLine(courseDropdownLine === line.id ? null : line.id); }}
                                 aria-label={l10n.getString('retail-cart-course-aria', { name: line.name ?? line.sku }) || `Course for ${line.name ?? line.sku}`}
                                 title={line.courseId ? `${courseEmoji(line.courseId)} ${courseLabel(line.courseId)}` : 'Set course'}
                               >
@@ -183,7 +197,7 @@ export default function RetailCartPanel({
                               </button>
                               {/* ── Course dropdown ──── */}
                               {courseDropdownLine === line.id && (
-                                <span className="retail-cart-course-dropdown" role="listbox" aria-label="Select course">
+                                <span className="retail-cart-course-dropdown" role="listbox" aria-label="Select course" ref={courseDropdownGroupRef}>
                                   <button
                                     type="button"
                                     className={`retail-cart-course-option${!line.courseId ? ' retail-cart-course-option--active' : ''}`}
