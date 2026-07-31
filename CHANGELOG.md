@@ -1,6 +1,6 @@
 # Changelog
 
-<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · verified accurate: 48 .ftl files, 98 migrations (highest N=100), Node>=22/npm>=11, Vite ^6, 214 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ -->
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · re-verified 2026-07-31 (3,476 UI tests, 14 check.sh steps) · verified accurate: 48 .ftl files, 101 migrations (highest N=106), Node>=22/npm>=11, Vite ^6, 228 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ -->
 
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
@@ -41,7 +41,7 @@ Desktop App Security & Stability Audit closeout: **all 18 findings resolved** ac
 
 ## [0.0.24] — 2026-07-31
 
-Retail + Restaurant (KDS) release: closed the full KDS production-readiness roadmap, completed ADR #22 workspace settings, overhauled the Retail POS UX, ran a codebase-wide i18n audit (89 fixes), and shipped E2E test infrastructure. All 3,476 UI tests and the 15-step pre-CI gate (`scripts/check.sh`) pass.
+Retail + Restaurant (KDS) release: closed the full KDS production-readiness roadmap, completed ADR #22 workspace settings, overhauled the Retail POS UX, ran a codebase-wide i18n audit (89 fixes), and shipped E2E test infrastructure. All 3,476 UI tests (228 files) and the 14-step pre-CI gate (`scripts/check.sh`) pass.
 
 ### Added
 
