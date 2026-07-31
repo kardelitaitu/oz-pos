@@ -62,3 +62,18 @@ tax-config-modal-close =
 tax-config-save-error = Failed to save tax rate
 tax-config-delete-error = Failed to delete tax rate
 tax-config-cat-save-error = Failed to save category tax rates
+tax-config-load-error = Failed to load tax configuration.
+tax-config-load-retry = Retry
+tax-config-rate-invalid = Rate must be between 0 and { $max } basis points.
+tax-config-delete-confirm-title = Delete { $name }?
+tax-config-delete-confirm-message = Archive “{ $name }”? This hides it from listings and removes its product/category assignments. Historical sales keep their rate linkage.
+tax-config-delete-blocked-title = Cannot delete { $name }
+tax-config-delete-blocked-message = “{ $name }” is referenced by { $count } historical sale(s) and cannot be archived. Rates used by past sales are kept so receipts and audit records stay intact.
+tax-config-delete-deps-products = { $count ->
+    [one] 1 product assignment
+   *[other] { $count } product assignments
+}
+tax-config-delete-deps-categories = { $count ->
+    [one] 1 category assignment
+   *[other] { $count } category assignments
+}

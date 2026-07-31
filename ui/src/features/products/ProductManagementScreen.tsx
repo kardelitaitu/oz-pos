@@ -7,11 +7,11 @@ import {
   createProductScoped,
   updateProductScoped,
   deleteProductScoped,
-  listCategories,
+  listCategoriesScoped,
   type ProductDto,
   type CategoryDto,
 } from '@/api/products';
-import { listTaxRates, type TaxRateDto } from '@/api/tax';
+import { listTaxRatesScoped, type TaxRateDto } from '@/api/tax';
 import { listCurrenciesScoped, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
 import { Card } from '@/components/Card';
@@ -123,7 +123,10 @@ export default function ProductManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRates(), listCategories(), listCurrenciesScoped(sessionToken)]);
+      // TAX-01: tax rates and categories are read from the session store,
+      // not the global DB — per-product tax assignment must resolve the same
+      // store the products came from.
+      const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRatesScoped(sessionToken), listCategoriesScoped(sessionToken), listCurrenciesScoped(sessionToken)]);
       setProductDtos(dtos);
       setProducts(dtos.map(dtoToProduct));
       setTaxRates(rates);

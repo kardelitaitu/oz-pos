@@ -84,6 +84,9 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--space-1) var(--space-3);
+  /* TAX-08: project touch-target standard — at least 44px tall. */
+  min-height: 2.75rem;
+  min-width: 2.75rem;
   cursor: pointer;
   font-size: var(--text-sm);
   color: var(--color-link);
@@ -150,6 +153,25 @@
   flex-direction: column;
   gap: var(--space-0_5);
   flex: 1;
+}
+
+/* ── Load error state (TAX-06) ────────────────────────────────── */
+
+.tax-config-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-4);
+  border: 1px solid var(--color-danger-border, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  text-align: center;
+}
+
+.tax-config-load-error p {
+  margin: 0;
 }
 
 /* ── Tax type badge ────────────────────────────────────────────── */
@@ -232,7 +254,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.125rem;
+  /* TAX-08: touch-target standard for tablet terminals. */
+  min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -271,6 +296,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  /* TAX-08: touch-target standard for the picker list. */
+  min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);

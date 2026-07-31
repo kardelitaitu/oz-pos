@@ -32,13 +32,14 @@ vi.mock('@tauri-apps/api/core', () => ({
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+    if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
     if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
-    if (cmd === 'list_category_tax_rates') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
-    if (cmd === 'create_tax_rate') return Promise.resolve({ ...SAMPLE_TAX_RATES[0], name: 'New Tax' });
-    if (cmd === 'update_tax_rate') return Promise.resolve(SAMPLE_TAX_RATES[0]);
-    if (cmd === 'delete_tax_rate') return Promise.resolve(undefined);
-    if (cmd === 'set_category_tax_rates') return Promise.resolve(undefined);
+    if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
+    if (cmd === 'create_tax_rate_scoped') return Promise.resolve({ ...SAMPLE_TAX_RATES[0], name: 'New Tax' });
+    if (cmd === 'update_tax_rate_scoped') return Promise.resolve(SAMPLE_TAX_RATES[0]);
+    if (cmd === 'delete_tax_rate_scoped') return Promise.resolve(undefined);
+    if (cmd === 'get_tax_rate_dependency_counts_scoped') return Promise.resolve({ products: 0, categories: 0, sale_lines: 0 });
+    if (cmd === 'set_category_tax_rates_scoped') return Promise.resolve(undefined);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
@@ -83,9 +84,9 @@ describe('TaxConfigurationScreen', () => {
 
   it('shows empty state when no tax rates exist', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve([]);
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve([]);
       if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve([]);
-      if (cmd === 'list_category_tax_rates') return Promise.resolve([]);
+      if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve([]);
       return Promise.resolve([]);
     });
     renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
@@ -128,7 +129,7 @@ describe('TaxConfigurationScreen', () => {
     expect(nameInput).toBeInTheDocument();
   });
 
-  it('deletes a tax rate when Delete is clicked', async () => {
+  it('deletes a tax rate after confirming the destructive dialog', async () => {
     renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();
 
@@ -139,9 +140,15 @@ describe('TaxConfigurationScreen', () => {
     expect(deleteBtn).not.toBeDisabled();
     await userEvent.click(deleteBtn);
 
-    // After delete, list_tax_rates should be called again (loadAll refreshes)
+    // Confirmation dialog must appear and name the rate
+    const confirm = await screen.findByRole('dialog', { name: /delete VAT/i });
+    expect(within(confirm).getByText(/archive/i)).toBeInTheDocument();
+
+    // Confirm the deletion — then the scoped delete command is invoked
+    await userEvent.click(within(confirm).getByRole('button', { name: /delete/i }));
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('delete_tax_rate', expect.objectContaining({
+      expect(invokeMock).toHaveBeenCalledWith('delete_tax_rate_scoped', expect.objectContaining({
+        sessionToken: expect.any(String),
         id: 'tax-2',
       }));
     });
@@ -170,13 +177,14 @@ describe('TaxConfigurationScreen', () => {
     expect(within(drinksRow).getByText(/no rates assigned/i)).toBeInTheDocument();
   });
 
-  it('disables Delete button while deletion is in progress', async () => {
-    // Make delete slow so we can see the loading state
+  it('disables the confirm button while deletion is in progress', async () => {
+    // Make delete slow so we can see the pending state
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'delete_tax_rate') return new Promise(() => {});
-      if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'delete_tax_rate_scoped') return new Promise(() => {});
+      if (cmd === 'get_tax_rate_dependency_counts_scoped') return Promise.resolve({ products: 0, categories: 0, sale_lines: 0 });
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
       if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
-      if (cmd === 'list_category_tax_rates') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
+      if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
       return Promise.resolve([]);
     });
 
@@ -187,10 +195,39 @@ describe('TaxConfigurationScreen', () => {
     const deleteBtn = within(vatRow).getByRole('button', { name: /delete/i });
     await userEvent.click(deleteBtn);
 
-    // Should be disabled while delete is in flight
+    // Confirmation dialog opens; confirm button is enabled
+    const confirm = await screen.findByRole('dialog', { name: /delete VAT/i });
+    const confirmBtn = within(confirm).getByRole('button', { name: /delete/i });
+    await userEvent.click(confirmBtn);
+
+    // Confirm button should be disabled (loading) while delete is in flight
     await waitFor(() => {
-      expect(deleteBtn).toBeDisabled();
+      expect(confirmBtn).toBeDisabled();
     });
+  });
+
+  it('shows a load-error state with retry when the initial fetch fails', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_tax_rates_scoped') return Promise.reject(new Error('IPC unavailable'));
+      return Promise.reject(new Error('IPC unavailable'));
+    });
+
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/failed to load tax configuration/i)).toBeInTheDocument();
+
+    // Retry re-attempts the load and recovers
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
+      return Promise.resolve([]);
+    });
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+    await waitForTable();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('closes the add modal when Escape is pressed', async () => {
@@ -211,10 +248,10 @@ describe('TaxConfigurationScreen', () => {
 
   it('handles save failure gracefully', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'create_tax_rate') return Promise.reject(new Error('DB error'));
-      if (cmd === 'list_tax_rates' || cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'create_tax_rate_scoped') return Promise.reject(new Error('DB error'));
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
       if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
-      if (cmd === 'list_category_tax_rates') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
+      if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
       return Promise.resolve([]);
     });
 
@@ -242,5 +279,54 @@ describe('TaxConfigurationScreen', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
       expect(saveBtn).not.toBeDisabled();
     });
+  });
+
+  // ── TAX-03: dependency counts + archive blocking ─────────────────
+
+  it('shows a blocked dialog when the rate is referenced by historical sales', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_tax_rate_dependency_counts_scoped') return Promise.resolve({ products: 1, categories: 1, sale_lines: 3 });
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
+      return Promise.resolve([]);
+    });
+
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitForTable();
+
+    const vatRow = screen.getByText('VAT').closest('tr')!;
+    await userEvent.click(within(vatRow).getByRole('button', { name: /delete/i }));
+
+    // Blocked dialog: title names the rate, message explains the sales reference
+    const blocked = await screen.findByRole('dialog', { name: /cannot delete VAT/i });
+    expect(within(blocked).getByText(/3 historical sale/i)).toBeInTheDocument();
+
+    // Confirm button is disabled — archiving is blocked by the backend policy
+    const confirmBtn = within(blocked).getByRole('button', { name: /delete/i });
+    expect(confirmBtn).toBeDisabled();
+  });
+
+  it('shows dependency counts in the delete confirmation dialog', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_tax_rate_dependency_counts_scoped') return Promise.resolve({ products: 2, categories: 1, sale_lines: 0 });
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_category_tax_rates_scoped') return Promise.resolve(SAMPLE_CAT_TAX_RATES);
+      return Promise.resolve([]);
+    });
+
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitForTable();
+
+    const vatRow = screen.getByText('VAT').closest('tr')!;
+    await userEvent.click(within(vatRow).getByRole('button', { name: /delete/i }));
+
+    const confirm = await screen.findByRole('dialog', { name: /delete VAT/i });
+    expect(within(confirm).getByText(/2 product assignments/i)).toBeInTheDocument();
+    expect(within(confirm).getByText(/1 category assignment/i)).toBeInTheDocument();
+
+    // No sales references → confirm stays enabled
+    expect(within(confirm).getByRole('button', { name: /delete/i })).not.toBeDisabled();
   });
 });

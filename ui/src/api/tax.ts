@@ -43,6 +43,13 @@ export interface SetCategoryTaxRatesArgs {
   taxRateIds: string[];
 }
 
+/** Reference counts for a tax rate (TAX-03) — used by the delete confirmation UI. */
+export interface TaxRateDependencyCounts {
+  products: number;
+  categories: number;
+  sale_lines: number;
+}
+
 /** A cart line for computing tax in a live preview. */
 export interface CartLineTaxInput {
   sku: string;
@@ -60,33 +67,49 @@ export const computeCartTax = (
     ? loggedInvoke<number>('compute_cart_tax_scoped', { sessionToken, lines, currency })
     : Promise.resolve(0);
 
-/** List all tax rates. */
-export const listTaxRates = (): Promise<TaxRateDto[]> =>
-  loggedInvoke<TaxRateDto[]>('list_tax_rates');
-
 /** List all tax rates for the store resolved from a session token. ADR #7. */
 export const listTaxRatesScoped = (sessionToken: string): Promise<TaxRateDto[]> =>
   loggedInvoke<TaxRateDto[]>('list_tax_rates_scoped', { sessionToken });
 
-/** Create a new tax rate. */
-export const createTaxRate = (args: CreateTaxRateArgs): Promise<TaxRateDto> =>
-  loggedInvoke<TaxRateDto>('create_tax_rate', { args });
+/** Create a tax rate in the store resolved from a session token. ADR #7. */
+export const createTaxRateScoped = (
+  sessionToken: string,
+  args: CreateTaxRateArgs,
+): Promise<TaxRateDto> =>
+  loggedInvoke<TaxRateDto>('create_tax_rate_scoped', { sessionToken, args });
 
-/** Update an existing tax rate. */
-export const updateTaxRate = (args: UpdateTaxRateArgs): Promise<TaxRateDto> =>
-  loggedInvoke<TaxRateDto>('update_tax_rate', { args });
+/** Update a tax rate in the store resolved from a session token. ADR #7. */
+export const updateTaxRateScoped = (
+  sessionToken: string,
+  args: UpdateTaxRateArgs,
+): Promise<TaxRateDto> =>
+  loggedInvoke<TaxRateDto>('update_tax_rate_scoped', { sessionToken, args });
 
-/** Delete a tax rate by its identifier. */
-export const deleteTaxRate = (id: string): Promise<void> =>
-  loggedInvoke('delete_tax_rate', { id });
+/** Delete a tax rate in the store resolved from a session token. ADR #7. */
+export const deleteTaxRateScoped = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke('delete_tax_rate_scoped', { sessionToken, id });
 
-/** List all category-to-tax-rate assignments. */
-export const listCategoryTaxRates = (): Promise<CategoryTaxRateRow[]> =>
-  loggedInvoke<CategoryTaxRateRow[]>('list_category_tax_rates');
+/** Get reference counts for a tax rate in the session store (TAX-03). */
+export const getTaxRateDependencyCountsScoped = (
+  sessionToken: string,
+  id: string,
+): Promise<TaxRateDependencyCounts> =>
+  loggedInvoke<TaxRateDependencyCounts>('get_tax_rate_dependency_counts_scoped', {
+    sessionToken,
+    id,
+  });
 
-/** Set the tax rates assigned to a product category. */
-export const setCategoryTaxRates = (args: SetCategoryTaxRatesArgs): Promise<void> =>
-  loggedInvoke<void>('set_category_tax_rates', {
+/** List category-to-tax-rate assignments for a session store. ADR #7. */
+export const listCategoryTaxRatesScoped = (sessionToken: string): Promise<CategoryTaxRateRow[]> =>
+  loggedInvoke<CategoryTaxRateRow[]>('list_category_tax_rates_scoped', { sessionToken });
+
+/** Set category tax rates in the store resolved from a session token. ADR #7. */
+export const setCategoryTaxRatesScoped = (
+  sessionToken: string,
+  args: SetCategoryTaxRatesArgs,
+): Promise<void> =>
+  loggedInvoke<void>('set_category_tax_rates_scoped', {
+    sessionToken,
     args: {
       category_id: args.categoryId,
       tax_rate_ids: args.taxRateIds,

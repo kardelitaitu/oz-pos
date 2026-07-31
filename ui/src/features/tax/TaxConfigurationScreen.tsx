@@ -1,24 +1,29 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
   listTaxRatesScoped,
-  createTaxRate,
-  updateTaxRate,
-  deleteTaxRate,
-  listCategoryTaxRates,
-  setCategoryTaxRates,
+  createTaxRateScoped,
+  updateTaxRateScoped,
+  deleteTaxRateScoped,
+  getTaxRateDependencyCountsScoped,
+  listCategoryTaxRatesScoped,
+  setCategoryTaxRatesScoped,
   type TaxRateDto,
-
+  type TaxRateDependencyCounts,
 } from '@/api/tax';
 import { listCategoriesScoped, type CategoryDto } from '@/api/products';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import './TaxConfigurationScreen.css';
+
+/** Maximum supported rate in basis points — mirrored from the backend (TAX-04). */
+const MAX_RATE_BPS = 1_000_000;
 
 interface TaxFormData {
   name: string;
@@ -48,6 +53,17 @@ export default function TaxConfigurationScreen() {
   const [form, setForm] = useState<TaxFormData>(EMPTY_TAX_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // TAX-06: distinct load error state + retry so a failed load is not
+  // indistinguishable from an empty result.
+  const [loadError, setLoadError] = useState(false);
+  // TAX-03/07: pending deletion confirmation (names the rate being removed).
+  const [pendingDelete, setPendingDelete] = useState<TaxRateDto | null>(null);
+  // TAX-03: dependency counts for the pending delete, fetched before the
+  // dialog opens so the operator sees exactly what archiving will detach.
+  const [pendingDeleteCounts, setPendingDeleteCounts] = useState<TaxRateDependencyCounts | null>(null);
+  const [loadingDeleteCounts, setLoadingDeleteCounts] = useState(false);
+  // Guards against a stale counts response if the user switches rate mid-flight.
+  const pendingDeleteIdRef = useRef<string | null>(null);
 
   // ── Category tax rates state ────────────────────────────────────
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -62,11 +78,12 @@ export default function TaxConfigurationScreen() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const [items, cats, catTax] = await Promise.all([
         listTaxRatesScoped(sessionToken),
         listCategoriesScoped(sessionToken),
-        listCategoryTaxRates(),
+        listCategoryTaxRatesScoped(sessionToken),
       ]);
       setRates(items);
       setCategories(cats);
@@ -77,7 +94,8 @@ export default function TaxConfigurationScreen() {
       }
       setCatTaxRates(map);
     } catch {
-      // IPC unavailable.
+      // TAX-06: surface the failure instead of silently treating it as empty.
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -108,44 +126,83 @@ export default function TaxConfigurationScreen() {
     setSaving(true);
     try {
       const rateBps = parseInt(form.rateBps, 10);
-      if (Number.isNaN(rateBps) || rateBps < 0) return;
+      if (Number.isNaN(rateBps) || rateBps < 0 || rateBps > MAX_RATE_BPS) {
+        addToast({
+          message: l10n.getString('tax-config-rate-invalid', { max: String(MAX_RATE_BPS) }),
+          type: 'error',
+        });
+        return;
+      }
 
+      const args = {
+        name: form.name,
+        rateBps,
+        isDefault: form.isDefault,
+        isInclusive: form.isInclusive,
+      };
       if (editingId) {
-        await updateTaxRate({
-          id: editingId,
-          name: form.name,
-          rateBps,
-          isDefault: form.isDefault,
-          isInclusive: form.isInclusive,
-        });
+        await updateTaxRateScoped(sessionToken, { id: editingId, ...args });
       } else {
-        await createTaxRate({
-          name: form.name,
-          rateBps,
-          isDefault: form.isDefault,
-          isInclusive: form.isInclusive,
-        });
+        await createTaxRateScoped(sessionToken, args);
       }
       setShowModal(false);
       await loadAll();
     } catch {
-      addToast({ message: l10n.getString('tax-config-save-error') || 'Failed to save tax rate', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'tax-config-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, loadAll, l10n, addToast]);
+  }, [form, editingId, sessionToken, loadAll, l10n, addToast]);
 
-  const confirmDelete = useCallback(async (id: string) => {
+  // TAX-03/07: ask for confirmation (naming the rate) before deleting.
+  // Fetches the dependency counts first so the dialog can show what
+  // archiving will detach — and block when historical sales reference it.
+  const requestDelete = useCallback(async (rate: TaxRateDto) => {
+    pendingDeleteIdRef.current = rate.id;
+    setPendingDelete(rate);
+    setPendingDeleteCounts(null);
+    setLoadingDeleteCounts(true);
+    try {
+      const counts = await getTaxRateDependencyCountsScoped(sessionToken, rate.id);
+      if (pendingDeleteIdRef.current === rate.id) {
+        setPendingDeleteCounts(counts);
+      }
+    } catch {
+      // Counts are best-effort — the dialog still opens with generic copy.
+      if (pendingDeleteIdRef.current === rate.id) {
+        setPendingDeleteCounts(null);
+      }
+    } finally {
+      // Guard against a stale response from a previous rate: only clear the
+      // loading flag for the rate that is still being requested, so a rapid
+      // A→B switch never opens the dialog mid-flight for B.
+      if (pendingDeleteIdRef.current === rate.id) {
+        setLoadingDeleteCounts(false);
+      }
+    }
+  }, [sessionToken]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
     setDeleting(id);
     try {
-      await deleteTaxRate(id);
-      setDeleting(null);
+      await deleteTaxRateScoped(sessionToken, id);
+      setPendingDelete(null);
+      setPendingDeleteCounts(null);
+      setLoadingDeleteCounts(false);
+      pendingDeleteIdRef.current = null;
       await loadAll();
     } catch {
-      addToast({ message: l10n.getString('tax-config-delete-error') || 'Failed to delete tax rate', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'tax-config-delete-error'), type: 'error' });
+      setPendingDelete(null);
+      setPendingDeleteCounts(null);
+      setLoadingDeleteCounts(false);
+      pendingDeleteIdRef.current = null;
+    } finally {
       setDeleting(null);
     }
-  }, [loadAll, l10n, addToast]);
+  }, [pendingDelete, sessionToken, loadAll, l10n, addToast]);
 
   // ── Category tax rates ──────────────────────────────────────────
 
@@ -160,18 +217,18 @@ export default function TaxConfigurationScreen() {
     if (!editingCatId) return;
     setSavingCat(true);
     try {
-      await setCategoryTaxRates({
+      await setCategoryTaxRatesScoped(sessionToken, {
         categoryId: editingCatId,
         taxRateIds: selectedCatRateIds,
       });
       setShowCatModal(false);
       await loadAll();
     } catch {
-      addToast({ message: l10n.getString('tax-config-cat-save-error') || 'Failed to save category tax rates', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'tax-config-cat-save-error'), type: 'error' });
     } finally {
       setSavingCat(false);
     }
-  }, [editingCatId, selectedCatRateIds, loadAll, l10n, addToast]);
+  }, [editingCatId, selectedCatRateIds, sessionToken, loadAll, l10n, addToast]);
 
   const toggleCatRate = useCallback((rateId: string) => {
     setSelectedCatRateIds((prev) =>
@@ -192,7 +249,16 @@ export default function TaxConfigurationScreen() {
         </Localized>
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <div className="tax-config-load-error" role="alert">
+          <Localized id="tax-config-load-error">
+            <p>Failed to load tax configuration.</p>
+          </Localized>
+          <Localized id="tax-config-load-retry">
+            <Button variant="secondary" onClick={loadAll}>Retry</Button>
+          </Localized>
+        </div>
+      ) : loading ? (
         <div className="tax-config-loading-skeleton" aria-hidden="true">
           {/* Header skeleton: title + button */}
           <div className="tax-config-header">
@@ -290,7 +356,7 @@ export default function TaxConfigurationScreen() {
                         <button
                           type="button"
                           className="tax-config-action-btn tax-config-action-btn--danger"
-                          onClick={() => confirmDelete(r.id)}
+                          onClick={() => requestDelete(r)}
                           disabled={deleting === r.id}
                         >
                           <Localized id="tax-config-btn-delete">
@@ -431,6 +497,7 @@ export default function TaxConfigurationScreen() {
               value={form.rateBps}
               onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
               placeholder={l10n.getString('tax-config-field-rate-placeholder')}
+              max={String(MAX_RATE_BPS)}
             />
             <Localized id="tax-config-rate-hint">
               <span className="tax-config-hint">Enter rate in basis points (e.g. 825 = 8.25%)</span>
@@ -486,6 +553,52 @@ export default function TaxConfigurationScreen() {
           {l10n.getString('tax-config-set-default')}
         </label>
       </SettingsPopup>
+
+      {/* ── Delete confirmation (TAX-03/07) ──────────────────────── */}
+      <ConfirmDialog
+        open={pendingDelete !== null && !loadingDeleteCounts}
+        onCancel={() => {
+          pendingDeleteIdRef.current = null;
+          setPendingDelete(null);
+          setPendingDeleteCounts(null);
+          setLoadingDeleteCounts(false);
+        }}
+        onConfirm={confirmDelete}
+        title={
+          pendingDeleteCounts && pendingDeleteCounts.sale_lines > 0
+            ? l10n.getString('tax-config-delete-blocked-title', { name: pendingDelete?.name ?? '' })
+            : l10n.getString('tax-config-delete-confirm-title', { name: pendingDelete?.name ?? '' })
+        }
+        message={
+          pendingDeleteCounts && pendingDeleteCounts.sale_lines > 0 ? (
+            l10n.getString('tax-config-delete-blocked-message', {
+              name: pendingDelete?.name ?? '',
+              count: String(pendingDeleteCounts.sale_lines),
+            })
+          ) : (
+            <>
+              {l10n.getString('tax-config-delete-confirm-message', { name: pendingDelete?.name ?? '' })}
+              {pendingDeleteCounts &&
+                (pendingDeleteCounts.products > 0 || pendingDeleteCounts.categories > 0) && (
+                  <span className="tax-config-delete-deps">
+                    {l10n.getString('tax-config-delete-deps-products', {
+                      count: String(pendingDeleteCounts.products),
+                    })}
+                    {' \u00b7 '}
+                    {l10n.getString('tax-config-delete-deps-categories', {
+                      count: String(pendingDeleteCounts.categories),
+                    })}
+                  </span>
+                )}
+            </>
+          )
+        }
+        variant="danger"
+        loading={deleting !== null}
+        disabled={(pendingDeleteCounts?.sale_lines ?? 0) > 0}
+        confirmLabel={l10n.getString('tax-config-btn-delete')}
+        cancelLabel={l10n.getString('tax-config-btn-cancel')}
+      />
 
       {/* ── Category Tax Rates Modal ─────────────────────────────── */}
       <SettingsPopup

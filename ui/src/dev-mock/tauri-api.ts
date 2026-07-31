@@ -1019,13 +1019,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'compute_cart_tax': () => 0,
   'compute_cart_tax_scoped': () => 0,
-  'list_tax_rates': () => [],
   'list_tax_rates_scoped': () => [],
-  'create_tax_rate': () => null,
-  'update_tax_rate': () => null,
-  'delete_tax_rate': () => null,
-  'list_category_tax_rates': () => [],
-  'set_category_tax_rates': () => null,
+  'create_tax_rate_scoped': () => null,
+  'update_tax_rate_scoped': () => null,
+  'delete_tax_rate_scoped': () => null,
+  'get_tax_rate_dependency_counts_scoped': () => ({ products: 0, categories: 0, sale_lines: 0 }),
+  'list_category_tax_rates_scoped': () => [],
+  'set_category_tax_rates_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // TABLES (restaurant floor plan)

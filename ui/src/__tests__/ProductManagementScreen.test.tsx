@@ -15,6 +15,11 @@ const SAMPLE_CATEGORIES = [
   { id: 'cat-2', name: 'Food', colour: '#f97316', icon: 'food' },
 ];
 
+const SAMPLE_TAX_RATES = [
+  { id: 'tax-1', name: 'Sales Tax', rate_bps: 825, is_default: true, display_rate: '8.25%', is_inclusive: false, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+  { id: 'tax-2', name: 'VAT', rate_bps: 2000, is_default: false, display_rate: '20%', is_inclusive: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+];
+
 const SAMPLE_PRODUCTS = [
   {
     sku: 'LATTE',
@@ -53,8 +58,11 @@ const { invokeMock } = vi.hoisted(() => ({
     if (cmd === 'list_currencies_scoped') {
       return Promise.resolve(SAMPLE_CURRENCIES);
     }
-    if (cmd === 'list_categories') {
+    if (cmd === 'list_categories' || cmd === 'list_categories_scoped') {
       return Promise.resolve(SAMPLE_CATEGORIES);
+    }
+    if (cmd === 'list_tax_rates_scoped') {
+      return Promise.resolve(SAMPLE_TAX_RATES);
     }
     if (
       cmd === 'create_product' || cmd === 'create_product_scoped' ||
@@ -94,8 +102,11 @@ beforeEach(() => {
     if (cmd === 'list_currencies_scoped') {
       return Promise.resolve(SAMPLE_CURRENCIES);
     }
-    if (cmd === 'list_categories') {
+    if (cmd === 'list_categories' || cmd === 'list_categories_scoped') {
       return Promise.resolve(SAMPLE_CATEGORIES);
+    }
+    if (cmd === 'list_tax_rates_scoped') {
+      return Promise.resolve(SAMPLE_TAX_RATES);
     }
     if (
       cmd === 'create_product' || cmd === 'create_product_scoped' ||
@@ -254,6 +265,48 @@ describe('ProductManagementScreen', () => {
   // user gets ZERO feedback. The modal's loading state clears and it
   // appears to succeed, but nothing was saved. This test proves the
   // user sees an error message when creation fails.
+
+  // ── TAX-01: product tax assignment must read the session store ───────
+
+  it('loads tax rates and categories from the session store, not the global DB', async () => {
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('list_tax_rates_scoped', expect.objectContaining({
+        sessionToken: 'mock-session-token',
+      }));
+      expect(invokeMock).toHaveBeenCalledWith('list_categories_scoped', expect.objectContaining({
+        sessionToken: 'mock-session-token',
+      }));
+    });
+
+    // The unscoped variants must never be called by this screen.
+    expect(invokeMock).not.toHaveBeenCalledWith('list_tax_rates');
+    expect(invokeMock).not.toHaveBeenCalledWith('list_categories', expect.anything());
+  });
+
+  it('passes selected taxRateIds through create_product_scoped', async () => {
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+
+    await userEvent.click(screen.getByRole('button', { name: /add product/i }));
+    await userEvent.type(screen.getByPlaceholderText('e.g. LATTE'), 'NEWSKU');
+    await userEvent.type(screen.getByPlaceholderText('e.g. Caffè Latte'), 'New Product');
+    await userEvent.type(screen.getByPlaceholderText('450'), '999');
+
+    // Toggle the two tax-rate checkboxes (shown when rates are loaded).
+    await userEvent.click(screen.getByLabelText(/sales tax \(8\.25%\)/i));
+    await userEvent.click(screen.getByLabelText(/vat \(20%\)/i));
+
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('create_product_scoped', expect.objectContaining({
+        sessionToken: 'mock-session-token',
+        args: expect.objectContaining({ taxRateIds: ['tax-1', 'tax-2'] }),
+      }));
+    });
+  });
 
   it('shows error message when createProduct fails (no silent swallow)', async () => {
     // Mock create_product to reject (e.g. duplicate SKU server-side).

@@ -16,6 +16,8 @@ export { ErrorState } from './ErrorState';
 export type { ErrorStateProps } from './ErrorState';
 export { Localized } from './Localized';
 export type { LocalizedProps } from './Localized';
+export { requiredLocalized } from './requiredLocalized';
+export type { RequiredLocalizedL10n } from './requiredLocalized';
 export { ToastProvider, useToast } from './Toast';
 export type { ToastType } from './Toast';
 export { default as PermissionDenied } from './PermissionDenied';

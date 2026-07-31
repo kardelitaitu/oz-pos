@@ -59,5 +59,20 @@ tax-config-modal-close =
 tax-config-save-error = Gagal menyimpan tarif pajak
 tax-config-delete-error = Gagal menghapus tarif pajak
 tax-config-cat-save-error = Gagal menyimpan tarif pajak kategori
+tax-config-load-error = Gagal memuat konfigurasi pajak.
+tax-config-load-retry = Coba lagi
+tax-config-rate-invalid = Tarif harus antara 0 dan { $max } basis poin.
+tax-config-delete-confirm-title = Hapus { $name }?
+tax-config-delete-confirm-message = Arsipkan “{ $name }”? Ini akan menyembunyikannya dari daftar dan menghapus penugasan produk/kategorinya. Penjualan historis tetap menyimpan tautan tarifnya.
+tax-config-delete-blocked-title = Tidak dapat menghapus { $name }
+tax-config-delete-blocked-message = “{ $name }” dirujuk oleh { $count } penjualan historis dan tidak dapat diarsipkan. Tarif yang dipakai penjualan lalu disimpan agar struk dan catatan audit tetap utuh.
+tax-config-delete-deps-products = { $count ->
+    [one] 1 penugasan produk
+   *[other] { $count } penugasan produk
+}
+tax-config-delete-deps-categories = { $count ->
+    [one] 1 penugasan kategori
+   *[other] { $count } penugasan kategori
+}
 
 # ── Multi-Store ──
