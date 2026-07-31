@@ -100,6 +100,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   } = usePosState();
 
   const lineCount = lines.reduce((a, l) => a + l.qty, 0);
+  // Ref for stock-check callbacks to avoid stale closure on rapid sequential adds
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
 
   const { playBeep, playError, playSuccess, setSoundEnabled } = useSound();
 
@@ -298,7 +301,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!pendingProduct) return;
     const qty = Math.max(1, parseInt(qtyInput, 10) || 1);
     if (pendingProduct.stock_qty != null) {
-      const inCart = lines.filter((l) => l.sku === pendingProduct.sku).reduce((s, l) => s + l.qty, 0);
+      const inCart = linesRef.current.filter((l) => l.sku === pendingProduct.sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + qty > pendingProduct.stock_qty) {
         addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${pendingProduct.name}`, type: 'warning' });
         return;
@@ -307,7 +310,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     addProduct(toProduct(pendingProduct), qty);
     setShowQtyPicker(false);
     setPendingProduct(null);
-  }, [pendingProduct, qtyInput, addProduct, addToast, l10n, lines]);
+  }, [pendingProduct, qtyInput, addProduct, addToast, l10n]);
 
   // ── Keyboard shortcut overlay ────────────────────────────────────
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -510,21 +513,21 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleAdd = useCallback((p: ProductDto) => {
     if (p.stock_qty != null) {
-      const inCart = lines.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
+      const inCart = linesRef.current.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + 1 > p.stock_qty) {
         addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${p.name}`, type: 'warning' });
         return;
       }
     }
     addProduct(toProduct(p));
-  }, [addProduct, addToast, l10n, lines]);
+  }, [addProduct, addToast, l10n]);
 
   const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
     const product = products.find((p) => p.sku === sku);
     if (!product) return;
     const qty = Math.max(1, Math.round(weightGrams));
     if (product.stock_qty != null) {
-      const inCart = lines.filter((l) => l.sku === sku).reduce((s, l) => s + l.qty, 0);
+      const inCart = linesRef.current.filter((l) => l.sku === sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + qty > product.stock_qty) {
         addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
         return;
@@ -533,7 +536,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     addProduct(toProduct(product), qty);
     setWeighTarget(null);
     addToast({ message: l10n.getString('scale-weigh-added', { name: product.name, weight: qty }) || `Added ${qty}g of ${product.name}`, type: 'success' });
-  }, [products, lines, addProduct, addToast, l10n]);
+  }, [products, addProduct, addToast, l10n]);
 
   const handleSetWeighTarget = useCallback((p: ProductDto) => {
     if (weighTarget?.sku === p.sku) return;
@@ -545,7 +548,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleIncreaseQty = useCallback((line: { sku: string; id: LineId; qty: number }) => {
     const product = products.find((p) => p.sku === line.sku);
     if (product?.stock_qty != null) {
-      const otherLinesQty = lines
+      const otherLinesQty = linesRef.current
         .filter((l) => l.sku === line.sku && l.id !== line.id)
         .reduce((s, l) => s + l.qty, 0);
       if (otherLinesQty + line.qty + 1 > product.stock_qty) {
@@ -554,7 +557,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       }
     }
     updateQty(line.id, line.qty + 1);
-  }, [products, lines, updateQty, addToast, l10n]);
+  }, [products, updateQty, addToast, l10n]);
 
   /** Open the modifier editor for a cart line. */
   const handleEditModifiers = useCallback((line: CartLine) => {
