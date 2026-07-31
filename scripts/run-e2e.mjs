@@ -22,6 +22,7 @@ import { generateKeyPairSync } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { platform } from 'os';
+import http from 'node:http';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -199,8 +200,22 @@ function startVite() {
     });
 
     let outputBuffer = '';
+    let isReady = false;
+    let pollInterval = null;
     const startupTimeout = Number(process.env.VITE_STARTUP_TIMEOUT || '120000');
+
+    const markReady = () => {
+      if (isReady) return;
+      isReady = true;
+      if (pollInterval) clearInterval(pollInterval);
+      clearTimeout(timeout);
+      log('Vite', 'Ready.');
+      resolvePromise();
+    };
+
     const timeout = setTimeout(() => {
+      if (pollInterval) clearInterval(pollInterval);
+      if (isReady) return;
       const tail = outputBuffer.split('\n').filter(Boolean).slice(-40).join('\n');
       reject(new Error(
         `Vite dev server failed to start within ${startupTimeout / 1000}s.\n` +
@@ -210,24 +225,36 @@ function startVite() {
 
     const onData = (data) => {
       outputBuffer += data.toString();
-      if (outputBuffer.includes('Local:') || outputBuffer.includes('localhost:1420')) {
-        clearTimeout(timeout);
-        log('Vite', 'Ready.');
-        resolvePromise();
+      if (!isReady && (outputBuffer.includes('Local:') || outputBuffer.includes('localhost:1420') || outputBuffer.includes('ready in'))) {
+        markReady();
       }
     };
 
     viteProcess.stdout.on('data', onData);
     viteProcess.stderr.on('data', onData);
 
+    // Active HTTP poll every 250ms so we don't rely solely on stdout chunking in non-TTY CI
+    pollInterval = setInterval(() => {
+      if (isReady) return;
+      const req = http.get('http://127.0.0.1:1420', (res) => {
+        req.destroy();
+        markReady();
+      });
+      req.on('error', () => {
+        // Not ready yet
+      });
+    }, 250);
+
     viteProcess.on('error', (err) => {
+      if (pollInterval) clearInterval(pollInterval);
       clearTimeout(timeout);
-      reject(err);
+      if (!isReady) reject(err);
     });
 
     viteProcess.on('exit', (code) => {
+      if (pollInterval) clearInterval(pollInterval);
       clearTimeout(timeout);
-      if (code !== 0 && !outputBuffer.includes('ready')) {
+      if (!isReady && code !== 0 && !outputBuffer.includes('ready')) {
         reject(new Error(`Vite exited with code ${code}`));
       }
     });
