@@ -39,92 +39,37 @@ Desktop App Security & Stability Audit closeout: **all 18 findings resolved** ac
 
 ---
 
-## [0.0.24] — 2026-07-28
+## [0.0.24] — 2026-07-31
 
-Retail POS Theme Integration Audit: **all 7 findings resolved** (3 P0 + 2 P1 + 2 P2). The `RetailPosScreen` now participates in the global theme system — consuming `useOptionalTheme()?.theme` from `ThemeProvider` instead of a shadow `useState` with its own `localStorage` key. Eleven POS-domain CSS tokens (`--color-primary-pos`, `--color-success-pos`, `--color-warning-pos`, `--color-fn-key-pos`, `--color-bg-pos`, `--color-dark-bg-pos`, `--color-dark-border-pos`, and their light/dark/darker variants) are now defined in `tokens.css` across all three theme blocks. Hardcoded colour literals replaced with token references, and dual-declaration fallbacks added for nine `color-mix()` sites so legacy WKWebView (< Safari 16.4) renders a solid colour instead of `unset`. Three new theme-regression tests added (runtime sync, source-grep guard, expanded token-resolution check). Full audit documentation lives in [`docs/2026-07-28-retail-pos-theming-audit.md`](docs/2026-07-28-retail-pos-theming-audit.md).
-
-### Fixed
-
-#### 🔴 P0 — Theme Drift & Orphan Tokens (3 / 3)
-
-- **P0-1 — Shadow theme state (`RetailPosScreen.tsx:166–172`)** — Replaced the 6-line standalone `useState<'light' | 'dark'>('dark')` with a single `useOptionalTheme()?.theme` expression that subscribes to the global `ThemeProvider`. The `data-theme={theme}` attribute on the `.retail-pos` root now stays in lockstep with `<html data-theme>` when the user toggles via `ThemeToggle`.
-- **P0-2 — Orphan POS tokens (`RetailPosScreen.css` × 30+ usages)** — Added 11 POS-domain token declarations to `ui/src/frontend/themes/tokens.css`: `--color-primary-pos`, `--color-primary-pos-light`, `--color-primary-pos-dark`, `--color-success-pos`, `--color-success-pos-darker`, `--color-warning-pos`, `--color-fn-key-pos`, `--color-dark-bg-pos`, `--color-dark-border-pos` (brand-locked in `:root`), `--color-bg-pos` (`var(--color-bg)` / `var(--neutral-100)` / `var(--neutral-50)` per theme), and `--color-ink` (theme-adaptive). Previously these tokens were referenced ~30 times in CSS but defined 0 times — they resolved to `unset`.
-- **P0-3 — Storage-key collision + dead setter** — Removed the `localStorage['retail-theme']` key (collided with the global `'oz-pos-theme-v4'` key), the unused `_setTheme` setter, and the narrowed `'light' | 'dark'` type. The component now inherits the global 3-value theme type (`'default' | 'light' | 'dark'`).
-
-#### 🟠 P1 — CSS Compliance (2 / 2)
-
-- **P1-4 — Hardcoded `#000` literal + `hsl()` blends (`RetailPosScreen.css:1068, 321/334/341`)** — Replaced the hardcoded `#000` in `.retail-low-stock-banner` with `var(--color-ink)`. Migrated three `hsl(var(--cat-hue, 210), …)` blend sites to theme-aware `color-mix(in srgb, var(--color-bg-surface), hsl(var(--cat-hue, 210) …) …)` expressions so they respond to dark/light theme changes.
-- **P1-5 — WKWebView colour-mix fallback (9 sites)** — Added preceding `var(--color-bg-surface)` / `var(--color-bg-elevated)` / `var(--color-primary-pos)` / `var(--color-success-pos)` solid-token declarations before nine `color-mix()` rules so legacy WebKit engines (macOS WKWebView < Safari 16.4) that ignore `color-mix()` fall back to a predictable colour instead of `unset`. Covering: 3 cat-strip blend sites, 2 header nav button sites, shift badge, resize handle, cart table focus ring, and scan flash animation.
-
-#### 🟡 P2 — Type & Setter Hygiene (2 / 2)
-
-- **P2-6 — Obsolete type set** — Removed the standalone `useState<'light' | 'dark'>` declaration; the component now inherits the global 3-value `'default' | 'light' | 'dark'` type.
-- **P2-7 — Dead `_setTheme` setter** — Removed the unused underscore-prefixed setter that was never invoked.
+Retail + Restaurant (KDS) release: closed the full KDS production-readiness roadmap, completed ADR #22 workspace settings, overhauled the Retail POS UX, ran a codebase-wide i18n audit (89 fixes), and shipped E2E test infrastructure. All 3,476 UI tests and the 15-step pre-CI gate (`scripts/check.sh`) pass.
 
 ### Added
 
-#### 🧪 Theme-Regression Tests (3 new guards)
+- **KDS — real-time push (TODO 1a)** — Replaced adaptive polling with Tauri event push for live ticket updates; `table_number` wired end-to-end (removed the `as unknown` hack).
+- **KDS — course/modifier pipeline (TODO 2a)** — New course/modifier schema + `kds_line_items` table; course-grouped ticket cards with indented modifiers (Phase 2); course selector + modifier UI in the POS cart (Phase 3).
+- **KDS — offline resilience (TODO 3b)** — `useKdsOffline` cache, retry queue, and optimistic updates, backed by a 31-test suite.
+- **KDS — per-item status (TODO 3e)** — Item-level status column with per-line badges advancing pending → preparing → ready → served.
+- **KDS — mid-order editing (TODO 3f)** — `update_kds_order_items` API + product-picker modal for line-item replacement, with line refetch after edits.
+- **KDS — chit printing + profiles (TODO 3c/4c/4e)** — Printer HAL wired for automatic kitchen chit printing; separate kitchen-printer field; hardware profiles migrated to DB with schema versioning.
+- **KDS — UX (TODO 2b/2c/2d/3a/3d/2e)** — History/recall view, rush-priority flag, keyboard shortcuts, zone-switching chip bar, voice callout on 'ready', theme-color tokenization, wired auto-acknowledge.
+- **KDS + Retail — loading/error UX** — Shimmer loading skeletons and error banners with retry on both screens; KDS keyboard-help overlay, arrival animation, layout independence.
+- **Workspace settings (ADR #22)** — F10 keybinding opens the settings modal (TODO 4b); terminalId wired from AppShell; duplicate F10 removed; `markSettingsUpdated` on all 5 card saves; 6 card audit findings resolved; `setReceiptSettings` migrated to the scoped ADR #7 variant.
+- **E2E infrastructure (Phase B)** — `npm run e2e` + `check:all` commands, E2E PR workflow, `--changed-only` flag, and critical-path specs: POS→KDS flow, KDS lifecycle, sale→history, settings persistence, shift reconciliation.
 
-- **Runtime theme-sync test (`RetailPosScreen.test.tsx`)** — New test mounts `<RetailPosScreen />` inside a `ToggleThemeWrapper`, toggles the global theme via `useTheme().setTheme('dark' | 'light')`, and asserts that the `.retail-pos` root's `data-theme` attribute tracks `<html data-theme>` through each transition.
-- **Source-grep regression guard (`themeRegressionRetailPosScreen.test.tsx`)** — Statically reads `RetailPosScreen.tsx` with `fs.readFileSync` and asserts the shadow-state anti-pattern (`useState<'light'`, `retail-theme`, `_setTheme`) is absent. Fails-closed if the pattern re-emerges.
-- **Expanded token-resolution check (`themeRegression.test.tsx`)** — Renamed `CORE_TOKENS` → `THEME_TOKENS` and added POS-specific tokens (`--color-primary-pos`, `--color-success-pos`, `--color-warning-pos`) to the resolution verification so the existing theme-regression test also guards POS token definitions.
+### Fixed
 
-#### 🧪 Test Setup Hardening
+- **Retail POS — 5 P0 bugs** — `modifierLine` not reset on cart clear; in-flight product-fetch race (stale requests aborted); stale-closure stock-check callbacks; course dropdown click-through; corrupt held-cart lines rejected on resume.
+- **Retail POS — 7 P1 UX gaps** — Screen-reader announce on add-to-cart; low-stock filter empty state; held-cart delete confirmation; grid scroll preservation; Ctrl+K credit shortcut; reminder-popup re-show logic; distinct SKU vs barcode error messages.
+- **i18n — full-codebase audit (89 fixes across 6 cycles)** — 75 attribute-only FTL keys silently returning `undefined` via `l10n.getString()` fixed across 16 bundles; hardcoded strings closed in RestaurantMenu (13 keys), SettingsPage, PosScreen, Product/Category management, AuditLog, RetailProductGrid, AddCategoryModal.
+- **Management & settings audits** — ShiftManagementScreen (6 bug categories); SalesHistoryScreen (focus traps, CSV DOM leak, Profiler); SettingsNavTree (7 aria-labels); TerminalManagement FEATURE_GROUPS labels; DataManagement aria-labels; 16 test regressions + 4 pre-existing failing test files rescued.
+- **Pre-CI gate** — 3 UI lint fixes; `.kds-picker-modal` noise-dither compliance (3 CSS parity blocks + test baseline); LocationPicker load-flake hardening (18 waitFor timeouts). `scripts/check.sh` passes all 15 steps.
 
-- **Cross-file flake prevention (`test-setup.ts` + `RetailPosScreenCheckout.test.tsx`)** — Global `beforeEach` now clears `sessionStorage` in addition to `localStorage`, removes leaked `data-theme` / `is-theme-transitioning` from `<html>`, and deletes injected `<style>` tags. Added global `afterEach(cleanup)` to unmount rendered React trees. Wrapped synchronous `/Change/` assertions in `waitFor` to prevent cross-file render races.
+### Changed
 
-#### 🌐 i18n — Full-Codebase Audit (89 fixes across 6 cycles)
-
-Systematic audit of every feature directory for hardcoded English strings bypassing the `@fluent/react` localization layer. The headline fix is an automated sweep that identified 268 attribute-only FTL messages silently returning `undefined` when accessed via `l10n.getString()`, causing empty aria-labels and placeholders across 25 files. Five follow-up manual audits then closed the remaining hardcoded-string gaps in 7 high-impact screens.
-
-**Verification gate:** 3,324/3,324 vitest tests passing, TypeScript strict-mode clean, ESLint zero warnings, `cargo clippy` zero warnings, bundle parity zero missing keys across all 24 en + 24 id bundles.
-
-##### 🔴 Attribute-Only FTL Sweep — 75 keys across 16 bundles
-
-- **Root cause:** ~268 FTL messages were attribute-only (e.g. `.aria-label = Search products` with no message value). When accessed via `l10n.getString()` — the pattern used in 1,212 call sites — they silently returned `undefined`. Screens like PosScreen.tsx (26 instances), PaymentModal.tsx (18), StockCountsScreen.tsx (14), and StaffManagementScreen.tsx (9) were most affected.
-- **Fix:** Cross-referenced all `l10n.getString()` call sites against FTL bundle keys. Converted 75 attribute-only keys to simple key=value messages, added 3 defensive `||` fallbacks in TypeScript code where the same key is also used via `<Localized attrs>` wrappers (so the attribute path must remain). Bundles touched: `sales`, `inventory`, `staff`, `shared`, `categories`, `products`, `kds`, `purchasing`, `terminals`, `tax`, `shifts`, `currency`, `reports`, `multi-store`, `loyalty`, `settings` (en + id each).
-- **Prevention:** Documented the `attribute-only + l10n.getString()` anti-pattern in `TODO.md` as a permanent reference. A pre-commit or CI guard that cross-references attribute-only keys against `l10n.getString()` call sites would permanently close this bug class.
-
-##### 🟠 RestaurantMenu.tsx — 13 missing keys + 2 hardcoded aria-labels
-
-- **Missing FTL keys (13):** `restaurant-search-aria`, `restaurant-search-clear-aria`, `restaurant-context-pin`, `restaurant-context-unpin`, `restaurant-context-available`, `restaurant-context-unavailable`, `restaurant-card-pin-title`, `restaurant-sort-manual`, `restaurant-sort-a-z`, `restaurant-sort-date`, `restaurant-sort-popularity`, `restaurant-menu-items-aria`, `restaurant-color-swatch-aria`. All referenced in code but absent from `products.ftl` / `products.id.ftl` — silently rendering empty text. Added with proper English + Indonesian translations.
-- **Hardcoded aria-labels (2):** `aria-label="Menu items"` on the product grid and `aria-label={c}` (raw hex codes like `#10b981`) on 10 colour swatches — replaced with `l10n.getString()` calls with `||` fallbacks.
-- **Hook audit:** All `useEffect` / `useCallback` dep arrays correct, proper cleanup, no stale closures. CSS audit: 500+ lines, zero hardcoded hex colours — all `var(--color-*)` / `var(--bg-*)` tokens.
-
-##### 🟡 SettingsPage.tsx — 2 hardcoded strings
-
-- `placeholder="Search"` on the settings search input → `l10n.getString('settings-search-placeholder') || 'Search'`.
-- `Loading...` in the `Suspense` fallback → `<Localized id="settings-section-loading"><div>Loading...</div></Localized>`.
-- **CSS audit:** 244 tokens, zero hardcoded hex. Hook audit: all `useCallback`/`useEffect` dep arrays correct, proper cleanup, save-via-ref pattern consistent. At 1,081 lines, the largest UI file was also the cleanest.
-
-##### 🟡 PosScreen.tsx — 5 hardcoded English strings
-
-- Course fire button aria-label (`Fire ${course.label} (${holdCount} items)`) → `l10n.getString('pos-cart-course-fire-aria', { label, count }, fallback)`.
-- "Fire All" button text → `<Localized id="pos-cart-course-btn--all">`.
-- Override button aria-label (`Override price for ${line.name}`) + text → `l10n.getString('pos-cart-line-override-aria', { name }, fallback)` + `<Localized id="pos-cart-line-override">`.
-- **FTL keys added:** 6 across `sales.ftl` / `sales.id.ftl`. Indonesian: "Kirim { $label } ({ $count } item)", "Kirim Semua", "Timpa", "Timpa harga untuk { $name }".
-- **CSS audit:** 216 tokens, all hex inside `var()` fallbacks, zero true hardcoded hex. Hook audit: 40 hooks, `l10nRef` pattern correct, ESLint zero errors.
-
-##### 🟢 ProductManagementScreen + CategoryManagementScreen — 3 fixes
-
-- Category edit button: `aria-label={`Edit category ${cat.name}`}` → `l10n.getString('category-mgmt-edit-aria', { name }, fallback)`.
-- Product type dropdown: `Retail`/`Restaurant`/`Service` hardcoded options → `l10n.getString('product-type-retail') || 'Retail'` (and equivalents).
-- Stock alert bell aria-label: 3-way English logic → `l10n.getString()` with open/close/alert-count keys, all with `||` fallbacks.
-- **FTL keys added:** 7 across `products.ftl` / `products.id.ftl`. **CSS audit:** 92 + 135 tokens, zero hardcoded hex.
-
-##### 🟢 AuditLogScreen — 1 tooltip fix
-
-- Unreviewed-count badge title: `title={`${unreviewedCount} unreviewed events since last review`}` → `l10n.getString('audit-log-unreviewed-title', { count }, fallback)` with Fluent plural selector. **FTL key added:** 1 in `shared.ftl` / `shared.id.ftl`.
-
-##### ✅ CustomerManagementScreen — zero bugs (clean sweep)
-
-Both apparent hardcoded aria-labels (`aria-label="Search customers"` and `aria-label="Actions"`) were verified to be inside `<Localized attrs>` wrappers — legitimate fallbacks, not bugs. 71 CSS tokens, zero hardcoded hex, zero inline styles.
-
-#### 📚 Documentation
-
-- **Retail POS theming audit doc** — Created `docs/2026-07-28-retail-pos-theming-audit.md` documenting all 7 findings, remediation steps, residual risks, and verification summary. Marked VERIFIED after all fixes landed and pre-CI gates passed.
-- **i18n audit session summary** — Documented all 6 audit cycles with per-cycle breakdowns, fix counts, FTL key tallies, and verification gates in `JOURNAL.md` (July 29 entry).
-- **`TODO.md` audit roadmap** — Created tracking document with the 3-item audit backlog (attribute-only FTL sweep, RestaurantMenu, SettingsPage), marked all 3 complete after verification.
+- **Test infrastructure** — Shared mock factories (`createUsePosStateMock`, `mockedBarcode` singleton, retail fixtures) removed ~385 lines of boilerplate across 5 files; compile-time drift guard fails `tsc` if `usePosState` gains a field the mock lacks.
+- **Settings test coverage** — 76 new tests across General (12), Sync (32), Appearance (14), and Receipt (18) sections plus workspace cards.
+- **Retail POS code quality** — 37 static inline styles extracted to CSS classes (P2–P4); retail theming audit retained (global theme tokens + `color-mix()` fallbacks + 3 regression guards).
+- **Docs** — 9 ARCHITECTURE.md drifts fixed; TODO.md roadmap marked complete; topology inspector Phase 2 (Ctrl+I, sessionToken, ErrorBoundary); CHANGELOG/JOURNAL audit records.
 
 ---
 
