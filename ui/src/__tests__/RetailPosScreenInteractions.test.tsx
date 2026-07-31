@@ -275,6 +275,30 @@ describe('RetailPosScreen — interactions', () => {
     expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001' }));
   });
 
+  // ── P1-1: screen-reader announcement ─────────────────────────
+
+  it('announces the added product via the screen-reader live region', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // The visually-hidden live region is always mounted inside #retail-main
+    const announceRegion = document.querySelector('.retail-sr-only') as HTMLElement;
+    expect(announceRegion).toBeInTheDocument();
+    expect(announceRegion).toHaveAttribute('role', 'status');
+    expect(announceRegion).toHaveAttribute('aria-live', 'polite');
+    // Empty before any add
+    expect(announceRegion.textContent).toBe('');
+
+    // Single tap → handleAdd → announce('Added Indomie Goreng')
+    const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
+    fireEvent.pointerDown(productBtn);
+    fireEvent.pointerUp(productBtn);
+
+    await waitFor(() => {
+      expect(announceRegion.textContent).toMatch(/Added Indomie Goreng/);
+    });
+  });
+
   // ── SKU / Barcode input ──────────────────────────────────────
 
   it('adds product when SKU is submitted via Enter', async () => {

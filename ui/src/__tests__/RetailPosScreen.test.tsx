@@ -523,6 +523,32 @@ describe('RetailPosScreen — rendering', () => {
     expect(screen.getByText('Teh Botol Sosro')).toBeInTheDocument();
   });
 
+  it('shows the low-stock-specific empty message when the filter matches nothing (P1-2)', async () => {
+    // Override the products so every stock_qty is above the threshold → the
+    // low-stock filter yields zero rows and the grid shows its dedicated message.
+    // Persistent mock (not Once) since the load path may re-run (abort/retry).
+    const productsApi = await import('@/api/products');
+    vi.mocked(productsApi.listProductsScoped).mockResolvedValue(
+      mockProducts.map((p) => ({ ...p, stock_qty: 100 })),
+    );
+
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // No low-stock message before the filter is active
+    expect(screen.queryByText(/No products below the low-stock threshold/)).not.toBeInTheDocument();
+
+    // Ctrl+L toggles the filter → every product is filtered out
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.getByText(/No products below the low-stock threshold/)).toBeInTheDocument());
+    expect(screen.queryByText('Indomie Goreng')).not.toBeInTheDocument();
+    expect(screen.queryByText('Aqua 600ml')).not.toBeInTheDocument();
+
+    // Reset the persistent mock so high stock values don't leak into later tests
+    vi.mocked(productsApi.listProductsScoped).mockResolvedValue(mockProducts);
+  });
+
   it('syncs the retail-pos root data-theme with the global theme provider', async () => {
     await renderWithProviders(
       <ToggleThemeWrapper><RetailPosScreen /></ToggleThemeWrapper>,
