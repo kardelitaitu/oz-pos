@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { formatMoney, type Money, type Sku } from '@/types/domain';
 import type { ProductDto, CategoryDto } from '@/api/products';
@@ -67,8 +67,12 @@ export interface RetailProductGridProps {
 }
 
 // ── ProductCard sub-component ──────────────────────────────────────
+// Memoized: props are referentially stable (handlers are useCallbacks,
+// catHue is a useCallback, formatMoney is module-level, and product
+// objects come from the memoized pagedProducts slice) so cards skip
+// re-renders when cart/totals change (P4).
 
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, outOfStockLabel, addToCartTitle, addToCartAria, editProductTitle, editProductAria, weighProductAria, priceChangedHint }: {
+const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget, outOfStockLabel, addToCartTitle, addToCartAria, editProductTitle, editProductAria, weighProductAria, priceChangedHint }: {
   product: ProductDto;
   catHue: (catId: string | null) => number;
   formatMoney: (m: Money) => string;
@@ -140,7 +144,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
             {product.stock_qty}
           </span>
         ) : (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-fg-tertiary)' }}>{outOfStockLabel}</span>
+          <span className="retail-product-out-label">{outOfStockLabel}</span>
         )}
       </td>
       <td className="retail-col-name">
@@ -208,7 +212,7 @@ function ProductCard({ product, catHue, formatMoney, handleAdd, handleEdit, hand
       </td>
     </tr>
   );
-}
+});
 
 // ── Main component ─────────────────────────────────────────────────
 
@@ -380,7 +384,7 @@ export default function RetailProductGrid({
                   role="columnheader"
                   aria-sort={sortField === 'stock' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
-                  <div className="retail-th-content" style={{ justifyContent: 'center' }}>
+                  <div className="retail-th-content retail-th-content--center">
                     <span>{l10n.getString('retail-col-stock') || 'Stock'}</span>
                     <span className="retail-sort-icon">
                       {sortField === 'stock' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
@@ -406,7 +410,7 @@ export default function RetailProductGrid({
                   role="columnheader"
                   aria-sort={sortField === 'price' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
-                  <div className="retail-th-content" style={{ justifyContent: 'flex-end' }}>
+                  <div className="retail-th-content retail-th-content--end">
                     <span>{l10n.getString('retail-col-price') || 'Price'}</span>
                     <span className="retail-sort-icon">
                       {sortField === 'price' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}

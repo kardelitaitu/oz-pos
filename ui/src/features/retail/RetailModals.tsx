@@ -269,7 +269,7 @@ export default function RetailModals(props: RetailModalsProps) {
           >
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {shift.closeShiftError && <div className="retail-shift-error">{shift.closeShiftError}</div>}
-            <div style={{ fontSize: 12, color: 'var(--color-fg-secondary)', marginBottom: 10 }}>
+            <div className="retail-shift-opened-info">
               {l10n.getString('pos-close-shift-opened')}: {shift.activeShift ? new Date(shift.activeShift.openedAt).toLocaleString() : ''}
             </div>
             <label htmlFor="retail-closing">{l10n.getString('pos-close-shift-counted-label')}</label>
@@ -280,7 +280,7 @@ export default function RetailModals(props: RetailModalsProps) {
               value={shift.closingBalance}
               onChange={(e) => shift.onClosingBalanceChange(e.target.value)}
             />
-            <label htmlFor="retail-notes" style={{ marginTop: 8 }}>{l10n.getString('pos-shift-notes')}</label>
+            <label htmlFor="retail-notes" className="retail-shift-notes-label">{l10n.getString('pos-shift-notes')}</label>
             <textarea
               id="retail-notes"
               rows={2}
@@ -314,7 +314,7 @@ export default function RetailModals(props: RetailModalsProps) {
             className={`retail-shift-modal${shift.shiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}
           >
             <h3>{l10n.getString('pos-shift-closed-title')}</h3>
-            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+            <div className="retail-shift-summary">
               <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: shift.closedShiftSummary.totalSalesMinor, currency: shift.storeSettings.currency })}</div>
               <div>{l10n.getString('retail-shift-closed-cash-sales')} {formatMoney({ minor_units: shift.closedShiftSummary.totalCashMinor, currency: shift.storeSettings.currency })}</div>
               <div>{l10n.getString('pos-shift-expected-cash')}: {shift.closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: shift.closedShiftSummary.expectedCashMinor, currency: shift.storeSettings.currency }) : '—'}</div>
@@ -346,39 +346,34 @@ export default function RetailModals(props: RetailModalsProps) {
           <div
             ref={creditPanelRef}
             className={`retail-credit-modal${credit.exit.exiting ? ' retail-credit-modal--exiting' : ''}`}
-            style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}
           >
             <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
             {credit.sales.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: 'var(--color-fg-tertiary)' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
+              <div className="retail-credit-empty">{l10n.getString('retail-credit-no-outstanding')}</div>
             ) : (
-              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+              <table className="retail-credit-table">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
-                    <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
-                    <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
-                    { }
-                    <th style={{ padding: 4 }}></th>
+                  <tr>
+                    <th className="retail-credit-th--left">{l10n.getString('retail-credit-col-customer')}</th>
+                    <th className="retail-credit-th--right">{l10n.getString('retail-credit-col-amount')}</th>
+                    <th className="retail-credit-th--center">{l10n.getString('retail-credit-col-date')}</th>
+                    <th className="retail-credit-th--left"></th>
                   </tr>
                 </thead>
                 <tbody>{credit.sales.map((c) => (
-                    <tr key={c.saleId} style={{ borderBottom: '1px solid var(--color-border-hover)' }}>
-                      <td style={{ padding: 4 }}>{c.customerName || '—'}</td>
-                      <td style={{ textAlign: 'right', padding: 4 }}>
+                    <tr key={c.saleId}>
+                      <td>{c.customerName || '—'}</td>
+                      <td className="retail-credit-td--right">
                         {formatMoney({ minor_units: c.totalMinor, currency: c.currency })}
                       </td>
-                      <td style={{ textAlign: 'center', padding: 4, fontSize: 11 }}>
+                      <td className="retail-credit-td--center">
                         {new Date(c.createdAt).toLocaleDateString()}
                       </td>
-                      <td style={{ padding: 4 }}>
+                      <td>
                         <button
+                          className="retail-credit-settle-btn"
                           onClick={() => credit.onSettle(c.saleId)}
                           disabled={credit.settlingId === c.saleId}
-                          style={{
-                            padding: '4px 8px', fontSize: 11, background: 'var(--color-success-pos)',
-                            color: 'var(--color-accent-fg)', border: 'none', cursor: 'pointer',
-                          }}
                         >
                           {credit.settlingId === c.saleId ? '…' : l10n.getString('retail-credit-settle')}
                         </button>
@@ -412,7 +407,7 @@ export default function RetailModals(props: RetailModalsProps) {
             className={`retail-clear-modal${clearConfirm.exit.exiting ? ' retail-clear-modal--exiting' : ''}`}
           >
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
-            <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
+            <p className="retail-modal-message">
               {l10n.getString('retail-clear-cart-confirm', { count: clearConfirm.lineCount }) || `Remove all ${clearConfirm.lineCount} item${clearConfirm.lineCount !== 1 ? 's' : ''} from the cart?`}
             </p>
             <div className="retail-shift-modal-actions">
@@ -440,7 +435,7 @@ export default function RetailModals(props: RetailModalsProps) {
             className={`retail-clear-modal${deleteHeldCartConfirm.exit.exiting ? ' retail-clear-modal--exiting' : ''}`}
           >
             <h3>{l10n.getString('retail-held-cart-delete-title') || 'Delete Held Cart'}</h3>
-            <p style={{ fontSize: 13, margin: '0 0 16px', color: 'var(--color-fg-tertiary)' }}>
+            <p className="retail-modal-message">
               {l10n.getString('retail-held-cart-delete-confirm', { label: deleteHeldCartConfirm.label }) || `Delete "${deleteHeldCartConfirm.label}"? This cannot be undone.`}
             </p>
             <div className="retail-shift-modal-actions">
@@ -791,13 +786,12 @@ export default function RetailModals(props: RetailModalsProps) {
             className={`retail-shift-modal${quickReturn.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
           >
             <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
-            <p style={{ fontSize: 12, color: 'var(--color-fg-tertiary)', marginBottom: 8 }}>
+            <p className="retail-quick-return-desc">
               {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
             </p>
             <input
               type="text"
-              className="retail-sku-input"
-              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
+              className="retail-sku-input retail-quick-return-input"
               value={quickReturn.barcode}
               onChange={(e) => quickReturn.onBarcodeChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') quickReturn.onSubmit(); }}

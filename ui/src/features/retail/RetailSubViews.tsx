@@ -23,7 +23,7 @@ export function SalesHistoryView({ theme, onBack }: SalesHistoryViewProps) {
         onBack={onBack}
         skipTarget="retail-subview-main"
       />
-      <div id="retail-subview-main" style={{ flex: 1, overflow: 'auto' }}>
+      <div id="retail-subview-main">
         <SalesHistoryScreen />
       </div>
     </div>
@@ -48,7 +48,7 @@ export function TableManagementView({ theme, onBack }: TableManagementViewProps)
         onBack={onBack}
         skipTarget="retail-subview-main"
       />
-      <div id="retail-subview-main" style={{ flex: 1, overflow: 'auto' }}>
+      <div id="retail-subview-main">
         <TableManagementScreen />
       </div>
     </div>
@@ -74,7 +74,7 @@ export function StockInquiryView({ theme, onBack, onAddProduct }: StockInquiryVi
         onBack={onBack}
         skipTarget="retail-subview-main"
       />
-      <div id="retail-subview-main" style={{ flex: 1, overflow: 'auto' }}>
+      <div id="retail-subview-main">
         <ProductLookupScreen onAddProduct={(p) => onAddProduct({
           sku: p.sku, name: p.name, category: p.category,
           price: p.price, barcode: p.barcode ?? null,

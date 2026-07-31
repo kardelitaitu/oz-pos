@@ -78,7 +78,6 @@ export default function RetailHeader({
             src={`data:image/png;base64,${storeSettings.logo}`}
             alt={storeSettings.name || l10n.getString('retail-store-logo-alt') || 'Store logo'}
             className="retail-header-logo"
-            style={{ height: 32, marginRight: 8 }}
           />
         )}
         <div>
@@ -95,7 +94,7 @@ export default function RetailHeader({
             {l10n.getString('retail-shift-label')} &middot; {formatMoney({ minor_units: activeShift.totalSalesMinor, currency: storeSettings?.currency ?? 'IDR' })}
           </span>
         ) : (
-          <span className="retail-shift-badge" style={{ opacity: 0.6 }}>{l10n.getString('retail-no-shift')}</span>
+          <span className="retail-shift-badge retail-shift-badge--idle">{l10n.getString('retail-no-shift')}</span>
         )}
         {onWorkspacePicker && (
           <button

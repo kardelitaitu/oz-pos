@@ -168,20 +168,19 @@ export default function RetailCartPanel({
               <table className="retail-cart-table-inner">
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }}>{l10n.getString('retail-cart-header-col')}</th>
+                    <th className="retail-cart-th-num">{l10n.getString('retail-cart-header-col')}</th>
                     <th>{l10n.getString('retail-cart-header-item')}</th>
-                    <th style={{ width: 56 }}>{l10n.getString('retail-cart-header-qty')}</th>
-                    <th style={{ width: 72 }}>{l10n.getString('retail-cart-header-price')}</th>
-                    <th style={{ width: 80 }}>{l10n.getString('retail-cart-header-subtotal')}</th>
-                    { }
-                    <th style={{ width: 24 }}></th>
+                    <th className="retail-cart-th-qty">{l10n.getString('retail-cart-header-qty')}</th>
+                    <th className="retail-cart-th-price">{l10n.getString('retail-cart-header-price')}</th>
+                    <th className="retail-cart-th-subtotal">{l10n.getString('retail-cart-header-subtotal')}</th>
+                    <th className="retail-cart-th-actions"></th>
                   </tr>
                 </thead>
                 <tbody>{lines.map((line, idx) => (
                     <tr key={line.id}>
                       <td className="retail-cart-line-sku">{idx + 1}</td>
                       <td>
-                        <div style={{ fontWeight: 600, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                        <div className="retail-cart-line-name">
                           {line.name ?? line.sku}
                           {/* ── Course chip ──────────── */}
                           {showCourseSelector && (
@@ -232,7 +231,7 @@ export default function RetailCartPanel({
                         </div>
                         {/* ── Modifier names line ──── */}
                         {line.modifiers && line.modifiers.length > 0 && (
-                          <div style={{ fontSize: 10, color: 'var(--color-fg-tertiary)', marginTop: 2, lineHeight: 1.3 }}>
+                          <div className="retail-cart-line-modifiers">
                             {line.modifiers.map((m) => m.modifierName).join(', ')}
                           </div>
                         )}
@@ -244,11 +243,6 @@ export default function RetailCartPanel({
                             onChange={(e) => lineActions.onSerialChange(line.id, e.target.value)}
                             placeholder={l10n.getString('retail-serial-placeholder') || 'Serial #'}
                             aria-label={l10n.getString('retail-serial-aria', { name: line.name ?? line.sku }) || `Serial number for ${line.name ?? line.sku}`}
-                            style={{
-                              marginTop: 4, padding: '2px 4px', fontSize: 10,
-                              width: '100%', boxSizing: 'border-box',
-                              border: '1px solid var(--color-border)', borderRadius: 2,
-                            }}
                           />
                         )}
                       </td>
@@ -340,7 +334,7 @@ export default function RetailCartPanel({
               {totals.discountPercent > 0 && totals.discountAmount && (
                 <div className="retail-total-row">
                   <span>{l10n.getString('retail-total-discount', { percent: totals.discountPercent }) || `Discount ${totals.discountPercent}%`}</span>
-                  <span style={{ color: 'var(--color-danger)' }}>&minus;{formatMoney(totals.discountAmount)}</span>
+                  <span className="retail-total-discount">&minus;{formatMoney(totals.discountAmount)}</span>
                 </div>
               )}
               {totals.cartTax > 0 && (
