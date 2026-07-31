@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
@@ -91,7 +92,7 @@ export default function DashboardScreen() {
     : 1;
 
   return (
-    <div className="dashboard" role="region" aria-label={l10n.getString('dashboard-region-aria') || 'Dashboard'}>
+    <div className="dashboard" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
       <Localized id="dashboard-title">
         <h1 className="dashboard-title">Dashboard</h1>
       </Localized>
@@ -160,13 +161,13 @@ export default function DashboardScreen() {
         ) : (
           <ul
             className="dashboard-low-stock-list"
-            aria-label={l10n.getString('dashboard-stock-alerts-aria') || 'Low stock alerts'}
+            aria-label={requiredLocalized(l10n, 'dashboard-stock-alerts-aria')}
           >
             {lowStock.map((item) => (
               <li key={item.product_id} className="dashboard-low-stock-item">
                 <span className="dashboard-low-stock-name">{item.name}</span>
                 <span className="dashboard-low-stock-qty">
-                  {item.current_qty} {l10n.getString('dashboard-stock-left') || 'left'}
+                  {item.current_qty} {requiredLocalized(l10n, 'dashboard-stock-left')}
                 </span>
               </li>
             ))}

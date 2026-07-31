@@ -38,6 +38,7 @@ import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useOptionalTheme, type Theme } from '@/frontend/shell/ThemeProvider';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
@@ -885,7 +886,7 @@ function SettingsPageContent() {
               name="settings-search"
               className="settings-topbar-search-input"
               type="text"
-              placeholder={l10n.getString('settings-search-placeholder') || 'Search'}
+              placeholder={requiredLocalized(l10n, 'settings-search-placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('settings-sidebar-search-aria')}

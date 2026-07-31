@@ -97,6 +97,7 @@ inv-shift-no-transactions = Tidak ada transaksi yang tercatat.
 
 # Inventory Shift — error toasts + a11y
 inv-shift-error-locations = Gagal memuat lokasi
+inv-error-load = Gagal memuat produk
 inv-shift-error-active = Gagal memuat shift aktif
 inv-shift-error-start = Gagal memulai shift
 inv-shift-error-end = Gagal mengakhiri shift

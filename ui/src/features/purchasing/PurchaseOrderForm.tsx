@@ -8,6 +8,7 @@ import {
 } from '@/api/purchasing';
 import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './PurchaseOrderForm.css';
 
@@ -46,7 +47,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
 
   useEffect(() => {
     listSuppliers().then(setSuppliers)    .catch(() => {
-      addToast({ message: l10nRef.current.getString('po-form-error-suppliers-failed') || 'Failed to load suppliers', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-form-error-suppliers-failed'), type: 'error' });
     });
   }, [addToast]); // l10n via ref — stable dep chain
 

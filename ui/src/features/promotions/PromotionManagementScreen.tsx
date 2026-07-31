@@ -12,6 +12,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -68,7 +69,7 @@ export default function PromotionManagementScreen() {
       const items = await listPromotions();
       setPromotions(items);
     } catch {
-      addToast({ message: l10n.getString('promotions-error-load') || 'Failed to load promotions', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'promotions-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -121,7 +122,7 @@ export default function PromotionManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-save') || 'Failed to save promotion', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : requiredLocalized(l10n, 'promotions-error-save'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -135,7 +136,7 @@ export default function PromotionManagementScreen() {
       await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-delete') || 'Failed to delete promotion', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : requiredLocalized(l10n, 'promotions-error-delete'), type: 'error' });
     } finally {
       setDeleting(null);
     }
@@ -146,7 +147,7 @@ export default function PromotionManagementScreen() {
       await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-toggle') || 'Failed to toggle promotion', type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : requiredLocalized(l10n, 'promotions-error-toggle'), type: 'error' });
     }
   }, [load, addToast, l10n, session?.user_id]);
 

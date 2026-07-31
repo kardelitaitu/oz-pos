@@ -21,7 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
-import { EmptyState } from '@/frontend/shared';
+import { EmptyState, requiredLocalized } from '@/frontend/shared';
 import { NoSalesIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import RefundModal from './RefundModal';
@@ -682,15 +682,15 @@ export default function SalesHistoryScreen() {
               <EmptyState
                 icon={<NoSalesIcon />}
                 headingLevel={2}
-                title={l10n.getString('sales-history-empty') || 'No sales recorded yet'}
+                title={requiredLocalized(l10n, 'sales-history-empty')}
               />
             ) : (
               <EmptyState
                 icon={<NotFoundIcon />}
                 headingLevel={2}
-                title={l10n.getString('sales-history-empty-filtered') || 'No sales match your filters'}
+                title={requiredLocalized(l10n, 'sales-history-empty-filtered')}
                 action={{
-                  label: l10n.getString('sales-history-clear-filters') || 'Clear filters',
+                  label: requiredLocalized(l10n, 'sales-history-clear-filters'),
                   onClick: () => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); },
                 }}
               />

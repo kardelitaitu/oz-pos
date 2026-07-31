@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import {
   listProducts,
   adjustStock,
@@ -60,7 +61,7 @@ export default function InventoryAdjustmentScreen() {
       if (mountedRef.current) setProducts(data);
     } catch {
       if (mountedRef.current) {
-        addToast({ message: l10n.getString('inv-error-load') || 'Failed to load products', type: 'error' });
+        addToast({ message: requiredLocalized(l10n, 'inv-error-load'), type: 'error' });
       }
     } finally {
       if (mountedRef.current) setLoading(false);

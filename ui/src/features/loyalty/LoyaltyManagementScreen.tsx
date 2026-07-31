@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
@@ -64,7 +65,7 @@ export default function LoyaltyManagementScreen() {
     } catch (err) {
       setLoadError(err instanceof Error
         ? err.message
-        : l10n.getString('loyalty-load-error') || 'Failed to load loyalty data');
+        : requiredLocalized(l10n, 'loyalty-load-error'));
     } finally {
       setLoading(false);
     }
@@ -120,7 +121,7 @@ export default function LoyaltyManagementScreen() {
       setTiers((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       setEditingTier(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('loyalty-save-tier-error') || 'Failed to save tier');
+      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'loyalty-save-tier-error'));
     } finally {
       setSavingTier(false);
     }

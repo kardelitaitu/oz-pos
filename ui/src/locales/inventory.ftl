@@ -75,6 +75,7 @@ inv-shift-no-transactions = No transactions recorded.
 
 # Inventory Shift — error toasts + a11y
 inv-shift-error-locations = Failed to load locations
+inv-error-load = Failed to load products
 inv-shift-error-active = Failed to load active shift
 inv-shift-error-start = Failed to start shift
 inv-shift-error-end = Failed to end shift

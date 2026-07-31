@@ -1,4 +1,5 @@
 import type React from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -159,7 +160,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               className="retail-edit-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={l10n.getString('retail-add-product-name-placeholder') || 'e.g. Logitech G Pro X Wireless Mouse'}
+              placeholder={requiredLocalized(l10n, 'retail-add-product-name-placeholder')}
               ref={nameInputRef}
               required
             />

@@ -11,7 +11,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
 import './CategoryManagementScreen.css';
 
@@ -565,7 +565,7 @@ export default function CategoryManagementScreen() {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             ref={editInputRef}
-            aria-label={l10n.getString('categories-name-aria') || 'Category Name'}
+            aria-label={requiredLocalized(l10n, 'categories-name-aria')}
           />
         </div>
 

@@ -1,4 +1,5 @@
 import type React from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -92,7 +93,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               className="retail-edit-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={l10n.getString('retail-add-category-name-placeholder') || 'e.g. Storage, Peripherals, Accessories'}
+              placeholder={requiredLocalized(l10n, 'retail-add-category-name-placeholder')}
               ref={nameInputRef}
               required
             />

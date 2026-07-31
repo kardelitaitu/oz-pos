@@ -5,6 +5,7 @@ import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
 
@@ -124,7 +125,7 @@ export function TerminalPreferencesCard({
               step={5}
               value={soundVolume}
               onChange={(e) => updateSoundVolume(Number(e.target.value))}
-              aria-label={l10n.getString('terminal-sound-volume-aria') || 'Sound volume'}
+              aria-label={requiredLocalized(l10n, 'terminal-sound-volume-aria')}
             />
             {!isCompact && (
               <span className="settings-range-value">{soundVolume}%</span>

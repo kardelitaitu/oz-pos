@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { animDuration } from '@/utils/animation';
 import { Localized, useLocalization } from '@fluent/react';
 import { issueGiftCard, type IssueGiftCardInput } from '@/api/giftCards';
@@ -77,7 +78,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
       await issueGiftCard(input);
       onIssued();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('gift-cards-error-issue') || 'Failed to issue gift card'));
+      setError(err instanceof Error ? err.message : (requiredLocalized(l10n, 'gift-cards-error-issue')));
     } finally {
       setProcessing(false);
     }
@@ -136,7 +137,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
               className="gift-cards-modal-input"
               id="gift-card-issued-to"
               name="gift-card-issued-to"
-              placeholder={l10n.getString('gift-cards-issue-to-placeholder') || 'Customer name'}
+              placeholder={requiredLocalized(l10n, 'gift-cards-issue-to-placeholder')}
               value={issuedTo}
               onChange={(e) => { setIssuedTo(e.target.value); setError(''); }}
               aria-label={l10n.getString('gift-cards-issue-to-aria')}
@@ -153,7 +154,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
               className="gift-cards-modal-input"
               id="gift-card-pin"
               name="gift-card-pin"
-              placeholder={l10n.getString('gift-cards-issue-pin-placeholder') || 'For balance checks'}
+              placeholder={requiredLocalized(l10n, 'gift-cards-issue-pin-placeholder')}
               value={pin}
               onChange={(e) => { setPin(e.target.value); setError(''); }}
               aria-label={l10n.getString('gift-cards-issue-pin-aria')}

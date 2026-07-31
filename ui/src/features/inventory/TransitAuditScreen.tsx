@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
 import './TransitAuditScreen.css';
 
@@ -34,7 +35,7 @@ export default function TransitAuditScreen() {
       );
       setTransfers(enriched);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-transit-error-load') || 'Failed to load transit stock'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-transit-error-load')), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -54,9 +55,9 @@ export default function TransitAuditScreen() {
       await cancelStockTransfer(reverseConfirmId);
       setReverseConfirmId(null);
       await loadTransfers();
-      addToast({ message: l10n.getString('inv-transit-reversed-toast') || 'Stock transfer reversed successfully', type: 'success' });
+      addToast({ message: requiredLocalized(l10n, 'inv-transit-reversed-toast'), type: 'success' });
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-transit-error-reverse') || 'Failed to reverse transfer'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-transit-error-reverse')), type: 'error' });
     }
   };
 
@@ -121,7 +122,7 @@ export default function TransitAuditScreen() {
                     <Localized id="inv-transit-col-sent">
                       <span>Sent At</span>
                     </Localized>
-                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : (l10n.getString('inv-transit-unknown') || 'Unknown')}</strong>
+                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : (requiredLocalized(l10n, 'inv-transit-unknown'))}</strong>
                   </div>
                 </div>
 
@@ -166,10 +167,10 @@ export default function TransitAuditScreen() {
         open={reverseConfirmId !== null}
         onCancel={() => setReverseConfirmId(null)}
         onConfirm={handleReverseConfirm}
-        title={l10n.getString('inv-transit-reverse-title') || 'Reverse Transfer?'}
-        message={l10n.getString('inv-transit-reverse-message') || 'Are you sure you want to reverse this stock transfer? Stock will be returned to the source location. This action cannot be undone.'}
+        title={requiredLocalized(l10n, 'inv-transit-reverse-title')}
+        message={requiredLocalized(l10n, 'inv-transit-reverse-message')}
         variant="danger"
-        confirmLabel={l10n.getString('inv-transit-reverse-confirm') || 'Reverse'}
+        confirmLabel={requiredLocalized(l10n, 'inv-transit-reverse-confirm')}
       />
     </div>
   );

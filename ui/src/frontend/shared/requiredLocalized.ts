@@ -36,7 +36,6 @@ export function requiredLocalized(
   const value = l10n.getString(id, args);
   if (value === null || value === undefined) {
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
       console.warn(`[i18n] missing required message: "${id}"`);
     }
     return id;

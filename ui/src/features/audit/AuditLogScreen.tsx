@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { listAuditLog, type AuditEntryDto } from '@/api/audit';
 import { useAuth } from '@/contexts/AuthContext';
@@ -115,7 +116,7 @@ export default function AuditLogScreen() {
       }
     } catch (err) {
       if (!cancelledRef.current) {
-        setError(err instanceof Error ? err.message : l10n.getString('audit-log-error-load') || 'Failed to load audit log');
+        setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'audit-log-error-load'));
       }
     } finally {
       if (!cancelledRef.current) {
@@ -350,7 +351,7 @@ export default function AuditLogScreen() {
                         <span className="audit-log-target-none">&mdash;</span>
                       )}
                     </td>
-                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : l10n.getString('audit-log-user-system') || 'system'}</td>
+                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : requiredLocalized(l10n, 'audit-log-user-system')}</td>
                     <td>
                       <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`}>
                         {entry.outcome}

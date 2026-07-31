@@ -7,6 +7,7 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
 import { useLocalization } from '@fluent/react';
@@ -583,7 +584,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       }
       // ADR-19 §5.1: reject add_line when cart exists but has no deduction location
       if (cartId && !deductionLocationIdRef.current) {
-        addToast({ message: l10nRef.current.getString('pos-cart-unbound-error') || 'Cart has no deduction location — cannot add items', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'pos-cart-unbound-error'), type: 'error' });
         return;
       }
       addProduct(product, qty);
@@ -964,7 +965,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   useEffect(() => {
     getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
-      .catch(() => addToast({ message: l10nRef.current.getString('pos-toast-receipt-settings-failed') || 'Failed to load receipt settings', type: 'error' }));
+      .catch(() => addToast({ message: requiredLocalized(l10nRef.current, 'pos-toast-receipt-settings-failed'), type: 'error' }));
   }, [addToast, sessionToken]); // l10n via ref — stable dep chain
 
   const handleCloseShiftClick = useCallback(() => {
@@ -1297,8 +1298,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 type="button"
                 className="pos-cart-lock-btn"
                 onClick={() => setShowTables(true)}
-                aria-label={l10n.getString('tables-title') || 'Tables'}
-                title={l10n.getString('tables-title') || 'Table Management'}
+                aria-label={requiredLocalized(l10n, 'tables-title')}
+                title={requiredLocalized(l10n, 'tables-title')}
                 style={{ marginRight: 4 }}
               >
                 🪑
@@ -1309,8 +1310,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={() => setShowSalesHistory(true)}
-              aria-label={l10n.getString('retail-fn-history') || 'Sales History'}
-              title={l10n.getString('retail-fn-history') || 'Sales History'}
+              aria-label={requiredLocalized(l10n, 'retail-fn-history')}
+              title={requiredLocalized(l10n, 'retail-fn-history')}
               style={{ marginRight: 4 }}
             >
               📋
@@ -1320,8 +1321,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={() => setShowStockInquiry(true)}
-              aria-label={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
-              title={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
+              aria-label={requiredLocalized(l10n, 'retail-fn-stok')}
+              title={requiredLocalized(l10n, 'retail-fn-stok')}
               style={{ marginRight: 4 }}
             >
               📦
@@ -1331,8 +1332,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={() => onNavigate?.('kds')}
-              aria-label={l10n.getString('kds-title') || 'KDS'}
-              title={l10n.getString('kds-title') || 'KDS'}
+              aria-label={requiredLocalized(l10n, 'kds-title')}
+              title={requiredLocalized(l10n, 'kds-title')}
               style={{ marginRight: 4 }}
             >
               👨‍🍳
@@ -1342,8 +1343,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={handleOpenSettings}
-              aria-label={l10n.getString('settings-page-title') || 'Settings'}
-              title={l10n.getString('settings-page-title') || 'Settings'}
+              aria-label={requiredLocalized(l10n, 'settings-page-title')}
+              title={requiredLocalized(l10n, 'settings-page-title')}
               style={{ marginRight: 4 }}
             >
               ⚙️

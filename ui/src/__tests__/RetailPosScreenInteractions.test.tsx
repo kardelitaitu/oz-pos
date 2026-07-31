@@ -230,7 +230,7 @@ describe('RetailPosScreen — interactions', () => {
     await waitFor(() => {
       const toast = screen.getByRole('alert');
       // P1-7: SKU lookups use a distinct message (not the barcode one)
-      expect(toast.textContent).toMatch(/No product matches this SKU/);
+      expect(toast.textContent).toMatch(/No product matches SKU "INVALID-SKU"/);
     });
   });
 

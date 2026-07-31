@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
@@ -168,7 +169,7 @@ export default function WorkspaceSettingsModal({
               type="button"
               className={styles['close-btn']}
               onClick={() => exit.requestClose()}
-              aria-label={l10n.getString('workspace-modal-close-aria') || 'Close settings'}
+              aria-label={requiredLocalized(l10n, 'workspace-modal-close-aria')}
             >
               <svg
                 viewBox="0 0 24 24"

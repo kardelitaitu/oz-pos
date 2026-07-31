@@ -3,6 +3,7 @@ import { usePosState } from '@/features/sales/usePosState';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
@@ -192,11 +193,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         setShowQuickReturnRefund(true);
         setQuickReturnBarcode('');
       } else {
-        addToast({ message: l10n.getString('retail-quick-return-not-found') || 'Sale not found for this receipt barcode', type: 'error' });
+        addToast({ message: requiredLocalized(l10n, 'retail-quick-return-not-found'), type: 'error' });
         playError();
       }
     } catch {
-      addToast({ message: l10n.getString('retail-quick-return-error') || 'Failed to look up receipt', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-quick-return-error'), type: 'error' });
       playError();
     } finally {
       setQuickReturnLoading(false);
@@ -287,7 +288,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
     addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty);
-    announce(l10nRef.current.getString('retail-added-to-cart', { name: item.name }) || `Added ${item.name}`);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: item.name }));
     setUndoStack((prev) => prev.slice(1));
   }, [undoStack, addProduct, announce]);
 
@@ -317,12 +318,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (pendingProduct.stock_qty != null) {
       const inCart = linesRef.current.filter((l) => l.sku === pendingProduct.sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + qty > pendingProduct.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${pendingProduct.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: pendingProduct.name }), type: 'warning' });
         return;
       }
     }
     addProduct(toProduct(pendingProduct), qty);
-    announce(l10nRef.current.getString('retail-added-to-cart', { name: pendingProduct.name }) || `Added ${pendingProduct.name}`);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: pendingProduct.name }));
     setShowQtyPicker(false);
     setPendingProduct(null);
   }, [pendingProduct, qtyInput, addProduct, addToast, l10n, announce]);
@@ -395,7 +396,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       .catch(() => {
         if (controller.signal.aborted) return;
         setProducts(RETAIL_SAMPLE_PRODUCTS);
-        setLoadError(l10nRef.current.getString('retail-load-error') || 'Failed to load products. Showing demo data.');
+        setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
       })
       .finally(() => { if (!controller.signal.aborted) setProductsLoading(false); });
     listCategories()
@@ -406,7 +407,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       .catch(() => {
         if (controller.signal.aborted) return;
         setCategories(RETAIL_SAMPLE_CATEGORIES);
-        setLoadError(l10nRef.current.getString('retail-load-error') || 'Failed to load products. Showing demo data.');
+        setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
       })
       .finally(() => {
         if (!controller.signal.aborted) setCategoriesLoading(false);
@@ -427,7 +428,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  const allLabel = l10n.getString('product-lookup-all-categories') || 'All';
+  const allLabel = requiredLocalized(l10n, 'product-lookup-all-categories');
   const catLabels = useMemo(() => {
     const m = new Map<string, string>();
     categories.forEach((c) => {
@@ -551,12 +552,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (p.stock_qty != null) {
       const inCart = linesRef.current.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + 1 > p.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${p.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: p.name }), type: 'warning' });
         return;
       }
     }
     addProduct(toProduct(p));
-    announce(l10nRef.current.getString('retail-added-to-cart', { name: p.name }) || `Added ${p.name}`);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: p.name }));
   }, [addProduct, addToast, l10n, announce]);
 
   const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
@@ -566,20 +567,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (product.stock_qty != null) {
       const inCart = linesRef.current.filter((l) => l.sku === sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + qty > product.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: product.name }), type: 'warning' });
         return;
       }
     }
     addProduct(toProduct(product), qty);
-    announce(l10nRef.current.getString('retail-added-to-cart', { name: product.name }) || `Added ${product.name}`);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: product.name }));
     setWeighTarget(null);
-    addToast({ message: l10n.getString('scale-weigh-added', { name: product.name, weight: qty }) || `Added ${qty}g of ${product.name}`, type: 'success' });
+    addToast({ message: requiredLocalized(l10n, 'scale-weigh-added', { name: product.name, weight: qty }), type: 'success' });
   }, [products, addProduct, addToast, l10n, announce]);
 
   const handleSetWeighTarget = useCallback((p: ProductDto) => {
     if (weighTarget?.sku === p.sku) return;
     setWeighTarget({ sku: p.sku as Sku, name: p.name });
-    addToast({ message: l10n.getString('scale-target-set', { name: p.name }) || `${p.name} selected for weighing`, type: 'info' });
+    addToast({ message: requiredLocalized(l10n, 'scale-target-set', { name: p.name }), type: 'info' });
   }, [weighTarget, addToast, l10n]);
 
   /** Stock-aware cart qty increase — checks stock_qty before incrementing. */
@@ -590,7 +591,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         .filter((l) => l.sku === line.sku && l.id !== line.id)
         .reduce((s, l) => s + l.qty, 0);
       if (otherLinesQty + line.qty + 1 > product.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: product.name }), type: 'warning' });
         return;
       }
     }
@@ -620,7 +621,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       const found = await lookupProductBySkuScoped(sessionToken, val);
       if (found) { handleAdd(found); return; }
     } catch { /* unreachable */ }
-    addToast({ message: l10n.getString('retail-sku-not-found') || `No product matches SKU "${val}"`, type: 'warning' });
+    addToast({ message: requiredLocalized(l10n, 'retail-sku-not-found', { sku: val }), type: 'warning' });
   }, [skuInput, handleAdd, addToast, l10n, sessionToken]);
 
   const handleBarcode = useCallback(async (payload: { code: string }) => {
@@ -633,7 +634,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       if (p) { handleAdd(p); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     } catch { /* unreachable */ }
     playError();
-    addToast({ message: l10n.getString('pos-no-barcode-match') || 'No product or bundle matches this barcode', type: 'warning' });
+    addToast({ message: requiredLocalized(l10n, 'pos-no-barcode-match'), type: 'warning' });
   }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken]);
 
   useBarcodeScanner({ onProductFound: handleBarcode });
@@ -643,7 +644,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [storeSettings, setStoreSettings] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
   useEffect(() => {
     let mounted = true;
-    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10nRef.current.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
+    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-failed-settings'), type: 'error' }); });
     return () => { mounted = false; };
   }, [addToast, sessionToken]);
 
@@ -695,7 +696,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setShowOpenShift(false);
       setOpeningBalance('');
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-open-shift') || 'Failed to open shift', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-open-shift'), type: 'error' });
     } finally {
       setOpeningShift(false);
     }
@@ -712,7 +713,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setClosedShiftSummary(s);
       setActiveShift(null);
     } catch (e) {
-      setCloseShiftError((e instanceof Error ? e.message : String(e)) ?? (l10n.getString('pos-close-shift-failed') || 'Failed to close shift'));
+      setCloseShiftError((e instanceof Error ? e.message : String(e)) ?? (requiredLocalized(l10n, 'pos-close-shift-failed')));
     } finally {
       setClosingShift(false);
     }
@@ -801,7 +802,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setCartId(newCartId);
       return newCartId;
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-cart') || 'Failed to create sale cart', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-cart'), type: 'error' });
       return null;
     }
   }, [cartId, addToast, l10n, sessionToken]);
@@ -810,7 +811,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!overrideTarget) return;
     const cId = cartId;
     if (!cId) {
-      addToast({ message: l10n.getString('retail-toast-no-cart') || 'No active sale cart', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-no-cart'), type: 'error' });
       setOverrideTarget(null);
       return;
     }
@@ -851,7 +852,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ),
         );
       })
-      .catch(() => { if (cancelled) return; addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
+      .catch(() => { if (cancelled) return; addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-customers-failed'), type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => { if (cancelled) return; setLoadingCustomers(false); });
     return () => { cancelled = true; };
   }, [showCustomerSearch, addToast]); // l10n via ref — fetch only when modal opens
@@ -886,7 +887,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   });
 
   const handlePay = useCallback(() => {
-    if (!activeShift) { addToast({ message: l10nRef.current.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
+    if (!activeShift) { addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-open-shift-first'), type: 'warning' }); return; }
     setShowPayment(true);
   }, [activeShift, addToast]); // l10n via ref
 
@@ -915,9 +916,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       });
       setHeldCartId(id);
       resetCart();
-      addToast({ message: l10n.getString('retail-toast-order-held') || 'Order held', type: 'success' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-order-held'), type: 'success' });
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-hold') || 'Failed to hold order', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-hold'), type: 'error' });
     }
   }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast, l10n, sessionToken]);
 
@@ -928,7 +929,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       const cleanupCorrupt = async () => {
         await deleteHeldCartScoped(sessionToken, cartId).catch(() => {});
         setHeldCartId(null);
-        addToast({ message: l10nRef.current.getString('retail-toast-corrupt-cart') || 'Held cart data is corrupted and has been removed', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-corrupt-cart'), type: 'error' });
       };
       let data: Record<string, unknown>;
       try {
@@ -953,14 +954,14 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' }, qty);
       }
       if (hasCorruptLines) {
-        addToast({ message: l10nRef.current.getString('retail-toast-corrupt-cart') || 'Held cart data is corrupted and has been removed', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-corrupt-cart'), type: 'error' });
       }
       if (data['discountPercent']) setDiscount(data['discountPercent'] as number, (data['discountLabel'] as string) ?? '');
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartId(null);
       setShowHeldCartsList(false);
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-resume') || 'Failed to resume order', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-resume'), type: 'error' });
     }
   }, [addProduct, setDiscount, addToast, l10n, sessionToken]);
 
@@ -976,7 +977,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setHeldCartsList(held);
       setShowHeldCartsList(true);
     } catch {
-      addToast({ message: l10nRef.current.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-failed-load-held'), type: 'error' });
     }
   }, [handleResumeCart, addToast, sessionToken]);
 
@@ -989,9 +990,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartsList((prev) => prev.filter((c) => c.id !== cartId));
       if (heldCartId === cartId) setHeldCartId(null);
-      addToast({ type: 'success', message: l10nRef.current.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
+      addToast({ type: 'success', message: requiredLocalized(l10nRef.current, 'retail-toast-held-cart-deleted') });
     } catch {
-      addToast({ type: 'error', message: l10nRef.current.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
+      addToast({ type: 'error', message: requiredLocalized(l10nRef.current, 'retail-toast-failed-delete-held') });
     } finally {
       setDeleteHeldTarget(null);
     }
@@ -1007,7 +1008,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         const held = carts.find((c) => c.bill_type === 'hold');
         if (held) setHeldCartId(held.id);
       })
-      .catch(() => { if (mounted) addToast({ message: l10nRef.current.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
+      .catch(() => { if (mounted) addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-failed-load-held'), type: 'error' }); });
     return () => { mounted = false; };
   }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
@@ -1053,9 +1054,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     try {
       await settleCreditScoped(sessionToken, saleId);
       setCreditSales((prev) => prev.filter((c) => c.saleId !== saleId));
-      addToast({ message: l10n.getString('retail-toast-credit-settled') || 'Credit settled', type: 'success' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-credit-settled'), type: 'success' });
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-settle') || 'Failed to settle credit', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-settle'), type: 'error' });
     } finally {
       setSettlingId(null);
     }
@@ -1166,7 +1167,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         {...(isEnabled(FEATURES.SERIAL_TRACKING) ? { serialNumbers } : {})}
         onCustomerChange={(c) => setSelectedCustomer(c)}
         tenderPresets={tenderPresets}
-        onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: l10n.getString('retail-toast-sale-complete') || 'Sale complete', type: 'success' }); }}
+        onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: requiredLocalized(l10n, 'retail-toast-sale-complete'), type: 'success' }); }}
         onClose={() => setShowPayment(false)}
       />
     );
@@ -1192,7 +1193,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     <div className="retail-pos" data-theme={theme}>
       {/* ── Skip-to-content link ─────────────── */}
       <a href="#retail-main" className="retail-skip-link">
-        {l10n.getString('retail-skip-to-main') || 'Skip to main content'}
+        {requiredLocalized(l10n, 'retail-skip-to-main')}
       </a>
 
       {/* ── Header ──────────────────────────── */}
@@ -1214,11 +1215,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         <div ref={announceRef} className="retail-sr-only" data-testid="retail-sr-announce" role="status" aria-live="polite" aria-atomic="true" />
         {/* Left: product grid */}
         {filterLowStock && (
-          <div className="retail-filter-indicator" role="status" aria-label={l10n.getString('retail-filter-indicator-aria') || 'Low-stock filter active'}>
+          <div className="retail-filter-indicator" role="status" aria-label={requiredLocalized(l10n, 'retail-filter-indicator-aria')}>
             <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
               <path fillRule="evenodd" d="M3 3a1 1 0 011 0v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
-            <span>{l10n.getString('retail-filtered-low-stock') || `Filtered: ${lowStockCount} low-stock products`}</span>
+            <span>{requiredLocalized(l10n, 'retail-filtered-low-stock', { count: lowStockCount })}</span>
           </div>
         )}
         {/* ── Error banner ──────────────── */}
@@ -1232,15 +1233,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
               type="button"
               className="retail-load-error-retry"
               onClick={handleRetryLoad}
-              aria-label={l10n.getString('retail-load-error-retry-aria') || 'Retry loading products'}
+              aria-label={requiredLocalized(l10n, 'retail-load-error-retry-aria')}
             >
-              {l10n.getString('retry') || 'Retry'}
+              {requiredLocalized(l10n, 'retry')}
             </button>
             <button
               type="button"
               className="retail-load-error-dismiss"
               onClick={() => setLoadError(null)}
-              aria-label={l10n.getString('dismiss') || 'Dismiss'}
+              aria-label={requiredLocalized(l10n, 'dismiss')}
             >
               <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
                 <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

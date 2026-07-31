@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Localized } from '@/frontend/shared/Localized';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { detectDefaultCurrency } from '@/utils/currency';
 import LiveSetupPreview from './components/LiveSetupPreview';
@@ -381,7 +382,7 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
                       : 'setup-step-dot setup-step-dot--pending'
                 }
                 aria-current={i === step ? 'step' : undefined}
-                aria-label={l10n.getString('setup-step-aria', { number: i + 1, label: stepLabel }) || `Step ${i + 1}: ${label}`}
+                aria-label={requiredLocalized(l10n, 'setup-step-aria', { number: i + 1, label: stepLabel })}
               >
                 {i < step || (completed && i === TOTAL_STEPS - 1) ? '✓' : i + 1}
               </span>
@@ -698,7 +699,7 @@ function StepReview({
         <Card padding="md" shadow="sm">
           <p className="setup-preset-summary">
             {l10n.getString('setup-review-preset', {
-              name: preset ? l10n.getString(`setup-preset-${preset}`) || PRESET_NAMES[preset] : l10n.getString('setup-review-none') || 'None',
+              name: preset ? l10n.getString(`setup-preset-${preset}`) || PRESET_NAMES[preset] : requiredLocalized(l10n, 'setup-review-none'),
             })}
           </p>
         </Card>

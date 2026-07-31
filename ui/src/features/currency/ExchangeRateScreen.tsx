@@ -12,7 +12,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
 import './ExchangeRateScreen.css';
 
@@ -94,7 +94,7 @@ export default function ExchangeRateScreen() {
       setShowModal(false);
       await load();
     } catch {
-      addToast({ message: l10n.getString('currency-save-error') || 'Failed to save exchange rate', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'currency-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -107,7 +107,7 @@ export default function ExchangeRateScreen() {
       setDeleting(null);
       await load();
     } catch {
-      addToast({ message: l10n.getString('currency-delete-error') || 'Failed to delete exchange rate', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'currency-delete-error'), type: 'error' });
       setDeleting(null);
     }
   }, [load, l10n, addToast]);

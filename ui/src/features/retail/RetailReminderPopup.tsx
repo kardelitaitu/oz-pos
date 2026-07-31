@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 
 export interface RetailReminderPopupProps {
@@ -46,13 +47,13 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
           type="button"
           className={`retail-reminder-row retail-reminder-row--low-stock${lowStockActive ? ' retail-reminder-row--active' : ''}`}
           onClick={onClickLowStock}
-          aria-label={l10n.getString('retail-reminder-low-stock-aria', { count: lowStockCount }) || `View ${lowStockCount} low-stock products`}
+          aria-label={requiredLocalized(l10n, 'retail-reminder-low-stock-aria', { count: lowStockCount })}
           aria-pressed={lowStockActive ?? false}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
             <path d="M10 2a1 1 0 011 1v8a1 1 0 11-2 0V3a1 1 0 011-1zM10 16a1 1 0 100-2 1 1 0 000 2z" />
           </svg>
-          <span>{l10n.getString('retail-low-stock-banner', { count: lowStockCount }) || `${lowStockCount} product${lowStockCount > 1 ? 's' : ''} low on stock`}</span>
+          <span>{requiredLocalized(l10n, 'retail-low-stock-banner', { count: lowStockCount })}</span>
         </button>
       )}
 
@@ -62,13 +63,13 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
           type="button"
           className="retail-reminder-row retail-reminder-row--credit"
           onClick={onClickCredit}
-          aria-label={l10n.getString('retail-reminder-credit-aria', { count: creditCount }) || `View ${creditCount} credit sales`}
+          aria-label={requiredLocalized(l10n, 'retail-reminder-credit-aria', { count: creditCount })}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
             <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
             <path d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" />
           </svg>
-          <span>{l10n.getString('retail-credit-reminders', { count: creditCount }) || `Credit Reminders (${creditCount})`}</span>
+          <span>{requiredLocalized(l10n, 'retail-credit-reminders', { count: creditCount })}</span>
         </button>
       )}
 
@@ -78,12 +79,12 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
           type="button"
           className="retail-reminder-row retail-reminder-row--held-cart"
           onClick={onClickHeldCarts}
-          aria-label={l10n.getString('retail-reminder-held-cart-aria', { count: heldCartCount }) || `View ${heldCartCount} held carts`}
+          aria-label={requiredLocalized(l10n, 'retail-reminder-held-cart-aria', { count: heldCartCount })}
         >
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
             <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 1h2a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zm8 0h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1V5a1 1 0 011-1zm-8 8a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zm0 1h2a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1v-2a1 1 0 011-1zm8 0h2a1 1 0 011 1v2a1 1 0 01-1 1h-2a1 1 0 01-1-1v-2a1 1 0 011-1z" />
           </svg>
-          <span>{l10n.getString('retail-held-cart-reminders', { count: heldCartCount }) || `${heldCartCount} held cart${heldCartCount > 1 ? 's' : ''}`}</span>
+          <span>{requiredLocalized(l10n, 'retail-held-cart-reminders', { count: heldCartCount })}</span>
         </button>
       )}
 
@@ -92,7 +93,7 @@ export default function RetailReminderPopup({ lowStockCount, creditCount, heldCa
         type="button"
         className="retail-reminder-dismiss"
         onClick={() => setDismissed(true)}
-        aria-label={l10n.getString('retail-reminder-dismiss-aria') || 'Dismiss reminders'}
+        aria-label={requiredLocalized(l10n, 'retail-reminder-dismiss-aria')}
       >
         <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
           <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

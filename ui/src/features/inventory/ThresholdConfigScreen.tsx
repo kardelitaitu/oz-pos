@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listProductsScoped, type ProductDto } from '@/api/products';
 import {
@@ -50,7 +51,7 @@ export default function ThresholdConfigScreen() {
       setLocations(locs);
       setThresholds(thresh);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-threshold-error-load') || 'Failed to load threshold data'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-threshold-error-load')), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,7 @@ export default function ThresholdConfigScreen() {
       const locId = selectedLocationId === '' ? null : selectedLocationId;
       const numVal = parseInt(thresholdVal, 10);
       if (isNaN(numVal) || numVal < 0) {
-        addToast({ message: l10n.getString('inv-threshold-error-qty') || 'Threshold must be a valid non-negative integer', type: 'error' });
+        addToast({ message: requiredLocalized(l10n, 'inv-threshold-error-qty'), type: 'error' });
         return;
       }
 
@@ -96,7 +97,7 @@ export default function ThresholdConfigScreen() {
       setIsDialogOpen(false);
       await loadData();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-threshold-error-save') || 'Failed to save threshold'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-threshold-error-save')), type: 'error' });
     }
   };
 
@@ -112,7 +113,7 @@ export default function ThresholdConfigScreen() {
       setDeleteConfirmId(null);
       await loadData();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-threshold-error-delete') || 'Failed to delete threshold'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-threshold-error-delete')), type: 'error' });
     }
   };
 
@@ -232,10 +233,10 @@ export default function ThresholdConfigScreen() {
         open={deleteConfirmId !== null}
         onCancel={() => setDeleteConfirmId(null)}
         onConfirm={handleDeleteConfirm}
-        title={l10n.getString('inv-threshold-delete-title') || 'Delete Threshold?'}
-        message={l10n.getString('inv-threshold-delete-message') || 'Are you sure you want to delete this threshold alert boundary? This action cannot be undone.'}
+        title={requiredLocalized(l10n, 'inv-threshold-delete-title')}
+        message={requiredLocalized(l10n, 'inv-threshold-delete-message')}
         variant="danger"
-        confirmLabel={l10n.getString('inv-threshold-delete-confirm') || 'Delete'}
+        confirmLabel={requiredLocalized(l10n, 'inv-threshold-delete-confirm')}
       />
 
       {isDialogOpen && (
@@ -302,7 +303,7 @@ export default function ThresholdConfigScreen() {
               />
             </div>
 
-            <label className="threshold-checkbox-label" aria-label={l10n.getString('inv-threshold-status-enabled') || 'Enabled'}>
+            <label className="threshold-checkbox-label" aria-label={requiredLocalized(l10n, 'inv-threshold-status-enabled')}>
               <input
                 type="checkbox"
                 checked={enabled}

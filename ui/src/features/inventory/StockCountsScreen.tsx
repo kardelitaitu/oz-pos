@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import {
   listStockCounts,
   type StockCountDto,
@@ -27,7 +28,7 @@ export default function StockCountsScreen() {
       const data = await listStockCounts();
       setCounts(data);
     } catch {
-      addToast({ message: l10nRef.current.getString('sc-error-load') || 'Failed to load stock counts', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'sc-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }

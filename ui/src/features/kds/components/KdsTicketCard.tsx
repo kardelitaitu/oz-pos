@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, memo, useCallback } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
+import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
 
 /** Props for the KdsTicketCard component. */
@@ -178,17 +179,17 @@ export const KdsTicketCard = memo(function KdsTicketCard({
 
   // ── Course label resolver ────────────────────────────────────────
   const courseLabel = useCallback((course: string | null): string => {
-    if (!course) return l10n.getString('kds-course-other') || 'OTHER';
+    if (!course) return requiredLocalized(l10n, 'kds-course-other');
     const key = COURSE_L10N_KEYS[course];
     if (key) return l10n.getString(key) || course.toUpperCase();
-    return l10n.getString('kds-course-other') || 'OTHER';
+    return requiredLocalized(l10n, 'kds-course-other');
   }, [l10n]);
 
   return (
     <button
       className={`kds-ticket kds-ticket--${level}${urgent ? ' kds-ticket--urgent' : ''}${selected ? ' kds-ticket--selected' : ''}${order.priority ? ' kds-ticket--rush' : ''}${isNew ? ' kds-ticket--new' : ''}`}
       onClick={handleClick}
-      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${l10n.getString('kds-urgent-badge') || 'URGENT'}` : ''}${order.priority ? `, ${l10n.getString('kds-rush-badge') || 'RUSH'}` : ''}, ${display}`}
+      aria-label={`${l10n.getString('kds-tap-to-advance-label', { number: order.display_number ?? 0 })} — ${level} SLA${urgent ? `, ${requiredLocalized(l10n, 'kds-urgent-badge')}` : ''}${order.priority ? `, ${requiredLocalized(l10n, 'kds-rush-badge')}` : ''}, ${display}`}
     >
       <div className="kds-ticket-header">
         <span className="kds-ticket-id-group">
@@ -266,7 +267,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
         /* ── Fallback: flat items_summary (loading, old orders) ──── */
         <span className="kds-ticket-items">
           {lineItemsLoading
-            ? l10n.getString('kds-course-loading') || 'Loading items...'
+            ? requiredLocalized(l10n, 'kds-course-loading')
             : order.items_summary}
         </span>
       )}
@@ -287,7 +288,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
             value={editSummary}
             onChange={(e) => setEditSummary(e.target.value)}
             onKeyDown={handleKeyDown}
-            aria-label={l10n.getString('kds-edit-items-aria') || 'Edit items'}
+            aria-label={requiredLocalized(l10n, 'kds-edit-items-aria')}
           />
           <div className="kds-ticket-edit-row">
             <label className="kds-ticket-edit-label">
@@ -299,7 +300,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                 value={editCount}
                 onChange={(e) => setEditCount(e.target.value)}
                 onKeyDown={handleKeyDown}
-                aria-label={l10n.getString('kds-edit-count-aria') || 'Item count'}
+                aria-label={requiredLocalized(l10n, 'kds-edit-count-aria')}
               />
             </label>
             <div className="kds-ticket-edit-actions">
@@ -307,14 +308,14 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                 className="kds-ticket-edit-save"
                 onClick={handleSaveEdit}
                 disabled={!editSummary.trim() || parseInt(editCount, 10) <= 0}
-                aria-label={l10n.getString('kds-edit-save-aria') || 'Save items'}
+                aria-label={requiredLocalized(l10n, 'kds-edit-save-aria')}
               >
                 <Localized id="kds-edit-save">Save</Localized>
               </button>
               <button
                 className="kds-ticket-edit-cancel"
                 onClick={handleCancelEdit}
-                aria-label={l10n.getString('kds-edit-cancel-aria') || 'Cancel edit'}
+                aria-label={requiredLocalized(l10n, 'kds-edit-cancel-aria')}
               >
                 <Localized id="kds-edit-cancel">Cancel</Localized>
               </button>
@@ -332,7 +333,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
           <button
             className="kds-ticket-edit-btn"
             onClick={startEditing}
-            aria-label={l10n.getString('kds-edit-items-btn-aria') || 'Edit ticket items'}
+            aria-label={requiredLocalized(l10n, 'kds-edit-items-btn-aria')}
           >
             <Localized id="kds-edit-items-btn">Edit Items</Localized>
           </button>
@@ -344,7 +345,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
               e.stopPropagation();
               onAddItems(order.id);
             }}
-            aria-label={l10n.getString('kds-add-items-btn-aria') || 'Add items to order'}
+            aria-label={requiredLocalized(l10n, 'kds-add-items-btn-aria')}
           >
             <Localized id="kds-add-items-btn">Add Items</Localized>
           </button>

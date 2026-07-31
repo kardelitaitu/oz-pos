@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
@@ -211,10 +212,10 @@ export default function OfflineQueueScreen() {
           }}
         >
           {pullState === 'pulling' && (
-            <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull to refresh'}</span>
+            <span>{requiredLocalized(l10n, 'offline-queue-pull-to-refresh')}</span>
           )}
           {pullState === 'ready' && (
-            <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+            <span>{requiredLocalized(l10n, 'offline-queue-release-to-refresh')}</span>
           )}
           {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
         </div>
@@ -287,15 +288,15 @@ export default function OfflineQueueScreen() {
               }}
             >
               {pullState === 'pulling' && (
-                <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull down to refresh'}</span>
+                <span>{requiredLocalized(l10n, 'offline-queue-pull-to-refresh')}</span>
               )}
               {pullState === 'ready' && (
-                <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+                <span>{requiredLocalized(l10n, 'offline-queue-release-to-refresh')}</span>
               )}
               {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
             </div>
           )}
-          <table className="offline-queue-table" aria-label={l10n.getString('offline-queue-table-aria') || 'Offline queue items'}>
+          <table className="offline-queue-table" aria-label={requiredLocalized(l10n, 'offline-queue-table-aria')}>
             <thead>
               <tr>
                 <Localized id="offline-queue-action"><th>Action</th></Localized>

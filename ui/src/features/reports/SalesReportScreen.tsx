@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
@@ -321,7 +322,7 @@ export default function SalesReportScreen() {
     : null;
 
   return (
-    <div className="sales-report" role="region" aria-label={l10n.getString('sales-report-region-aria') || 'Sales Report'}>
+    <div className="sales-report" role="region" aria-label={requiredLocalized(l10n, 'sales-report-region-aria')}>
       <div className="sales-report-header">
         <Localized id="sales-report-title">
           <h1 className="sales-report-title">Sales Report</h1>
@@ -337,7 +338,7 @@ export default function SalesReportScreen() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="sales-report-input"
-            aria-label={l10n.getString('sales-report-start-aria') || 'Start date'}
+            aria-label={requiredLocalized(l10n, 'sales-report-start-aria')}
           />
 
           <label htmlFor="end-date" className="sales-report-label">
@@ -349,13 +350,13 @@ export default function SalesReportScreen() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="sales-report-input"
-            aria-label={l10n.getString('sales-report-end-aria') || 'End date'}
+            aria-label={requiredLocalized(l10n, 'sales-report-end-aria')}
           />
 
           <div
             className="sales-report-view-toggle"
             role="radiogroup"
-            aria-label={l10n.getString('sales-report-view-aria') || 'View mode'}
+            aria-label={requiredLocalized(l10n, 'sales-report-view-aria')}
           >
             {(['daily', 'weekly', 'monthly'] as ViewMode[]).map((mode) => (
               <button
@@ -376,7 +377,7 @@ export default function SalesReportScreen() {
           <Button
             variant={comparePeriod ? 'primary' : 'secondary'}
             onClick={() => setComparePeriod((p) => !p)}
-            aria-label={comparePeriod ? (l10n.getString('sales-report-compare-off-aria') || 'Disable period comparison') : (l10n.getString('sales-report-compare-on-aria') || 'Compare to previous period')}
+            aria-label={comparePeriod ? (requiredLocalized(l10n, 'sales-report-compare-off-aria')) : (requiredLocalized(l10n, 'sales-report-compare-on-aria'))}
             aria-pressed={comparePeriod}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 'var(--space-1)' }}>
@@ -389,14 +390,14 @@ export default function SalesReportScreen() {
           <Button
             variant="secondary"
             onClick={printReport}
-            aria-label={l10n.getString('sales-report-print-aria') || 'Print report'}
+            aria-label={requiredLocalized(l10n, 'sales-report-print-aria')}
           >
             <Localized id="print">Print</Localized>
           </Button>
           <Button
             variant="secondary"
             onClick={exportCsv}
-            aria-label={l10n.getString('sales-report-export-aria') || 'Export CSV'}
+            aria-label={requiredLocalized(l10n, 'sales-report-export-aria')}
           >
             <Localized id="sales-report-export-csv">Export CSV</Localized>
           </Button>
@@ -555,7 +556,7 @@ export default function SalesReportScreen() {
           <div
             className="sales-report-heatmap"
             role="grid"
-            aria-label={l10n.getString('sales-report-heatmap-aria') || 'Hourly heatmap'}
+            aria-label={requiredLocalized(l10n, 'sales-report-heatmap-aria')}
           >
             <div className="sales-report-heatmap-header">
               <div className="sales-report-heatmap-corner" />

@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Localized } from '@/frontend/shared/Localized';
+import { requiredLocalized } from '@/frontend/shared';
 import { processRefund, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
@@ -254,7 +255,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder={l10n.getString('refund-reason-placeholder') || 'e.g. Customer changed mind'}
+                    placeholder={requiredLocalized(l10n, 'refund-reason-placeholder')}
                     aria-label={l10n.getString('refund-reason-aria')}
                   />
                 </Localized>
@@ -269,7 +270,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder={l10n.getString('refund-note-placeholder') || 'Optional internal note'}
+                    placeholder={requiredLocalized(l10n, 'refund-note-placeholder')}
                     aria-label={l10n.getString('refund-note-aria')}
                   />
                 </Localized>

@@ -1,4 +1,5 @@
 import { useContext, useState, useCallback, useEffect } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getHourlyHeatmap } from '@/api/reports';
@@ -84,7 +85,7 @@ export default function HourlyHeatmapWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--heatmap" aria-label={l10n.getString('sales-dashboard-heatmap-aria') || 'Hourly sales heatmap'}>
+    <div className="reporting-widget reporting-widget--heatmap" aria-label={requiredLocalized(l10n, 'sales-dashboard-heatmap-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-heatmap-title">
           <h3 className="reporting-widget-title">Busiest Hours</h3>

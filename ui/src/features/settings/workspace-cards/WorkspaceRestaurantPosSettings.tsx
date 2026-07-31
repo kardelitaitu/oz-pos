@@ -4,6 +4,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
@@ -222,7 +223,7 @@ export function WorkspaceRestaurantPosSettings({
                 value={hw.profile?.hardware.kitchenPrinter.connection ?? 'disabled'}
                 onChange={(v) => hw.updateKitchenPrinter({ connection: v as 'network' | 'usb' | 'serial' | 'auto' | 'disabled' })}
                 options={[
-                  { value: 'disabled', label: l10n.getString('workspace-resto-kp-disabled') || 'Disabled' },
+                  { value: 'disabled', label: requiredLocalized(l10n, 'workspace-resto-kp-disabled') },
                   { value: 'network', label: 'Network' },
                   { value: 'usb', label: 'USB' },
                   { value: 'serial', label: 'Serial' },

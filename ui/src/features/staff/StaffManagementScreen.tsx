@@ -19,7 +19,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
 import { EmptyState } from '@/frontend/shared';
@@ -169,7 +169,7 @@ export default function StaffManagementScreen() {
         setForm((prev) => ({ ...prev, wsMode: 'custom', wsKeys: userKeys }));
       }
     } catch {
-      addToast({ message: l10n.getString('staff-error-workspaces-failed') || 'Failed to load workspace settings', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'staff-error-workspaces-failed'), type: 'error' });
       setAllWorkspaces([]);
     }
   }, [callerUserId, addToast, l10n]);
@@ -359,8 +359,8 @@ export default function StaffManagementScreen() {
           <div className="staff-mgmt-empty">
             <EmptyState
               icon={<NoStaffIcon />}
-              title={l10n.getString('staff-empty') || 'No staff members yet.'}
-              action={{ label: l10n.getString('staff-empty-cta') || 'Add your first staff member', onClick: openCreate }}
+              title={requiredLocalized(l10n, 'staff-empty')}
+              action={{ label: requiredLocalized(l10n, 'staff-empty-cta'), onClick: openCreate }}
             />
           </div>
         </Card>

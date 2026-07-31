@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import './KdsSettingsPanel.css';
@@ -87,7 +88,7 @@ export function KdsSettingsPanel({
         ref={btnRef}
         className="kds-settings-btn"
         onClick={() => setOpen((p) => !p)}
-        aria-label={l10n.getString('kds-settings-aria') || 'KDS settings'}
+        aria-label={requiredLocalized(l10n, 'kds-settings-aria')}
         aria-expanded={open}
       >
         <svg className="kds-settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -100,10 +101,10 @@ export function KdsSettingsPanel({
           ref={popoverRef}
           className="kds-settings-popover"
           role="dialog"
-          aria-label={l10n.getString('kds-settings-aria') || 'KDS settings'}
+          aria-label={requiredLocalized(l10n, 'kds-settings-aria')}
         >
           {/* Sound toggle */}
-          <label className="kds-settings-toggle" aria-label={l10n.getString('kds-settings-sound') || 'Sound'}>
+          <label className="kds-settings-toggle" aria-label={requiredLocalized(l10n, 'kds-settings-sound')}>
             <input
               type="checkbox"
               role="switch"
@@ -126,7 +127,7 @@ export function KdsSettingsPanel({
               step={1}
               value={settings.yellowThresholdMin}
               onChange={(e) => onChangeYellowThreshold(Number(e.target.value))}
-              aria-label={l10n.getString('kds-settings-yellow-aria') || 'Yellow escalation threshold in minutes'}
+              aria-label={requiredLocalized(l10n, 'kds-settings-yellow-aria')}
             />
           </div>
 
@@ -143,12 +144,12 @@ export function KdsSettingsPanel({
               step={1}
               value={settings.redThresholdMin}
               onChange={(e) => onChangeRedThreshold(Number(e.target.value))}
-              aria-label={l10n.getString('kds-settings-red-aria') || 'Red escalation threshold in minutes'}
+              aria-label={requiredLocalized(l10n, 'kds-settings-red-aria')}
             />
           </div>
 
           {/* Auto-acknowledge toggle */}
-          <label className="kds-settings-toggle" aria-label={l10n.getString('kds-settings-auto-ack') || 'Auto-acknowledge'}>
+          <label className="kds-settings-toggle" aria-label={requiredLocalized(l10n, 'kds-settings-auto-ack')}>
             <input
               type="checkbox"
               role="switch"

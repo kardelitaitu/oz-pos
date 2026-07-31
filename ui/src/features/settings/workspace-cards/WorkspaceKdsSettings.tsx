@@ -4,6 +4,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useSettings } from '@/contexts/SettingsContext';
 import { getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
@@ -182,7 +183,7 @@ export function WorkspaceKdsSettings({
               step={1}
               value={draft.yellowThresholdMin}
               onChange={(e) => update('yellowThresholdMin', Number(e.target.value))}
-              aria-label={l10n.getString('workspace-kds-yellow-threshold-aria') || 'Yellow escalation threshold in minutes'}
+              aria-label={requiredLocalized(l10n, 'workspace-kds-yellow-threshold-aria')}
             />
             {!isCompact && (
               <span className="settings-range-value">{draft.yellowThresholdMin} min</span>
@@ -203,7 +204,7 @@ export function WorkspaceKdsSettings({
               step={1}
               value={draft.redThresholdMin}
               onChange={(e) => update('redThresholdMin', Number(e.target.value))}
-              aria-label={l10n.getString('workspace-kds-red-threshold-aria') || 'Red escalation threshold in minutes'}
+              aria-label={requiredLocalized(l10n, 'workspace-kds-red-threshold-aria')}
             />
             {!isCompact && (
               <span className="settings-range-value">{draft.redThresholdMin} min</span>

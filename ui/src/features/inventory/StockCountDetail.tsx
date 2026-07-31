@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import {
   getStockCount,
   getCountLines,
@@ -57,7 +58,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         setLines(await getCountLines(countId));
       }
     } catch {
-      addToast({ message: l10nRef.current.getString('sc-error-load') || 'Failed to load stock count', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'sc-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -67,7 +68,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     load();
     if (sessionToken) {
       listProductsScoped(sessionToken).then(setProducts).catch(() => {
-        addToast({ message: l10nRef.current.getString('sc-error-products') || 'Failed to load products', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'sc-error-products'), type: 'error' });
       });
     }
   }, [load, sessionToken, addToast]);
@@ -102,7 +103,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       setSearchQuery('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-add-line') || 'Failed to add line'));
+      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-add-line')));
     } finally {
       setSaving(false);
     }
@@ -113,7 +114,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await updateCountLine({ lineId, countedQty, notes: '' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-update-line') || 'Failed to update'));
+      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-update-line')));
     }
   }, [load]);
 
@@ -122,7 +123,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await removeCountLine({ lineId });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-remove-line') || 'Failed to remove'));
+      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-remove-line')));
     }
   }, [load]);
 
@@ -131,7 +132,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await updateStockCountStatus(countId, 'in_progress');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-start-count') || 'Failed to start count'));
+      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-start-count')));
     }
   }, [countId, load]);
 
@@ -145,7 +146,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       );
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10nRef.current.getString('sc-error-complete') || 'Failed to complete'));
+      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-complete')));
     } finally {
       setSaving(false);
     }

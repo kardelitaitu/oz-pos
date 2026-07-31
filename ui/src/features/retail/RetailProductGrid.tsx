@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useCallback, memo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization, Localized } from '@fluent/react';
 import { formatMoney, type Money, type Sku } from '@/types/domain';
 import type { ProductDto, CategoryDto } from '@/api/products';
@@ -277,8 +278,8 @@ export default function RetailProductGrid({
             type="button"
             className="retail-cat-btn retail-cat-btn--add"
             onClick={actions.onAddCategory}
-            title={l10n.getString('retail-add-category-btn-title') || 'Add new category'}
-            aria-label={l10n.getString('retail-add-category-btn-aria') || 'Add new category'}
+            title={requiredLocalized(l10n, 'retail-add-category-btn-title')}
+            aria-label={requiredLocalized(l10n, 'retail-add-category-btn-aria')}
           >
             + Category
           </button>
@@ -307,8 +308,8 @@ export default function RetailProductGrid({
             type="button"
             className="retail-add-product-btn"
             onClick={actions.onAddNewProduct}
-            title={l10n.getString('retail-add-product-btn-title') || 'Add new product'}
-            aria-label={l10n.getString('retail-add-product-btn-aria') || 'Add new product'}
+            title={requiredLocalized(l10n, 'retail-add-product-btn-title')}
+            aria-label={requiredLocalized(l10n, 'retail-add-product-btn-aria')}
           >
             + Product
           </button>
@@ -337,7 +338,7 @@ export default function RetailProductGrid({
                 <th className="retail-col-action"><span className="retail-skeleton-shimmer retail-skeleton-shimmer--action">&nbsp;</span></th>
               </tr>
             </thead>
-            <tbody role="status" aria-label={l10n.getString('retail-products-loading') || 'Loading products'}>
+            <tbody role="status" aria-label={requiredLocalized(l10n, 'retail-products-loading')}>
               {Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="retail-skeleton-row">
                   <td className="retail-col-sku"><span className="retail-skeleton-shimmer">&nbsp;</span></td>
@@ -353,12 +354,12 @@ export default function RetailProductGrid({
       ) : filteredProducts.length === 0 ? (
         <div className="retail-grid-empty" role="status">
           {filterLowStock
-            ? (l10n.getString('retail-no-low-stock-products') || 'No products below the low-stock threshold')
+            ? (requiredLocalized(l10n, 'retail-no-low-stock-products'))
             : searchQuery.trim()
-              ? (l10n.getString('retail-no-products-match') || 'No products match your search')
+              ? (requiredLocalized(l10n, 'retail-no-products-match'))
               : activeCategory
-                ? (l10n.getString('retail-no-products-in-category') || 'No products in this category')
-                : (l10n.getString('retail-no-products') || 'No products')}
+                ? (requiredLocalized(l10n, 'retail-no-products-in-category'))
+                : (requiredLocalized(l10n, 'retail-no-products'))}
         </div>
       ) : (
         <div className="retail-grid" data-testid="product-grid-scroll">
@@ -372,7 +373,7 @@ export default function RetailProductGrid({
                   aria-sort={sortField === 'sku' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <div className="retail-th-content">
-                    <span>{l10n.getString('retail-col-sku') || 'SKU / Code'}</span>
+                    <span>{requiredLocalized(l10n, 'retail-col-sku')}</span>
                     <span className="retail-sort-icon">
                       {sortField === 'sku' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                     </span>
@@ -385,7 +386,7 @@ export default function RetailProductGrid({
                   aria-sort={sortField === 'stock' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <div className="retail-th-content retail-th-content--center">
-                    <span>{l10n.getString('retail-col-stock') || 'Stock'}</span>
+                    <span>{requiredLocalized(l10n, 'retail-col-stock')}</span>
                     <span className="retail-sort-icon">
                       {sortField === 'stock' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                     </span>
@@ -398,7 +399,7 @@ export default function RetailProductGrid({
                   aria-sort={sortField === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <div className="retail-th-content">
-                    <span>{l10n.getString('retail-col-name') || 'Product Name'}</span>
+                    <span>{requiredLocalized(l10n, 'retail-col-name')}</span>
                     <span className="retail-sort-icon">
                       {sortField === 'name' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                     </span>
@@ -411,13 +412,13 @@ export default function RetailProductGrid({
                   aria-sort={sortField === 'price' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <div className="retail-th-content retail-th-content--end">
-                    <span>{l10n.getString('retail-col-price') || 'Price'}</span>
+                    <span>{requiredLocalized(l10n, 'retail-col-price')}</span>
                     <span className="retail-sort-icon">
                       {sortField === 'price' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
                     </span>
                   </div>
                 </th>
-                <th className="retail-col-action">{l10n.getString('retail-col-action') || 'Action'}</th>
+                <th className="retail-col-action">{requiredLocalized(l10n, 'retail-col-action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -432,13 +433,13 @@ export default function RetailProductGrid({
                   handleOpenQtyPicker={actions.onOpenQtyPicker}
                   scaleEnabled={isScaleEnabled}
                   onSetWeighTarget={actions.onSetWeighTarget}
-                  outOfStockLabel={l10n.getString('retail-product-out-of-stock') || 'Out of stock'}
-                  addToCartTitle={l10n.getString('retail-product-add-title') || 'Add to Cart'}
-                  addToCartAria={l10n.getString('retail-product-add-aria', { name: p.name }) || `Add ${p.name} to cart`}
-                  editProductTitle={l10n.getString('retail-product-edit-title') || 'Edit Product'}
-                  editProductAria={l10n.getString('retail-product-edit-aria', { name: p.name }) || `Edit ${p.name}`}
-                  weighProductAria={l10n.getString('retail-product-weigh-aria', { name: p.name }) || `Weigh ${p.name}`}
-                  priceChangedHint={l10n.getString('retail-price-volatility-hint') || 'Price changed recently'}
+                  outOfStockLabel={requiredLocalized(l10n, 'retail-product-out-of-stock')}
+                  addToCartTitle={requiredLocalized(l10n, 'retail-product-add-title')}
+                  addToCartAria={requiredLocalized(l10n, 'retail-product-add-aria', { name: p.name })}
+                  editProductTitle={requiredLocalized(l10n, 'retail-product-edit-title')}
+                  editProductAria={requiredLocalized(l10n, 'retail-product-edit-aria', { name: p.name })}
+                  weighProductAria={requiredLocalized(l10n, 'retail-product-weigh-aria', { name: p.name })}
+                  priceChangedHint={requiredLocalized(l10n, 'retail-price-volatility-hint')}
                 />
               ))}
             </tbody>
@@ -446,12 +447,12 @@ export default function RetailProductGrid({
         </div>
       )}
       {totalPages > 1 && (
-        <div className="retail-page-nav" role="navigation" aria-label={l10n.getString('retail-page-nav-aria') || 'Product pages'}>
-          <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => actions.onSetProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>
+        <div className="retail-page-nav" role="navigation" aria-label={requiredLocalized(l10n, 'retail-page-nav-aria')}>
+          <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => actions.onSetProductPage((p) => p - 1)} aria-label={requiredLocalized(l10n, 'retail-page-prev-aria')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
           </button>
           <span className="retail-page-info" aria-current="true">{productPage + 1} / {totalPages}</span>
-          <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => actions.onSetProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>
+          <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => actions.onSetProductPage((p) => p + 1)} aria-label={requiredLocalized(l10n, 'retail-page-next-aria')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
           </button>
         </div>
@@ -470,7 +471,7 @@ export default function RetailProductGrid({
         <button
           className="retail-sku-go-btn"
           onClick={actions.onSkuSubmit}
-          aria-label={l10n.getString('retail-sku-lookup-aria') || 'Look up SKU'}
+          aria-label={requiredLocalized(l10n, 'retail-sku-lookup-aria')}
         >
           {l10n.getString('retail-sku-go')}
         </button>

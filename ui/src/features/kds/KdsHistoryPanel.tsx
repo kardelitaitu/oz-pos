@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listKdsOrdersScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
@@ -38,7 +39,7 @@ export function KdsHistoryPanel() {
   return (
     <div className="kds-history">
       {/* Filter tabs */}
-      <div className="kds-history-tabs" role="tablist" aria-label={l10n.getString('kds-history-filter-aria') || 'Filter by status'}>
+      <div className="kds-history-tabs" role="tablist" aria-label={requiredLocalized(l10n, 'kds-history-filter-aria')}>
         {STATUS_ORDER.map(({ key, label }) => (
           <button
             key={key}

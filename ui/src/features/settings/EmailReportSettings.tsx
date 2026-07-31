@@ -11,6 +11,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { getReportSchedule, saveReportSchedule, type ReportScheduleConfig } from '@/api/email';
 import { getSetting, setSetting } from '@/api/settings';
@@ -461,9 +462,9 @@ export default function EmailReportSettings() {
                 aria-label={l10n.getString('settings-schedule-cadence')}
                 style={{ width: '100%', maxWidth: '320px' }}
               >
-                <option value="daily">{l10n.getString('settings-schedule-cadence-daily') || 'Daily'}</option>
-                <option value="weekly">{l10n.getString('settings-schedule-cadence-weekly') || 'Weekly (Monday)'}</option>
-                <option value="monthly">{l10n.getString('settings-schedule-cadence-monthly') || 'Monthly (1st)'}</option>
+                <option value="daily">{requiredLocalized(l10n, 'settings-schedule-cadence-daily')}</option>
+                <option value="weekly">{requiredLocalized(l10n, 'settings-schedule-cadence-weekly')}</option>
+                <option value="monthly">{requiredLocalized(l10n, 'settings-schedule-cadence-monthly')}</option>
               </select>
             </span>
           </div>

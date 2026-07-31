@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { checkLicenseStatus } from '@/api/license';
@@ -228,10 +229,10 @@ export default function SessionLockScreen({
         <div className="session-lock-time">{timeStr}</div>
         <div className="session-lock-date">{dateStr}</div>
 
-        <div className="session-lock-sub">{l10n.getString('session-lock-enter-pin') || 'Enter PIN to unlock'}</div>
+        <div className="session-lock-sub">{requiredLocalized(l10n, 'session-lock-enter-pin')}</div>
 
         {/* PIN dots */}
-        <div className="session-lock-pin-dots" aria-label={l10n.getString('session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) }) || `PIN: ${pin.length} of ${MAX_PIN_LENGTH} digits entered`}>
+        <div className="session-lock-pin-dots" aria-label={requiredLocalized(l10n, 'session-lock-pin-aria', { length: String(pin.length), max: String(MAX_PIN_LENGTH) })}>
           {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
             <span
               key={i}
@@ -247,7 +248,7 @@ export default function SessionLockScreen({
             {error}
             {isLocked && (
               <span className="session-lock-rate-limit">
-                {' '}{l10n.getString('session-lock-lockout', { seconds: String(lockoutRemainingSec) }) || `Wait ${lockoutRemainingSec}s.`}
+                {' '}{requiredLocalized(l10n, 'session-lock-lockout', { seconds: String(lockoutRemainingSec) })}
               </span>
             )}
           </div>
@@ -262,7 +263,7 @@ export default function SessionLockScreen({
           tabIndex={-1}
           onKeyDown={handleKeyDown}
           role="application"
-          aria-label={l10n.getString('session-lock-pad-aria') || 'PIN pad'}
+          aria-label={requiredLocalized(l10n, 'session-lock-pad-aria')}
         >
           {[['7', '8', '9'], ['4', '5', '6'], ['1', '2', '3']].map((row) => (
             <div className="session-lock-pad-row" key={row[0]}>
@@ -287,7 +288,7 @@ export default function SessionLockScreen({
               onClick={() => setPin([])}
               disabled={pin.length === 0 || isLocked}
             >
-              {l10n.getString('staff-login-clear') || 'Clear'}
+              {requiredLocalized(l10n, 'staff-login-clear')}
             </button>
             <button
               type="button"
@@ -315,14 +316,14 @@ export default function SessionLockScreen({
 
         {/* ── Connection status indicators ──────── */}
         <div className="session-lock-connection-group">
-          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? l10n.getString('staff-login-connection-checking') || 'Checking…' : authOnline ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
+          {/* Auth status — via checkLicenseStatus IPC */}            <div className="connection-status" title={authOnline === null ? requiredLocalized(l10n, 'staff-login-connection-checking') : authOnline ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
             <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-            <span className="connection-label">{l10n.getString('staff-login-connection-auth') || 'Auth'}</span>
+            <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-auth')}</span>
             {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
           </div>
-          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? l10n.getString('staff-login-connection-checking') || 'Checking…' : syncStatus.state === 'connected' ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
+          {/* Sync status — via useSyncConnection IPC */}            <div className="connection-status" title={syncStatus.state === 'checking' ? requiredLocalized(l10n, 'staff-login-connection-checking') : syncStatus.state === 'connected' ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
             <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-            <span className="connection-label">{l10n.getString('staff-login-connection-sync') || 'Sync'}</span>
+            <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-sync')}</span>
             {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
           </div>
         </div>

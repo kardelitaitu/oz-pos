@@ -36,6 +36,7 @@ loyalty-txn-date = Date
 loyalty-table-aria = Loyalty accounts
 loyalty-txn-table-aria = Recent transactions
 loyalty-save-tier-error = Failed to save tier
+loyalty-load-error = Failed to load loyalty data
 loyalty-tier-name-aria =
     .aria-label = Tier name
 loyalty-tier-min-points-aria =

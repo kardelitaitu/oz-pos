@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
 import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
@@ -258,7 +259,7 @@ export default function PaymentModal({
         allCustomersRef.current = customers;
         setCustomerSearchResults(customers);
       })
-      .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
+      .catch(() => { addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-customers-failed'), type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
   }, [showCustomerSearch, sessionToken, addToast]); // l10n via ref — stable dep chain
 
@@ -296,7 +297,7 @@ export default function PaymentModal({
             setLoyaltyDiscount(0n);
           }
         })
-        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-loyalty-failed') || 'Failed to load loyalty account', type: 'error' }); setLoyaltyAccount(null); });
+        .catch(() => { addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-loyalty-failed'), type: 'error' }); setLoyaltyAccount(null); });
     } else {
       setLoyaltyAccount(null);
       setRedeemPoints(false);
@@ -312,7 +313,7 @@ export default function PaymentModal({
       }
       getPointsValue(sessionToken, loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
-        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
+        .catch(() => { addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-points-value-failed'), type: 'error' }); setPointsWorthMinor(null); });
     } else {
       setPointsWorthMinor(null);
     }
@@ -961,7 +962,7 @@ export default function PaymentModal({
           }}
           onCancel={() => {
             setShortfallResult(null);
-            addToast({ message: l10n.getString('payment-shortfall-cancelled') || 'Sale cancelled due to insufficient stock.', type: 'info' });
+            addToast({ message: requiredLocalized(l10n, 'payment-shortfall-cancelled'), type: 'info' });
             animateLeave(onClose);
           }}
         />
@@ -1145,7 +1146,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : l10n.getString('payment-method-credit') || 'Credit'}
+                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : requiredLocalized(l10n, 'payment-method-credit')}
                         </span>
                       </label>
                     ))}
@@ -1461,7 +1462,7 @@ export default function PaymentModal({
               <div className="payment-loyalty-section">
                 <div className="payment-loyalty-balance">
                   <span className="payment-loyalty-label">
-                    {l10n.getString('payment-loyalty-points-label') || 'Points'}: {loyaltyAccount.account.points}
+                    {requiredLocalized(l10n, 'payment-loyalty-points-label')}: {loyaltyAccount.account.points}
                   </span>
                   <span className="payment-loyalty-value">
                     {pointsWorthMinor !== null

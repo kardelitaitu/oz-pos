@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -77,7 +78,7 @@ export default function ShiftManagementScreen() {
       setShifts(allShifts);
       setActiveShift(active);
     } catch {
-      addToast({ message: l10n.getString('shift-load-error') || 'Failed to load shifts', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'shift-load-error'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -112,7 +113,7 @@ export default function ShiftManagementScreen() {
       setOpeningBalance('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('shift-open-error') || 'Failed to open shift');
+      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'shift-open-error'));
     } finally {
       setSaving(false);
     }
@@ -124,7 +125,7 @@ export default function ShiftManagementScreen() {
     if (!activeShift) return;
     const balance = parseInt(closingBalance, 10);
     if (Number.isNaN(balance) || balance < 0) {
-      setError(l10n.getString('shift-invalid-balance') || 'Please enter a valid closing balance');
+      setError(requiredLocalized(l10n, 'shift-invalid-balance'));
       return;
     }
 
@@ -141,7 +142,7 @@ export default function ShiftManagementScreen() {
       setClosedShiftSummary(closed);
       setActiveShift(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('shift-close-error') || 'Failed to close shift');
+      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'shift-close-error'));
     } finally {
       setSaving(false);
     }
@@ -163,7 +164,7 @@ export default function ShiftManagementScreen() {
     if (!activeShift) return;
     const amount = parseInt(payoutAmount, 10);
     if (Number.isNaN(amount) || amount <= 0) {
-      setError(l10n.getString('shift-invalid-payout-amount') || 'Please enter a valid payout amount');
+      setError(requiredLocalized(l10n, 'shift-invalid-payout-amount'));
       return;
     }
     const reason = payoutReason.trim() || 'safe drop';
@@ -177,7 +178,7 @@ export default function ShiftManagementScreen() {
       setPayoutReason('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('shift-payout-error') || 'Failed to record payout');
+      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'shift-payout-error'));
     } finally {
       setSaving(false);
     }
@@ -417,7 +418,7 @@ export default function ShiftManagementScreen() {
               <div className="shift-mgmt-empty">
                 <EmptyState
                   icon={<NoShiftsIcon />}
-                  title={l10n.getString('shift-empty') || 'No shifts recorded yet.'}
+                  title={requiredLocalized(l10n, 'shift-empty')}
                 />
               </div>
             ) : (

@@ -1,4 +1,5 @@
 import { useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { formatMoney } from '@/types/domain';
 import type { StoreSettingsDto } from '@/api/settings';
 import type { ShiftDto } from '@/api/shifts';
@@ -48,7 +49,7 @@ export default function RetailHeader({
       <>
         {skipTarget && (
           <a href={`#${skipTarget}`} className="retail-skip-link">
-            {l10n.getString('retail-skip-to-main') || 'Skip to main content'}
+            {requiredLocalized(l10n, 'retail-skip-to-main')}
           </a>
         )}
         <header className="retail-header">
@@ -60,7 +61,7 @@ export default function RetailHeader({
               type="button"
               className="retail-options-tab retail-options-tab--danger"
               onClick={onBack}
-              aria-label={l10n.getString('back') || 'Back'}
+              aria-label={requiredLocalized(l10n, 'back')}
             >
               &larr; {l10n.getString('back')}
             </button>
@@ -76,7 +77,7 @@ export default function RetailHeader({
         {storeSettings?.logo && (
           <img
             src={`data:image/png;base64,${storeSettings.logo}`}
-            alt={storeSettings.name || l10n.getString('retail-store-logo-alt') || 'Store logo'}
+            alt={storeSettings.name || requiredLocalized(l10n, 'retail-store-logo-alt')}
             className="retail-header-logo"
           />
         )}
@@ -101,8 +102,8 @@ export default function RetailHeader({
             type="button"
             className="retail-header-nav-btn"
             onClick={onWorkspacePicker}
-            title={l10n.getString('retail-header-workspaces-title') || 'Back to workspaces'}
-            aria-label={l10n.getString('retail-header-workspaces-aria') || 'Back to workspaces'}
+            title={requiredLocalized(l10n, 'retail-header-workspaces-title')}
+            aria-label={requiredLocalized(l10n, 'retail-header-workspaces-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
               <rect x="2" y="3" width="22" height="14" rx="2" ry="2" />

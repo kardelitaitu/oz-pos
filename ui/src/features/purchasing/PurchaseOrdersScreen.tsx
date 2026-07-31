@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import {
   listPurchaseOrders,
   updatePoStatus,
@@ -38,7 +39,7 @@ export default function PurchaseOrdersScreen() {
       const data = await listPurchaseOrders();
       setOrders(data);
     } catch {
-      addToast({ message: l10nRef.current.getString('po-error-load') || 'Failed to load purchase orders', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -57,7 +58,7 @@ export default function PurchaseOrdersScreen() {
       await updatePoStatus({ id, status });
       await load();
     } catch {
-      addToast({ message: l10nRef.current.getString('po-error-update') || 'Failed to update purchase order', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-error-update'), type: 'error' });
     } finally {
       setActionLoading(null);
     }
@@ -69,7 +70,7 @@ export default function PurchaseOrdersScreen() {
       await receivePurchaseOrder(id);
       await load();
     } catch {
-      addToast({ message: l10nRef.current.getString('po-error-receive') || 'Failed to receive purchase order', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-error-receive'), type: 'error' });
     } finally {
       setActionLoading(null);
     }
@@ -174,7 +175,7 @@ export default function PurchaseOrdersScreen() {
         </Card>
       ) : (
         <div className="po-table-wrap">
-          <table className="po-table" aria-label={l10n.getString('po-title') || 'Purchase Orders'}>
+          <table className="po-table" aria-label={requiredLocalized(l10n, 'po-title')}>
             <thead>
               <tr>
                 <Localized id="po-col-number"><th>PO #</th></Localized>

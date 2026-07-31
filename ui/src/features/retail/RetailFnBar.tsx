@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 
@@ -44,7 +45,7 @@ export default function RetailFnBar({
   const { isEnabled } = useFeatures();
 
   return (
-    <div className="retail-fn-bar" role="toolbar" aria-label={l10n.getString('retail-fn-bar-aria') || 'Function bar'}>
+    <div className="retail-fn-bar" role="toolbar" aria-label={requiredLocalized(l10n, 'retail-fn-bar-aria')}>
       <button type="button" className="retail-fn-btn" onClick={onPay} disabled={linesLength === 0}>
         <span className="retail-fn-key">F1</span> {l10n.getString('sale-pay-button')}
       </button>
@@ -55,7 +56,7 @@ export default function RetailFnBar({
         <span className="retail-fn-key">F3</span> {l10n.getString('retail-fn-diskon')}
       </button>
       <button type="button" className="retail-fn-btn" onClick={onHoldResume} disabled={!heldCartId && linesLength === 0}>
-        <span className="retail-fn-key">F4</span> {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
+        <span className="retail-fn-key">F4</span> {heldCartId ? (requiredLocalized(l10n, 'retail-resume-button')) : (requiredLocalized(l10n, 'pos-cart-hold'))}
       </button>
       <button type="button" className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
         <span className="retail-fn-key">F5</span> {l10n.getString('retail-fn-cari')}
@@ -77,15 +78,15 @@ export default function RetailFnBar({
       </button>
       {isEnabled(FEATURES.QUICK_RETURN) && (
         <button type="button" className="retail-fn-btn" onClick={onShowQuickReturn}>
-          <span className="retail-fn-key">F11</span> {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
+          <span className="retail-fn-key">F11</span> {requiredLocalized(l10n, 'retail-fn-quick-return')}
         </button>
       )}
       <button type="button" className="retail-fn-btn" onClick={onNavigateKds} disabled={!onNavigateKds}>
-        <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
+        <span className="retail-fn-key">F12</span> {requiredLocalized(l10n, 'kds-title')}
       </button>
       {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
-        <button type="button" className="retail-fn-btn" onClick={onShowTables} aria-label={l10n.getString('tables-title') || 'Tables'}>
-          <span aria-hidden="true">🪑</span> {l10n.getString('tables-title') || 'Tables'}
+        <button type="button" className="retail-fn-btn" onClick={onShowTables} aria-label={requiredLocalized(l10n, 'tables-title')}>
+          <span aria-hidden="true">🪑</span> {requiredLocalized(l10n, 'tables-title')}
         </button>
       )}
     </div>

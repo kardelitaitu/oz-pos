@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listInventoryTransactions,
@@ -48,7 +49,7 @@ export default function TransactionLogScreen() {
         setTransactions(txs);
         setLocations(locs);
       })
-      .catch((err) => addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-load') || 'Failed to load transactions'), type: 'error' }))
+      .catch((err) => addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-log-error-load')), type: 'error' }))
       .finally(() => setLoading(false));
   }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
@@ -68,7 +69,7 @@ export default function TransactionLogScreen() {
         setExpandedLines(detail[1]);
       }
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-lines') || 'Failed to load transaction details'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-log-error-lines')), type: 'error' });
     } finally {
       setLoadingLines(false);
     }

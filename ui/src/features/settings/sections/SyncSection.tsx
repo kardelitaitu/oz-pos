@@ -1,4 +1,5 @@
 import { Localized } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import type { ReactLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -245,7 +246,7 @@ export default function SyncSection({
             </Localized>
           </span>
           <span className="settings-field-input-wrap">
-            <label className="settings-toggle" htmlFor="sync-enabled" aria-label={l10n.getString('toggle') || 'Toggle'}>
+            <label className="settings-toggle" htmlFor="sync-enabled" aria-label={requiredLocalized(l10n, 'toggle')}>
               <span className="sr-only"><Localized id="toggle">Toggle</Localized></span>
               <span className="settings-toggle-switch">
                 <input

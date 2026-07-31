@@ -8,6 +8,7 @@ import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, up
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
+import { requiredLocalized } from '@/frontend/shared';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
 import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
@@ -149,7 +150,7 @@ export default function KdsScreen() {
           await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
           // Voice callout if reconnected action targeted 'ready'.
           if (action.targetStatus === 'ready') {
-            speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${l10n.getString('kds-ready-tts') || 'up'}!`);
+            speak(`${requiredLocalized(l10n, 'kds-order-up-tts')} ${requiredLocalized(l10n, 'kds-ready-tts')}!`);
           }
           return true;
         } catch {
@@ -205,7 +206,7 @@ export default function KdsScreen() {
     if (ok) {
       // 3d: Voice callout when a ticket hits 'ready' — "Order 42 up!"
       if (nextStatus === 'ready') {
-        speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${order.display_number} ${l10n.getString('kds-ready-tts') || 'up'}!`);
+        speak(`${requiredLocalized(l10n, 'kds-order-up-tts')} ${order.display_number} ${requiredLocalized(l10n, 'kds-ready-tts')}!`);
       }
       // No manual fetchOrders() — the kds:orders-changed event triggers a refresh.
     } else {
@@ -214,7 +215,7 @@ export default function KdsScreen() {
         o.id === order.id ? { ...o, status: nextStatus } : o,
       ));
       // Show a user-friendly banner instead of raw error.
-      setError(l10n.getString('kds-offline-queued-update') || 'Update queued — will sync when online');
+      setError(requiredLocalized(l10n, 'kds-offline-queued-update'));
     }
   }, [sessionToken, speak, l10n, wrapUpdate]);
 
@@ -229,7 +230,7 @@ export default function KdsScreen() {
       await updateKdsLineItemStatusScoped(sessionToken, item.id, nextStatus);
       // 3d: Voice callout when an item hits 'ready'.
       if (nextStatus === 'ready') {
-        speak(`${l10n.getString('kds-order-up-tts') || 'Order'} ${item.display_name} ${l10n.getString('kds-ready-tts') || 'up'}!`);
+        speak(`${requiredLocalized(l10n, 'kds-order-up-tts')} ${item.display_name} ${requiredLocalized(l10n, 'kds-ready-tts')}!`);
       }
     } catch {
       // Silent — the backend will emit kds:orders-changed on next poll.
@@ -388,7 +389,7 @@ export default function KdsScreen() {
         console.debug('[Profiler] KdsScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
       }
     }}>
-    <div ref={kdsRef} className="kds" tabIndex={-1} role="region" aria-label={l10n.getString('kds-screen-aria') || 'Kitchen Display System'}>
+    <div ref={kdsRef} className="kds" tabIndex={-1} role="region" aria-label={requiredLocalized(l10n, 'kds-screen-aria')}>
       <div className="kds-header">
         <div className="kds-header-left">
           <h1 className="kds-title"><Localized id="kds-title">Kitchen Display</Localized></h1>
@@ -396,7 +397,7 @@ export default function KdsScreen() {
         </div>
         <div className="kds-header-center">
           {zones.length > 0 && (
-            <div className="kds-zone-chips" role="tablist" aria-label={l10n.getString('kds-zone-filter-aria') || 'Filter by kitchen zone'}>
+            <div className="kds-zone-chips" role="tablist" aria-label={requiredLocalized(l10n, 'kds-zone-filter-aria')}>
               <button
                 className={`kds-zone-chip${!prefs.kdsZone ? ' kds-zone-chip--active' : ''}`}
                 onClick={() => setKdsZone('')}
@@ -425,7 +426,7 @@ export default function KdsScreen() {
             ref={shortcutsBtnRef}
             className="kds-shortcuts-btn"
             onClick={() => setShowShortcuts((p) => !p)}
-            aria-label={l10n.getString('kds-shortcuts-aria') || 'Keyboard shortcuts'}
+            aria-label={requiredLocalized(l10n, 'kds-shortcuts-aria')}
             aria-expanded={showShortcuts}
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
@@ -437,7 +438,7 @@ export default function KdsScreen() {
               ref={shortcutsRef}
               className="kds-shortcuts-popover"
               role="tooltip"
-              aria-label={l10n.getString('kds-shortcuts-label') || 'Keyboard shortcuts'}
+              aria-label={requiredLocalized(l10n, 'kds-shortcuts-label')}
             >
               {SHORTCUTS.map((s) => (
                 <div key={s.id} className="kds-shortcut-row">
@@ -451,9 +452,9 @@ export default function KdsScreen() {
           <button
             className={`kds-history-toggle${showHistory ? ' kds-history-toggle--active' : ''}`}
             onClick={() => setShowHistory((p) => !p)}
-            aria-label={l10n.getString('kds-history-toggle-aria') || 'Toggle order history'}
+            aria-label={requiredLocalized(l10n, 'kds-history-toggle-aria')}
             aria-pressed={showHistory}
-            title={l10n.getString('kds-history-toggle-title') || 'Order history'}
+            title={requiredLocalized(l10n, 'kds-history-toggle-title')}
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
@@ -491,14 +492,14 @@ export default function KdsScreen() {
               clearError();
               fetchOrders();
             }}
-            aria-label={l10n.getString('kds-error-retry-aria') || 'Retry'}
+            aria-label={requiredLocalized(l10n, 'kds-error-retry-aria')}
           >
             <Localized id="kds-offline-retry">Retry</Localized>
           </button>
           <button
             className="kds-error-dismiss-btn"
             onClick={clearError}
-            aria-label={l10n.getString('kds-error-dismiss-aria') || 'Dismiss'}
+            aria-label={requiredLocalized(l10n, 'kds-error-dismiss-aria')}
           >
             &times;
           </button>
@@ -513,8 +514,8 @@ export default function KdsScreen() {
           </svg>
           <span className="kds-offline-banner-text">
             {pendingQueueLength > 0
-              ? l10n.getString('kds-offline-queued', { count: pendingQueueLength }) || `${pendingQueueLength} update(s) queued — offline`
-              : l10n.getString('kds-offline-label') || 'Offline — showing cached orders'}
+              ? requiredLocalized(l10n, 'kds-offline-queued', { count: pendingQueueLength })
+              : requiredLocalized(l10n, 'kds-offline-label')}
           </span>
           {pendingQueueLength > 0 && (
             <button
@@ -531,7 +532,7 @@ export default function KdsScreen() {
                 // The backend will emit kds:orders-changed on success,
                 // which triggers fetchOrders via the event listener.
               }}
-              aria-label={l10n.getString('kds-offline-retry-aria') || 'Retry pending updates'}
+              aria-label={requiredLocalized(l10n, 'kds-offline-retry-aria')}
             >
               <Localized id="kds-offline-retry">Retry</Localized>
             </button>
@@ -539,7 +540,7 @@ export default function KdsScreen() {
           <button
             className="kds-offline-dismiss-btn"
             onClick={() => setError(null)}
-            aria-label={l10n.getString('kds-offline-dismiss-aria') || 'Dismiss offline banner'}
+            aria-label={requiredLocalized(l10n, 'kds-offline-dismiss-aria')}
           >
             &times;
           </button>

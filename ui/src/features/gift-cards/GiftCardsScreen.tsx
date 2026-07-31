@@ -9,6 +9,7 @@ import {
   type GiftCardFilter,
 } from '@/api/giftCards';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -45,7 +46,7 @@ export default function GiftCardsScreen() {
       const result = await listGiftCards(filter);
       setCards(result);
     } catch {
-      addToast({ message: l10n.getString('gift-cards-error-load') || 'Failed to load gift cards', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'gift-cards-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -62,7 +63,7 @@ export default function GiftCardsScreen() {
       }
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('gift-cards-error-freeze') || 'Failed to toggle freeze'), type: 'error' });
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'gift-cards-error-freeze')), type: 'error' });
     }
   }, [load, addToast, l10n]);
 
@@ -79,7 +80,7 @@ export default function GiftCardsScreen() {
       setTopUpAmount('');
       await load();
     } catch (err) {
-      setTopUpError(err instanceof Error ? err.message : (l10n.getString('gift-cards-error-topup') || 'Top-up failed'));
+      setTopUpError(err instanceof Error ? err.message : (requiredLocalized(l10n, 'gift-cards-error-topup')));
     }
   }, [topUpAmount, load, l10n]);
 
@@ -238,10 +239,10 @@ export default function GiftCardsScreen() {
                         className="gift-card-topup-input"
                         id="gift-card-topup-amount"
                         name="gift-card-topup-amount"
-                        placeholder={l10n.getString('gift-cards-topup-placeholder') || 'Amount (minor units)'}
+                        placeholder={requiredLocalized(l10n, 'gift-cards-topup-placeholder')}
                         value={topUpAmount}
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}
-                        aria-label={l10n.getString('gift-cards-topup-aria') || 'Top-up amount'}
+                        aria-label={requiredLocalized(l10n, 'gift-cards-topup-aria')}
                       />
                       <Localized id="gift-cards-confirm-topup">
                         <Button variant="primary" onClick={() => handleTopUp(gc.card.card_number)}>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized } from '@/components/Localized';
 import { type Product } from '@/types/domain';
 import { useLocalization } from '@fluent/react';
@@ -665,7 +666,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           </span>
         </div>
       ) : (
-        <div className="restaurant-grid" role="list" aria-label={l10n.getString('restaurant-menu-items-aria') || 'Menu items'}>
+        <div className="restaurant-grid" role="list" aria-label={requiredLocalized(l10n, 'restaurant-menu-items-aria')}>
           {filtered.map((product, i) => (
             <RestaurantCard
               key={product.sku}
@@ -796,7 +797,7 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
     >
       <div className="restaurant-card-body">
         {pinned && (
-          <span className="restaurant-card-pin-badge" title={l10n.getString('restaurant-card-pin-title') || 'Pinned to top'}>
+          <span className="restaurant-card-pin-badge" title={requiredLocalized(l10n, 'restaurant-card-pin-title')}>
             <PinIcon />
           </span>
         )}

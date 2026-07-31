@@ -1,4 +1,5 @@
 import { useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import TableManagementScreen from '@/features/tables/TableManagementScreen';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
@@ -19,7 +20,7 @@ export function SalesHistoryView({ theme, onBack }: SalesHistoryViewProps) {
     <div className="retail-pos" data-theme={theme}>
       <RetailHeader
         variant="minimal"
-        title={l10n.getString('retail-fn-history') || 'Sales History'}
+        title={requiredLocalized(l10n, 'retail-fn-history')}
         onBack={onBack}
         skipTarget="retail-subview-main"
       />
@@ -44,7 +45,7 @@ export function TableManagementView({ theme, onBack }: TableManagementViewProps)
     <div className="retail-pos" data-theme={theme}>
       <RetailHeader
         variant="minimal"
-        title={l10n.getString('tables-title') || 'Table Management'}
+        title={requiredLocalized(l10n, 'tables-title')}
         onBack={onBack}
         skipTarget="retail-subview-main"
       />
@@ -70,7 +71,7 @@ export function StockInquiryView({ theme, onBack, onAddProduct }: StockInquiryVi
     <div className="retail-pos" data-theme={theme}>
       <RetailHeader
         variant="minimal"
-        title={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
+        title={requiredLocalized(l10n, 'retail-fn-stok')}
         onBack={onBack}
         skipTarget="retail-subview-main"
       />

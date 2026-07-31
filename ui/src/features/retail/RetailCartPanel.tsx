@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type CSSProperties } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization, Localized } from '@fluent/react';
 import { formatMoney, type Money, type LineId, type Sku, type CourseId } from '@/types/domain';
 import { COURSES, courseLabel, courseEmoji } from '@/types/domain';
@@ -133,7 +134,7 @@ export default function RetailCartPanel({
         aria-valuenow={retailCartWidth}
         aria-valuemin={cartWidthMin}
         aria-valuemax={clampRetailCartWidth(cartWidthMaxCap, window.innerWidth)}
-        aria-label={l10n.getString('retail-resize-handle-aria') || 'Resize cart panel'}
+        aria-label={requiredLocalized(l10n, 'retail-resize-handle-aria')}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'ArrowLeft') {
@@ -151,7 +152,7 @@ export default function RetailCartPanel({
       <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties} {...cartSwipe}>
         <div className="retail-cart-header">
           <span>{l10n.getString('cart-title')}</span>
-          <span>{l10n.getString('retail-cart-items', { count: lineCount }) || `${lineCount} item${lineCount !== 1 ? 's' : ''}`}</span>
+          <span>{requiredLocalized(l10n, 'retail-cart-items', { count: lineCount })}</span>
         </div>
         {lines.length === 0 ? (
           <div className="retail-cart-empty">
@@ -189,7 +190,7 @@ export default function RetailCartPanel({
                                 type="button"
                                 className={`retail-cart-course-chip${line.courseId ? ' retail-cart-course-chip--set' : ''}`}
                                 onClick={(e) => { e.stopPropagation(); setCourseDropdownLine(courseDropdownLine === line.id ? null : line.id); }}
-                                aria-label={l10n.getString('retail-cart-course-aria', { name: line.name ?? line.sku }) || `Course for ${line.name ?? line.sku}`}
+                                aria-label={requiredLocalized(l10n, 'retail-cart-course-aria', { name: line.name ?? line.sku })}
                                 title={line.courseId ? `${courseEmoji(line.courseId)} ${courseLabel(line.courseId)}` : 'Set course'}
                               >
                                 {line.courseId ? `${courseEmoji(line.courseId)} ${courseLabel(line.courseId)}` : '🍽️ Course'}
@@ -241,8 +242,8 @@ export default function RetailCartPanel({
                             className="retail-cart-serial-input"
                             value={serialNumbers[line.id] ?? ''}
                             onChange={(e) => lineActions.onSerialChange(line.id, e.target.value)}
-                            placeholder={l10n.getString('retail-serial-placeholder') || 'Serial #'}
-                            aria-label={l10n.getString('retail-serial-aria', { name: line.name ?? line.sku }) || `Serial number for ${line.name ?? line.sku}`}
+                            placeholder={requiredLocalized(l10n, 'retail-serial-placeholder')}
+                            aria-label={requiredLocalized(l10n, 'retail-serial-aria', { name: line.name ?? line.sku })}
                           />
                         )}
                       </td>
@@ -258,7 +259,7 @@ export default function RetailCartPanel({
                                 lineActions.onUpdateQty(line.id, newQty);
                               }
                             }}
-                            aria-label={l10n.getString('retail-cart-qty-decrease-aria') || `Decrease quantity of ${line.sku}`}
+                            aria-label={requiredLocalized(l10n, 'retail-cart-qty-decrease-aria', { sku: line.sku })}
                           >
                             &minus;
                           </button>
@@ -266,7 +267,7 @@ export default function RetailCartPanel({
                           <button
                             className="retail-cart-qty-btn"
                             onClick={() => lineActions.onIncreaseQty(line)}
-                            aria-label={l10n.getString('retail-cart-qty-increase-aria') || `Increase quantity of ${line.sku}`}
+                            aria-label={requiredLocalized(l10n, 'retail-cart-qty-increase-aria', { sku: line.sku })}
                           >
                             +
                           </button>
@@ -277,7 +278,7 @@ export default function RetailCartPanel({
                             type="button"
                             className="retail-cart-modifier-btn"
                             onClick={() => lineActions.onEditModifiers(line)}
-                            aria-label={l10n.getString('retail-cart-modifier-aria', { name: line.name ?? line.sku }) || `Modifiers for ${line.name ?? line.sku}`}
+                            aria-label={requiredLocalized(l10n, 'retail-cart-modifier-aria', { name: line.name ?? line.sku })}
                           >
                             <Localized id="retail-cart-modifier-btn">
                               <span>Modifiers</span>
@@ -295,7 +296,7 @@ export default function RetailCartPanel({
                               lineActions.onSetOverrideTarget({ id: line.id as LineId, name: line.name ?? line.sku, unit_price: line.unit_price });
                               onEnsureCart(line.unit_price.currency);
                             }}
-                            aria-label={l10n.getString('retail-override-aria', { name: line.name ?? line.sku }) || `Override price for ${line.name ?? line.sku}`}
+                            aria-label={requiredLocalized(l10n, 'retail-override-aria', { name: line.name ?? line.sku })}
                           >
                             <Localized id="retail-override-btn"><span>Override</span></Localized>
                           </button>
@@ -303,7 +304,7 @@ export default function RetailCartPanel({
                       </td>
                       <td className="retail-cart-line-subtotal">{formatMoney({ minor_units: line.unit_price.minor_units * line.qty, currency: line.unit_price.currency })}</td>
                         <td>
-                          <button type="button" className="retail-cart-remove-btn" onClick={() => lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty })} aria-label={l10n.getString('retail-cart-remove-aria') || `Remove ${line.sku} from cart`}>
+                          <button type="button" className="retail-cart-remove-btn" onClick={() => lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty })} aria-label={requiredLocalized(l10n, 'retail-cart-remove-aria', { sku: line.sku })}>
                             &times;
                           </button>
                       </td>
@@ -320,7 +321,7 @@ export default function RetailCartPanel({
                 role="status"
                 aria-live="polite"
               >
-                <span className="retail-undo-bar-label">{l10n.getString('retail-undo-items-removed', { count: undoStack.length }) || `${undoStack.length} item${undoStack.length > 1 ? 's' : ''} removed`}</span>
+                <span className="retail-undo-bar-label">{requiredLocalized(l10n, 'retail-undo-items-removed', { count: undoStack.length })}</span>
                 <button type="button" className="retail-undo-bar-btn" onClick={onUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
                 <button type="button" className="retail-undo-bar-dismiss" onClick={onDismissUndo} aria-label={l10n.getString('pos-cart-undo-dismiss-aria')}>&times;</button>
               </div>
@@ -333,7 +334,7 @@ export default function RetailCartPanel({
               </div>
               {totals.discountPercent > 0 && totals.discountAmount && (
                 <div className="retail-total-row">
-                  <span>{l10n.getString('retail-total-discount', { percent: totals.discountPercent }) || `Discount ${totals.discountPercent}%`}</span>
+                  <span>{requiredLocalized(l10n, 'retail-total-discount', { percent: totals.discountPercent })}</span>
                   <span className="retail-total-discount">&minus;{formatMoney(totals.discountAmount)}</span>
                 </div>
               )}
@@ -381,9 +382,9 @@ export default function RetailCartPanel({
                 className="retail-cart-action-btn retail-cart-action-btn--hold"
                 onClick={panelActions.onHoldResume}
                 disabled={!heldCartId && lines.length === 0}
-                aria-label={heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
+                aria-label={heldCartId ? (requiredLocalized(l10n, 'retail-resume-button')) : (requiredLocalized(l10n, 'pos-cart-hold'))}
               >
-                {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
+                {heldCartId ? (requiredLocalized(l10n, 'retail-resume-button')) : (requiredLocalized(l10n, 'pos-cart-hold'))}
               </button>
               <button
                 type="button"

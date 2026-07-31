@@ -1,4 +1,5 @@
 import { useContext, useState, useCallback, useEffect } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getCategoryBreakdown } from '@/api/reports';
@@ -83,7 +84,7 @@ export default function CategoryPieChartWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--category" aria-label={l10n.getString('sales-dashboard-category-aria') || 'Category breakdown'}>
+    <div className="reporting-widget reporting-widget--category" aria-label={requiredLocalized(l10n, 'sales-dashboard-category-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-category-title">
           <h3 className="reporting-widget-title">By Category</h3>

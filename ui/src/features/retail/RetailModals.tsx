@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { formatMoney, type Money, type LineId } from '@/types/domain';
 import type { CustomerDto } from '@/api/customers';
@@ -408,7 +409,7 @@ export default function RetailModals(props: RetailModalsProps) {
           >
             <h3>{l10n.getString('retail-clear-cart-title')}</h3>
             <p className="retail-modal-message">
-              {l10n.getString('retail-clear-cart-confirm', { count: clearConfirm.lineCount }) || `Remove all ${clearConfirm.lineCount} item${clearConfirm.lineCount !== 1 ? 's' : ''} from the cart?`}
+              {requiredLocalized(l10n, 'retail-clear-cart-confirm', { count: clearConfirm.lineCount })}
             </p>
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => clearConfirm.exit.requestClose()}>{l10n.getString('cancel')}</button>
@@ -425,7 +426,7 @@ export default function RetailModals(props: RetailModalsProps) {
           className={`retail-clear-overlay${deleteHeldCartConfirm.exit.exiting ? ' retail-clear-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
-          aria-label={l10n.getString('retail-held-cart-delete-title') || 'Delete Held Cart'}
+          aria-label={requiredLocalized(l10n, 'retail-held-cart-delete-title')}
           onClick={(e) => { if (e.target === e.currentTarget) deleteHeldCartConfirm.exit.requestClose(); }}
           onKeyDown={(e) => { if (e.key === 'Escape') deleteHeldCartConfirm.exit.requestClose(); }}
           tabIndex={-1}
@@ -434,13 +435,13 @@ export default function RetailModals(props: RetailModalsProps) {
             ref={deleteHeldCartPanelRef}
             className={`retail-clear-modal${deleteHeldCartConfirm.exit.exiting ? ' retail-clear-modal--exiting' : ''}`}
           >
-            <h3>{l10n.getString('retail-held-cart-delete-title') || 'Delete Held Cart'}</h3>
+            <h3>{requiredLocalized(l10n, 'retail-held-cart-delete-title')}</h3>
             <p className="retail-modal-message">
-              {l10n.getString('retail-held-cart-delete-confirm', { label: deleteHeldCartConfirm.label }) || `Delete "${deleteHeldCartConfirm.label}"? This cannot be undone.`}
+              {requiredLocalized(l10n, 'retail-held-cart-delete-confirm', { label: deleteHeldCartConfirm.label })}
             </p>
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => deleteHeldCartConfirm.exit.requestClose()}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" data-testid="held-cart-delete-confirm" onClick={deleteHeldCartConfirm.onConfirm}>{l10n.getString('retail-held-cart-delete-btn') || 'Delete'}</button>
+              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" data-testid="held-cart-delete-confirm" onClick={deleteHeldCartConfirm.onConfirm}>{requiredLocalized(l10n, 'retail-held-cart-delete-btn')}</button>
             </div>
           </div>
         </div>
@@ -581,7 +582,7 @@ export default function RetailModals(props: RetailModalsProps) {
           className={`retail-qty-overlay${qtyPicker.exit.exiting ? ' retail-qty-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
-          aria-label={l10n.getString('retail-qty-picker-title') || 'Select Quantity'}
+          aria-label={requiredLocalized(l10n, 'retail-qty-picker-title')}
           onClick={(e) => { if (e.target === e.currentTarget) qtyPicker.exit.requestClose(); }}
           onKeyDown={(e) => { if (e.key === 'Escape') qtyPicker.exit.requestClose(); }}
           tabIndex={-1}
@@ -624,7 +625,7 @@ export default function RetailModals(props: RetailModalsProps) {
                       if (k === '⌫') qtyPicker.onInputChange(qtyPicker.input.length > 1 ? qtyPicker.input.slice(0, -1) : '1');
                       else qtyPicker.onInputChange(String(Math.max(1, parseInt(qtyPicker.input + String(k), 10) || 1)));
                     }}
-                    aria-label={k === '⌫' ? (l10n.getString('retail-qty-backspace-aria') || 'Backspace') : String(k)}
+                    aria-label={k === '⌫' ? (requiredLocalized(l10n, 'retail-qty-backspace-aria')) : String(k)}
                   >
                     {k === '⌫' ? (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
@@ -676,7 +677,7 @@ export default function RetailModals(props: RetailModalsProps) {
               <div className="retail-held-carts-list">
                 {heldCarts.list.map((c) => (
                   <div key={c.id} className="retail-held-cart-row">
-                    <button type="button" className="retail-held-cart-info" aria-label={l10n.getString('retail-held-cart-resume-aria') || 'Resume cart'} onClick={() => heldCarts.onResume(c.id)}>
+                    <button type="button" className="retail-held-cart-info" aria-label={requiredLocalized(l10n, 'retail-held-cart-resume-aria')} onClick={() => heldCarts.onResume(c.id)}>
                       <span className="retail-held-cart-label">{c.label}</span>
                       <span className="retail-held-cart-meta">
                         {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
@@ -724,10 +725,10 @@ export default function RetailModals(props: RetailModalsProps) {
               <span className="retail-shortcuts-key">F8</span><span>{l10n.getString('retail-fn-stok')}</span>
               <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
               <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
-              <span className="retail-shortcuts-key">F11</span><span>{l10n.getString('retail-shortcut-fullscreen') || 'Toggle Fullscreen'}</span>
+              <span className="retail-shortcuts-key">F11</span><span>{requiredLocalized(l10n, 'retail-shortcut-fullscreen')}</span>
               <span className="retail-shortcuts-key">?</span><span>{l10n.getString('retail-shortcut-list')}</span>
-              <span className="retail-shortcuts-key">Ctrl+K</span><span>{l10n.getString('retail-shortcut-credit') || 'Credit reminders'}</span>
-              <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
+              <span className="retail-shortcuts-key">Ctrl+K</span><span>{requiredLocalized(l10n, 'retail-shortcut-credit')}</span>
+              <span className="retail-shortcuts-key">F12</span><span>{requiredLocalized(l10n, 'kds-title')}</span>
               <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
             </div>
             <button type="button" className="retail-shortcuts-close" onClick={() => shortcuts.exit.requestClose()}>{l10n.getString('close')}</button>
@@ -776,7 +777,7 @@ export default function RetailModals(props: RetailModalsProps) {
           className={`retail-shift-overlay${quickReturn.exit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
           role="dialog"
           aria-modal="true"
-          aria-label={l10n.getString('retail-quick-return-title') || 'Quick Return'}
+          aria-label={requiredLocalized(l10n, 'retail-quick-return-title')}
           onClick={(e) => { if (e.target === e.currentTarget) quickReturn.exit.requestClose(); }}
           onKeyDown={(e) => { if (e.key === 'Escape') quickReturn.exit.requestClose(); }}
           tabIndex={-1}
@@ -785,9 +786,9 @@ export default function RetailModals(props: RetailModalsProps) {
             ref={quickReturnPanelRef}
             className={`retail-shift-modal${quickReturn.exit.exiting ? ' retail-shift-modal--exiting' : ''}`}
           >
-            <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
+            <h3>{requiredLocalized(l10n, 'retail-quick-return-title')}</h3>
             <p className="retail-quick-return-desc">
-              {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
+              {requiredLocalized(l10n, 'retail-quick-return-desc')}
             </p>
             <input
               type="text"
@@ -795,15 +796,15 @@ export default function RetailModals(props: RetailModalsProps) {
               value={quickReturn.barcode}
               onChange={(e) => quickReturn.onBarcodeChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') quickReturn.onSubmit(); }}
-              placeholder={l10n.getString('retail-quick-return-placeholder') || 'Receipt barcode'}
-              aria-label={l10n.getString('retail-quick-return-aria') || 'Receipt barcode input'}
+              placeholder={requiredLocalized(l10n, 'retail-quick-return-placeholder')}
+              aria-label={requiredLocalized(l10n, 'retail-quick-return-aria')}
             />
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => quickReturn.exit.requestClose()} disabled={quickReturn.loading}>
                 {l10n.getString('cancel')}
               </button>
               <button type="button" className="retail-shift-confirm-btn" onClick={quickReturn.onSubmit} disabled={quickReturn.loading || !quickReturn.barcode.trim()}>
-                {quickReturn.loading ? l10n.getString('loading') : (l10n.getString('retail-quick-return-lookup') || 'Look Up')}
+                {quickReturn.loading ? l10n.getString('loading') : (requiredLocalized(l10n, 'retail-quick-return-lookup'))}
               </button>
             </div>
           </div>
