@@ -4303,6 +4303,7 @@ dependencies = [
  "oz-core",
  "oz-hal",
  "oz-logging",
+ "platform-core",
  "platform-kernel",
  "platform-startup",
  "rusqlite",

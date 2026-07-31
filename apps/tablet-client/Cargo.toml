@@ -34,6 +34,7 @@ modules-staff = { workspace = true }
 modules-reporting = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
+platform-core = { workspace = true }
 platform-kernel = { workspace = true }
 platform-startup = { workspace = true }
 tauri = { workspace = true, features = [] }

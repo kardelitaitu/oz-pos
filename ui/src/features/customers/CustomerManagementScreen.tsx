@@ -1,15 +1,14 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listCustomersScoped,
-  createCustomer,
-  updateCustomer,
-  deleteCustomer,
+  createCustomerScoped,
+  updateCustomerScoped,
+  deleteCustomerScoped,
   type CustomerDto,
-  type UpdateCustomerArgs,
-  type CreateCustomerArgs,
+  type UpdateCustomerScopedArgs,
+  type CreateCustomerScopedArgs,
 } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -38,10 +37,8 @@ const EMPTY_FORM: FormData = {
 /** Customer management screen — list, search, create, edit, and delete customer records. */
 export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
-  const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
-  const userId = session?.user_id ?? '';
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,17 +118,17 @@ export default function CustomerManagementScreen() {
       const name = form.name.trim();
 
       if (editingId) {
-        const args: UpdateCustomerArgs = { userId, id: editingId, name };
+        const args: UpdateCustomerScopedArgs = { id: editingId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
-        await updateCustomer(args);
+        await updateCustomerScoped(sessionToken, args);
       } else {
-        const args: CreateCustomerArgs = { userId, name };
+        const args: CreateCustomerScopedArgs = { name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
-        await createCustomer(args);
+        await createCustomerScoped(sessionToken, args);
       }
       closeModal();
       await load();
@@ -140,20 +137,20 @@ export default function CustomerManagementScreen() {
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, userId, l10n]);
+  }, [form, editingId, closeModal, load, sessionToken, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
     try {
-      await deleteCustomer({ userId, id });
+      await deleteCustomerScoped(sessionToken, id);
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
     }
-  }, [load, userId]);
+  }, [load, sessionToken]);
 
   // ── Render ─────────────────────────────────────────────────────
 

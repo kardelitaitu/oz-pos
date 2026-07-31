@@ -6,28 +6,32 @@ import customersFtl from '@/locales/customers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/customers', () => {
-  const listCustomers = vi.fn();
+  const listCustomersScoped = vi.fn();
+  const createCustomerScoped = vi.fn();
+  const updateCustomerScoped = vi.fn();
+  const deleteCustomerScoped = vi.fn();
   return {
-    listCustomers,
-    listCustomersScoped: (...args: unknown[]) => listCustomers(...args),
-    createCustomer: vi.fn(),
-    updateCustomer: vi.fn(),
-    deleteCustomer: vi.fn(),
+    listCustomersScoped,
+    createCustomerScoped,
+    updateCustomerScoped,
+    deleteCustomerScoped,
   };
 });
 
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({
-    session: { user_id: 'user-1', display_name: 'Cashier', role_name: 'cashier' },
-  }),
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'session-1' }),
 }));
 
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
-import { listCustomers, createCustomer, updateCustomer } from '@/api/customers';
+import {
+  listCustomersScoped,
+  createCustomerScoped,
+  updateCustomerScoped,
+} from '@/api/customers';
 
-const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
-const mockCreateCustomer = createCustomer as ReturnType<typeof vi.fn>;
-const mockUpdateCustomer = updateCustomer as ReturnType<typeof vi.fn>;
+const mockListCustomers = listCustomersScoped as ReturnType<typeof vi.fn>;
+const mockCreateCustomer = createCustomerScoped as ReturnType<typeof vi.fn>;
+const mockUpdateCustomer = updateCustomerScoped as ReturnType<typeof vi.fn>;
 
 
 
@@ -43,6 +47,14 @@ describe('CustomerManagementScreen', () => {
   });
 
   // ── Rendering ─────────────────────────────────────────────────
+
+  it('loads customers with the active session token', async () => {
+    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Customers')).toBeInTheDocument();
+    });
+    expect(mockListCustomers).toHaveBeenCalledWith('session-1');
+  });
 
   it('renders the title and Add Customer button', async () => {
     renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
@@ -176,7 +188,9 @@ describe('CustomerManagementScreen', () => {
     await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(mockCreateCustomer).toHaveBeenCalled();
+      expect(mockCreateCustomer).toHaveBeenCalledWith('session-1', {
+        name: 'Dave',
+      });
     });
   });
 
@@ -253,7 +267,13 @@ describe('CustomerManagementScreen', () => {
     await user.click(screen.getByText('Update'));
 
     await waitFor(() => {
-      expect(mockUpdateCustomer).toHaveBeenCalled();
+      expect(mockUpdateCustomer).toHaveBeenCalledWith('session-1', {
+        id: 'cust-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        phone: '+1-555-0101',
+        notes: 'Regular',
+      });
     });
   });
 });

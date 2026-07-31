@@ -13,18 +13,16 @@ export interface CustomerDto {
   updated_at: string;
 }
 
-/** Arguments for creating a new customer. */
-export interface CreateCustomerArgs {
-  userId: string;
+/** Arguments for creating a customer in the session's store. */
+export interface CreateCustomerScopedArgs {
   name: string;
   email?: string;
   phone?: string;
   notes?: string;
 }
 
-/** Arguments for updating an existing customer. */
-export interface UpdateCustomerArgs {
-  userId: string;
+/** Arguments for updating a customer in the session's store. */
+export interface UpdateCustomerScopedArgs {
   id: string;
   name: string;
   email?: string;
@@ -44,14 +42,20 @@ export const listCustomersScoped = (sessionToken: string): Promise<CustomerDto[]
 export const getCustomer = (id: string): Promise<CustomerDto | null> =>
   loggedInvoke<CustomerDto | null>('get_customer', { id });
 
-/** Create a new customer. */
-export const createCustomer = (args: CreateCustomerArgs): Promise<CustomerDto> =>
-  loggedInvoke<CustomerDto>('create_customer', { args });
+/** Create a customer in the store resolved from a session token. ADR #7. */
+export const createCustomerScoped = (
+  sessionToken: string,
+  args: CreateCustomerScopedArgs,
+): Promise<CustomerDto> =>
+  loggedInvoke<CustomerDto>('create_customer_scoped', { sessionToken, args });
 
-/** Update an existing customer. */
-export const updateCustomer = (args: UpdateCustomerArgs): Promise<CustomerDto> =>
-  loggedInvoke<CustomerDto>('update_customer', { args });
+/** Update a customer in the store resolved from a session token. ADR #7. */
+export const updateCustomerScoped = (
+  sessionToken: string,
+  args: UpdateCustomerScopedArgs,
+): Promise<CustomerDto> =>
+  loggedInvoke<CustomerDto>('update_customer_scoped', { sessionToken, args });
 
-/** Delete a customer by their identifier. */
-export const deleteCustomer = (args: { userId: string; id: string }): Promise<void> =>
-  loggedInvoke('delete_customer', { args });
+/** Delete a customer from the store resolved from a session token. ADR #7. */
+export const deleteCustomerScoped = (sessionToken: string, id: string): Promise<void> =>
+  loggedInvoke('delete_customer_scoped', { sessionToken, id });

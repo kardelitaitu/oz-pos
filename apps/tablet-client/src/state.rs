@@ -31,6 +31,7 @@ use tokio::sync::{Mutex, oneshot};
 use oz_core::migrations;
 use oz_core::session::SessionContext;
 use oz_hal::DriverRegistry;
+use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
 
 use crate::error::AppError;
@@ -75,6 +76,10 @@ pub struct AppState {
     /// Consumers (Redis pub/sub subscriber, inventory change publisher)
     /// read this field instead of calling std::env::var().
     pub terminal_id: tokio::sync::Mutex<Option<String>>,
+
+    /// Store-scoped database manager (ADR #4 Phase 2 / ADR #7).
+    /// Each resolved store is opened in its own migrated SQLite database.
+    pub db_manager: StoreDatabaseManager,
 }
 
 impl AppState {
@@ -105,6 +110,11 @@ impl AppState {
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or(86400);
 
+        let data_dir = db_path
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let db_manager = StoreDatabaseManager::new(data_dir, oz_core::migrations::ALL);
         let registry = Arc::new(DriverRegistry::default());
 
         tracing::info!(?db_path, "AppState initialised");
@@ -119,6 +129,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds,
             terminal_id: Mutex::new(None),
+            db_manager,
         })
     }
 
@@ -163,6 +174,20 @@ impl AppState {
         }
 
         Err(AppError::InvalidSession)
+    }
+
+    /// Resolve a session token and return its store-scoped database.
+    ///
+    /// ADR #7: The session determines the store; callers never supply a
+    /// store identifier directly for scoped commands.
+    pub fn resolve_store(
+        &self,
+        token: &str,
+    ) -> Result<std::sync::Arc<std::sync::Mutex<Connection>>, AppError> {
+        let session = self.resolve_session(token)?;
+        self.db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))
     }
 
     /// Remove all expired sessions from the store in a single sweep.
@@ -242,6 +267,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
+            db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
         }
     }
 
@@ -258,6 +284,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
+            db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
         }
     }
 }

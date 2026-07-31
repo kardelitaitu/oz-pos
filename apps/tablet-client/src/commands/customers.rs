@@ -63,6 +63,21 @@ pub async fn list_customers(state: State<'_, AppState>) -> Result<Vec<CustomerDt
     Ok(customers.into_iter().map(CustomerDto::from).collect())
 }
 
+/// List customers for the store resolved from a session token. ADR #7.
+#[command]
+pub async fn list_customers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<CustomerDto>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let customers = store.list_customers()?;
+    Ok(customers.into_iter().map(CustomerDto::from).collect())
+}
+
 // ── Get single customer ─────────────────────────────────────────────
 
 #[command]
@@ -79,6 +94,20 @@ pub async fn get_customer(
 }
 
 // ── Create customer ─────────────────────────────────────────────────
+
+/// Arguments for creating a customer in the session's store.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCustomerScopedArgs {
+    /// Display name.
+    pub name: String,
+    /// Email address.
+    pub email: Option<String>,
+    /// Phone number.
+    pub phone: Option<String>,
+    /// Notes.
+    pub notes: Option<String>,
+}
 
 #[derive(Debug, Deserialize)]
 /// Createcustomerargs.
@@ -97,6 +126,9 @@ pub struct CreateCustomerArgs {
 
 #[command]
 /// Create customer.
+///
+/// **Deprecated for multi-store UI paths (ADR #7):** Use
+/// [`create_customer_scoped`] so the session selects the store and user.
 pub async fn create_customer(
     args: CreateCustomerArgs,
     state: State<'_, AppState>,
@@ -126,6 +158,22 @@ pub async fn create_customer(
 
 // ── Update customer ─────────────────────────────────────────────────
 
+/// Arguments for updating a customer in the session's store.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCustomerScopedArgs {
+    /// Unique identifier.
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    /// Email address.
+    pub email: Option<String>,
+    /// Phone number.
+    pub phone: Option<String>,
+    /// Notes.
+    pub notes: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 /// Updatecustomerargs.
 pub struct UpdateCustomerArgs {
@@ -145,6 +193,9 @@ pub struct UpdateCustomerArgs {
 
 #[command]
 /// Update customer.
+///
+/// **Deprecated for multi-store UI paths (ADR #7):** Use
+/// [`update_customer_scoped`] so the session selects the store and user.
 pub async fn update_customer(
     args: UpdateCustomerArgs,
     state: State<'_, AppState>,
@@ -186,6 +237,10 @@ pub struct DeleteCustomerArgs {
 
 #[command]
 /// Delete customer.
+///
+/// **Deprecated for multi-store UI paths (ADR #7):** Use
+/// [`delete_customer_scoped`] so the session selects the store and user.
+///
 pub async fn delete_customer(
     args: DeleteCustomerArgs,
     state: State<'_, AppState>,
@@ -197,6 +252,91 @@ pub async fn delete_customer(
 
     store.delete_customer(&args.id)?;
     drop(db);
+    Ok(())
+}
+
+// ── Store-scoped mutations (ADR #7) ─────────────────────────────────
+
+/// Create a customer in the store resolved from a session token.
+#[command]
+pub async fn create_customer_scoped(
+    session_token: String,
+    args: CreateCustomerScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<CustomerDto, AppError> {
+    validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::CUSTOMERS_CREATE)?;
+    let customer = store.create_customer(
+        args.name.trim(),
+        args.email.as_deref(),
+        args.phone.as_deref(),
+        args.notes.as_deref(),
+    )?;
+    Ok(CustomerDto::from(customer))
+}
+
+/// Update a customer in the store resolved from a session token.
+#[command]
+pub async fn update_customer_scoped(
+    session_token: String,
+    args: UpdateCustomerScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<CustomerDto, AppError> {
+    validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
+    let session = state.resolve_session(&session_token)?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::CUSTOMERS_EDIT)?;
+    let customer = store.update_customer(
+        &args.id,
+        args.name.trim(),
+        args.email.as_deref(),
+        args.phone.as_deref(),
+        args.notes.as_deref(),
+    )?;
+    Ok(CustomerDto::from(customer))
+}
+
+/// Delete a customer from the store resolved from a session token.
+#[command]
+pub async fn delete_customer_scoped(
+    session_token: String,
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::CUSTOMERS_DELETE)?;
+    store.delete_customer(&id)?;
+    Ok(())
+}
+
+/// Validate fields shared by customer create and update commands.
+fn validate_customer_fields(
+    name: &str,
+    email: Option<&str>,
+    phone: Option<&str>,
+) -> Result<(), AppError> {
+    validate_not_empty("name", name).map_err(|e| AppError::Invalid(e.to_string()))?;
+    if let Some(email) = email {
+        foundation::Email::new(email).map_err(|e| AppError::Invalid(e.to_string()))?;
+    }
+    if let Some(phone) = phone {
+        foundation::Phone::new(phone).map_err(|e| AppError::Invalid(e.to_string()))?;
+    }
     Ok(())
 }
 
@@ -472,5 +612,21 @@ mod tests {
         };
         let d = format!("{args:?}");
         assert!(d.contains("c"));
+    }
+
+    #[test]
+    fn scoped_create_args_deserialize_without_user_id() {
+        let json = r#"{"name":"Alice","email":"alice@example.com"}"#;
+        let args: CreateCustomerScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.name, "Alice");
+        assert_eq!(args.email.as_deref(), Some("alice@example.com"));
+    }
+
+    #[test]
+    fn scoped_update_args_deserialize_without_user_id() {
+        let json = r#"{"id":"c1","name":"Alice Updated"}"#;
+        let args: UpdateCustomerScopedArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.id, "c1");
+        assert_eq!(args.name, "Alice Updated");
     }
 }
