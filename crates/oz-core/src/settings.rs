@@ -8,6 +8,7 @@ use rusqlite::Connection;
 
 use crate::error::CoreError;
 use crate::features::FeatureRegistry;
+use crate::tax_rate::RoundingMode;
 
 /// Well-known settings keys for store configuration.
 pub mod keys {
@@ -242,6 +243,47 @@ impl Settings {
         Ok(platform_core::settings::Settings::set_receipt_margin_right(
             conn, mm,
         )?)
+    }
+
+    /// Tax rounding mode as the domain [`RoundingMode`] enum.
+    ///
+    /// Unknown/legacy values fall back to [`RoundingMode::HalfUp`] (the
+    /// TAX-05 default). Persisted wire values are `"half_up"` / `"truncate"`.
+    pub fn get_tax_rounding_mode(conn: &Connection) -> Result<RoundingMode, CoreError> {
+        let val = platform_core::settings::Settings::get_tax_rounding_mode(conn)?;
+        Ok(match val.as_str() {
+            "truncate" => RoundingMode::Truncate,
+            _ => RoundingMode::HalfUp,
+        })
+    }
+
+    /// Set the tax rounding mode for the store.
+    pub fn set_tax_rounding_mode(conn: &Connection, mode: RoundingMode) -> Result<(), CoreError> {
+        let val = match mode {
+            RoundingMode::Truncate => "truncate",
+            RoundingMode::HalfUp => "half_up",
+        };
+        Ok(platform_core::settings::Settings::set_tax_rounding_mode(
+            conn, val,
+        )?)
+    }
+
+    /// Set the tax rounding mode from its wire string (`"half_up"` / `"truncate"`).
+    ///
+    /// Rejects unknown values with a structured error so callers (e.g. the
+    /// settings DTO) cannot persist garbage.
+    pub fn set_tax_rounding_mode_str(conn: &Connection, val: &str) -> Result<(), CoreError> {
+        let mode = match val {
+            "half_up" => RoundingMode::HalfUp,
+            "truncate" => RoundingMode::Truncate,
+            other => {
+                return Err(CoreError::Validation {
+                    field: "rounding_mode",
+                    message: format!("invalid tax rounding mode: {other}"),
+                });
+            }
+        };
+        Self::set_tax_rounding_mode(conn, mode)
     }
 
     // ── Printer settings ─────────────────────────────────────────────
@@ -907,6 +949,58 @@ mod tests {
             Settings::get_default_currency(&conn).unwrap(),
             Some("EUR".into())
         );
+    }
+
+    #[test]
+    fn tax_rounding_mode_defaults_to_half_up() {
+        let conn = fresh();
+        assert_eq!(
+            Settings::get_tax_rounding_mode(&conn).unwrap(),
+            RoundingMode::HalfUp
+        );
+    }
+
+    #[test]
+    fn set_and_get_tax_rounding_mode_roundtrip() {
+        let conn = fresh();
+        Settings::set_tax_rounding_mode(&conn, RoundingMode::Truncate).unwrap();
+        assert_eq!(
+            Settings::get_tax_rounding_mode(&conn).unwrap(),
+            RoundingMode::Truncate
+        );
+        Settings::set_tax_rounding_mode(&conn, RoundingMode::HalfUp).unwrap();
+        assert_eq!(
+            Settings::get_tax_rounding_mode(&conn).unwrap(),
+            RoundingMode::HalfUp
+        );
+    }
+
+    #[test]
+    fn set_tax_rounding_mode_str_rejects_unknown_value() {
+        let conn = fresh();
+        assert!(Settings::set_tax_rounding_mode_str(&conn, "bankers").is_err());
+        // Valid values still round-trip.
+        Settings::set_tax_rounding_mode_str(&conn, "truncate").unwrap();
+        assert_eq!(
+            Settings::get_tax_rounding_mode(&conn).unwrap(),
+            RoundingMode::Truncate
+        );
+    }
+
+    #[test]
+    fn tax_rounding_mode_unknown_wire_value_falls_back_to_half_up() {
+        let conn = fresh();
+        Settings::set(&conn, "tax.rounding_mode", "half_even").unwrap();
+        assert_eq!(
+            Settings::get_tax_rounding_mode(&conn).unwrap(),
+            RoundingMode::HalfUp
+        );
+    }
+
+    #[test]
+    fn wire_name_matches_serde_snake_case() {
+        assert_eq!(RoundingMode::HalfUp.wire_name(), "half_up");
+        assert_eq!(RoundingMode::Truncate.wire_name(), "truncate");
     }
 
     /// `oz_core::Settings::set()` does NOT touch the `setting_updated`

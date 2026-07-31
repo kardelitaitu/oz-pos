@@ -45,6 +45,13 @@ pub struct ReceiptSettingsDto {
     pub margin_left: i64,
     /// Right margin (mm).
     pub margin_right: i64,
+    /// Tax rounding mode: `"half_up"` or `"truncate"`. Default `"half_up"`.
+    #[serde(default = "default_tax_rounding_mode")]
+    pub tax_rounding_mode: String,
+}
+
+fn default_tax_rounding_mode() -> String {
+    "half_up".to_string()
 }
 
 // ── Get receipt settings ──────────────────────────────────
@@ -88,6 +95,9 @@ fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettin
         margin_bottom: Settings::get_receipt_margin_bottom(conn)?,
         margin_left: Settings::get_receipt_margin_left(conn)?,
         margin_right: Settings::get_receipt_margin_right(conn)?,
+        tax_rounding_mode: Settings::get_tax_rounding_mode(conn)?
+            .wire_name()
+            .to_string(),
     })
 }
 
@@ -143,6 +153,7 @@ fn run_set_receipt_settings(
     Settings::set_receipt_margin_bottom(&tx, args.margin_bottom)?;
     Settings::set_receipt_margin_left(&tx, args.margin_left)?;
     Settings::set_receipt_margin_right(&tx, args.margin_right)?;
+    Settings::set_tax_rounding_mode_str(&tx, &args.tax_rounding_mode)?;
 
     tx.commit()?;
 
@@ -1143,6 +1154,7 @@ mod tests {
         assert_eq!(result.margin_bottom, 0);
         assert_eq!(result.margin_left, 0);
         assert_eq!(result.margin_right, 0);
+        assert_eq!(result.tax_rounding_mode, "half_up");
     }
 
     #[test]
@@ -1159,6 +1171,7 @@ mod tests {
             margin_bottom: 3,
             margin_left: 2,
             margin_right: 2,
+            tax_rounding_mode: "truncate".into(),
         };
 
         run_set_receipt_settings(&conn, &dto).unwrap();
@@ -1174,6 +1187,7 @@ mod tests {
         assert_eq!(result.margin_bottom, 3);
         assert_eq!(result.margin_left, 2);
         assert_eq!(result.margin_right, 2);
+        assert_eq!(result.tax_rounding_mode, "truncate");
     }
 
     #[test]
@@ -1229,6 +1243,7 @@ mod tests {
                 margin_bottom: 0,
                 margin_left: 0,
                 margin_right: 0,
+                tax_rounding_mode: "half_up".into(),
             },
         )
         .unwrap();
@@ -1246,6 +1261,7 @@ mod tests {
                 margin_bottom: 5,
                 margin_left: 0,
                 margin_right: 0,
+                tax_rounding_mode: "half_up".into(),
             },
         )
         .unwrap();
@@ -1319,6 +1335,7 @@ mod tests {
             margin_bottom: 0,
             margin_left: 0,
             margin_right: 0,
+            tax_rounding_mode: "half_up".into(),
         };
         let d = format!("{dto:?}");
         assert!(d.contains("Thanks"));
@@ -1500,6 +1517,7 @@ mod tests {
             margin_bottom: 3,
             margin_left: 2,
             margin_right: 1,
+            tax_rounding_mode: "half_up".into(),
         };
         let json = serde_json::to_value(&dto).unwrap();
         let back: ReceiptSettingsDto = serde_json::from_value(json).unwrap();

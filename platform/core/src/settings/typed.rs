@@ -207,6 +207,16 @@ impl Settings {
         Self::set(conn, keys::RECEIPT_MARGIN_RIGHT, &mm.to_string())
     }
 
+    /// Tax rounding mode: `"half_up"` or `"truncate"`. Default `"half_up"`.
+    pub fn get_tax_rounding_mode(conn: &Connection) -> Result<String, PlatformError> {
+        Ok(Self::get(conn, keys::TAX_ROUNDING_MODE)?.unwrap_or_else(|| "half_up".into()))
+    }
+
+    /// Set the tax rounding mode (`"half_up"` or `"truncate"`).
+    pub fn set_tax_rounding_mode(conn: &Connection, val: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::TAX_ROUNDING_MODE, val)
+    }
+
     // ── Printer settings ─────────────────────────────────────────
 
     /// Printer connection type.

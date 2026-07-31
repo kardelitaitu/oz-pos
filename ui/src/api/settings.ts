@@ -16,6 +16,8 @@ export interface ReceiptSettingsDto {
   marginBottom: number;
   marginLeft: number;
   marginRight: number;
+  /** Tax rounding mode: `'half_up'` or `'truncate'`. Default `'half_up'`. */
+  taxRoundingMode?: string;
 }
 
 /** Get the current receipt settings. */

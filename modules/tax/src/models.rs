@@ -23,6 +23,17 @@ pub enum RoundingMode {
 }
 
 impl RoundingMode {
+    /// Stable wire/storage name (matches the `serde` `snake_case` form
+    /// declared by `#[serde(rename_all = "snake_case")]` on this enum —
+    /// keep the two in sync if the rename changes).
+    #[must_use]
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Self::Truncate => "truncate",
+            Self::HalfUp => "half_up",
+        }
+    }
+
     /// Divide `numerator / divisor` and round per this mode using
     /// integer-only arithmetic (no floats).
     ///

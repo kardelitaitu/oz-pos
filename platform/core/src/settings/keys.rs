@@ -35,6 +35,8 @@ pub const RECEIPT_FOOTER: &str = "receipt.footer";
 pub const RECEIPT_PAPER_WIDTH: &str = "receipt.paper_width";
 /// Show table number on cart and receipts. `"1"` or `"0"`. Default `"0"`.
 pub const RECEIPT_SHOW_TABLE_NUMBER: &str = "receipt.show_table_number";
+/// Tax rounding mode: `"half_up"` or `"truncate"`. Default `"half_up"`.
+pub const TAX_ROUNDING_MODE: &str = "tax.rounding_mode";
 /// Top margin in mm. Default `"0"`.
 pub const RECEIPT_MARGIN_TOP: &str = "receipt.margin_top";
 /// Bottom margin in mm. Default `"0"`.
