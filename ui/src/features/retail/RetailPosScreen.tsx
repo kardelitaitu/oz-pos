@@ -738,8 +738,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setUndoStack([]);
     setSerialNumbers({});
     setSelectedCustomer(null);
+    setModifierLine(null);
     setShowClearConfirm(false);
-  }, [resetCart, setDiscount, setSelectedCustomer]);
+  }, [resetCart, setDiscount, setSelectedCustomer, setModifierLine]);
 
   const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
     if (cartId) return cartId;
