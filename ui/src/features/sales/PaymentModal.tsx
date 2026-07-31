@@ -14,7 +14,7 @@ import {
   type CurrencyDto,
   type ExchangeRateDto,
 } from '@/api/currency';
-import { listCustomers, type CustomerDto } from '@/api/customers';
+import { listCustomersScoped, type CustomerDto } from '@/api/customers';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -241,15 +241,23 @@ export default function PaymentModal({
 
   useEffect(() => {
     if (!showCustomerSearch) return;
+    if (!sessionToken) {
+      // Customer data is store-scoped. Never fall back to the legacy global
+      // command when this modal is rendered outside an authenticated scope.
+      allCustomersRef.current = [];
+      setCustomerSearchResults([]);
+      setLoadingCustomers(false);
+      return;
+    }
     setLoadingCustomers(true);
-    listCustomers()
+    listCustomersScoped(sessionToken)
       .then((customers) => {
         allCustomersRef.current = customers;
         setCustomerSearchResults(customers);
       })
       .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, addToast]); // l10n via ref — stable dep chain
+  }, [showCustomerSearch, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -273,7 +281,11 @@ export default function PaymentModal({
 
   useEffect(() => {
     if (selectedCustomer) {
-      getLoyaltyAccount(selectedCustomer.id)
+      if (!sessionToken) {
+        setLoyaltyAccount(null);
+        return;
+      }
+      getLoyaltyAccount(sessionToken, selectedCustomer.id)
         .then((account) => {
           setLoyaltyAccount(account);
           if (account && account.account.points > 0) {
@@ -287,17 +299,21 @@ export default function PaymentModal({
       setRedeemPoints(false);
       setLoyaltyDiscount(0n);
     }
-  }, [selectedCustomer, addToast]); // l10n via ref — stable dep chain
+  }, [selectedCustomer, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
-      getPointsValue(loyaltyAccount.account.points)
+      if (!sessionToken) {
+        setPointsWorthMinor(null);
+        return;
+      }
+      getPointsValue(sessionToken, loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
         .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
     } else {
       setPointsWorthMinor(null);
     }
-  }, [loyaltyAccount, addToast]); // l10n via ref — stable dep chain
+  }, [loyaltyAccount, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!redeemPoints || pointsToRedeem <= 0) {
@@ -305,7 +321,8 @@ export default function PaymentModal({
       return;
     }
     let cancelled = false;
-    getPointsValue(pointsToRedeem)
+    if (!sessionToken) return;
+    getPointsValue(sessionToken, pointsToRedeem)
       .then((val) => {
         if (!cancelled) {
           const discount = BigInt(val);
@@ -314,7 +331,7 @@ export default function PaymentModal({
       })
       .catch(() => { /* points value calc is best-effort */ });
     return () => { cancelled = true; };
-  }, [pointsToRedeem, redeemPoints, totalMinor]);
+  }, [pointsToRedeem, redeemPoints, totalMinor, sessionToken]);
 
   const effectiveTotal = useMemo(() => {
     const base = totalMinor;
@@ -493,11 +510,14 @@ export default function PaymentModal({
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
           if (selectedCustomer?.id) {
-            await redeemLoyaltyPoints(
-              selectedCustomer.id,
-              Number(loyaltyDiscount),
-              saleResult.saleId,
-            );
+            if (sessionToken) {
+              await redeemLoyaltyPoints(
+                sessionToken,
+                selectedCustomer.id,
+                Number(loyaltyDiscount),
+                saleResult.saleId,
+              );
+            }
           }
         } catch {
           // non-blocking
@@ -799,11 +819,14 @@ export default function PaymentModal({
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
           if (selectedCustomer?.id) {
-            await redeemLoyaltyPoints(
-              selectedCustomer.id,
-              Number(loyaltyDiscount),
-              saleResult.saleId,
-            );
+            if (sessionToken) {
+              await redeemLoyaltyPoints(
+                sessionToken,
+                selectedCustomer.id,
+                Number(loyaltyDiscount),
+                saleResult.saleId,
+              );
+            }
           }
         } catch {
           // Loyalty redemption failure is non-blocking

@@ -6,6 +6,8 @@
   "dependencies": ["crm"],
   "permissions": [
     "loyalty:view",
+    "loyalty:earn",
+    "loyalty:redeem",
     "loyalty:manage"
   ]
 }

@@ -132,6 +132,9 @@ pub struct Cart {
     discount_percent: Percentage,
     #[serde(default)]
     discount_label: Option<String>,
+    /// Fixed discount in minor currency units, applied after any percentage discount.
+    #[serde(default)]
+    fixed_discount_minor: i64,
 }
 
 impl Cart {
@@ -144,6 +147,7 @@ impl Cart {
             lines: Vec::new(),
             discount_percent: Percentage::zero(),
             discount_label: None,
+            fixed_discount_minor: 0,
         }
     }
 
@@ -188,10 +192,30 @@ impl Cart {
         self.discount_percent
     }
 
-    /// Set a cart-level percentage discount.
+    /// Set a cart-level percentage discount and clear any fixed discount.
     pub fn set_discount(&mut self, percent: Percentage, label: Option<String>) {
         self.discount_percent = percent;
+        self.fixed_discount_minor = 0;
         self.discount_label = if percent.get() == 0 { None } else { label };
+    }
+
+    /// Set a fixed cart discount in minor currency units.
+    ///
+    /// The amount is capped at the cart's payable total when the total is
+    /// calculated, so a discount can safely be applied before all lines exist.
+    pub fn set_fixed_discount(&mut self, minor_units: i64, label: Option<String>) {
+        self.fixed_discount_minor = minor_units.max(0);
+        self.discount_label = if self.fixed_discount_minor == 0 {
+            None
+        } else {
+            label
+        };
+    }
+
+    /// Return the fixed discount in minor currency units.
+    #[must_use]
+    pub fn fixed_discount_minor(&self) -> i64 {
+        self.fixed_discount_minor
     }
 
     /// Append a line. Returns `Err` on currency mismatch.
@@ -244,6 +268,13 @@ impl Cart {
         if self.discount_percent.get() > 0 {
             acc = self.discount_percent.complement_apply_to(acc)?;
         }
+        if self.fixed_discount_minor > 0 {
+            let fixed = self.fixed_discount_minor.min(acc.minor_units);
+            acc = acc.checked_sub(Money {
+                minor_units: fixed,
+                currency: self.currency,
+            })?;
+        }
         Some(acc)
     }
 
@@ -271,7 +302,19 @@ impl Cart {
             let t = line.total()?;
             subtotal = subtotal.checked_add(t)?;
         }
-        self.discount_percent.apply_to(subtotal)
+        let discounted = if self.discount_percent.get() > 0 {
+            self.discount_percent.complement_apply_to(subtotal)?
+        } else {
+            subtotal
+        };
+        let fixed = self.fixed_discount_minor.min(discounted.minor_units);
+        discounted
+            .checked_sub(Money {
+                minor_units: fixed,
+                currency: self.currency,
+            })
+            .and_then(|total| subtotal.checked_sub(total))
+            .or(Some(Money::zero(self.currency)))
     }
 }
 
@@ -499,6 +542,28 @@ mod tests {
     fn discount_amount_zero_when_no_discount() {
         let cart = Cart::new(usd());
         assert_eq!(cart.discount_amount().unwrap().minor_units, 0);
+    }
+
+    #[test]
+    fn fixed_discount_is_capped_and_survives_serialization() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(
+            Sku::new("ITEM"),
+            1,
+            Money {
+                minor_units: 1000,
+                currency: usd(),
+            },
+        ))
+        .unwrap();
+        cart.set_fixed_discount(1500, Some("Loyalty points".into()));
+        assert_eq!(cart.total().unwrap().minor_units, 0);
+        assert_eq!(cart.discount_amount().unwrap().minor_units, 1000);
+
+        let json = serde_json::to_string(&cart).unwrap();
+        let restored: Cart = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.fixed_discount_minor(), 1500);
+        assert_eq!(restored.total().unwrap().minor_units, 0);
     }
 
     #[test]
@@ -859,6 +924,7 @@ mod tests {
         assert_eq!(back.line_count(), 1);
         assert_eq!(back.currency(), usd());
         assert_eq!(back.discount_percent(), 10);
+        assert_eq!(back.fixed_discount_minor(), 0);
         assert_eq!(back.discount_label(), Some("sale"));
     }
 }

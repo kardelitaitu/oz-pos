@@ -15,6 +15,7 @@ use foundation::Percentage;
 use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
 use oz_core::location_resolver;
+use oz_core::tax_rate::RoundingMode;
 use oz_core::{Cart, CartId, CartLine, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
 
 use crate::commands::authz::require_permission_for_user;
@@ -684,7 +685,7 @@ pub async fn complete_sale(
     let updated = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(&mut sale, &[], RoundingMode::default())?;
 
         // Match serial numbers from args to sale lines by SKU.
         if let Some(ref serial_numbers) = args.serial_numbers {
@@ -811,7 +812,7 @@ pub async fn complete_sale_scoped(
     let _res = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(&mut sale, &[], RoundingMode::default())?;
 
         if let Some(ref serial_numbers) = args.serial_numbers {
             for sn in serial_numbers {
@@ -897,7 +898,7 @@ pub async fn compute_cart_tax(
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let tax = store.compute_cart_tax(&lines, parsed)?;
+    let tax = store.compute_cart_tax(&lines, parsed, RoundingMode::default())?;
     drop(db);
     Ok(tax.minor_units)
 }
@@ -921,7 +922,7 @@ pub async fn compute_cart_tax_scoped(
         &session.user_id,
         oz_core::permissions::SALES_PROCESS,
     )?;
-    let tax = store.compute_cart_tax(&lines, parsed)?;
+    let tax = store.compute_cart_tax(&lines, parsed, RoundingMode::default())?;
     drop(db);
     Ok(tax.minor_units)
 }
@@ -1028,7 +1029,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
         let db = state.db.lock().await;
         let store = Store::new(&db);
 
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(&mut sale, &[], RoundingMode::default())?;
 
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()

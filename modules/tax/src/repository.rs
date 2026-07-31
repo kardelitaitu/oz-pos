@@ -14,11 +14,17 @@ impl<'a> TaxRepository<'a> {
         Self { conn }
     }
 
-    /// Retrieve a tax rate by ID.
+    /// Retrieve an active tax rate by ID.
+    ///
+    /// TAX-03: honours the `is_active` soft-delete flag exactly like
+    /// `oz_core::db::Store::get_tax_rate`, so archived (immutable) rates
+    /// stay hidden through the module boundary too. The cross-layer
+    /// contract test `modules/tax/tests/boundary_contract.rs` pins this
+    /// parity.
     pub fn get_tax_rate(&self, id: &str) -> Result<Option<TaxRate>, anyhow::Error> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
-             FROM tax_rates WHERE id = ?1",
+             FROM tax_rates WHERE id = ?1 AND is_active = 1",
         )?;
 
         let mut rows = stmt.query(params![id])?;

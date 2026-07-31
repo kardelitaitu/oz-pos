@@ -1054,14 +1054,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // LOYALTY
   // ═══════════════════════════════════════════════════════════════
 
-  'get_loyalty_account': () => null,
-  'list_loyalty_accounts': () => [],
-  'earn_loyalty_points': () => null,
-  'redeem_loyalty_points': () => null,
-  'list_loyalty_tiers': () => [],
-  'update_loyalty_tier': () => null,
-  'get_points_value': () => 0,
-  'get_or_create_loyalty_account': () => null,
+  'get_loyalty_account_scoped': () => null,
+  'list_loyalty_accounts_scoped': () => [],
+  'earn_loyalty_points_scoped': () => null,
+  'redeem_loyalty_points_scoped': () => null,
+  'list_loyalty_tiers_scoped': () => [],
+  'update_loyalty_tier_scoped': () => null,
+  'get_points_value_scoped': () => 0,
+  'get_or_create_loyalty_account_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // GIFT CARDS

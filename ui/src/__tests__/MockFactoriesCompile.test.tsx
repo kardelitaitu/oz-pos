@@ -97,7 +97,7 @@ import * as loyApi from '@/api/loyalty';
 
 describe('createLoyaltyApiMock', () => {
   it('returns LoyaltyAccountWithDetails from getLoyaltyAccount', async () => {
-    const account = await loyApi.getLoyaltyAccount('cust-1');
+    const account = await loyApi.getLoyaltyAccount('session-1', 'cust-1');
     expect(account).not.toBeNull();
     expect(account!.account.customer_id).toBe('cust-1');
     expect(account!.account.points).toBe(500);
@@ -106,31 +106,31 @@ describe('createLoyaltyApiMock', () => {
   });
 
   it('returns loyalty accounts list from listLoyaltyAccounts', async () => {
-    const accounts = await loyApi.listLoyaltyAccounts();
+    const accounts = await loyApi.listLoyaltyAccounts('session-1');
     expect(Array.isArray(accounts)).toBe(true);
     expect(accounts[0]?.account.id).toBe('loyalty-1');
   });
 
   it('returns a LoyaltyTransaction from earnLoyaltyPoints', async () => {
-    const txn = await loyApi.earnLoyaltyPoints('cust-1', 'sale-1', 50000);
+    const txn = await loyApi.earnLoyaltyPoints('session-1', 'cust-1', 'sale-1', 50000);
     expect(txn.txn_type).toBe('earn');
     expect(txn.points).toBe(100);
   });
 
   it('returns RedeemResult from redeemLoyaltyPoints', async () => {
-    const result = await loyApi.redeemLoyaltyPoints('cust-1', 200, 'sale-1');
+    const result = await loyApi.redeemLoyaltyPoints('session-1', 'cust-1', 200, 'sale-1');
     expect(result.transaction.txn_type).toBe('redeem');
     expect(result.discount_minor).toBe(50000);
   });
 
   it('returns tiers from listLoyaltyTiers', async () => {
-    const tiers = await loyApi.listLoyaltyTiers();
+    const tiers = await loyApi.listLoyaltyTiers('session-1');
     expect(Array.isArray(tiers)).toBe(true);
     expect(tiers[0]?.name).toBe('Silver');
   });
 
   it('returns points value from getPointsValue', async () => {
-    const value = await loyApi.getPointsValue(100);
+    const value = await loyApi.getPointsValue('session-1', 100);
     expect(value).toBe(25000);
   });
 });

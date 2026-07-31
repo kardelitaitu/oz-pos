@@ -11,6 +11,20 @@ use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
+/// Verify a loyalty permission against the global identity database.
+///
+/// Users and roles are global authentication records; loyalty business data
+/// is read from the store-scoped connection after this check succeeds.
+async fn require_loyalty_permission(
+    state: &AppState,
+    user_id: &str,
+    permission: &str,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, user_id, permission)
+}
+
 /// The result of a successful loyalty points redemption.
 #[derive(Debug, Serialize)]
 pub struct RedeemResult {
@@ -28,11 +42,11 @@ pub async fn get_loyalty_account_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<LoyaltyAccountWithDetails>, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_VIEW)?;
     Ok(store.get_loyalty_account(&customer_id)?)
 }
 
@@ -43,11 +57,11 @@ pub async fn list_loyalty_accounts_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<LoyaltyAccountWithDetails>, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_VIEW)?;
     Ok(store.list_loyalty_accounts()?)
 }
 
@@ -61,11 +75,11 @@ pub async fn earn_loyalty_points_scoped(
     state: State<'_, AppState>,
 ) -> Result<LoyaltyTransaction, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_EARN).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_EARN)?;
     Ok(store.earn_points(&customer_id, &sale_id, total_minor)?)
 }
 
@@ -79,11 +93,11 @@ pub async fn redeem_loyalty_points_scoped(
     state: State<'_, AppState>,
 ) -> Result<RedeemResult, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_REDEEM).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_REDEEM)?;
     let (transaction, discount_minor) = store.redeem_points(&customer_id, points, &sale_id)?;
     Ok(RedeemResult {
         transaction,
@@ -98,11 +112,11 @@ pub async fn list_loyalty_tiers_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<LoyaltyTier>, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_VIEW)?;
     Ok(store.list_tiers()?)
 }
 
@@ -114,11 +128,11 @@ pub async fn update_loyalty_tier_scoped(
     state: State<'_, AppState>,
 ) -> Result<LoyaltyTier, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_MANAGE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_MANAGE)?;
     Ok(store.update_tier(
         &tier.id,
         &tier.name,
@@ -137,11 +151,11 @@ pub async fn get_points_value_scoped(
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_VIEW)?;
     Ok(store.get_points_value(points)?)
 }
 
@@ -153,17 +167,20 @@ pub async fn get_or_create_loyalty_account_scoped(
     state: State<'_, AppState>,
 ) -> Result<LoyaltyAccount, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_loyalty_permission(&state, &session.user_id, permissions::LOYALTY_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::LOYALTY_VIEW)?;
     Ok(store.get_or_create_loyalty_account(&customer_id)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::session::SessionContext;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
 
     fn sample_txn() -> LoyaltyTransaction {
         LoyaltyTransaction {
@@ -207,5 +224,154 @@ mod tests {
             discount_minor: 0,
         };
         assert_eq!(result.discount_minor, 0);
+    }
+
+    #[tokio::test]
+    async fn permission_check_uses_global_identity_db() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let state = AppState::for_test_with_conn(conn);
+
+        assert!(
+            require_loyalty_permission(&state, "user-cashier", permissions::LOYALTY_VIEW)
+                .await
+                .is_ok()
+        );
+        assert!(matches!(
+            require_loyalty_permission(&state, "user-cashier", permissions::LOYALTY_MANAGE).await,
+            Err(AppError::PermissionDenied(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn permission_check_rejects_missing_user() {
+        let conn = oz_core::migrations::fresh_db();
+        let state = AppState::for_test_with_conn(conn);
+
+        assert!(matches!(
+            require_loyalty_permission(&state, "missing-user", permissions::LOYALTY_VIEW).await,
+            Err(AppError::PermissionDenied(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn scoped_command_rejects_invalid_session() {
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test())
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = list_loyalty_accounts_scoped("missing-token".into(), app.state()).await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_command_denies_user_without_loyalty_permission() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-custom', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "cashier-token".into(),
+            SessionContext::new(
+                "user-cashier".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                "store-cashier".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = list_loyalty_accounts_scoped("cashier-token".into(), app.state()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn scoped_command_reads_only_the_session_store() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        for (token, store_id) in [("store-a-token", "store-a"), ("store-b-token", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-owner".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+
+        {
+            let store_a_conn = state.db_manager.open_store("store-a").unwrap();
+            let store_a_db = store_a_conn.lock().unwrap();
+            store_a_db
+                .execute(
+                    "INSERT INTO customers (id, name) VALUES ('customer-a', 'Store A Customer')",
+                    [],
+                )
+                .unwrap();
+            Store::new(&store_a_db)
+                .get_or_create_loyalty_account("customer-a")
+                .unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let store_a_accounts = list_loyalty_accounts_scoped("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        let store_b_accounts = list_loyalty_accounts_scoped("store-b-token".into(), app.state())
+            .await
+            .unwrap();
+        assert_eq!(store_a_accounts.len(), 1);
+        assert_eq!(store_a_accounts[0].account.customer_id, "customer-a");
+        assert!(
+            store_b_accounts.is_empty(),
+            "store B must not see store A loyalty data"
+        );
     }
 }

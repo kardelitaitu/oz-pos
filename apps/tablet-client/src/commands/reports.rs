@@ -1,7 +1,8 @@
 //! Intelligence / reporting commands: revenue, heatmap, top products, alerts.
 //!
-//! These commands expose the `oz_core::db::reports` Store methods as
-//! Tauri IPC handlers for the dashboard and analytics front-end.
+//! All registered reporting commands resolve the caller's session before
+//! reading store data. The session supplies both the store database and the
+//! authenticated user used for permission checks.
 
 use tauri::{State, command};
 
@@ -10,105 +11,239 @@ use oz_core::db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
 };
+use oz_core::export::{CustomReportRequest, CustomReportResponse};
+use oz_core::permissions;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
+const MAX_TOP_PRODUCTS: i64 = 100;
+
+async fn resolve_report_scope(
+    state: &AppState,
+    session_token: &str,
+    permission: &str,
+) -> Result<std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>, AppError> {
+    let session = state.resolve_session(session_token)?;
+    {
+        let db = state.db.lock().await;
+        let identity_store = Store::new(&db);
+        require_permission_for_user(&identity_store, &session.user_id, permission)?;
+    }
+    state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))
+}
+
+fn validate_top_product_limit(limit: i64) -> Result<(), AppError> {
+    if !(1..=MAX_TOP_PRODUCTS).contains(&limit) {
+        return Err(AppError::Invalid(format!(
+            "top product limit must be between 1 and {MAX_TOP_PRODUCTS}"
+        )));
+    }
+    Ok(())
+}
+
 #[command]
-/// Get daily revenue.
-pub async fn get_daily_revenue(
-    state: State<'_, AppState>,
+/// Get menu engineering for the session's store.
+pub async fn get_menu_engineering_scoped(
+    session_token: String,
     start_date: String,
     end_date: String,
+    state: State<'_, AppState>,
+) -> Result<oz_reporting::menu_engineering::MenuEngineeringResult, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(oz_reporting::menu_engineering::query_menu_engineering(
+        &db,
+        &start_date,
+        &end_date,
+    )?)
+}
+
+#[command]
+/// Get daily revenue for the session's store.
+pub async fn get_daily_revenue_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
 ) -> Result<Vec<DailyRevenueRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.daily_revenue(&start_date, &end_date)?;
-    drop(db);
-    Ok(rows)
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).daily_revenue(&start_date, &end_date)?)
 }
 
 #[command]
-/// Get weekly revenue.
-pub async fn get_weekly_revenue(
-    state: State<'_, AppState>,
+/// Get weekly revenue for the session's store.
+pub async fn get_weekly_revenue_scoped(
+    session_token: String,
     start_date: String,
     end_date: String,
+    state: State<'_, AppState>,
 ) -> Result<Vec<WeeklyRevenueRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.weekly_revenue(&start_date, &end_date)?;
-    drop(db);
-    Ok(rows)
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).weekly_revenue(&start_date, &end_date)?)
 }
 
 #[command]
-/// Get monthly revenue.
-pub async fn get_monthly_revenue(
-    state: State<'_, AppState>,
+/// Get monthly revenue for the session's store.
+pub async fn get_monthly_revenue_scoped(
+    session_token: String,
     start_date: String,
     end_date: String,
+    state: State<'_, AppState>,
 ) -> Result<Vec<MonthlyRevenueRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.monthly_revenue(&start_date, &end_date)?;
-    drop(db);
-    Ok(rows)
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).monthly_revenue(&start_date, &end_date)?)
 }
 
 #[command]
-/// Get top products.
-pub async fn get_top_products(
-    state: State<'_, AppState>,
+/// Get top products for the session's store with a bounded limit.
+pub async fn get_top_products_scoped(
+    session_token: String,
     start_date: String,
     end_date: String,
     limit: i64,
+    state: State<'_, AppState>,
 ) -> Result<Vec<TopProductRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.top_products(&start_date, &end_date, limit)?;
-    drop(db);
-    Ok(rows)
+    validate_top_product_limit(limit)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).top_products(&start_date, &end_date, limit)?)
 }
 
 #[command]
-/// Get hourly heatmap.
-pub async fn get_hourly_heatmap(
-    state: State<'_, AppState>,
+/// Get hourly heatmap data for the session's store.
+pub async fn get_hourly_heatmap_scoped(
+    session_token: String,
     start_date: String,
     end_date: String,
+    state: State<'_, AppState>,
 ) -> Result<Vec<HourlyHeatmapRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.hourly_heatmap(&start_date, &end_date)?;
-    drop(db);
-    Ok(rows)
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).hourly_heatmap(&start_date, &end_date)?)
 }
 
 #[command]
-/// Get low stock alerts.
-#[allow(deprecated)]
-pub async fn get_low_stock_alerts(
-    state: State<'_, AppState>,
+/// Get low-stock alerts for the session's store default location.
+pub async fn get_low_stock_alerts_scoped(
+    session_token: String,
     threshold: i64,
+    state: State<'_, AppState>,
 ) -> Result<Vec<LowStockAlert>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.low_stock_alerts(threshold)?;
-    drop(db);
-    Ok(rows)
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).low_stock_alerts_at_location(
+        oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+        threshold,
+    )?)
 }
 
 #[command]
-/// Get category breakdown.
-pub async fn get_category_breakdown(
-    state: State<'_, AppState>,
+/// Get category breakdown for the session's store.
+pub async fn get_category_breakdown_scoped(
+    session_token: String,
     start_date: String,
     end_date: String,
+    state: State<'_, AppState>,
 ) -> Result<Vec<CategoryBreakdownRow>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.category_breakdown(&start_date, &end_date)?;
-    drop(db);
-    Ok(rows)
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_breakdown(&start_date, &end_date)?)
+}
+
+#[command]
+/// Build a custom report for the session's store.
+///
+/// Custom reports can expose customer and staff data, so exporting them
+/// requires the stronger `reports:export` permission.
+pub async fn build_custom_report_scoped(
+    session_token: String,
+    request: CustomReportRequest,
+    state: State<'_, AppState>,
+) -> Result<CustomReportResponse, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_EXPORT).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).build_custom_report(request)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oz_core::session::SessionContext;
+
+    #[tokio::test]
+    async fn scoped_report_rejects_invalid_session() {
+        let state = AppState::for_test();
+        let result = resolve_report_scope(&state, "missing-token", permissions::REPORTS_VIEW).await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_report_denies_user_without_reports_permission() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-custom', 'custom', 'hash', 'Custom', 'role-custom', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let state = AppState::for_test_with_conn(conn);
+        state.session_store.write().unwrap().insert(
+            "custom-token".into(),
+            SessionContext::new(
+                "user-custom".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                "store-1".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+
+        let result = resolve_report_scope(&state, "custom-token", permissions::REPORTS_VIEW).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[test]
+    fn top_product_limit_accepts_bounded_values() {
+        assert!(validate_top_product_limit(1).is_ok());
+        assert!(validate_top_product_limit(MAX_TOP_PRODUCTS).is_ok());
+    }
+
+    #[test]
+    fn top_product_limit_rejects_unbounded_values() {
+        for limit in [0, -1, MAX_TOP_PRODUCTS + 1, i64::MAX] {
+            assert!(validate_top_product_limit(limit).is_err());
+        }
+    }
 }

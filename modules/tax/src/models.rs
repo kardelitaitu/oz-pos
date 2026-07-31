@@ -2,6 +2,46 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Rounding policy applied to fractional tax amounts.
+///
+/// TAX-05: tax is computed in integer minor units, so a per-line/rate
+/// result like `333.5` must be reduced to a whole minor unit. The legacy
+/// behavior silently truncated toward zero (understating tax); [`HalfUp`]
+/// is the recommended, jurisdiction-defensible default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoundingMode {
+    /// Truncate toward zero — legacy behavior, kept for backward
+    /// compatibility with previously recorded sales.
+    Truncate,
+    /// Round half away from zero (`0.5` → `1`) — recommended default.
+    ///
+    /// The integer implementation assumes non-negative numerators, which
+    /// is the only domain tax math produces (base and rate are both ≥ 0).
+    #[default]
+    HalfUp,
+}
+
+impl RoundingMode {
+    /// Divide `numerator / divisor` and round per this mode using
+    /// integer-only arithmetic (no floats).
+    ///
+    /// `HalfUp` computes `(numerator + divisor/2) / divisor`, which rounds
+    /// ties away from zero for non-negative inputs (the only domain tax
+    /// math produces). `divisor` must be strictly positive.
+    ///
+    /// Returns `None` if the intermediate `numerator + divisor/2` would
+    /// overflow `i64`.
+    #[must_use]
+    pub fn divide(self, numerator: i64, divisor: i64) -> Option<i64> {
+        debug_assert!(divisor > 0, "divisor must be positive");
+        match self {
+            Self::Truncate => Some(numerator / divisor),
+            Self::HalfUp => numerator.checked_add(divisor / 2).map(|n| n / divisor),
+        }
+    }
+}
+
 /// A named tax rate, stored in basis points.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaxRate {

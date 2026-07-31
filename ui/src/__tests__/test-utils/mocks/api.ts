@@ -383,14 +383,14 @@ const loyaltyAccountWithDetails = {
 
 export function createLoyaltyApiMock(overrides: LoyaltyApiOverrides = {}) {
   return {
-    getLoyaltyAccount: vi.fn((_customerId: string) => Promise.resolve(loyaltyAccountWithDetails)),
-    listLoyaltyAccounts: vi.fn(() => Promise.resolve([loyaltyAccountWithDetails])),
-    earnLoyaltyPoints: vi.fn((_customerId: string, _saleId: string, _totalMinor: number) => Promise.resolve({
+    getLoyaltyAccount: vi.fn((_token: string, _customerId: string) => Promise.resolve(loyaltyAccountWithDetails)),
+    listLoyaltyAccounts: vi.fn((_token: string) => Promise.resolve([loyaltyAccountWithDetails])),
+    earnLoyaltyPoints: vi.fn((_token: string, _customerId: string, _saleId: string, _totalMinor: number) => Promise.resolve({
       id: 'loyaltytx-1', account_id: 'loyalty-1', sale_id: 'sale-1',
       points: 100, txn_type: 'earn', description: 'Points earned',
       created_at: new Date().toISOString(),
     })),
-    redeemLoyaltyPoints: vi.fn((_customerId: string, _points: number, _saleId: string) => Promise.resolve({
+    redeemLoyaltyPoints: vi.fn((_token: string, _customerId: string, _points: number, _saleId: string) => Promise.resolve({
       transaction: {
         id: 'loyaltytx-2', account_id: 'loyalty-1', sale_id: 'sale-1',
         points: -200, txn_type: 'redeem', description: 'Points redeemed',
@@ -398,10 +398,10 @@ export function createLoyaltyApiMock(overrides: LoyaltyApiOverrides = {}) {
       },
       discount_minor: 50000,
     })),
-    listLoyaltyTiers: vi.fn(() => Promise.resolve([loyaltyTier])),
-    updateLoyaltyTier: vi.fn((_tier: Record<string, unknown>) => Promise.resolve(loyaltyTier)),
-    getPointsValue: vi.fn((_points: number) => Promise.resolve(25000)),
-    getOrCreateLoyaltyAccount: vi.fn((_customerId: string) => Promise.resolve(loyaltyAccount)),
+    listLoyaltyTiers: vi.fn((_token: string) => Promise.resolve([loyaltyTier])),
+    updateLoyaltyTier: vi.fn((_token: string, _tier: Record<string, unknown>) => Promise.resolve(loyaltyTier)),
+    getPointsValue: vi.fn((_token: string, _points: number) => Promise.resolve(25000)),
+    getOrCreateLoyaltyAccount: vi.fn((_token: string, _customerId: string) => Promise.resolve(loyaltyAccount)),
     ...overrides,
   };
 }

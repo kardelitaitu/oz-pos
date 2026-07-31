@@ -594,6 +594,26 @@ impl AppState {
             terminal_id: Arc::new(Mutex::new(None)),
         }
     }
+
+    /// Construct a test state with a caller-provided global database connection.
+    ///
+    /// This keeps authorization tests independent from the production app
+    /// bootstrap while preserving the same global-identity lookup path.
+    pub fn for_test_with_conn(conn: Connection) -> Self {
+        let mut state = Self::for_test();
+        state.db = Arc::new(Mutex::new(conn));
+        state
+    }
+
+    /// Construct a test state with an isolated store database directory.
+    ///
+    /// The production state owns this manager, so injecting it here lets
+    /// scope tests prove that a session cannot observe another store's file.
+    pub fn for_test_with_db_manager(db_manager: StoreDatabaseManager) -> Self {
+        let mut state = Self::for_test();
+        state.db_manager = db_manager;
+        state
+    }
 }
 
 #[cfg(test)]
@@ -636,6 +656,81 @@ mod tests {
         let state = AppState::for_test();
         let result = state.resolve_session("");
         assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn resolve_session_rejects_and_removes_expired_token() {
+        let state = AppState::for_test();
+        let expired = SessionContext::new(
+            "u-expired".into(),
+            "r1".into(),
+            "t1".into(),
+            "store-expired".into(),
+            "i1".into(),
+            "pos".into(),
+            Some(1),
+            0,
+        );
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("expired-token".into(), expired);
+
+        assert!(matches!(
+            state.resolve_session("expired-token"),
+            Err(AppError::InvalidSession)
+        ));
+        assert!(
+            !state
+                .session_store
+                .read()
+                .unwrap()
+                .contains_key("expired-token")
+        );
+    }
+
+    #[test]
+    fn resolve_scope_isolates_store_databases() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        let state = AppState::for_test_with_db_manager(manager);
+        for (token, store_id) in [("token-a", "store-a"), ("token-b", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-1".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+
+        let (_, store_a) = state.resolve_scope("token-a").unwrap();
+        let conn_a = store_a.lock().unwrap();
+        conn_a
+            .execute_batch(
+                "CREATE TABLE scope_probe (value TEXT NOT NULL); INSERT INTO scope_probe VALUES ('A');",
+            )
+            .unwrap();
+        drop(conn_a);
+
+        let (_, store_b) = state.resolve_scope("token-b").unwrap();
+        let conn_b = store_b.lock().unwrap();
+        let table_count: i64 = conn_b
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'scope_probe'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 0, "store B must not see store A data");
     }
 
     #[test]

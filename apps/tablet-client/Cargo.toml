@@ -19,6 +19,7 @@ tauri-build = { workspace = true }
 
 [dev-dependencies]
 tauri = { workspace = true, features = ["test"] }
+tempfile = "3"
 
 [dependencies]
 foundation = { workspace = true }
@@ -32,6 +33,7 @@ modules-tax = { workspace = true }
 modules-sales = { workspace = true }
 modules-staff = { workspace = true }
 modules-reporting = { workspace = true }
+oz-reporting = { workspace = true }
 modules-terminal = { workspace = true }
 modules-currency = { workspace = true }
 platform-core = { workspace = true }

@@ -578,6 +578,38 @@ pub const ALL: &[Migration] = &[
         id: "106_sale_lines_course_modifier.sql",
         sql: include_str!("../migrations/106_sale_lines_course_modifier.sql"),
     },
+    // ── 107: Loyalty integrity constraints and tier validation ─────
+    // Prevents duplicate earn/redeem projections for one account and sale,
+    // and rejects invalid tier configuration at the database boundary.
+    Migration {
+        id: "107_loyalty_integrity.sql",
+        sql: include_str!("../migrations/107_loyalty_integrity.sql"),
+    },
+    // ── 108: Tax single-default invariant (TAX-02) ─────────────────
+    // Normalises any legacy multiple-default rows and adds a partial
+    // UNIQUE index so SQLite rejects a second is_default = 1 row,
+    // closing the concurrency/failure window in default switching.
+    Migration {
+        id: "108_tax_single_default.sql",
+        sql: include_str!("../migrations/108_tax_single_default.sql"),
+    },
+    // ── 109: Tax soft-delete flag (TAX-03) ─────────────────────────
+    // Adds is_active so archiving a rate preserves historical
+    // sale-line linkage instead of hard-deleting; archiving a rate
+    // still referenced by historical sales is blocked at the app layer.
+    Migration {
+        id: "109_tax_soft_delete.sql",
+        sql: include_str!("../migrations/109_tax_soft_delete.sql"),
+    },
+    // ── 110: Per-line tax breakdown (TAX-02 auditability) ─────────
+    // Persists the full per-rate breakdown on each sale line so
+    // receipts/audit trails can reconstruct multi-rate taxation even
+    // after a rate is archived or renamed (today only the first rate
+    // id survives on `tax_rate_id`).
+    Migration {
+        id: "110_sale_line_tax_breakdown.sql",
+        sql: include_str!("../migrations/110_sale_line_tax_breakdown.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1189,6 +1221,101 @@ mod tests {
         }
     }
 
+    // ── TAX-02 (migration 108): single-default invariant ────────────
+
+    #[test]
+    fn migration_108_creates_single_default_index() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master \
+                  WHERE type='index' AND name='idx_tax_rates_single_default'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("missing partial UNIQUE index from migration 108");
+
+        assert!(
+            index_sql.contains("UNIQUE") && index_sql.contains("WHERE is_default = 1"),
+            "single-default index must be partial + unique, got: {index_sql}"
+        );
+    }
+
+    #[test]
+    fn migration_108_rejects_second_default() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Seed one default rate, then a raw second default must be rejected
+        // by the partial UNIQUE index (TAX-02 database invariant).
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-a', 'A', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let second = conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-b', 'B', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        );
+        assert!(
+            second.is_err(),
+            "expected the partial UNIQUE index to reject a second default rate"
+        );
+    }
+
+    #[test]
+    fn migration_108_normalises_legacy_multiple_defaults() {
+        // Apply migrations UP TO (but not including) 108 so the partial
+        // UNIQUE index does not yet exist — otherwise the second default
+        // insert below would be rejected by the index before the
+        // normalisation UPDATE ever runs.
+        let mut conn = fresh();
+        let idx_108 = ALL
+            .iter()
+            .position(|m| m.id == "108_tax_single_default.sql")
+            .expect("migration 108 registered");
+        platform_core::database::run(&mut conn, &ALL[..idx_108]).unwrap();
+
+        // Simulate a pre-108 DB that already has two defaults (the bug
+        // TAX-02 fixed). The UPDATE normalisation must keep the OLDEST
+        // and clear the other when migration 108 applies.
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-old', 'Old', 1000, 1, 0, '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-new', 'New', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        // Apply migration 108 — normalisation + index creation.
+        platform_core::database::run(&mut conn, &ALL[idx_108..]).unwrap();
+
+        let defaults: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT name FROM tax_rates WHERE is_default = 1")
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
+        };
+        assert_eq!(
+            defaults,
+            vec!["Old"],
+            "legacy multiple-default data must be normalised to the oldest default"
+        );
+    }
+
     /// Verify the `setting_updated` table survives a migration re-run
     /// (idempotent — uses `CREATE TABLE IF NOT EXISTS`).
     #[test]
@@ -1218,5 +1345,63 @@ mod tests {
             count, 1,
             "existing delta row should survive migration re-run"
         );
+    }
+
+    // ── TAX-03 (migration 109): tax soft-delete flag ─────────────
+
+    #[test]
+    fn migration_109_adds_is_active_column_to_tax_rates() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('tax_rates') WHERE name = 'is_active'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(col, 1, "tax_rates must have is_active column");
+
+        let notnull: i64 = conn
+            .query_row(
+                "SELECT \"notnull\" FROM pragma_table_info('tax_rates') WHERE name = 'is_active'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(notnull, 1, "is_active must be NOT NULL");
+    }
+
+    #[test]
+    fn migration_109_existing_rates_default_to_active() {
+        // Rows inserted before 109 (and any future insert that omits the
+        // column) must default to is_active = 1.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-109-a', 'A', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let active: i64 = conn
+            .query_row(
+                "SELECT is_active FROM tax_rates WHERE id = 'tax-109-a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(active, 1, "pre-109 rows must default to active");
+
+        // The partial unique index from 108 still works with 109 applied.
+        let second = conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-109-b', 'B', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        );
+        assert!(second.is_err(), "single-default index must still reject");
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listLoyaltyAccounts,
   listLoyaltyTiers,
@@ -7,7 +8,7 @@ import {
   type LoyaltyAccountWithDetails,
   type LoyaltyTier,
 } from '@/api/loyalty';
-import { listCustomers, type CustomerDto } from '@/api/customers';
+import { listCustomersScoped, type CustomerDto } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -24,6 +25,7 @@ interface TierFormData {
 /** Loyalty management screen — view loyalty accounts, manage tiers, points configuration, and earn multipliers. */
 export default function LoyaltyManagementScreen() {
   const { l10n } = useLocalization();
+  const { sessionToken } = useWorkspace();
   const [accounts, setAccounts] = useState<LoyaltyAccountWithDetails[]>([]);
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [tiers, setTiers] = useState<LoyaltyTier[]>([]);
@@ -37,26 +39,36 @@ export default function LoyaltyManagementScreen() {
   });
   const [savingTier, setSavingTier] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const customerMap = new Map(customers.map((c) => [c.id, c.name]));
 
   const load = useCallback(async () => {
+    if (!sessionToken) {
+      // Loyalty data is store-scoped; never invoke a scoped command with an
+      // empty token while the workspace session is still being created.
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
     try {
       const [accs, custs, t] = await Promise.all([
-        listLoyaltyAccounts(),
-        listCustomers(),
-        listLoyaltyTiers(),
+        listLoyaltyAccounts(sessionToken),
+        listCustomersScoped(sessionToken),
+        listLoyaltyTiers(sessionToken),
       ]);
       setAccounts(accs);
       setCustomers(custs);
       setTiers(t);
-    } catch {
-      /* API unavailable — keep existing state */
+    } catch (err) {
+      setLoadError(err instanceof Error
+        ? err.message
+        : l10n.getString('loyalty-load-error') || 'Failed to load loyalty data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [l10n, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -73,18 +85,29 @@ export default function LoyaltyManagementScreen() {
   }, []);
 
   const handleSaveTier = useCallback(async () => {
-    if (!editingTier) return;
+    if (!editingTier || !sessionToken) return;
     const minPts = parseInt(tierForm.min_points, 10);
     const ppu = parseInt(tierForm.points_per_unit, 10);
     const mult = parseFloat(tierForm.earn_multiplier);
-    if (Number.isNaN(minPts) || Number.isNaN(ppu) || Number.isNaN(mult) || !tierForm.name.trim()) {
+    const validColour = /^#[0-9a-fA-F]{6}$/.test(tierForm.colour);
+    if (
+      Number.isNaN(minPts)
+      || Number.isNaN(ppu)
+      || Number.isNaN(mult)
+      || minPts < 0
+      || ppu <= 0
+      || !Number.isFinite(mult)
+      || mult <= 0
+      || !validColour
+      || !tierForm.name.trim()
+    ) {
       setError(l10n.getString('loyalty-validation-error'));
       return;
     }
     setSavingTier(true);
     setError(null);
     try {
-      const updated = await updateLoyaltyTier({
+      const updated = await updateLoyaltyTier(sessionToken, {
         id: editingTier,
         name: tierForm.name.trim(),
         min_points: minPts,
@@ -101,7 +124,7 @@ export default function LoyaltyManagementScreen() {
     } finally {
       setSavingTier(false);
     }
-  }, [editingTier, tierForm, tiers, l10n]);
+  }, [editingTier, tierForm, tiers, l10n, sessionToken]);
 
   return (
     <div className="loyalty-mgmt">
@@ -152,6 +175,15 @@ export default function LoyaltyManagementScreen() {
             </table>
           </div>
         </div>
+      ) : loadError ? (
+        <Card shadow="sm">
+          <div className="loyalty-mgmt-error loyalty-mgmt-load-error" role="alert">
+            <span>{loadError}</span>
+            <Button variant="ghost" onClick={load}>
+              <Localized id="retry">Retry</Localized>
+            </Button>
+          </div>
+        </Card>
       ) : tierTab ? (
         <div className="loyalty-tiers-section">
           <div className="loyalty-tiers-grid">

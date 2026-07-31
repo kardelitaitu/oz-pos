@@ -36,9 +36,18 @@ pub struct SaleLine {
     #[serde(default)]
     pub tax_amount: Money,
 
-    /// Tax rate ID applied to this line.
+    /// Tax rate ID applied to this line (first applicable rate only).
     #[serde(default)]
     pub tax_rate_id: Option<String>,
+
+    /// Full per-rate tax breakdown as a JSON array string (TAX-02 auditability).
+    ///
+    /// Each element: `{ "rate_id": "…" | null, "rate_bps": int,
+    /// "is_inclusive": bool, "tax_minor": int }`. `rate_id` is null for
+    /// Lua-override lines. `None` when no tax applies or for legacy rows
+    /// (pre-migration 110).
+    #[serde(default)]
+    pub tax_breakdown_json: Option<String>,
 
     /// Serial number captured at checkout for this line item.
     #[serde(default)]
@@ -148,6 +157,7 @@ impl Sale {
                     line_position: (i as i64) + 1,
                     tax_amount: Money::zero(currency),
                     tax_rate_id: None,
+                    tax_breakdown_json: None,
                     serial_number: None,
                     course: None,
                     modifiers_json: None,

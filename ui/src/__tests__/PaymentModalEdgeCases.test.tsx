@@ -58,18 +58,22 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('@/api/customers', () => ({
   listCustomers: vi.fn(),
+  listCustomersScoped: vi.fn(),
 }));
 
-import { listCustomers } from '@/api/customers';
+import { listCustomers, listCustomersScoped } from '@/api/customers';
 const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
+const mockListCustomersScoped = listCustomersScoped as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   invokeMock.mockReset(); // reset calls AND implementation
   invokeMock.mockImplementation(defaultImpl);
-  mockListCustomers.mockResolvedValue([
+  const customers = [
     { id: 'cust-1', name: 'John Doe', phone: '555-0100', email: 'john@example.com' },
     { id: 'cust-2', name: 'Jane Smith', phone: '555-0200', email: 'jane@example.com' },
-  ]);
+  ];
+  mockListCustomers.mockResolvedValue(customers);
+  mockListCustomersScoped.mockResolvedValue(customers);
 });
 
 afterEach(() => {
@@ -359,10 +363,31 @@ describe('PaymentModal — edge cases', () => {
 
   // ── Customer search modal ────────────────────────────────────
 
-  it('opens customer search when Select Customer is clicked', async () => {
+  it('does not use the legacy global customer list without a session token', async () => {
     await renderWithFluent(
       <PaymentModal
         open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByText(/select customer/i));
+    await screen.findByPlaceholderText(/search by name/i);
+
+    expect(mockListCustomers).not.toHaveBeenCalled();
+    expect(mockListCustomersScoped).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('button.payment-customer-search-item')).toHaveLength(0);
+  });
+
+  it('uses the session-scoped customer list when a session token is present', async () => {
+    await renderWithFluent(
+      <PaymentModal
+        open
+        sessionToken="mock-session-token"
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -383,6 +408,7 @@ describe('PaymentModal — edge cases', () => {
     await renderWithFluent(
       <PaymentModal
         open
+        sessionToken="mock-session-token"
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -408,6 +434,7 @@ describe('PaymentModal — edge cases', () => {
     await renderWithFluent(
       <PaymentModal
         open
+        sessionToken="mock-session-token"
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
@@ -433,6 +460,7 @@ describe('PaymentModal — edge cases', () => {
     await renderWithFluent(
       <PaymentModal
         open
+        sessionToken="mock-session-token"
         lineItems={[lineItem()]}
         total={usd(700)}
         userId="test-user-id"
