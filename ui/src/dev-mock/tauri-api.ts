@@ -156,7 +156,7 @@ const _initialKdsOrders = [
     store_id: 'store-1',
   },
 ];
-let mockKdsOrders: Record<string, unknown>[] = [..._initialKdsOrders];
+const mockKdsOrders: Record<string, unknown>[] = [..._initialKdsOrders];
 let kdsDisplayCounter = 104;
 
 /** Push a new KDS order derived from cart lines into the mock queue. */

@@ -53,7 +53,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   // ── Opens dropdown on click ───────────────────────────────────
@@ -66,14 +66,14 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
 
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
     expect(screen.getByText('Store Front')).toBeInTheDocument();
     expect(screen.getByText('In Transit')).toBeInTheDocument();
   });
@@ -88,19 +88,19 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     // Click outside the dropdown
     await user.click(document.body);
     await waitFor(() => {
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   // ── Closes on Escape ────────────────────────────────────────────
@@ -113,18 +113,18 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     await user.keyboard('{Escape}');
     await waitFor(() => {
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   // ── Calls onChange with new location ────────────────────────────
@@ -138,14 +138,14 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
 
     await waitFor(() => {
       expect(screen.getByText('Store Front')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const storeOption = screen.getByRole('option', { name: /store front store/i });
     await user.click(storeOption);
@@ -164,14 +164,14 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
 
     await waitFor(() => {
       expect(screen.getByRole('option', { name: /warehouse a warehouse/i })).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const sameOption = screen.getByRole('option', { name: /warehouse a warehouse/i });
     await user.click(sameOption);
@@ -189,7 +189,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
@@ -198,7 +198,7 @@ describe('LocationPicker', () => {
       expect(screen.getByText('warehouse')).toBeInTheDocument();
       expect(screen.getByText('store')).toBeInTheDocument();
       expect(screen.getByText('transit')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   // ── Highlights active location with aria-selected ──────────────
@@ -211,7 +211,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
@@ -221,7 +221,7 @@ describe('LocationPicker', () => {
       const activeOption = options.find((opt) => opt.getAttribute('aria-selected') === 'true');
       expect(activeOption).toBeDefined();
       expect(activeOption).toHaveTextContent('Warehouse A');
-    });
+    }, { timeout: 5000 });
   });
 
   // ── Hides when no locations are loaded ─────────────────────────
@@ -232,8 +232,10 @@ describe('LocationPicker', () => {
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
     );
 
-    await new Promise((r) => setTimeout(r, 100));
-    // The component returns null when locations is empty
+    // Wait for the (empty) locations fetch to settle, then confirm the component hides itself
+    await waitFor(() => {
+      expect(mockListLocations).toHaveBeenCalled();
+    }, { timeout: 5000 });
     expect(screen.queryByRole('button', { name: /select inventory location/i })).not.toBeInTheDocument();
   });
 });

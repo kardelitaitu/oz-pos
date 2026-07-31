@@ -164,7 +164,7 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
     // The settings toggle button must be in the header-right.
-    const settingsToggle = page.locator('.kds-settings-toggle, .kds-header-right button[aria-label*=\"Setting\"]').first();
+    const settingsToggle = page.locator('.kds-settings-toggle, .kds-header-right button[aria-label*="Setting"]').first();
     await expect(settingsToggle).toBeVisible({ timeout: 5_000 });
     await settingsToggle.click();
     await page.waitForTimeout(500);
