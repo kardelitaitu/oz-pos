@@ -902,9 +902,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         await cleanupCorrupt();
         return;
       }
-      const lines = data['lines'] as { sku: string; name: string; category: string; qty: number; unit_price: Money }[];
-      for (const l of lines) {
-        addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' }, l.qty || 1);
+      const rawLines = data['lines'] as { sku: string; name: string; category: string; qty: number; unit_price: Money }[];
+      // Validate each line has required fields; skip corrupt ones
+      let hasCorruptLines = false;
+      for (const l of rawLines) {
+        if (!l.sku || !l.unit_price || typeof l.unit_price.minor_units !== 'number') {
+          hasCorruptLines = true;
+          continue;
+        }
+        const qty = Number.isFinite(l.qty) && l.qty > 0 ? Math.round(l.qty) : 1;
+        addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' }, qty);
+      }
+      if (hasCorruptLines) {
+        addToast({ message: l10nRef.current.getString('retail-toast-corrupt-cart') || 'Held cart data is corrupted and has been removed', type: 'error' });
       }
       if (data['discountPercent']) setDiscount(data['discountPercent'] as number, (data['discountLabel'] as string) ?? '');
       await deleteHeldCartScoped(sessionToken, cartId);
