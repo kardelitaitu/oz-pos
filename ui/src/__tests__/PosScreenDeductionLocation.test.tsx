@@ -17,30 +17,9 @@ import PosScreen from '@/features/sales/PosScreen';
 import * as salesApi from '@/api/sales';
 import * as productsApi from '@/api/products';
 import type { CartId } from '@/types/domain';
-import type { BarcodeScannedPayload } from '@/api/hardware';
 import type * as HardwareModule from '@/api/hardware';
+import { mockedBarcode } from '@/__tests__/test-utils/mocks/barcodeScanner';
 
-// ── Hoisted mock helpers ──────────────────────────────────────────
-
-const mockedBarcode = vi.hoisted(() => {
-  let onProductFound: ((payload: BarcodeScannedPayload) => void) | null = null;
-  return {
-    triggerScan(code: string) {
-      onProductFound?.({ code, symbology: 'test' });
-    },
-    reset() {
-      onProductFound = null;
-    },
-    useBarcodeScanner: vi.fn(
-      (opts: {
-        onProductFound: (p: BarcodeScannedPayload) => void;
-        onError?: (error: string) => void;
-      }) => {
-        onProductFound = opts.onProductFound;
-      },
-    ),
-  };
-});
 
 vi.mock('@/api/hardware', async () => {
   const actual = await vi.importActual<typeof HardwareModule>('@/api/hardware');
@@ -52,9 +31,11 @@ vi.mock('@/api/hardware', async () => {
   };
 });
 
-vi.mock('@/features/sales/useBarcodeScanner', () => ({
-  useBarcodeScanner: mockedBarcode.useBarcodeScanner,
-}));
+vi.mock('@/features/sales/useBarcodeScanner', async () => {
+  const { createBarcodeScannerModuleMock } =
+    await import('@/__tests__/test-utils/mocks/barcodeScanner');
+  return createBarcodeScannerModuleMock();
+});
 
 vi.mock('@/api/products', () => ({
   lookupByBarcode: vi.fn(() => Promise.resolve(null)),

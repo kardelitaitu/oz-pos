@@ -361,7 +361,7 @@ export default function RetailProductGrid({
                 : (l10n.getString('retail-no-products') || 'No products')}
         </div>
       ) : (
-        <div className="retail-grid">
+        <div className="retail-grid" data-testid="product-grid-scroll">
           <table className="retail-product-table">
             <thead>
               <tr>

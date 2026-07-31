@@ -440,7 +440,7 @@ export default function RetailModals(props: RetailModalsProps) {
             </p>
             <div className="retail-shift-modal-actions">
               <button type="button" onClick={() => deleteHeldCartConfirm.exit.requestClose()}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" onClick={deleteHeldCartConfirm.onConfirm}>{l10n.getString('retail-held-cart-delete-btn') || 'Delete'}</button>
+              <button type="button" className="retail-shift-confirm-btn retail-shift-confirm-btn--danger" data-testid="held-cart-delete-confirm" onClick={deleteHeldCartConfirm.onConfirm}>{l10n.getString('retail-held-cart-delete-btn') || 'Delete'}</button>
             </div>
           </div>
         </div>
@@ -682,7 +682,7 @@ export default function RetailModals(props: RetailModalsProps) {
                         {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
                       </span>
                     </button>
-                    <button type="button" className="retail-held-cart-delete" onClick={() => heldCarts.onDelete(c.id)} aria-label={l10n.getString('retail-held-cart-delete-aria')}>
+                    <button type="button" className="retail-held-cart-delete" data-testid="held-cart-delete" onClick={() => heldCarts.onDelete(c.id)} aria-label={l10n.getString('retail-held-cart-delete-aria')}>
                       &times;
                     </button>
                   </div>

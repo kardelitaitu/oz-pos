@@ -355,9 +355,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // Save scroll position before swapping to a sub-view; restore after remount.
   // The real scroll container is .retail-grid (overflow-y: auto); .retail-main
-  // itself is overflow-y: hidden, so read from the grid element.
+  // itself is overflow-y: hidden, so read from the grid element. The data-testid
+  // doubles as the scroll-container contract used by the scroll-preservation test
+  // — keep it in sync with RetailProductGrid's grid wrapper (intentional coupling).
   const getScrollContainer = useCallback(() => {
-    return retailPosRef.current?.querySelector<HTMLElement>('.retail-grid') ?? null;
+    return retailPosRef.current?.querySelector<HTMLElement>('[data-testid="product-grid-scroll"]') ?? null;
   }, []);
   const saveScroll = useCallback(() => {
     const el = getScrollContainer();
@@ -1209,7 +1211,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       {/* ── Main area ───────────────────────── */}
       <div id="retail-main" className="retail-main" ref={retailPosRef}>
         {/* Screen-reader announcement (visually hidden) */}
-        <div ref={announceRef} className="retail-sr-only" role="status" aria-live="polite" aria-atomic="true" />
+        <div ref={announceRef} className="retail-sr-only" data-testid="retail-sr-announce" role="status" aria-live="polite" aria-atomic="true" />
         {/* Left: product grid */}
         {filterLowStock && (
           <div className="retail-filter-indicator" role="status" aria-label={l10n.getString('retail-filter-indicator-aria') || 'Low-stock filter active'}>

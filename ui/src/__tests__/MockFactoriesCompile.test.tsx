@@ -206,4 +206,50 @@ describe('existing factory imports compile', () => {
     expect(typeof mod.createLoyaltyApiMock).toBe('function');
     expect(typeof mod.createReportsApiMock).toBe('function');
   });
+
+  it('imports the usePosState mock factory without error', async () => {
+    const mod = await import('@/__tests__/test-utils/mocks/usePosState');
+    expect(typeof mod.createUsePosStateMock).toBe('function');
+    const mock = mod.createUsePosStateMock();
+    // Default shape: empty cart, no money, vi.fn() action handlers.
+    expect(mock.lines).toEqual([]);
+    expect(mock.total).toBeNull();
+    expect(mock.subtotal).toBeNull();
+    expect(mock.addProduct).toBeTypeOf('function');
+    expect(mock.resetCart).toBeTypeOf('function');
+    // Overrides merge over defaults.
+    const override = mod.createUsePosStateMock({ discountPercent: 10, resetCart: vi.fn() });
+    expect(override.discountPercent).toBe(10);
+    expect(override.resetCart).toBeTypeOf('function');
+  });
+
+  it('imports the barcode-scanner mock singleton without error', async () => {
+    const mod = await import('@/__tests__/test-utils/mocks/barcodeScanner');
+    expect(typeof mod.createBarcodeScannerModuleMock).toBe('function');
+    // The singleton drives simulated scans through the mocked hook.
+    expect(mod.mockedBarcode.triggerScan).toBeTypeOf('function');
+    expect(mod.mockedBarcode.triggerError).toBeTypeOf('function');
+    expect(mod.mockedBarcode.reset).toBeTypeOf('function');
+    expect(mod.mockedBarcode.useBarcodeScanner).toBeTypeOf('function');
+    // The module mock wires the singleton's hook fn.
+    const moduleMock = mod.createBarcodeScannerModuleMock();
+    expect(moduleMock.useBarcodeScanner).toBe(mod.mockedBarcode.useBarcodeScanner);
+  });
+
+  it('imports the retail POS fixtures + mock factories without error', async () => {
+    const mod = await import('@/__tests__/test-utils/mocks/retailPos');
+    expect(mod.retailProducts).toHaveLength(4);
+    expect(mod.retailProducts[0]?.sku).toBe('SKU-001');
+    expect(mod.retailCategories).toHaveLength(2);
+    expect(typeof mod.createRetailProductsApiMock).toBe('function');
+    expect(typeof mod.createRetailKdsApiMock).toBe('function');
+    expect(typeof mod.createRetailCurrencyApiMock).toBe('function');
+    expect(typeof mod.createRetailCustomersApiMock).toBe('function');
+    expect(typeof mod.createTableManagementScreenStub).toBe('function');
+    expect(typeof mod.createSalesHistoryScreenStub).toBe('function');
+    expect(typeof mod.createProductLookupScreenStub).toBe('function');
+    // Spot-check a factory default.
+    const productsMock = mod.createRetailProductsApiMock();
+    expect(productsMock.listProductsScoped).toBeTypeOf('function');
+  });
 });
