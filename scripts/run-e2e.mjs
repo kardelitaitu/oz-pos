@@ -18,6 +18,7 @@
  */
 
 import { execSync, spawn } from 'child_process';
+import { generateKeyPairSync } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { platform } from 'os';
@@ -87,6 +88,36 @@ function dockerAvailable() {
   } catch {
     return false;
   }
+}
+
+/**
+ * Ensure OZ_LICENSE_PRIVATE_KEY is set for the license server.
+ *
+ * If the user has already set OZ_LICENSE_PRIVATE_KEY in their environment,
+ * use it as-is (honouring explicit configuration). Otherwise, generate a
+ * throwaway RSA-2048 key pair with Node's built-in crypto module so the
+ * E2E license server container can boot. The generated key is for testing
+ * only — it is not committed, never persisted, and discarded on cleanup.
+ *
+ * NOTE: The generated key does NOT match the committed public key
+ * (crates/oz-core/oz-license.key.pub). Tests that verify real license
+ * signatures must provide a real OZ_LICENSE_PRIVATE_KEY instead.
+ */
+function ensureLicenseKey() {
+  if (process.env.OZ_LICENSE_PRIVATE_KEY) {
+    log('License', 'Using OZ_LICENSE_PRIVATE_KEY from environment.');
+    return;
+  }
+  log('License', 'Generating throwaway RSA-2048 key for E2E license server...');
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'der' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  // Escape literal newlines to \n so the PEM survives shell/env boundaries
+  // intact. The Go license server's normalizePEM() reverses this on receipt.
+  process.env.OZ_LICENSE_PRIVATE_KEY = privateKey.replace(/\n/g, '\\n');
+  log('License', 'Throwaway key generated (valid for this session only).');
 }
 
 /** Start Docker E2E services. */
@@ -300,6 +331,7 @@ async function main() {
     // ── Step 1: Start Docker backend ──────────────────────────────
     if (!NO_DOCKER) {
       if (dockerAvailable()) {
+        ensureLicenseKey();
         startDocker();
       } else {
         log('Docker', `${YELLOW}Not available — skipping.${NC}`);
