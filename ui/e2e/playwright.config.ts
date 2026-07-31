@@ -58,11 +58,11 @@ export default defineConfig({
   },
 
   // Auto-start the Vite dev server (no more manual second terminal).
-  // In CI, always start fresh; locally, reuse an existing server if running.
+  // Reuse existing server if running (e.g. started by run-e2e.mjs runner or dev workflow).
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:1420',
-    reuseExistingServer: !process.env['CI'],
+    reuseExistingServer: true,
     timeout: 120_000,
     cwd: '..',
   },
