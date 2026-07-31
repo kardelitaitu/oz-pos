@@ -48,5 +48,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=5s --retries=3 \
     CMD /pb/healthcheck http://localhost:8080/api/health || exit 1
 
-# PocketBase v0.23+ removed the --http flag; listen address is now a positional argument.
-ENTRYPOINT ["/pb/pocketbase", "serve", "0.0.0.0:8080"]
+# Explicit HTTP keeps the E2E healthcheck on plain http://localhost:8080.
+# A positional value is treated as an AutoTLS domain by PocketBase v0.39.6.
+ENTRYPOINT ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]
