@@ -372,6 +372,10 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
@@ -405,6 +409,9 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PAYMENTS_CARD,
             permissions::CUSTOMERS_CREATE,
             permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
             permissions::DISCOUNTS_APPLY,
             permissions::INVENTORY_VIEW,
             permissions::SHIFTS_OPEN,
@@ -464,6 +471,10 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
@@ -705,6 +716,16 @@ pub mod permissions {
     pub const CUSTOMERS_EDIT: &str = "customers:edit";
     /// Delete a customer record.
     pub const CUSTOMERS_DELETE: &str = "customers:delete";
+
+    // ── Loyalty ──────────────────────────────────────────────────
+    /// View loyalty accounts, balances, and tiers.
+    pub const LOYALTY_VIEW: &str = "loyalty:view";
+    /// Earn loyalty points for completed sales.
+    pub const LOYALTY_EARN: &str = "loyalty:earn";
+    /// Redeem loyalty points during checkout.
+    pub const LOYALTY_REDEEM: &str = "loyalty:redeem";
+    /// Manage loyalty tier configuration.
+    pub const LOYALTY_MANAGE: &str = "loyalty:manage";
 
     // ── Tables ────────────────────────────────────────────────────
     /// Assign a table to a customer or server.
@@ -1027,6 +1048,10 @@ mod tests {
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
@@ -1095,6 +1120,10 @@ mod tests {
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,

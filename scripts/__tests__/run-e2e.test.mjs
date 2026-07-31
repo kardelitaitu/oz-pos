@@ -239,7 +239,21 @@ describe('Playwright command construction', () => {
 
   it('handles spec files without e2e/ prefix', () => {
     const specs = ['auth.spec.ts'];
-    const result = specs.map(f => f.startsWith('e2e/') ? f : `e2e/${f}`);
+    const result = specs.map(f => {
+      let p = f.replace(/^ui\//, '');
+      if (p.startsWith('e2e/e2e/')) p = p.replace(/^e2e\/e2e\//, 'e2e/');
+      return p.startsWith('e2e/') ? p : `e2e/${p}`;
+    });
     assert.deepStrictEqual(result, ['e2e/auth.spec.ts']);
+  });
+
+  it('prevents duplicating e2e/ prefix when input is ui/e2e/auth.spec.ts', () => {
+    const specs = ['ui/e2e/auth.spec.ts', 'e2e/sale.spec.ts', 'e2e/e2e/settings.spec.ts'];
+    const result = specs.map(f => {
+      let p = f.replace(/^ui\//, '');
+      if (p.startsWith('e2e/e2e/')) p = p.replace(/^e2e\/e2e\//, 'e2e/');
+      return p.startsWith('e2e/') ? p : `e2e/${p}`;
+    });
+    assert.deepStrictEqual(result, ['e2e/auth.spec.ts', 'e2e/sale.spec.ts', 'e2e/settings.spec.ts']);
   });
 });

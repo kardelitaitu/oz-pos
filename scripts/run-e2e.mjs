@@ -299,7 +299,11 @@ function getChangedSpecs() {
       { stdio: 'pipe', timeout: 10_000, cwd: ROOT },
     ).toString().trim().split('\n').filter(Boolean);
 
-    return changed.map(f => f.replace(/^ui\//, 'e2e/'));
+    return changed.map(f => {
+      let cleaned = f.replace(/^ui\//, '');
+      if (cleaned.startsWith('e2e/e2e/')) cleaned = cleaned.replace(/^e2e\/e2e\//, 'e2e/');
+      return cleaned;
+    });
   } catch {
     return [];
   }
@@ -346,7 +350,11 @@ function runPlaywright() {
   }
 
   if (specs.length > 0) {
-    cmd += ' ' + specs.map(f => f.startsWith('e2e/') ? f : `e2e/${f}`).join(' ');
+    cmd += ' ' + specs.map(f => {
+      let p = f.replace(/^ui\//, '');
+      if (p.startsWith('e2e/e2e/')) p = p.replace(/^e2e\/e2e\//, 'e2e/');
+      return p.startsWith('e2e/') ? p : `e2e/${p}`;
+    }).join(' ');
   }
 
   log('Playwright', `Running: ${cmd}`);
