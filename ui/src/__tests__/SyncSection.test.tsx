@@ -292,7 +292,9 @@ describe('SyncSection', () => {
   // ── Token expiry display ─────────────────────────────────────
 
   it('shows expiry badge with days remaining', () => {
-    const futureDate = new Date(Date.now() + 3 * 86_400_000).toISOString();
+    // Buffer of +1h guards against ms drift: the component's Date.now() runs
+    // a few ms after the test's, which would floor 3d - ε down to 2d.
+    const futureDate = new Date(Date.now() + 3 * 86_400_000 + 3_600_000).toISOString();
     renderSection({
       sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
       tokenExpiresAt: futureDate,
