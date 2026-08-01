@@ -127,6 +127,18 @@ export default function ProductManagementScreen() {
   l10nRef.current = l10n;
   const productModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(productModalRef, showModal && modalExit.shouldRender && !modalExit.exiting, modalExit.requestClose);
+  // PROD-08: the stock-alert drawer is a focus-trapped dialog — Escape and
+  // the close button both dismiss it, and focus returns to the bell toggle.
+  // The trap is gated on `!showModal` so the drawer and the product modal are
+  // mutually exclusive (two simultaneous traps would fight over Tab and
+  // body-scroll lock).
+  const alertDrawerRef = useRef<HTMLDivElement>(null);
+  const alertToggleRef = useRef<HTMLButtonElement>(null);
+  const closeAlertDrawer = useCallback(() => {
+    setShowAlertPanel(false);
+    alertToggleRef.current?.focus();
+  }, []);
+  useFocusTrap(alertDrawerRef, showAlertPanel && !showModal, closeAlertDrawer);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,6 +167,7 @@ export default function ProductManagementScreen() {
     setForm(emptyForm(activeWorkspace ?? ''));
     setEditingSku(null);
     setSaveError(null);
+    setShowAlertPanel(false);
     setShowModal(true);
   }, [activeWorkspace]);
 
@@ -173,6 +186,7 @@ export default function ProductManagementScreen() {
     });
     setEditingSku(p.sku);
     setSaveError(null);
+    setShowAlertPanel(false);
     setShowModal(true);
   }, [productDtos]);
 
@@ -288,10 +302,12 @@ export default function ProductManagementScreen() {
             label={selectedLocationName}
           />
           <button
+            ref={alertToggleRef}
             type="button"
             className="product-mgmt-alert-toggle"
             onClick={() => setShowAlertPanel((prev) => !prev)}
-            aria-label={showAlertPanel ? requiredLocalized(l10n, 'product-mgmt-stock-alert-close') : (alertCount > 0 ? l10n.getString('product-mgmt-alert-count', { count: String(alertCount) }) : requiredLocalized(l10n, 'product-mgmt-stock-alert-open'))}
+            aria-label={showAlertPanel ? requiredLocalized(l10n, 'product-mgmt-stock-alert-close') : (alertCount > 0 ? requiredLocalized(l10n, 'product-mgmt-alert-count', { count: String(alertCount) }) : requiredLocalized(l10n, 'product-mgmt-stock-alert-open'))}
+            aria-expanded={showAlertPanel}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -414,46 +430,40 @@ export default function ProductManagementScreen() {
                     )}
                   </td>
                   <td className="product-mgmt-cell-actions">
-                    <Localized id="product-mgmt-variants-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
-                      <button
-                        type="button"
-                        className="product-mgmt-action-btn"
-                        onClick={() => {
-                          setVariantProductSku(p.sku);
-                          setVariantProductName(p.name);
-                        }}
-                        aria-label={`Variants for ${p.name}`}
-                      >
-                        <Localized id="product-mgmt-variants">
-                          <span>Variants</span>
-                        </Localized>
-                      </button>
-                    </Localized>
-                    <Localized id="product-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
-                      <button
-                        type="button"
-                        className="product-mgmt-action-btn"
-                        onClick={() => openEdit(p)}
-                        aria-label={`Edit ${p.name}`}
-                      >
-                        <Localized id="product-mgmt-edit">
-                          <span>Edit</span>
-                        </Localized>
-                      </button>
-                    </Localized>
-                    <Localized id="product-mgmt-delete-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
-                      <button
-                        type="button"
-                        className="product-mgmt-action-btn product-mgmt-action-btn--danger"
-                        onClick={() => requestDelete(p.sku)}
-                        disabled={deleting === p.sku}
-                        aria-label={`Delete ${p.name}`}
-                      >
-                        <Localized id="product-mgmt-delete">
-                          <span>Delete</span>
-                        </Localized>
-                      </button>
-                    </Localized>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn"
+                      onClick={() => {
+                        setVariantProductSku(p.sku);
+                        setVariantProductName(p.name);
+                      }}
+                      aria-label={requiredLocalized(l10n, 'product-mgmt-variants-aria', { name: p.name })}
+                    >
+                      <Localized id="product-mgmt-variants">
+                        <span>Variants</span>
+                      </Localized>
+                    </button>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn"
+                      onClick={() => openEdit(p)}
+                      aria-label={requiredLocalized(l10n, 'product-mgmt-edit-aria', { name: p.name })}
+                    >
+                      <Localized id="product-mgmt-edit">
+                        <span>Edit</span>
+                      </Localized>
+                    </button>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn product-mgmt-action-btn--danger"
+                      onClick={() => requestDelete(p.sku)}
+                      disabled={deleting === p.sku}
+                      aria-label={requiredLocalized(l10n, 'product-mgmt-delete-aria', { name: p.name })}
+                    >
+                      <Localized id="product-mgmt-delete">
+                        <span>Delete</span>
+                      </Localized>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -678,16 +688,22 @@ export default function ProductManagementScreen() {
 
       {/* ── Stock Alert Panel (right-side drawer) ──────────── */}
       {showAlertPanel && (
-        <div className="product-mgmt-alert-drawer">
+        <div
+          ref={alertDrawerRef}
+          className="product-mgmt-alert-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label={requiredLocalized(l10n, 'product-mgmt-alerts-title')}
+        >
           <div className="product-mgmt-alert-drawer-header">
             <Localized id="product-mgmt-alerts-title">
               <span className="product-mgmt-alert-drawer-title">Stock Alerts</span>
             </Localized>
-            { }
             <button
               type="button"
               className="product-mgmt-alert-drawer-close"
-              onClick={() => setShowAlertPanel(false)}
+              onClick={closeAlertDrawer}
+              aria-label={requiredLocalized(l10n, 'product-mgmt-alert-close')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
