@@ -322,29 +322,122 @@ impl SyncDaemon {
 
             // Phase 4: Pull remote updates and apply them locally.
             if !cfg.server_url.is_empty() {
+                // SYNC-01: read the durable pull anchor + cursor so we only
+                // fetch updates newer than the last successfully-applied page
+                // (previously every cycle pulled the ENTIRE queue and re-applied
+                // stock/sale mutations, silently corrupting inventory).
+                let (pull_since, pull_cursor) = {
+                    let db_clone = db.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let conn = db_clone.blocking_lock();
+                        let store = Store::new(&conn);
+                        let st = store.get_sync_pull_state().unwrap_or_default();
+                        (st.since, st.cursor)
+                    })
+                    .await
+                    .unwrap_or((None, None))
+                };
+
                 let transport = SyncTransport::new(&cfg.server_url, cfg.api_key.as_deref());
-                match transport.pull_updates(None, None).await {
+                match transport
+                    .pull_updates(pull_since.as_deref(), pull_cursor.as_deref())
+                    .await
+                {
                     Ok(pull_resp) => {
                         pulled = pull_resp.items.len();
                         if !pull_resp.items.is_empty() {
                             let db_clone = db.clone();
                             let items = pull_resp.items;
+                            let next_cursor = pull_resp.next_cursor;
+                            let prev_since = pull_since.clone();
                             let outcome = tokio::task::spawn_blocking(move || {
                                 let conn = db_clone.blocking_lock();
                                 let store = Store::new(&conn);
                                 let queue = SyncQueue::new();
                                 let mut has_stock_movements = false;
+                                let mut all_applied = true;
+                                // SYNC-01: captured so anchor-persistence
+                                // failures surface in the daemon status
+                                // (returned from the closure below) instead of
+                                // being silently swallowed by tracing only.
+                                let mut anchor_error: Option<String> = None;
                                 for item in &items {
                                     if item.action == "stock.movement" {
                                         has_stock_movements = true;
                                     }
+                                    // SYNC-01: idempotency ledger — skip any
+                                    // remote item already applied in a prior
+                                    // cycle (replay is harmless).
+                                    let already = store
+                                        .is_remote_item_applied(&item.id)
+                                        .unwrap_or(false);
+                                    if already {
+                                        continue;
+                                    }
+                                    // Apply the mutation, then record the
+                                    // ledger receipt. NOTE: we deliberately do
+                                    // NOT wrap these in a single outer
+                                    // transaction — `apply_remote`'s
+                                    // `adjust_stock` path opens its OWN
+                                    // `unchecked_transaction()` internally, so
+                                    // nesting would fail with a SQLite
+                                    // "cannot start a transaction within a
+                                    // transaction" error and roll the item
+                                    // back entirely (observed in the SYNC-01
+                                    // regression test). Instead:
+                                    //  1. If the apply FAILS, `all_applied`
+                                    //     goes false → anchor does not advance
+                                    //     → the item replays next cycle.
+                                    //  2. If the apply SUCCEEDS, the mutation
+                                    //     is committed. The receipt write is
+                                    //     best-effort: even if it fails, we
+                                    //     advance the anchor past the item,
+                                    //     because re-applying an already-
+                                    //     committed mutation is the worse
+                                    //     failure. A lost receipt only matters
+                                    //     if the server replays history after
+                                    //     an anchor reset — which the snapshot
+                                    //     import path handles separately.
                                     if let Err(e) = queue.apply_remote(&store, item) {
+                                        all_applied = false;
                                         tracing::error!(
                                             item_id = %item.id,
                                             action = %item.action,
                                             error = %e,
                                             "failed to apply remote item"
                                         );
+                                    } else if let Err(e) =
+                                        store.mark_remote_item_applied(&item.id, &item.action)
+                                    {
+                                        tracing::warn!(
+                                            item_id = %item.id,
+                                            action = %item.action,
+                                            error = %e,
+                                            "failed to write ledger receipt (item still applied; anchor advances)"
+                                        );
+                                    }
+                                }
+                                // SYNC-01: advance the pull anchor ONLY after
+                                // the whole page applied successfully. A crash
+                                // mid-pull leaves the old anchor so the ledger
+                                // absorbs the replay.
+                                if all_applied {
+                                    let new_since = items
+                                        .iter()
+                                        .map(|i| i.created_at.clone())
+                                        .max()
+                                        .or(prev_since);
+                                    if let Err(e) = store.set_sync_pull_state(
+                                        new_since.as_deref(),
+                                        next_cursor.as_deref(),
+                                    ) {
+                                        tracing::error!(
+                                            error = %e,
+                                            "failed to persist sync pull anchor"
+                                        );
+                                        anchor_error = Some(format!(
+                                            "persist sync pull anchor: {e}"
+                                        ));
                                     }
                                 }
                                 // ADR #6: Rebuild the materialized stock_summary
@@ -356,10 +449,29 @@ impl SyncDaemon {
                                         "failed to rebuild stock summary after sync pull"
                                     );
                                 }
+                                // Return the anchor-persistence error (if any)
+                                // so the caller can surface it in the daemon
+                                // status — a lost anchor makes the NEXT cycle
+                                // re-pull the whole page, which is exactly the
+                                // corruption class SYNC-01 prevents.
+                                anchor_error
                             })
                             .await;
-                            if let Err(e) = outcome {
-                                sync_error = Some(format!("apply pull phase: {e}"));
+                            // SYNC-01: propagate both spawn_blocking panics AND
+                            // anchor-persistence failures into sync_error so the
+                            // daemon status/backoff reflect them.
+                            match outcome {
+                                Ok(Some(msg)) => {
+                                    if sync_error.is_none() {
+                                        sync_error = Some(msg);
+                                    }
+                                }
+                                Ok(None) => {}
+                                Err(e) => {
+                                    if sync_error.is_none() {
+                                        sync_error = Some(format!("apply pull phase: {e}"));
+                                    }
+                                }
                             }
                         }
                     }
@@ -780,6 +892,134 @@ mod tests {
         assert_eq!(pending[0].action, "test");
         // Config is None because sync is not enabled in fresh DB.
         assert!(config.is_none());
+    }
+
+    // ── SYNC-01: idempotent remote application ───────────────────────
+
+    /// Spawn a mock sync server whose pull endpoint ALWAYS returns the
+    /// same remote `stock.adjusted` item, regardless of the `since` anchor
+    /// or cursor. Simulates a server that replays history (or a client
+    /// whose anchor was lost) — the idempotency ledger must make replay
+    /// harmless.
+    async fn spawn_replaying_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":10}"#,
+            );
+            // Fixed id + timestamp so the SAME remote item is returned on
+            // every pull — exactly the replay scenario SYNC-01 targets.
+            // NOTE: this mock deliberately IGNORES the since/cursor request
+            // params. Do not "fix" it to filter by anchor, or the replay
+            // guarantee the test asserts would silently break.
+            item.id = "remote-item-replay-1".into();
+            item.created_at = "2026-01-01T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-01 regression: two daemon ticks against the SAME remote item
+    /// must apply the local mutation exactly once (previously every cycle
+    /// re-pulled the whole queue and re-deducted stock → silent corruption).
+    #[tokio::test]
+    async fn daemon_applies_replayed_remote_item_only_once() {
+        let server_url = spawn_replaying_mock_sync_server().await;
+        let db = setup_db();
+
+        // Seed a product + inventory so the remote stock adjustment has a
+        // target, and configure sync (all inside spawn_blocking per the
+        // daemon's DB-access pattern).
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+                 VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+                 INSERT INTO inventory (product_id, qty, updated_at)
+                 VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+            )
+            .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+
+        // Tick 1: pulls + applies the remote +10 (50 → 60), records ledger.
+        SyncDaemon::run_tick(&db, &status).await;
+        let after_tick_1 = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                let store = Store::new(&conn);
+                store.get_stock("prod-coffee").unwrap()
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(after_tick_1, 60, "first tick must apply the +10 delta");
+
+        // Tick 2: the server replays the SAME item. The idempotency ledger
+        // must skip it — stock stays 60, not 70.
+        SyncDaemon::run_tick(&db, &status).await;
+        let after_tick_2 = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                let store = Store::new(&conn);
+                store.get_stock("prod-coffee").unwrap()
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            after_tick_2, 60,
+            "replayed remote item must NOT be applied a second time (SYNC-01)"
+        );
+
+        // Ledger contains exactly one entry for the replayed id.
+        let ledger_rows = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                let count: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM sync_applied_items WHERE item_id = 'remote-item-replay-1'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                count
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(ledger_rows, 1, "ledger must hold one receipt for the item");
     }
 
     /// When the DB read phase succeeds, `run_tick` must update status

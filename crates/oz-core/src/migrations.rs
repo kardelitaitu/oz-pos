@@ -634,6 +634,16 @@ pub const ALL: &[Migration] = &[
         id: "113_stock_count_actor_ids.sql",
         sql: include_str!("../migrations/113_stock_count_actor_ids.sql"),
     },
+    // ── 114: Durable sync pull anchor + idempotency ledger (audit/09 SYNC-01) ─
+    // sync_pull_state persists the daemon's pull anchor/cursor so remote
+    // updates are only fetched since the last applied page; sync_applied_items
+    // is a receipt ledger so a replayed remote item is never applied twice
+    // (previously every daemon cycle pulled the whole queue and re-applied
+    // stock/sale mutations, silently corrupting inventory).
+    Migration {
+        id: "114_sync_pull_state.sql",
+        sql: include_str!("../migrations/114_sync_pull_state.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -881,6 +891,9 @@ mod tests {
             // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
             // ── ADR #22 Phase 0d (migration 100) ──
             "setting_updated",
+            // ── audit/09 SYNC-01 (migration 114) ──
+            "sync_pull_state",
+            "sync_applied_items",
         ];
 
         for table in &expected_tables {

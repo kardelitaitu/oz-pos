@@ -29,6 +29,20 @@ pub struct SyncStatusSummary {
     pub conflict_count: i64,
 }
 
+/// Durable pull anchor/cursor for the background sync daemon (SYNC-01).
+///
+/// Persisted in the single-row `sync_pull_state` table so the daemon only
+/// fetches remote updates newer than the last successfully-applied page
+/// (plus the opaque pagination cursor for the next page, P-3).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyncPullState {
+    /// ISO-8601 anchor timestamp of the last successfully applied page.
+    pub since: Option<String>,
+    /// Opaque pagination cursor for the next page (P-3). `None` when the
+    /// previous page was the final one.
+    pub cursor: Option<String>,
+}
+
 impl Store<'_> {
     /// Enqueue a transaction for later sync (default tenant).
     pub fn enqueue_offline(
@@ -276,6 +290,70 @@ impl Store<'_> {
             oldest_pending_at,
             conflict_count,
         })
+    }
+
+    /// Read the persisted sync pull anchor and cursor (SYNC-01).
+    ///
+    /// Returns the `since` timestamp and `cursor` from the last
+    /// successfully-applied page. Both are `None` on first sync (pull
+    /// everything). A missing row (pre-114 database) defaults to `None`.
+    pub fn get_sync_pull_state(&self) -> Result<SyncPullState, CoreError> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row(
+                "SELECT since, cursor FROM sync_pull_state WHERE id = 1",
+                [],
+                |row| {
+                    Ok(SyncPullState {
+                        since: row.get(0)?,
+                        cursor: row.get(1)?,
+                    })
+                },
+            )
+            .optional()
+            .map(|row| row.unwrap_or_default())
+            .map_err(Into::into)
+    }
+
+    /// Persist the sync pull anchor and cursor (SYNC-01).
+    ///
+    /// Called only AFTER a page of remote items was applied successfully,
+    /// so a crash mid-pull replays safely — the idempotency ledger then
+    /// skips any already-applied items.
+    pub fn set_sync_pull_state(
+        &self,
+        since: Option<&str>,
+        cursor: Option<&str>,
+    ) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT INTO sync_pull_state (id, since, cursor) VALUES (1, ?1, ?2)
+             ON CONFLICT(id) DO UPDATE SET since = excluded.since, cursor = excluded.cursor",
+            params![since, cursor],
+        )?;
+        Ok(())
+    }
+
+    /// Check whether a remote item has already been applied locally (SYNC-01).
+    pub fn is_remote_item_applied(&self, item_id: &str) -> Result<bool, CoreError> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_applied_items WHERE item_id = ?1)",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    /// Record a remote item as applied locally (SYNC-01 idempotency ledger).
+    ///
+    /// `INSERT OR IGNORE` — re-recording the same id is a no-op, so replay
+    /// of a page never double-counts a mutation.
+    pub fn mark_remote_item_applied(&self, item_id: &str, action: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO sync_applied_items (item_id, action) VALUES (?1, ?2)",
+            params![item_id, action],
+        )?;
+        Ok(())
     }
 
     fn row_to_offline_queue_item(row: &rusqlite::Row) -> rusqlite::Result<OfflineQueueItem> {
@@ -549,6 +627,64 @@ mod tests {
         let s = store(&conn);
         let items = s.list_pending_offline_for_tenant("no-such-tenant").unwrap();
         assert!(items.is_empty());
+    }
+
+    // ── SYNC-01: durable pull anchor + idempotency ledger ────────────
+
+    #[test]
+    fn sync_pull_state_defaults_to_none() {
+        let conn = fresh();
+        let st = store(&conn).get_sync_pull_state().unwrap();
+        assert!(st.since.is_none());
+        assert!(st.cursor.is_none());
+    }
+
+    #[test]
+    fn sync_pull_state_roundtrip() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_sync_pull_state(Some("2026-01-01T00:00:00Z"), None)
+            .unwrap();
+        let st = s.get_sync_pull_state().unwrap();
+        assert_eq!(st.since.as_deref(), Some("2026-01-01T00:00:00Z"));
+        assert!(st.cursor.is_none());
+
+        // Single-row guard: overwrite, never insert a second row.
+        s.set_sync_pull_state(
+            Some("2026-02-01T00:00:00Z"),
+            Some("2026-02-01T00:00:00Z|abc"),
+        )
+        .unwrap();
+        let st = s.get_sync_pull_state().unwrap();
+        assert_eq!(st.since.as_deref(), Some("2026-02-01T00:00:00Z"));
+        assert_eq!(st.cursor.as_deref(), Some("2026-02-01T00:00:00Z|abc"));
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_pull_state", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "sync_pull_state must stay a single row");
+    }
+
+    #[test]
+    fn sync_applied_items_tracks_ids() {
+        let conn = fresh();
+        let s = store(&conn);
+        assert!(!s.is_remote_item_applied("item-1").unwrap());
+
+        s.mark_remote_item_applied("item-1", "stock.adjusted")
+            .unwrap();
+        assert!(s.is_remote_item_applied("item-1").unwrap());
+
+        // INSERT OR IGNORE — replay is a no-op.
+        s.mark_remote_item_applied("item-1", "stock.adjusted")
+            .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_applied_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "re-applying the same item must not duplicate the ledger row"
+        );
     }
 
     #[test]
