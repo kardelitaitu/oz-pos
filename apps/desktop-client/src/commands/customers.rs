@@ -262,7 +262,7 @@ pub async fn delete_customer(
 /// Create a customer in the store resolved from a session token.
 ///
 /// The session supplies both the store database and authenticated user;
-/// no caller-provided user ID is accepted.
+/// no caller-provided user ID is accepted. ADR #7.
 #[tauri::command]
 pub async fn create_customer_scoped(
     session_token: String,
@@ -270,16 +270,12 @@ pub async fn create_customer_scoped(
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
     validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
-    let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_CREATE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::CUSTOMERS_CREATE)?;
     let customer = store.create_customer(
         args.name.trim(),
         args.email.as_deref(),
@@ -289,7 +285,7 @@ pub async fn create_customer_scoped(
     Ok(CustomerDto::from(customer))
 }
 
-/// Update a customer in the store resolved from a session token.
+/// Update a customer in the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn update_customer_scoped(
     session_token: String,
@@ -297,16 +293,12 @@ pub async fn update_customer_scoped(
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
     validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
-    let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_EDIT).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::CUSTOMERS_EDIT)?;
     let customer = store.update_customer(
         &args.id,
         args.name.trim(),
@@ -317,25 +309,34 @@ pub async fn update_customer_scoped(
     Ok(CustomerDto::from(customer))
 }
 
-/// Delete a customer from the store resolved from a session token.
+/// Delete a customer from the store resolved from a session token. ADR #7.
 #[tauri::command]
 pub async fn delete_customer_scoped(
     session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let session = state.resolve_session(&session_token)?;
-    let conn = state
-        .db_manager
-        .open_store(&session.store_id)
-        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_DELETE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::CUSTOMERS_DELETE)?;
     store.delete_customer(&id)?;
     Ok(())
+}
+
+/// Users and roles are global authentication records (ADR #4 / ADR #7);
+/// customer business data is read from the store-scoped connection after
+/// this check succeeds. Mirror of `require_tax_permission` in tax.rs.
+async fn require_customer_permission(
+    state: &AppState,
+    user_id: &str,
+    permission: &str,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, user_id, permission)
 }
 
 /// Validate fields shared by customer create and update commands.
@@ -360,6 +361,156 @@ fn validate_customer_fields(
 mod tests {
     use super::*;
     use foundation::{Email, Phone};
+    use oz_core::session::SessionContext;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
+
+    // ── Scoped-command permission + isolation (CUST-01) ─────────────
+
+    /// Seed the GLOBAL identity DB with an owner user (all permissions).
+    fn seed_owner_user(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn create_args(name: &str) -> CreateCustomerScopedArgs {
+        CreateCustomerScopedArgs {
+            name: name.into(),
+            email: None,
+            phone: None,
+            notes: None,
+        }
+    }
+
+    fn update_args(id: &str, name: &str) -> UpdateCustomerScopedArgs {
+        UpdateCustomerScopedArgs {
+            id: id.into(),
+            name: name.into(),
+            email: None,
+            phone: None,
+            notes: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn scoped_customer_command_rejects_invalid_session() {
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test())
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result =
+            create_customer_scoped("missing-token".into(), create_args("Alice"), app.state()).await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+
+        let result =
+            delete_customer_scoped("missing-token".into(), "cust-1".into(), app.state()).await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_customer_command_denies_user_without_permission() {
+        // Kitchen role lacks customers:create (ROLE_PRESETS).
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-kitchen', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "kitchen-token".into(),
+            SessionContext::new(
+                "user-kitchen".into(),
+                "role-kitchen".into(),
+                "terminal-1".into(),
+                "store-kitchen".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result =
+            create_customer_scoped("kitchen-token".into(), create_args("Alice"), app.state()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn scoped_customer_write_command_targets_only_the_session_store() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        for (token, store_id) in [("store-a-token", "store-a"), ("store-b-token", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-owner".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Create a customer ONLY in store A's database.
+        create_customer_scoped("store-a-token".into(), create_args("Alice"), app.state())
+            .await
+            .unwrap();
+        // Writes target the session store: updating an unknown id in store A
+        // rejects (isolated from any other store's data).
+        update_customer_scoped(
+            "store-a-token".into(),
+            update_args("cust-a", "Alice 2"),
+            app.state(),
+        )
+        .await
+        .unwrap_err();
+
+        let store_a = list_customers_scoped("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        let store_b = list_customers_scoped("store-b-token".into(), app.state())
+            .await
+            .unwrap();
+        assert_eq!(store_a.len(), 1);
+        assert_eq!(store_a[0].name, "Alice");
+        assert!(
+            store_b.is_empty(),
+            "store B must not see store A customer data"
+        );
+    }
 
     // ── Name validation (shared by create + update) ─────────────────
 
