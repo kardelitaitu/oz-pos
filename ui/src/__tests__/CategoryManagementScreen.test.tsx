@@ -460,4 +460,68 @@ describe('CategoryManagementScreen', () => {
       }),
     );
   });
+
+  it('surfaces a create rejection with a localized error in the modal (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([]);
+    mockCreateCategory.mockRejectedValue(new Error('backend exploded'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Drinks');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    // CAT-09: raw IPC text must not leak — the modal shows the localized generic.
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to create category'),
+    );
+    expect(screen.queryByText(/backend exploded/i)).toBeNull();
+    // The modal stays open so the operator can retry.
+    expect(screen.getByText('Cancel')).toBeDefined();
+  });
+
+  it('surfaces an update rejection with a localized error in the edit modal (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    mockUpdateCategory.mockRejectedValue(new Error('fk violation'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
+    await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
+    // The edit input is labelled by the visible "Name" label (htmlFor=cat-edit-name).
+    await userEvent.type(screen.getByLabelText('Name'), 'Bakery 2');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to update category'),
+    );
+    expect(screen.queryByText(/fk violation/i)).toBeNull();
+  });
+
+  it('closes the create modal with Escape and leaves it dismissed (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByText('Cancel')).toBeNull());
+    // The screen itself stays rendered behind the modal.
+    expect(screen.getByText('Add Category')).toBeDefined();
+  });
+
+  it('localizes the delete button aria-label via the Fluent bundle (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    // category-delete-aria = Delete category { $name } (settings.ftl). Fluent
+    // wraps interpolated vars in Unicode bidi isolation marks, so strip them.
+    const deleteBtn = document.querySelector('.cat-mgmt-delete-btn');
+    const label = (deleteBtn?.getAttribute('aria-label') ?? '').replace(/[\u2066-\u2069]/g, '');
+    expect(label).toBe('Delete category Bakery');
+  });
 });
