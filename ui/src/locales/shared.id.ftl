@@ -230,7 +230,7 @@ audit-log-col-target = Target
 audit-log-col-user = ID Pengguna
 audit-log-col-outcome = Hasil
 audit-log-col-details = Detail
-audit-log-count = { $count } entri
+audit-log-count-of = { $shown } dari { $total } entri
 audit-log-table-label = Entri log audit
 audit-log-search-placeholder = Cari tindakan, target, atau pengguna…
 audit-log-search-label = Cari log audit
@@ -253,6 +253,7 @@ audit-action-system-backup = Cadangan Dibuat
 audit-action-system-export = Ekspor Data
 audit-action-system-import = Impor Data
 audit-action-system-restore = Pulihkan
+audit-action-audit-review = Audit Ditinjau
 
 # ── Setup Wizard ──
 spinner-label = Memuat…

@@ -150,6 +150,91 @@ impl Store<'_> {
         }
         Ok((items, total, has_more))
     }
+
+    // ── Review checkpoints (AUD-04) ────────────────────────────────
+
+    /// Persist a server-side review checkpoint and emit the matching
+    /// `audit.review` audit event in one transaction (AUD-04).
+    pub fn save_review_checkpoint(
+        &self,
+        cp: &crate::AuditReviewCheckpoint,
+    ) -> Result<(), CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO audit_review_checkpoints
+             (id, store_id, reviewer_user_id, reviewed_at,
+              reviewed_through_created_at, reviewed_through_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                cp.id,
+                cp.store_id,
+                cp.reviewer_user_id,
+                cp.reviewed_at,
+                cp.reviewed_through_created_at,
+                cp.reviewed_through_id,
+            ],
+        )?;
+        // The review action itself is an audit event (append-only).
+        let details = serde_json::json!({
+            "reviewed_through_created_at": cp.reviewed_through_created_at,
+            "reviewed_through_id": cp.reviewed_through_id,
+        })
+        .to_string();
+        let event = crate::AuditEntry::new(
+            &cp.reviewer_user_id,
+            "audit.review",
+            Some("audit_review_checkpoint"),
+            Some(&cp.id),
+            Some(details),
+            "success",
+        );
+        tx.execute(
+            "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                event.id, event.user_id, event.action,
+                event.target_type, event.target_id,
+                event.details, event.outcome, event.created_at,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Most recent review checkpoint for this store (newest first).
+    pub fn latest_review_checkpoint(
+        &self,
+    ) -> Result<Option<crate::AuditReviewCheckpoint>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, store_id, reviewer_user_id, reviewed_at,
+                    reviewed_through_created_at, reviewed_through_id
+             FROM audit_review_checkpoints
+             ORDER BY reviewed_at DESC, id DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map([], |row| {
+            Ok(crate::AuditReviewCheckpoint {
+                id: row.get(0)?,
+                store_id: row.get(1)?,
+                reviewer_user_id: row.get(2)?,
+                reviewed_at: row.get(3)?,
+                reviewed_through_created_at: row.get(4)?,
+                reviewed_through_id: row.get(5)?,
+            })
+        })?;
+        Ok(rows.next().transpose()?)
+    }
+
+    /// Count audit entries created strictly after a timestamp. Powers the
+    /// server-side unreviewed badge (AUD-02/AUD-04) over the full table,
+    /// independent of the currently loaded page.
+    pub fn count_audit_entries_after(&self, created_at: &str) -> Result<u64, CoreError> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM audit_log WHERE created_at > ?1",
+            rusqlite::params![created_at],
+            |row| row.get(0),
+        )?;
+        Ok(n.max(0) as u64)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -641,5 +726,110 @@ mod tests {
             .list_audit_entries_filtered(None, None, None, None, 0)
             .unwrap();
         assert_eq!(items.len(), 1);
+    }
+
+    // ── Review checkpoints (AUD-04) ────────────────────────────────
+
+    fn checkpoint(
+        id: &str,
+        store: &str,
+        reviewer: &str,
+        reviewed_at: &str,
+    ) -> crate::AuditReviewCheckpoint {
+        crate::AuditReviewCheckpoint {
+            id: id.into(),
+            store_id: store.into(),
+            reviewer_user_id: reviewer.into(),
+            reviewed_at: reviewed_at.into(),
+            reviewed_through_created_at: "2025-01-01T12:00:00.000Z".into(),
+            reviewed_through_id: "aud-1".into(),
+        }
+    }
+
+    #[test]
+    fn save_review_checkpoint_persists_row() {
+        let conn = fresh();
+        let s = store(&conn);
+        let cp = checkpoint("cp-1", "store-a", "user-1", "2025-02-01T00:00:00.000Z");
+        s.save_review_checkpoint(&cp).unwrap();
+
+        let latest = s.latest_review_checkpoint().unwrap().unwrap();
+        assert_eq!(latest.id, "cp-1");
+        assert_eq!(latest.store_id, "store-a");
+        assert_eq!(latest.reviewer_user_id, "user-1");
+        assert_eq!(latest.reviewed_through_id, "aud-1");
+    }
+
+    #[test]
+    fn save_review_checkpoint_emits_audit_review_event() {
+        let conn = fresh();
+        let s = store(&conn);
+        let cp = checkpoint("cp-1", "store-a", "user-1", "2025-02-01T00:00:00.000Z");
+        s.save_review_checkpoint(&cp).unwrap();
+
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].action, "audit.review");
+        assert_eq!(
+            entries[0].target_type.as_deref(),
+            Some("audit_review_checkpoint")
+        );
+        assert_eq!(entries[0].target_id.as_deref(), Some("cp-1"));
+        assert!(entries[0].details.contains("reviewed_through_id"));
+    }
+
+    #[test]
+    fn latest_review_checkpoint_returns_newest() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.save_review_checkpoint(&checkpoint(
+            "cp-1",
+            "store-a",
+            "user-1",
+            "2025-02-01T00:00:00.000Z",
+        ))
+        .unwrap();
+        s.save_review_checkpoint(&checkpoint(
+            "cp-2",
+            "store-a",
+            "user-2",
+            "2025-03-01T00:00:00.000Z",
+        ))
+        .unwrap();
+
+        let latest = s.latest_review_checkpoint().unwrap().unwrap();
+        assert_eq!(latest.id, "cp-2");
+        assert_eq!(latest.reviewer_user_id, "user-2");
+    }
+
+    #[test]
+    fn latest_review_checkpoint_empty_is_none() {
+        let conn = fresh();
+        assert!(store(&conn).latest_review_checkpoint().unwrap().is_none());
+    }
+
+    #[test]
+    fn count_audit_entries_after_counts_full_table() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let s = store(&conn);
+        // All 4 rows are after 2024.
+        assert_eq!(
+            s.count_audit_entries_after("2024-01-01T00:00:00.000Z")
+                .unwrap(),
+            4
+        );
+        // Only aud-4 is after 13:30.
+        assert_eq!(
+            s.count_audit_entries_after("2025-01-01T13:30:00.000Z")
+                .unwrap(),
+            1
+        );
+        // Nothing after 2026.
+        assert_eq!(
+            s.count_audit_entries_after("2026-01-01T00:00:00.000Z")
+                .unwrap(),
+            0
+        );
     }
 }

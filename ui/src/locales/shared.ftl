@@ -87,7 +87,7 @@ audit-log-col-target = Target
 audit-log-col-user = User ID
 audit-log-col-outcome = Outcome
 audit-log-col-details = Details
-audit-log-count = { $count } entr{ $count ->
+audit-log-count-of = { $shown } of { $total } entr{ $shown ->
   [one] y
   *[other] ies
 }
@@ -281,6 +281,7 @@ audit-action-system-backup = Backup Created
 audit-action-system-restore = Restore
 audit-action-system-export = Data Export
 audit-action-system-import = Data Import
+audit-action-audit-review = Audit Reviewed
 audit-log-table-label = Audit log entries
 audit-log-search-placeholder = Search actions, targets, or users…
 audit-log-search-label = Search audit log

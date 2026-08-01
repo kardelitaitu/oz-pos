@@ -31,6 +31,27 @@ pub struct AuditEntry {
     pub created_at: String,
 }
 
+/// A server-side audit review checkpoint (AUD-04).
+///
+/// Persists each "Mark Reviewed" action with the tenant store, reviewer,
+/// review timestamp, and a `(created_at, id)` high-water mark so the badge
+/// state is durable, shared across managers, and auditable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditReviewCheckpoint {
+    /// UUID v7 identifier.
+    pub id: String,
+    /// Tenant store the checkpoint belongs to.
+    pub store_id: String,
+    /// User who performed the review.
+    pub reviewer_user_id: String,
+    /// ISO-8601 timestamp of the review action.
+    pub reviewed_at: String,
+    /// High-water mark: newest `audit_log.created_at` covered by this review.
+    pub reviewed_through_created_at: String,
+    /// Tie-breaker: `audit_log.id` of the newest covered entry.
+    pub reviewed_through_id: String,
+}
+
 impl AuditEntry {
     /// Create a new audit entry with a generated UUID v7 and current UTC timestamp.
     pub fn new(

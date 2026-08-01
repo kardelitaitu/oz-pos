@@ -6,14 +6,24 @@ import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import AuditLogScreen from '@/features/audit/AuditLogScreen';
 import sharedFtl from '@/locales/shared.ftl?raw';
-import type { AuditEntryDto } from '@/api/audit';
+import type { AuditEntryDto, AuditLogPageDto } from '@/api/audit';
 
-const { mockListAuditLog } = vi.hoisted(() => ({
-  mockListAuditLog: vi.fn(),
-}));
+const { mockListAuditLogScoped, mockGetAuditReviewStatusScoped, mockMarkAuditReviewedScoped } =
+  vi.hoisted(() => ({
+    mockListAuditLogScoped: vi.fn(),
+    mockGetAuditReviewStatusScoped: vi.fn(),
+    mockMarkAuditReviewedScoped: vi.fn(),
+  }));
 
 vi.mock('@/api/audit', () => ({
-  listAuditLog: (limit: number, offset: number) => mockListAuditLog(limit, offset),
+  listAuditLog: (limit: number, offset: number) => mockListAuditLogScoped('tok', { limit, offset }),
+  listAuditLogScoped: (token: string, args: unknown) => mockListAuditLogScoped(token, args),
+  getAuditReviewStatusScoped: (token: string) => mockGetAuditReviewStatusScoped(token),
+  markAuditReviewedScoped: (token: string, args: unknown) => mockMarkAuditReviewedScoped(token, args),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok' }),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -58,9 +68,17 @@ function makeEntry(overrides: Partial<AuditEntryDto> = {}): AuditEntryDto {
   };
 }
 
+function makePage(entries: AuditEntryDto[], total?: number, has_more = false): AuditLogPageDto {
+  return { items: entries, total: total ?? entries.length, has_more };
+}
+
 describe('AuditLogScreen', () => {
   beforeEach(() => {
-    mockListAuditLog.mockResolvedValue([]);
+    mockListAuditLogScoped.mockReset();
+    mockGetAuditReviewStatusScoped.mockReset();
+    mockMarkAuditReviewedScoped.mockReset();
+    mockGetAuditReviewStatusScoped.mockResolvedValue({ checkpoint: null, unreviewed_count: 0 });
+    mockListAuditLogScoped.mockResolvedValue(makePage([]));
   });
 
   it('renders the title', async () => {
@@ -73,18 +91,35 @@ describe('AuditLogScreen', () => {
     await waitFor(() => expect(screen.getByText('Refresh')).toBeDefined());
   });
 
-  it('calls load(0) when Refresh is clicked', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry()]);
+  it('loads the scoped page with the session token on mount (AUD-01)', async () => {
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry()]));
+    await renderScreen();
+    await waitFor(() =>
+      expect(mockListAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ limit: 50 }),
+      ),
+    );
+  });
+
+  it('calls load(reset) when Refresh is clicked', async () => {
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry()]));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Refresh')).toBeDefined());
 
-    mockListAuditLog.mockClear();
+    mockListAuditLogScoped.mockClear();
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry()]));
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    await waitFor(() => expect(mockListAuditLog).toHaveBeenCalledWith(50, 0));
+    await waitFor(() =>
+      expect(mockListAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ limit: 50 }),
+      ),
+    );
   });
 
   it('shows loading skeleton initially', async () => {
-    mockListAuditLog.mockReturnValue(new Promise(() => {}));
+    mockListAuditLogScoped.mockReturnValue(new Promise(() => {}));
     await renderScreen();
     const skeleton = document.querySelector('.audit-log-loading-skeleton');
     expect(skeleton).toBeTruthy();
@@ -100,27 +135,31 @@ describe('AuditLogScreen', () => {
   });
 
   it('shows error state with retry button', async () => {
-    mockListAuditLog.mockRejectedValue(new Error('DB error'));
+    mockListAuditLogScoped.mockRejectedValue(new Error('DB error'));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('DB error')).toBeDefined());
     expect(screen.getByText('Retry')).toBeDefined();
   });
 
-  it('calls load(0) when retry button is clicked after error', async () => {
+  it('calls load(reset) when retry button is clicked after error', async () => {
     // First call during mount rejects — shows error state
-    mockListAuditLog.mockRejectedValueOnce(new Error('DB error'));
+    mockListAuditLogScoped.mockRejectedValueOnce(new Error('DB error'));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('DB error')).toBeDefined());
 
     // Clear mock so retry uses the default resolved value from beforeEach
-    mockListAuditLog.mockClear();
-    // Click retry — should call load(0) which calls listAuditLog(50, 0)
+    mockListAuditLogScoped.mockClear();
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(mockListAuditLog).toHaveBeenCalledWith(50, 0));
+    await waitFor(() =>
+      expect(mockListAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ limit: 50 }),
+      ),
+    );
   });
 
   it('renders table with audit entries', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry(), makeEntry({ id: 'a-2', action: 'login' })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry(), makeEntry({ id: 'a-2', action: 'login' })]));
     await renderScreen();
     await waitFor(() => {
       expect(screen.getByText('Date')).toBeDefined();
@@ -133,10 +172,10 @@ describe('AuditLogScreen', () => {
   });
 
   it('shows outcome badge with proper class', async () => {
-    mockListAuditLog.mockResolvedValue([
+    mockListAuditLogScoped.mockResolvedValue(makePage([
       makeEntry({ id: 'a-1', outcome: 'success' }),
       makeEntry({ id: 'a-2', outcome: 'failure' }),
-    ]);
+    ]));
     await renderScreen();
     await waitFor(() => {
       const successBadges = document.querySelectorAll('.audit-badge--success');
@@ -147,13 +186,13 @@ describe('AuditLogScreen', () => {
   });
 
   it('shows action label for known action keys', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry({ action: 'sale.void' })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ action: 'sale.void' })]));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Void Sale')).toBeDefined());
   });
 
   it('shows fallback action key for unknown actions', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry({ action: 'custom.event' })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ action: 'custom.event' })]));
     await renderScreen();
     await waitFor(() => {
       const actionKeys = document.querySelectorAll('.audit-log-action-key');
@@ -163,7 +202,7 @@ describe('AuditLogScreen', () => {
   });
 
   it('shows target type and truncated target id', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry({ target_type: 'product', target_id: 'prod-abcdef-123456' })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ target_type: 'product', target_id: 'prod-abcdef-123456' })]));
     await renderScreen();
     await waitFor(() => {
       const targetType = document.querySelector('.audit-log-target-type');
@@ -172,7 +211,7 @@ describe('AuditLogScreen', () => {
   });
 
   it('shows em-dash when target_type is null', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry({ target_type: null, target_id: null })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ target_type: null, target_id: null })]));
     await renderScreen();
     await waitFor(() => {
       const dash = document.querySelector('.audit-log-target-none');
@@ -182,7 +221,7 @@ describe('AuditLogScreen', () => {
 
   it('truncates details preview to 60 chars', async () => {
     const longDetails = 'x'.repeat(100);
-    mockListAuditLog.mockResolvedValue([makeEntry({ details: longDetails })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ details: longDetails })]));
     await renderScreen();
     await waitFor(() => {
       const preview = document.querySelector('.audit-log-details-preview');
@@ -192,7 +231,7 @@ describe('AuditLogScreen', () => {
   });
 
   it('shows em-dash for empty/null details', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry({ details: '{}' })]);
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ details: '{}' })]));
     await renderScreen();
     await waitFor(() => {
       const dash = document.querySelector('.audit-log-details-none');
@@ -200,11 +239,16 @@ describe('AuditLogScreen', () => {
     });
   });
 
-  it('filters entries by outcome', async () => {
-    mockListAuditLog.mockResolvedValue([
-      makeEntry({ id: 'a-1', outcome: 'success', action: 'login' }),
-      makeEntry({ id: 'a-2', outcome: 'failure', action: 'login.failed' }),
-    ]);
+  it('sends the outcome filter to the server (AUD-02)', async () => {
+    mockListAuditLogScoped.mockImplementation((_token: string, args: { outcome?: string }) => {
+      if (args.outcome === 'success') {
+        return Promise.resolve(makePage([makeEntry({ id: 'a-1', outcome: 'success', action: 'login' })]));
+      }
+      return Promise.resolve(makePage([
+        makeEntry({ id: 'a-1', outcome: 'success', action: 'login' }),
+        makeEntry({ id: 'a-2', outcome: 'failure', action: 'login.failed' }),
+      ]));
+    });
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Audit Log')).toBeDefined());
 
@@ -213,18 +257,23 @@ describe('AuditLogScreen', () => {
     await userEvent.click(successChip);
 
     await waitFor(() => {
-      // The failed entry should be filtered out
+      expect(mockListAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ outcome: 'success' }),
+      );
+      // The failed entry should be gone (server returned only success rows)
       const failureBadges = document.querySelectorAll('.audit-badge--failure');
       expect(failureBadges.length).toBe(0);
     });
   });
 
-  it('shows empty filtered state when filters match nothing', async () => {
-    mockListAuditLog.mockResolvedValue([makeEntry({ outcome: 'success' })]);
+  it('shows empty filtered state when the server returns no matches', async () => {
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ outcome: 'success' })]));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Audit Log')).toBeDefined());
 
-    // Click Failure filter
+    // Click Failure filter — server returns an empty page
+    mockListAuditLogScoped.mockResolvedValue(makePage([], 0, false));
     const failureChip = screen.getByText('Failure').closest('button')!;
     await userEvent.click(failureChip);
 
@@ -233,48 +282,98 @@ describe('AuditLogScreen', () => {
     );
   });
 
-  it('shows Load More button when more entries exist', async () => {
-    // Return 50 entries (equal to limit) — hasMore will be true
-    const entries = Array.from({ length: 50 }, (_, i) => makeEntry({ id: `a-${i}` }));
-    mockListAuditLog.mockResolvedValue(entries);
+  it('shows Load More button when has_more is true (AUD-03)', async () => {
+    const entries = Array.from({ length: 50 }, (_, i) => makeEntry({ id: `a-${i}`, created_at: `2026-07-01T12:0${Math.floor(i / 10)}:00Z` }));
+    mockListAuditLogScoped.mockResolvedValue(makePage(entries, 60, true));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Load More')).toBeDefined());
   });
 
-  it('calls load with offset on Load More click', async () => {
+  it('sends the keyset cursor on Load More (AUD-03)', async () => {
     const entries = Array.from({ length: 50 }, (_, i) => makeEntry({ id: `a-${i}` }));
-    mockListAuditLog.mockResolvedValue(entries);
+    mockListAuditLogScoped.mockResolvedValue(makePage(entries, 60, true));
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Load More')).toBeDefined());
 
-    mockListAuditLog.mockClear();
-    mockListAuditLog.mockResolvedValue([]);
+    mockListAuditLogScoped.mockClear();
+    mockListAuditLogScoped.mockResolvedValue(makePage([], 60, false));
 
     const loadMoreBtn = screen.getByText('Load More').closest('button')!;
     await userEvent.click(loadMoreBtn);
 
     await waitFor(() =>
-      expect(mockListAuditLog).toHaveBeenCalledWith(50, 50), // limit=50, offset=50
+      expect(mockListAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ beforeId: 'a-49' }),
+      ),
     );
   });
 
-  it('filters entries by search query', async () => {
-    mockListAuditLog.mockResolvedValue([
-      makeEntry({ id: 'a-1', action: 'sale.complete', user_id: 'alice' }),
-      makeEntry({ id: 'a-2', action: 'login', user_id: 'bob' }),
-    ]);
+  it('sends the debounced search query to the server (AUD-02)', async () => {
+    mockListAuditLogScoped.mockImplementation((_token: string, args: { query?: string }) => {
+      if (args.query) {
+        return Promise.resolve(makePage([makeEntry({ id: 'a-1', user_id: 'alice' })]));
+      }
+      return Promise.resolve(makePage([
+        makeEntry({ id: 'a-1', user_id: 'alice' }),
+        makeEntry({ id: 'a-2', action: 'login', user_id: 'bob' }),
+      ]));
+    });
     await renderScreen();
     await waitFor(() => expect(screen.getByText('Audit Log')).toBeDefined());
 
-    // Type into the search input to filter
     const searchInput = document.querySelector('.audit-log-search') as HTMLInputElement;
     await userEvent.type(searchInput, 'alice');
 
-    // Entries not containing 'alice' should be filtered out
+    await waitFor(() =>
+      expect(mockListAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ query: 'alice' }),
+      ),
+    );
+  });
+
+  // ── Review checkpoints (AUD-04) ─────────────────────────────────
+
+  it('shows the server-side unreviewed badge count (AUD-04)', async () => {
+    mockGetAuditReviewStatusScoped.mockResolvedValue({ checkpoint: null, unreviewed_count: 3 });
+    await renderScreen();
     await waitFor(() => {
-      // 'bob' entry should be hidden since 'alice' is not found in its fields
-      const visibleRows = document.querySelectorAll('.audit-log-table tbody tr');
-      expect(visibleRows.length).toBe(1);
+      expect(screen.getByText('3 new')).toBeDefined();
     });
+  });
+
+  it('shows reviewed-at date when a checkpoint exists (AUD-04)', async () => {
+    mockGetAuditReviewStatusScoped.mockResolvedValue({
+      checkpoint: {
+        id: 'cp-1',
+        store_id: 'store-a',
+        reviewer_user_id: 'user-1',
+        reviewed_at: '2026-07-02T00:00:00Z',
+        reviewed_through_created_at: '2026-07-01T12:00:00Z',
+        reviewed_through_id: 'a-1',
+      },
+      unreviewed_count: 0,
+    });
+    await renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText(/Reviewed:/)).toBeDefined();
+    });
+  });
+
+  it('marks reviewed via the scoped API with the newest entry cursor (AUD-04)', async () => {
+    mockGetAuditReviewStatusScoped.mockResolvedValue({ checkpoint: null, unreviewed_count: 5 });
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ id: 'a-1', created_at: '2026-07-01T12:00:00Z' })]));
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Mark Reviewed')).toBeDefined());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mark Reviewed' }));
+
+    await waitFor(() =>
+      expect(mockMarkAuditReviewedScoped).toHaveBeenCalledWith('tok', {
+        reviewedThroughCreatedAt: '2026-07-01T12:00:00Z',
+        reviewedThroughId: 'a-1',
+      }),
+    );
   });
 });

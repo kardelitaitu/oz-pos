@@ -644,6 +644,10 @@ pub const ALL: &[Migration] = &[
         id: "114_sync_pull_state.sql",
         sql: include_str!("../migrations/114_sync_pull_state.sql"),
     },
+    Migration {
+        id: "115_audit_review_checkpoints.sql",
+        sql: include_str!("../migrations/115_audit_review_checkpoints.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

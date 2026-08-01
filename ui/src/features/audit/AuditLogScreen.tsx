@@ -1,8 +1,14 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
-import { listAuditLog, type AuditEntryDto } from '@/api/audit';
+import {
+  listAuditLogScoped,
+  getAuditReviewStatusScoped,
+  markAuditReviewedScoped,
+  type AuditEntryDto,
+} from '@/api/audit';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -27,6 +33,7 @@ const ACTION_FLUENT_IDS: Record<string, string> = {
   'system.restore': 'audit-action-system-restore',
   'system.export': 'audit-action-system-export',
   'system.import': 'audit-action-system-import',
+  'audit.review': 'audit-action-audit-review',
 };
 
 // P12-3: Actions considered critical/security for audit review
@@ -35,22 +42,6 @@ const CRITICAL_ACTIONS = new Set([
   'setting.change', 'system.backup', 'system.restore',
   'system.export', 'system.import', 'product.delete',
 ]);
-
-const REVIEW_STORAGE_KEY = 'audit-last-reviewed';
-
-function getLastReviewed(): string | null {
-  return localStorage.getItem(REVIEW_STORAGE_KEY);
-}
-
-function setLastReviewed(iso: string) {
-  localStorage.setItem(REVIEW_STORAGE_KEY, iso);
-}
-
-/** Count entries created after a timestamp. */
-function countUnreviewed(entries: AuditEntryDto[], since: string | null): number {
-  if (!since) return entries.length;
-  return entries.filter((e) => e.created_at > since).length;
-}
 
 function outcomeBadgeClass(outcome: string): string {
   switch (outcome) {
@@ -75,6 +66,12 @@ function formatDate(iso: string): string {
   }
 }
 
+/** High-water-mark cursor: newest entry a page boundary references. */
+interface Cursor {
+  created_at: string;
+  id: string;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 type OutcomeFilter = 'all' | 'success' | 'failure';
@@ -83,95 +80,136 @@ type OutcomeFilter = 'all' | 'success' | 'failure';
 export default function AuditLogScreen() {
   const { l10n } = useLocalization();
   const { isManager } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
+
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
   const limit = 50;
-  const cancelledRef = useRef(false);
+  const loadSeqRef = useRef(0);
+  const cursorRef = useRef<Cursor | null>(null);
 
-  // P12-3: Last reviewed timestamp (tracked via localStorage)
-  const [lastReviewed, setLastReviewedState] = useState<string | null>(getLastReviewed);
+  // Server-side review checkpoint (AUD-04): review time for display and a
+  // server-computed unreviewed count over the FULL table (AUD-02), not just
+  // the loaded page.
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [unreviewedCount, setUnreviewedCount] = useState(0);
+  const [markingReviewed, setMarkingReviewed] = useState(false);
 
-  // Filters
+  // Filters (server-side). Search is debounced to avoid an IPC per keystroke.
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
 
-  // ── Load ──────────────────────────────────────────────────────────
+  // ── Load (server-filtered + keyset paginated, AUD-01/02/03) ─────
 
-  const load = useCallback(async (newOffset: number, append: boolean = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await listAuditLog(limit, newOffset);
-      if (!cancelledRef.current) {
-        if (append) {
-          setEntries((prev) => [...prev, ...data]);
+  const load = useCallback(
+    async (opts: { reset?: boolean } = {}) => {
+      const { reset = false } = opts;
+      if (!sessionToken) return;
+      const seq = ++loadSeqRef.current;
+      setLoading(true);
+      setError(null);
+      try {
+        const page = await listAuditLogScoped(sessionToken, {
+          limit,
+          ...(outcomeFilter !== 'all' ? { outcome: outcomeFilter } : {}),
+          ...(searchQuery ? { query: searchQuery } : {}),
+          ...(!reset && cursorRef.current
+            ? {
+                beforeCreatedAt: cursorRef.current.created_at,
+                beforeId: cursorRef.current.id,
+              }
+            : {}),
+        });
+        if (seq !== loadSeqRef.current) return;
+        if (reset) {
+          setEntries(page.items);
         } else {
-          setEntries(data);
+          // Deduplicate by entry id (AUD-03 defense in depth).
+          setEntries((prev) => {
+            const seen = new Set(prev.map((e) => e.id));
+            return [...prev, ...page.items.filter((e) => !seen.has(e.id))];
+          });
         }
-        setHasMore(data.length >= limit);
-        setOffset(newOffset);
-      }
-    } catch (err) {
-      if (!cancelledRef.current) {
+        setTotal(page.total);
+        setHasMore(page.has_more);
+        const last = page.items[page.items.length - 1];
+        if (last) {
+          cursorRef.current = { created_at: last.created_at, id: last.id };
+        }
+      } catch (err) {
+        if (seq !== loadSeqRef.current) return;
         setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'audit-log-error-load'));
+      } finally {
+        if (seq === loadSeqRef.current) setLoading(false);
       }
-    } finally {
-      if (!cancelledRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [limit, l10n]);
-
-  useEffect(() => {
-    cancelledRef.current = false;
-    load(0);
-    return () => { cancelledRef.current = true; };
-  }, [load]);
-
-  // ── Filtered entries ──────────────────────────────────────────────
-
-  const filteredEntries = useMemo(() => {
-    let items = entries;
-
-    if (outcomeFilter !== 'all') {
-      items = items.filter((e) => e.outcome === outcomeFilter);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      items = items.filter(
-        (e) =>
-          e.action.toLowerCase().includes(q) ||
-          (ACTION_FLUENT_IDS[e.action] ?? '').toLowerCase().includes(q) ||
-          (e.target_type ?? '').toLowerCase().includes(q) ||
-          (e.target_id ?? '').toLowerCase().includes(q) ||
-          e.user_id.toLowerCase().includes(q),
-      );
-    }
-
-    return items;
-  }, [entries, outcomeFilter, searchQuery]);
-
-  const handleLoadMore = useCallback(() => {
-    load(offset + limit, true);
-  }, [load, offset, limit]);
-
-  // P12-3: Unreviewed count & Mark Reviewed handler
-  const unreviewedCount = useMemo(
-    () => countUnreviewed(entries, lastReviewed),
-    [entries, lastReviewed],
+    },
+    [sessionToken, limit, outcomeFilter, searchQuery, l10n],
   );
 
-  const handleMarkReviewed = useCallback(() => {
-    const now = new Date().toISOString();
-    setLastReviewed(now);
-    setLastReviewedState(now);
-  }, []);
+  // Debounce the free-text search, then reload from the first page.
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  // Initial load + reload whenever a server-side filter changes.
+  useEffect(() => {
+    cursorRef.current = null;
+    void load({ reset: true });
+  }, [load]);
+
+  // ── Review checkpoint (AUD-04) ───────────────────────────────────
+
+  const loadReviewStatus = useCallback(async () => {
+    if (!sessionToken) return;
+    try {
+      const status = await getAuditReviewStatusScoped(sessionToken);
+      setReviewedAt(status.checkpoint?.reviewed_at ?? null);
+      setUnreviewedCount(status.unreviewed_count);
+    } catch {
+      // Server is authoritative; a transient failure keeps the previous state.
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    void loadReviewStatus();
+  }, [loadReviewStatus]);
+
+  const handleMarkReviewed = useCallback(async () => {
+    if (!sessionToken) return;
+    setMarkingReviewed(true);
+    try {
+      // High-water mark = the newest entry the reviewer has seen (page 1 is
+      // newest-first, so entries[0] is the globally newest row).
+      const newest = entries[0];
+      await markAuditReviewedScoped(sessionToken, {
+        reviewedThroughCreatedAt: newest?.created_at ?? new Date().toISOString(),
+        reviewedThroughId: newest?.id ?? '',
+      });
+      await loadReviewStatus();
+      // The audit.review event just landed — refresh the first page.
+      await load({ reset: true });
+    } catch {
+      await loadReviewStatus();
+    } finally {
+      setMarkingReviewed(false);
+    }
+  }, [sessionToken, entries, load, loadReviewStatus]);
+
+  const handleLoadMore = useCallback(() => {
+    void load({ reset: false });
+  }, [load]);
 
   // ── Render ────────────────────────────────────────────────────────
+
+  // With server-side filtering the page only ever holds matching rows, so the
+  // empty-filtered state is distinguishable by whether a filter is active.
+  const filtersActive = outcomeFilter !== 'all' || searchQuery.length > 0;
 
   return (
     <div className="audit-log" data-testid="audit-log-table">
@@ -185,22 +223,22 @@ export default function AuditLogScreen() {
               {unreviewedCount} new
             </span>
           )}
-          {lastReviewed && (
+          {reviewedAt && (
             <span className="audit-log-reviewed-at">
-              <Localized id="audit-log-reviewed-at" vars={{ date: new Date(lastReviewed).toLocaleDateString() }}><span>Reviewed: {new Date(lastReviewed).toLocaleDateString()}</span></Localized>
+              <Localized id="audit-log-reviewed-at" vars={{ date: new Date(reviewedAt).toLocaleDateString() }}><span>Reviewed: {new Date(reviewedAt).toLocaleDateString()}</span></Localized>
             </span>
           )}
         </div>
         <div className="audit-log-header-right">
           {isManager && unreviewedCount > 0 && (
-            <Button variant="secondary" onClick={handleMarkReviewed} size="sm">
+            <Button variant="secondary" onClick={() => void handleMarkReviewed()} loading={markingReviewed} size="sm">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 4 }}>
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <Localized id="audit-log-mark-reviewed"><span>Mark Reviewed</span></Localized>
             </Button>
           )}
-          <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+          <Button variant="secondary" onClick={() => void load({ reset: true })} loading={loading}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
@@ -225,8 +263,8 @@ export default function AuditLogScreen() {
             id="audit-log-search"
             name="audit-log-search"
             placeholder={l10n.getString('audit-log-search-placeholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             aria-label={l10n.getString('audit-log-search-label')}
           />
         </div>
@@ -293,14 +331,14 @@ export default function AuditLogScreen() {
           <div className="audit-log-error">
             <p>{error}</p>
             <Localized id="audit-log-retry">
-              <Button variant="secondary" onClick={() => load(0)}><span>Retry</span></Button>
+              <Button variant="secondary" onClick={() => void load({ reset: true })}><span>Retry</span></Button>
             </Localized>
           </div>
         </Card>
-      ) : filteredEntries.length === 0 && !loading ? (
+      ) : entries.length === 0 && !loading ? (
         <Card shadow="sm">
           <div className="audit-log-empty">
-            {searchQuery || outcomeFilter !== 'all' ? (
+            {filtersActive ? (
               <Localized id="audit-log-empty-filtered">
                 <span>No audit entries match the current filters.</span>
               </Localized>
@@ -325,7 +363,7 @@ export default function AuditLogScreen() {
                 <Localized id="audit-log-col-details"><th><span>Details</span></th></Localized>
               </tr>
             </thead>
-            <tbody>{filteredEntries.map((entry) => {
+            <tbody>{entries.map((entry) => {
                 const isCritical = CRITICAL_ACTIONS.has(entry.action) || entry.outcome === 'failure';
                 return (
                   <tr key={entry.id} className={isCritical ? 'audit-log-row--critical' : ''}>
@@ -387,8 +425,8 @@ export default function AuditLogScreen() {
           )}
           <div className="audit-log-footer">
             <span className="audit-log-count">
-              <Localized id="audit-log-count" vars={{ count: filteredEntries.length }}>
-                <span>{filteredEntries.length} entr{filteredEntries.length === 1 ? 'y' : 'ies'}</span>
+              <Localized id="audit-log-count-of" vars={{ shown: entries.length, total }}>
+                <span>{entries.length} of {total} entries</span>
               </Localized>
             </span>
           </div>

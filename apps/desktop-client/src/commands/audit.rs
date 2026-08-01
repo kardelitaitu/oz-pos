@@ -167,6 +167,115 @@ async fn require_audit_permission(
     require_permission_for_user(&store, user_id, permission)
 }
 
+// ── Review checkpoints (AUD-04) ───────────────────────────────────
+
+/// A persisted server-side review checkpoint (AUD-04).
+#[derive(Debug, Serialize)]
+pub struct ReviewCheckpointDto {
+    /// UUID v7 identifier.
+    pub id: String,
+    /// Tenant store the checkpoint belongs to.
+    pub store_id: String,
+    /// User who performed the review.
+    pub reviewer_user_id: String,
+    /// ISO-8601 timestamp of the review action.
+    pub reviewed_at: String,
+    /// High-water mark: newest `audit_log.created_at` covered.
+    pub reviewed_through_created_at: String,
+    /// Tie-breaker: `audit_log.id` of the newest covered entry.
+    pub reviewed_through_id: String,
+}
+
+impl From<oz_core::AuditReviewCheckpoint> for ReviewCheckpointDto {
+    fn from(cp: oz_core::AuditReviewCheckpoint) -> Self {
+        Self {
+            id: cp.id,
+            store_id: cp.store_id,
+            reviewer_user_id: cp.reviewer_user_id,
+            reviewed_at: cp.reviewed_at,
+            reviewed_through_created_at: cp.reviewed_through_created_at,
+            reviewed_through_id: cp.reviewed_through_id,
+        }
+    }
+}
+
+/// Arguments for marking the audit log reviewed (AUD-04).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkAuditReviewedArgs {
+    /// High-water mark: newest `audit_log.created_at` the reviewer has seen.
+    pub reviewed_through_created_at: String,
+    /// Tie-breaker: `audit_log.id` of that newest entry.
+    pub reviewed_through_id: String,
+}
+
+/// Review status for the audit screen (AUD-04): the latest checkpoint and a
+/// server-side unreviewed count computed over the full table — not just the
+/// currently loaded page (AUD-02).
+#[derive(Debug, Serialize)]
+pub struct AuditReviewStatusDto {
+    /// Latest checkpoint, or `None` when no review has been marked yet.
+    pub checkpoint: Option<ReviewCheckpointDto>,
+    /// Count of entries strictly newer than the checkpoint's high-water mark
+    /// (all entries when no checkpoint exists).
+    pub unreviewed_count: u64,
+}
+
+/// Fetch the session store's latest review checkpoint + unreviewed count
+/// (AUD-04). Resolves the store from the session token and enforces
+/// `audit:view`.
+#[tauri::command]
+pub async fn get_audit_review_status_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<AuditReviewStatusDto, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_audit_permission(&state, &session.user_id, permissions::AUDIT_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let checkpoint = store.latest_review_checkpoint()?;
+    let unreviewed_count = match &checkpoint {
+        Some(cp) => store.count_audit_entries_after(&cp.reviewed_through_created_at)?,
+        // No checkpoint yet — everything is unreviewed.
+        None => store.count_audit_entries_after("1970-01-01T00:00:00.000Z")?,
+    };
+    Ok(AuditReviewStatusDto {
+        checkpoint: checkpoint.map(ReviewCheckpointDto::from),
+        unreviewed_count,
+    })
+}
+
+/// Persist a server-side review checkpoint for the session's store (AUD-04).
+///
+/// Writes the checkpoint row and an `audit.review` audit event in one
+/// transaction, so the review action is durable, shared across managers,
+/// and itself auditable. Enforces `audit:view`.
+#[tauri::command]
+pub async fn mark_audit_reviewed_scoped(
+    session_token: String,
+    args: MarkAuditReviewedArgs,
+    state: State<'_, AppState>,
+) -> Result<ReviewCheckpointDto, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_audit_permission(&state, &session.user_id, permissions::AUDIT_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let cp = oz_core::AuditReviewCheckpoint {
+        id: uuid::Uuid::now_v7().to_string(),
+        store_id: session.store_id.clone(),
+        reviewer_user_id: session.user_id.clone(),
+        reviewed_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        reviewed_through_created_at: args.reviewed_through_created_at,
+        reviewed_through_id: args.reviewed_through_id,
+    };
+    store.save_review_checkpoint(&cp)?;
+    Ok(ReviewCheckpointDto::from(cp))
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
