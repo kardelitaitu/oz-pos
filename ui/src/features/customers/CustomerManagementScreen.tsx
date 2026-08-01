@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { formatMoney } from '@/types/domain';
 import './CustomerManagementScreen.css';
 
@@ -244,10 +245,12 @@ export default function CustomerManagementScreen() {
 
   // ── History modal (CUST-05) ────────────────────────────────────
 
-  // CUST-11: remember the opener so focus can be restored on close and
-  // hand a ref to the modal's close button for initial focus.
+  // CUST-11: remember the opener so focus can be restored on close.
   const historyTriggerRef = useRef<HTMLElement | null>(null);
-  const historyCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+  // CUST-11: the shared focus-trap hook owns initial focus, Tab cycling,
+  // Escape-to-close, and body scroll locking — same modal semantics as
+  // SettingsPopup (the audit's positive control).
+  const historyPanelRef = useRef<HTMLDivElement | null>(null);
 
   const openHistory = useCallback((customer: CustomerDto) => {
     historyTriggerRef.current = document.activeElement as HTMLElement | null;
@@ -276,26 +279,9 @@ export default function CustomerManagementScreen() {
     historyTriggerRef.current = null;
   }, []);
 
-  // CUST-11: Escape closes the history modal (mirrors SettingsPopup's modal
-  // semantics), and the dialog locks body scroll while open.
-  useEffect(() => {
-    if (!historyTarget) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        closeHistory();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    // Move focus into the dialog once rendered.
-    historyCloseBtnRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [historyTarget, closeHistory]);
+  // CUST-11: shared modal semantics — auto-focus, Tab trap, Escape-close,
+  // body scroll lock — active while the history dialog is open.
+  useFocusTrap(historyPanelRef, historyTarget !== null, closeHistory);
 
   const retryHistory = useCallback(() => {
     if (!historyTarget) return;
@@ -748,7 +734,13 @@ export default function CustomerManagementScreen() {
           recent sales. Loaded scoped + permission-gated by the backend. */}
       {historyTarget && (
         <div className="customer-mgmt-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) closeHistory(); }}>
-          <div className="customer-mgmt-history" role="dialog" aria-modal="true" aria-labelledby="customer-mgmt-history-title">
+          <div
+            ref={historyPanelRef}
+            className="customer-mgmt-history"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-mgmt-history-title"
+          >
             <div className="customer-mgmt-history-header">
               <div>
                 <h2 id="customer-mgmt-history-title" className="customer-mgmt-history-title">
@@ -757,7 +749,6 @@ export default function CustomerManagementScreen() {
                 <p className="customer-mgmt-history-subtitle">{historyTarget.name}</p>
               </div>
               <button
-                ref={historyCloseBtnRef}
                 type="button"
                 className="customer-mgmt-action-btn customer-mgmt-history-close"
                 onClick={closeHistory}

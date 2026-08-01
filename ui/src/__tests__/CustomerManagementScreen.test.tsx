@@ -562,8 +562,9 @@ describe('CustomerManagementScreen', () => {
       expect(screen.getByText('Customer history')).toBeInTheDocument();
     });
 
-    // Escape closes the dialog.
-    fireEvent.keyDown(window, { key: 'Escape' });
+    // Escape closes the dialog. The shared useFocusTrap listens on
+    // document (same as SettingsPopup), so fire there.
+    fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => {
       expect(screen.queryByText('Customer history')).not.toBeInTheDocument();
     });

@@ -80,6 +80,5 @@ customer-mgmt-history-sale-total = Total
 customer-mgmt-history-sale-items = Items
 customer-mgmt-history-sale-status = Status
 customer-mgmt-history-no-sales = No sales yet.
-customer-mgmt-history-empty = No history to show yet.
 customer-mgmt-search-results = Showing { $shown } of { $total } customers
 customer-mgmt-search-loading = Searching…

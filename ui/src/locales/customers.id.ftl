@@ -67,7 +67,6 @@ customer-mgmt-history-sale-total = Total
 customer-mgmt-history-sale-items = Item
 customer-mgmt-history-sale-status = Status
 customer-mgmt-history-no-sales = Belum ada penjualan.
-customer-mgmt-history-empty = Belum ada riwayat.
 customer-mgmt-search-results = Menampilkan { $shown } dari { $total } pelanggan
 customer-mgmt-search-loading = Mencari…
 
