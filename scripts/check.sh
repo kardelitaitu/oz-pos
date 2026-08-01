@@ -92,6 +92,9 @@ else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
 fi
 
+# ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────
+step "plugin-guide parity" "python3 scripts/verify-plugin-guide-parity.py" python3 scripts/verify-plugin-guide-parity.py
+
 # ── Docker build smoke test (optional: --docker-dry-run) ──────────────────
 if [ "${1:-}" = "--docker-dry-run" ]; then
     if command -v docker &>/dev/null; then
