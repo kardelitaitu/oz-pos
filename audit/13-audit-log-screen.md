@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** AuditLogScreen — append-only event visibility, filters, pagination, review workflow, authorization, privacy, localization, and tests  
-> **Status:** AUDITED · authorization and compliance-readiness findings require remediation  
-> **Production code changed:** None
+> **Status:** PARTIALLY REMEDIATED · audit-log labels, placeholders, and retry affordance localized post-audit (commit `1bec6777`); authorization, pagination, review-persistence, privacy, and export findings remain open  
+> **Production code changed:** Yes — partial post-audit remediation (see “Post-audit remediation” below)
 
 ## Scope
 
@@ -173,6 +173,11 @@ Results:
 4. **AUD-07 through AUD-09:** Repair locale/action presentation and add permissioned export.
 5. **AUD-10 and AUD-11:** Complete theme-token cleanup and security/compliance test coverage.
 
+## Post-audit remediation (2026-08-01)
+
+- **AUD-08 (partial):** the localized label/retry surface was hardened by the codebase-wide `requiredLocalized` sweep (commit `1bec6777`). `AuditLogScreen` now reads `audit-log-search-label`, `audit-log-filter-label`, `audit-log-table-label`, and the localized `audit-log-retry` label via `l10n.getString`/`Localized` instead of hardcoded English, so the audit table, outcome filter, and Retry control no longer leak source-language copy.
+- AUD-01 through AUD-07 and AUD-09 through AUD-11 remain **Open** (backend authorization/tenant scope, page-set filtering, offset pagination, server-side review checkpoints, request-generation protection, sensitive-detail policy, locale-aware date formatting, export, theming, and the security/compliance test gap).
+
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+This report is evidence-based; post-audit remediation has partially landed (see above). The findings that are not explicitly marked remediated remain **Open** until remediation commits link each item to tests and validation results.
