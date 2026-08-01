@@ -178,6 +178,22 @@ impl LuaEventBridge {
         });
     }
 
+    /// Remove every callback registered by `owner` for a single event.
+    ///
+    /// Backs the plugin-side `oz.off(event)` so one plugin can only ever
+    /// unsubscribe its own callbacks, never another plugin's (PLG-04).
+    pub fn off_for(&mut self, owner: &str, event: &str) {
+        if owner.is_empty() {
+            return;
+        }
+        if let Some(entries) = self.callbacks.get_mut(event) {
+            entries.retain(|e| e.owner != owner);
+            if entries.is_empty() {
+                self.callbacks.remove(event);
+            }
+        }
+    }
+
     /// Remove all callbacks for all events.
     pub fn clear(&mut self) {
         self.callbacks.clear();

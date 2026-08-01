@@ -226,8 +226,7 @@ impl Store<'_> {
 
         // Fetch all matching lines in one IN query, then group them back onto
         // their transfers in transfer order.
-        let placeholders = std::iter::repeat("?")
-            .take(transfers.len())
+        let placeholders = std::iter::repeat_n("?", transfers.len())
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(

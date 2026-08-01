@@ -164,7 +164,7 @@ impl OzpkArchive {
                 )));
             }
 
-            let mut file = archive
+            let file = archive
                 .by_index(i)
                 .map_err(|e| PluginError::Archive(e.to_string()))?;
 
