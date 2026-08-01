@@ -239,14 +239,23 @@ fn map_products_to_dtos(
     store: &Store<'_>,
     products: Vec<oz_core::db::ProductWithDetails>,
 ) -> Result<Vec<ProductDto>, AppError> {
+    // PROD-12: batch-load tax assignments in ONE query instead of one
+    // `get_product_tax_rates` call per product (N+1 catalog-load pattern).
+    let skus: Vec<String> = products
+        .iter()
+        .map(|pwd| pwd.product.sku.to_string())
+        .collect();
+    let tax_rates_by_sku = store.get_product_tax_rates_batch(&skus)?;
     let dtos: Vec<ProductDto> = products
         .into_iter()
         .map(|pwd| {
             let cur_str = std::str::from_utf8(&pwd.product.price.currency.0)
                 .unwrap_or("USD")
                 .to_owned();
+            let sku = pwd.product.sku.to_string();
+            let tax_rate_ids = tax_rates_by_sku.get(&sku).cloned().unwrap_or_default();
             ProductDto {
-                sku: pwd.product.sku.to_string(),
+                sku,
                 name: pwd.product.name,
                 category: pwd.category_name,
                 price: MoneyDto {
@@ -259,9 +268,7 @@ fn map_products_to_dtos(
                 created_at: pwd.product.created_at,
                 price_updated_at: pwd.product.price_updated_at,
                 product_type: pwd.product.product_type.as_str().to_owned(),
-                tax_rate_ids: store
-                    .get_product_tax_rates(pwd.product.sku.as_str())
-                    .unwrap_or_default(),
+                tax_rate_ids,
             }
         })
         .collect();

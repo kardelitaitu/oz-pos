@@ -330,6 +330,44 @@ impl Store<'_> {
         Ok(ids)
     }
 
+    /// Get tax rate IDs for many products in one query (PROD-12).
+    ///
+    /// Returns a map of `product_sku -> [tax_rate_id, ...]` ordered by
+    /// `created_at`. This replaces the per-product `get_product_tax_rates`
+    /// loop in list endpoints, removing the N+1 database pattern for
+    /// catalog loads. Products with no assignments are absent from the map.
+    ///
+    /// Bounds: the `IN (...)` clause binds one parameter per SKU, so very
+    /// large catalogs are capped by SQLite's `SQLITE_MAX_VARIABLE_NUMBER`
+    /// (999 in common builds). Callers with larger catalogs should chunk
+    /// the SKU list; the current list endpoint stays well under this limit.
+    pub fn get_product_tax_rates_batch(
+        &self,
+        skus: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<String>>, CoreError> {
+        use std::collections::HashMap;
+
+        let mut map: HashMap<String, Vec<String>> = HashMap::new();
+        if skus.is_empty() {
+            return Ok(map);
+        }
+        let placeholders: Vec<String> = (1..=skus.len()).map(|i| format!("?{i}")).collect();
+        let sql = format!(
+            "SELECT product_sku, tax_rate_id FROM product_taxes \
+             WHERE product_sku IN ({}) ORDER BY created_at",
+            placeholders.join(", ")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(skus.iter()), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (sku, rate_id) = row?;
+            map.entry(sku).or_default().push(rate_id);
+        }
+        Ok(map)
+    }
+
     /// Assign tax rates to a category.
     ///
     /// TAX-03: every id must resolve to an active rate — archived or
@@ -645,6 +683,41 @@ mod tests {
         let s = store(&conn);
         let ids = s.get_product_tax_rates("NO-SKU").unwrap();
         assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn get_product_tax_rates_batch_returns_all_skus() {
+        let conn = fresh();
+        let s = store(&conn);
+        let currency = Currency::from_str("USD").unwrap();
+        let money = crate::Money {
+            minor_units: 1000,
+            currency,
+        };
+        let r1 = s.create_tax_rate("GST", 1000, true, false).unwrap();
+        let r2 = s.create_tax_rate("State", 500, false, false).unwrap();
+        s.create_product("A", "Product A", money, None, None, 0, None)
+            .unwrap();
+        s.create_product("B", "Product B", money, None, None, 0, None)
+            .unwrap();
+        s.set_product_tax_rates("A", &[r1.id.clone(), r2.id.clone()])
+            .unwrap();
+        s.set_product_tax_rates("B", &[r1.id.clone()]).unwrap();
+
+        let map = s
+            .get_product_tax_rates_batch(&["A".into(), "B".into(), "NOPE".into()])
+            .unwrap();
+        assert_eq!(map.get("A").map(|v| v.len()), Some(2));
+        assert_eq!(map.get("B").map(|v| v.len()), Some(1));
+        assert!(!map.contains_key("NOPE"));
+    }
+
+    #[test]
+    fn get_product_tax_rates_batch_empty_skus() {
+        let conn = fresh();
+        let s = store(&conn);
+        let map = s.get_product_tax_rates_batch(&[]).unwrap();
+        assert!(map.is_empty());
     }
 
     #[test]
