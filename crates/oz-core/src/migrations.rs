@@ -618,6 +618,14 @@ pub const ALL: &[Migration] = &[
         id: "111_login_attempts_device.sql",
         sql: include_str!("../migrations/111_login_attempts_device.sql"),
     },
+    // ── 112: Store-local transfer actor FK removal (audit/07 INV-03) ─
+    // Transfer actor IDs are derived from the global session identity.
+    // Remove the obsolete local users foreign keys so a store database
+    // never needs fake authentication rows for a legitimate actor.
+    Migration {
+        id: "112_stock_transfer_actor_ids.sql",
+        sql: include_str!("../migrations/112_stock_transfer_actor_ids.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

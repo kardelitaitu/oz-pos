@@ -4,6 +4,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
 import './TransitAuditScreen.css';
 
@@ -20,16 +21,18 @@ export default function TransitAuditScreen() {
   const [reverseConfirmId, setReverseConfirmId] = useState<string | null>(null);
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
 
   const loadTransfers = useCallback(async () => {
     setLoading(true);
     try {
-      const allTransfers = await listStockTransfers();
+      const allTransfers = await listStockTransfers(sessionToken);
       const inTransit = allTransfers.filter(t => t.status === 'in_transit');
       
       const enriched = await Promise.all(
         inTransit.map(async (transfer) => {
-          const lines = await getStockTransferLines(transfer.id);
+          const lines = await getStockTransferLines(sessionToken, transfer.id);
           return { transfer, lines };
         })
       );
@@ -39,7 +42,7 @@ export default function TransitAuditScreen() {
     } finally {
       setLoading(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast, l10n, sessionToken]);
 
   useEffect(() => {
     loadTransfers();
@@ -52,7 +55,7 @@ export default function TransitAuditScreen() {
   const handleReverseConfirm = async () => {
     if (!reverseConfirmId) return;
     try {
-      await cancelStockTransfer(reverseConfirmId);
+      await cancelStockTransfer(sessionToken, reverseConfirmId);
       setReverseConfirmId(null);
       await loadTransfers();
       addToast({ message: requiredLocalized(l10n, 'inv-transit-reversed-toast'), type: 'success' });

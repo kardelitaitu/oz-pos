@@ -40,68 +40,92 @@ export interface ReceivedLineInput {
   received_qty: number;
 }
 
-/** Create a new stock transfer between locations or terminals. */
+/** Create a stock transfer in the session-scoped store. */
 export const createStockTransfer = (
+  sessionToken: string,
   sourceLocation: string | null,
   destinationLocation: string | null,
   sourceTerminalId: string | null,
   destinationTerminalId: string | null,
   notes: string,
-  createdBy: string,
   lines: StockTransferLine[],
 ): Promise<StockTransfer> =>
-  loggedInvoke<StockTransfer>('create_stock_transfer', {
+  loggedInvoke<StockTransfer>('create_stock_transfer_scoped', {
+    sessionToken,
     sourceLocation,
     destinationLocation,
     sourceTerminalId,
     destinationTerminalId,
     notes,
-    createdBy,
     lines,
   });
 
-/** Get a single stock transfer by its identifier. */
-export const getStockTransfer = (id: string): Promise<TransferWithLines | null> =>
-  loggedInvoke<TransferWithLines | null>('get_stock_transfer', { id });
+/** Get a stock transfer from the session-scoped store. */
+export const getStockTransfer = (
+  sessionToken: string,
+  id: string,
+): Promise<TransferWithLines | null> =>
+  loggedInvoke<TransferWithLines | null>('get_stock_transfer_scoped', { sessionToken, id });
 
-/** List all stock transfers. */
-export const listStockTransfers = (): Promise<StockTransfer[]> =>
-  loggedInvoke<StockTransfer[]>('list_stock_transfers');
+/** List stock transfers from the session-scoped store. */
+export const listStockTransfers = (sessionToken: string): Promise<StockTransfer[]> =>
+  loggedInvoke<StockTransfer[]>('list_stock_transfers_scoped', { sessionToken });
 
-/** Get all line items for a stock transfer. */
-export const getStockTransferLines = (transferId: string): Promise<StockTransferLine[]> =>
-  loggedInvoke<StockTransferLine[]>('get_stock_transfer_lines', { transferId });
+/** Get all line items for a transfer in the session-scoped store. */
+export const getStockTransferLines = (
+  sessionToken: string,
+  transferId: string,
+): Promise<StockTransferLine[]> =>
+  loggedInvoke<StockTransferLine[]>('get_stock_transfer_lines_scoped', {
+    sessionToken,
+    transferId,
+  });
 
-/** Add a line item to a stock transfer. */
+/** Add a line item to a draft transfer in the session-scoped store. */
 export const addStockTransferLine = (
+  sessionToken: string,
   transferId: string,
   sku: string,
   productName: string,
   qty: number,
 ): Promise<StockTransferLine> =>
-  loggedInvoke<StockTransferLine>('add_stock_transfer_line', {
+  loggedInvoke<StockTransferLine>('add_stock_transfer_line_scoped', {
+    sessionToken,
     transferId,
     sku,
     productName,
     qty,
   });
 
-/** Remove a line item from a stock transfer. */
-export const removeStockTransferLine = (lineId: string): Promise<void> =>
-  loggedInvoke<void>('remove_stock_transfer_line', { lineId });
+/** Remove a line item from a draft transfer in the session-scoped store. */
+export const removeStockTransferLine = (
+  sessionToken: string,
+  lineId: string,
+): Promise<void> =>
+  loggedInvoke<void>('remove_stock_transfer_line_scoped', { sessionToken, lineId });
 
-/** Mark a stock transfer as sent (dispatched from source). */
-export const sendStockTransfer = (id: string): Promise<StockTransfer> =>
-  loggedInvoke<StockTransfer>('send_stock_transfer', { id });
-
-/** Mark a stock transfer as received, updating quantities for each line. */
-export const receiveStockTransfer = (
+/** Mark a transfer as sent in the session-scoped store. */
+export const sendStockTransfer = (
+  sessionToken: string,
   id: string,
-  receivedBy: string,
+): Promise<StockTransfer> =>
+  loggedInvoke<StockTransfer>('send_stock_transfer_scoped', { sessionToken, id });
+
+/** Mark a transfer as received; the backend derives received_by from the session. */
+export const receiveStockTransfer = (
+  sessionToken: string,
+  id: string,
   receivedLines: ReceivedLineInput[],
 ): Promise<StockTransfer> =>
-  loggedInvoke<StockTransfer>('receive_stock_transfer', { id, receivedBy, receivedLines });
+  loggedInvoke<StockTransfer>('receive_stock_transfer_scoped', {
+    sessionToken,
+    id,
+    receivedLines,
+  });
 
-/** Cancel a stock transfer. */
-export const cancelStockTransfer = (id: string): Promise<StockTransfer> =>
-  loggedInvoke<StockTransfer>('cancel_stock_transfer', { id });
+/** Cancel a transfer in the session-scoped store. */
+export const cancelStockTransfer = (
+  sessionToken: string,
+  id: string,
+): Promise<StockTransfer> =>
+  loggedInvoke<StockTransfer>('cancel_stock_transfer_scoped', { sessionToken, id });

@@ -901,15 +901,15 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // STOCK TRANSFERS
   // ═══════════════════════════════════════════════════════════════
 
-  'create_stock_transfer': () => null,
-  'get_stock_transfer': () => null,
-  'list_stock_transfers': () => [],
-  'get_stock_transfer_lines': () => [],
-  'add_stock_transfer_line': () => null,
-  'remove_stock_transfer_line': () => null,
-  'send_stock_transfer': () => null,
-  'receive_stock_transfer': () => null,
-  'cancel_stock_transfer': () => null,
+  'create_stock_transfer_scoped': () => null,
+  'get_stock_transfer_scoped': () => null,
+  'list_stock_transfers_scoped': () => [],
+  'get_stock_transfer_lines_scoped': () => [],
+  'add_stock_transfer_line_scoped': () => null,
+  'remove_stock_transfer_line_scoped': () => null,
+  'send_stock_transfer_scoped': () => null,
+  'receive_stock_transfer_scoped': () => null,
+  'cancel_stock_transfer_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // KDS

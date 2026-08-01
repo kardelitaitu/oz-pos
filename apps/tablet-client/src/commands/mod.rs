@@ -61,6 +61,8 @@ pub mod settings;
 pub mod setup;
 /// Staff / employee commands.
 pub mod staff;
+/// Stock transfer commands.
+pub mod stock_transfers;
 /// Sync commands.
 pub mod sync;
 /// Table management commands.

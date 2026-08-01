@@ -348,7 +348,7 @@ describe('StockTransfersScreen', () => {
     await user.click(screen.getByRole('button', { name: /send transfer/i }));
 
     await waitFor(() => {
-      expect(mockSendTransfer).toHaveBeenCalledWith('st-1');
+      expect(mockSendTransfer).toHaveBeenCalledWith('mock-session-token', 'st-1');
     });
   });
 
@@ -365,7 +365,7 @@ describe('StockTransfersScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => {
-      expect(mockCancelTransfer).toHaveBeenCalledWith('st-1');
+      expect(mockCancelTransfer).toHaveBeenCalledWith('mock-session-token', 'st-1');
     });
   });
 });

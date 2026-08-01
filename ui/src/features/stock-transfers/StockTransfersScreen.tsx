@@ -14,7 +14,6 @@ import {
 import { listProductsScoped, type ProductDto } from '@/api/products';
 import { listTerminalsScoped, type TerminalDto } from '@/api/terminals';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { Card } from '@/components/Card';
@@ -44,7 +43,6 @@ interface LineFormEntry {
 /** Stock transfers screen — create, send, receive, and cancel stock transfers between store locations or terminals. */
 export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
-  const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
@@ -93,7 +91,7 @@ export default function StockTransfersScreen() {
     setError(null);
     try {
       const [data, prodData, termData] = await Promise.all([
-        listStockTransfers(),
+        listStockTransfers(sessionToken),
         listProductsScoped(sessionToken).catch(() => []),
         listTerminalsScoped(sessionToken).catch(() => []),
       ]);
@@ -113,14 +111,14 @@ export default function StockTransfersScreen() {
     setDetailId(id);
     setDetailLoading(true);
     try {
-      const data = await getStockTransfer(id);
+      const data = await getStockTransfer(sessionToken, id);
       if (data) setDetail(data);
     } catch {
       setError(l10n.getString('stock-transfers-error-load'));
     } finally {
       setDetailLoading(false);
     }
-  }, [l10n]);
+  }, [l10n, sessionToken]);
 
   const closeDetail = useCallback(() => {
     detailExit.requestClose();
@@ -129,13 +127,13 @@ export default function StockTransfersScreen() {
   const openSend = useCallback(async () => {
     if (!detailId) return;
     try {
-      await sendStockTransfer(detailId);
+      await sendStockTransfer(sessionToken, detailId);
       await load();
       if (detailId) openDetail(detailId);
     } catch {
       setError(l10n.getString('stock-transfers-error-send'));
     }
-  }, [detailId, load, openDetail, l10n]);
+  }, [detailId, load, openDetail, l10n, sessionToken]);
 
   const openReceiveModal = useCallback(() => {
     if (!detailId || !detail) return;
@@ -150,7 +148,7 @@ export default function StockTransfersScreen() {
   }, [receiveExit]);
 
   const handleReceive = useCallback(async () => {
-    if (!receiveTransferId || !session?.user_id) return;
+    if (!receiveTransferId || !sessionToken) return;
     setReceiveSaving(true);
     try {
       const receivedLines: ReceivedLineInput[] = Object.entries(receiveLines).map(
@@ -159,7 +157,7 @@ export default function StockTransfersScreen() {
           received_qty: parseInt(qtyStr, 10) || 0,
         }),
       );
-      await receiveStockTransfer(receiveTransferId, session.user_id, receivedLines);
+      await receiveStockTransfer(sessionToken, receiveTransferId, receivedLines);
       setReceiveTransferId(null);
       await load();
       if (detailId) openDetail(detailId);
@@ -168,12 +166,12 @@ export default function StockTransfersScreen() {
     } finally {
       setReceiveSaving(false);
     }
-  }, [receiveTransferId, receiveLines, session, detailId, load, openDetail, l10n]);
+  }, [receiveTransferId, receiveLines, sessionToken, detailId, load, openDetail, l10n]);
 
   const handleCancel = useCallback(async (id: string) => {
     setCancelling(id);
     try {
-      await cancelStockTransfer(id);
+      await cancelStockTransfer(sessionToken, id);
       await load();
       if (detailId === id) closeDetail();
     } catch {
@@ -181,7 +179,7 @@ export default function StockTransfersScreen() {
     } finally {
       setCancelling(null);
     }
-  }, [load, detailId, closeDetail, l10n]);
+  }, [load, detailId, closeDetail, l10n, sessionToken]);
 
   const addLineEntry = useCallback(() => {
     setCreateLines([...createLines, { sku: '', productName: '', qty: '1' }]);
@@ -212,7 +210,7 @@ export default function StockTransfersScreen() {
   }, []);
 
   const handleCreate = useCallback(async () => {
-    if (!session?.user_id) return;
+    if (!sessionToken) return;
     setCreateSaving(true);
     setCreateError(null);
     try {
@@ -232,12 +230,12 @@ export default function StockTransfersScreen() {
         return;
       }
       await createStockTransfer(
+        sessionToken,
         createSourceLoc || null,
         createDestLoc || null,
         createSourceTerminalId || null,
         createDestTerminalId || null,
         createNotes,
-        session.user_id,
         lines,
       );
       setShowCreate(false);
@@ -248,7 +246,7 @@ export default function StockTransfersScreen() {
     } finally {
       setCreateSaving(false);
     }
-  }, [session, createLines, createSourceLoc, createDestLoc, createSourceTerminalId, createDestTerminalId, createNotes, l10n, load, resetCreateForm]);
+  }, [sessionToken, createLines, createSourceLoc, createDestLoc, createSourceTerminalId, createDestTerminalId, createNotes, l10n, load, resetCreateForm]);
 
 
   const openCreate = useCallback(() => {
