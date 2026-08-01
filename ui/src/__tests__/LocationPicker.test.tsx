@@ -260,9 +260,11 @@ describe('LocationPicker', () => {
 
     // The error message (loc-picker-error-load = "Failed to load locations")
     // must render persistently instead of silently returning null.
+    // Timeout 10s (was 5s): flaked once under parallel-worker load during the
+    // full 8-file inventory sweep — the alert render raced the 5s budget.
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-    }, { timeout: 5000 });
+    }, { timeout: 10000 });
     expect(screen.getByText('Failed to load locations')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
@@ -277,13 +279,13 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-    }, { timeout: 5000 });
+    }, { timeout: 10000 });
 
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /select inventory location/i })).toBeInTheDocument();
-    }, { timeout: 5000 });
+    }, { timeout: 10000 });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
