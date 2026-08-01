@@ -483,7 +483,6 @@ export default function CategoryManagementScreen() {
                     className="cat-mgmt-delete-btn"
                     onClick={() => setDeleteTarget({ id: cat.id, name: cat.name })}
                     disabled={deleting === cat.id}
-                    aria-label={`Delete category ${cat.name}`}
                   >
                     &times;
                   </button>
@@ -535,22 +534,19 @@ export default function CategoryManagementScreen() {
             </Localized>
           </label>
           <Localized id="categories-name-placeholder" attrs={{ placeholder: true }}>
-            <Localized id="categories-name-aria" attrs={{ 'aria-label': true }}>
-              <input
-                className="cat-mgmt-input"
-                type="text"
-                id="cat-new-name"
-                name="cat-new-name"
-                placeholder="e.g. Bakery, Merchandise"
-                value={newName}
-                onChange={(e) => {
-                  setNewName(e.target.value);
-                  if (e.target.value.trim()) setNameTouched(true);
-                }}
-                ref={inputRef}
-                aria-label="Category Name"
-              />
-            </Localized>
+            <input
+              className="cat-mgmt-input"
+              type="text"
+              id="cat-new-name"
+              name="cat-new-name"
+              value={newName}
+              onChange={(e) => {
+                setNewName(e.target.value);
+                if (e.target.value.trim()) setNameTouched(true);
+              }}
+              ref={inputRef}
+              aria-label={requiredLocalized(l10n, 'categories-name-aria')}
+            />
           </Localized>
           {nameTouched && !newName.trim() && (
             <span className="cat-mgmt-field-error" role="alert">
@@ -603,7 +599,7 @@ export default function CategoryManagementScreen() {
           <Localized id="categories-colour">
             <span className="cat-mgmt-label">Colour</span>
           </Localized>
-          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('category-colour-picker-aria')}>
+          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('categories-colour-picker-aria')}>
               {COLOURS.map((colour) => (
                 <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
                   <button
@@ -617,7 +613,6 @@ export default function CategoryManagementScreen() {
                     }
                     style={{ background: colour }}
                     onClick={() => setNewColour(colour)}
-                    aria-label={`Select colour ${colour}`}
                   />
                 </Localized>
               ))}
@@ -723,18 +718,17 @@ export default function CategoryManagementScreen() {
             {COLOURS.map((colour) => (
               <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
                 <button
-                  type="button"
-                  role="radio"
-                  aria-checked={editColour === colour}
-                  className={
-                    editColour === colour
-                      ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
-                      : 'cat-mgmt-colour-swatch'
-                  }
-                  style={{ background: colour }}
-                  onClick={() => setEditColour(colour)}
-                  aria-label={`Select colour ${colour}`}
-                />
+                    type="button"
+                    role="radio"
+                    aria-checked={editColour === colour}
+                    className={
+                      editColour === colour
+                        ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
+                        : 'cat-mgmt-colour-swatch'
+                    }
+                    style={{ background: colour }}
+                    onClick={() => setEditColour(colour)}
+                  />
               </Localized>
             ))}
           </div>
