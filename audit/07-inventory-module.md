@@ -2,7 +2,7 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** Inventory module — locations, stock adjustments, stock counts, transfers, shifts, thresholds, alerts, and transaction history  
-> **Status:** ✅ **FULLY REMEDIATED** — all 11 findings closed (commits `a2c70848`, `45d65511`, `5be6de69`)
+> **Status:** ✅ **FULLY REMEDIATED** — all 11 findings closed (commits `a2c70848`, `45d65511`, `5be6de69`, `3bbd44e9`, `3caddf6e`, `eb0a5abb`)
 > **Production code changed:** Yes — session-scoped stock-transfer and stock-count commands, store isolation, server-side actor derivation, transfer cancellation reversal, count-number concurrency hardening, batch transit API, and migrations 112/113
 
 ## Scope
