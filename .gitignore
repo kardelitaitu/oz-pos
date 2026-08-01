@@ -11,6 +11,11 @@
 # src-tauri/) so the lockfile is committed for reproducible builds.
 # Do NOT add a per-crate `Cargo.lock` line — they don't exist and the
 # pattern would never match.
+# Exception: the fuzz/ crate is a standalone cargo-fuzz workspace (its own
+# `[workspace]` table + nightly toolchain pin), so it builds its own
+# target/ and Cargo.lock locally; both are dev-only artifacts.
+/fuzz/target/
+/fuzz/Cargo.lock
 
 # Local state
 *.db

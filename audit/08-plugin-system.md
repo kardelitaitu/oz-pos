@@ -144,21 +144,34 @@ All 11 findings (PLG-01 → PLG-11) are remediated. Production code changed acro
 | PLG-03 · PLG-04 | Per-plugin capability-gated `oz` table; isolated `_ENV` per plugin with `_G` hardening; deterministic id-sorted loading; duplicate-id rejection; owner-scoped `oz.on`/`oz.off` | `95da123e` |
 | PLG-08 | Manifest schema validation: unknown permissions rejected with actionable diagnostics (no longer silently dropped), kebab-case plugin IDs, strict SemVer, hook-name shape; loader fails loudly on schema violations | `47f63d52` |
 | PLG-10 | `docs/plugin-guide.md` rewritten to the implemented API surface | `06f7ff34` |
-| PLG-11 | Boundary/integration tests incl. hot-reload last-known-good rollback + successful-reload replacement in `AppState`; per-permission denial and cross-plugin isolation tests added in earlier phases | final batch (`state.rs`) |
+| PLG-11 | Boundary/integration tests incl. hot-reload last-known-good rollback + successful-reload replacement in `AppState`; per-permission denial and cross-plugin isolation tests added in earlier phases; fuzz targets added for the hardened parsers | final batch (`state.rs`), `cb6d181c` |
 | PLG-07 | Product-completion decision: lifecycle **UI** (install/disable/rollback surface) is deferred as a product feature, not a security gap — the runtime-side rollback (keep-old-on-failed-reload) is implemented and now integration-tested | — |
 | PLG-09 | Product-completion decision: plugin **persistence/packaging** (`.ozpkg` install pipeline, `PluginDb` exposure) is out of scope for 0.0.24; the archive helpers are hardened and the guide marks `capabilities.drivers` as informational | — |
+
+### Residuals closed (2026-07-31, follow-up batch)
+
+Three review-identified tails were closed after the main remediation:
+
+| Tail | Fix | Commit(s) |
+|------|-----|-----------|
+| PLG-08 residual — silent field typos | `#[serde(deny_unknown_fields)]` on all manifest structs: a typo'd field (`required_permissionss`, `versoin`, `scritps`, `allow_netwrk`) now fails loudly naming the field instead of being silently dropped; 4 regression tests | `4022bc5d` |
+| PLG-10 residual — no automated parity gate | `scripts/verify-plugin-guide-parity.py` (wired into `check.sh`) fails on documented-but-unimplemented bindings/CLI and forbids the phantom `run-script`/`validate-plugins` commands; verified with a deliberately injected fake binding | `7d5d318c` |
+| PLG-11 residual — parsers not fuzzed | `ozpkg_parse` + `manifest_parse` fuzz targets added to the CI fuzz loop; also fixed the pre-existing fuzz-crate workspace/config gap | `cb6d181c` |
 
 ### Decisions recorded
 
 - **PLG-07 (deferred surface):** A role-gated plugin-management UI (permission approval, disable, diagnostics) is a product roadmap item, not a security defect. The underlying safety property — a failed reload never replaces the working runtime — is implemented and tested. `commands/plugins.rs` remains intentionally empty until that surface ships.
 - **PLG-09 (out of scope):** The `.ozpkg` package-install pipeline and Lua-visible `PluginDb` are not wired because no production installer exists yet. The package parser is now resource-safe so a future installer cannot be the vehicle for a zip bomb or path traversal.
 
-## Validation (post-remediation)
+## Validation (post-remediation + residuals)
 
-- `cargo test -p oz-plugin --lib`: **167 passed, 0 failed**
+- `cargo test -p oz-plugin --lib`: **171 passed, 0 failed**
 - `cargo test -p oz-lua --lib`: **61 passed, 0 failed**
 - `cargo test -p oz-pos-app --lib state::tests`: **11 passed, 0 failed** (incl. hot-reload rollback tests)
+- `cargo test -p oz-core --test manifest_schema_test`: **11 passed, 0 failed**
 - `cargo clippy -p oz-plugin -p oz-lua -p oz-pos-app`: clean
+- `scripts/verify-plugin-guide-parity.py`: 0 drift (gate verified with a deliberately injected fake binding)
+- `fuzz` crate: `ozpkg_parse` + `manifest_parse` typecheck clean under `--cfg fuzzing` (full link runs on Linux CI; Windows MSVC lacks the ASan runtime lib)
 
 ## Status
 
