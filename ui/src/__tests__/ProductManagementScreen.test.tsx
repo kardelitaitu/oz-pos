@@ -227,15 +227,74 @@ describe('ProductManagementScreen', () => {
     });
   });
 
-  it('calls deleteProduct on delete button click', async () => {
+  it('requires confirmation before calling deleteProduct (PROD-02)', async () => {
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+
+    // Clicking Delete opens the confirmation dialog but must NOT delete yet.
+    await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('delete_product_scoped', expect.anything());
+
+    // Cancelling closes the dialog without deleting.
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('delete_product_scoped', expect.anything());
+  });
+
+  it('deletes after confirming the dialog', async () => {
     renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitForTable();
     await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
+    await screen.findByRole('dialog');
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('delete_product_scoped', expect.objectContaining({
         args: { sku: 'LATTE' },
       }));
     });
+  });
+
+  it('surfaces a delete failure instead of swallowing it (PROD-03)', async () => {
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === 'list_products' || cmd === 'list_products_scoped') return Promise.resolve(SAMPLE_PRODUCTS);
+      if (cmd === 'delete_product' || cmd === 'delete_product_scoped') {
+        return Promise.reject(new Error('product has sales history'));
+      }
+      if (cmd === 'list_currencies_scoped') return Promise.resolve(SAMPLE_CURRENCIES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      return Promise.resolve([]);
+    }) as unknown as typeof invokeMock);
+
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+    await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
+    await screen.findByRole('dialog');
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/product has sales history/i);
+    });
+  });
+
+  it('shows an error + retry instead of the empty catalog on load failure (PROD-04)', async () => {
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === 'list_products' || cmd === 'list_products_scoped') {
+        return Promise.reject(new Error('database locked'));
+      }
+      return Promise.resolve([]);
+    }) as unknown as typeof invokeMock);
+
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/database locked/i);
+    });
+    // The empty-catalog CTA must NOT be shown for a failed load.
+    expect(screen.queryByText(/add your first product/i)).not.toBeInTheDocument();
   });
 
   it('shows empty state when no products', async () => {

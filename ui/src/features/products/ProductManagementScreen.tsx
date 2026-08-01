@@ -23,6 +23,7 @@ import { getActiveStockAlerts } from '@/api/inventory';
 import LocationPicker from '@/features/inventory/LocationPicker';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { EmptyState, requiredLocalized } from '@/frontend/shared';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { NoProductsIcon } from '@/components/EmptyStateIllustrations';
 import './ProductManagementScreen.css';
 
@@ -76,6 +77,7 @@ export default function ProductManagementScreen() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingSku, setEditingSku] = useState<string | null>(null);
 
@@ -84,6 +86,8 @@ export default function ProductManagementScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteConfirmSku, setDeleteConfirmSku] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
   const [variantProductName, setVariantProductName] = useState<string>('');
 
@@ -117,11 +121,16 @@ export default function ProductManagementScreen() {
   }, [sessionToken, selectedLocationId]);
 
   const { l10n } = useLocalization();
+  // PROD-04: keep l10n in a ref so `load` is not recreated (and the product
+  // list re-fetched) on every locale change — same convention as useProducts.
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const productModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(productModalRef, showModal && modalExit.shouldRender && !modalExit.exiting, modalExit.requestClose);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // TAX-01: tax rates and categories are read from the session store,
       // not the global DB — per-product tax assignment must resolve the same
@@ -132,8 +141,9 @@ export default function ProductManagementScreen() {
       setTaxRates(rates);
       setCategories(cats);
       setCurrencies(currencyList);
-    } catch {
-      // IPC unavailable.
+    } catch (err) {
+      // PROD-04: distinguish a failed load from a genuinely empty catalog.
+      setLoadError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'product-mgmt-error-load'));
     } finally {
       setLoading(false);
     }
@@ -213,16 +223,33 @@ export default function ProductManagementScreen() {
     }
   }, [form, editingSku, load, sessionToken, l10n]);
 
-  const confirmDelete = useCallback(async (sku: string) => {
-    setDeleting(sku);
+  // PROD-02: deletion goes through a confirmation dialog first.
+  const requestDelete = useCallback((sku: string) => {
+    setDeleteError(null);
+    setDeleteConfirmSku(sku);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirmSku(null);
+    setDeleteError(null);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteConfirmSku) return;
+    setDeleting(deleteConfirmSku);
+    setDeleteError(null);
     try {
-      await deleteProductScoped(sessionToken, sku);
-      setDeleting(null);
+      await deleteProductScoped(sessionToken, deleteConfirmSku);
+      setDeleteConfirmSku(null);
       await load();
-    } catch {
+    } catch (err) {
+      // PROD-03: surface the failure instead of swallowing it.
+      setDeleteConfirmSku(null);
+      setDeleteError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'product-mgmt-error-delete'));
+    } finally {
       setDeleting(null);
     }
-  }, [load, sessionToken]);
+  }, [deleteConfirmSku, load, sessionToken]);
 
   return (
     <div className="product-mgmt">
@@ -293,6 +320,19 @@ export default function ProductManagementScreen() {
             </table>
           </div>
         </div>
+      ) : loadError && products.length === 0 ? (
+        <Card shadow="sm">
+          <div className="product-mgmt-empty" role="alert">
+            <EmptyState
+              icon={<NoProductsIcon />}
+              title={requiredLocalized(l10n, 'product-mgmt-error-load')}
+              action={{ label: requiredLocalized(l10n, 'product-mgmt-error-retry'), onClick: () => { void load(); } }}
+            />
+            {loadError && loadError !== requiredLocalized(l10n, 'product-mgmt-error-load') && (
+              <p className="product-mgmt-load-error-detail">{loadError}</p>
+            )}
+          </div>
+        </Card>
       ) : products.length === 0 ? (
         <Card shadow="sm">
           <div className="product-mgmt-empty">
@@ -381,7 +421,7 @@ export default function ProductManagementScreen() {
                       <button
                         type="button"
                         className="product-mgmt-action-btn product-mgmt-action-btn--danger"
-                        onClick={() => confirmDelete(p.sku)}
+                        onClick={() => requestDelete(p.sku)}
                         disabled={deleting === p.sku}
                         aria-label={`Delete ${p.name}`}
                       >
@@ -395,6 +435,12 @@ export default function ProductManagementScreen() {
               ))}
 </tbody>
           </table>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="product-mgmt-delete-error" role="alert">
+          {deleteError}
         </div>
       )}
 
@@ -639,6 +685,20 @@ export default function ProductManagementScreen() {
           onClose={() => setVariantProductSku(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirmSku !== null}
+        onCancel={cancelDelete}
+        onConfirm={() => { void confirmDelete(); }}
+        title={requiredLocalized(l10n, 'product-mgmt-delete-confirm-title')}
+        message={requiredLocalized(l10n, 'product-mgmt-delete-confirm-message', {
+          name: products.find((p) => p.sku === deleteConfirmSku)?.name ?? '',
+          sku: deleteConfirmSku ?? '',
+        })}
+        variant="danger"
+        loading={deleting !== null}
+        confirmLabel={requiredLocalized(l10n, 'product-mgmt-delete-confirm-btn')}
+      />
     </div>
   );
 }

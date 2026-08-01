@@ -96,6 +96,12 @@ product-mgmt-deleting =
         [one] Menghapus…
        *[other] …
     }
+product-mgmt-delete-confirm-title = Hapus produk?
+product-mgmt-delete-confirm-message = Hapus { $name } ({ $sku })? Tindakan ini tidak dapat dibatalkan.
+product-mgmt-delete-confirm-btn = Hapus
+product-mgmt-error-delete = Gagal menghapus produk
+product-mgmt-error-load = Gagal memuat produk
+product-mgmt-error-retry = Coba lagi
 product-mgmt-modal-add-title = Tambah Produk
 product-mgmt-modal-edit-title = Ubah Produk
 product-mgmt-modal-close = Tutup

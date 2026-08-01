@@ -461,6 +461,21 @@
   margin-right: auto;
 }
 
+.product-mgmt-delete-error {
+  margin: var(--space-3) var(--space-5) 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+}
+
+.product-mgmt-load-error-detail {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}
+
 .product-mgmt-modal-actions {
   display: flex;
   justify-content: flex-end;

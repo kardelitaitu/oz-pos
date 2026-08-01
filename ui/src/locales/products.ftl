@@ -87,6 +87,12 @@ product-mgmt-deleting =
         [one] Deleting…
        *[other] …
     }
+product-mgmt-delete-confirm-title = Delete product?
+product-mgmt-delete-confirm-message = Delete { $name } ({ $sku })? This cannot be undone.
+product-mgmt-delete-confirm-btn = Delete
+product-mgmt-error-delete = Failed to delete product
+product-mgmt-error-load = Failed to load products
+product-mgmt-error-retry = Retry
 product-mgmt-modal-add-title = Add Product
 product-mgmt-modal-edit-title = Edit Product
 product-mgmt-modal-close = Close
