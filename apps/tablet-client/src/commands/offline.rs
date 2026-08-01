@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
+use oz_core::sync_client::{self, SyncConfig};
 use oz_core::{OfflineQueueItem, Store};
 
 use foundation::validate_not_empty;
@@ -134,40 +135,63 @@ pub async fn pending_offline_count(state: State<'_, AppState>) -> Result<i64, Ap
     Ok(count)
 }
 
-/// Attempt to sync all pending offline items.
+/// Attempt to sync all pending offline items through the real cloud sync
+/// pipeline.
 ///
-/// For each pending item, tries to process the action. Currently marks
-/// items as synced as a placeholder — real sync logic will be added later.
+/// SYNC-04: this is NOT a placeholder — it delegates to the same
+/// authenticated push flow as `sync_run`: read pending items + config,
+/// POST the batch to the cloud server, then mark each item `synced` or
+/// `failed` only according to the server's per-item outcome.
+///
+/// Uses a three-phase split (read → async HTTP → write) so the DB lock
+/// is not held during the network round-trip, mirroring `sync_run`.
 #[command]
 pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let pending = store.list_pending_offline()?;
-    let total_count = pending.len() as i64;
-    let mut synced_count: i64 = 0;
-    let mut failed_count: i64 = 0;
+    // Phase 1: Read pending items and config from DB (brief lock).
+    let (pending_items, config_opt) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let pending = store.list_pending_offline()?;
+        let config = SyncConfig::from_settings(&store)?;
+        (pending, config)
+    };
 
-    for item in &pending {
-        // Placeholder: attempt to process each item.
-        // Real implementation will dispatch based on item.action.
-        match store.mark_offline_synced(&item.id) {
-            Ok(()) => {
-                synced_count += 1;
-                tracing::info!(id = %item.id, action = %item.action, "offline item synced");
-            }
-            Err(e) => {
-                failed_count += 1;
-                let err_msg = format!("sync failed: {e}");
-                let _ = store.mark_offline_failed(&item.id, &err_msg);
-                tracing::error!(id = %item.id, action = %item.action, error = %e, "offline item sync failed");
-            }
+    let total_count = pending_items.len() as i64;
+    let config = match config_opt {
+        Some(c) => c,
+        None => {
+            // SYNC-04: never fabricate a successful retry when sync is
+            // unconfigured — surface the error so the UI catch handler
+            // shows the honest failure and the items stay pending.
+            return Err(AppError::Invalid(
+                "Sync is not configured or disabled — items remain pending".into(),
+            ));
         }
+    };
+
+    if pending_items.is_empty() {
+        return Ok(SyncResult {
+            synced_count: 0,
+            failed_count: 0,
+            total_count: 0,
+        });
     }
 
+    // Phase 2: Async HTTP push (no DB lock held).
+    let outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+
+    // Phase 3: Write outcomes back to DB (brief lock).
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let attempt = match outcomes {
+        Ok(outcomes) => sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?,
+        Err(e) => sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?,
+    };
     drop(db);
+
     Ok(SyncResult {
-        synced_count,
-        failed_count,
+        synced_count: attempt.synced as i64,
+        failed_count: attempt.failed as i64,
         total_count,
     })
 }

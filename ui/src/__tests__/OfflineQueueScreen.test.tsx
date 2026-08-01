@@ -214,7 +214,7 @@ describe('OfflineQueueScreen', () => {
   it('shows sync result after Sync All succeeds', async () => {
     mockListAllOffline.mockResolvedValue([makeQueueItem()]);
     mockPendingOfflineCount.mockResolvedValue(1);
-    mockRetryOfflineSync.mockResolvedValue({ synced: 1, failed: 0 });
+    mockRetryOfflineSync.mockResolvedValue({ syncedCount: 1, failedCount: 0, totalCount: 1 });
 
     renderScreen();
 

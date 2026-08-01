@@ -935,6 +935,132 @@ mod tests {
         assert_eq!(config.api_key, Some("sk-test-key".into()));
     }
 
+    // ── SYNC-04: per-outcome application contract ───────────────
+    //
+    // `retry_offline_sync` and `sync_run` both delegate here. These tests
+    // pin that an item is marked synced ONLY on an accepted outcome, and
+    // marked failed (never falsely synced) on rejection or conflict.
+
+    #[test]
+    fn apply_sync_outcomes_accepted_marks_synced() {
+        let store = setup();
+        let items = [
+            store
+                .enqueue_offline("complete_sale", r#"{"id":1}"#)
+                .unwrap(),
+            store.enqueue_offline("void_sale", r#"{"id":2}"#).unwrap(),
+        ];
+
+        let outcomes = vec![PushOutcome::Accepted, PushOutcome::Accepted];
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 2);
+        assert_eq!(result.failed, 0);
+        assert!(result.error.is_none());
+
+        let all = store.list_all_offline().unwrap();
+        assert!(
+            all.iter()
+                .all(|i| i.status == crate::offline::OfflineQueueStatus::Synced)
+        );
+    }
+
+    #[test]
+    fn apply_sync_outcomes_rejected_marks_failed() {
+        let store = setup();
+        let items = [store
+            .enqueue_offline("complete_sale", r#"{"id":1}"#)
+            .unwrap()];
+
+        let outcomes = vec![PushOutcome::Rejected {
+            reason: "invalid action".into(),
+        }];
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 1);
+        assert_eq!(result.error.as_deref(), Some("invalid action"));
+
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+        assert_eq!(all[0].last_error.as_deref(), Some("invalid action"));
+    }
+
+    #[test]
+    fn apply_sync_outcomes_conflict_marks_failed_never_synced() {
+        let store = setup();
+        let local = store
+            .enqueue_offline("complete_sale", r#"{"id":1}"#)
+            .unwrap();
+        let items = [local.clone()];
+
+        // A conflict outcome carries the server's copy of the item.
+        let server_item = OfflineQueueItem {
+            id: local.id.clone(),
+            action: local.action.clone(),
+            payload: r#"{"id":1,"remote":true}"#.into(),
+            status: local.status,
+            retry_count: local.retry_count,
+            last_error: None,
+            tenant_id: local.tenant_id.clone(),
+            created_at: local.created_at.clone(),
+            synced_at: None,
+            priority: local.priority,
+        };
+        let outcomes = vec![PushOutcome::Conflict(server_item)];
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 1);
+
+        // The local item must be marked failed — never silently synced.
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+        assert!(
+            all[0]
+                .last_error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("conflict"),
+            "conflict failure message must explain the conflict"
+        );
+    }
+
+    #[test]
+    fn apply_sync_outcomes_truncates_on_outcome_len_mismatch() {
+        // Documented behaviour: if the server returns fewer outcomes than
+        // pending items, `zip` silently truncates. The unpaired items are
+        // neither marked synced nor failed (they stay pending) — the
+        // retry caller must re-list them next cycle. This pins the
+        // current contract so a future refactor can't silently mark them
+        // synced without an outcome.
+        let store = setup();
+        let items = [
+            store
+                .enqueue_offline("complete_sale", r#"{"id":1}"#)
+                .unwrap(),
+            store
+                .enqueue_offline("complete_sale", r#"{"id":2}"#)
+                .unwrap(),
+        ];
+        let outcomes = vec![PushOutcome::Accepted]; // one outcome for two items
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 1);
+        assert_eq!(result.failed, 0);
+
+        let all = store.list_all_offline().unwrap();
+        // One synced, one still pending — never falsely synced.
+        assert_eq!(
+            all.iter()
+                .filter(|i| i.status == crate::offline::OfflineQueueStatus::Synced)
+                .count(),
+            1
+        );
+        assert_eq!(
+            all.iter()
+                .filter(|i| i.status == crate::offline::OfflineQueueStatus::Pending)
+                .count(),
+            1
+        );
+    }
+
     #[test]
     fn sync_attempt_result_debug() {
         let result = SyncAttemptResult {

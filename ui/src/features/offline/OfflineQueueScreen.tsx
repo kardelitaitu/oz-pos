@@ -187,10 +187,10 @@ export default function OfflineQueueScreen() {
         <div className="offline-queue-sync-result" role="status">
           <Localized
             id="offline-queue-sync-success"
-            vars={{ synced: String(syncResult.synced), failed: String(syncResult.failed) }}
+            vars={{ synced: String(syncResult.syncedCount), failed: String(syncResult.failedCount) }}
           >
             <span>
-              Synced {syncResult.synced} items, {syncResult.failed} failed.
+              Synced {syncResult.syncedCount} items, {syncResult.failedCount} failed.
             </span>
           </Localized>
         </div>

@@ -7,7 +7,7 @@
 //
 // ADR #22 Phase 1 testing gate (§9).
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LocalizationProvider } from '@fluent/react';
 import type { ReactNode, ReactElement } from 'react';
@@ -164,6 +164,11 @@ function renderSection(overrides: Record<string, unknown> = {}) {
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('SyncSection', () => {
+  // The pull-button tests stub window.confirm; always restore the spy so a
+  // failed waitFor in one test cannot leak the stub into later tests.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it('shows not-configured hint when sync is not set up', () => {
     renderSection();
     // Text is rendered via <Localized> which wraps in a <span>
@@ -429,7 +434,8 @@ describe('SyncSection', () => {
 
   // ── Pull from Server button ──────────────────────────────────
 
-  it('calls syncPull when Pull is clicked', async () => {
+  it('calls syncPull with destructive consent when Pull is clicked and confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const syncPull = vi.fn().mockResolvedValue({ productsPulled: 5, taxRatesPulled: 0, usersPulled: 0, error: undefined });
     renderSection({
       sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
@@ -438,11 +444,30 @@ describe('SyncSection', () => {
 
     fireEvent.click(screen.getByText('Pull from Server'));
     await waitFor(() => {
-      expect(syncPull).toHaveBeenCalled();
+      // SYNC-03: the confirmation dialog and the IPC payload are one flow.
+      expect(syncPull).toHaveBeenCalledWith({ confirmDestructive: true });
     });
+    confirmSpy.mockRestore();
+  });
+
+  it('does not call syncPull when the user declines the confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const syncPull = vi.fn().mockResolvedValue({ productsPulled: 5, taxRatesPulled: 0, usersPulled: 0, error: undefined });
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPull,
+    });
+
+    fireEvent.click(screen.getByText('Pull from Server'));
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalled();
+    });
+    expect(syncPull).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it('shows success toast on successful pull', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const syncPull = vi.fn().mockResolvedValue({ productsPulled: 5, taxRatesPulled: 1, usersPulled: 0, error: undefined });
     const addToast = vi.fn();
     renderSection({
@@ -455,6 +480,7 @@ describe('SyncSection', () => {
     await waitFor(() => {
       expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
     });
+    confirmSpy.mockRestore();
   });
 
   // ── Request Token button ─────────────────────────────────────

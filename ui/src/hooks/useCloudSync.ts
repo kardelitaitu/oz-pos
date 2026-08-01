@@ -359,7 +359,10 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
     pullingRef.current = true;
     setPulling(true);
     try {
-      const result = await syncPull();
+      // SYNC-03: the caller (SyncSection) shows a confirm dialog before
+      // invoking pullFromServer; the destructive consent travels with the
+      // IPC payload so the backend never pulls without explicit consent.
+      const result = await syncPull({ confirmDestructive: true });
       const total = result.productsPulled + result.taxRatesPulled + result.usersPulled;
       setStatus(result.error ? 'offline' : 'online');
       if (result.error) {

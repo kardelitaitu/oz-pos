@@ -79,7 +79,7 @@ export interface SyncSectionProps {
   refreshPendingCount: () => Promise<void>;
   testSyncConnection: (url?: string) => Promise<PingResult>;
   syncRun: () => Promise<SyncAttemptResult>;
-  syncPull: () => Promise<PullResult>;
+  syncPull: (args: { confirmDestructive: boolean }) => Promise<PullResult>;
   requestSyncToken: (url?: string) => Promise<TokenResult>;
   l10n: ReactLocalization;
   addToast: (opts: { message: string; type: 'success' | 'error' | 'info' }) => void;
@@ -354,10 +354,15 @@ export default function SyncSection({
                 variant="ghost"
                 loading={pulling}
                 onClick={async () => {
+                  // SYNC-03: destructive pull requires explicit consent — the
+                  // confirmation dialog and the IPC payload are one flow.
+                  if (!window.confirm(requiredLocalized(l10n, 'settings-sync-confirm-overwrite'))) {
+                    return;
+                  }
                   setPulling(true);
                   setPullResult(null);
                   try {
-                    const result = await syncPull();
+                    const result = await syncPull({ confirmDestructive: true });
                     setPullResult(result);
                     if (result.error) {
                       addToast({ message: result.error, type: 'error' });

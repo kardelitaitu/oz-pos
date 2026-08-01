@@ -21,10 +21,19 @@ export interface EnqueueOfflineArgs {
   payload: string;
 }
 
-/** Result of a sync attempt. */
+/**
+ * Result of a manual retry of the pending offline queue.
+ *
+ * SYNC-04 / SYNC-11: matches the Rust `SyncResult` DTO exactly
+ * (camelCase `syncedCount` / `failedCount` / `totalCount`).
+ */
 export interface SyncResult {
-  synced: number;
-  failed: number;
+  /** Number of items successfully synced. */
+  syncedCount: number;
+  /** Number of items that failed to sync. */
+  failedCount: number;
+  /** Total number of items that were attempted. */
+  totalCount: number;
 }
 
 /** Summary of offline queue status (P1-6 sync observability). */
@@ -58,7 +67,10 @@ export const listAllOffline = (): Promise<OfflineQueueItemDto[]> =>
 export const pendingOfflineCount = (): Promise<number> =>
   loggedInvoke<number>('pending_offline_count');
 
-/** Retry syncing all pending offline actions. */
+/**
+ * Retry syncing all pending offline actions through the real cloud sync
+ * pipeline (SYNC-04 — no longer a placeholder).
+ */
 export const retryOfflineSync = (): Promise<SyncResult> =>
   loggedInvoke<SyncResult>('retry_offline_sync');
 
@@ -117,9 +129,25 @@ export const syncRun = (): Promise<SyncAttemptResult> =>
 export const pendingSyncCount = (): Promise<number> =>
   loggedInvoke<number>('pending_sync_count');
 
-/** Pull data (products, tax rates, users) from the cloud server. */
-export const syncPull = (): Promise<PullResult> =>
-  loggedInvoke<PullResult>('sync_pull');
+/**
+ * Arguments for a destructive snapshot pull.
+ *
+ * SYNC-03: `confirmDestructive` must be `true` for the backend command
+ * to proceed — it rejects any call without explicit user consent.
+ */
+export interface SyncPullArgs {
+  confirmDestructive: boolean;
+}
+
+/**
+ * Pull data (products, tax rates, users) from the cloud server.
+ *
+ * SYNC-03: the destructive consent is part of the IPC contract — the
+ * caller must pass `{ confirmDestructive: true }` after showing a
+ * confirmation dialog.
+ */
+export const syncPull = (args: SyncPullArgs): Promise<PullResult> =>
+  loggedInvoke<PullResult>('sync_pull', { args });
 
 // ── Connection Test ──────────────────────────────────────────────
 

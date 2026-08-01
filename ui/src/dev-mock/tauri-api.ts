@@ -1087,7 +1087,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_pending_offline': () => [],
   'list_all_offline': () => [],
   'pending_offline_count': () => 0,
-  'retry_offline_sync': () => ({ synced: 0, failed: 0 }),
+  'retry_offline_sync': () => ({ syncedCount: 0, failedCount: 0, totalCount: 0 }),
   'delete_offline_item': () => null,
 
   'get_sync_settings': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
@@ -1097,7 +1097,15 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'offline_queue_status_summary': () => ({ pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0 }),
 
   'pending_sync_count': () => 0,
-  'sync_pull': () => ({ productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: null }),
+  'sync_pull': (args: unknown) => {
+    // SYNC-03: reject without explicit destructive consent, mirroring the
+    // backend command contract so dev-mode behaviour matches production.
+    const a = (args ?? {}) as { confirmDestructive?: boolean };
+    if (!a.confirmDestructive) {
+      throw new Error('confirmDestructive must be true to proceed with sync pull');
+    }
+    return { productsPulled: 0, taxRatesPulled: 0, usersPulled: 0, error: null };
+  },
   'test_sync_connection': () => ({ ok: true, status: 'connected', latencyMs: 12 }),
   'request_sync_token': () => ({ ok: true, token: 'mock-jwt-token', status: 'issued', expiresAt: new Date(Date.now() + 86400000).toISOString() }),
 
