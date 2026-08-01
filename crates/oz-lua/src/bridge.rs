@@ -31,6 +31,15 @@ use std::collections::HashMap;
 
 use mlua::{Function, Lua, RegistryKey, Value};
 
+/// A single registered callback plus its owning plugin id.
+#[derive(Debug)]
+struct CallbackEntry {
+    /// The plugin id that registered this callback (empty for system callbacks).
+    owner: String,
+    /// Registry key for the Lua callback function.
+    key: RegistryKey,
+}
+
 /// Manages Lua event callbacks registered via `oz.on()`.
 ///
 /// Callbacks are stored as `RegistryKey`s in the Lua registry so they
@@ -39,7 +48,7 @@ use mlua::{Function, Lua, RegistryKey, Value};
 #[derive(Debug)]
 pub struct LuaEventBridge {
     /// Registry keys for callback functions, indexed by event name.
-    callbacks: HashMap<String, Vec<RegistryKey>>,
+    callbacks: HashMap<String, Vec<CallbackEntry>>,
 }
 
 impl Default for LuaEventBridge {
@@ -59,48 +68,88 @@ impl LuaEventBridge {
     /// Register a Lua callback for an event (called by `oz.on()`).
     ///
     /// The callback function is stored in the Lua registry so it persists
-    /// across script reloads and survives GC.
+    /// across script reloads and survives GC. The callback is tagged with an
+    /// empty owner (system-level); plugins should use
+    /// [`register_for`](LuaEventBridge::register_for) so their callbacks can
+    /// be removed when the plugin is disabled or reloaded.
     pub fn register(&mut self, lua: &Lua, event: String, callback: Function) -> mlua::Result<()> {
+        self.register_for(String::new(), lua, event, callback)
+    }
+
+    /// Register a Lua callback for an event, tagged with the owning plugin id.
+    ///
+    /// All callbacks registered by one plugin can be removed with a single
+    /// [`remove_owner`](LuaEventBridge::remove_owner) call when the plugin is
+    /// disabled, reloaded, or fails to load.
+    pub fn register_for(
+        &mut self,
+        owner: String,
+        lua: &Lua,
+        event: String,
+        callback: Function,
+    ) -> mlua::Result<()> {
         let key = lua.create_registry_value(callback)?;
-        self.callbacks.entry(event).or_default().push(key);
+        self.callbacks
+            .entry(event)
+            .or_default()
+            .push(CallbackEntry { owner, key });
         Ok(())
     }
 
     /// Fire an event: call all registered Lua callbacks with the given args.
     ///
     /// Returns `Ok(())` even if individual callbacks error — errors are
-    /// collected and returned as a single comma-separated error string only
-    /// if ALL callbacks fail. If at least one succeeds, the result is `Ok(())`.
+    /// collected and returned as a single joined error string only if ALL
+    /// callbacks fail. If at least one succeeds, the result is `Ok(())` and
+    /// any partial failures are logged as warnings for observability.
     pub fn fire(&self, lua: &Lua, event: &str, args: Value) -> Result<(), crate::LuaError> {
-        let Some(keys) = self.callbacks.get(event) else {
+        let Some(entries) = self.callbacks.get(event) else {
             return Ok(());
         };
+        if entries.is_empty() {
+            return Ok(());
+        }
 
-        let mut last_error = None;
+        let mut errors: Vec<String> = Vec::new();
+        let mut success_count = 0usize;
 
-        for key in keys {
-            let callback: Function = match lua.registry_value(key) {
+        for entry in entries {
+            let callback: Function = match lua.registry_value(&entry.key) {
                 Ok(f) => f,
                 Err(e) => {
-                    last_error = Some(crate::LuaError::Script(format!(
-                        "failed to retrieve callback for '{event}': {e}"
-                    )));
+                    errors.push(format!("failed to retrieve callback for '{event}': {e}"));
                     continue;
                 }
             };
 
-            if let Err(e) = callback.call::<_, ()>(args.clone()) {
-                last_error = Some(crate::LuaError::Script(format!(
-                    "callback for '{event}' failed: {e}"
-                )));
-                // Continue to other callbacks
-            } else {
-                // At least one callback succeeded — clear any prior error
-                last_error = None;
+            match callback.call::<_, ()>(args.clone()) {
+                Ok(()) => success_count += 1,
+                Err(e) => errors.push(format!("callback for '{event}' failed: {e}")),
             }
         }
 
-        last_error.map_or(Ok(()), Err)
+        // Documented contract: Ok unless EVERY callback failed.
+        if success_count > 0 {
+            if !errors.is_empty() {
+                tracing::warn!(
+                    event,
+                    failed = errors.len(),
+                    succeeded = success_count,
+                    "partial callback failures for event"
+                );
+            }
+            return Ok(());
+        }
+
+        if errors.is_empty() {
+            return Ok(());
+        }
+
+        Err(crate::LuaError::Script(format!(
+            "all {} callbacks for '{event}' failed: {}",
+            errors.len(),
+            errors.join("; ")
+        )))
     }
 
     /// Remove all callbacks for a specific event.
@@ -108,11 +157,25 @@ impl LuaEventBridge {
     /// This drops the registry keys, allowing the Lua GC to collect
     /// the callback functions.
     pub fn off(&mut self, event: &str) {
-        if let Some(keys) = self.callbacks.remove(event) {
+        if let Some(entries) = self.callbacks.remove(event) {
             // RegistryKeys are dropped here, which removes them from the
             // Lua registry.
-            drop(keys);
+            drop(entries);
         }
+    }
+
+    /// Remove every callback registered by `owner` across all events.
+    ///
+    /// Used when a plugin is disabled or reloaded so stale callbacks from a
+    /// removed plugin can never fire again.
+    pub fn remove_owner(&mut self, owner: &str) {
+        if owner.is_empty() {
+            return;
+        }
+        self.callbacks.retain(|_, entries| {
+            entries.retain(|e| e.owner != owner);
+            !entries.is_empty()
+        });
     }
 
     /// Remove all callbacks for all events.
@@ -271,6 +334,7 @@ mod tests {
 
     #[test]
     fn fire_partial_success_clears_error() {
+        // Failure BEFORE success must still return Ok (documented contract).
         let lua = make_lua();
         let mut bridge = LuaEventBridge::new();
 
@@ -287,6 +351,175 @@ mod tests {
             result.is_ok(),
             "if at least one callback succeeds, fire should return Ok"
         );
+    }
+
+    #[test]
+    fn fire_success_then_failure_is_still_ok() {
+        // PLG-05 regression: success-then-failure previously returned Err
+        // because the error was cleared on success and re-set on the later
+        // failure — order-dependent and contrary to the documented contract.
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f_good = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f_bad = lua
+            .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("fail 2".into())))
+            .unwrap();
+
+        bridge.register(&lua, "order.event".into(), f_good).unwrap();
+        bridge.register(&lua, "order.event".into(), f_bad).unwrap();
+
+        let result = bridge.fire(&lua, "order.event", Value::Nil);
+        assert!(
+            result.is_ok(),
+            "success-then-failure must still be Ok (at least one succeeded)"
+        );
+    }
+
+    #[test]
+    fn fire_all_fail_returns_aggregated_error() {
+        // PLG-05: when EVERY callback fails, fire must return Err with the
+        // individual errors joined, regardless of order.
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f1 = lua
+            .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("fail A".into())))
+            .unwrap();
+        let f2 = lua
+            .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("fail B".into())))
+            .unwrap();
+
+        bridge.register(&lua, "allfail.event".into(), f1).unwrap();
+        bridge.register(&lua, "allfail.event".into(), f2).unwrap();
+
+        let result = bridge.fire(&lua, "allfail.event", Value::Nil);
+        assert!(result.is_err(), "all-failed must return Err");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("fail A") && err_msg.contains("fail B"),
+            "aggregated error should contain every callback failure, got: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("all 2 callbacks"),
+            "error should report the count, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn fire_all_fail_returns_err_in_reverse_order_too() {
+        // Order independence: all-failed must be Err in any registration order.
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f1 = lua
+            .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("fail X".into())))
+            .unwrap();
+        let f2 = lua
+            .create_function(|_, ()| Err::<(), _>(mlua::Error::RuntimeError("fail Y".into())))
+            .unwrap();
+
+        bridge.register(&lua, "rev.event".into(), f2).unwrap();
+        bridge.register(&lua, "rev.event".into(), f1).unwrap();
+
+        let result = bridge.fire(&lua, "rev.event", Value::Nil);
+        assert!(
+            result.is_err(),
+            "all-failed must be Err regardless of order"
+        );
+    }
+
+    #[test]
+    fn fire_zero_callbacks_is_ok() {
+        let lua = make_lua();
+        let bridge = LuaEventBridge::new();
+        let result = bridge.fire(&lua, "none.event", Value::Nil);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn remove_owner_removes_only_that_plugins_callbacks() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f_a = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f_b = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        bridge
+            .register_for("plugin-a".into(), &lua, "evt".into(), f_a)
+            .unwrap();
+        bridge
+            .register_for("plugin-b".into(), &lua, "evt".into(), f_b)
+            .unwrap();
+
+        assert_eq!(bridge.callback_count(), 2);
+        bridge.remove_owner("plugin-a");
+
+        assert_eq!(bridge.callback_count(), 1);
+        assert!(bridge.has_callbacks("evt"));
+    }
+
+    #[test]
+    fn remove_owner_across_multiple_events() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let f1 = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f2 = lua.create_function(|_, ()| Ok(())).unwrap();
+        let f3 = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        bridge
+            .register_for("p1".into(), &lua, "e1".into(), f1)
+            .unwrap();
+        bridge
+            .register_for("p1".into(), &lua, "e2".into(), f2)
+            .unwrap();
+        bridge
+            .register_for("p2".into(), &lua, "e2".into(), f3)
+            .unwrap();
+
+        assert_eq!(bridge.event_count(), 2);
+        bridge.remove_owner("p1");
+
+        // e1 is now empty and should be dropped; e2 keeps only p2's callback.
+        assert_eq!(bridge.event_count(), 1);
+        assert!(!bridge.has_callbacks("e1"));
+        assert!(bridge.has_callbacks("e2"));
+        assert_eq!(bridge.callback_count(), 1);
+    }
+
+    #[test]
+    fn remove_owner_with_empty_owner_is_noop() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+        let f = lua.create_function(|_, ()| Ok(())).unwrap();
+        bridge.register(&lua, "evt".into(), f).unwrap();
+
+        // System callbacks (empty owner) are never removed by owner cleanup.
+        bridge.remove_owner("");
+        assert_eq!(bridge.callback_count(), 1);
+    }
+
+    #[test]
+    fn register_for_and_fire_with_owner() {
+        let lua = make_lua();
+        let mut bridge = LuaEventBridge::new();
+
+        let globals = lua.globals();
+        globals.set("owner_called", false).unwrap();
+        let f = lua
+            .create_function(|lua, ()| {
+                lua.globals().set("owner_called", true)?;
+                Ok(())
+            })
+            .unwrap();
+        bridge
+            .register_for("plug".into(), &lua, "evt".into(), f)
+            .unwrap();
+
+        bridge.fire(&lua, "evt", Value::Nil).unwrap();
+        let called: bool = globals.get("owner_called").unwrap();
+        assert!(called);
     }
 
     #[test]
