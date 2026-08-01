@@ -48,13 +48,14 @@ customer-mgmt-error-delete = Gagal menghapus pelanggan
 customer-mgmt-error-load = Gagal memuat pelanggan
 customer-mgmt-error-retry = Coba lagi
 
-# ── Inventory (remaining) ──
+# ── Customer Management (remaining) ──
 customer-mgmt-title = Pelanggan
 customer-mgmt-add = Tambah Pelanggan
 customer-mgmt-col-name = Nama
 customer-mgmt-col-email = Email
 customer-mgmt-col-phone = Telepon
 customer-mgmt-col-notes = Catatan
+customer-mgmt-table-aria = Pelanggan
 customer-mgmt-edit = Ubah
 customer-mgmt-delete = Hapus
 customer-mgmt-empty = Belum ada pelanggan.

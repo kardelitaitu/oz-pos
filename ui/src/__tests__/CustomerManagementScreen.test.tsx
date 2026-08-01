@@ -1,7 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
+import { getBundle } from '@/i18n';
 import customersFtl from '@/locales/customers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -360,5 +363,81 @@ describe('CustomerManagementScreen', () => {
       expect(screen.queryByText('Delete customer?')).toBeNull();
     });
     expect(mockDeleteCustomer).not.toHaveBeenCalled();
+  });
+
+  // ── CUST-07: locale parity ──────────────────────────────────────
+
+  it('resolves every screen Localized id in both the en and id bundles (CUST-07)', () => {
+    // Reuse the production bundle loader (@/i18n) which already includes
+    // customers.ftl + customers.id.ftl — same approach as i18nBundle.test.tsx.
+    const en = getBundle('en');
+    const id = getBundle('id');
+
+    // Every id the screen resolves — via <Localized id> or l10n.getString().
+    const usedIds = [
+      'customer-mgmt-title',
+      'customer-mgmt-add',
+      'customer-mgmt-search',
+      'customer-mgmt-empty',
+      'customer-mgmt-empty-cta',
+      'customer-mgmt-search-empty',
+      'customer-mgmt-search-clear',
+      'customer-mgmt-col-name',
+      'customer-mgmt-col-email',
+      'customer-mgmt-col-phone',
+      'customer-mgmt-col-notes',
+      'customer-mgmt-col-actions',
+      'customer-mgmt-table-aria',
+      'customer-mgmt-edit',
+      'customer-mgmt-edit-aria',
+      'customer-mgmt-delete',
+      'customer-mgmt-delete-aria',
+      'customer-mgmt-modal-add-title',
+      'customer-mgmt-modal-edit-title',
+      'customer-mgmt-field-name',
+      'customer-mgmt-field-email',
+      'customer-mgmt-field-phone',
+      'customer-mgmt-field-notes',
+      'customer-mgmt-name-placeholder',
+      'customer-mgmt-email-placeholder',
+      'customer-mgmt-phone-placeholder',
+      'customer-mgmt-notes-placeholder',
+      'customer-mgmt-btn-cancel',
+      'customer-mgmt-btn-create',
+      'customer-mgmt-btn-update',
+      'customer-mgmt-error-name-required',
+      'customer-mgmt-error-save-failed',
+      'customer-mgmt-delete-confirm-title',
+      'customer-mgmt-delete-confirm-message',
+      'customer-mgmt-delete-confirm-btn',
+      'customer-mgmt-error-delete',
+      'customer-mgmt-error-load',
+      'customer-mgmt-error-retry',
+    ];
+    for (const key of usedIds) {
+      expect(en.getMessage(key), `en bundle missing ${key}`).toBeDefined();
+      expect(id.getMessage(key), `id bundle missing ${key}`).toBeDefined();
+    }
+  });
+
+  // ── CUST-08: 44px touch targets ─────────────────────────────────
+
+  it('declares guaranteed 44px touch targets for row action buttons (CUST-08)', () => {
+    // jsdom runs with `css: false` so computed styles are meaningless here;
+    // assert against the stylesheet source on disk (mirrors
+    // animationCompliance.test.ts).
+    const cssPath = join(
+      process.cwd(),
+      'src/features/customers/CustomerManagementScreen.css',
+    );
+    const css = readFileSync(cssPath, 'utf8');
+
+    // The action button block must declare a minimum 44px hit area in both
+    // axes while keeping compact visual padding.
+    const blockMatch = css.match(/\.customer-mgmt-action-btn\s*{[^}]*}/);
+    expect(blockMatch).not.toBeNull();
+    const block = blockMatch![0];
+    expect(block).toMatch(/min-height:\s*2\.75rem/);
+    expect(block).toMatch(/min-width:\s*2\.75rem/);
   });
 });
