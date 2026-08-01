@@ -33,6 +33,8 @@ pub mod hardware;
 pub mod health;
 /// Sales-history commands.
 pub mod history;
+/// Inventory-count commands.
+pub mod inventory_counts;
 /// KDS commands.
 pub mod kds;
 /// Loyalty / rewards commands.

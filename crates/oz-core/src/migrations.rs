@@ -626,6 +626,14 @@ pub const ALL: &[Migration] = &[
         id: "112_stock_transfer_actor_ids.sql",
         sql: include_str!("../migrations/112_stock_transfer_actor_ids.sql"),
     },
+    // ── 113: Store-local stock-count actor FK removal (audit/07 INV-03) ─
+    // Count and adjustment actor IDs are derived from the global session
+    // identity. Remove obsolete local users foreign keys while preserving
+    // existing count data and adding non-negative quantity constraints.
+    Migration {
+        id: "113_stock_count_actor_ids.sql",
+        sql: include_str!("../migrations/113_stock_count_actor_ids.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

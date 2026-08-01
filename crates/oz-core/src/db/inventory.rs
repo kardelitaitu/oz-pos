@@ -256,7 +256,7 @@ impl Store<'_> {
     // ── Inventory Shifts ────────────────────────────────────────────────
 
     /// Start a new inventory shift for a user at a location.
-    /// Checks that the user does not already have an open shift.
+    /// Checks that the user does not already have an open shift at that location.
     pub fn start_inventory_shift(
         &self,
         user_id: &str,
@@ -266,11 +266,14 @@ impl Store<'_> {
     ) -> Result<InventoryShift, CoreError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Enforce that only one shift is open at a time for this user.
+        // Migration 086 permits one active shift per user/location pair.
+        // Keep the application check aligned with that partial unique index;
+        // a worker may legitimately work at two locations concurrently.
         let active_count: i64 = tx
             .query_row(
-                "SELECT COUNT(*) FROM inventory_shifts WHERE user_id = ?1 AND status = 'active'",
-                params![user_id],
+                "SELECT COUNT(*) FROM inventory_shifts
+                 WHERE user_id = ?1 AND location_id = ?2 AND status = 'active'",
+                params![user_id, location_id],
                 |row| row.get(0),
             )
             .unwrap_or(0);
@@ -278,7 +281,7 @@ impl Store<'_> {
         if active_count > 0 {
             return Err(CoreError::Validation {
                 field: "shift",
-                message: "user already has an active inventory shift open".into(),
+                message: "user already has an active inventory shift open at this location".into(),
             });
         }
 
@@ -327,14 +330,20 @@ impl Store<'_> {
         Ok(())
     }
 
-    /// Retrieve the currently active shift for a user, if any.
+    /// Retrieve the most recently started active shift for a user, if any.
+    ///
+    /// Multiple locations may be active concurrently under migration 086's
+    /// per-user/location invariant. The existing IPC shape returns one
+    /// optional shift, so the UI receives the latest one; history remains
+    /// available through `list_inventory_shifts`.
     pub fn get_active_inventory_shift(
         &self,
         user_id: &str,
     ) -> Result<Option<InventoryShift>, CoreError> {
         let res = self.conn.query_row(
             "SELECT id, user_id, location_id, terminal_id, started_at, ended_at, status, notes \
-             FROM inventory_shifts WHERE user_id = ?1 AND status = 'active'",
+             FROM inventory_shifts WHERE user_id = ?1 AND status = 'active'
+             ORDER BY started_at DESC LIMIT 1",
             params![user_id],
             |row| {
                 Ok(InventoryShift {
@@ -785,7 +794,7 @@ mod tests {
         assert_eq!(shift.status, "active");
         assert!(shift.ended_at.is_none());
 
-        // Attempting to open another active shift should error
+        // Attempting to open another active shift at the same location should error
         let err = s
             .start_inventory_shift("u-1", &loc_id, None, "")
             .unwrap_err();

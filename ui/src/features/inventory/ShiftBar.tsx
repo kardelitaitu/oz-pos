@@ -59,7 +59,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         addToast({ message: requiredLocalized(l10nRef.current, 'inv-shift-error-locations'), type: 'error' });
       });
 
-    getActiveInventoryShift(sessionToken, session.user_id)
+    getActiveInventoryShift(sessionToken)
       .then(shift => {
         setActiveShift(shift);
         onShiftChange?.(shift);
@@ -101,7 +101,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     if (!sessionToken || !session?.user_id || !selectedLocationId) return;
 
     try {
-      const shift = await startInventoryShift(sessionToken, session.user_id, selectedLocationId, notes);
+      const shift = await startInventoryShift(sessionToken, selectedLocationId, notes);
       setActiveShift(shift);
       setNotes('');
       if (onShiftChange) onShiftChange(shift);
@@ -115,10 +115,9 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
 
     try {
       // Fetch transactions server-side for this shift window.
-      const uid = session?.user_id ?? '';
       const since = activeShift.started_at;
       const filtered = await listInventoryTransactionsForShift(
-        sessionToken, uid, activeShift.location_id, since,
+        sessionToken, activeShift.location_id, since,
       );
 
       await endInventoryShift(sessionToken, activeShift.id);

@@ -124,7 +124,7 @@ describe('ShiftBar', () => {
 
     await waitFor(() => {
       expect(mockStartShift).toHaveBeenCalledWith(
-        'mock-session-token', 'user-1', 'loc-2', 'Night shift'
+        'mock-session-token', 'loc-2', 'Night shift'
       );
     });
   });

@@ -46,23 +46,28 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
   const { addToast } = useToast();
-  const { sessionToken: rawToken } = useWorkspace();
-  const sessionToken = rawToken || '';
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const c = await getStockCount(countId);
+      if (!sessionToken) throw new Error('session unavailable');
+      const c = await getStockCount(sessionToken, countId);
       setCount(c);
       if (c) {
-        setLines(await getCountLines(countId));
+        setLines(await getCountLines(sessionToken, countId));
       }
-    } catch {
-      addToast({ message: requiredLocalized(l10nRef.current, 'sc-error-load'), type: 'error' });
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : requiredLocalized(l10nRef.current, 'sc-error-load');
+      setError(message);
+      addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [countId, addToast]);
+  }, [countId, addToast, sessionToken]);
 
   useEffect(() => {
     load();
@@ -91,7 +96,8 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await addCountLine({
+      if (!sessionToken) throw new Error('session unavailable');
+      await addCountLine(sessionToken, {
         countId,
         sku: selectedSku,
         productName: selectedName,
@@ -107,40 +113,44 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [countId, selectedSku, selectedName, expectedQty, load]);
+  }, [countId, selectedSku, selectedName, expectedQty, load, sessionToken]);
 
   const handleRecordCount = useCallback(async (lineId: string, countedQty: number) => {
     try {
-      await updateCountLine({ lineId, countedQty, notes: '' });
+      if (!sessionToken) throw new Error('session unavailable');
+      await updateCountLine(sessionToken, { lineId, countedQty, notes: '' });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-update-line')));
     }
-  }, [load]);
+  }, [load, sessionToken]);
 
   const handleRemoveLine = useCallback(async (lineId: string) => {
     try {
-      await removeCountLine({ lineId });
+      if (!sessionToken) throw new Error('session unavailable');
+      await removeCountLine(sessionToken, { lineId });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-remove-line')));
     }
-  }, [load]);
+  }, [load, sessionToken]);
 
   const handleStartCounting = useCallback(async () => {
     try {
-      await updateStockCountStatus(countId, 'in_progress');
+      if (!sessionToken) throw new Error('session unavailable');
+      await updateStockCountStatus(sessionToken, countId, 'in_progress');
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-start-count')));
     }
-  }, [countId, load]);
+  }, [countId, load, sessionToken]);
 
   const handleComplete = useCallback(async () => {
     setSaving(true);
     setError(null);
     try {
-      const adjustments = await completeStockCount({ countId });
+      if (!sessionToken) throw new Error('session unavailable');
+      const adjustments = await completeStockCount(sessionToken, { countId });
       setSuccessMsg(
         l10nRef.current.getString('sc-complete-success', { count: adjustments.length }),
       );
@@ -150,7 +160,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [countId, load]);
+  }, [countId, load, sessionToken]);
 
   const totalExpected = lines.reduce((s, l) => s + l.expected_qty, 0);
   const totalCounted = lines.reduce((s, l) => s + (l.counted_qty ?? 0), 0);
@@ -196,7 +206,22 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   }
 
   if (!count) {
-    return <p className="sc-detail-error"><Localized id="sc-not-found"><span>Count not found.</span></Localized></p>;
+    return (
+      <div className="sc-detail-screen">
+        {error ? (
+          <div className="sc-load-error" role="alert">
+            <p>{error}</p>
+            <Button variant="secondary" onClick={load}>
+              <Localized id="retry"><span>Retry</span></Localized>
+            </Button>
+          </div>
+        ) : (
+          <p className="sc-detail-error">
+            <Localized id="sc-not-found"><span>Count not found.</span></Localized>
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

@@ -370,7 +370,6 @@ pub async fn create_inventory_transaction(
     session_token: String,
     type_str: String,
     location_id: String,
-    staff_id: String,
     notes: String,
     lines: Vec<InventoryTransactionLineInput>,
     state: State<'_, AppState>,
@@ -394,8 +393,13 @@ pub async fn create_inventory_transaction(
     let ttype = InventoryTransactionType::from_stored_str(&type_str)
         .ok_or_else(|| AppError::Invalid(format!("invalid transaction type: {}", type_str)))?;
 
-    let tx_id =
-        store.create_inventory_transaction(ttype, &location_id, &staff_id, &notes, &lines)?;
+    let tx_id = store.create_inventory_transaction(
+        ttype,
+        &location_id,
+        &session.user_id,
+        &notes,
+        &lines,
+    )?;
     Ok(tx_id)
 }
 
@@ -434,7 +438,6 @@ pub async fn list_inventory_transactions(
 #[tauri::command]
 pub async fn list_inventory_transactions_for_shift(
     session_token: String,
-    staff_id: String,
     location_id: String,
     since: String,
     state: State<'_, AppState>,
@@ -455,7 +458,8 @@ pub async fn list_inventory_transactions_for_shift(
         oz_core::permissions::SALES_PROCESS,
     )?;
 
-    let txs = store.list_inventory_transactions_for_shift(&staff_id, &location_id, &since)?;
+    let txs =
+        store.list_inventory_transactions_for_shift(&session.user_id, &location_id, &since)?;
     Ok(txs)
 }
 

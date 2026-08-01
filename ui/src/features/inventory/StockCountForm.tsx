@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { createStockCount, type StockCountDto } from '@/api/inventoryCounts';
 import { Card } from '@/components/Card';
@@ -18,12 +19,17 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
 
   const handleSubmit = useCallback(async () => {
     setSaving(true);
     setError(null);
     try {
-      const result = await createStockCount({
+      if (!sessionToken) {
+        throw new Error(l10n.getString('sc-error-session'));
+      }
+      const result = await createStockCount(sessionToken, {
         countType,
         notes,
       });
@@ -33,7 +39,7 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [countType, notes, onCreated, l10n]);
+  }, [countType, notes, onCreated, l10n, sessionToken]);
 
   const typeOptions: Array<{ value: 'full' | 'cyclic' | 'spot' }> = [
     { value: 'full' },

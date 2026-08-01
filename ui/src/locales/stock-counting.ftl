@@ -44,6 +44,7 @@ sc-hist-title = Count History
 sc-hist-empty = No completed counts to display.
 
 # Error messages
+sc-error-session = Session unavailable. Please sign in again.
 sc-error-load = Failed to load stock counts.
 sc-error-add-line = Failed to add line
 sc-error-update-line = Failed to update line
