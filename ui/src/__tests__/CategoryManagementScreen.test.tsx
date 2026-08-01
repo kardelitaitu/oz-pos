@@ -127,7 +127,31 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => {
       const badge = document.querySelector('.cat-mgmt-icon-badge') as HTMLElement;
       expect(badge).toBeDefined();
-      expect(badge?.style.background).toBe('rgb(249, 115, 22)');
+      // CAT-07: dynamic colour now flows through the --cat-bg custom property
+      // instead of an inline `background` style.
+      expect(badge?.style.getPropertyValue('--cat-bg')).toBe('#f97316');
+    });
+  });
+
+  it('uses a contrast-safe foreground on the icon badge (CAT-07)', async () => {
+    // Light amber badge -> dark near-black foreground (never fixed white).
+    mockListCategories.mockResolvedValue([makeCategory({ colour: '#f59e0b' })]);
+    renderScreen();
+    await waitFor(() => {
+      const badge = document.querySelector('.cat-mgmt-icon-badge') as HTMLElement;
+      expect(badge?.style.getPropertyValue('--cat-bg')).toBe('#f59e0b');
+      expect(badge?.style.getPropertyValue('--cat-fg')).toBe('#0a0a0a');
+    });
+  });
+
+  it('uses white foreground for a dark badge colour (CAT-07)', async () => {
+    // Dark sky-blue badge -> white foreground.
+    mockListCategories.mockResolvedValue([makeCategory({ colour: '#0ea5e9' })]);
+    renderScreen();
+    await waitFor(() => {
+      const badge = document.querySelector('.cat-mgmt-icon-badge') as HTMLElement;
+      expect(badge?.style.getPropertyValue('--cat-bg')).toBe('#0ea5e9');
+      expect(badge?.style.getPropertyValue('--cat-fg')).toBe('#ffffff');
     });
   });
 
@@ -363,5 +387,77 @@ describe('CategoryManagementScreen', () => {
       expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
     );
     expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a case-variant name that collides with an existing ID (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // "BAKERY" normalises to the same slug (cat-bakery) as the existing card.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'BAKERY');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a punctuation-variant name that collides with an existing ID (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // "Bakery!" slugs to cat-bakery, colliding with the existing category.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Bakery!');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('derives a stable non-empty ID for a non-ASCII name (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // A fully non-ASCII name must not collapse to the degenerate `cat-` slug.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'カフェ');
+    const idPreview = document.querySelector('.cat-mgmt-hint code') as HTMLElement;
+    expect(idPreview).toBeDefined();
+    const derivedId = idPreview?.textContent ?? '';
+    expect(derivedId.startsWith('cat-')).toBe(true);
+    expect(derivedId.length).toBeGreaterThan(4);
+  });
+
+  it('allows a fresh non-conflicting name to create a category (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    mockCreateCategory.mockResolvedValue({ id: 'cat-drinks' });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Drinks');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(mockCreateCategory).toHaveBeenCalledWith(TOKEN, {
+        id: 'cat-drinks',
+        name: 'Drinks',
+        colour: expect.any(String),
+        icon: expect.any(String),
+      }),
+    );
   });
 });

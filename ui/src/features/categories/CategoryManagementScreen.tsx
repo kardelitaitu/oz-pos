@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
+import { contrastFg } from '@/utils/color';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listCategoriesScoped,
@@ -156,10 +157,27 @@ function randomIcon(): string {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function colourToId(name: string): string {
-  return `cat-${name
+  const slug = name
     .toLowerCase()
+    .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')}`;
+    .replace(/^-|-$/g, '');
+  // CAT-04: fully non-ASCII names (e.g. カフェ) collapse to an empty slug,
+  // which would produce the degenerate ID `cat-`. Fall back to a stable hash
+  // suffix derived from the name so the ID is never empty.
+  if (!slug) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    }
+    return `cat-${hash.toString(36)}`;
+  }
+  return `cat-${slug}`;
+}
+
+/** Inline custom properties for dynamic-colour elements (CAT-07). */
+function catColourVars(colour: string): CSSProperties {
+  return { '--cat-bg': colour, '--cat-fg': contrastFg(colour) } as CSSProperties;
 }
 
 // ── Component ────────────────────────────────────────────────────────
@@ -453,7 +471,7 @@ export default function CategoryManagementScreen() {
                 {/* Icon badge — coloured circle with icon SVG */}
                 <div
                   className="cat-mgmt-icon-badge"
-                  style={{ background: cat.colour }}
+                  style={catColourVars(cat.colour)}
                   aria-hidden="true"
                 >
                   {cat.icon ? (
@@ -585,7 +603,7 @@ export default function CategoryManagementScreen() {
                     ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
                     : 'cat-mgmt-icon-btn'
                 }
-                style={newIcon === opt.id ? { background: newColour, color: '#fff' } : undefined}
+                style={newIcon === opt.id ? catColourVars(newColour) : undefined}
                 onClick={() => setNewIcon(opt.id)}
               >
                 <CategoryIconSvg icon={opt.id} size={20} />
@@ -611,7 +629,7 @@ export default function CategoryManagementScreen() {
                         ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
                         : 'cat-mgmt-colour-swatch'
                     }
-                    style={{ background: colour }}
+                    style={{ '--cat-bg': colour } as CSSProperties}
                     onClick={() => setNewColour(colour)}
                   />
                 </Localized>
@@ -626,10 +644,7 @@ export default function CategoryManagementScreen() {
           </Localized>
           <span
             className="cat-mgmt-preview-chip"
-            style={{
-              background: newColour,
-              color: '#fff',
-            }}
+            style={catColourVars(newColour)}
           >
             <CategoryIconSvg icon={newIcon} size={14} />
             {newName.trim() || <Localized id="category-name-fallback"><span>Category Name</span></Localized>}
@@ -700,7 +715,7 @@ export default function CategoryManagementScreen() {
                     ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
                     : 'cat-mgmt-icon-btn'
                 }
-                style={editIcon === opt.id ? { background: editColour, color: '#fff' } : undefined}
+                style={editIcon === opt.id ? catColourVars(editColour) : undefined}
                 onClick={() => setEditIcon(opt.id)}
               >
                 <CategoryIconSvg icon={opt.id} size={20} />
@@ -726,7 +741,7 @@ export default function CategoryManagementScreen() {
                         ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
                         : 'cat-mgmt-colour-swatch'
                     }
-                    style={{ background: colour }}
+                    style={{ '--cat-bg': colour } as CSSProperties}
                     onClick={() => setEditColour(colour)}
                   />
               </Localized>
@@ -741,7 +756,7 @@ export default function CategoryManagementScreen() {
           </Localized>
           <span
             className="cat-mgmt-preview-chip"
-            style={{ background: editColour, color: '#fff' }}
+            style={catColourVars(editColour)}
           >
             <CategoryIconSvg icon={editIcon} size={14} />
             {editName.trim() || editTarget?.name || ''}
