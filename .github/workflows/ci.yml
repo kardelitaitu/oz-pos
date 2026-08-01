@@ -367,7 +367,7 @@ jobs:
         run: cargo install cargo-fuzz
       - name: Fuzz targets (60s each)
         run: |
-          for target in sku_parse money_parse cart_deser; do
+          for target in sku_parse money_parse cart_deser ozpkg_parse manifest_parse; do
             echo "::group::Fuzzing $target"
             timeout 65 cargo fuzz run "$target" -- -max_total_time=60 || true
             echo "::endgroup::"
