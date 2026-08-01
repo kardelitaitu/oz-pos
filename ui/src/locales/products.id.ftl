@@ -102,6 +102,7 @@ product-mgmt-delete-confirm-btn = Hapus
 product-mgmt-error-delete = Gagal menghapus produk
 product-mgmt-error-load = Gagal memuat produk
 product-mgmt-error-retry = Coba lagi
+product-mgmt-error-invalid-stock = Stok harus berupa bilangan bulat non-negatif
 product-mgmt-modal-add-title = Tambah Produk
 product-mgmt-modal-edit-title = Ubah Produk
 product-mgmt-modal-close = Tutup

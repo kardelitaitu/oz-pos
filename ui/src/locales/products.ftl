@@ -93,6 +93,7 @@ product-mgmt-delete-confirm-btn = Delete
 product-mgmt-error-delete = Failed to delete product
 product-mgmt-error-load = Failed to load products
 product-mgmt-error-retry = Retry
+product-mgmt-error-invalid-stock = Stock must be a whole, non-negative number
 product-mgmt-modal-add-title = Add Product
 product-mgmt-modal-edit-title = Edit Product
 product-mgmt-modal-close = Close

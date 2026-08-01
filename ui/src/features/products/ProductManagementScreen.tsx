@@ -180,9 +180,33 @@ export default function ProductManagementScreen() {
     setSaving(true);
     setSaveError(null);
     try {
-      const priceMinor = parseInt(form.priceMinor, 10);
-      if (Number.isNaN(priceMinor) || priceMinor < 0) {
-        setSaveError(l10n.getString('product-mgmt-error-invalid-price'));
+      // PROD-05: reject anything that is not a complete non-negative integer.
+      // `parseInt('4.50')` silently truncates to 4 — that must not reach the
+      // backend as a 100×-smaller price.
+      const priceRaw = form.priceMinor.trim();
+      const priceMinor = Number(priceRaw);
+      const priceIsValid =
+        priceRaw !== '' &&
+        /^\d+$/.test(priceRaw) &&
+        Number.isSafeInteger(priceMinor) &&
+        priceMinor >= 0;
+      if (!priceIsValid) {
+        setSaveError(requiredLocalized(l10nRef.current, 'product-mgmt-error-invalid-price'));
+        return;
+      }
+
+      // PROD-06: initial stock must be a complete non-negative integer too.
+      // HTML `min` is not a submit-time guarantee; blank/`1abc`/`-1` are all
+      // rejected rather than silently transformed, and safe-integer bounds
+      // keep huge digit strings from overflowing the backend i64.
+      const initialStockRaw = form.initialStock.trim();
+      const initialStock = Number(initialStockRaw);
+      const initialStockValid =
+        initialStockRaw !== '' &&
+        /^\d+$/.test(initialStockRaw) &&
+        Number.isSafeInteger(initialStock);
+      if (!editingSku && !initialStockValid) {
+        setSaveError(requiredLocalized(l10nRef.current, 'product-mgmt-error-invalid-stock'));
         return;
       }
 
@@ -205,7 +229,7 @@ export default function ProductManagementScreen() {
           currency: form.currency,
           categoryId: form.categoryId || undefined,
           barcode: form.barcode || undefined,
-          initialStock: parseInt(form.initialStock, 10) || 0,
+          initialStock,
           productType: form.productType,
           taxRateIds: form.taxRateIds,
         });
@@ -502,6 +526,8 @@ export default function ProductManagementScreen() {
                       type="number"
                       id="product-field-price"
                       min="0"
+                      step="1"
+                      inputMode="numeric"
                       value={form.priceMinor}
                       onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
                       placeholder="450"
@@ -615,6 +641,8 @@ export default function ProductManagementScreen() {
                       type="number"
                       id="product-field-stock"
                       min="0"
+                      step="1"
+                      inputMode="numeric"
                       value={form.initialStock}
                       onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
                       placeholder="0"

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import productsFtl from '@/locales/products.ftl?raw';
@@ -365,6 +365,57 @@ describe('ProductManagementScreen', () => {
         args: expect.objectContaining({ taxRateIds: ['tax-1', 'tax-2'] }),
       }));
     });
+  });
+
+  it('rejects a decimal price instead of truncating it (PROD-05)', async () => {
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+    await userEvent.click(screen.getByRole('button', { name: /add product/i }));
+    await userEvent.type(screen.getByPlaceholderText('e.g. LATTE'), 'NEWSKU');
+    await userEvent.type(screen.getByPlaceholderText('e.g. Caffè Latte'), 'New Product');
+    await userEvent.type(screen.getByPlaceholderText('450'), '4.50');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/price must be a valid non-negative number/i);
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('create_product_scoped', expect.anything());
+  });
+
+  it('rejects negative and malformed initial stock (PROD-06)', async () => {
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+    await userEvent.click(screen.getByRole('button', { name: /add product/i }));
+    await userEvent.type(screen.getByPlaceholderText('e.g. LATTE'), 'NEWSKU');
+    await userEvent.type(screen.getByPlaceholderText('e.g. Caffè Latte'), 'New Product');
+    await userEvent.type(screen.getByPlaceholderText('450'), '999');
+
+    // Negative value must be rejected, not passed through.
+    await userEvent.clear(screen.getByLabelText(/initial stock/i));
+    await userEvent.type(screen.getByLabelText(/initial stock/i), '-1');
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/stock must be a whole, non-negative number/i);
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('create_product_scoped', expect.anything());
+
+    // Malformed `1abc` must be rejected too, not partially parsed to 1.
+    // (fireEvent bypasses the number input's browser-side sanitisation,
+    // simulating the raw value that can reach the submit handler.)
+    fireEvent.change(screen.getByLabelText(/initial stock/i), { target: { value: '1abc' } });
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/stock must be a whole, non-negative number/i);
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('create_product_scoped', expect.anything());
+
+    // A very large value outside safe-integer bounds must also be rejected.
+    fireEvent.change(screen.getByLabelText(/initial stock/i), { target: { value: '99999999999999999999999999' } });
+    await userEvent.click(screen.getByRole('button', { name: /create/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/stock must be a whole, non-negative number/i);
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith('create_product_scoped', expect.anything());
   });
 
   it('shows error message when createProduct fails (no silent swallow)', async () => {
