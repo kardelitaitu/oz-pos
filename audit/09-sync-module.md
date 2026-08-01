@@ -195,7 +195,7 @@ The integration suite's ignored status is important: it is not evidence that the
 4. **SYNC-06:** Remove credential hashes from snapshots and add a sensitive-field contract test. — ✅ done
 5. **SYNC-07 through SYNC-11:** Close scope, error, API-shape, and observability gaps. — ✅ done
 6. **SYNC-12:** Complete the shared status-bar i18n and token cleanup. — ✅ done
-7. Run the full integration suite with `slow-tests`, then add a two-cycle replay test as a release gate. — ⚠️ remaining: the `slow-tests`-gated integration suite (19 tests) is not run by the default CI; a scheduled/CI job should execute `cargo test -p platform-sync --features slow-tests` and publish the result.
+7. Run the full integration suite with `slow-tests`, then add a two-cycle replay test as a release gate. — ✅ done: the two-cycle replay test is part of SYNC-01 (`a1ea01e7`), and a dedicated `sync-slow-tests` CI job now runs the 19 gated tests on every main-branch push and uploads the JUnit report.
 
 ## Audit status
 
@@ -216,4 +216,4 @@ The integration suite's ignored status is important: it is not evidence that the
 | SYNC-11 DTO contract shapes | P2 | `5633e790` |
 | SYNC-12 status-bar i18n | P3 | `178abfbf` |
 
-**Residual (documented, not blocking):** the `slow-tests`-gated integration suite should be wired into a scheduled/CI job as a release gate.
+**Residual:** none — all 12 findings closed and the `slow-tests`-gated integration suite is now an explicit main-branch CI gate (`sync-slow-tests` job in `.github/workflows/ci.yml`).
