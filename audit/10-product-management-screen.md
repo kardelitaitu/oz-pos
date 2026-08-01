@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** ProductManagementScreen — product CRUD, pricing, categories, tax-rate assignment, stock display, locations, alerts, and variants
-> **Status:** AUDITED · findings require remediation
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 12 findings closed (2026-08-02)
+> **Production code changed:** All 12 findings closed; 11 remediated across 5 commits (PROD-01 was already satisfied at audit time) — see commit chain below
 
 ## Scope
 
@@ -192,6 +192,39 @@ Results:
 6. **PROD-12:** Remove the per-product tax-rate query pattern before large-catalog rollout.
 7. **PROD-09:** Finish CSS/token cleanup and add theme compliance coverage.
 
+## Remediation status — 2026-08-02
+
+All 12 findings are closed. Commit chain:
+
+| Commit | Scope |
+|---|---|
+| `f399c703` | PROD-02/03/04 — delete confirmation dialog, delete-error surfacing, load-error + retry state |
+| `beba8dad` | PROD-05/06 — strict non-negative-integer validation for price and initial stock |
+| `6a6840aa` | PROD-07/08 — localization sweep (no duplicate aria-labels) + focus-trapped alert drawer |
+| `6b9aead9` | PROD-09/10/11 — token-based styles, alert poll error banner + retry, stale-load seq guard |
+| `67bb09c1` | PROD-12 — batch product tax-rate query (kills catalog N+1) |
+
+### Per-finding closure
+
+- **PROD-01** — already satisfied at audit time: `load()` uses `listTaxRatesScoped`/`listCategoriesScoped` with the session token (TAX-01); a contract test pins both scoped calls and asserts the unscoped variants are never invoked.
+- **PROD-02** — delete now routes through a localized `ConfirmDialog` (`role="alertdialog"`, focus-trapped); the destructive command only fires after explicit confirmation and stays disabled in flight.
+- **PROD-03** — delete failures render in a visible `role="alert"` (backend message), instead of being swallowed.
+- **PROD-04** — failed loads render a distinct error card with a Retry action; the empty-catalog CTA is reserved for successful zero-row loads. Refreshes preserve the last known catalog (skeleton only on first load per session).
+- **PROD-05** — price is validated as a complete non-negative safe integer (`/^\d+$/` + `Number.isSafeInteger`); `4.50` is rejected with a localized error, never truncated to `4`. Inputs gained `step="1"` + `inputMode="numeric"`.
+- **PROD-06** — initial stock validated identically; blank / `-1` / `1abc` / out-of-safe-integer values are rejected before any IPC call.
+- **PROD-07** — row action buttons (Variants/Edit/Delete) use a single `requiredLocalized` aria-label; no duplicated literal `aria-label` or `|| 'English'` fallbacks remain.
+- **PROD-08** — the stock-alert drawer is now `role="dialog" aria-modal="true"` with a labelled title, `useFocusTrap`, Escape + close-button dismissal, focus restore to the bell toggle, and `aria-expanded`. Drawer and product modal are mutually exclusive (single focus trap at a time).
+- **PROD-09** — tax-rate list/labels moved from inline styles to `.product-mgmt-tax-rate-list`/`-option` token classes; the stock-low span dropped its inline override.
+- **PROD-10** — poll failures set `alertError` shown in a drawer banner with a localized reload button; a `pollSeqRef` stale-response guard prevents old location/session polls from overwriting newer ones.
+- **PROD-11** — `load()` has a request-sequence guard (`loadSeqRef`); results/errors/loading only apply when the call is still latest. Verified by a genuinely overlapping two-load race test (deferred promise, no wall-clock waits).
+- **PROD-12** — new `Store::get_product_tax_rates_batch` resolves all product tax assignments in one `IN (...)` query; `map_products_to_dtos` uses it, removing the per-product N+1. Error propagation is now fail-loudly (documented).
+
+### Validation
+
+- UI: `ProductManagementScreen.test.tsx` **24/24 pass** (including new PROD-02/03/04/05/06/10/11 tests), `tsc --noEmit` clean, i18n lint + bundle parity clean.
+- Rust: `oz-core db::tax` **40/40**, `oz-pos-app commands::products` **30/30**, `cargo clippy -- -D warnings` clean.
+- Each phase was code-reviewed; all reviewer follow-ups (loadError gating, `l10nRef`, overlapping-race test premise, `hasLoadedOnceRef` reset on session switch, scoped ConfirmDialog loading, borrow-before-move) resolved before commit.
+
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+This evidence-based audit report is complete. All 12 findings were remediated, validated, and reviewed; the master index marks this sector **FULLY REMEDIATED**.
