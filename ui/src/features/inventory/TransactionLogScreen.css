@@ -140,3 +140,19 @@
 .badge-purchase-order-receive { background: var(--color-success-bg); color: var(--success-500); }
 .badge-stock-count { background: var(--color-info-bg); color: var(--color-info); }
 .badge-manual-adjustment { background: var(--color-bg-hover); color: var(--neutral-600); }
+
+/* Qty change colors — tokenized so custom themes / dark mode stay consistent. */
+.log-qty-positive {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+}
+
+.log-qty-negative {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Detail button — small padding without inline styles. */
+.log-detail-btn {
+  padding: var(--space-1) var(--space-2_5);
+}

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { requiredLocalized } from '@/frontend/shared';
 import { listInventoryLocations, type InventoryLocation } from '@/api/inventory';
 import './LocationPicker.css';
 
@@ -8,7 +10,7 @@ interface LocationPickerProps {
   value: string;
   /** Called when the user selects a location. */
   onChange: (locationId: string, locationName: string) => void;
-  /** Label for the dropdown trigger (default: 'Location'). */
+  /** Label for the dropdown trigger (defaults to the localized 'Location'). */
   label?: string;
 }
 
@@ -22,9 +24,10 @@ interface LocationPickerProps {
 const LocationPicker = memo(function LocationPicker({
   value,
   onChange,
-  label = 'Location',
+  label,
 }: LocationPickerProps) {
   const { sessionToken } = useWorkspace();
+  const { l10n } = useLocalization();
   const token = sessionToken ?? '';
 
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -94,7 +97,8 @@ const LocationPicker = memo(function LocationPicker({
   // ── Find current location name ─────────────────────────────────
 
   const currentLocation = locations.find((loc) => loc.id === value);
-  const currentName = currentLocation?.name ?? label;
+  const fallbackLabel = label ?? requiredLocalized(l10n, 'loc-picker-label');
+  const currentName = currentLocation?.name ?? fallbackLabel;
 
   // ── Render ─────────────────────────────────────────────────────
 
@@ -108,7 +112,7 @@ const LocationPicker = memo(function LocationPicker({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`Select inventory location. Current: ${currentName}`}
+        aria-label={requiredLocalized(l10n, 'loc-picker-trigger-aria', { name: currentName })}
       >
         <svg
           width="16"
@@ -145,7 +149,7 @@ const LocationPicker = memo(function LocationPicker({
         <ul
           className="location-picker-dropdown"
           role="listbox"
-          aria-label="Inventory locations"
+          aria-label={requiredLocalized(l10n, 'loc-picker-listbox-aria')}
         >
           {locations.map((loc) => (
             <li key={loc.id} role="none">

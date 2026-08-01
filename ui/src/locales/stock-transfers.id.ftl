@@ -8,6 +8,7 @@ stock-transfers-status-draft = Draft
 stock-transfers-status-pending = Tertunda
 stock-transfers-status-in_transit = Dalam Perjalanan
 stock-transfers-status-received = Diterima
+stock-transfers-status-received_partial = Diterima (Sebagian)
 stock-transfers-status-cancelled = Dibatalkan
 stock-transfers-empty = Tidak ada transfer stok ditemukan
 stock-transfers-table-aria = Daftar transfer stok

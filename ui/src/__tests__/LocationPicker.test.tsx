@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
+import inventoryFtl from '@/locales/inventory.ftl?raw';
 import LocationPicker from '@/features/inventory/LocationPicker';
 
 // ── Mock auth and workspace contexts ───────────────────────────
@@ -49,6 +50,7 @@ describe('LocationPicker', () => {
   it('renders the currently selected location name', async () => {
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -62,6 +64,7 @@ describe('LocationPicker', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -84,6 +87,7 @@ describe('LocationPicker', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -109,6 +113,7 @@ describe('LocationPicker', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -134,6 +139,7 @@ describe('LocationPicker', () => {
     const handleChange = vi.fn();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={handleChange} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -160,6 +166,7 @@ describe('LocationPicker', () => {
     const handleChange = vi.fn();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={handleChange} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -185,6 +192,7 @@ describe('LocationPicker', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -207,6 +215,7 @@ describe('LocationPicker', () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     await waitFor(() => {
@@ -230,6 +239,7 @@ describe('LocationPicker', () => {
     mockListLocations.mockResolvedValue([]);
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
     );
 
     // Wait for the (empty) locations fetch to settle, then confirm the component hides itself

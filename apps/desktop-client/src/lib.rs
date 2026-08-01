@@ -311,6 +311,7 @@ pub fn run() {
             commands::stock_transfers::create_stock_transfer_scoped,
             commands::stock_transfers::get_stock_transfer_scoped,
             commands::stock_transfers::list_stock_transfers_scoped,
+            commands::stock_transfers::list_in_transit_transfers_scoped,
             commands::stock_transfers::get_stock_transfer_lines_scoped,
             commands::stock_transfers::add_stock_transfer_line_scoped,
             commands::stock_transfers::remove_stock_transfer_line_scoped,

@@ -15,6 +15,7 @@ import {
   createStockTransfer,
   getStockTransfer,
   listStockTransfers,
+  listInTransitTransfers,
   getStockTransferLines,
   addStockTransferLine,
   removeStockTransferLine,
@@ -53,6 +54,21 @@ describe('stockTransfers.ts scoped IPC contract', () => {
     });
     await removeStockTransferLine('tok', 'line-1');
     expect(mockInvoke).toHaveBeenLastCalledWith('remove_stock_transfer_line_scoped', { sessionToken: 'tok', lineId: 'line-1' });
+  });
+
+  it('lists in-transit transfers with lines in one batch call (INV-09)', async () => {
+    mockInvoke.mockResolvedValue([
+      {
+        transfer: { id: 't-1', transfer_number: 'TRF-1', status: 'in_transit' },
+        lines: [],
+      },
+    ]);
+    const result = await listInTransitTransfers('tok');
+    expect(mockInvoke).toHaveBeenLastCalledWith('list_in_transit_transfers_scoped', { sessionToken: 'tok' });
+    // The response carries transfer + lines together so the UI never issues
+    // one line-fetch per transfer (the N+1 this command eliminates).
+    expect(result[0]!.transfer.status).toBe('in_transit');
+    expect(result[0]!.lines).toEqual([]);
   });
 
   it('scopes lifecycle operations and derives the receiver server-side', async () => {

@@ -145,6 +145,7 @@ inv-log-type-void = Void
 inv-log-type-refund = Refund
 inv-log-type-transfer = Transfer
 inv-log-type-po-receive = PO Diterima
+inv-log-type-purchase-order-receive = PO Diterima
 inv-log-type-stock-count = Stok Opname
 inv-log-type-manual-adjustment = Penyesuaian Manual
 inv-log-loading-lines = Memuat baris...
@@ -199,6 +200,11 @@ inv-alert-stock-label = Stok
 inv-alert-threshold-label = Batas
 inv-alert-error-load = Gagal memuat peringatan
 inv-alert-error-ack = Gagal menanggapi
+
+# ── Location Picker ──
+loc-picker-label = Lokasi
+loc-picker-trigger-aria = Pilih lokasi inventaris. Saat ini: { $name }
+loc-picker-listbox-aria = Lokasi inventaris
 
 # ── Table Management ──
 

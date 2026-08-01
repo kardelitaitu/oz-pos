@@ -8,6 +8,7 @@ stock-transfers-status-draft = Draft
 stock-transfers-status-pending = Pending
 stock-transfers-status-in_transit = In Transit
 stock-transfers-status-received = Received
+stock-transfers-status-received_partial = Received (Partial)
 stock-transfers-status-cancelled = Cancelled
 stock-transfers-empty = No stock transfers found
 stock-transfers-table-aria = Stock transfers list

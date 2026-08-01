@@ -123,6 +123,7 @@ inv-log-type-void = Void
 inv-log-type-refund = Refund
 inv-log-type-transfer = Transfer
 inv-log-type-po-receive = PO Receive
+inv-log-type-purchase-order-receive = PO Receive
 inv-log-type-stock-count = Stock Count
 inv-log-type-manual-adjustment = Manual Adjustment
 inv-log-loading-lines = Loading lines...
@@ -177,4 +178,9 @@ inv-alert-stock-label = Stock
 inv-alert-threshold-label = Threshold
 inv-alert-error-load = Failed to load alerts
 inv-alert-error-ack = Failed to acknowledge
+
+# ── Location Picker ──
+loc-picker-label = Location
+loc-picker-trigger-aria = Select inventory location. Current: { $name }
+loc-picker-listbox-aria = Inventory locations
 

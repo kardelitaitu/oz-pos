@@ -197,3 +197,13 @@
   width: 100%;
   justify-content: center;
 }
+
+/* Shift summary transaction type — capitalize without inline styles. */
+.summary-item-type {
+  text-transform: capitalize;
+}
+
+/* Empty summary marker — danger border via tokens instead of inline color. */
+.summary-item-empty {
+  border-left-color: var(--color-danger);
+}

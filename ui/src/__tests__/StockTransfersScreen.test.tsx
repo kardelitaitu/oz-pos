@@ -162,8 +162,8 @@ describe('StockTransfersScreen', () => {
 
     const inTransitBadge = document.querySelector('.stock-transfers-badge--in_transit');
     expect(inTransitBadge).toBeInTheDocument();
-    // statusLabel('in_transit') produces "In transit" (lowercase t).
-    expect(inTransitBadge!.textContent).toBe('In transit');
+    // The badge uses the localized stock-transfers-status-in_transit key.
+    expect(inTransitBadge!.textContent).toBe('In Transit');
   });
 
   it('shows View button for each transfer row', async () => {

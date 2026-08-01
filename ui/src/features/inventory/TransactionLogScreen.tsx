@@ -220,13 +220,13 @@ export default function TransactionLogScreen() {
                     <td>{new Date(tx.created_at).toLocaleString()}</td>
                     <td>
                       <span className={`badge badge-${tx.type}`}>
-                        {tx.type.replace('-', ' ')}
+                        {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
                       </span>
                     </td>
                     <td>{locationName}</td>
                     <td>{tx.staff_id}</td>
                     <td>
-                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
+                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary log-detail-btn">
                         <Localized id="inv-log-expand-btn">
                           <span>Details</span>
                         </Localized>
@@ -266,10 +266,9 @@ export default function TransactionLogScreen() {
                               <tbody>{expandedLines.map(line => (
                                   <tr key={line.id}>
                                     <td>{line.sku}</td>
-                                    <td>{line.product_name}</td>
-                                    <td style={{ color: line.qty >= 0 ? '#22c55e' : '#ef4444' }}>
-                                      {line.qty >= 0 ? `+${line.qty}` : line.qty}
-                                    </td>
+                                    <td>{line.product_name}</td>                    <td className={line.qty >= 0 ? 'log-qty-positive' : 'log-qty-negative'}>
+                      {line.qty >= 0 ? `+${line.qty}` : line.qty}
+                    </td>
                                     <td>{line.barcode_scanned || '-'}</td>
                                   </tr>
                                 ))}

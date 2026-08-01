@@ -71,6 +71,12 @@ export const getStockTransfer = (
 export const listStockTransfers = (sessionToken: string): Promise<StockTransfer[]> =>
   loggedInvoke<StockTransfer[]>('list_stock_transfers_scoped', { sessionToken });
 
+/** List in-transit transfers with their line items in one batch request (avoids N+1). */
+export const listInTransitTransfers = (
+  sessionToken: string,
+): Promise<TransferWithLines[]> =>
+  loggedInvoke<TransferWithLines[]>('list_in_transit_transfers_scoped', { sessionToken });
+
 /** Get all line items for a transfer in the session-scoped store. */
 export const getStockTransferLines = (
   sessionToken: string,

@@ -31,7 +31,11 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let ts = chrono::Utc::now().timestamp_millis();
-        let short = &id[..8];
+        // Use the random tail of the UUID v7 for the short suffix. The first
+        // 8 hex chars of a UUID v7 encode the millisecond timestamp, so two
+        // transfers created in the same millisecond would collide and trip
+        // the UNIQUE constraint on `transfer_number`. The tail is random.
+        let short = &id[24..];
         let transfer_number = format!("TRF-{ts}-{short}");
 
         // ADR-18 §13-36 canonical default-location UUID (see
@@ -175,6 +179,93 @@ impl Store<'_> {
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List transfers in a given status with their line items, newest first.
+    ///
+    /// Runs two queries (transfers, then one `IN` query for every line) so
+    /// the front end does not need to fetch lines one transfer at a time.
+    /// This powers the transit audit screen without an N+1 request pattern.
+    pub fn list_transfers_with_lines_by_status(
+        &self,
+        status: &str,
+    ) -> Result<Vec<(StockTransfer, Vec<StockTransferLine>)>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, transfer_number, status,
+                    source_location_id AS source_location,
+                    destination_location_id AS destination_location,
+                    source_terminal_id, destination_terminal_id,
+                    notes, created_by, received_by,
+                    created_at, sent_at, received_at, updated_at
+             FROM stock_transfers WHERE status = ?1 ORDER BY created_at DESC",
+        )?;
+        let transfers: Vec<StockTransfer> = stmt
+            .query_map(params![status], |row| {
+                Ok(StockTransfer {
+                    id: row.get("id")?,
+                    transfer_number: row.get("transfer_number")?,
+                    status: row.get("status")?,
+                    source_location: row.get("source_location")?,
+                    destination_location: row.get("destination_location")?,
+                    source_terminal_id: row.get("source_terminal_id")?,
+                    destination_terminal_id: row.get("destination_terminal_id")?,
+                    notes: row.get("notes")?,
+                    created_by: row.get("created_by")?,
+                    received_by: row.get("received_by")?,
+                    created_at: row.get("created_at")?,
+                    sent_at: row.get("sent_at")?,
+                    received_at: row.get("received_at")?,
+                    updated_at: row.get("updated_at")?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+
+        if transfers.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Fetch all matching lines in one IN query, then group them back onto
+        // their transfers in transfer order.
+        let placeholders = std::iter::repeat("?")
+            .take(transfers.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT id, transfer_id, sku, product_name, qty, received_qty
+             FROM stock_transfer_lines WHERE transfer_id IN ({placeholders})
+             ORDER BY transfer_id, id"
+        );
+        let mut line_stmt = self.conn.prepare(&sql)?;
+        let ids: Vec<&str> = transfers.iter().map(|t| t.id.as_str()).collect();
+        let lines: Vec<StockTransferLine> = line_stmt
+            .query_map(rusqlite::params_from_iter(ids.iter().copied()), |row| {
+                Ok(StockTransferLine {
+                    id: row.get("id")?,
+                    transfer_id: row.get("transfer_id")?,
+                    sku: row.get("sku")?,
+                    product_name: row.get("product_name")?,
+                    qty: row.get("qty")?,
+                    received_qty: row.get("received_qty")?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+
+        let mut by_transfer: std::collections::HashMap<String, Vec<StockTransferLine>> =
+            std::collections::HashMap::new();
+        for line in lines {
+            by_transfer
+                .entry(line.transfer_id.clone())
+                .or_default()
+                .push(line);
+        }
+
+        Ok(transfers
+            .into_iter()
+            .map(|transfer| {
+                let transfer_lines = by_transfer.remove(&transfer.id).unwrap_or_default();
+                (transfer, transfer_lines)
+            })
+            .collect())
     }
 
     /// Get lines for a transfer.
@@ -1301,6 +1392,76 @@ mod tests {
         assert_eq!(fetched_lines.len(), 2);
         assert_eq!(fetched_lines[0].sku, "SKU-001");
         assert_eq!(fetched_lines[1].sku, "SKU-002");
+    }
+
+    #[test]
+    fn list_transfers_with_lines_by_status_batches_lines() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_product(&conn, "SKU-002", "Gadget");
+        seed_inventory(&conn, "SKU-001", 100);
+        seed_inventory(&conn, "SKU-002", 50);
+
+        // Two in-transit transfers (each with lines) and one draft transfer.
+        let t1 = s
+            .create_transfer(
+                None,
+                None,
+                None,
+                None,
+                "",
+                "user-1",
+                &[
+                    make_line("SKU-001", "Widget", 10),
+                    make_line("SKU-002", "Gadget", 5),
+                ],
+            )
+            .unwrap();
+        s.send_transfer(&t1.id).unwrap();
+        let t2 = s
+            .create_transfer(
+                None,
+                None,
+                None,
+                None,
+                "",
+                "user-1",
+                &[make_line("SKU-001", "Widget", 3)],
+            )
+            .unwrap();
+        s.send_transfer(&t2.id).unwrap();
+        let _t3 = s
+            .create_transfer(None, None, None, None, "draft", "user-1", &[])
+            .unwrap();
+
+        let batched = s.list_transfers_with_lines_by_status("in_transit").unwrap();
+        assert_eq!(batched.len(), 2, "only in-transit transfers are returned");
+
+        let t1_batch = batched
+            .iter()
+            .find(|(t, _)| t.id == t1.id)
+            .expect("transfer 1 present");
+        assert_eq!(t1_batch.1.len(), 2, "both lines batched for transfer 1");
+        assert_eq!(t1_batch.1[0].sku, "SKU-001");
+        assert_eq!(t1_batch.1[1].sku, "SKU-002");
+
+        let t2_batch = batched
+            .iter()
+            .find(|(t, _)| t.id == t2.id)
+            .expect("transfer 2 present");
+        assert_eq!(t2_batch.1.len(), 1);
+        assert_eq!(t2_batch.1[0].qty, 3);
+    }
+
+    #[test]
+    fn list_transfers_with_lines_empty_status_is_empty() {
+        let conn = fresh();
+        let result = store(&conn)
+            .list_transfers_with_lines_by_status("in_transit")
+            .unwrap();
+        assert!(result.is_empty());
     }
 
     #[test]

@@ -156,6 +156,32 @@ pub async fn list_stock_transfers_scoped(
     Ok(Store::new(&db).list_transfers()?)
 }
 
+/// List in-transit transfers with their line items in one batch request.
+///
+/// The transit audit screen previously listed all transfers and then fetched
+/// lines one transfer at a time (N+1). This command returns the lines in two
+/// SQL queries so the whole audit view loads in a single IPC round-trip.
+///
+/// The status filter is intentionally `in_transit` only: this mirrors the
+/// legacy screen's behavior, and partially-received transfers (`received_partial`)
+/// continue to be received on the StockTransfersScreen, not the transit audit.
+#[tauri::command]
+pub async fn list_in_transit_transfers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TransferWithLines>, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db)
+        .list_transfers_with_lines_by_status("in_transit")?
+        .into_iter()
+        .map(|(transfer, lines)| TransferWithLines { transfer, lines })
+        .collect())
+}
+
 /// Get transfer lines from the session-scoped store.
 #[tauri::command]
 pub async fn get_stock_transfer_lines_scoped(

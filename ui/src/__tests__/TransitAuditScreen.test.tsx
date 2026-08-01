@@ -7,16 +7,14 @@ import inventoryFtl from '@/locales/inventory.ftl?raw';
 // ── Mocks ─────────────────────────────────────────────────────────
 
 vi.mock('@/api/stockTransfers', () => ({
-  listStockTransfers: vi.fn(),
-  getStockTransferLines: vi.fn(),
+  listInTransitTransfers: vi.fn(),
   cancelStockTransfer: vi.fn(),
 }));
 
 import TransitAuditScreen from '@/features/inventory/TransitAuditScreen';
-import { listStockTransfers, getStockTransferLines, cancelStockTransfer } from '@/api/stockTransfers';
+import { listInTransitTransfers, cancelStockTransfer } from '@/api/stockTransfers';
 
-const mockListTransfers = listStockTransfers as ReturnType<typeof vi.fn>;
-const mockGetLines = getStockTransferLines as ReturnType<typeof vi.fn>;
+const mockListTransfers = listInTransitTransfers as ReturnType<typeof vi.fn>;
 const mockCancelTransfer = cancelStockTransfer as ReturnType<typeof vi.fn>;
 
 // ── Test data ─────────────────────────────────────────────────────
@@ -63,8 +61,10 @@ const lines = [
 describe('TransitAuditScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListTransfers.mockResolvedValue([recentTransfer, overdueTransfer]);
-    mockGetLines.mockResolvedValue(lines);
+    mockListTransfers.mockResolvedValue([
+      { transfer: recentTransfer, lines },
+      { transfer: overdueTransfer, lines },
+    ]);
     mockCancelTransfer.mockResolvedValue({
       ...recentTransfer,
       status: 'cancelled',

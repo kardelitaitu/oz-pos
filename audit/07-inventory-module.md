@@ -160,6 +160,15 @@ The main inventory primitives are:
 
 **Priority:** P2 — performance and failure isolation.
 
+**Status: ✅ REMEDIATED** — commit `45d65511` (Phase 2) + `list_in_transit_transfers_scoped` batch.
+
+- **Core:** `Store::list_transfers_with_lines_by_status(status)` in `crates/oz-core/src/db/stock_transfers.rs` runs two queries (transfers, then one `IN` batch for all lines) and groups lines back onto their transfers — no per-transfer line fetch.
+- **Commands:** `list_in_transit_transfers_scoped` added to desktop + tablet `commands/stock_transfers.rs`, registered in both `lib.rs` files, and pinned in `wiring_audit.rs`.
+- **API:** `listInTransitTransfers(sessionToken)` in `ui/src/api/stockTransfers.ts`; `TransitAuditScreen` now loads everything in one IPC round-trip with a durable error state + Retry button (`inv-transit-error-load` / `retry` keys in both bundles).
+- **Contract test:** `api-stock-transfers-contract.test.ts` pins the command name and the transfer+lines response shape.
+- **Fixed en route:** `create_transfer` used `&id[..8]` (the millisecond-timestamp prefix of UUID v7) in `TRF-{ts}-{short}`, so two transfers created in the same millisecond collided on the UNIQUE `transfer_number`. Now uses the random tail `&id[24..]`. Core regression test `list_transfers_with_lines_by_status_batches_lines` covers the batch grouping.
+- **Design note:** the batch filters `in_transit` only, matching the legacy screen; `received_partial` transfers continue to be received on StockTransfersScreen, not the transit audit.
+
 ---
 
 ### INV-10 — Inventory screens still contain localization and theme-compliance drift (P3)
@@ -171,6 +180,14 @@ The main inventory primitives are:
 **Recommendation:** Add all labels, placeholders, status names, dates, and empty markers to the Fluent bundles; use a locale-aware date formatter; replace inline colors/padding with tokenized CSS classes; and run bundle-parity, accessibility, and theme-token checks over the entire Inventory surface.
 
 **Priority:** P3 — accessibility, localization, and theming quality.
+
+**Status: ✅ REMEDIATED** — localization + theme cleanup across the four flagged surfaces:
+
+- **`LocationPicker`:** `label = 'Location'`, the trigger `aria-label`, and the listbox `aria-label` are now Fluent-driven via `requiredLocalized` (`loc-picker-label`, `loc-picker-trigger-aria` with `{ $name }`, `loc-picker-listbox-aria`), added to both `inventory.ftl` / `inventory.id.ftl`.
+- **`StockTransfersScreen`:** status badges (table + detail) use `localizedStatusLabel()` reading `stock-transfers-status-*` keys (reusing the `RequiredLocalizedL10n` type); added missing `stock-transfers-status-received_partial` to both bundles. The `aria-label="Actions"` was already Fluent-driven via the `stock-transfers-actions` attribute.
+- **`TransactionLogScreen`:** inline `#22c55e`/`#ef4444` replaced with tokenized `.log-qty-positive`/`.log-qty-negative` CSS classes; inline padding moved to `.log-detail-btn`; type badges now resolve `inv-log-type-*` keys (added `inv-log-type-purchase-order-receive` alias to both bundles for the DB `purchase-order-receive` value).
+- **`ShiftBar`:** `textTransform` inline style moved to `.summary-item-type`; `#ef4444` border moved to `.summary-item-empty` using `var(--color-danger)`; type badges localized via `inv-log-type-*` keys.
+- All new keys exist in both en + id bundles (bundle-parity clean); 6 affected UI test files pass (56/56).
 
 ---
 
@@ -227,4 +244,19 @@ These validation runs exercised existing behavior only; they do not cover the un
 
 ## Status
 
-Phase 1 of this audit is implemented and validated locally. Stock transfers now have a session/store/permission boundary on desktop and tablet, with actor attribution derived server-side and no local auth-row fabrication. INV-02, INV-04 through INV-11, and the remaining stock-count/inventory actor work are still open; this report must not be treated as a full inventory remediation sign-off.
+✅ **FULLY REMEDIATED.** All 11 findings (INV-01 → INV-11) are implemented and validated locally:
+
+- **INV-01/02/03 (session boundary):** all stock-transfer and stock-count commands are `*_scoped` on desktop + tablet with `resolve_scope` (ADR #7), permission checks, and server-side actor derivation; migration `113_stock_count_actor_ids.sql` drops local auth FKs. (Phases 1–2, commits `a2c70848`, `45d65511`.)
+- **INV-04/05/06 (data integrity):** `cancel_transfer` reverses source inventory atomically for `in_transit` (received/partial rejected); receive lifecycle allows `in_transit` + `received_partial` continuation with delta-only crediting; quantity/status invariants enforced at the core transaction boundary; count completion claims status conditionally. (Phase 2, commit `45d65511`.)
+- **INV-07/11 (concurrency):** shift contract aligned to per user+location; count-number allocation uses `BEGIN IMMEDIATE` + conditional claim with rollback hardening. (Phase 2.)
+- **INV-08/09 (resilience/performance):** durable error + retry states on StockCounts/History/Detail/TransitAudit; transit N+1 replaced by the scoped batch API. (Phase 2 + this batch.)
+- **INV-10 (i18n/theme):** Fluent coverage + tokenized CSS across LocationPicker, StockTransfersScreen, TransactionLogScreen, ShiftBar. (This batch.)
+
+### Validation (this batch)
+
+- `cargo test -p oz-core --lib db::stock_transfers`: **27 passed** (incl. the new batch-grouping test)
+- UI typecheck: clean · UI lint: clean
+- Focused UI tests (LocationPicker, TransactionLog, ShiftBar, StockTransfersScreen, TransitAuditScreen, api-stock-transfers-contract): **56/56 passed**
+- Code review (deepseek-flash): no blockers
+
+**Conscious retention:** `get_stock_transfer_lines_scoped` / `getStockTransferLines` now has no UI consumer (TransitAuditScreen was its only caller) but remains a registered, contract-tested public IPC surface — kept intentionally for direct line fetches from future screens.

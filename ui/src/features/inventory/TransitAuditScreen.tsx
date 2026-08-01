@@ -1,48 +1,48 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
+import { listInTransitTransfers, cancelStockTransfer, type TransferWithLines } from '@/api/stockTransfers';
 import './TransitAuditScreen.css';
-
-interface TransferWithLines {
-  transfer: StockTransfer;
-  lines: StockTransferLine[];
-}
 
 const TRANSIT_EXPIRY_HOURS = 24;
 
 export default function TransitAuditScreen() {
   const [transfers, setTransfers] = useState<TransferWithLines[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reverseConfirmId, setReverseConfirmId] = useState<string | null>(null);
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
 
   const loadTransfers = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const allTransfers = await listStockTransfers(sessionToken);
-      const inTransit = allTransfers.filter(t => t.status === 'in_transit');
-      
-      const enriched = await Promise.all(
-        inTransit.map(async (transfer) => {
-          const lines = await getStockTransferLines(sessionToken, transfer.id);
-          return { transfer, lines };
-        })
-      );
+      if (!sessionToken) {
+        throw new Error(requiredLocalized(l10nRef.current, 'inv-transit-error-load'));
+      }
+      // Single batch request — the backend returns in-transit transfers with
+      // their lines in one IPC round-trip (no N+1 line fetches).
+      const enriched = await listInTransitTransfers(sessionToken);
       setTransfers(enriched);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-transit-error-load')), type: 'error' });
+      const message = err instanceof Error
+        ? err.message
+        : requiredLocalized(l10nRef.current, 'inv-transit-error-load');
+      setLoadError(message);
+      addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast, l10n, sessionToken]);
+  }, [addToast, sessionToken]);
 
   useEffect(() => {
     loadTransfers();
@@ -92,7 +92,14 @@ export default function TransitAuditScreen() {
         </Localized>
       </div>
 
-      {transfers.length === 0 ? (
+      {loadError ? (
+        <div className="transit-error" role="alert">
+          <p>{loadError}</p>
+          <Button variant="secondary" size="sm" onClick={loadTransfers}>
+            <Localized id="retry"><span>Retry</span></Localized>
+          </Button>
+        </div>
+      ) : transfers.length === 0 ? (
         <div className="transit-empty">
           <Localized id="inv-transit-no-overdue">
             <span>No transfers in transit.</span>

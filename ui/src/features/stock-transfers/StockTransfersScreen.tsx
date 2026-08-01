@@ -19,12 +19,22 @@ import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import type { RequiredLocalizedL10n } from '@/frontend/shared';
 import './StockTransfersScreen.css';
 
 const STATUS_FILTERS = ['all', 'draft', 'pending', 'in_transit', 'received', 'cancelled'] as const;
 
 function statusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
+}
+
+/**
+ * Localized status badge label. Prefers the Fluent `stock-transfers-status-*`
+ * bundle entries (already used by the filter tabs); falls back to the
+ * capitalized raw status for unknown statuses.
+ */
+function localizedStatusLabel(l10n: RequiredLocalizedL10n, status: string): string {
+  return l10n.getString(`stock-transfers-status-${status}`) ?? statusLabel(status);
 }
 
 function formatDate(iso: string | null): string {
@@ -381,7 +391,7 @@ export default function StockTransfersScreen() {
                   </td>
                   <td>
                     <span className={`stock-transfers-badge stock-transfers-badge--${t.status}`}>
-                      {statusLabel(t.status)}
+                      {localizedStatusLabel(l10n, t.status)}
                     </span>
                   </td>
                   <td>{t.source_location ?? t.source_terminal_id ?? '—'}</td>
@@ -469,7 +479,7 @@ export default function StockTransfersScreen() {
                   </div>
                   <div className="stock-transfers-detail-field">
                     <Localized id="stock-transfers-status"><span className="stock-transfers-detail-label">Status</span></Localized>
-                    <span className={`stock-transfers-badge stock-transfers-badge--${detail.transfer.status}`}>{statusLabel(detail.transfer.status)}</span>
+                    <span className={`stock-transfers-badge stock-transfers-badge--${detail.transfer.status}`}>{localizedStatusLabel(l10n, detail.transfer.status)}</span>
                   </div>
                   <div className="stock-transfers-detail-field">
                     <Localized id="stock-transfers-source"><span className="stock-transfers-detail-label">Source</span></Localized>

@@ -211,15 +211,15 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               {shiftSummaryTxs.length > 0 ? (
                 shiftSummaryTxs.map(tx => (
                   <li key={tx.id} className="summary-item">
-                    <span style={{ textTransform: 'capitalize' }}>
-                      {tx.type.replace('-', ' ')}
+                    <span className="summary-item-type">
+                      {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
                     </span>
                     <span>{new Date(tx.created_at).toLocaleTimeString()}</span>
                   </li>
                 ))
               ) : (
                 <Localized id="inv-shift-no-transactions">
-                  <li className="summary-item" style={{ borderLeftColor: '#ef4444' }}>
+                  <li className="summary-item summary-item-empty">
                     No transactions recorded.
                   </li>
                 </Localized>

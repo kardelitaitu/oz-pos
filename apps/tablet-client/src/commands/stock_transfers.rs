@@ -156,6 +156,24 @@ pub async fn list_stock_transfers_scoped(
     Ok(Store::new(&db).list_transfers()?)
 }
 
+/// List in-transit transfers with their line items in one batch request.
+#[command]
+pub async fn list_in_transit_transfers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TransferWithLines>, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db)
+        .list_transfers_with_lines_by_status("in_transit")?
+        .into_iter()
+        .map(|(transfer, lines)| TransferWithLines { transfer, lines })
+        .collect())
+}
+
 /// Get transfer lines from the session-scoped store.
 #[command]
 pub async fn get_stock_transfer_lines_scoped(
