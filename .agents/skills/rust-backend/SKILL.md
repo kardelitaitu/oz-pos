@@ -213,15 +213,24 @@ pub struct SaleLine {
 
 ---
 
-## Toolchain (run before commit)
+## Toolchain & Verification
 
+### During Development Iteration
+Fast checks to validate logic and compilation during active development:
+```bash
+cargo check -p <crate>
+cargo test -p <crate> <test_name>
+```
+
+### Pre-Push & Final Verification
+Run before pushing code or submitting for final review:
 ```bash
 cargo fmt --all
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test --lib
+cargo test --workspace --all-features
 ```
 
-`AGENTS.md` makes `rustfmt` and `clippy -D warnings` mandatory. Don't commit code that fails either.
+`AGENTS.md` mandates passing `cargo fmt` and `clippy -D warnings` before pushing.
 
 ---
 

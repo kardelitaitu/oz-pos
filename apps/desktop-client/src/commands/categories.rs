@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use oz_core::Store;
+use oz_core::permissions;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -87,8 +89,12 @@ pub struct CreateCategoryResult {
     pub id: String,
 }
 
-#[tauri::command]
 /// Create category.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `create_category_scoped`,
+/// which resolves the store from the session and enforces the manager
+/// permission on the session user.
+#[tauri::command]
 pub async fn create_category(
     args: CreateCategoryArgs,
     state: State<'_, AppState>,
@@ -96,6 +102,29 @@ pub async fn create_category(
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
+    store.create_category(&args.id, &args.name, &args.colour, &args.icon)?;
+
+    Ok(CreateCategoryResult { id: args.id })
+}
+
+/// Create category in the store resolved from a session token (CAT-01).
+///
+/// Resolves the store from the opaque session token and enforces
+/// `products:create` on the session user — mirroring the scoped product
+/// commands. ADR #7.
+#[tauri::command]
+pub async fn create_category_scoped(
+    session_token: String,
+    args: CreateCategoryArgs,
+    state: State<'_, AppState>,
+) -> Result<CreateCategoryResult, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_CREATE)?;
     store.create_category(&args.id, &args.name, &args.colour, &args.icon)?;
 
     Ok(CreateCategoryResult { id: args.id })
@@ -124,6 +153,8 @@ pub struct UpdateCategoryResult {
 }
 
 /// Update an existing category's name, colour, and icon.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `update_category_scoped`.
 #[tauri::command]
 pub async fn update_category(
     args: UpdateCategoryArgs,
@@ -131,6 +162,26 @@ pub async fn update_category(
 ) -> Result<UpdateCategoryResult, AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    store.update_category(&args.id, &args.name, &args.colour, &args.icon)?;
+    Ok(UpdateCategoryResult { id: args.id })
+}
+
+/// Update a category in the store resolved from a session token (CAT-01).
+///
+/// Enforces `products:update` on the session user. ADR #7.
+#[tauri::command]
+pub async fn update_category_scoped(
+    session_token: String,
+    args: UpdateCategoryArgs,
+    state: State<'_, AppState>,
+) -> Result<UpdateCategoryResult, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_UPDATE)?;
     store.update_category(&args.id, &args.name, &args.colour, &args.icon)?;
     Ok(UpdateCategoryResult { id: args.id })
 }
@@ -144,8 +195,17 @@ pub struct DeleteCategoryArgs {
     pub id: String,
 }
 
-#[tauri::command]
+/// Result of deleting a category (CAT-02).
+#[derive(Debug, Serialize)]
+pub struct DeleteCategoryResult {
+    /// Number of products unlinked from the deleted category.
+    pub affected_products: i64,
+}
+
 /// Delete category.
+///
+/// **Deprecated for multi-store (ADR #7):** Use `delete_category_scoped`.
+#[tauri::command]
 pub async fn delete_category(
     args: DeleteCategoryArgs,
     state: State<'_, AppState>,
@@ -154,6 +214,29 @@ pub async fn delete_category(
     let store = Store::new(&db);
     store.delete_category(&args.id)?;
     Ok(())
+}
+
+/// Delete a category in the store resolved from a session token (CAT-01/02).
+///
+/// Enforces `products:delete` on the session user, then deletes the
+/// category with the explicit unlink policy — products in the category are
+/// set to `category_id = NULL` in the same transaction, and the number of
+/// unlinked products is returned to the UI. ADR #7.
+#[tauri::command]
+pub async fn delete_category_scoped(
+    session_token: String,
+    args: DeleteCategoryArgs,
+    state: State<'_, AppState>,
+) -> Result<DeleteCategoryResult, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_DELETE)?;
+    let affected_products = store.delete_category_with_unlink(&args.id)?;
+    Ok(DeleteCategoryResult { affected_products })
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

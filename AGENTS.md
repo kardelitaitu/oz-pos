@@ -108,8 +108,8 @@ npm ci --no-audit --no-fund
   or anywhere else) unless the user explicitly asks you to bump it.
 
 ### Rust Standards
-- Format all Rust code with `rustfmt` before committing.
-- Run `cargo clippy -- -D warnings` and resolve all warnings.
+- **Development Iteration:** Use `cargo check` (or `cargo check -p <crate>`) for quick compilation validation and run specific target tests (e.g. `cargo test -p <crate> <test_name>`) during active development.
+- **Pre-Push Verification:** Run `cargo fmt --all`, `cargo clippy --all-targets --all-features -- -D warnings` (resolving all warnings), and full workspace tests prior to pushing code or completing final verification.
 - Every public function, struct, and trait must have a doc comment (`///`).
 - Prefer `thiserror` for error types and `anyhow` for application-level error propagation.
 - Store all monetary values as integer minor units (`i64`) using the `Money` struct; never use `f32`/`f64` for currency.

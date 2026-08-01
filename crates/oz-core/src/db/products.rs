@@ -593,6 +593,31 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Delete a category, explicitly unlinking its products first (CAT-02).
+    ///
+    /// The relationship policy is made explicit in one transaction: products
+    /// referencing this category are set to `category_id = NULL`, then the
+    /// category row is deleted. Returns the number of products that were
+    /// unlinked so the UI can show the consequence — replacing the implicit
+    /// FK-dependent behavior of [`Store::delete_category`] for the
+    /// management screen.
+    pub fn delete_category_with_unlink(&self, id: &str) -> Result<i64, CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        let unlinked = tx.execute(
+            "UPDATE products SET category_id = NULL WHERE category_id = ?1",
+            params![id],
+        )?;
+        let deleted = tx.execute("DELETE FROM categories WHERE id = ?1", params![id])?;
+        if deleted == 0 {
+            return Err(CoreError::NotFound {
+                entity: "category",
+                id: id.to_owned(),
+            });
+        }
+        tx.commit()?;
+        Ok(unlinked as i64)
+    }
+
     /// Look up a category by id.
     pub fn get_category(&self, id: &str) -> Result<Option<Category>, CoreError> {
         let mut stmt = self
@@ -2065,6 +2090,51 @@ mod tests {
     fn delete_category_not_found() {
         let conn = fresh();
         let err = store(&conn).delete_category("nope").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    #[test]
+    fn delete_category_with_unlink_nullifies_products_and_returns_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_category("cat-1", "Drinks", "#06b6d4", "hot-drink")
+            .unwrap();
+        s.create_category("cat-2", "Food", "#f97316", "food")
+            .unwrap();
+        // Seed two products linked to cat-1 and one to cat-2.
+        for (sku, cat) in [("SKU-1", "cat-1"), ("SKU-2", "cat-1"), ("SKU-3", "cat-2")] {
+            let currency = Currency::from_str("USD").unwrap();
+            let money = crate::Money {
+                minor_units: 100,
+                currency,
+            };
+            s.create_product(sku, sku, money, Some(cat), None, 0, None)
+                .unwrap();
+        }
+
+        let unlinked = s.delete_category_with_unlink("cat-1").unwrap();
+        assert_eq!(unlinked, 2);
+        assert!(s.get_category("cat-1").unwrap().is_none());
+        // cat-2 and its product are untouched; the unlinked products exist
+        // with a NULL category_id.
+        assert!(s.get_category("cat-2").unwrap().is_some());
+        let rows = s
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM products WHERE category_id IS NULL",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 2);
+    }
+
+    #[test]
+    fn delete_category_with_unlink_missing_returns_not_found() {
+        let conn = fresh();
+        let err = store(&conn)
+            .delete_category_with_unlink("nope")
+            .unwrap_err();
         assert!(matches!(err, CoreError::NotFound { .. }));
     }
 
