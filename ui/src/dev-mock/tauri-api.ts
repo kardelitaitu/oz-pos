@@ -86,17 +86,6 @@ const MOCK_TERMINAL = {
   updatedAt: new Date().toISOString(),
 };
 
-const MOCK_STAFF_LIST = [
-  { id: 'staff-1', username: 'owner', display_name: 'Owner', role_id: '1', role_name: 'owner', is_active: true },
-  { id: 'staff-2', username: 'kasir', display_name: 'Kasir', role_id: '3', role_name: 'cashier', is_active: true },
-];
-
-const MOCK_ROLES = [
-  { id: '1', name: 'owner', description: 'Full system access' },
-  { id: '2', name: 'manager', description: 'Management access' },
-  { id: '3', name: 'cashier', description: 'POS operations' },
-];
-
 const MOCK_CUSTOMERS = [
   { id: 'cust-1', name: 'John Doe', email: 'john@example.com', phone: '08123456789', notes: 'Regular customer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: 'cust-2', name: 'Jane Smith', email: 'jane@example.com', phone: '08987654321', notes: '', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -362,29 +351,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // WORKSPACES (ADR #4 / #7)
   // ═══════════════════════════════════════════════════════════════
 
-  'list_all_workspaces': () => [
-    { key: 'store-pos', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart' },
-    { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant' },
-    { key: 'kds', name: 'Kitchen Display', description: 'Order display', icon: 'utensils' },
-    { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
-    { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
-  ],
   'list_workspaces': () => MOCK_WORKSPACES,
   'list_workspaces_scoped': () => MOCK_WORKSPACES,
   'list_workspace_screens': () => [],
   'list_workspace_screens_scoped': () => [],
-  'get_workspace_instance': (args) => {
-    const { instanceId } = args as { instanceId: string };
-    return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
-  },
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
     return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
   },
-  'create_workspace_instance': (args) => ({
-    instance_id: `ws-${Date.now()}`,
-    ...(args as Record<string, unknown>),
-  }),
   'create_workspace_instance_scoped': (args) => {
     const req = (args as { req: Record<string, unknown> }).req;
     return { instance_id: `ws-${Date.now()}`, ...req };
@@ -401,13 +375,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
     { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
   ],
-  'get_user_workspace_instances': () => [],
   'get_user_workspace_instances_scoped': () => [],
-  'set_user_workspace_instances': () => null,
   'set_user_workspace_instances_scoped': () => null,
-  'get_user_workspaces': () => [],
   'get_user_workspaces_scoped': () => [],
-  'set_user_workspaces': () => null,
   'set_user_workspaces_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
@@ -822,11 +792,6 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // STAFF MANAGEMENT
   // ═══════════════════════════════════════════════════════════════
-
-  'list_staff': () => MOCK_STAFF_LIST,
-  'list_roles': () => MOCK_ROLES,
-  'create_staff': () => ({ id: 'staff-new', username: 'newuser', display_name: 'New User', role_id: '3', role_name: 'cashier', is_active: true }),
-  'update_staff': () => ({ id: 'staff-upd', username: 'updated', display_name: 'Updated', role_id: '3', role_name: 'cashier', is_active: true }),
 
   // ═══════════════════════════════════════════════════════════════
   // SHIFTS

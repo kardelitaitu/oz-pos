@@ -4,11 +4,13 @@ crate: modules-staff | status: SAFE | lint: CLEAN
 findings: Transitional module implementing Module trait. No unsafe code. Re-exports User, Role,
   builtin_roles, seed_users from oz-core. Staff CRUD commands are now session-scoped
   (*_scoped) with server-side caller resolution (STAFF-01), role-hierarchy enforcement
-  (STAFF-02), PIN rotation with session invalidation (STAFF-03), atomic profile+workspace
+  (STAFF-02), PIN rotation with session invalidation (STAFF-03), profile+workspace
   save with compensating rollback (STAFF-05), uniform pre-auth response closing the
   enumeration oracle (STAFF-06), and device/global login rate limiting with exponential
-  backoff (STAFF-07). Legacy unscoped commands remain as deprecated wrappers.
-next: Migrate auth/staff commands physically into this module | perf: N/A.
+  backoff (STAFF-07). Legacy staff CRUD commands are disabled and unregistered;
+  cross-database rollback remains a documented crash-window limitation.
+next: Migrate auth/staff commands physically into this module and add IP-aware edge
+controls where a trusted network identity exists | perf: N/A.
 */
 #![warn(missing_docs)]
 
@@ -30,8 +32,12 @@ next: Migrate auth/staff commands physically into this module | perf: N/A.
 //! - API: `ui/src/api/staff.ts`
 //! - Locale: `ui/src/locales/*/staff.ftl`
 //!
-//! In subsequent phases, these files will be physically moved into
-//! `modules/staff/` as the module system matures.
+//! The module boundary is intentionally transitional: these files remain in
+//! their original locations until the module system can own the Tauri command
+//! and migration lifecycle without duplicating the global identity database.
+//! The security boundary is nevertheless explicit today: production staff
+//! mutations use session-scoped commands and the legacy IPC registrations are
+//! disabled.
 //!
 //! ## Module manifest
 //!
@@ -62,9 +68,9 @@ use tracing::info;
 /// The Staff module.
 ///
 /// Implements the [`Module`] trait to participate in the kernel
-/// lifecycle. Currently acts as a registration and configuration
-/// layer; the actual staff logic lives in the existing codebase
-/// and will be migrated into this module in upcoming phases.
+/// lifecycle. It currently acts as a registration and configuration layer;
+/// the production staff logic remains in the existing command and core DB
+/// crates until the physical module migration is planned and validated.
 #[derive(Debug)]
 pub struct StaffModule;
 

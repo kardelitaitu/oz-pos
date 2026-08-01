@@ -403,7 +403,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setWorkspaceScreensState([]);
       return;
     }
-    listWorkspaceScreens(activeInstance.type_key)
+    listWorkspaceScreens(activeInstance.type_key, activeInstance.store_id)
       .then((screens) => {
         if (cancelled) return;
         if (screens.length > 0) {

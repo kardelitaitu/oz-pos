@@ -1,9 +1,9 @@
 # Staff Module Audit — July 2026
 
-> **Audit date:** 2026-07-31  
-> **Sector:** Staff module — staff accounts, roles, permissions, PIN authentication, workspace access, and shift identity  
-> **Status:** AUDITED · findings require remediation  
-> **Production code changed:** None
+> **Audit date:** 2026-07-31
+> **Sector:** Staff module — staff accounts, roles, permissions, PIN authentication, workspace access, and shift identity
+> **Status:** PARTIALLY REMEDIATED · security-critical staff IPC paths closed; residuals documented below
+> **Production code changed:** Yes — remediation commits `535a6cf3`, `50337ba1`, and the current audit/06 remediation batch
 
 ## Scope
 
@@ -32,7 +32,7 @@ The review uses the universal audit lenses from `audit/AUDIT_JULY_2026.md`: func
 
 ## Architecture summary
 
-The Staff module is transitional. `modules/staff` provides module registration, domain models, and a minimal repository/service lookup surface, while production CRUD, authentication, workspace assignment, and Tauri command behavior remain in `oz-core` and `apps/desktop-client`. The UI uses the legacy unscoped staff and workspace commands and sends `caller_user_id` values from the frontend.
+The Staff module remains transitional. `modules/staff` provides module registration, domain models, and a minimal repository/service lookup surface, while production CRUD, authentication, workspace assignment, and Tauri command behavior remain in `oz-core` and the desktop/tablet Tauri clients. Staff identity and roles are global records; session-scoped staff commands bind the caller to the opaque session token before reading or mutating them. The Staff Management UI now uses session-scoped staff and workspace APIs; legacy staff CRUD IPC registrations and legacy staff workspace-assignment registrations are disabled. General pre-session workspace discovery commands remain for boot/workspace selection and are not treated as staff-management APIs.
 
 Built-in roles are seeded in `platform/core/src/rbac.rs`: Owner has `*`; Manager and Staff have broad operational permissions including `staff:create` and `staff:update`; Cashier has sales/shift permissions but no staff-management permissions; Custom has none.
 
@@ -194,6 +194,19 @@ PINs are hashed through the platform auth helper. Login attempts are persisted i
 
 **Priority:** P2 — architecture and assurance gap.
 
+## Remediation update — 2026-08-01
+
+The following changes are now present in production code:
+
+- **STAFF-01 / STAFF-04 — remediated for authenticated staff management:** `list_staff_scoped`, `list_roles_scoped`, `create_staff_scoped`, and `update_staff_scoped` resolve caller identity from the opaque session token. The four legacy staff CRUD commands are hard-disabled and unregistered in both desktop and tablet clients. Staff UI, Sales History, and dev mocks use scoped staff APIs. Because users and roles are global identity records, the scoped commands intentionally read the global identity database after validating the session caller; they do not pretend that users are store-local.
+- **STAFF-05 — partially remediated:** Profile and workspace assignment are one IPC operation. The profile transaction commits before the separate store-database assignment; if the assignment fails, a compensating rollback restores the entire profile and reports whether rollback succeeded. This is not crash-atomic across two SQLite databases; a power-loss window remains.
+- **STAFF-06 / STAFF-07 — remediated within local IPC scope:** Username pre-check responses are uniform. Account, device, and global login throttles with exponential backoff are persisted. No network/IP limiter is implemented because these commands run through local Tauri IPC; a trusted remote network identity is not available at this boundary.
+- **STAFF-08 / STAFF-09 / STAFF-10 / STAFF-11 — remediated:** Retryable load errors, inactive-state preservation, backend role/last-owner/self-protection, confirmation UI, localized labels, and the required touch-target styles are present.
+- **STAFF-12 — automated portion remediated:** The shared touch-target compliance suite covers `StaffManagementScreen.css`; action buttons, radio rows, and checkbox rows declare at least 44px targets. A device/browser matrix test remains future work.
+- **STAFF-13 — partially remediated:** Security-focused command tests and wiring tests cover session binding, two-store identity behavior, role hierarchy, PIN rotation/session invalidation, rate limits, and disabled legacy registrations. Physical ownership migration into `modules/staff` remains open.
+
+Residuals are intentionally not marked fully closed: the pre-session workspace picker still accepts role/user/store identifiers supplied by the client (the selected store is routed through `StoreDatabaseManager`, but the caller identity is not cryptographically bound before an opaque session exists), cross-database crash consistency, a network/IP limiter if a remote IPC boundary is introduced, supported-webview manual accessibility verification, and physical module migration remain architectural follow-up work.
+
 ## Positive observations
 
 - PINs are hashed through the platform authentication helper and are not included in the staff DTO returned to the UI.
@@ -208,13 +221,11 @@ PINs are hashed through the platform auth helper. Login attempts are persisted i
 
 ## Recommended implementation order
 
-1. **STAFF-01/STAFF-04:** Replace caller-ID/global staff commands with session-scoped, store-resolved commands and backend permission checks.
-2. **STAFF-02/STAFF-09/STAFF-10:** Enforce role hierarchy, preserve inactive state during edits, add last-owner protection, and make account activation explicit.
-3. **STAFF-03:** Remove or fully implement PIN rotation with hashing, session invalidation, and tests.
-4. **STAFF-05:** Make staff profile and workspace assignment atomic.
-5. **STAFF-06/STAFF-07:** Harden pre-auth enumeration and lockout/abuse controls.
-6. **STAFF-08/STAFF-11:** Add retry/error states and remove localization fallbacks.
-7. **STAFF-12/STAFF-13:** Finish touch/a11y verification and add security-focused integration coverage.
+1. **Pre-session workspace identity binding:** Replace the forgeable `role_id`/`user_id` bootstrap arguments with a short-lived, server-issued post-login workspace-picker credential, or remove the pre-session discovery surface in favor of a fully server-resolved picker.
+2. **STAFF-05:** Replace compensating cross-database writes with an outbox/recovery protocol if crash-atomic staff/workspace updates become a hard requirement.
+3. **STAFF-12:** Run the manual accessibility and touch-target matrix against every supported Tauri webview/tablet browser.
+4. **STAFF-13:** Move production staff ownership into `modules/staff` once the module boundary and migration plan are stable.
+5. **Remote deployment hardening:** Add a trusted network/device identity and IP-aware abuse limiter only if staff IPC is exposed beyond the local process boundary.
 
 ## Validation
 
@@ -222,10 +233,12 @@ PINs are hashed through the platform auth helper. Login attempts are persisted i
 - `cargo test -p modules-staff`: **9 unit tests passed**
 - `modules-staff` doctests: **1 passed**
 - Filtered `oz-core` Staff tests: **33 passed**
-- `git diff --check -- audit`: passed
+- Current audit/06 wiring test: **4 passed** (`desktop_client_no_duplicate_handler_commands`, `tablet_client_no_duplicate_handler_commands`, and scoped Staff boundary checks for both clients)
+- Current UI regression set: **90 passed across 4 files** (`StaffManagementScreen`, `SalesHistoryScreen`, `WorkspaceContext`, `api-ipc-contract`)
+- Current validation: desktop/tablet `cargo check --lib`, UI `npm run typecheck`, and `git diff --check` passed
 
 Some focused UI runs emitted non-fatal mock warnings for an unhandled `get_brand_settings` command; the test suites still passed.
 
 ## Status
 
-This is an evidence-based audit report only. No production code was changed. The report is currently uncommitted in the existing `audit/` folder.
+**Partially remediated, with the high-risk caller-forgery path closed.** The current implementation is protected by session-scoped staff commands, disabled legacy staff IPC registrations, backend role/owner invariants, persisted account/device/global throttling, retryable UI states, and focused security tests. This report remains `PARTIALLY REMEDIATED` until the cross-database crash window, remote-network abuse controls (if applicable), physical module migration, and supported-webview accessibility verification are separately addressed.

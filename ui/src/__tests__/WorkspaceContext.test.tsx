@@ -290,7 +290,7 @@ describe('WorkspaceContext', () => {
       await waitFor(() => {
         expect(result.current.workspace.workspaceScreens).toEqual(['pos', 'orders']);
       }, FAST_WAIT);
-      expect(mocks.listWorkspaceScreens).toHaveBeenCalledWith('restaurant-pos');
+      expect(mocks.listWorkspaceScreens).toHaveBeenCalledWith('restaurant-pos', 'store-1');
     });
 
     it('clears screens when instance becomes null', async () => {

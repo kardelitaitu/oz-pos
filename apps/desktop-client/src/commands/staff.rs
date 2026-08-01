@@ -59,13 +59,10 @@ fn to_staff_dto(user: &User, roles: &[Role]) -> StaffMemberDto {
 /// caller identity is resolved from the session token instead of a
 /// client-supplied `caller_user_id`.
 #[tauri::command]
-pub async fn list_staff(state: State<'_, AppState>) -> Result<Vec<StaffMemberDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let users = store.list_users()?;
-    let roles = store.list_roles()?;
-    drop(db);
-    Ok(users.iter().map(|u| to_staff_dto(u, &roles)).collect())
+pub async fn list_staff(_state: State<'_, AppState>) -> Result<Vec<StaffMemberDto>, AppError> {
+    Err(AppError::PermissionDenied(
+        "legacy unscoped staff commands are disabled; use list_staff_scoped".into(),
+    ))
 }
 
 // ── List roles ─────────────────────────────────────────────────────
@@ -85,19 +82,10 @@ pub struct RoleDto {
 /// List roles.
 ///
 /// **Deprecated for multi-store (ADR #7):** Use [`list_roles_scoped`].
-pub async fn list_roles(state: State<'_, AppState>) -> Result<Vec<RoleDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let roles = store.list_roles()?;
-    drop(db);
-    Ok(roles
-        .into_iter()
-        .map(|r| RoleDto {
-            id: r.id,
-            name: r.name,
-            description: r.description,
-        })
-        .collect())
+pub async fn list_roles(_state: State<'_, AppState>) -> Result<Vec<RoleDto>, AppError> {
+    Err(AppError::PermissionDenied(
+        "legacy unscoped staff commands are disabled; use list_roles_scoped".into(),
+    ))
 }
 
 // ── Create staff member ────────────────────────────────────────────
@@ -124,32 +112,12 @@ pub struct CreateStaffArgs {
 /// legacy `caller_user_id` argument is forgeable — never call this from a
 /// session-bound UI path.
 pub async fn create_staff(
-    args: CreateStaffArgs,
-    state: State<'_, AppState>,
+    _args: CreateStaffArgs,
+    _state: State<'_, AppState>,
 ) -> Result<StaffMemberDto, AppError> {
-    let username = args.username.trim().to_lowercase();
-    let display_name = args.display_name.trim();
-
-    validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("display_name", display_name)
-        .map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_min_length("pin", &args.pin, 4).map_err(|e| AppError::Invalid(e.to_string()))?;
-    validate_not_empty("role_id", &args.role_id).map_err(|e| AppError::Invalid(e.to_string()))?;
-
-    let pin_hash =
-        hash_pin(&args.pin).map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    // Permission check: caller must have staff:create.
-    require_permission_for_user(&store, &args.caller_user_id, permissions::STAFF_CREATE)?;
-
-    let user = store.create_user(&username, &pin_hash, display_name, &args.role_id)?;
-    let roles = store.list_roles()?;
-    drop(db);
-
-    Ok(to_staff_dto(&user, &roles))
+    Err(AppError::PermissionDenied(
+        "legacy unscoped staff commands are disabled; use create_staff_scoped".into(),
+    ))
 }
 
 // ── Update staff member ────────────────────────────────────────────
@@ -178,26 +146,12 @@ pub struct UpdateStaffArgs {
 /// legacy `caller_user_id` argument is forgeable — never call this from a
 /// session-bound UI path.
 pub async fn update_staff(
-    args: UpdateStaffArgs,
-    state: State<'_, AppState>,
+    _args: UpdateStaffArgs,
+    _state: State<'_, AppState>,
 ) -> Result<StaffMemberDto, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-
-    // Permission check: caller must have staff:update.
-    require_permission_for_user(&store, &args.caller_user_id, permissions::STAFF_UPDATE)?;
-
-    let user = store.update_user(
-        &args.id,
-        &args.username,
-        &args.display_name,
-        &args.role_id,
-        args.is_active,
-    )?;
-    let roles = store.list_roles()?;
-    drop(db);
-
-    Ok(to_staff_dto(&user, &roles))
+    Err(AppError::PermissionDenied(
+        "legacy unscoped staff commands are disabled; use update_staff_scoped".into(),
+    ))
 }
 
 // ── Session-scoped staff commands (ADR #7 · audit/06 STAFF-01) ────────
@@ -479,30 +433,64 @@ pub async fn update_staff_scoped(
     // If it fails, compensate by restoring the previous profile and surface a
     // clear partial-failure error instead of leaving a half-updated account.
     if let Some(keys) = &args.workspace_keys {
-        let result = {
-            let conn = state
-                .db_manager
-                .open_store(&session.store_id)
-                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-            let sdb = conn
-                .lock()
-                .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-            let store = Store::new(&sdb);
-            let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
-            store.set_user_workspaces_legacy(&args.id, key_refs)
+        // Keep database-open and mutex failures inside the same compensation
+        // path as assignment failures. Returning early here would otherwise
+        // leave the committed profile update without reporting or attempting
+        // a rollback (STAFF-05).
+        let result: Result<(), String> = match state.db_manager.open_store(&session.store_id) {
+            Err(error) => Err(format!("opening store db: {error}")),
+            Ok(conn) => match conn.lock() {
+                Err(error) => Err(format!("store db lock: {error}")),
+                Ok(sdb) => {
+                    let store = Store::new(&sdb);
+                    let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
+                    store
+                        .set_user_workspaces_legacy(&args.id, key_refs)
+                        .map_err(|error| error.to_string())
+                }
+            },
         };
         if let Err(e) = result {
             // Compensate: roll the profile back to its previous values.
-            if let Some((username, display_name, role_id, is_active, pin_hash)) = &previous_profile
-            {
-                let db = state.db.lock().await;
-                let store = Store::new(&db);
-                let _ = store.update_user(&args.id, username, display_name, role_id, *is_active);
-                let _ = store.update_user_pin(&args.id, pin_hash);
-                drop(db);
-            }
+            // Do not use `?` while compensating: a rollback failure must be
+            // reported together with the original workspace error, otherwise
+            // operators cannot tell that the account may still be inconsistent.
+            let rollback_result: Result<(), String> =
+                if let Some((username, display_name, role_id, is_active, pin_hash)) =
+                    &previous_profile
+                {
+                    let db = state.db.lock().await;
+                    match db.unchecked_transaction() {
+                        Ok(tx) => {
+                            let store = Store::new(&tx);
+                            match store.update_user(
+                                &args.id,
+                                username,
+                                display_name,
+                                role_id,
+                                *is_active,
+                            ) {
+                                Ok(_) => match store.update_user_pin(&args.id, pin_hash) {
+                                    Ok(_) => tx.commit().map_err(|error| error.to_string()),
+                                    Err(error) => Err(error.to_string()),
+                                },
+                                Err(error) => Err(error.to_string()),
+                            }
+                        }
+                        Err(error) => Err(error.to_string()),
+                    }
+                } else {
+                    Err(format!(
+                        "staff profile {} was not found before update",
+                        args.id
+                    ))
+                };
+            let rollback_detail = match rollback_result {
+                Ok(_) => "profile rollback succeeded".to_owned(),
+                Err(rollback_error) => format!("profile rollback failed: {rollback_error}"),
+            };
             return Err(AppError::Internal(format!(
-                "profile updated but workspace assignment failed — profile rolled back: {e}"
+                "profile updated but workspace assignment failed: {e}; {rollback_detail}"
             )));
         }
     }
@@ -776,10 +764,8 @@ mod tests {
 
     #[tokio::test]
     async fn legacy_create_staff_accepts_forged_caller_user_id() {
-        // Proof of the STAFF-01 vulnerability: `create_staff` trusts the
-        // client-supplied `caller_user_id` request field. A caller who can
-        // invoke the IPC (e.g. a cashier, who has no staff:create) simply
-        // passes the owner's user_id and the permission check succeeds.
+        // The legacy command must reject caller-supplied identity rather than
+        // allowing the STAFF-01 forged-caller vulnerability.
         let conn = oz_core::migrations::fresh_db();
         seed_global_users(&conn);
         let state = AppState::for_test_with_conn(conn);
@@ -799,10 +785,7 @@ mod tests {
             app.state(),
         )
         .await;
-        assert!(
-            result.is_ok(),
-            "STAFF-01: forged caller_user_id passed the permission check"
-        );
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
     }
 
     #[tokio::test]
@@ -827,10 +810,7 @@ mod tests {
             app.state(),
         )
         .await;
-        assert!(
-            result.is_ok(),
-            "STAFF-01: forged caller_user_id promoted a user to Owner"
-        );
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
     }
 
     // ── STAFF-01 fix — scoped commands bind identity to the session ────
@@ -1375,6 +1355,46 @@ mod tests {
         assert!(st.resolve_session("owner-token").is_ok());
         // The other user's session is completely untouched.
         assert!(st.resolve_session("manager-token").is_ok());
+    }
+
+    #[tokio::test]
+    async fn scoped_update_staff_rolls_back_profile_when_workspace_assignment_fails() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_global_users(&conn);
+        let state =
+            scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = update_staff_scoped(
+            "owner-token".into(),
+            UpdateStaffScopedArgs {
+                id: "user-cashier".into(),
+                username: "cashier-updated".into(),
+                display_name: "Cashier Updated".into(),
+                role_id: "role-cashier".into(),
+                is_active: true,
+                pin: None,
+                // This key violates the workspace FK and forces the second
+                // database write to fail after the profile transaction.
+                workspace_keys: Some(vec!["missing-workspace".into()]),
+            },
+            app.state(),
+        )
+        .await;
+
+        let error = result.expect_err("invalid workspace assignment must fail");
+        assert!(
+            matches!(error, AppError::Internal(message) if message.contains("profile rollback succeeded"))
+        );
+
+        let state = app.state::<AppState>();
+        let db = state.db.lock().await;
+        let user = Store::new(&db).get_user("user-cashier").unwrap().unwrap();
+        assert_eq!(user.username, "cashier");
+        assert_eq!(user.display_name, "Cashier");
     }
 
     #[tokio::test]

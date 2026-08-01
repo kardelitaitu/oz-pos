@@ -14,7 +14,6 @@ import {
   type WorkspaceTypeDto,
 } from '@/api/workspaces';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
@@ -77,7 +76,6 @@ const EMPTY_FORM: FormData = {
 /** Staff management screen — manage user accounts, roles, PIN codes, and workspace assignments. */
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
-  const { session } = useAuth();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
@@ -99,8 +97,6 @@ export default function StaffManagementScreen() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const callerUserId = session?.user_id ?? '';
 
   // ── Load data
 
@@ -155,7 +151,7 @@ export default function StaffManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, [callerUserId, sessionToken, l10n]);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -299,17 +295,6 @@ export default function StaffManagementScreen() {
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
-  // STAFF-10: deactivating an account is high-impact — require an explicit
-  // confirmation with the staff member's name before sending the request.
-  // Reactivating (restoring) an inactive account needs no confirmation.
-  const toggleActive = useCallback((member: StaffMemberDto) => {
-    if (member.is_active) {
-      setConfirmTarget(member);
-    } else {
-      void performActivate(member);
-    }
-  }, []);
-
   const performActivate = useCallback(async (member: StaffMemberDto) => {
     try {
       if (!sessionToken) {
@@ -334,6 +319,17 @@ export default function StaffManagementScreen() {
       addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
     }
   }, [load, sessionToken, addToast, l10n]);
+
+  // STAFF-10: deactivating an account is high-impact — require an explicit
+  // confirmation with the staff member's name before sending the request.
+  // Reactivating (restoring) an inactive account needs no confirmation.
+  const toggleActive = useCallback((member: StaffMemberDto) => {
+    if (member.is_active) {
+      setConfirmTarget(member);
+    } else {
+      void performActivate(member);
+    }
+  }, [performActivate]);
 
   const confirmDeactivate = useCallback(async () => {
     if (!confirmTarget) return;

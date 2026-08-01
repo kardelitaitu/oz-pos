@@ -490,6 +490,7 @@ describe('products.ts IPC contract', () => {
 
 import {
   listWorkspacesScoped,
+  listWorkspaceScreens,
   createWorkspaceInstanceScoped,
   updateWorkspaceInstanceScoped,
   archiveWorkspaceInstanceScoped,
@@ -502,6 +503,15 @@ describe('workspaces.ts IPC contract', () => {
     mockInvoke.mockResolvedValue([]);
     await listWorkspacesScoped('tok');
     expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_scoped', { sessionToken: 'tok' });
+  });
+
+  it('listWorkspaceScreens routes pre-session reads with typeKey + storeId', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listWorkspaceScreens('restaurant-pos', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens', {
+      typeKey: 'restaurant-pos',
+      storeId: 'store-1',
+    });
   });
 
   it('createWorkspaceInstanceScoped invokes "create_workspace_instance_scoped" with sessionToken + req', async () => {

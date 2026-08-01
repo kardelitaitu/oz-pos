@@ -91,43 +91,6 @@ export interface RoleDto {
   description: string;
 }
 
-/** Arguments for creating a new staff member. */
-export interface CreateStaffArgs {
-  username: string;
-  pin: string;
-  display_name: string;
-  role_id: string;
-  /** User ID of the caller (from LoginSession). Used for permission check. */
-  caller_user_id: string;
-}
-
-/** Arguments for updating an existing staff member. */
-export interface UpdateStaffArgs {
-  id: string;
-  username: string;
-  display_name: string;
-  role_id: string;
-  is_active: boolean;
-  /** User ID of the caller (from LoginSession). Used for permission check. */
-  caller_user_id: string;
-}
-
-/** List all staff members. */
-export const listStaff = (): Promise<StaffMemberDto[]> =>
-  loggedInvoke<StaffMemberDto[]>('list_staff');
-
-/** List all roles. */
-export const listRoles = (): Promise<RoleDto[]> =>
-  loggedInvoke<RoleDto[]>('list_roles');
-
-/** Create a new staff member. */
-export const createStaff = (args: CreateStaffArgs): Promise<StaffMemberDto> =>
-  loggedInvoke<StaffMemberDto>('create_staff', { args });
-
-/** Update an existing staff member. */
-export const updateStaff = (args: UpdateStaffArgs): Promise<StaffMemberDto> =>
-  loggedInvoke<StaffMemberDto>('update_staff', { args });
-
 // ── Session-scoped Staff Management (ADR #7 · audit/06 STAFF-01) ───
 //
 // These are the secure replacements. The caller identity is resolved from

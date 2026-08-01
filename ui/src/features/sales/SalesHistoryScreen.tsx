@@ -11,7 +11,8 @@ import {
   type RefundDto,
   type LineItemDto,
 } from '@/api/sales';
-import { listStaff, type StaffMemberDto } from '@/api/staff';
+import { listStaffScoped, type StaffMemberDto } from '@/api/staff';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -131,6 +132,7 @@ export default function SalesHistoryScreen() {
   const [refunds, setRefunds] = useState<RefundDto[]>([]);
   const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session, isManager } = useAuth();
+  const { sessionToken } = useWorkspace();
 
   // P2-4: Sale detail cache — avoids re-fetching the same sale on modal re-open.
   // Invalidated when a sale is voided or refunded (status-changing events).
@@ -176,7 +178,9 @@ export default function SalesHistoryScreen() {
     try {
       const [items, staffList] = await Promise.all([
         listSales(),
-        listStaff().catch(() => [] as StaffMemberDto[]),
+        sessionToken
+          ? listStaffScoped(sessionToken).catch(() => [] as StaffMemberDto[])
+          : Promise.resolve([] as StaffMemberDto[]),
       ]);
       setSales(items);
       setStaff(staffList);
@@ -185,7 +189,7 @@ export default function SalesHistoryScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   // P7-3: Pull-to-refresh gesture
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
