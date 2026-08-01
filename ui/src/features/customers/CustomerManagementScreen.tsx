@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
@@ -52,18 +52,44 @@ export default function CustomerManagementScreen() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CustomerDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // CUST-03: track load failures separately from a genuinely empty customer set.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // CUST-10: request-sequence guard — a slower response from an earlier
+  // session/refresh must never overwrite newer customer data.
+  const loadSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  // Keep `load` memoized on [sessionToken] only — locale identity changes
+  // must not re-fire the load effect (mirrors ProductManagementScreen).
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   // ── Load data ──────────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const seq = ++loadSeqRef.current;
+    // CUST-10: only the first load shows the skeleton — refreshes
+    // preserve the last known list on screen instead of flashing a skeleton.
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
+    setLoadError(null);
     try {
       const data = await listCustomersScoped(sessionToken);
+      if (seq !== loadSeqRef.current) return;
       setCustomers(data);
-    } catch {
-      // IPC unavailable.
+      hasLoadedOnceRef.current = true;
+    } catch (err) {
+      // CUST-03: a failed load must not be indistinguishable from an empty store.
+      if (seq !== loadSeqRef.current) return;
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : requiredLocalized(l10nRef.current, 'customer-mgmt-error-load'),
+      );
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [sessionToken]);
 
@@ -254,6 +280,22 @@ export default function CustomerManagementScreen() {
             </table>
           </div>
         </div>
+      ) : loadError && customers.length === 0 ? (
+        <Card shadow="sm">
+          <div className="customer-mgmt-empty" role="alert">
+            <Localized id="customer-mgmt-error-load">
+              <p className="customer-mgmt-load-error-title">Failed to load customers</p>
+            </Localized>
+            {loadError && loadError !== requiredLocalized(l10n, 'customer-mgmt-error-load') && (
+              <p className="customer-mgmt-load-error-detail">{loadError}</p>
+            )}
+            <Localized id="customer-mgmt-error-retry">
+              <Button variant="secondary" onClick={() => void load()}>
+                Retry
+              </Button>
+            </Localized>
+          </div>
+        </Card>
       ) : customers.length === 0 ? (
         <Card shadow="sm">
           <div className="customer-mgmt-empty">

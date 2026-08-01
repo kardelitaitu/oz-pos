@@ -45,6 +45,8 @@ customer-mgmt-delete-confirm-title = Hapus pelanggan?
 customer-mgmt-delete-confirm-message = Ini akan menghapus permanen { $name } beserta riwayat tersimpan. Tindakan ini tidak dapat dibatalkan.
 customer-mgmt-delete-confirm-btn = Hapus
 customer-mgmt-error-delete = Gagal menghapus pelanggan
+customer-mgmt-error-load = Gagal memuat pelanggan
+customer-mgmt-error-retry = Coba lagi
 
 # ── Inventory (remaining) ──
 customer-mgmt-title = Pelanggan

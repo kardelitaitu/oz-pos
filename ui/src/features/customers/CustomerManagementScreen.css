@@ -91,6 +91,18 @@
   opacity: 0.5;
 }
 
+.customer-mgmt-load-error-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.customer-mgmt-load-error-detail {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  max-width: 32rem;
+  overflow-wrap: anywhere;
+}
+
 /* ── Table ────────────────────────────────────────────────────────── */
 
 .customer-mgmt-table-wrap {

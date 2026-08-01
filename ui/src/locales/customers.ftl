@@ -58,3 +58,5 @@ customer-mgmt-delete-confirm-title = Delete customer?
 customer-mgmt-delete-confirm-message = This will permanently remove { $name } and any saved history. This action cannot be undone.
 customer-mgmt-delete-confirm-btn = Delete
 customer-mgmt-error-delete = Failed to delete customer
+customer-mgmt-error-load = Failed to load customers
+customer-mgmt-error-retry = Retry
