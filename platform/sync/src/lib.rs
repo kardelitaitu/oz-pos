@@ -561,7 +561,12 @@ mod tests {
 
         let users = store.list_users().unwrap();
         let user = users.into_iter().find(|u| u.username == "staff-1").unwrap();
-        assert_eq!(user.pin_hash, "new-hash");
+        // SYNC-06: pin_hash is NEVER read from the snapshot. The first
+        // import writes the non-verifiable placeholder, and the second
+        // import preserves it (the UPDATE clause omits pin_hash) — even
+        // though the snapshot carried "new-hash", it must not land in DB.
+        assert_eq!(user.pin_hash, "!snapshot-no-credential!");
+        assert_ne!(user.pin_hash, "new-hash");
         assert_eq!(user.display_name, "New Display");
         assert!(!user.is_active);
     }
@@ -887,6 +892,13 @@ fn import_snapshot(
     }
 
     // Upsert users by username.
+    //
+    // SYNC-06: `pin_hash` is deliberately NEVER read from the snapshot —
+    // credential verifier material must not travel over the sync channel.
+    // New rows get a non-verifiable placeholder, and on conflict the
+    // EXISTING local hash is preserved (the UPDATE clause omits pin_hash),
+    // so an import can neither replicate credentials nor lock out an
+    // operator who already has a working PIN.
     {
         let mut stmt = tx
             .prepare(
@@ -894,7 +906,6 @@ fn import_snapshot(
                                     is_active, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, ?9), COALESCE(?8, ?9))
                  ON CONFLICT(username) DO UPDATE SET
-                     pin_hash     = excluded.pin_hash,
                      display_name = excluded.display_name,
                      role_id      = excluded.role_id,
                      is_active    = excluded.is_active,
@@ -911,7 +922,7 @@ fn import_snapshot(
             stmt.execute(rusqlite::params![
                 id,
                 u["username"].as_str().unwrap_or(""),
-                u["pin_hash"].as_str().unwrap_or(""),
+                oz_core::sync_client::SNAPSHOT_PIN_HASH_PLACEHOLDER,
                 u["display_name"].as_str().unwrap_or(""),
                 u["role_id"].as_str().unwrap_or(""),
                 u["is_active"].as_bool().unwrap_or(true) as i64,

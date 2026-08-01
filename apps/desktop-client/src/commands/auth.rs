@@ -170,6 +170,8 @@ pub async fn staff_login(
     }
 
     // Verify PIN against stored hash.
+    // `verify_pin` fails closed (Ok(false)) on malformed/placeholder hashes;
+    // the Err arm is retained for future argon2 library errors.
     let valid = oz_core::auth::verify_pin(&args.pin, &user.pin_hash)
         .map_err(|e| AppError::Internal(format!("PIN verification failed: {e}")))?;
 

@@ -383,10 +383,16 @@ async fn snapshot_handler(
     };
 
     // Query users — scoped to the requesting tenant.
+    //
+    // SYNC-06: `pin_hash` is deliberately NOT selected or serialized.
+    // Credential verifier material must never leave the server — sync
+    // clients only receive the minimum non-secret user metadata. User
+    // credentials are provisioned through a separate, tightly authorized
+    // identity-management flow, never the snapshot.
     let users: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at FROM users WHERE tenant_id = ?1"
+                "SELECT id, username, display_name, role_id, is_active, created_at, updated_at FROM users WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
         Ok(stmt
@@ -394,7 +400,6 @@ async fn snapshot_handler(
                 Ok(serde_json::json!({
                     "id": row.get::<_, String>("id")?,
                     "username": row.get::<_, String>("username")?,
-                    "pin_hash": row.get::<_, String>("pin_hash")?,
                     "display_name": row.get::<_, String>("display_name")?,
                     "role_id": row.get::<_, String>("role_id")?,
                     "is_active": row.get::<_, bool>("is_active")?,
@@ -626,6 +631,61 @@ mod tests {
         assert!(json["products"].is_array());
         assert!(json["tax_rates"].is_array());
         assert!(json["users"].is_array());
+    }
+
+    #[tokio::test]
+    async fn snapshot_omits_pin_hash_entirely() {
+        // SYNC-06: the snapshot contract must never export credential
+        // verifier material. Even with a user seeded that HAS a pin_hash,
+        // the serialised snapshot bytes must not contain the field.
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        let app = test_router_with_state(state.clone());
+
+        {
+            let conn = state.db.lock().await;
+            conn.execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ('r-owner', 'Owner', '[]')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, tenant_id)
+                 VALUES ('user-secret', 'alice', 'SENSITIVE-HASH', 'Alice', 'r-owner', 'tenant-a')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let req = authed(
+            axum::http::Method::GET,
+            "/api/sync/snapshot",
+            Some("tenant-a"),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let body_str = String::from_utf8(body_bytes.to_vec()).unwrap();
+
+        // The raw wire bytes must not contain the sensitive field name NOR
+        // the seeded hash value anywhere (users array or otherwise).
+        assert!(
+            !body_str.contains("pin_hash"),
+            "snapshot must not contain pin_hash: {body_str}"
+        );
+        assert!(
+            !body_str.contains("SENSITIVE-HASH"),
+            "snapshot must not leak the seeded hash: {body_str}"
+        );
+
+        // But the non-secret metadata must still be present.
+        let json: serde_json::Value = serde_json::from_str(&body_str).unwrap();
+        assert_eq!(json["users"].as_array().unwrap().len(), 1);
+        assert_eq!(json["users"][0]["username"], "alice");
+        assert_eq!(json["users"][0]["display_name"], "Alice");
     }
 
     #[tokio::test]

@@ -593,15 +593,32 @@ struct SnapshotTaxRate {
     updated_at: Option<String>,
 }
 
-/// Flat user row matching the `users` table columns.
+/// Placeholder written into `users.pin_hash` for snapshot-imported users.
+///
+/// SYNC-06: the snapshot contract deliberately carries NO credential
+/// material, so `upsert_users` cannot write a real verifier. This sentinel
+/// can never match a bcrypt/argon2 verification, so a snapshot-imported
+/// user cannot authenticate until a local administrator provisions their
+/// PIN through the normal identity-management flow.
+///
+/// Shared with `platform-sync`'s `import_snapshot` so the sentinel lives
+/// in exactly one place.
+pub const SNAPSHOT_PIN_HASH_PLACEHOLDER: &str = "!snapshot-no-credential!";
+
+/// Flat user row matching the `users` table columns (minus secrets).
+///
+/// SYNC-06: `pin_hash` is intentionally absent from the snapshot
+/// contract — a sync token with snapshot access must never receive
+/// credential-verifier material for tenant users. `deny_unknown_fields`
+/// makes the client fail loudly if a (buggy/older) server ever sends a
+/// `pin_hash` field instead of silently importing it.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SnapshotUser {
     /// Internal row id (UUID v4).
     id: Option<String>,
     /// Login username — UNIQUE column used for the upsert conflict target.
     username: String,
-    /// Bcrypt/argon2 hash of the PIN/password.
-    pin_hash: String,
     /// Display name shown on the POS UI.
     display_name: String,
     /// FK to `roles.id`.
@@ -775,13 +792,17 @@ fn upsert_tax_rates(
 fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result<usize, CoreError> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut count = 0usize;
+    // SYNC-06: `pin_hash` is never taken from the snapshot. New rows get a
+    // non-verifiable placeholder, and on conflict the EXISTING local hash
+    // is preserved (the UPDATE clause deliberately omits `pin_hash`) — a
+    // snapshot pull can neither replicate credentials nor lock out an
+    // operator who already has a working PIN.
     let mut stmt = tx.prepare(
         "INSERT INTO users (id, username, pin_hash, display_name, role_id,
                             is_active, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6,
                  COALESCE(?7, ?9), COALESCE(?8, ?9))
          ON CONFLICT(username) DO UPDATE SET
-             pin_hash     = excluded.pin_hash,
              display_name = excluded.display_name,
              role_id      = excluded.role_id,
              is_active    = excluded.is_active,
@@ -792,15 +813,15 @@ fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result
             u.id.clone()
                 .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
         stmt.execute(rusqlite::params![
-            id,                 // ?1
-            u.username,         // ?2
-            u.pin_hash,         // ?3
-            u.display_name,     // ?4
-            u.role_id,          // ?5
-            u.is_active as i64, // ?6
-            u.created_at,       // ?7
-            u.updated_at,       // ?8
-            now,                // ?9 — default for created_at / updated_at
+            id,                            // ?1
+            u.username,                    // ?2
+            SNAPSHOT_PIN_HASH_PLACEHOLDER, // ?3 — never a real verifier
+            u.display_name,                // ?4
+            u.role_id,                     // ?5
+            u.is_active as i64,            // ?6
+            u.created_at,                  // ?7
+            u.updated_at,                  // ?8
+            now,                           // ?9 — default for created_at / updated_at
         ])?;
         count += 1;
     }
@@ -1059,6 +1080,152 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    // ── SYNC-06: snapshot credential-exposure contract ──────────
+    //
+    // The snapshot must NEVER carry `pin_hash`. These tests pin both
+    // directions: (1) the client rejects a snapshot that (incorrectly)
+    // includes the field, and (2) applying a valid snapshot writes a
+    // non-verifiable placeholder for new users while preserving any
+    // existing local credential hash on conflict.
+
+    #[test]
+    fn snapshot_user_without_pin_hash_deserializes() {
+        // A snapshot user row with NO pin_hash field is the normal
+        // contract and must deserialize cleanly.
+        let json = r#"{
+            "users": [{
+                "id": "u1",
+                "username": "alice",
+                "display_name": "Alice",
+                "role_id": "r-owner",
+                "is_active": true
+            }]
+        }"#;
+        let snap: Snapshot = serde_json::from_str(json).unwrap();
+        assert_eq!(snap.users.len(), 1);
+        assert_eq!(snap.users[0].username, "alice");
+    }
+
+    #[test]
+    fn snapshot_user_with_pin_hash_is_rejected() {
+        // Defense in depth: a snapshot that (incorrectly) carries pin_hash
+        // must fail loudly instead of silently importing credential
+        // material into the local users table.
+        let json = r#"{
+            "users": [{
+                "id": "u1",
+                "username": "alice",
+                "pin_hash": "SENSITIVE-HASH",
+                "display_name": "Alice",
+                "role_id": "r-owner",
+                "is_active": true
+            }]
+        }"#;
+        assert!(
+            serde_json::from_str::<Snapshot>(json).is_err(),
+            "snapshot with pin_hash must be rejected"
+        );
+    }
+
+    #[test]
+    fn apply_snapshot_writes_placeholder_pin_hash_for_new_users() {
+        let store = setup();
+        // Seed a role so the users FK is satisfied.
+        store
+            .conn()
+            .execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ('r-owner', 'Owner', '[]')",
+                [],
+            )
+            .unwrap();
+
+        let snap = Snapshot {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![SnapshotUser {
+                id: Some("u1".into()),
+                username: "alice".into(),
+                display_name: "Alice".into(),
+                role_id: "r-owner".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        };
+        let result = apply_snapshot(&store, &snap).unwrap();
+        assert_eq!(result.users_pulled, 1);
+
+        let hash: String = store
+            .conn()
+            .query_row(
+                "SELECT pin_hash FROM users WHERE username = 'alice'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hash, SNAPSHOT_PIN_HASH_PLACEHOLDER);
+        assert_ne!(hash, "SENSITIVE-HASH", "never a real verifier");
+    }
+
+    #[test]
+    fn apply_snapshot_preserves_existing_local_pin_hash_on_conflict() {
+        let store = setup();
+        store
+            .conn()
+            .execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ('r-owner', 'Owner', '[]')",
+                [],
+            )
+            .unwrap();
+        // Pre-existing local user with a REAL credential hash.
+        store
+            .conn()
+            .execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id)
+                 VALUES ('u-local', 'bob', 'REAL-LOCAL-HASH', 'Bob', 'r-owner')",
+                [],
+            )
+            .unwrap();
+
+        // Snapshot upserts the same username with a fresh remote id.
+        let snap = Snapshot {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![SnapshotUser {
+                id: Some("u-remote".into()),
+                username: "bob".into(),
+                display_name: "Bob Updated".into(),
+                role_id: "r-owner".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        };
+        apply_snapshot(&store, &snap).unwrap();
+
+        // The conflict-update must NOT clobber the local credential hash.
+        let hash: String = store
+            .conn()
+            .query_row(
+                "SELECT pin_hash FROM users WHERE username = 'bob'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hash, "REAL-LOCAL-HASH");
+
+        // ...but the non-secret metadata from the snapshot still lands.
+        let name: String = store
+            .conn()
+            .query_row(
+                "SELECT display_name FROM users WHERE username = 'bob'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(name, "Bob Updated");
     }
 
     #[test]
