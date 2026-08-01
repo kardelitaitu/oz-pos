@@ -368,6 +368,8 @@ pub struct CustomerSaleSummaryDto {
     pub id: String,
     /// Total in minor units.
     pub total_minor: i64,
+    /// Currency code (e.g. "USD") for the total.
+    pub currency: String,
     /// Status string (e.g. "Completed").
     pub status: String,
     /// Number of line items.
@@ -448,6 +450,7 @@ pub async fn get_customer_history_scoped(
             .map(|s| CustomerSaleSummaryDto {
                 id: s.id,
                 total_minor: s.total.minor_units,
+                currency: s.total.currency.to_string(),
                 status: format!("{:?}", s.status),
                 line_count: s.line_count,
                 created_at: s.created_at,

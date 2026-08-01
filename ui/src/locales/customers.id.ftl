@@ -50,6 +50,26 @@ customer-mgmt-delete-confirm-btn = Hapus
 customer-mgmt-error-delete = Gagal menghapus pelanggan
 customer-mgmt-error-load = Gagal memuat pelanggan
 customer-mgmt-error-retry = Coba lagi
+customer-mgmt-history = Riwayat
+customer-mgmt-history-aria = Lihat riwayat { $name }
+customer-mgmt-history-title = Riwayat Pelanggan
+customer-mgmt-history-close = Tutup
+customer-mgmt-history-loading = Memuat riwayat…
+customer-mgmt-history-error = Gagal memuat riwayat
+customer-mgmt-history-loyalty-title = Loyalitas
+customer-mgmt-history-points = Poin
+customer-mgmt-history-lifetime = Poin seumur hidup
+customer-mgmt-history-tier = Tingkat
+customer-mgmt-history-no-tier = Tanpa tingkat
+customer-mgmt-history-sales-title = Penjualan terbaru
+customer-mgmt-history-sale-date = Tanggal
+customer-mgmt-history-sale-total = Total
+customer-mgmt-history-sale-items = Item
+customer-mgmt-history-sale-status = Status
+customer-mgmt-history-no-sales = Belum ada penjualan.
+customer-mgmt-history-empty = Belum ada riwayat.
+customer-mgmt-search-results = Menampilkan { $shown } dari { $total } pelanggan
+customer-mgmt-search-loading = Mencari…
 
 # ── Customer Management (remaining) ──
 customer-mgmt-title = Pelanggan

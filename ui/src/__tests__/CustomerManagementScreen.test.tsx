@@ -10,11 +10,15 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/customers', () => {
   const listCustomersScoped = vi.fn();
+  const searchCustomersScoped = vi.fn();
+  const getCustomerHistoryScoped = vi.fn();
   const createCustomerScoped = vi.fn();
   const updateCustomerScoped = vi.fn();
   const deleteCustomerScoped = vi.fn();
   return {
     listCustomersScoped,
+    searchCustomersScoped,
+    getCustomerHistoryScoped,
     createCustomerScoped,
     updateCustomerScoped,
     deleteCustomerScoped,
@@ -28,12 +32,16 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 import CustomerManagementScreen from '@/features/customers/CustomerManagementScreen';
 import {
   listCustomersScoped,
+  searchCustomersScoped,
+  getCustomerHistoryScoped,
   createCustomerScoped,
   updateCustomerScoped,
   deleteCustomerScoped,
 } from '@/api/customers';
 
 const mockListCustomers = listCustomersScoped as ReturnType<typeof vi.fn>;
+const mockSearchCustomers = searchCustomersScoped as ReturnType<typeof vi.fn>;
+const mockGetHistory = getCustomerHistoryScoped as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomerScoped as ReturnType<typeof vi.fn>;
 const mockUpdateCustomer = updateCustomerScoped as ReturnType<typeof vi.fn>;
 const mockDeleteCustomer = deleteCustomerScoped as ReturnType<typeof vi.fn>;
@@ -122,10 +130,14 @@ describe('CustomerManagementScreen', () => {
     expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
   });
 
-  // ── Search ────────────────────────────────────────────────────
+  // ── Search (CUST-06: server-side bounded search) ───────────────
 
-  it('filters customers by search query', async () => {
+  it('runs the query through the server-side search API (CUST-06)', async () => {
     const user = userEvent.setup();
+    mockSearchCustomers.mockResolvedValue({
+      items: [sampleCustomers[1]],
+      total: 1,
+    });
     renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
@@ -135,13 +147,40 @@ describe('CustomerManagementScreen', () => {
     await user.type(searchInput, 'Bob');
 
     await waitFor(() => {
-      expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+      expect(mockSearchCustomers).toHaveBeenCalledWith(
+        'session-1',
+        'Bob',
+        50,
+        0,
+      );
       expect(screen.getByText('Bob')).toBeInTheDocument();
+    });
+    // The full client-side list is replaced by the bounded server page.
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+  });
+
+  it('shows the server-side total count (CUST-06)', async () => {
+    const user = userEvent.setup();
+    mockSearchCustomers.mockResolvedValue({
+      items: [sampleCustomers[0], sampleCustomers[2]],
+      total: 17,
+    });
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search by name/i);
+    await user.type(searchInput, 'a');
+
+    await waitFor(() => {
+      expect(screen.getByText('Showing 2 of 17 customers')).toBeInTheDocument();
     });
   });
 
-  it('shows no-match state for search with no results', async () => {
+  it('shows no-match state when the server returns an empty page', async () => {
     const user = userEvent.setup();
+    mockSearchCustomers.mockResolvedValue({ items: [], total: 0 });
     renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
@@ -153,6 +192,27 @@ describe('CustomerManagementScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('No customers match your search.')).toBeInTheDocument();
       expect(screen.getByText('Clear search')).toBeInTheDocument();
+    });
+  });
+
+  it('clearing the search restores the full list', async () => {
+    const user = userEvent.setup();
+    mockSearchCustomers.mockResolvedValue({ items: [], total: 0 });
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByPlaceholderText(/search by name/i);
+    await user.type(searchInput, 'zzz');
+    await waitFor(() => {
+      expect(screen.getByText('No customers match your search.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('Clear search'));
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.getByText('Carol')).toBeInTheDocument();
     });
   });
 
@@ -365,6 +425,93 @@ describe('CustomerManagementScreen', () => {
     expect(mockDeleteCustomer).not.toHaveBeenCalled();
   });
 
+  // ── History modal (CUST-05) ────────────────────────────────────
+
+  it('opens the read-only history modal for a customer (CUST-05)', async () => {
+    const user = userEvent.setup();
+    mockGetHistory.mockResolvedValue({
+      customer: sampleCustomers[0],
+      loyalty: {
+        points: 120,
+        lifetime_points: 450,
+        tier_name: 'Silver',
+      },
+      sales: [
+        {
+          id: 's-1',
+          total_minor: 2500,
+          currency: 'USD',
+          status: 'Completed',
+          line_count: 2,
+          created_at: '2026-07-01T10:00:00.000Z',
+        },
+      ],
+      sales_total: 1,
+    });
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'View history for Alice' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Customer history')).toBeInTheDocument();
+      expect(mockGetHistory).toHaveBeenCalledWith('session-1', 'cust-1');
+    });
+    expect(screen.getByText('Silver')).toBeInTheDocument();
+    expect(screen.getByText('120')).toBeInTheDocument();
+    expect(screen.getByText('450')).toBeInTheDocument();
+    expect(screen.getByText('Recent sales')).toBeInTheDocument();
+  });
+
+  it('shows loyalty and no-sales empty states in the history modal (CUST-05)', async () => {
+    const user = userEvent.setup();
+    mockGetHistory.mockResolvedValue({
+      customer: sampleCustomers[1],
+      loyalty: null,
+      sales: [],
+      sales_total: 0,
+    });
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Bob')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'View history for Bob' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Customer history')).toBeInTheDocument();
+    });
+    expect(screen.getByText('No tier')).toBeInTheDocument();
+    expect(screen.getByText('No sales yet.')).toBeInTheDocument();
+  });
+
+  it('surfaces a history load failure with a retry (CUST-05)', async () => {
+    const user = userEvent.setup();
+    mockGetHistory.mockRejectedValueOnce(new Error('boom'));
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'View history for Alice' }));
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load history')).toBeInTheDocument();
+    });
+
+    mockGetHistory.mockResolvedValueOnce({
+      customer: sampleCustomers[0],
+      loyalty: null,
+      sales: [],
+      sales_total: 0,
+    });
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => {
+      expect(screen.getByText('No sales yet.')).toBeInTheDocument();
+    });
+  });
+
   // ── CUST-07: locale parity ──────────────────────────────────────
 
   it('resolves every screen Localized id in both the en and id bundles (CUST-07)', () => {
@@ -413,6 +560,21 @@ describe('CustomerManagementScreen', () => {
       'customer-mgmt-error-delete',
       'customer-mgmt-error-load',
       'customer-mgmt-error-retry',
+      'customer-mgmt-history',
+      'customer-mgmt-history-aria',
+      'customer-mgmt-history-title',
+      'customer-mgmt-history-close',
+      'customer-mgmt-history-loading',
+      'customer-mgmt-history-error',
+      'customer-mgmt-history-loyalty-title',
+      'customer-mgmt-history-points',
+      'customer-mgmt-history-lifetime',
+      'customer-mgmt-history-tier',
+      'customer-mgmt-history-no-tier',
+      'customer-mgmt-history-sales-title',
+      'customer-mgmt-history-no-sales',
+      'customer-mgmt-search-results',
+      'customer-mgmt-search-loading',
     ];
     for (const key of usedIds) {
       expect(en.getMessage(key), `en bundle missing ${key}`).toBeDefined();

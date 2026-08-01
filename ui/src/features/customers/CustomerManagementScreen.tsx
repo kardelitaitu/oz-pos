@@ -1,12 +1,16 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listCustomersScoped,
+  searchCustomersScoped,
+  getCustomerHistoryScoped,
   createCustomerScoped,
   updateCustomerScoped,
   deleteCustomerScoped,
   type CustomerDto,
+  type CustomerHistory,
+  type CustomerSaleSummary,
   type UpdateCustomerScopedArgs,
   type CreateCustomerScopedArgs,
 } from '@/api/customers';
@@ -16,6 +20,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
+import { formatMoney } from '@/types/domain';
 import './CustomerManagementScreen.css';
 
 // ── Form state ──────────────────────────────────────────────────────
@@ -92,6 +97,16 @@ export default function CustomerManagementScreen() {
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  // CUST-06: server-side search — the renderer only ever holds one bounded
+  // page; the total count drives the "showing X of Y" line and pagination.
+  const [searchTotal, setSearchTotal] = useState<number | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchSeqRef = useRef(0);
+  // CUST-05: read-only history modal state.
+  const [historyTarget, setHistoryTarget] = useState<CustomerDto | null>(null);
+  const [history, setHistory] = useState<CustomerHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
@@ -143,18 +158,48 @@ export default function CustomerManagementScreen() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Search filter ──────────────────────────────────────────────
+  // ── Search (CUST-06) ───────────────────────────────────────────
 
-  const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
-    const q = searchQuery.trim().toLowerCase();
-    return customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email ?? '').toLowerCase().includes(q) ||
-        (c.phone ?? '').toLowerCase().includes(q),
-    );
-  }, [customers, searchQuery]);
+  // Debounced server-side search: queries run in the store DB (LIKE over
+  // name/email/phone) with a bounded page size instead of loading the whole
+  // collection into the renderer and filtering client-side.
+  const runSearch = useCallback(
+    async (query: string) => {
+      const seq = ++searchSeqRef.current;
+      const trimmed = query.trim();
+      if (!trimmed) {
+        setSearchTotal(null);
+        setSearching(false);
+        await load();
+        return;
+      }
+      setSearching(true);
+      try {
+        const page = await searchCustomersScoped(sessionToken, trimmed, 50, 0);
+        if (seq !== searchSeqRef.current) return;
+        setCustomers(page.items);
+        setSearchTotal(page.total);
+      } catch {
+        if (seq !== searchSeqRef.current) return;
+        setLoadError(
+          requiredLocalized(l10nRef.current, 'customer-mgmt-error-load'),
+        );
+        setCustomers([]);
+      } finally {
+        if (seq === searchSeqRef.current) {
+          setSearching(false);
+        }
+      }
+    },
+    [sessionToken, load],
+  );
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void runSearch(searchQuery);
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, runSearch]);
 
   // ── Modal handlers ──────────────────────────────────────────────
 
@@ -196,6 +241,46 @@ export default function CustomerManagementScreen() {
       return next;
     });
   }, []);
+
+  // ── History modal (CUST-05) ────────────────────────────────────
+
+  const openHistory = useCallback((customer: CustomerDto) => {
+    setHistoryTarget(customer);
+    setHistory(null);
+    setHistoryError(false);
+    setHistoryLoading(true);
+    void getCustomerHistoryScoped(sessionToken, customer.id)
+      .then((h) => {
+        setHistory(h);
+        setHistoryLoading(false);
+      })
+      .catch(() => {
+        setHistoryError(true);
+        setHistoryLoading(false);
+      });
+  }, [sessionToken]);
+
+  const closeHistory = useCallback(() => {
+    setHistoryTarget(null);
+    setHistory(null);
+    setHistoryError(false);
+  }, []);
+
+  const retryHistory = useCallback(() => {
+    if (!historyTarget) return;
+    setHistory(null);
+    setHistoryError(false);
+    setHistoryLoading(true);
+    void getCustomerHistoryScoped(sessionToken, historyTarget.id)
+      .then((h) => {
+        setHistory(h);
+        setHistoryLoading(false);
+      })
+      .catch(() => {
+        setHistoryError(true);
+        setHistoryLoading(false);
+      });
+  }, [historyTarget, sessionToken]);
 
   // ── Save / Update ──────────────────────────────────────────────
 
@@ -369,7 +454,25 @@ export default function CustomerManagementScreen() {
             </Localized>
           </div>
         </Card>
-      ) : customers.length === 0 ? (
+      ) : customers.length === 0 && searchQuery.trim() ? (
+        // CUST-06: an active search that returned an empty page renders the
+        // no-match state (with Clear search) — never the "no customers yet"
+        // onboarding state, which is reserved for a genuinely empty store.
+        <Card shadow="sm">
+          <div className="customer-mgmt-empty">
+            <Localized id="customer-mgmt-search-empty">
+              <p>No customers match your search.</p>
+            </Localized>
+            <Localized id="customer-mgmt-search-clear">
+              <Button variant="ghost" onClick={() => setSearchQuery('')}>
+                Clear search
+              </Button>
+            </Localized>
+          </div>
+        </Card>
+      ) : customers.length === 0 && searchTotal === null ? (
+        // CUST-06: onboarding empty state is reserved for a genuinely empty
+        // store — never shown while a search is active or being cleared.
         <Card shadow="sm">
           <div className="customer-mgmt-empty">
             <div className="customer-mgmt-empty-icon" aria-hidden="true">
@@ -390,21 +493,23 @@ export default function CustomerManagementScreen() {
             </Localized>
           </div>
         </Card>
-      ) : filteredCustomers.length === 0 ? (
-        <Card shadow="sm">
-          <div className="customer-mgmt-empty">
-            <Localized id="customer-mgmt-search-empty">
-              <p>No customers match your search.</p>
-            </Localized>
-            <Localized id="customer-mgmt-search-clear">
-              <Button variant="ghost" onClick={() => setSearchQuery('')}>
-                Clear search
-              </Button>
-            </Localized>
-          </div>
-        </Card>
       ) : (
         <div className="customer-mgmt-table-wrap">
+          {searching && (
+            <p className="customer-mgmt-search-status" role="status">
+              <Localized id="customer-mgmt-search-loading"><span>Searching…</span></Localized>
+            </p>
+          )}
+          {searchTotal !== null && !searching && (
+            <p className="customer-mgmt-search-status" role="status">
+              <Localized
+                id="customer-mgmt-search-results"
+                vars={{ shown: String(customers.length), total: String(searchTotal) }}
+              >
+                <span>Showing {customers.length} of {searchTotal} customers</span>
+              </Localized>
+            </p>
+          )}
           <table className="customer-mgmt-table" aria-label={l10n.getString('customer-mgmt-table-aria')}>
             <thead>
               <tr>
@@ -417,7 +522,7 @@ export default function CustomerManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>{filteredCustomers.map((customer) => (
+            <tbody>{customers.map((customer) => (
                 <tr key={customer.id}>
                   { }
                   <td>
@@ -438,6 +543,16 @@ export default function CustomerManagementScreen() {
                     {customer.notes || '\u2014'}
                   </td>
                   <td className="customer-mgmt-cell-actions">
+                    <Localized id="customer-mgmt-history-aria" attrs={{ 'aria-label': true }} vars={{ name: customer.name }}>
+                      <button
+                        type="button"
+                        className="customer-mgmt-action-btn"
+                        onClick={() => openHistory(customer)}
+                        aria-label={`View history for ${customer.name}`}
+                      >
+                        <Localized id="customer-mgmt-history"><span>History</span></Localized>
+                      </button>
+                    </Localized>
                     <Localized id="customer-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: customer.name }}>
                       <button
                         type="button"
@@ -597,6 +712,128 @@ export default function CustomerManagementScreen() {
         confirmLabel={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-btn')}
         cancelLabel={requiredLocalized(l10n, 'customer-mgmt-btn-cancel')}
       />
+
+      {/* CUST-05: read-only customer history — profile, loyalty summary,
+          recent sales. Loaded scoped + permission-gated by the backend. */}
+      {historyTarget && (
+        <div className="customer-mgmt-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) closeHistory(); }}>
+          <div className="customer-mgmt-history" role="dialog" aria-modal="true" aria-labelledby="customer-mgmt-history-title">
+            <div className="customer-mgmt-history-header">
+              <div>
+                <h2 id="customer-mgmt-history-title" className="customer-mgmt-history-title">
+                  {requiredLocalized(l10n, 'customer-mgmt-history-title')}
+                </h2>
+                <p className="customer-mgmt-history-subtitle">{historyTarget.name}</p>
+              </div>
+              <button
+                type="button"
+                className="customer-mgmt-action-btn customer-mgmt-history-close"
+                onClick={closeHistory}
+                aria-label={requiredLocalized(l10n, 'customer-mgmt-history-close')}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+
+            <div className="customer-mgmt-history-body">
+              {historyLoading && (
+                <div className="customer-mgmt-history-state" role="status">
+                  <Localized id="customer-mgmt-history-loading"><p>Loading history…</p></Localized>
+                </div>
+              )}
+              {historyError && (
+                <div className="customer-mgmt-history-state" role="alert">
+                  <Localized id="customer-mgmt-history-error">
+                    <p>Failed to load history</p>
+                  </Localized>
+                  <Button variant="secondary" onClick={() => void retryHistory()}>
+                    {requiredLocalized(l10n, 'customer-mgmt-error-retry')}
+                  </Button>
+                </div>
+              )}
+              {!historyLoading && !historyError && history && (
+                <>
+                  <section className="customer-mgmt-history-section">
+                    <Localized id="customer-mgmt-history-loyalty-title">
+                      <h3 className="customer-mgmt-history-section-title">Loyalty</h3>
+                    </Localized>
+                    {history.loyalty ? (
+                      <dl className="customer-mgmt-history-grid">
+                        <div>
+                          <dt>{requiredLocalized(l10n, 'customer-mgmt-history-points')}</dt>
+                          <dd>{history.loyalty.points.toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>{requiredLocalized(l10n, 'customer-mgmt-history-lifetime')}</dt>
+                          <dd>{history.loyalty.lifetime_points.toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>{requiredLocalized(l10n, 'customer-mgmt-history-tier')}</dt>
+                          <dd>{history.loyalty.tier_name ?? requiredLocalized(l10n, 'customer-mgmt-history-no-tier')}</dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <p className="customer-mgmt-history-empty-note">
+                        {requiredLocalized(l10n, 'customer-mgmt-history-no-tier')}
+                      </p>
+                    )}
+                  </section>
+
+                  <section className="customer-mgmt-history-section">
+                    <Localized id="customer-mgmt-history-sales-title">
+                      <h3 className="customer-mgmt-history-section-title">Recent sales</h3>
+                    </Localized>
+                    {history.sales.length === 0 ? (
+                      <p className="customer-mgmt-history-empty-note">
+                        {requiredLocalized(l10n, 'customer-mgmt-history-no-sales')}
+                      </p>
+                    ) : (
+                      <ul className="customer-mgmt-history-sales">
+                        {history.sales.map((sale) => (
+                          <li key={sale.id} className="customer-mgmt-history-sale">
+                            <div className="customer-mgmt-history-sale-meta">
+                              <span className="customer-mgmt-history-sale-date">{formatDate(sale.created_at)}</span>
+                              <span className="customer-mgmt-history-sale-status">{sale.status}</span>
+                            </div>
+                            <div className="customer-mgmt-history-sale-amount">
+                              {formatSaleTotal(sale)}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** CUST-05: format a sale total from minor units + currency code. */
+function formatSaleTotal(sale: CustomerSaleSummary): string {
+  try {
+    return formatMoney(
+      { minor_units: sale.total_minor, currency: sale.currency },
+      'en-US',
+    );
+  } catch {
+    return sale.total_minor.toLocaleString();
+  }
+}
+
+/** CUST-05: short readable date for the sales list. */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
