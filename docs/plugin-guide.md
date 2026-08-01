@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: STALE (2 findings — aspirational plugin API not fully implemented) · F1 (line 101): lists NfcReader as an available v1.0 HAL driver trait; crates/oz-hal/src/traits/ has BarcodeScanner, ReceiptPrinter, CashDrawer, CustomerDisplay but NO NfcReader trait · F2 (lines 179-182): documents `cargo run -p oz-cli -- run-script` and `-- validate-plugins` subcommands; oz-cli Command enum (cli.rs) has Migrate/InitDb/Product/Backup/... and NO run-script or validate-plugins · verified accurate: crates/oz-hal/examples/custom_barcode_scanner.rs exists; oz.register_hook + oz.apply_discount present in oz-lua; sandbox (no fs/network) matches oz-lua -->
+<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: SYNCED (PLG-10 parity rewrite) · verified against crates/oz-plugin (manager.rs, manifest.rs, loader.rs, package.rs) and crates/oz-lua (lib.rs, bridge.rs) · corrected: oz table surface (get_time/log/apply_discount/register_hook/on/off only), mandatory required_permissions + manifest validation (kebab-case name, strict SemVer, unknown-permission rejection), register_hook(string) signature, per-plugin env isolation, HAL traits table (no NfcReader), oz-cli commands (no run-script/validate-plugins), sandbox limits (100k instr / 10 MB) -->
 
 # OZ-POS Plugin System
 
@@ -7,32 +7,46 @@ and integrations — all without modifying the core codebase.
 
 ## Plugin Manifest (`plugin.toml`)
 
-Every plugin is a directory containing a `plugin.toml` manifest:
+Every plugin is a directory containing a `plugin.toml` manifest. The manifest
+is **validated at load time** (PLG-08): invalid manifests fail loudly with an
+actionable error and the plugin is not loaded.
 
 ```toml
 [plugin]
-name = "my-custom-discount"
-version = "1.0.0"
+name = "my-custom-discount"   # kebab-case: lowercase letters/digits/hyphens, 1-64 chars
+version = "1.0.0"             # strict SemVer (e.g. "1.2.3-beta.1")
 description = "A custom discount rule for Tuesday afternoons"
 author = "My Company"
 license = "MIT"
 
 [capabilities]
-# Scripts that the plugin provides
+# Scripts that the plugin provides (paths must stay inside the plugin dir)
 scripts = ["discount.lua", "validation.lua"]
 
-# Hardware drivers the plugin registers (optional)
-# drivers = ["my-barcode-scanner"]
-
-# Hooks the plugin listens to
-# hooks = ["sale.before_complete", "product.after_lookup"]
+# Hooks the plugin listens to (informational; lowercase/digits/dot/underscore/hyphen)
+hooks = ["sale.before_complete"]
 
 [permissions]
-# What the plugin can access
-allow_network = false
-allow_filesystem = false
-allow_http = false
+# REQUIRED: at least one permission must be declared, and every permission
+# must be recognised — unknown permissions reject the plugin.
+required_permissions = ["cart:read", "cart:write", "system:time", "log:write"]
 ```
+
+### Available permissions
+
+| Permission | Grants the `oz` binding |
+|------------|--------------------------|
+| `cart:read` | `oz.register_hook`, `oz.on`, `oz.off` |
+| `cart:write` | `oz.apply_discount` |
+| `tax:read` | *(reserved — tax-rate read access)* |
+| `inventory:read` | *(reserved — stock read access)* |
+| `inventory:write` | *(reserved — stock adjustment)* |
+| `reporting:read` | *(reserved — reporting/analytics access)* |
+| `system:time` | `oz.get_time` |
+| `log:write` | `oz.log` |
+
+Bindings whose permission is not granted simply do not exist in the plugin's
+`oz` table, so an unapproved call fails fast in the sandbox.
 
 ## Plugin Directory Structure
 
@@ -52,45 +66,74 @@ plugins/
 Plugins are loaded from the `plugins/` directory at startup:
 
 1. OZ-POS scans `plugins/` (relative to the app data directory)
-2. Each subdirectory with a `plugin.toml` is loaded
-3. Lua scripts are loaded into a sandboxed VM
-4. Scripts can register hooks by calling `oz.register_hook(name, function)`
+2. Each subdirectory with a `plugin.toml` is loaded; manifest schema violations
+   fail loudly instead of silently skipping
+3. Each plugin's Lua scripts load into **its own isolated environment** — plugin
+   globals never leak between plugins or into the shared namespace
+4. Scripts can register hooks by calling `oz.register_hook(name, function_name)`
+5. Plugin IDs must be unique; duplicate IDs are rejected
 
-## API Versioning
+## Sandbox
 
-The OZ-POS Plugin API follows **semantic versioning** independent of the
-main application version. The current stable API version is **v1.0**.
+Lua scripts run in a hardened sandbox:
 
-### Version Guarantees
+- **No filesystem or network access**: `os.execute`, `os.remove`, `os.rename`,
+  and `os.exit` are `nil`; read-only `os.date`/`os.time`/`os.clock` remain
+- **Instruction limit**: scripts abort after 100 000 Lua instructions
+  (prevents infinite loops)
+- **Memory limit**: the Lua VM is capped at 10 MB (prevents memory exhaustion)
+- **Isolated environments**: each plugin loads into its own `_ENV`, with `_G`
+  pointed at that environment — a plugin writing `_G.foo = ...` cannot affect
+  any other plugin
 
-| Guarantee | Description |
-|-----------|-------------|
-| **Backward compatibility** | Plugins written for API v1.0 will work on all future v1.x releases |
-| **Deprecation notice** | Deprecated APIs are marked with `@deprecated` for at least one minor version before removal |
-| **Migration path** | Breaking changes go through a major version bump (v2.0) with documented migration guides |
-| **Feature detection** | Plugins can check `oz.api_version` at runtime to conditionally use newer APIs |
+## `oz` Global Table
 
-### Checking API Version at Runtime
+Only the following bindings are implemented. Each is capability-gated by the
+plugin's declared permissions (see above).
+
+| Function | Permission | Description |
+|----------|------------|-------------|
+| `oz.log(level, message)` | `log:write` | Log a message (`level`: "info", "warn", "error", "debug") |
+| `oz.get_time()` | `system:time` | Current time table: `wday`, `hour`, `min`, `sec`, `month`, `day`, `year` |
+| `oz.apply_discount(target, percent)` | `cart:write` | Queue a discount: `"cart"` or `"line:<SKU>"`; `percent` must be 0–100 |
+| `oz.register_hook(event, function_name)` | `cart:read` | Register a hook by **function name** (string), resolved in this plugin's environment |
+| `oz.on(event, callback)` | `cart:read` | Register an inline callback function |
+| `oz.off(event)` | `cart:read` | Unsubscribe this plugin's callbacks for an event (a plugin can only ever remove its own) |
+
+### Legacy top-level hooks
+
+In addition to `oz.register_hook`, the runtime still recognises these
+**top-level functions** defined in a plugin script (each resolved in the
+plugin's own environment):
+
+| Lua function | Signature | Called when |
+|---|---|---|
+| `apply_discount` | `(lines_json) → {percent, label} \| nil` | Before sale creation |
+| `calc_line_tax` | `(sku, qty, unit_price_minor, currency) → {rate_bps, is_inclusive} \| nil` | During tax computation |
+| `validate_order` | `(lines_json, total_minor, currency) → string[]` | Before completion |
+
+## Example: Custom Discount
 
 ```lua
-local api_ver = oz.api_version()
-if api_ver.major >= 2 then
-  oz.log("info", "Using v2+ API features")
+-- plugins/tuesday-discount/discount.lua
+function apply_tuesday_discount(sale)
+  local now = oz.get_time()
+  if now.wday == 3 then  -- Tuesday
+    oz.log("info", "Tuesday 10% discount applied")
+    oz.apply_discount("cart", 10)  -- 10% off entire cart
+  end
 end
+
+-- register_hook takes the function NAME as a string
+oz.register_hook("sale.before_complete", "apply_tuesday_discount")
 ```
 
-### Deprecation Policy
-
-1. APIs marked for deprecation log a warning on first use
-2. Deprecated APIs remain functional for at least one minor version
-3. Removal happens only in a major version bump
-4. Migration guides are published with each major version
+Requires `required_permissions = ["cart:read", "cart:write", "system:time", "log:write"]`
+in `plugin.toml` (see `plugins/example-discount/` for a complete example).
 
 ## HAL Driver API Surface
 
 Third-party hardware drivers implement the traits defined in `crates/oz-hal/`.
-Each trait is versioned independently and follows the same backward compatibility
-guarantees as the Lua API.
 
 ### Available Driver Traits (v1.0)
 
@@ -100,7 +143,6 @@ guarantees as the Lua API.
 | `ReceiptPrinter` | `oz-hal` | Print receipts, barcodes, QR codes, cash drawer kick |
 | `CashDrawer` | `oz-hal` | Open drawer, detect drawer state |
 | `CustomerDisplay` | `oz-hal` | Show/hide messages, update totals |
-| `NfcReader` | `oz-hal` | Read NFC tags/cards, emulate tags |
 
 ### Implementing a Custom Driver
 
@@ -110,85 +152,46 @@ tested example of implementing the `BarcodeScanner` trait for custom hardware.
 Key requirements:
 1. Implement the trait methods (`connect`, `poll`, `cancel`, `device_info`)
 2. Return `oz_hal::HalError` for all error paths
-3. Register the driver via `plugin.toml`:
 
-```toml
-[drivers]
-barcode_scanner = { type = "custom", path = "my_scanner.lua" }
-receipt_printer = { type = "escpos", vendor_id = "0x04b8", product_id = "0x0202" }
-```
-
-## API Changelog
-
-### v1.0 (current)
-
-- `oz.log(level, message)`
-- `oz.get_setting(key)`
-- `oz.get_product(sku)`
-- `oz.get_cart()`
-- `oz.apply_discount(line_or_cart, percent)`
-- `oz.calc_line_tax(line)`
-- `oz.get_time()`
-- `oz.register_hook(name, function)`
-- `oz.api_version()`
-- HAL traits: BarcodeScanner, ReceiptPrinter, CashDrawer, CustomerDisplay, NfcReader
-
-### `oz` Global Table
-
-| Function | Description |
-|----------|-------------|
-| `oz.log(level, message)` | Log a message (level: "info", "warn", "error") |
-| `oz.get_setting(key)` | Read a store setting |
-| `oz.get_product(sku)` | Get product details (returns table) |
-| `oz.get_cart()` | Get the current cart contents |
-| `oz.apply_discount(line_or_cart, percent)` | Apply percentage discount |
-| `oz.calc_line_tax(line)` | Calculate tax for a line item |
-
-### Example: Custom Discount
-
-```lua
--- plugins/tuesday-discount/discount.lua
-function on_before_complete(sale)
-  local now = oz.get_time()
-  if now.wday == 3 then  -- Tuesday
-    oz.log("info", "Tuesday discount applied")
-    oz.apply_discount("cart", 10)  -- 10% off entire cart
-  end
-end
-
-oz.register_hook("sale.before_complete", on_before_complete)
-```
+> **Note:** Native driver loading from `plugin.toml` is not yet wired into the
+> Lua runtime. Drivers are implemented in Rust against the `oz-hal` traits; the
+> `capabilities.drivers` manifest field is currently informational.
 
 ## Security
 
 - Lua scripts run in a sandbox with no filesystem or network access
-- CPU time is limited (configurable timeout)
-- Memory is limited (configurable limit)
-- All plugin scripts are scanned for suspicious patterns at load time
+- CPU time and memory are limited (100 000 instructions / 10 MB)
+- Each plugin loads into its own isolated environment; hooks are owner-tagged
+- Plugins can only ever unsubscribe their own hooks/callbacks
+- Manifests are validated: kebab-case plugin IDs, strict SemVer, recognised
+  permissions only, unique IDs, and script paths confined to the plugin
+  directory (no `..`, absolute paths, or symlink escapes)
+- `.ozpkg` archives are parsed with path-traversal and zip-bomb protections
 
 ## Creating a Plugin
 
 1. Create a directory in `plugins/`
-2. Write your `plugin.toml`
+2. Write your `plugin.toml` (including at least one `required_permissions`)
 3. Write your Lua scripts
 4. Restart OZ-POS to load the plugin
 5. Check the logs for any load errors
 
 ## Testing Plugins
 
-```bash
-# Run a plugin script directly via the CLI
-cargo run -p oz-cli -- run-script plugins/my-plugin/discount.lua
+The `oz-plugin` crate includes an integration test that loads the real
+`plugins/example-discount` plugin end-to-end:
 
-# Validate all plugin manifests
-cargo run -p oz-cli -- validate-plugins
+```bash
+cargo test -p oz-plugin --lib
 ```
 
 ## Troubleshooting
 
 | Symptom | Likely Cause |
 |---------|-------------|
-| Plugin not loaded | Missing or invalid `plugin.toml` |
+| Plugin not loaded, "invalid manifest" | Missing/invalid `plugin.toml`; unknown permission; bad name or version format |
+| Plugin not loaded, "unsafe script path" | A declared script escapes the plugin directory |
+| Plugin not loaded, "duplicate plugin id" | Two plugins declare the same `plugin.name` |
 | Lua errors on startup | Syntax error in script — check logs |
-| Hook not firing | Plugin not permitted to use that hook |
-| Permission denied | Plugin requested `allow_network` but not granted |
+| `attempt to call a nil value` on `oz.*` | The plugin lacks the permission for that binding |
+| Hook not firing | `oz.register_hook` needs `cart:read`; check the event name and function name |
