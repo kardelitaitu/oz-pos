@@ -4,7 +4,13 @@ use std::path::Path;
 use crate::error::PluginError;
 
 /// A plugin manifest (`plugin.toml`).
+///
+/// `deny_unknown_fields` (PLG-08 tail): a typo'd field name — e.g.
+/// `required_permissionss` or `cappabilities` — must fail loudly at load
+/// instead of being silently dropped and changing the manifest author's
+/// intent without anyone noticing.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginManifest {
     /// Plugin metadata (name, version, etc.).
     pub plugin: PluginMeta,
@@ -18,6 +24,7 @@ pub struct PluginManifest {
 
 /// Metadata section of a plugin manifest.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginMeta {
     /// Plugin name (must be unique).
     pub name: String,
@@ -33,6 +40,7 @@ pub struct PluginMeta {
 
 /// Declared capabilities of a plugin.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginCapabilities {
     /// Script files to load into the Lua sandbox.
     #[serde(default)]
@@ -165,6 +173,7 @@ where
 
 /// Sandbox permissions for a plugin.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginPermissions {
     /// Whether the plugin may make network requests.
     #[serde(default)]
@@ -544,6 +553,85 @@ required_permissions = ["cart:read"]
         std::fs::write(&path, toml).unwrap();
         let err = PluginManifest::load(&path).unwrap_err();
         assert!(err.to_string().contains("invalid hook name"));
+    }
+
+    // ── PLG-08 tail: unknown-field (typo) rejection ──────────────────
+
+    #[test]
+    fn typo_in_permission_field_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[permissions]
+required_permissionss = ["cart:read"]
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("required_permissionss"),
+            "expected the unknown field named in the error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn typo_in_plugin_meta_field_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+versoin = "1.0.0"
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("versoin"),
+            "expected the unknown field named in the error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn typo_in_capabilities_field_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[capabilities]
+scritps = ["main.lua"]
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("scritps"),
+            "expected the unknown field named in the error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn typo_in_permissions_boolean_field_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[permissions]
+allow_netwrk = false
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("allow_netwrk"),
+            "expected the unknown field named in the error, got: {err}"
+        );
     }
 
     #[test]
