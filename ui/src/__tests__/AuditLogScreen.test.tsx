@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
@@ -375,5 +375,88 @@ describe('AuditLogScreen', () => {
         reviewedThroughId: 'a-1',
       }),
     );
+  });
+
+  // ── Request-generation protection (AUD-05) ─────────────────────
+
+  it('discards a stale slower load in favor of a newer one (AUD-05)', async () => {
+    // Mount load (request 1) is deferred; a later filter change (request 2)
+    // resolves first. The outcome chip stands in for the Refresh button's
+    // load({reset:true}) path because the shared Button disables while
+    // loading.
+    let resolveStale!: (page: AuditLogPageDto) => void;
+    mockListAuditLogScoped.mockImplementationOnce(
+      () => new Promise<AuditLogPageDto>((resolve) => { resolveStale = resolve; }),
+    );
+    // The newer request returns the newest row. user_id is truncated to 8
+    // chars in the table, so use <=8-char ids for exact text matching.
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ id: 'a-fresh', user_id: 'fresh-1' })]));
+
+    await renderScreen();
+
+    // Trigger a new request generation while the first is still in flight by
+    // changing a server-side filter. The outcome chip is a plain button (never
+    // disabled), unlike the Refresh Button which disables while loading — so
+    // this deterministically exercises the "overlap across state transitions
+    // and external triggers" the seq guard must absorb.
+    const successChip = screen.getByText('Success').closest('button')!;
+    await userEvent.click(successChip);
+    await waitFor(() => expect(screen.getByText('fresh-1')).toBeDefined());
+
+    // The stale first request resolves late — it must be ignored.
+    await act(async () => {
+      resolveStale(makePage([makeEntry({ id: 'a-stale', user_id: 'stale-1' })]));
+    });
+    expect(screen.queryByText('stale-1')).toBeNull();
+    expect(screen.getByText('fresh-1')).toBeDefined();
+  });
+
+  it('discards a stale Load More append after a filter change (AUD-05)', async () => {
+    // First page loaded normally.
+    mockListAuditLogScoped.mockResolvedValueOnce(
+      makePage(Array.from({ length: 50 }, (_, i) => makeEntry({ id: `a-${i}` })), 60, true),
+    );
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Load More')).toBeDefined());
+
+    // Load More (request 2) is deferred.
+    let resolveAppend!: (page: AuditLogPageDto) => void;
+    mockListAuditLogScoped.mockImplementationOnce(
+      () => new Promise<AuditLogPageDto>((resolve) => { resolveAppend = resolve; }),
+    );
+    const loadMoreBtn = screen.getByText('Load More').closest('button')!;
+    await userEvent.click(loadMoreBtn);
+
+    // A filter change (request 3, a reset generation) resolves with a fresh
+    // first page while the append is still in flight.
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ id: 'a-fresh', user_id: 'fresh-1' })], 1, false));
+    const successChip = screen.getByText('Success').closest('button')!;
+    await userEvent.click(successChip);
+    await waitFor(() => expect(screen.getByText('fresh-1')).toBeDefined());
+
+    // The stale append resolves late — it must NOT append its rows.
+    await act(async () => {
+      resolveAppend(makePage([makeEntry({ id: 'a-late', user_id: 'late-1' })], 60, true));
+    });
+    expect(screen.queryByText('late-1')).toBeNull();
+    expect(screen.getByText('fresh-1')).toBeDefined();
+  });
+
+  it('deduplicates appended rows by id (AUD-03 defense in depth)', async () => {
+    // First page + append both contain id 'a-dup'.
+    mockListAuditLogScoped.mockResolvedValueOnce(
+      makePage([makeEntry({ id: 'a-dup', user_id: 'dup-1' })], 2, true),
+    );
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Load More')).toBeDefined());
+
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry({ id: 'a-dup', user_id: 'dup-1' })], 2, false));
+    const loadMoreBtn = screen.getByText('Load More').closest('button')!;
+    await userEvent.click(loadMoreBtn);
+
+    await waitFor(() => {
+      const rows = document.querySelectorAll('.audit-log-table tbody tr');
+      expect(rows.length).toBe(1);
+    });
   });
 });

@@ -5,16 +5,121 @@ use crate::error::CoreError;
 
 use super::Store;
 
+/// Keys whose values are considered secrets and are redacted before an audit
+/// `details` payload is persisted (AUD-06). Match is case-insensitive.
+const SENSITIVE_DETAIL_KEYS: &[&str] = &[
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "auth_token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apikey",
+    "client_secret",
+    "pin",
+    "cvv",
+    "cvc",
+    "card_number",
+    "cardnumber",
+    "pan",
+    "session_token",
+    "authorization",
+    "private_key",
+];
+
+/// Marker substituted for redacted secret values (AUD-06).
+const REDACTED_MARKER: &str = "[REDACTED]";
+
+/// Maximum persisted length (in chars) for an audit `details` payload
+/// (AUD-06). Oversized payloads are truncated with an explicit marker.
+const MAX_DETAIL_LEN: usize = 4000;
+
+/// True when any key in the JSON tree matches a sensitive key name
+/// (case-insensitive). Used to decide whether re-serialisation is needed.
+fn has_sensitive_key(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
+            SENSITIVE_DETAIL_KEYS
+                .iter()
+                .any(|s| k.eq_ignore_ascii_case(s))
+                || has_sensitive_key(v)
+        }),
+        serde_json::Value::Array(items) => items.iter().any(has_sensitive_key),
+        _ => false,
+    }
+}
+
+/// Redact sensitive keys (case-insensitive) from a JSON value tree.
+fn redact_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut out = serde_json::Map::with_capacity(map.len());
+            for (k, v) in map {
+                if SENSITIVE_DETAIL_KEYS
+                    .iter()
+                    .any(|s| k.eq_ignore_ascii_case(s))
+                {
+                    out.insert(k.clone(), serde_json::Value::String(REDACTED_MARKER.into()));
+                } else {
+                    out.insert(k.clone(), redact_value(v));
+                }
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(redact_value).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// Truncate an oversized details payload, appending an explicit marker so a
+/// reader knows the record was summarised (AUD-06).
+fn truncate_details(details: &str) -> String {
+    if details.chars().count() <= MAX_DETAIL_LEN {
+        details.to_string()
+    } else {
+        let mut truncated: String = details.chars().take(MAX_DETAIL_LEN).collect();
+        truncated.push_str("…[truncated]");
+        truncated
+    }
+}
+
+/// Apply the AUD-06 policy: redact secret keys in JSON details, then cap the
+/// payload size.
+///
+/// When no sensitive key is present the original string is returned verbatim
+/// (preserving exact bytes — serde only re-serialises when a redaction is
+/// actually needed). Non-JSON strings are only truncated.
+fn sanitize_details(details: &str) -> String {
+    let redacted = match serde_json::from_str::<serde_json::Value>(details) {
+        Ok(value) if has_sensitive_key(&value) => {
+            serde_json::to_string(&redact_value(&value)).unwrap_or_else(|_| details.to_string())
+        }
+        _ => details.to_string(),
+    };
+    truncate_details(&redacted)
+}
+
 impl Store<'_> {
     /// Insert a new audit log entry (append-only).
+    ///
+    /// AUD-06: the `details` payload is sanitised before persistence — secret
+    /// keys are redacted and oversized payloads are truncated — so tokens,
+    /// PINs, and customer data written by upstream callers never reach the
+    /// audit table verbatim.
     pub fn log_audit(&self, entry: &AuditEntry) -> Result<(), CoreError> {
+        let details = sanitize_details(&entry.details);
         self.conn.execute(
             "INSERT INTO audit_log (id, user_id, action, target_type, target_id, details, outcome, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 entry.id, entry.user_id, entry.action,
                 entry.target_type, entry.target_id,
-                entry.details, entry.outcome, entry.created_at,
+                details, entry.outcome, entry.created_at,
             ],
         )?;
         Ok(())
@@ -807,7 +912,6 @@ mod tests {
         let conn = fresh();
         assert!(store(&conn).latest_review_checkpoint().unwrap().is_none());
     }
-
     #[test]
     fn count_audit_entries_after_counts_full_table() {
         let conn = fresh();
@@ -831,5 +935,93 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    // ── Sensitive-detail sanitisation (AUD-06) ─────────────────────
+
+    #[test]
+    fn log_audit_redacts_sensitive_keys() {
+        let conn = fresh();
+        let s = store(&conn);
+        let entry = AuditEntry::new(
+            "user-1",
+            "login",
+            None::<String>,
+            None::<String>,
+            Some(
+                "{\"user\":\"admin\",\"password\":\"hunter2\",\"api_key\":\"sk-123\",\"pin\":\"4321\"}"
+                    .to_string(),
+            ),
+            "failure",
+        );
+        s.log_audit(&entry).unwrap();
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert!(!entries[0].details.contains("hunter2"));
+        assert!(!entries[0].details.contains("sk-123"));
+        assert!(!entries[0].details.contains("4321"));
+        assert!(entries[0].details.contains("[REDACTED]"));
+        // Non-sensitive values survive.
+        assert!(entries[0].details.contains("admin"));
+    }
+
+    #[test]
+    fn log_audit_redacts_nested_sensitive_keys() {
+        let conn = fresh();
+        let s = store(&conn);
+        let entry = AuditEntry::new(
+            "user-1",
+            "sale.refund",
+            None::<String>,
+            None::<String>,
+            Some(
+                "{\"reason\":\"ok\",\"card\":{\"card_number\":\"4242\",\"cvv\":\"123\"}}"
+                    .to_string(),
+            ),
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert!(!entries[0].details.contains("4242"));
+        assert!(!entries[0].details.contains("\"123\""));
+        assert!(entries[0].details.contains("[REDACTED]"));
+        assert!(entries[0].details.contains("\"reason\":\"ok\""));
+    }
+
+    #[test]
+    fn log_audit_truncates_oversized_details() {
+        let conn = fresh();
+        let s = store(&conn);
+        let big = format!("{{\"payload\":\"{}\"}}", "x".repeat(10_000));
+        let entry = AuditEntry::new(
+            "user-1",
+            "bulk.import",
+            None::<String>,
+            None::<String>,
+            Some(big.clone()),
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert!(entries[0].details.len() < big.len());
+        assert!(entries[0].details.ends_with("[truncated]"));
+    }
+
+    #[test]
+    fn log_audit_keeps_non_secret_json_intact() {
+        let conn = fresh();
+        let s = store(&conn);
+        let details = "{\"total_minor\":1000,\"reason\":\"test\"}";
+        let entry = AuditEntry::new(
+            "user-1",
+            "sale.void",
+            None::<String>,
+            None::<String>,
+            Some(details.to_string()),
+            "success",
+        );
+        s.log_audit(&entry).unwrap();
+        let entries = s.list_audit_entries(10, 0).unwrap();
+        assert!(entries[0].details.contains("1000"));
+        assert!(!entries[0].details.contains("[REDACTED]"));
     }
 }
