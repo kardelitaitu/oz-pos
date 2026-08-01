@@ -2,7 +2,7 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** Plugin system — Lua runtime, manifests, permissions, package archives, persistence, lifecycle, hot reload, IPC exposure, documentation, and tests  
-> **Status:** ✅ **FULLY REMEDIATED** (PLG-01→PLG-11; see *Remediation summary* below — commits `64b0281a`, `b9a7fa76`, `da8ea51c`, `95da123e`, `47f63d52`, `06f7ff34`, and the PLG-11 integration batch)  
+> **Status:** ✅ **FULLY REMEDIATED** — 9 findings implemented (PLG-01→06, 08, 10, 11) and 2 closed by recorded product decision (PLG-07, PLG-09); see *Remediation summary* below — commits `64b0281a`, `b9a7fa76`, `da8ea51c`, `95da123e`, `47f63d52`, `06f7ff34`, `308bc101`  
 > **Production code changed:** Yes — see *Remediation summary* below
 
 ## Scope
@@ -162,4 +162,4 @@ All 11 findings (PLG-01 → PLG-11) are remediated. Production code changed acro
 
 ## Status
 
-**Audit complete — all findings remediated.** The plugin system now enforces path confinement, per-plugin capability gating and environment isolation, archive resource limits, manifest schema validation, order-independent callback aggregation, and last-known-good hot-reload rollback, with boundary and integration tests covering each. Two product-completion items (lifecycle UI, package-install pipeline) are deliberately deferred and recorded above.
+**Audit complete.** Nine findings (PLG-01→06, 08, 10, 11) are implemented and tested; two (PLG-07 lifecycle UI, PLG-09 package-install pipeline) are **closed by recorded product decision** — deferred as roadmap features, not security gaps, with the underlying safety properties (runtime-side rollback, hardened archive parser) already in place. The plugin system now enforces path confinement, per-plugin capability gating and environment isolation, archive resource limits, manifest schema validation, order-independent callback aggregation, and last-known-good hot-reload rollback, with boundary and integration tests covering each.
