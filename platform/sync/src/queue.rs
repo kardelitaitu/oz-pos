@@ -8,6 +8,7 @@ use oz_core::db::offline::SyncStatusSummary;
 use oz_core::error::CoreError;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Deserialize)]
 struct SalePayload {
@@ -172,6 +173,28 @@ impl SyncQueue {
         Ok(())
     }
 
+    /// Apply a push-conflict outcome using the shared ADR #21 resolver.
+    ///
+    /// **This is the single conflict-application service** used by both the
+    /// immediate [`SyncEngine`](crate::SyncEngine) and the background
+    /// [`SyncDaemon`](crate::daemon::SyncDaemon), so the same ADR #21
+    /// strategy (version LWW / sale status DAG / stock CRDT merge) applies
+    /// regardless of which trigger processes the conflict (SYNC-02).
+    ///
+    /// Resolves the conflict, persists the resolution (marking the local
+    /// item resolved with an auditable tag), and re-enqueues the merged
+    /// winner when the resolver produced a CRDT merge — whose payload is
+    /// now consumable by [`SyncQueue::apply_remote`] (SYNC-05).
+    pub fn apply_push_conflict(
+        &self,
+        store: &Store<'_>,
+        local: &OfflineQueueItem,
+        server_item: &OfflineQueueItem,
+    ) -> Result<(), CoreError> {
+        let resolved = crate::conflict::resolve_conflict(local, server_item);
+        self.apply_resolution(store, &resolved)
+    }
+
     /// Apply a remote item to the local store.
     ///
     /// Parses the `action` field and dispatches to the appropriate local
@@ -192,11 +215,32 @@ impl SyncQueue {
                 }
                 Ok(())
             }
-            // Stock adjustment from another terminal.
+            // Stock adjustment from another terminal. Supports BOTH a flat
+            // `{sku, delta}` payload AND the SYNC-05 CRDT merge envelope
+            // (`{local, remote, merge_type: "crdt_delta"}`) produced by
+            // `resolve_stock_crdt` — both deltas are valid CRDT facts and
+            // must be applied. NOTE: `adjust_stock` is NOT idempotent (it
+            // appends a new stock_movements row), so re-applying a merged
+            // winner must be prevented by the caller's replay ledger / queue
+            // dedup (the daemon's sync_applied_items + mark-synced guards).
             "stock.adjusted" => {
-                let payload: StockAdjustmentPayload = serde_json::from_str(&item.payload)
+                let payload: Value = serde_json::from_str(&item.payload)
                     .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
-                store.adjust_stock(&payload.sku, payload.delta)?;
+                if payload.get("merge_type").and_then(|m| m.as_str()) == Some("crdt_delta") {
+                    for side in ["local", "remote"] {
+                        let sub: StockAdjustmentPayload = serde_json::from_value(
+                            payload.get(side).cloned().unwrap_or(Value::Null),
+                        )
+                        .map_err(|e| {
+                            CoreError::Internal(format!("invalid crdt stock delta: {e}"))
+                        })?;
+                        store.adjust_stock(&sub.sku, sub.delta)?;
+                    }
+                } else {
+                    let sub: StockAdjustmentPayload = serde_json::from_value(payload)
+                        .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
+                    store.adjust_stock(&sub.sku, sub.delta)?;
+                }
                 Ok(())
             }
             // A new product created on another terminal — create locally.
@@ -236,22 +280,34 @@ impl SyncQueue {
             }
             // ADR #6: Remote stock movement from another store or register.
             // Insert directly into the ledger; the daemon rebuilds the
-            // stock_summary cache after applying all remote items.
+            // stock_summary cache after applying all remote items. Also
+            // accepts the SYNC-05 CRDT merge envelope (both rows inserted).
             "stock.movement" => {
-                let payload: StockMovementPayload =
-                    serde_json::from_str(&item.payload).map_err(|e| {
-                        CoreError::Internal(format!("invalid stock.movement payload: {e}"))
-                    })?;
-                store.insert_stock_movement(
-                    &payload.id,
-                    &payload.item_id,
-                    payload.delta,
-                    payload.reason.as_deref(),
-                    payload.source_terminal_id.as_deref(),
-                    payload.source_user_id.as_deref(),
-                    &payload.store_id,
-                    &payload.created_at,
-                )?;
+                let payload: Value = serde_json::from_str(&item.payload).map_err(|e| {
+                    CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                })?;
+                let apply_one = |value: &Value| -> Result<(), CoreError> {
+                    let m: StockMovementPayload =
+                        serde_json::from_value(value.clone()).map_err(|e| {
+                            CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                        })?;
+                    store.insert_stock_movement(
+                        &m.id,
+                        &m.item_id,
+                        m.delta,
+                        m.reason.as_deref(),
+                        m.source_terminal_id.as_deref(),
+                        m.source_user_id.as_deref(),
+                        &m.store_id,
+                        &m.created_at,
+                    )
+                };
+                if payload.get("merge_type").and_then(|m| m.as_str()) == Some("crdt_delta") {
+                    apply_one(payload.get("local").unwrap_or(&Value::Null))?;
+                    apply_one(payload.get("remote").unwrap_or(&Value::Null))?;
+                } else {
+                    apply_one(&payload)?;
+                }
                 Ok(())
             }
             // Unsupported action — log and skip.
@@ -816,5 +872,179 @@ mod tests {
         // The materialized inventory should now also reflect 30.
         let inv_qty = store.get_stock("prod-coffee").unwrap();
         assert_eq!(inv_qty, 30, "inventory should be rebuilt to 30");
+    }
+
+    // ── SYNC-02: shared conflict-application service ────────────────
+
+    #[test]
+    fn apply_push_conflict_routes_version_lww() {
+        // A higher local product version must win, exactly as the
+        // SyncEngine would resolve it (SYNC-02 shared service).
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let local = queue
+            .enqueue(
+                &store,
+                "product.update",
+                r#"{"version":5,"name":"Local New"}"#,
+            )
+            .unwrap();
+        let server_item =
+            OfflineQueueItem::new("product.update", r#"{"version":3,"name":"Server Stale"}"#);
+
+        queue
+            .apply_push_conflict(&store, &local, &server_item)
+            .unwrap();
+
+        // Local item marked resolved (synced) with the local-won tag; no
+        // re-enqueued remote winner.
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all.len(), 1, "local winner must not enqueue a new item");
+        assert_eq!(all[0].status, OfflineQueueStatus::Synced);
+        assert!(
+            all[0]
+                .last_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("resolved: conflict (local won)"),
+            "local item must carry the resolution tag, got: {:?}",
+            all[0].last_error
+        );
+    }
+
+    #[test]
+    fn apply_push_conflict_routes_sale_status_dag() {
+        // Completed must win over pending even when the local item is
+        // NEWER — proves the daemon path can no longer discard an advanced
+        // sale state via blanket "remote wins" (SYNC-02).
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let local = queue
+            .enqueue(
+                &store,
+                "complete_sale",
+                r#"{"status":"pending","version":2}"#,
+            )
+            .unwrap();
+        let server_item =
+            OfflineQueueItem::new("complete_sale", r#"{"status":"completed","version":1}"#);
+
+        queue
+            .apply_push_conflict(&store, &local, &server_item)
+            .unwrap();
+
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].status, OfflineQueueStatus::Synced);
+        assert!(
+            all[0]
+                .last_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("resolved: conflict (remote won)"),
+            "completed server sale must win the DAG, got: {:?}",
+            all[0].last_error
+        );
+    }
+
+    // ── SYNC-05: CRDT merge payloads are consumable end-to-end ─────
+
+    #[test]
+    fn apply_remote_consumes_crdt_merge_stock_adjusted() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        // Build the exact merged payload resolve_stock_crdt produces.
+        let merged = serde_json::json!({
+            "local": {"sku": "COFFEE", "delta": 10},
+            "remote": {"sku": "COFFEE", "delta": -3},
+            "merge_type": "crdt_delta"
+        })
+        .to_string();
+        let remote = OfflineQueueItem::new("stock.adjusted", &merged);
+
+        queue.apply_remote(&store, &remote).unwrap();
+
+        // Both deltas applied: 50 + 10 - 3 = 57.
+        assert_eq!(inventory_qty(&store, "COFFEE"), 57);
+    }
+
+    #[test]
+    fn apply_remote_consumes_crdt_merge_stock_movement() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        let merged = serde_json::json!({
+            "local": {
+                "id": "sm-merge-1", "item_id": "prod-coffee", "delta": 10,
+                "reason": "merge-a", "source_terminal_id": null,
+                "source_user_id": null, "store_id": "store-b",
+                "created_at": "2026-01-15T00:00:00Z"
+            },
+            "remote": {
+                "id": "sm-merge-2", "item_id": "prod-bagel", "delta": -2,
+                "reason": "merge-b", "source_terminal_id": null,
+                "source_user_id": null, "store_id": "store-c",
+                "created_at": "2026-01-15T00:00:01Z"
+            },
+            "merge_type": "crdt_delta"
+        })
+        .to_string();
+        let remote = OfflineQueueItem::new("stock.movement", &merged);
+
+        queue.apply_remote(&store, &remote).unwrap();
+
+        // Both movement rows inserted into the ledger.
+        let movements = store.list_stock_movements("prod-coffee", 10, 0).unwrap();
+        assert!(
+            movements.iter().any(|m| m.id == "sm-merge-1"),
+            "local-side movement must be inserted"
+        );
+        let movements = store.list_stock_movements("prod-bagel", 10, 0).unwrap();
+        assert!(
+            movements.iter().any(|m| m.id == "sm-merge-2"),
+            "remote-side movement must be inserted"
+        );
+    }
+
+    #[test]
+    fn crdt_merge_end_to_end_resolve_to_apply() {
+        // Full SYNC-05 path: resolve_conflict → apply_resolution (enqueue
+        // merged winner) → apply_remote (consume merged payload). Both
+        // deltas must survive the entire pipeline.
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+
+        // The LOCAL item must already be in the queue — apply_resolution
+        // marks it resolved (mark_offline_resolved) and fails with NotFound
+        // when no row exists (mirrors a real push-conflict where the local
+        // item is a pending queue row).
+        let local = queue
+            .enqueue(&store, "stock.adjusted", r#"{"sku":"COFFEE","delta":10}"#)
+            .unwrap();
+        let remote = OfflineQueueItem::new("stock.adjusted", r#"{"sku":"COFFEE","delta":-3}"#);
+
+        // Step 1: resolve — merged winner carries both deltas.
+        let resolved = crate::conflict::resolve_conflict(&local, &remote);
+        let payload: Value = serde_json::from_str(&resolved.winner.payload).unwrap();
+        assert_eq!(payload["merge_type"], "crdt_delta");
+
+        // Step 2: persist — merged winner enqueued as a new pending item.
+        queue.apply_resolution(&store, &resolved).unwrap();
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 1, "merged winner must be re-enqueued");
+        let winner = &pending[0];
+        assert_eq!(winner.action, "stock.adjusted");
+        assert!(
+            winner.payload.contains("crdt_delta"),
+            "winner payload must keep the merge envelope"
+        );
+
+        // Step 3: consume — the normal remote dispatcher applies BOTH deltas.
+        queue.apply_remote(&store, winner).unwrap();
+        assert_eq!(inventory_qty(&store, "COFFEE"), 57, "50 + 10 - 3");
     }
 }

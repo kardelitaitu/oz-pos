@@ -242,50 +242,49 @@ impl SyncDaemon {
                 match transport.push_items(&pending).await {
                     Ok(results) => {
                         pushed = results.len();
-                        // Phase 3: Apply push results to DB (blocking)
+                        // Phase 3: Apply push results to DB (blocking).
+                        // SYNC-02: carry the FULL local items (not just ids)
+                        // so a conflict is resolved by the shared ADR #21
+                        // conflict-application service — the same strategy the
+                        // immediate SyncEngine uses, never a blanket LWW.
                         let db_clone = db.clone();
-                        let ids: Vec<String> = pending.iter().map(|i| i.id.clone()).collect();
+                        let local_items = pending;
                         let outcome = tokio::task::spawn_blocking(move || {
                             let conn = db_clone.blocking_lock();
                             let store = Store::new(&conn);
-                            for (i, outcome) in ids.iter().zip(results.iter()) {
+                            let queue = SyncQueue::new();
+                            for (local, outcome) in local_items.iter().zip(results.iter()) {
                                 match outcome {
                                     PushOutcome::Accepted => {
-                                        if let Err(e) = store.mark_offline_synced(i) {
+                                        if let Err(e) = store.mark_offline_synced(&local.id) {
                                             tracing::error!(
-                                                item_id = %i,
+                                                item_id = %local.id,
                                                 error = %e,
                                                 "sync daemon: failed to mark item synced"
                                             );
                                         }
                                     }
                                     PushOutcome::Rejected { reason } => {
-                                        if let Err(e) = store.mark_offline_failed(i, reason) {
+                                        if let Err(e) = store.mark_offline_failed(&local.id, reason)
+                                        {
                                             tracing::error!(
-                                                item_id = %i,
+                                                item_id = %local.id,
                                                 error = %e,
                                                 "sync daemon: failed to mark item failed"
                                             );
                                         }
                                     }
-                                    PushOutcome::Conflict(remote) => {
-                                        // LWW: remote wins — mark local as synced,
-                                        // re-enqueue the remote version.
-                                        if let Err(e) = store.mark_offline_synced(i) {
-                                            tracing::error!(
-                                                item_id = %i,
-                                                error = %e,
-                                                "sync daemon: failed to mark conflicted item synced"
-                                            );
-                                        }
+                                    PushOutcome::Conflict(server_item) => {
+                                        // SYNC-02: shared ADR #21 conflict-application
+                                        // path — version LWW / sale status DAG / stock
+                                        // CRDT merge, identical to the SyncEngine.
                                         if let Err(e) =
-                                            store.enqueue_offline(&remote.action, &remote.payload)
+                                            queue.apply_push_conflict(&store, local, server_item)
                                         {
                                             tracing::error!(
-                                                item_id = %i,
-                                                action = %remote.action,
+                                                item_id = %local.id,
                                                 error = %e,
-                                                "sync daemon: failed to re-enqueue remote winner"
+                                                "sync daemon: failed to apply conflict resolution"
                                             );
                                         }
                                     }
@@ -1020,6 +1019,218 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(ledger_rows, 1, "ledger must hold one receipt for the item");
+    }
+
+    /// Spawn a mock sync server whose push endpoint ALWAYS returns a
+    /// `Conflict` with a LOWER-version server item. The daemon must route
+    /// the conflict through the shared ADR #21 service (SYNC-02): the local
+    /// higher version wins and is marked resolved — never discarded by the
+    /// old blanket "LWW: remote wins" path.
+    async fn spawn_conflict_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            let results = items
+                .iter()
+                .map(|_| {
+                    PushOutcome::Conflict(oz_core::offline::OfflineQueueItem::new(
+                        "product.update",
+                        r#"{"version":3,"name":"Server Stale"}"#,
+                    ))
+                })
+                .collect();
+            Json(PushResponse { results })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            Json(PullResponse {
+                items: vec![],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-02 regression: when the server returns a Conflict for a pushed
+    /// item, the daemon must resolve it through the shared ADR #21 service
+    /// (version LWW here) rather than blanket-marking it synced and
+    /// re-enqueuing the remote winner.
+    #[tokio::test]
+    async fn daemon_resolves_push_conflict_via_shared_service() {
+        let server_url = spawn_conflict_mock_sync_server().await;
+        let db = setup_db();
+
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            // Local product.update has version 5 — HIGHER than the server's 3.
+            store
+                .enqueue_offline("product.update", r#"{"version":5,"name":"Local New"}"#)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status).await;
+
+        let db_check = db.clone();
+        let (all, pending) = tokio::task::spawn_blocking(move || {
+            let conn = db_check.blocking_lock();
+            let store = Store::new(&conn);
+            (
+                store.list_all_offline().unwrap(),
+                store.list_pending_offline().unwrap(),
+            )
+        })
+        .await
+        .unwrap();
+
+        // The local item must be marked resolved (synced) with the local-won
+        // tag — the shared service decided local v5 > server v3. Nothing may
+        // be re-enqueued (old behavior re-enqueued the server's stale v3).
+        assert_eq!(all.len(), 1, "no remote winner may be re-enqueued");
+        assert!(pending.is_empty(), "local winner must not stay pending");
+        assert_eq!(all[0].status, oz_core::offline::OfflineQueueStatus::Synced);
+        assert!(
+            all[0]
+                .last_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("resolved: conflict (local won)"),
+            "daemon must record the ADR #21 resolution tag, got: {:?}",
+            all[0].last_error
+        );
+    }
+
+    /// SYNC-05 daemon end-to-end: a stock conflict must be resolved via the
+    /// shared ADR #21 service into a CRDT merge, the merged winner must be
+    /// re-enqueued, AND a later pull of that same merged item must be
+    /// consumable by the daemon's apply_remote (both deltas land in stock).
+    ///
+    /// Mock: push returns a Conflict with a lower server stock delta; pull
+    /// returns the merged crdt_delta envelope (fixed id so the SYNC-01
+    /// ledger absorbs replays).
+    async fn spawn_crdt_conflict_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            let results = items
+                .iter()
+                .map(|_| {
+                    PushOutcome::Conflict(oz_core::offline::OfflineQueueItem::new(
+                        "stock.adjusted",
+                        r#"{"sku":"COFFEE","delta":-3}"#,
+                    ))
+                })
+                .collect();
+            Json(PushResponse { results })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut winner = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"local":{"sku":"COFFEE","delta":10},"remote":{"sku":"COFFEE","delta":-3},"merge_type":"crdt_delta"}"#,
+            );
+            winner.id = "remote-crdt-winner-1".into();
+            winner.created_at = "2026-01-02T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![winner],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    #[tokio::test]
+    async fn daemon_crdt_conflict_merge_is_consumable_end_to_end() {
+        let server_url = spawn_crdt_conflict_mock_sync_server().await;
+        let db = setup_db();
+
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+                 VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+                 INSERT INTO inventory (product_id, qty, updated_at)
+                 VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+            )
+            .unwrap();
+            store
+                .enqueue_offline(
+                    "stock.adjusted",
+                    r#"{"sku":"COFFEE","delta":10}"#,
+                )
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        // One tick: push → conflict → CRDT merge resolved locally; pull →
+        // merged winner applied by apply_remote. Both deltas must land.
+        SyncDaemon::run_tick(&db, &status).await;
+
+        let db_check = db.clone();
+        let (stock, all) = tokio::task::spawn_blocking(move || {
+            let conn = db_check.blocking_lock();
+            let store = Store::new(&conn);
+            (
+                store.get_stock("prod-coffee").unwrap(),
+                store.list_all_offline().unwrap(),
+            )
+        })
+        .await
+        .unwrap();
+
+        // 50 + 10 (local) - 3 (remote) = 57 — the merge survives push→pull.
+        assert_eq!(stock, 57, "both CRDT deltas must be applied by the daemon");
+
+        // The local item carries the crdt-merge resolution tag. Match on
+        // the tag itself (NOT on payload content): the re-enqueued merged
+        // winner also embeds `"delta":10` inside its envelope, and
+        // list_all_offline orders by created_at DESC (winner first), so a
+        // payload-based lookup would grab the wrong row.
+        let local = all.iter().find(|i| {
+            i.last_error
+                .as_deref()
+                .unwrap_or("")
+                .contains("resolved: conflict (crdt merge)")
+        });
+        assert!(
+            local.is_some(),
+            "local stock item must carry the crdt-merge tag, got: {:?}",
+            all.iter().map(|i| &i.last_error).collect::<Vec<_>>()
+        );
     }
 
     /// When the DB read phase succeeds, `run_tick` must update status

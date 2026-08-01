@@ -1006,8 +1006,10 @@ impl SyncEngine {
                             queue.mark_synced(store, &item.id)?;
                         }
                         transport::PushOutcome::Conflict(server_item) => {
-                            let resolved = conflict::resolve_conflict(item, server_item);
-                            queue.apply_resolution(store, &resolved)?;
+                            // SYNC-02: single shared conflict-application
+                            // service — identical ADR #21 strategy whether the
+                            // conflict is processed here or by the daemon.
+                            queue.apply_push_conflict(store, item, server_item)?;
                         }
                         transport::PushOutcome::Rejected { reason } => {
                             queue.mark_failed(store, &item.id, reason)?;
