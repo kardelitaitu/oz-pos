@@ -387,6 +387,36 @@ impl AppState {
         Err(AppError::InvalidSession)
     }
 
+    /// Remove every session bound to `user_id` except the token in
+    /// `keep_token` (STAFF-03 PIN rotation).
+    ///
+    /// The caller's own session is preserved — they authenticated moments
+    /// ago and the UI follows up with a reload using the same token — while
+    /// stale terminal sessions issued under the old PIN are invalidated.
+    pub fn invalidate_user_sessions_except(&self, user_id: &str, keep_token: &str) -> usize {
+        let mut store = match self.session_store.write() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("session store lock poisoned during invalidation: {e}");
+                return 0;
+            }
+        };
+        let before = store.len();
+        store.retain(|token, ctx| {
+            ctx.user_id != user_id || (!keep_token.is_empty() && token == keep_token)
+        });
+        let removed = before - store.len();
+        if removed > 0 {
+            tracing::info!(
+                user_id = %user_id,
+                removed = %removed,
+                keep_token = %keep_token,
+                "sessions invalidated after PIN rotation"
+            );
+        }
+        removed
+    }
+
     /// Remove all expired sessions from the store in a single sweep.
     ///
     /// Called periodically by the background session-cleanup daemon

@@ -1,19 +1,20 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listStaff,
-  listRoles,
-  createStaff,
-  updateStaff,
+  listStaffScoped,
+  listRolesScoped,
+  createStaffScoped,
+  updateStaffScoped,
   type StaffMemberDto,
   type RoleDto,
 } from '@/api/staff';
 import {
-  listAllWorkspaces,
-  setUserWorkspaces,
-  getUserWorkspaces,
+  listAllWorkspacesScoped,
+  setUserWorkspacesScoped,
+  getUserWorkspacesScoped,
   type WorkspaceTypeDto,
 } from '@/api/workspaces';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -53,6 +54,8 @@ interface FormData {
   displayName: string;
   pin: string;
   roleId: string;
+  /** STAFF-09: current active state — preserved unchanged on profile edits. */
+  isActive: boolean;
   /** Only used when editing — workspace assignment mode */
   wsMode: 'default' | 'custom';
   /** Only used when editing — selected workspace keys */
@@ -64,6 +67,7 @@ const EMPTY_FORM: FormData = {
   displayName: '',
   pin: '',
   roleId: '',
+  isActive: true,
   wsMode: 'default',
   wsKeys: [],
 };
@@ -74,6 +78,7 @@ const EMPTY_FORM: FormData = {
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -94,16 +99,19 @@ export default function StaffManagementScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      if (!sessionToken) {
+        return;
+      }
       const [staffData, rolesData] = await Promise.all([
-        listStaff(),
-        listRoles(),
+        listStaffScoped(sessionToken),
+        listRolesScoped(sessionToken),
       ]);
       setStaff(staffData);
       setRoles(rolesData);
 
       // Load workspace names and assignments for the table column.
       try {
-        const workspaces = await listAllWorkspaces(callerUserId);
+        const workspaces = await listAllWorkspacesScoped(sessionToken);
         const nameMap = new Map<string, string>();
         for (const w of workspaces) {
           nameMap.set(w.key, w.name);
@@ -112,7 +120,7 @@ export default function StaffManagementScreen() {
 
         const wsMap = new Map<string, string[]>();
         const results = await Promise.allSettled(
-          staffData.map((m) => getUserWorkspaces(m.id)),
+          staffData.map((m) => getUserWorkspacesScoped(sessionToken, m.id)),
         );
         for (let i = 0; i < results.length; i++) {
           const member = staffData[i];
@@ -132,7 +140,7 @@ export default function StaffManagementScreen() {
     } finally {
       setLoading(false);
     }
-  }, [callerUserId]);
+  }, [callerUserId, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -146,11 +154,14 @@ export default function StaffManagementScreen() {
   }, []);
 
   const openEdit = useCallback(async (member: StaffMemberDto) => {
+    // STAFF-09: preserve the member's current active state so a profile
+    // edit never silently reactivates a deactivated account.
     setForm({
       username: member.username,
       displayName: member.display_name,
       pin: '',
       roleId: member.role_id,
+      isActive: member.is_active,
       wsMode: 'default',
       wsKeys: [],
     });
@@ -160,9 +171,12 @@ export default function StaffManagementScreen() {
 
     // Load workspaces and user's current assignments in parallel.
     try {
+      if (!sessionToken) {
+        return;
+      }
       const [workspaces, userKeys] = await Promise.all([
-        listAllWorkspaces(callerUserId),
-        getUserWorkspaces(member.id),
+        listAllWorkspacesScoped(sessionToken),
+        getUserWorkspacesScoped(sessionToken, member.id),
       ]);
       setAllWorkspaces(workspaces);
       if (userKeys.length > 0) {
@@ -172,7 +186,7 @@ export default function StaffManagementScreen() {
       addToast({ message: requiredLocalized(l10n, 'staff-error-workspaces-failed'), type: 'error' });
       setAllWorkspaces([]);
     }
-  }, [callerUserId, addToast, l10n]);
+  }, [sessionToken, addToast, l10n]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -222,29 +236,35 @@ export default function StaffManagementScreen() {
     setSaving(true);
     setError(null);
     try {
+      if (!sessionToken) {
+        setError(l10n.getString('staff-error-save-failed'));
+        return;
+      }
       if (editingId) {
-        await updateStaff({
+        const trimmedPin = form.pin.trim();
+        await updateStaffScoped(sessionToken, {
           id: editingId,
           username,
           display_name: displayName,
           role_id: form.roleId,
-          is_active: true,
-          caller_user_id: callerUserId,
+          // STAFF-09: send the preserved active state unchanged.
+          is_active: form.isActive,
+          // STAFF-03: rotate PIN only when a new one was entered.
+          ...(trimmedPin ? { pin: trimmedPin } : {}),
         });
 
-        // Save workspace assignments.
-        await setUserWorkspaces(
+        // Save workspace assignments (caller resolved from session).
+        await setUserWorkspacesScoped(
+          sessionToken,
           editingId,
           form.wsMode === 'custom' ? form.wsKeys : [],
-          callerUserId,
         );
       } else {
-        await createStaff({
+        await createStaffScoped(sessionToken, {
           username,
           pin: form.pin,
           display_name: displayName,
           role_id: form.roleId,
-          caller_user_id: callerUserId,
         });
       }
 
@@ -267,13 +287,16 @@ export default function StaffManagementScreen() {
 
   const toggleActive = useCallback(async (member: StaffMemberDto) => {
     try {
-      await updateStaff({
+      if (!sessionToken) {
+        addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
+        return;
+      }
+      await updateStaffScoped(sessionToken, {
         id: member.id,
         username: member.username,
         display_name: member.display_name,
         role_id: member.role_id,
         is_active: !member.is_active,
-        caller_user_id: callerUserId,
       });
       addToast({
         type: 'success',
@@ -285,7 +308,7 @@ export default function StaffManagementScreen() {
     } catch {
       addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
     }
-  }, [load, callerUserId, addToast, l10n]);
+  }, [load, sessionToken, addToast, l10n]);
 
   // ── Role colour mapping ────────────────────────────────────────
 

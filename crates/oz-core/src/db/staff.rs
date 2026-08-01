@@ -275,6 +275,29 @@ impl Store<'_> {
         })
     }
 
+    /// Update only the `pin_hash` for a user (STAFF-03 PIN rotation).
+    ///
+    /// Used by the staff-management PIN-reset path. The caller must already
+    /// have validated and hashed the new PIN; this method never accepts a
+    /// plaintext PIN.
+    pub fn update_user_pin(&self, id: &str, pin_hash: &str) -> Result<User, CoreError> {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let rows = self.conn.execute(
+            "UPDATE users SET pin_hash = ?1, updated_at = ?2 WHERE id = ?3",
+            params![pin_hash, now, id],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "user",
+                id: id.to_owned(),
+            });
+        }
+        self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "user",
+            id: id.to_owned(),
+        })
+    }
+
     /// Delete a user by id.
     pub fn delete_user(&self, id: &str) -> Result<(), CoreError> {
         let rows = self
@@ -685,5 +708,25 @@ mod tests {
             .update_user("user-1", "ALICE_NEW", "Alice Updated", "role-owner", true)
             .unwrap();
         assert_eq!(updated.username, "alice_new");
+    }
+
+    // ── PIN rotation (STAFF-03) ───────────────────────────────────
+
+    #[test]
+    fn update_user_pin_rotates_hash() {
+        let conn = fresh();
+        seed_users(&conn);
+        let updated = store(&conn).update_user_pin("user-1", "new_hash").unwrap();
+        assert_eq!(updated.pin_hash, "new_hash");
+        // Verify persistence via a fresh read.
+        let user = store(&conn).get_user("user-1").unwrap().unwrap();
+        assert_eq!(user.pin_hash, "new_hash");
+    }
+
+    #[test]
+    fn update_user_pin_not_found() {
+        let conn = fresh();
+        let err = store(&conn).update_user_pin("nope", "hash").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "user"));
     }
 }
