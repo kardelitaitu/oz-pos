@@ -18,6 +18,7 @@ import {
   pendingSyncCount,
   syncPull,
   syncRun,
+  testSyncConnection,
   updateSyncSettings,
 } from '@/api/offline';
 
@@ -81,7 +82,6 @@ const IPC_TOKEN_KEY = 'sync.auth_token';
 // ── Tunables ───────────────────────────────────────────────────────
 //
 // `sync_run` is a real Tauri command; no in-process latency simulation.
-const SIMULATED_LATENCY_TEST_MS = 400;
 const MIN_AUTO_INTERVAL_MS = 60_000;
 
 // ── Local helpers ───────────────────────────────────────────────────
@@ -273,17 +273,22 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
     return () => window.clearInterval(handle);
   }, [enabled, autoMinutes]);
 
+  // SYNC-08: the Settings connection test must be a real connectivity
+  // probe, not a latency simulation. Delegate to the same `test_sync_connection`
+  // command used by the StatusBar poller (`useSyncConnection`) so both
+  // surfaces share one error taxonomy and the operator never sees a false
+  // "Connection test passed" for an unreachable server.
   const testConnection = useCallback(async (): Promise<void> => {
     setSyncing(true);
     try {
-      await new Promise((resolve) => window.setTimeout(resolve, SIMULATED_LATENCY_TEST_MS));
-      const reachable = serverURL.trim().length > 0;
-      setStatus(reachable ? 'online' : 'offline');
+      const result = await testSyncConnection(serverURL.trim() || undefined);
+      setStatus(result.ok ? 'online' : 'offline');
       addToast({
-        message: reachable
+        message: result.ok
           ? t(l10n, 'settings-sync-toast-test-success', 'Connection test passed')
-          : t(l10n, 'settings-sync-toast-test-fail', 'Could not reach server'),
-        type: reachable ? 'success' : 'error',
+          : (result.status ||
+            t(l10n, 'settings-sync-toast-test-fail', 'Could not reach server')),
+        type: result.ok ? 'success' : 'error',
       });
     } catch {
       setStatus('offline');

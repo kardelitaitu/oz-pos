@@ -151,6 +151,28 @@ describe('offline.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_pending_offline', undefined);
   });
 
+  it('OfflineQueueItemDto carries payload (SYNC-11 — matches the Rust serializer)', async () => {
+    mockInvoke.mockResolvedValue([
+      {
+        id: 'oq-1',
+        action: 'complete_sale',
+        payload: '{"sale_id":"s-1"}',
+        status: 'pending',
+        retryCount: 0,
+        lastError: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        syncedAt: null,
+      },
+    ]);
+    const items = await listPendingOffline();
+    expect(items).toHaveLength(1);
+    // The payload field must survive the IPC round-trip — the Rust
+    // OfflineQueueItemDto serializes it and the TS DTO must not drop it.
+    const first = items[0]!;
+    expect(first.payload).toBe('{"sale_id":"s-1"}');
+    expect(first.action).toBe('complete_sale');
+  });
+
   it('listAllOffline invokes "list_all_offline" with no args', async () => {
     mockInvoke.mockResolvedValue([]);
     await listAllOffline();

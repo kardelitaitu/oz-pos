@@ -8,6 +8,11 @@ import { loggedInvoke } from '@/utils/logged-invoke';
 export interface OfflineQueueItemDto {
   id: string;
   action: string;
+  /**
+   * JSON-serialized action payload (SYNC-11: present in the Rust
+   * `OfflineQueueItemDto` serializer — must not be dropped here).
+   */
+  payload: string;
   status: string;
   retryCount: number;
   lastError: string | null;

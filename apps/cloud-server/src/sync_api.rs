@@ -235,7 +235,7 @@ async fn pull_handler(
             )
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-        rows.filter_map(|r| r.ok()).collect::<Vec<_>>()
+        collect_pull_rows(rows, tenant_id)?
     } else if let Some(ref since) = req.since {
         let mut stmt = conn
             .prepare(
@@ -251,7 +251,7 @@ async fn pull_handler(
             .query_map(params![since, tenant_id, limit], row_to_item)
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-        rows.filter_map(|r| r.ok()).collect::<Vec<_>>()
+        collect_pull_rows(rows, tenant_id)?
     } else {
         let mut stmt = conn
             .prepare(
@@ -267,7 +267,7 @@ async fn pull_handler(
             .query_map(params![tenant_id, limit], row_to_item)
             .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-        rows.filter_map(|r| r.ok()).collect::<Vec<_>>()
+        collect_pull_rows(rows, tenant_id)?
     };
 
     // P-3: Detect if there are more pages (501st row exists).
@@ -297,13 +297,20 @@ async fn pull_handler(
 async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
-) -> axum::Json<serde_json::Value> {
+) -> Result<axum::Json<serde_json::Value>, (axum::http::StatusCode, axum::Json<serde_json::Value>)>
+{
     let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
-    // Helper: build an error JSON response.
-    let error_json = |msg: &str| -> axum::Json<serde_json::Value> {
-        axum::Json(serde_json::json!({"error": msg}))
+    // Helper: build an error JSON response with a non-2xx status (SYNC-09).
+    // A failed snapshot must never look like a valid empty snapshot — the
+    // client rejects non-success statuses before deserialising the body.
+    let error_json = |msg: &str| -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+        tracing::error!(tenant_id, error = msg, "snapshot: query failed");
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({"error": msg})),
+        )
     };
 
     // P-3 Step 4: check in-memory cache (5-min TTL).
@@ -313,7 +320,7 @@ async fn snapshot_handler(
             && cached_at.elapsed().as_secs() < 300
             && let Ok(json) = serde_json::from_slice::<serde_json::Value>(cached_bytes)
         {
-            return axum::Json(json);
+            return Ok(axum::Json(json));
         }
     }
 
@@ -324,6 +331,10 @@ async fn snapshot_handler(
         .observe(db_start.elapsed().as_secs_f64());
 
     // Query products — scoped to the requesting tenant.
+    //
+    // SYNC-10: row decode failures fail the whole snapshot (5xx) rather than
+    // being silently dropped — a truncated reference-data baseline must never
+    // look like a complete one.
     let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
@@ -331,28 +342,27 @@ async fn snapshot_handler(
                  FROM products WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
-        Ok(stmt
-            .query_map(params![tenant_id], |row| {
-                Ok(serde_json::json!({
-                    "id": row.get::<_, String>("id")?,
-                    "sku": row.get::<_, String>("sku")?,
-                    "name": row.get::<_, String>("name")?,
-                    "price_minor": row.get::<_, i64>("price_minor")?,
-                    "currency": row.get::<_, String>("currency")?,
-                    "category_id": row.get::<_, Option<String>>("category_id")?,
-                    "barcode": row.get::<_, Option<String>>("barcode")?,
-                    "created_at": row.get::<_, String>("created_at")?,
-                    "updated_at": row.get::<_, String>("updated_at")?,
-                    "price_updated_at": row.get::<_, String>("price_updated_at")?,
-                    "track_serial": row.get::<_, bool>("track_serial")?
-                }))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect())
+        stmt.query_map(params![tenant_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>("id")?,
+                "sku": row.get::<_, String>("sku")?,
+                "name": row.get::<_, String>("name")?,
+                "price_minor": row.get::<_, i64>("price_minor")?,
+                "currency": row.get::<_, String>("currency")?,
+                "category_id": row.get::<_, Option<String>>("category_id")?,
+                "barcode": row.get::<_, Option<String>>("barcode")?,
+                "created_at": row.get::<_, String>("created_at")?,
+                "updated_at": row.get::<_, String>("updated_at")?,
+                "price_updated_at": row.get::<_, String>("price_updated_at")?,
+                "track_serial": row.get::<_, bool>("track_serial")?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("product row decode failed: {e}"))
     })() {
         Ok(v) => v,
-        Err(e) => return error_json(&e),
+        Err(e) => return Err(error_json(&e)),
     };
 
     // Query tax rates — scoped to the requesting tenant.
@@ -362,24 +372,23 @@ async fn snapshot_handler(
                 "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at FROM tax_rates WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
-        Ok(stmt
-            .query_map(params![tenant_id], |row| {
-                Ok(serde_json::json!({
-                    "id": row.get::<_, String>("id")?,
-                    "name": row.get::<_, String>("name")?,
-                    "rate_bps": row.get::<_, i64>("rate_bps")?,
-                    "is_default": row.get::<_, bool>("is_default")?,
-                    "is_inclusive": row.get::<_, bool>("is_inclusive")?,
-                    "created_at": row.get::<_, Option<String>>("created_at")?,
-                    "updated_at": row.get::<_, Option<String>>("updated_at")?
-                }))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect())
+        stmt.query_map(params![tenant_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>("id")?,
+                "name": row.get::<_, String>("name")?,
+                "rate_bps": row.get::<_, i64>("rate_bps")?,
+                "is_default": row.get::<_, bool>("is_default")?,
+                "is_inclusive": row.get::<_, bool>("is_inclusive")?,
+                "created_at": row.get::<_, Option<String>>("created_at")?,
+                "updated_at": row.get::<_, Option<String>>("updated_at")?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("tax rate row decode failed: {e}"))
     })() {
         Ok(v) => v,
-        Err(e) => return error_json(&e),
+        Err(e) => return Err(error_json(&e)),
     };
 
     // Query users — scoped to the requesting tenant.
@@ -395,24 +404,23 @@ async fn snapshot_handler(
                 "SELECT id, username, display_name, role_id, is_active, created_at, updated_at FROM users WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
-        Ok(stmt
-            .query_map(params![tenant_id], |row| {
-                Ok(serde_json::json!({
-                    "id": row.get::<_, String>("id")?,
-                    "username": row.get::<_, String>("username")?,
-                    "display_name": row.get::<_, String>("display_name")?,
-                    "role_id": row.get::<_, String>("role_id")?,
-                    "is_active": row.get::<_, bool>("is_active")?,
-                    "created_at": row.get::<_, Option<String>>("created_at")?,
-                    "updated_at": row.get::<_, Option<String>>("updated_at")?
-                }))
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|r| r.ok())
-            .collect())
+        stmt.query_map(params![tenant_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>("id")?,
+                "username": row.get::<_, String>("username")?,
+                "display_name": row.get::<_, String>("display_name")?,
+                "role_id": row.get::<_, String>("role_id")?,
+                "is_active": row.get::<_, bool>("is_active")?,
+                "created_at": row.get::<_, Option<String>>("created_at")?,
+                "updated_at": row.get::<_, Option<String>>("updated_at")?
+            }))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("user row decode failed: {e}"))
     })() {
         Ok(v) => v,
-        Err(e) => return error_json(&e),
+        Err(e) => return Err(error_json(&e)),
     };
 
     let snapshot = serde_json::json!({
@@ -431,7 +439,7 @@ async fn snapshot_handler(
     }
 
     metrics::SYNC_PULL_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
-    axum::Json(snapshot)
+    Ok(axum::Json(snapshot))
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.
@@ -486,6 +494,35 @@ pub struct SyncStatusResponse {
     pub pending_count: i64,
     /// Recommended heartbeat interval in seconds (P-3 tiered heartbeat).
     pub heartbeat_interval_secs: u64,
+}
+
+/// Collect `query_map` rows into a `Vec`, failing loudly (SYNC-10).
+///
+/// Previously `rows.filter_map(|r| r.ok()).collect()` silently dropped any
+/// row that failed to decode — a schema mismatch could return an apparently
+/// complete page that omitted changes, and cursors advanced past the gap.
+/// Now a decode failure is logged, counted via the
+/// `sync_pull_row_decode_failures_total` metric, and returned as a 5xx so
+/// the client never mistakes a truncated page for the full set of changes.
+fn collect_pull_rows(
+    rows: impl Iterator<Item = rusqlite::Result<oz_core::offline::OfflineQueueItem>>,
+    tenant_id: &str,
+) -> Result<Vec<oz_core::offline::OfflineQueueItem>, (axum::http::StatusCode, String)> {
+    let mut items = Vec::with_capacity(rows.size_hint().0);
+    for row in rows {
+        match row {
+            Ok(item) => items.push(item),
+            Err(e) => {
+                metrics::SYNC_PULL_ROW_DECODE_FAILURES_TOTAL.inc();
+                tracing::error!(tenant_id, error = %e, "pull: row decode failed — returning 500");
+                return Err((
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("offline_queue row decode failed: {e}"),
+                ));
+            }
+        }
+    }
+    Ok(items)
 }
 
 /// Convert a SQLite row to an `OfflineQueueItem`.
@@ -686,6 +723,81 @@ mod tests {
         assert_eq!(json["users"].as_array().unwrap().len(), 1);
         assert_eq!(json["users"][0]["username"], "alice");
         assert_eq!(json["users"][0]["display_name"], "Alice");
+    }
+
+    #[tokio::test]
+    async fn snapshot_query_failure_returns_500_not_empty_success() {
+        // SYNC-09: a server-side snapshot query failure must never be
+        // mistaken for a valid empty snapshot. Drop the products table to
+        // force a query error and assert the handler returns a non-2xx
+        // status with an error envelope.
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        let app = test_router_with_state(state.clone());
+
+        {
+            let conn = state.db.lock().await;
+            conn.execute("DROP TABLE products", []).unwrap();
+        }
+
+        let req = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(
+            json["error"].is_string(),
+            "error envelope must carry a message: {json}"
+        );
+    }
+
+    #[tokio::test]
+    async fn snapshot_cache_hit_returns_200() {
+        // After a successful snapshot, a second request within the TTL
+        // must still return 200 (the cache path must return Ok).
+        let app = test_router();
+        let req1 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
+        let resp1 = app.clone().oneshot(req1).await.unwrap();
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let req2 = authed(axum::http::Method::GET, "/api/sync/snapshot", None);
+        let resp2 = app.oneshot(req2).await.unwrap();
+        assert_eq!(resp2.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn pull_returns_500_on_malformed_row() {
+        // SYNC-10: a row that fails to decode must fail the whole pull
+        // (5xx) rather than being silently dropped. Seed a row whose
+        // retry_count is non-numeric (SQLite stores it as TEXT despite the
+        // INTEGER affinity) so row_to_item's `get::<_, i64>` fails.
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        let app = test_router_with_state(state.clone());
+
+        {
+            let conn = state.db.lock().await;
+            conn.execute_batch(
+                "INSERT INTO offline_queue (id, action, payload, status, retry_count, created_at, tenant_id) VALUES
+                 ('good', 'act', '{}', 'pending', 0, '2026-01-01T00:00:00Z', 'tenant-a'),
+                 ('bad', 'act', '{}', 'pending', 'not-a-number', '2026-01-02T00:00:00Z', 'tenant-a')",
+            )
+            .unwrap();
+        }
+
+        let req = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-a"));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "malformed row must fail the pull, not be silently dropped"
+        );
     }
 
     #[tokio::test]

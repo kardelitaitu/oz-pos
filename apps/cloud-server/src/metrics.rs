@@ -38,6 +38,20 @@ pub static SYNC_ANCHOR_EXPIRED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
     c
 });
 
+/// Total number of offline_queue rows that failed to decode during a pull
+/// (SYNC-10). A non-zero count indicates schema drift between the server
+/// and the `row_to_item` converter — the client receives a 5xx rather than
+/// a silently truncated page, so this is an operator-visible failure signal.
+pub static SYNC_PULL_ROW_DECODE_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "sync_pull_row_decode_failures_total",
+        "Total offline_queue rows that failed to decode during pull",
+    )
+    .unwrap();
+    REGISTRY.register(Box::new(c.clone())).unwrap();
+    c
+});
+
 // ── Histograms ────────────────────────────────────────────────────────
 
 /// Duration of push requests in milliseconds.
@@ -130,6 +144,7 @@ fn ensure_registered() {
     let _ = SYNC_PUSHES_TOTAL.with_label_values(&["conflict"]);
     let _ = SYNC_PUSHES_TOTAL.with_label_values(&["rejected"]);
     let _ = &*SYNC_ANCHOR_EXPIRED_TOTAL;
+    let _ = &*SYNC_PULL_ROW_DECODE_FAILURES_TOTAL;
     let _ = &*SYNC_PUSH_DURATION_MS;
     let _ = &*SYNC_PULL_DURATION_MS;
     let _ = &*SYNC_BATCH_SIZE_BYTES;
