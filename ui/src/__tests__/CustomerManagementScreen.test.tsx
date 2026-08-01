@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import { getBundle } from '@/i18n';
@@ -418,6 +418,118 @@ describe('CustomerManagementScreen', () => {
       expect(en.getMessage(key), `en bundle missing ${key}`).toBeDefined();
       expect(id.getMessage(key), `id bundle missing ${key}`).toBeDefined();
     }
+  });
+
+  // ── CUST-09: field-level validation ────────────────────────────
+
+  it('blocks save and flags an invalid email with aria-invalid (CUST-09)', async () => {
+    const user = userEvent.setup();
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add Customer' }));
+    await user.type(screen.getByLabelText('Name *'), 'Alice');
+    await user.type(screen.getByLabelText('Email'), 'not-an-email');
+
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true');
+    expect(mockCreateCustomer).not.toHaveBeenCalled();
+  });
+
+  it('blocks save when the phone contains no digits (CUST-09)', async () => {
+    const user = userEvent.setup();
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add Customer' }));
+    await user.type(screen.getByLabelText('Name *'), 'Bob');
+    await user.type(screen.getByLabelText('Phone'), '---');
+
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(
+        screen.getByText('Phone must contain at least one digit'),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText('Phone')).toHaveAttribute('aria-invalid', 'true');
+    expect(mockCreateCustomer).not.toHaveBeenCalled();
+  });
+
+  it('accepts a valid phone with digits and letters (CUST-09)', async () => {
+    const user = userEvent.setup();
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add Customer' }));
+    await user.type(screen.getByLabelText('Name *'), 'Carol');
+    await user.type(screen.getByLabelText('Phone'), '+62 812-3456');
+
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(mockCreateCustomer).toHaveBeenCalledWith('session-1', {
+        name: 'Carol',
+        phone: '+62 812-3456',
+      });
+    });
+  });
+
+  it('shows a localized error for overlong notes (CUST-09)', async () => {
+    const user = userEvent.setup();
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add Customer' }));
+    await user.type(screen.getByLabelText('Name *'), 'Dan');
+    // fireEvent.change bypasses the HTML maxLength truncation, reaching the
+    // JS guard branch (the reason the guard exists alongside the attribute).
+    fireEvent.change(screen.getByLabelText('Notes'), {
+      target: { value: 'x'.repeat(501) },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(
+        screen.getByText('Notes must be 500 characters or fewer'),
+      ).toBeInTheDocument();
+    });
+    expect(mockCreateCustomer).not.toHaveBeenCalled();
+  });
+
+  it('clears the field error once the operator fixes the value (CUST-09)', async () => {
+    const user = userEvent.setup();
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Add Customer' }));
+    await user.type(screen.getByLabelText('Name *'), 'Eve');
+    await user.type(screen.getByLabelText('Email'), 'bad');
+    await user.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => {
+      expect(screen.getByText('Enter a valid email address')).toBeInTheDocument();
+    });
+
+    await user.clear(screen.getByLabelText('Email'));
+    await user.type(screen.getByLabelText('Email'), 'eve@example.com');
+    expect(screen.queryByText('Enter a valid email address')).toBeNull();
+    expect(screen.getByLabelText('Email')).not.toHaveAttribute('aria-invalid');
   });
 
   // ── CUST-08: 44px touch targets ─────────────────────────────────

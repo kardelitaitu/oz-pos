@@ -34,6 +34,53 @@ const EMPTY_FORM: FormData = {
   notes: '',
 };
 
+/** CUST-09: client-side field validation mirrors the authoritative backend
+ * contract (foundation/src/contact.rs + db/customers.rs): name non-empty,
+ * email exactly one '@' with a dotted domain, phone ≥1 digit. Notes are
+ * length-capped here as a UX guard (backend remains authoritative). */
+const NOTES_MAX_LENGTH = 500;
+
+function validateEmail(email: string): boolean {
+  const trimmed = email.trim();
+  if (!trimmed) return true; // optional field
+  const atCount = trimmed.split('@').length - 1;
+  if (atCount !== 1) return false;
+  const [local, domain] = trimmed.split('@');
+  return (
+    local !== undefined &&
+    domain !== undefined &&
+    local.length > 0 &&
+    domain.length > 0 &&
+    domain.includes('.')
+  );
+}
+
+function validatePhone(phone: string): boolean {
+  const trimmed = phone.trim();
+  if (!trimmed) return true; // optional field
+  return /\d/.test(trimmed);
+}
+
+interface FieldErrors {
+  email?: string;
+  phone?: string;
+  notes?: string;
+}
+
+function validateForm(form: FormData, l10n: { getString: (id: string) => string }): FieldErrors {
+  const errors: FieldErrors = {};
+  if (form.email.trim() && !validateEmail(form.email)) {
+    errors.email = l10n.getString('customer-mgmt-error-email-invalid');
+  }
+  if (form.phone.trim() && !validatePhone(form.phone)) {
+    errors.phone = l10n.getString('customer-mgmt-error-phone-invalid');
+  }
+  if (form.notes.length > NOTES_MAX_LENGTH) {
+    errors.notes = l10n.getString('customer-mgmt-error-notes-too-long');
+  }
+  return errors;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 /** Customer management screen — list, search, create, edit, and delete customer records. */
@@ -48,6 +95,7 @@ export default function CustomerManagementScreen() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CustomerDto | null>(null);
@@ -112,6 +160,7 @@ export default function CustomerManagementScreen() {
 
   const openCreate = useCallback(() => {
     setForm(EMPTY_FORM);
+    setFieldErrors({});
     setEditingId(null);
     setError(null);
     setShowModal(true);
@@ -124,6 +173,7 @@ export default function CustomerManagementScreen() {
       phone: customer.phone ?? '',
       notes: customer.notes,
     });
+    setFieldErrors({});
     setEditingId(customer.id);
     setError(null);
     setShowModal(true);
@@ -131,14 +181,35 @@ export default function CustomerManagementScreen() {
 
   const closeModal = useCallback(() => {
     setShowModal(false);
+    setFieldErrors({});
     setError(null);
+  }, []);
+
+  /** CUST-09: clear a field error as soon as the operator edits the field. */
+  const updateField = useCallback((field: keyof FormData, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === 'name') return; // name has no per-field error
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   }, []);
 
   // ── Save / Update ──────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
+    // CUST-09: validate every field before any IPC round trip — the modal
+    // stays open and the offending field is flagged with aria-invalid.
+    const errs = validateForm(form, l10n);
+    setFieldErrors(errs);
     if (!form.name.trim()) {
       setError(l10n.getString('customer-mgmt-error-name-required'));
+      return;
+    }
+    if (errs.email || errs.phone || errs.notes) {
+      setError(null);
       return;
     }
 
@@ -163,7 +234,9 @@ export default function CustomerManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('customer-mgmt-error-save-failed'));
+      // CUST-09: keep save failures stable and localized; backend stays authoritative.
+      setError(requiredLocalized(l10n, 'customer-mgmt-error-save-failed'));
+      void err;
     } finally {
       setSaving(false);
     }
@@ -440,11 +513,18 @@ export default function CustomerManagementScreen() {
               type="email"
               id="customer-field-email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => updateField('email', e.target.value)}
               placeholder="jane@example.com"
               autoComplete="off"
+              aria-invalid={fieldErrors.email ? true : undefined}
+              aria-describedby={fieldErrors.email ? 'customer-field-email-error' : undefined}
             />
           </Localized>
+          {fieldErrors.email && (
+            <p id="customer-field-email-error" className="customer-mgmt-field-error" role="alert">
+              {fieldErrors.email}
+            </p>
+          )}
         </div>
 
         <div className="customer-mgmt-field">
@@ -461,11 +541,18 @@ export default function CustomerManagementScreen() {
               type="tel"
               id="customer-field-phone"
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => updateField('phone', e.target.value)}
               placeholder="+1-555-0100"
               autoComplete="off"
+              aria-invalid={fieldErrors.phone ? true : undefined}
+              aria-describedby={fieldErrors.phone ? 'customer-field-phone-error' : undefined}
             />
           </Localized>
+          {fieldErrors.phone && (
+            <p id="customer-field-phone-error" className="customer-mgmt-field-error" role="alert">
+              {fieldErrors.phone}
+            </p>
+          )}
         </div>
 
         <div className="customer-mgmt-field">
@@ -481,11 +568,19 @@ export default function CustomerManagementScreen() {
               className="customer-mgmt-input customer-mgmt-textarea"
               id="customer-field-notes"
               value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              onChange={(e) => updateField('notes', e.target.value)}
               placeholder="Preferences, special notes…"
               rows={3}
+              maxLength={NOTES_MAX_LENGTH}
+              aria-invalid={fieldErrors.notes ? true : undefined}
+              aria-describedby={fieldErrors.notes ? 'customer-field-notes-error' : undefined}
             />
           </Localized>
+          {fieldErrors.notes && (
+            <p id="customer-field-notes-error" className="customer-mgmt-field-error" role="alert">
+              {fieldErrors.notes}
+            </p>
+          )}
         </div>
       </SettingsPopup>
 

@@ -227,6 +227,12 @@
   color: var(--color-fg-secondary);
 }
 
+.customer-mgmt-field-error {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  margin: 0;
+}
+
 .customer-mgmt-input {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-base);
