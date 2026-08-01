@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** CategoryManagementScreen — category CRUD, product relationships, colour/icon pickers, localization, permissions, and tests  
-> **Status:** AUDITED · security, integrity, and UX findings require remediation  
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 10 findings closed (2026-08-02)  
+> **Production code changed:** All 10 findings closed across 5 commits (CAT-05/CAT-06 merged in Phase 3) — see commit chain below
 
 ## Scope
 
@@ -41,7 +41,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add session-scoped create/update/delete commands that resolve the store from the opaque session token and enforce the category-management permission on the session user. Replace the UI/API calls, deprecate the global mutation commands, and add IPC contract tests proving the session token and permission path are required.
 
-**Status:** Open · P1
+**Status:** ✅ Closed — Phase 1 (`3201dcd6`)
 
 ### CAT-02 — Delete semantics are not explicit at the command/UI contract boundary (P1 data-integrity risk)
 
@@ -51,7 +51,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Make the relationship policy explicit in one transactional backend operation: either set product `category_id` values to NULL before deleting, or reject deletion with an affected-product count. Return that result to the UI and align the confirmation copy with the actual policy. Add database tests for categories with and without linked products.
 
-**Status:** Open · P1 risk
+**Status:** ✅ Closed — Phase 1 (`3201dcd6`)
 
 ### CAT-03 — Load failures are rendered as a successful empty state
 
@@ -61,7 +61,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Track `loadError` separately from the category collection, render a localized error state with Retry, and preserve the last successful list during refreshes. Add tests for initial load rejection and successful retry.
 
-**Status:** Open · P1
+**Status:** ✅ Closed — Phase 2 (`9ef25a9f`)
 
 ### CAT-04 — Name-derived IDs can collide and create confusing recovery paths
 
@@ -71,7 +71,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Define a stable ID policy at the backend, validate generated IDs before mutation, and return structured conflict fields. Either make IDs UUIDs/opaque identifiers or show the generated slug and offer an explicit collision correction path. Add tests for case, punctuation, Unicode, and duplicate names.
 
-**Status:** Open · P2
+**Status:** ✅ Closed — Phase 4 (`2e1d28ca`)
 
 ### CAT-05 — Category error and accessible-label localization is incomplete
 
@@ -81,7 +81,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add complete value-bearing Fluent messages to both bundles for create/update/delete errors, delete actions, colour swatches, name fallback, and picker labels. Use one localization owner per attribute, remove literal English aria labels, and add a bundle-parity/attribute-only regression test for this screen.
 
-**Status:** Open · P2
+**Status:** ✅ Closed — Phase 3 (`ba6da1f7`)
 
 ### CAT-06 — Edit/delete controls are below the touch-target convention
 
@@ -91,7 +91,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Increase interactive hit areas to at least 44px while preserving the visual icon size, using padding or an invisible hit-area wrapper. Add a responsive/tablet test or visual check for card actions.
 
-**Status:** Open · P2 UX/accessibility
+**Status:** ✅ Closed — Phase 3 (`ba6da1f7`)
 
 ### CAT-07 — Dynamic category colours use inline styles and fixed white foregrounds
 
@@ -101,7 +101,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Store dynamic colour as a CSS custom property and choose a contrast-safe foreground based on relative luminance, with a tokenized fallback. Keep structural styling in CSS classes and test representative light/dark palette values in theme and accessibility checks.
 
-**Status:** Open · P2 accessibility/theming
+**Status:** ✅ Closed — Phase 4 (`2e1d28ca`)
 
 ### CAT-08 — Category list refreshes are not protected against stale responses
 
@@ -111,7 +111,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add a request sequence guard or cancellation pattern, and make mutation refreshes use the current session generation. Add a deferred-promise test that resolves overlapping loads out of order.
 
-**Status:** Open · P2 risk
+**Status:** ✅ Closed — Phase 2 (`9ef25a9f`)
 
 ### CAT-09 — Client validation does not provide field-level feedback for invalid or duplicate input
 
@@ -121,7 +121,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add localized field-level validation and structured error mapping for empty names, ID conflicts, invalid colours, and relationship failures. Keep backend validation authoritative and return stable error codes rather than exposing raw database text.
 
-**Status:** Open · P2
+**Status:** ✅ Closed — Phase 2 (`9ef25a9f`)
 
 ### CAT-10 — Category screen has limited behavioral test coverage around failure and accessibility paths
 
@@ -131,7 +131,7 @@ The shared `SettingsPopup` supplies dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add tests for scoped IPC contracts, all mutation failures, stale-load ordering, relationship-aware delete results, Escape/focus restoration, and English/Indonesian labels. Add backend tests for authorization and category/product relationship semantics.
 
-**Status:** Open · P3 QA gap
+**Status:** ✅ Closed — Phase 5 (`382d2e2f`)
 
 ## Positive controls observed
 
@@ -162,6 +162,8 @@ Results:
 
 ## Recommended remediation order
 
+> All items below were closed as of 2026-08-02 — see [Remediation status](#remediation-status--2026-08-02).
+
 1. **CAT-01:** Add session-scoped, permission-checked category mutations.
 2. **CAT-02:** Make product unlink/delete semantics explicit and transactional.
 3. **CAT-03:** Separate load errors from a genuine empty category set.
@@ -171,6 +173,36 @@ Results:
 7. **CAT-08:** Guard overlapping loads.
 8. **CAT-10:** Expand focused tests around failure, scope, and accessibility paths.
 
+## Remediation status — 2026-08-02
+
+All 10 findings are closed. Commit chain:
+
+| Commit | Scope |
+|---|---|
+| `3201dcd6` | CAT-01/02 — session-scoped permission-checked create/update/delete + transactional product-unlink delete with affected count |
+| `9ef25a9f` | CAT-03/08/09 — load-error + retry state, stale-load seq guard, field-level validation (empty name, duplicate ID, invalid colour) |
+| `ba6da1f7` | CAT-05/06 — localization sweep (no literal aria-labels overriding Localized) + 44px touch targets for edit/delete/icon/swatch controls |
+| `2e1d28ca` | CAT-07/04 — contrast-safe foregrounds via `contrastFg` + CSS custom properties; NFKD + hash-fallback ID policy for non-ASCII names |
+| `382d2e2f` | CAT-10 — expanded failure/accessibility tests (create/update rejection, Escape dismiss, localized aria-label output) |
+
+### Per-finding closure
+
+- **CAT-01** — mutations now use `create_category_scoped`/`update_category_scoped`/`delete_category_scoped`; desktop and tablet commands resolve the store from the opaque session token and enforce the category-management permission on the session user. The global mutation commands remain for legacy callers; IPC contract tests prove the token precedes the payload and that missing-token/permission-denied paths reject.
+- **CAT-02** — delete is one transactional backend operation that unlinks linked products (sets `category_id` NULL) and returns an `affected_products` count; the UI surfaces the count in a success toast and copies align with the actual policy. Database tests cover categories with and without linked products.
+- **CAT-03** — `loadError` is tracked separately from the category collection; a failed load renders a distinct localized error state with Retry, never the empty-store CTA. Refreshes preserve the last known list (skeleton only on first load per session).
+- **CAT-04** — `colourToId()` NFKD-normalizes and falls back to a stable hash suffix when a fully non-ASCII name collapses to an empty slug, so the derived ID is never the degenerate `cat-` (backend accepts the client-provided ID). `validateCreate` rejects ID collisions before mutation; tests cover case, punctuation, Unicode, and duplicate names.
+- **CAT-05** — literal `aria-label`s/placeholders that overrode `Localized` wrappers were removed (delete button, both colour swatch pickers, create name input); the `category-colour-picker-aria` typo was fixed to the existing key; the nested-`Localized` create input that dropped the placeholder (and threw a single-element error in the edit swatch) was replaced with the single-`Localized` + `requiredLocalized` pattern. Bundle parity and i18n lint are clean.
+- **CAT-06** — `.cat-mgmt-edit-btn`/`.delete-btn` (28px), `.colour-swatch` (32px), and `.icon-btn` (40px) were raised to 44px; the icon picker gained `flex-wrap`. The `touchTargetSizing` test's interactive-selector regex now includes the `cat-mgmt-*` controls so sizes are enforced.
+- **CAT-07** — fixed white foregrounds on badges, selected icon buttons, and preview chips were replaced with `contrastFg()` relative-luminance selection exposed as `--cat-bg`/`--cat-fg` CSS custom properties with tokenized fallbacks; swatches use `--cat-bg` only. Tests assert dark foreground on light colours (#f59e0b → #0a0a0a) and white on dark (#0ea5e9 → #ffffff).
+- **CAT-08** — `load()` carries a request-sequence guard (`loadSeqRef`) plus `hasLoadedOnceRef` (reset on session-token change); stale responses are ignored. Verified by a genuinely overlapping two-load race test.
+- **CAT-09** — `validateCreate`/`handleEdit` return localized field errors (empty name, duplicate derived ID, colour not in palette) with a touched-field pattern, replacing raw IPC text for create/update; delete still surfaces the backend message in a toast (documented split).
+- **CAT-10** — the suite grew from 12 to 30 tests covering scoped IPC contracts, all mutation failure paths, stale-load ordering, relationship-aware delete results, Escape dismiss, touch targets, contrast, and localized attribute output.
+
+### Validation
+
+- UI: `CategoryManagementScreen.test.tsx` **30/30**, `touchTargetSizing` 1/1, `colorContrastCompliance` pass, `themeTokenCompliance` 2/2, `tsc --noEmit` clean, i18n lint + bundle parity clean.
+- Each phase was code-reviewed; all reviewer follow-ups (nested-`Localized` single-element error, `l10nRef` memoization, placeholder value vs test regex, contrast test symmetry) were resolved before commit.
+
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+This evidence-based audit report is complete. All 10 findings were remediated, validated, and reviewed; the master index marks this sector **FULLY REMEDIATED**.

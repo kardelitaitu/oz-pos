@@ -29,7 +29,7 @@
 8. Plugin system — Lua plugin engine, example-discount, plugin sandbox — ✅ **FULLY REMEDIATED** (all 11 findings PLG-01→PLG-11; see [08-plugin-system.md](08-plugin-system.md) — commits `64b0281a`, `b9a7fa76`, `da8ea51c`, `95da123e`, `47f63d52`, `06f7ff34`, `308bc101`, plus residuals `4022bc5d`, `7d5d318c`, `cb6d181c`)
 9. Sync module — platform/sync, real-time sync, conflict resolution — ✅ **FULLY REMEDIATED** (all 12 findings SYNC-01→SYNC-12; see [09-sync-module.md](09-sync-module.md) — commits `a1ea01e7`, `b722740f`, `5229e296`, `85e323c7`, `5633e790`, `178abfbf`)
 10. ProductManagementScreen — ~641 lines, flagged hardcoded aria-labels — ✅ **FULLY REMEDIATED** (all 12 findings PROD-01→PROD-12; see [10-product-management-screen.md](10-product-management-screen.md) — commits `f399c703`, `beba8dad`, `6a6840aa`, `6b9aead9`, `67bb09c1`)
-11. CategoryManagementScreen — ~647 lines, flagged hardcoded aria-labels
+11. CategoryManagementScreen — ~647 lines, flagged hardcoded aria-labels — ✅ **FULLY REMEDIATED** (all 10 findings CAT-01→CAT-10; see [11-category-management-screen.md](11-category-management-screen.md) — commits `3201dcd6`, `9ef25a9f`, `ba6da1f7`, `2e1d28ca`, `382d2e2f`)
 12. CustomerManagementScreen — ~429 lines, flagged hardcoded aria-labels
 13. AuditLogScreen — audit trails, log filtering, export
 14. LocationPicker / LocationManagement — location CRUD, picker UX
