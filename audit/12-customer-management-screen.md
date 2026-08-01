@@ -3,7 +3,7 @@
 > **Audit date:** 2026-07-31  
 > **Sector:** CustomerManagementScreen — customer CRUD, search, privacy-sensitive fields, sales/loyalty relationships, localization, and tests  
 > **Status:** ✅ **FULLY REMEDIATED** — all 11 findings (CUST-01 → CUST-11) closed with tests; see remediation log below  
-> **Production code changed:** Yes — 8 commits
+> **Production code changed:** Yes — 9 commits
 
 ## Scope
 
@@ -180,6 +180,7 @@ Results:
 6. `afc0e290` — CUST-06/CUST-05 backend (bounded search + customer history commands)
 7. `ddc82de8` — CUST-06/CUST-05 frontend (server-side search + history modal)
 8. `95b54059` — CUST-11 expanded security/failure/a11y coverage
+9. `8bd25e52` — CUST-11 parity follow-up: shared `useFocusTrap` for the history modal (auto-focus, Tab trap, Escape, scroll lock) + removed dead `customer-mgmt-history-empty` FTL key
 
 ## Audit status
 
