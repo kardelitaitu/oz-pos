@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import customersFtl from '@/locales/customers.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -27,11 +27,13 @@ import {
   listCustomersScoped,
   createCustomerScoped,
   updateCustomerScoped,
+  deleteCustomerScoped,
 } from '@/api/customers';
 
 const mockListCustomers = listCustomersScoped as ReturnType<typeof vi.fn>;
 const mockCreateCustomer = createCustomerScoped as ReturnType<typeof vi.fn>;
 const mockUpdateCustomer = updateCustomerScoped as ReturnType<typeof vi.fn>;
+const mockDeleteCustomer = deleteCustomerScoped as ReturnType<typeof vi.fn>;
 
 
 
@@ -49,7 +51,7 @@ describe('CustomerManagementScreen', () => {
   // ── Rendering ─────────────────────────────────────────────────
 
   it('loads customers with the active session token', async () => {
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Customers')).toBeInTheDocument();
     });
@@ -57,7 +59,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('renders the title and Add Customer button', async () => {
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Customers')).toBeInTheDocument();
     });
@@ -66,14 +68,14 @@ describe('CustomerManagementScreen', () => {
 
   it('shows loading skeleton while fetching customers', async () => {
     mockListCustomers.mockReturnValue(new Promise(() => {}));
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     expect(document.querySelector('.customer-mgmt-loading-skeleton')).toBeInTheDocument();
     expect(screen.queryByText('Loading customers…')).not.toBeInTheDocument();
   });
 
   it('shows empty state when no customers exist', async () => {
     mockListCustomers.mockResolvedValue([]);
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('No customers yet.')).toBeInTheDocument();
     });
@@ -83,7 +85,7 @@ describe('CustomerManagementScreen', () => {
   // ── Table rendering ──────────────────────────────────────────
 
   it('displays customers in the table', async () => {
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -92,7 +94,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('displays email and phone columns', async () => {
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('alice@example.com')).toBeInTheDocument();
       expect(screen.getByText('+1-555-0101')).toBeInTheDocument();
@@ -100,7 +102,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('displays dash for null email and phone', async () => {
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Bob')).toBeInTheDocument();
     });
@@ -110,7 +112,7 @@ describe('CustomerManagementScreen', () => {
   });
 
   it('shows Edit and Delete buttons per row', async () => {
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getAllByText('Edit').length).toBeGreaterThanOrEqual(3);
     });
@@ -121,7 +123,7 @@ describe('CustomerManagementScreen', () => {
 
   it('filters customers by search query', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -137,7 +139,7 @@ describe('CustomerManagementScreen', () => {
 
   it('shows no-match state for search with no results', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
@@ -155,7 +157,7 @@ describe('CustomerManagementScreen', () => {
 
   it('opens the add customer modal when Add Customer is clicked', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
     });
@@ -173,7 +175,7 @@ describe('CustomerManagementScreen', () => {
     mockCreateCustomer.mockResolvedValue({});
     mockListCustomers.mockResolvedValueOnce(sampleCustomers);
     mockListCustomers.mockResolvedValueOnce([...sampleCustomers, { id: 'cust-4', name: 'Dave', email: null, phone: null, notes: '' }]);
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
@@ -196,7 +198,7 @@ describe('CustomerManagementScreen', () => {
 
   it('disables Create button when name is empty', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
     });
@@ -213,7 +215,7 @@ describe('CustomerManagementScreen', () => {
 
   it('closes the modal when Cancel is clicked', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByText('Add Customer')).toBeInTheDocument();
     });
@@ -234,7 +236,7 @@ describe('CustomerManagementScreen', () => {
 
   it('opens edit modal pre-filled with customer data', async () => {
     const user = userEvent.setup();
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getAllByText('Edit').length).toBeGreaterThanOrEqual(1);
     });
@@ -253,7 +255,7 @@ describe('CustomerManagementScreen', () => {
     const user = userEvent.setup();
     mockUpdateCustomer.mockResolvedValue({});
     mockListCustomers.mockResolvedValue(sampleCustomers);
-    renderWithFluentSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
 
     await waitFor(() => {
       expect(screen.getAllByText('Edit').length).toBeGreaterThanOrEqual(1);
@@ -275,5 +277,88 @@ describe('CustomerManagementScreen', () => {
         notes: 'Regular',
       });
     });
+  });
+
+  // ── Delete confirmation + failure (CUST-02/04) ────────────────
+
+  it('does not delete without confirmation (CUST-02)', async () => {
+    const user = userEvent.setup();
+    mockDeleteCustomer.mockResolvedValue(undefined);
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+    // The row button only arms the confirmation dialog — no IPC yet.
+    await user.click(screen.getAllByText('Delete')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Delete customer?')).toBeInTheDocument();
+    });
+    expect(mockDeleteCustomer).not.toHaveBeenCalled();
+  });
+
+  it('deletes only after explicit confirmation with the session token (CUST-02)', async () => {
+    const user = userEvent.setup();
+    mockDeleteCustomer.mockResolvedValue(undefined);
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+    await user.click(screen.getAllByText('Delete')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Delete customer?')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(mockDeleteCustomer).toHaveBeenCalledWith('session-1', 'cust-1');
+    });
+  });
+
+  it('surfaces a delete failure with a localized toast (CUST-04)', async () => {
+    const user = userEvent.setup();
+    mockDeleteCustomer.mockRejectedValue(new Error('fk constraint'));
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+    await user.click(screen.getAllByText('Delete')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Delete customer?')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    await waitFor(() => {
+      expect(screen.getByText('Failed to delete customer')).toBeInTheDocument();
+    });
+    // The row stays visible and the dialog remains open for retry.
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Delete customer?')).toBeInTheDocument();
+  });
+
+  it('dismisses the delete dialog via Cancel without deleting (CUST-02)', async () => {
+    const user = userEvent.setup();
+    mockDeleteCustomer.mockResolvedValue(undefined);
+    mockListCustomers.mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Delete').length).toBeGreaterThanOrEqual(3);
+    });
+    await user.click(screen.getAllByText('Delete')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Delete customer?')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Delete customer?')).toBeNull();
+    });
+    expect(mockDeleteCustomer).not.toHaveBeenCalled();
   });
 });

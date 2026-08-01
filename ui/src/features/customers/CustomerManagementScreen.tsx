@@ -13,7 +13,9 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { useToast } from '@/frontend/shared/Toast';
 import './CustomerManagementScreen.css';
 
 // ── Form state ──────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
+  const { addToast } = useToast();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,6 +50,7 @@ export default function CustomerManagementScreen() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CustomerDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // ── Load data ──────────────────────────────────────────────────
@@ -141,16 +145,37 @@ export default function CustomerManagementScreen() {
 
   // ── Delete ─────────────────────────────────────────────────────
 
-  const confirmDelete = useCallback(async (id: string) => {
-    setDeleting(id);
+  // CUST-02: deletion requires an explicit confirmation dialog; the row
+  // button only arms `deleteTarget` and the destructive IPC call fires from
+  // the dialog's confirm action.
+  const requestDelete = useCallback((customer: CustomerDto) => {
+    setDeleteTarget(customer);
+  }, []);
+
+  const closeDelete = useCallback(() => {
+    if (deleting !== null) return;
+    setDeleteTarget(null);
+  }, [deleting]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(deleteTarget.id);
     try {
-      await deleteCustomerScoped(sessionToken, id);
+      await deleteCustomerScoped(sessionToken, deleteTarget.id);
       setDeleting(null);
+      setDeleteTarget(null);
       await load();
-    } catch {
+    } catch (err) {
+      // CUST-04: a failed delete must be visible — keep the row, surface a
+      // localized toast, and leave the dialog open so the operator can retry.
       setDeleting(null);
+      addToast({
+        message: requiredLocalized(l10n, 'customer-mgmt-error-delete'),
+        type: 'error',
+      });
+      void err;
     }
-  }, [load, sessionToken]);
+  }, [deleteTarget, load, sessionToken, addToast, l10n]);
 
   // ── Render ─────────────────────────────────────────────────────
 
@@ -312,8 +337,8 @@ export default function CustomerManagementScreen() {
                       <button
                         type="button"
                         className="customer-mgmt-action-btn customer-mgmt-action-btn--danger"
-                        onClick={() => confirmDelete(customer.id)}
-                        disabled={deleting === customer.id}
+                        onClick={() => requestDelete(customer)}
+                        disabled={deleting !== null}
                         aria-label={`Delete ${customer.name}`}
                       >
                         <Localized id="customer-mgmt-delete"><span>Delete</span></Localized>
@@ -421,6 +446,20 @@ export default function CustomerManagementScreen() {
           </Localized>
         </div>
       </SettingsPopup>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onCancel={closeDelete}
+        onConfirm={() => { void confirmDelete(); }}
+        title={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-title')}
+        message={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-message', {
+          name: deleteTarget?.name ?? '',
+        })}
+        variant="danger"
+        loading={deleting !== null}
+        confirmLabel={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-btn')}
+        cancelLabel={requiredLocalized(l10n, 'customer-mgmt-btn-cancel')}
+      />
     </div>
   );
 }

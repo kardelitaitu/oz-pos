@@ -54,3 +54,7 @@ customer-mgmt-btn-create = Create
 customer-mgmt-btn-update = Update
 customer-mgmt-error-name-required = Customer name is required
 customer-mgmt-error-save-failed = Failed to save customer
+customer-mgmt-delete-confirm-title = Delete customer?
+customer-mgmt-delete-confirm-message = This will permanently remove { $name } and any saved history. This action cannot be undone.
+customer-mgmt-delete-confirm-btn = Delete
+customer-mgmt-error-delete = Failed to delete customer

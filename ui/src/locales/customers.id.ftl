@@ -41,6 +41,10 @@ customer-mgmt-btn-create = Buat
 customer-mgmt-btn-update = Perbarui
 customer-mgmt-error-name-required = Nama pelanggan wajib diisi
 customer-mgmt-error-save-failed = Gagal menyimpan pelanggan
+customer-mgmt-delete-confirm-title = Hapus pelanggan?
+customer-mgmt-delete-confirm-message = Ini akan menghapus permanen { $name } beserta riwayat tersimpan. Tindakan ini tidak dapat dibatalkan.
+customer-mgmt-delete-confirm-btn = Hapus
+customer-mgmt-error-delete = Gagal menghapus pelanggan
 
 # ── Inventory (remaining) ──
 customer-mgmt-title = Pelanggan
