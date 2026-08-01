@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import { getBundle } from '@/i18n';
@@ -91,6 +91,62 @@ describe('CustomerManagementScreen', () => {
       expect(screen.getByText('No customers yet.')).toBeInTheDocument();
     });
     expect(screen.getByText('Add your first customer')).toBeInTheDocument();
+  });
+
+  it('shows a load error with a working retry (CUST-11)', async () => {
+    const user = userEvent.setup();
+    // Mount fires the immediate `load()` (rejects -> error card). The retry
+    // click is the next load() call and must be the one that resolves, so the
+    // mock rejects once then resolves persistently — this genuinely exercises
+    // the retry handler (the 250ms debounced re-load resolving later is
+    // harmless).
+    mockListCustomers
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValue(sampleCustomers);
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load customers')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Failed to load customers')).not.toBeInTheDocument();
+  });
+
+  it('discards a stale slower response in favor of a newer refresh (CUST-10)', async () => {
+    // Mount fires TWO loads: the immediate `load()` effect and the 250ms
+    // debounced `runSearch('')` → `load()`. The first is a slow promise that
+    // resolves with stale data only AFTER the second (fresh) refresh has
+    // landed — the load seq guard must drop the stale page.
+    let resolveStale!: (v: typeof sampleCustomers) => void;
+    const stalePromise = new Promise<typeof sampleCustomers>((resolve) => {
+      resolveStale = resolve;
+    });
+    mockListCustomers
+      .mockImplementationOnce(() => stalePromise)
+      .mockResolvedValueOnce(sampleCustomers);
+
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+
+    // The debounced second load resolves the authoritative list.
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+    expect(mockListCustomers).toHaveBeenCalledTimes(2);
+
+    // Now let the stale mount response land with a DIFFERENT list — it must
+    // not overwrite the newer, authoritative data. Wrapping in `act` runs the
+    // late continuation deterministically so the assertions below genuinely
+    // exercise the seq guard (they would fail if it were ever removed).
+    await act(async () => {
+      resolveStale([{ id: 'stale-1', name: 'Stale Bob', email: null, phone: null, notes: '' }]);
+    });
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.queryByText('Stale Bob')).not.toBeInTheDocument();
   });
 
   // ── Table rendering ──────────────────────────────────────────
@@ -485,6 +541,35 @@ describe('CustomerManagementScreen', () => {
     });
     expect(screen.getByText('No tier')).toBeInTheDocument();
     expect(screen.getByText('No sales yet.')).toBeInTheDocument();
+  });
+
+  it('closes the history modal on Escape and restores focus to the opener (CUST-11)', async () => {
+    const user = userEvent.setup();
+    mockGetHistory.mockResolvedValue({
+      customer: sampleCustomers[0],
+      loyalty: null,
+      sales: [],
+      sales_total: 0,
+    });
+    renderWithProvidersSync(<CustomerManagementScreen />, customersFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    const opener = screen.getByRole('button', { name: 'View history for Alice' });
+    await user.click(opener);
+    await waitFor(() => {
+      expect(screen.getByText('Customer history')).toBeInTheDocument();
+    });
+
+    // Escape closes the dialog.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByText('Customer history')).not.toBeInTheDocument();
+    });
+
+    // Focus is restored to the button that opened the dialog.
+    expect(opener).toHaveFocus();
   });
 
   it('surfaces a history load failure with a retry (CUST-05)', async () => {

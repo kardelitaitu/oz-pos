@@ -244,7 +244,13 @@ export default function CustomerManagementScreen() {
 
   // ── History modal (CUST-05) ────────────────────────────────────
 
+  // CUST-11: remember the opener so focus can be restored on close and
+  // hand a ref to the modal's close button for initial focus.
+  const historyTriggerRef = useRef<HTMLElement | null>(null);
+  const historyCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+
   const openHistory = useCallback((customer: CustomerDto) => {
+    historyTriggerRef.current = document.activeElement as HTMLElement | null;
     setHistoryTarget(customer);
     setHistory(null);
     setHistoryError(false);
@@ -264,7 +270,32 @@ export default function CustomerManagementScreen() {
     setHistoryTarget(null);
     setHistory(null);
     setHistoryError(false);
+    // CUST-11: restore keyboard focus to the opener so the next Tab lands
+    // on the expected row action, not the top of the document.
+    historyTriggerRef.current?.focus();
+    historyTriggerRef.current = null;
   }, []);
+
+  // CUST-11: Escape closes the history modal (mirrors SettingsPopup's modal
+  // semantics), and the dialog locks body scroll while open.
+  useEffect(() => {
+    if (!historyTarget) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeHistory();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // Move focus into the dialog once rendered.
+    historyCloseBtnRef.current?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [historyTarget, closeHistory]);
 
   const retryHistory = useCallback(() => {
     if (!historyTarget) return;
@@ -726,6 +757,7 @@ export default function CustomerManagementScreen() {
                 <p className="customer-mgmt-history-subtitle">{historyTarget.name}</p>
               </div>
               <button
+                ref={historyCloseBtnRef}
                 type="button"
                 className="customer-mgmt-action-btn customer-mgmt-history-close"
                 onClick={closeHistory}

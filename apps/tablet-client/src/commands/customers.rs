@@ -1123,4 +1123,124 @@ mod tests {
         .await;
         assert!(matches!(result, Err(AppError::Core { .. })));
     }
+
+    #[tokio::test]
+    async fn delete_customer_scoped_is_blocked_by_loyalty_and_sales_references() {
+        // CUST-11: a customer referenced by a loyalty account or sales rows
+        // must NOT be silently deleted — the FK guard (foreign_keys = ON)
+        // rejects the delete so no orphaned child rows can be left behind.
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "store-a-token".into(),
+            SessionContext::new(
+                "user-owner".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                "store-a".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Seed the customer plus BOTH reference kinds in store-a.
+        {
+            let store_a = app
+                .state::<AppState>()
+                .db_manager
+                .open_store("store-a")
+                .unwrap();
+            let db = store_a.lock().unwrap();
+            let store = Store::new(&db);
+            seed_customer_in_store(&db, "cust-1", "Alice");
+            store.get_or_create_loyalty_account("cust-1").unwrap();
+            db.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+                 VALUES ('s-1', 2500, 'USD', 1, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 2500, 0)",
+                [],
+            )
+            .unwrap();
+        }
+
+        let result =
+            delete_customer_scoped("store-a-token".into(), "cust-1".into(), app.state()).await;
+        assert!(
+            matches!(result, Err(AppError::Core { .. })),
+            "delete must be blocked by the FK guard, got: {result:?}"
+        );
+
+        // The customer row is retained — nothing was silently cascaded.
+        let remaining = list_customers_scoped("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, "cust-1");
+    }
+
+    #[tokio::test]
+    async fn delete_customer_scoped_succeeds_without_references() {
+        // CUST-11 positive control: deleting an unreferenced customer in the
+        // session store works and is isolated from other stores.
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        for (token, store_id) in [("store-a-token", "store-a"), ("store-b-token", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-owner".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        {
+            let store_a = app
+                .state::<AppState>()
+                .db_manager
+                .open_store("store-a")
+                .unwrap();
+            let db = store_a.lock().unwrap();
+            seed_customer_in_store(&db, "cust-1", "Alice");
+        }
+
+        delete_customer_scoped("store-a-token".into(), "cust-1".into(), app.state())
+            .await
+            .unwrap();
+
+        let store_a = list_customers_scoped("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(store_a.is_empty());
+        // Store B was never touched by the store-A delete.
+        let store_b = list_customers_scoped("store-b-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(store_b.is_empty());
+    }
 }
