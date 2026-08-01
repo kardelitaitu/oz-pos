@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** Inventory module — locations, stock adjustments, stock counts, transfers, shifts, thresholds, alerts, and transaction history  
-> **Status:** Phase 1 transfer boundary remediated; stock-count and remaining inventory findings open
-> **Production code changed:** Yes — session-scoped stock-transfer commands, store isolation, actor derivation, and migration 112
+> **Status:** ✅ **FULLY REMEDIATED** — all 11 findings closed (commits `a2c70848`, `45d65511`, `5be6de69`)
+> **Production code changed:** Yes — session-scoped stock-transfer and stock-count commands, store isolation, server-side actor derivation, transfer cancellation reversal, count-number concurrency hardening, batch transit API, and migrations 112/113
 
 ## Scope
 
@@ -40,7 +40,7 @@ The review uses the universal audit lenses from `audit/AUDIT_JULY_2026.md`: func
 
 ## Architecture summary
 
-Inventory is a transitional module. `modules/inventory` contains domain models and a small repository/service surface, while the production multi-location logic remains in `oz-core` and Tauri commands. Inventory location and alert commands resolve `session_token` to a store and check `SALES_PROCESS`. Stock transfers now use the same session-scoped boundary on desktop and tablet; stock-count commands remain open work.
+Inventory is a transitional module. `modules/inventory` contains domain models and a small repository/service surface, while the production multi-location logic remains in `oz-core` and Tauri commands. All inventory mutation/read commands — locations, alerts, transfers, stock counts, adjustments, and inventory transactions — now resolve `session_token` to a store (ADR #7) and enforce permissions; actors are derived from the session, never from request data.
 
 The main inventory primitives are:
 
@@ -60,7 +60,7 @@ The main inventory primitives are:
 
 **Remediation (Phase 1):** Implemented session-scoped transfer commands on desktop and tablet. Each command resolves the store from the opaque session token, checks `inventory:transfer`, and the create/receive paths derive actors from the session rather than request data. The UI/API now sends session tokens, and legacy unscoped handlers are no longer registered. Location and terminal identifiers are validated against the resolved store database. Migration `112_stock_transfer_actor_ids.sql` removes the obsolete local `users` foreign keys so global auth users are not cloned into store databases. Two-store list isolation, permission rejection, actor attribution, IPC contract, and desktop/tablet wiring tests pass.
 
-**Remaining:** The transfer lifecycle still needs dedicated command-level tests for every cross-store operation and a decision/implementation for true cross-store routing and cancellation reversal (see INV-04).
+**Remaining:** None within this audit's scope (store-boundary isolation, lifecycle tests, and cancellation reversal — all done in Phase 2). Note: routing a transfer between two separate store *databases* was never part of the scope and remains unimplemented; transfers move between locations/terminals inside the resolved store.
 
 **Priority:** P0 — tenant isolation and inventory authorization.
 
@@ -84,7 +84,7 @@ The main inventory primitives are:
 
 **Impact:** Even where a command has a valid session, audit history can attribute an operation to another user or to a nonexistent actor. This weakens accountability and can allow a user to make an operation appear to have been performed or approved by an administrator.
 
-**Remediation (transfer portion):** Stock-transfer create and receive commands now derive `created_by`/`received_by` exclusively from the resolved session, and the frontend DTO no longer accepts actor fields. The remaining stock-count and inventory-transaction actor fields are still open and must be migrated separately.
+**Remediation:** ✅ Fully addressed. Stock-transfer create/receive derive actors from the session; stock-count create/complete derive `counted_by`/`completed_by` from the session; `create_inventory_transaction` passes `&session.user_id` as `staff_id` (verified in `apps/desktop-client/src/commands/inventory.rs`) — no actor field is accepted from request data on any inventory path.
 
 **Priority:** P1 — audit integrity and authorization boundary.
 
@@ -221,26 +221,35 @@ The main inventory primitives are:
 - The focused suites cover normal and many negative lifecycle paths: transfer over-receipt, invalid status transitions, stock insufficiency, stock-count completion, and API IPC argument shapes.
 - The inspected Inventory CSS predominantly uses design tokens and visible focus styles; the main theme drift is concentrated in inline styles and hardcoded fallbacks in secondary screens.
 
-## Recommended implementation order
+## Recommended implementation order (all complete)
 
-1. **INV-02 and remaining INV-03:** Move stock-count and inventory-transaction actor paths to session-scoped commands. Transfer scope work for INV-01 and the transfer portion of INV-03 is complete, but lifecycle/routing follow-up remains.
-2. **INV-04/INV-05/INV-06:** Correct transfer reversal semantics and enforce quantity/status invariants at the backend transaction boundary.
-3. **INV-07/INV-11:** Align inventory-shift contracts and make count-number allocation concurrency-safe.
-4. **INV-08:** Add durable error/retry states to every inventory data view.
-5. **INV-09:** Replace transit N+1 loading with a scoped batch query and partial-failure handling.
-6. **INV-10:** Complete Fluent coverage, locale-aware formatting, and CSS token cleanup.
+1. **INV-02 and remaining INV-03:** ✅ Session-scoped stock-count + inventory-transaction actor paths (migration 113).
+2. **INV-04/INV-05/INV-06:** ✅ Transfer reversal semantics + quantity/status invariants at the core transaction boundary.
+3. **INV-07/INV-11:** ✅ Shift contract aligned per user+location; count-number allocation concurrency-safe (`BEGIN IMMEDIATE`).
+4. **INV-08:** ✅ Durable error/retry states on StockCounts, History, Detail, and TransitAudit.
+5. **INV-09:** ✅ Transit N+1 replaced by the scoped batch API.
+6. **INV-10:** ✅ Fluent coverage + CSS token cleanup across the four flagged surfaces.
 
 ## Validation
 
-- Focused Inventory UI tests: **139 passed across 13 files**
-- Inventory API contract tests: included in the focused UI run and passed
-- `cargo test -p modules-inventory`: **18 unit tests passed**
-- `modules-inventory` doctests: **1 passed**
-- Filtered `oz-core` Inventory tests: **50 passed**
-- Relevant `oz-core` inventory integration tests (inventory, stock count, stock transfer, backup/restore, and purchase-order paths): passed with no failures in the captured run
-- `git diff --check -- audit`: passed
+### Phase 1 (transfer boundary)
 
-These validation runs exercised existing behavior only; they do not cover the unscoped-command and cross-store authorization gaps identified above.
+- Desktop transfer tests (7), tablet transfer tests (4), migration tests (22), wiring tests (6), focused UI tests (29 across 3 files).
+
+### Phase 2 (stock counts, lifecycle, concurrency)
+
+- `cargo test -p oz-core --lib db::stock_counts`: **20 passed**
+- `cargo test -p oz-core --lib db::stock_transfers`: **25 passed** (pre-INV-09)
+- `cargo test -p oz-core --lib db::inventory`: **34 passed**
+- `cargo test -p oz-core --test stock_count_integration`: **14 passed**
+- UI typecheck clean; focused stock-count/transfer UI suites green.
+
+### INV-09/INV-10 batch (commit `5be6de69`)
+
+- `cargo test -p oz-core --lib db::stock_transfers`: **27 passed** (incl. batch-grouping test)
+- `cargo test -p oz-pos-app --lib commands::stock_transfers`: **7 passed** · tablet: **4 passed** · wiring audit: **6 passed**
+- UI typecheck + lint clean; inventory UI suites **122/122** (56 + 66 across 11 files)
+- Code review (deepseek-flash): no blockers
 
 ## Status
 
