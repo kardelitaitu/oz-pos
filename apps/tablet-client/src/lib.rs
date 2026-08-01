@@ -221,6 +221,8 @@ pub fn run() {
                 commands::bundles::lookup_bundle_by_sku,
                 commands::customers::list_customers,
                 commands::customers::list_customers_scoped,
+                commands::customers::search_customers_scoped,
+                commands::customers::get_customer_history_scoped,
                 commands::customers::get_customer,
                 commands::customers::create_customer_scoped,
                 commands::customers::update_customer_scoped,

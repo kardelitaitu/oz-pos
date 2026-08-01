@@ -326,6 +326,142 @@ pub async fn delete_customer_scoped(
     Ok(())
 }
 
+// ── Search (CUST-06) ──────────────────────────────────────────────
+
+/// Bounded page of search results (CUST-06) — server-side query with an
+/// explicit sort order and total count for pagination.
+#[derive(Debug, Serialize)]
+pub struct CustomerSearchPage {
+    /// Matching customers on this page.
+    pub items: Vec<CustomerDto>,
+    /// Total number of matches across all pages.
+    pub total: u64,
+}
+
+/// Search customers in the store resolved from a session token. ADR #7.
+///
+/// CUST-06: the query runs server-side (LIKE over name/email/phone) with a
+/// bounded page size so the renderer never holds the full customer list.
+#[tauri::command]
+pub async fn search_customers_scoped(
+    session_token: String,
+    query: String,
+    limit: Option<u64>,
+    offset: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<CustomerSearchPage, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let (items, total) =
+        store.search_customers(&query, limit.unwrap_or(50), offset.unwrap_or(0))?;
+    Ok(CustomerSearchPage {
+        items: items.into_iter().map(CustomerDto::from).collect(),
+        total,
+    })
+}
+
+// ── Customer history (CUST-05) ────────────────────────────────────
+
+/// Summary of a single sale for the history view.
+#[derive(Debug, Serialize)]
+pub struct CustomerSaleSummaryDto {
+    /// Sale id.
+    pub id: String,
+    /// Total in minor units.
+    pub total_minor: i64,
+    /// Status string (e.g. "Completed").
+    pub status: String,
+    /// Number of line items.
+    pub line_count: i64,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+}
+
+/// Loyalty summary for the history view (CUST-05).
+#[derive(Debug, Serialize)]
+pub struct CustomerLoyaltySummaryDto {
+    /// Current redeemable points.
+    pub points: i64,
+    /// Lifetime points earned.
+    pub lifetime_points: i64,
+    /// Current tier name (None when unassigned).
+    pub tier_name: Option<String>,
+}
+
+/// Read-only customer history: profile, loyalty summary, recent sales.
+#[derive(Debug, Serialize)]
+pub struct CustomerHistoryDto {
+    /// The customer profile.
+    pub customer: CustomerDto,
+    /// Loyalty account summary, if any.
+    pub loyalty: Option<CustomerLoyaltySummaryDto>,
+    /// Recent sales for this customer (most recent first).
+    pub sales: Vec<CustomerSaleSummaryDto>,
+    /// Total number of sales across all pages.
+    pub sales_total: u64,
+}
+
+/// Get the read-only history for a customer (CUST-05). ADR #7.
+///
+/// Scoped to the session's store and gated on `customers:view`. Sales are
+/// bounded (max 100/page) so a heavy-spending customer cannot bloat the
+/// renderer.
+#[tauri::command]
+pub async fn get_customer_history_scoped(
+    session_token: String,
+    customer_id: String,
+    limit: Option<u64>,
+    offset: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<CustomerHistoryDto, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+
+    let customer =
+        store
+            .get_customer(&customer_id)?
+            .ok_or_else(|| oz_core::error::CoreError::NotFound {
+                entity: "customer".into(),
+                id: customer_id.clone(),
+            })?;
+
+    let loyalty =
+        store
+            .get_loyalty_account(&customer_id)?
+            .map(|details| CustomerLoyaltySummaryDto {
+                points: details.account.points,
+                lifetime_points: details.account.lifetime_points,
+                tier_name: details.tier.map(|t| t.name),
+            });
+
+    let (sales, sales_total) =
+        store.list_sales_for_customer(&customer_id, limit.unwrap_or(20), offset.unwrap_or(0))?;
+
+    Ok(CustomerHistoryDto {
+        customer: CustomerDto::from(customer),
+        loyalty,
+        sales: sales
+            .into_iter()
+            .map(|s| CustomerSaleSummaryDto {
+                id: s.id,
+                total_minor: s.total.minor_units,
+                status: format!("{:?}", s.status),
+                line_count: s.line_count,
+                created_at: s.created_at,
+            })
+            .collect(),
+        sales_total,
+    })
+}
+
 /// Users and roles are global authentication records (ADR #4 / ADR #7);
 /// customer business data is read from the store-scoped connection after
 /// this check succeeds. Mirror of `require_tax_permission` in tax.rs.
@@ -793,5 +929,202 @@ mod tests {
         let args: UpdateCustomerScopedArgs = serde_json::from_str(json).unwrap();
         assert_eq!(args.id, "c1");
         assert_eq!(args.name, "Alice Updated");
+    }
+
+    // ── Search + history (CUST-05/CUST-06) ─────────────────────────
+
+    /// Seed a customer into the GLOBAL identity DB via its store db handle.
+    fn seed_customer_in_store(store_db: &rusqlite::Connection, id: &str, name: &str) {
+        store_db
+            .execute(
+                "INSERT INTO customers (id, name, notes, created_at, updated_at)
+                 VALUES (?1, ?2, '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                rusqlite::params![id, name],
+            )
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn search_customers_scoped_rejects_invalid_session() {
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test())
+            .build(tauri::generate_context!())
+            .unwrap();
+        let result = search_customers_scoped(
+            "missing-token".into(),
+            "Alice".into(),
+            None,
+            None,
+            app.state(),
+        )
+        .await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn search_customers_scoped_is_bounded_and_store_isolated() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        for (token, store_id) in [("store-a-token", "store-a"), ("store-b-token", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-owner".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Only store A has customers; store B must not see them.
+        {
+            let store_a = app
+                .state::<AppState>()
+                .db_manager
+                .open_store("store-a")
+                .unwrap();
+            let db = store_a.lock().unwrap();
+            seed_customer_in_store(&db, "cust-1", "Alice");
+            seed_customer_in_store(&db, "cust-2", "Alicia");
+            seed_customer_in_store(&db, "cust-3", "Bob");
+        }
+
+        let page_a = search_customers_scoped(
+            "store-a-token".into(),
+            "Ali".into(),
+            Some(50),
+            None,
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(page_a.total, 2, "server-side search finds 2 'Ali' matches");
+        assert_eq!(page_a.items.len(), 2);
+
+        let page_b = search_customers_scoped(
+            "store-b-token".into(),
+            "Ali".into(),
+            Some(50),
+            None,
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(page_b.total, 0, "store B must not see store A customers");
+    }
+
+    #[tokio::test]
+    async fn get_customer_history_scoped_returns_profile_loyalty_and_sales() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "store-a-token".into(),
+            SessionContext::new(
+                "user-owner".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                "store-a".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let store_a = app
+            .state::<AppState>()
+            .db_manager
+            .open_store("store-a")
+            .unwrap();
+        let db = store_a.lock().unwrap();
+        let store = Store::new(&db);
+        seed_customer_in_store(&db, "cust-1", "Alice");
+        // Loyalty account + one completed sale for the history view.
+        store.get_or_create_loyalty_account("cust-1").unwrap();
+        db.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('s-1', 2500, 'USD', 1, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 2500, 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+
+        let history = get_customer_history_scoped(
+            "store-a-token".into(),
+            "cust-1".into(),
+            None,
+            None,
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(history.customer.name, "Alice");
+        let loyalty = history.loyalty.expect("loyalty account was seeded");
+        assert_eq!(loyalty.points, 0);
+        assert_eq!(history.sales.len(), 1);
+        assert_eq!(history.sales[0].total_minor, 2500);
+        assert_eq!(history.sales_total, 1);
+    }
+
+    #[tokio::test]
+    async fn get_customer_history_scoped_unknown_customer_is_not_found() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "store-a-token".into(),
+            SessionContext::new(
+                "user-owner".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                "store-a".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = get_customer_history_scoped(
+            "store-a-token".into(),
+            "cust-missing".into(),
+            None,
+            None,
+            app.state(),
+        )
+        .await;
+        assert!(matches!(result, Err(AppError::Core { .. })));
     }
 }

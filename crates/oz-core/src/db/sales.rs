@@ -1073,6 +1073,79 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List sales for one customer (most recent first), without line items.
+    ///
+    /// CUST-05: powers the customer history view. The result is bounded and
+    /// sorted explicitly; the total count lets the caller paginate. Returns
+    /// an empty vector (and total 0) when the customer has no sales yet.
+    pub fn list_sales_for_customer(
+        &self,
+        customer_id: &str,
+        limit: u64,
+        offset: u64,
+    ) -> Result<(Vec<Sale>, u64), CoreError> {
+        let bounded = limit.clamp(1, 100);
+        let total: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sales WHERE customer_id = ?1",
+            params![customer_id],
+            |row| row.get(0),
+        )?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status,
+                    payment_method, tendered_minor, discount_percent, discount_label,
+                    user_id, created_at, updated_at,
+                    subtotal_minor, tax_total_minor, customer_id, version
+             FROM sales WHERE customer_id = ?1
+             ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(params![customer_id, bounded, offset], |row| {
+            let cur_str: String = row.get("currency")?;
+            let status_str: String = row.get("status")?;
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
+            let status = SaleStatus::from_stored_str(&status_str).unwrap_or(SaleStatus::Pending);
+            Ok(Sale {
+                id: row.get("id")?,
+                status,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency,
+                },
+                line_count: row.get("line_count")?,
+                currency,
+                payment_method: row.get("payment_method")?,
+                tendered_minor: row.get("tendered_minor")?,
+                discount_percent: row
+                    .get::<_, Option<i64>>("discount_percent")
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0),
+                discount_label: row.get("discount_label")?,
+                user_id: row.get("user_id")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+                lines: Vec::new(),
+                subtotal: Money {
+                    minor_units: row.get("subtotal_minor")?,
+                    currency,
+                },
+                tax_total: Money {
+                    minor_units: row.get("tax_total_minor")?,
+                    currency,
+                },
+                customer_id: row.get("customer_id")?,
+                version: row.get("version").unwrap_or(1),
+            })
+        })?;
+        let items = rows
+            .map(|r| Ok(r?))
+            .collect::<Result<Vec<_>, CoreError>>()?;
+        Ok((items, total))
+    }
+
     /// Look up a single sale by id, including all line items.
     pub fn get_sale(&self, id: &str) -> Result<Option<Sale>, CoreError> {
         let mut sale_stmt = self.conn.prepare(
@@ -3830,5 +3903,100 @@ mod tests {
             matches!(err, CoreError::NotFound { .. }),
             "expected NotFound for already-finalized sale, got: {err:?}"
         );
+    }
+
+    // ── Customer history (CUST-05) ─────────────────────────────────
+
+    fn seed_customer_row(conn: &rusqlite::Connection, id: &str) {
+        // INSERT OR IGNORE keeps repeated seeding of the same customer id
+        // idempotent (several sales can share one customer).
+        conn.execute(
+            "INSERT OR IGNORE INTO customers (id, name, created_at, updated_at)
+             VALUES (?1, ?2, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            rusqlite::params![id, format!("Customer {id}")],
+        )
+        .unwrap();
+    }
+
+    fn seed_sale_for_customer(
+        conn: &rusqlite::Connection,
+        id: &str,
+        customer_id: &str,
+        total_minor: i64,
+    ) {
+        seed_customer_row(conn, customer_id);
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES (?1, ?2, 'USD', 1, 'completed', ?3, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', ?2, 0)",
+            rusqlite::params![id, total_minor, customer_id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn list_sales_for_customer_returns_only_that_customers_sales() {
+        let conn = fresh();
+        seed_sale_for_customer(&conn, "s-1", "cust-1", 1000);
+        seed_sale_for_customer(&conn, "s-2", "cust-1", 2000);
+        seed_sale_for_customer(&conn, "s-3", "cust-2", 3000);
+
+        let (items, total) = store(&conn)
+            .list_sales_for_customer("cust-1", 100, 0)
+            .unwrap();
+        assert_eq!(total, 2);
+        assert_eq!(items.len(), 2);
+        assert!(
+            items
+                .iter()
+                .all(|s| s.customer_id.as_deref() == Some("cust-1"))
+        );
+    }
+
+    #[test]
+    fn list_sales_for_customer_orders_most_recent_first() {
+        let conn = fresh();
+        seed_customer_row(&conn, "cust-1");
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('s-old', 100, 'USD', 1, 'completed', 'cust-1', '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z', 100, 0),
+                    ('s-new', 200, 'USD', 1, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 200, 0)",
+            [],
+        )
+        .unwrap();
+
+        let (items, _) = store(&conn)
+            .list_sales_for_customer("cust-1", 100, 0)
+            .unwrap();
+        assert_eq!(items[0].id, "s-new");
+        assert_eq!(items[1].id, "s-old");
+    }
+
+    #[test]
+    fn list_sales_for_customer_paginates() {
+        let conn = fresh();
+        for i in 0..3 {
+            seed_sale_for_customer(&conn, &format!("s-{i}"), "cust-1", i);
+        }
+
+        let (page, total) = store(&conn)
+            .list_sales_for_customer("cust-1", 2, 0)
+            .unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(page.len(), 2);
+
+        let (rest, _) = store(&conn)
+            .list_sales_for_customer("cust-1", 2, 2)
+            .unwrap();
+        assert_eq!(rest.len(), 1);
+    }
+
+    #[test]
+    fn list_sales_for_customer_no_sales_returns_empty() {
+        let conn = fresh();
+        let (items, total) = store(&conn)
+            .list_sales_for_customer("cust-ghost", 100, 0)
+            .unwrap();
+        assert!(items.is_empty());
+        assert_eq!(total, 0);
     }
 }

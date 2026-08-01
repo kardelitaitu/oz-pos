@@ -36,6 +36,65 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// Search customers by name, email, or phone with a bounded page.
+    ///
+    /// CUST-06: keeps the PII surface delivered to the renderer bounded —
+    /// the query runs server-side with an explicit sort order and a caller-
+    /// supplied page size (clamped to `[1, 100]`). Returns the matching
+    /// rows plus the total match count for pagination.
+    pub fn search_customers(
+        &self,
+        query: &str,
+        limit: u64,
+        offset: u64,
+    ) -> Result<(Vec<Customer>, u64), CoreError> {
+        let trimmed = query.trim();
+        let bounded = limit.clamp(1, 100);
+        // Escape the LIKE wildcards so user input with literal % or _ does
+        // not broaden the match beyond intent (e.g. searching "50%" must not
+        // match every row).
+        let escaped = trimmed
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let pattern = format!("%{escaped}%");
+        // ESCAPE '\' so user input with literal % or _ does not broaden the
+        // match beyond intent.
+        let filter = "(name LIKE ?1 ESCAPE '\\' OR COALESCE(email, '') LIKE ?1 ESCAPE '\\' OR COALESCE(phone, '') LIKE ?1 ESCAPE '\\')";
+
+        let total: u64 = self.conn.query_row(
+            &format!("SELECT COUNT(*) FROM customers WHERE {filter}"),
+            params![pattern],
+            |row| row.get(0),
+        )?;
+
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT id, name, email, phone, loyalty_points, total_spent_minor, currency,
+                    notes, created_at, updated_at
+             FROM customers WHERE {filter} ORDER BY name LIMIT ?2 OFFSET ?3"
+        ))?;
+        let rows = stmt.query_map(params![pattern, bounded, offset], |row| {
+            let email_raw: Option<String> = row.get("email")?;
+            let phone_raw: Option<String> = row.get("phone")?;
+            Ok(Customer {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                email: email_raw.and_then(|s| Email::new(&s).ok()),
+                phone: phone_raw.and_then(|s| Phone::new(&s).ok()),
+                loyalty_points: row.get("loyalty_points")?,
+                total_spent_minor: row.get("total_spent_minor")?,
+                currency: row.get("currency")?,
+                notes: row.get("notes")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        let items = rows
+            .map(|r| Ok(r?))
+            .collect::<Result<Vec<_>, CoreError>>()?;
+        Ok((items, total))
+    }
+
     /// Look up a single customer by id.
     pub fn get_customer(&self, id: &str) -> Result<Option<Customer>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -387,5 +446,97 @@ mod tests {
         // Email::new("not-an-email") returns Err, so and_then returns None.
         assert!(c.email.is_none());
         assert_eq!(c.name, "Test");
+    }
+
+    // ── Search (CUST-06) ───────────────────────────────────────────
+
+    #[test]
+    fn search_customers_matches_name_email_and_phone() {
+        let conn = fresh();
+        seed_customers(&conn);
+
+        let (by_name, total) = store(&conn).search_customers("Alice", 100, 0).unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(by_name[0].id, "cust-1");
+
+        let (by_email, _) = store(&conn)
+            .search_customers("carol@example.com", 100, 0)
+            .unwrap();
+        assert_eq!(by_email.len(), 1);
+        assert_eq!(by_email[0].id, "cust-3");
+
+        let (by_phone, _) = store(&conn).search_customers("555-0102", 100, 0).unwrap();
+        assert_eq!(by_phone.len(), 1);
+        assert_eq!(by_phone[0].id, "cust-2");
+    }
+
+    #[test]
+    fn search_customers_is_bounded_and_paginated() {
+        let conn = fresh();
+        for i in 0..5 {
+            conn.execute(
+                "INSERT INTO customers (id, name, created_at, updated_at)
+                 VALUES (?1, ?2, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                params![format!("c-{i}"), format!("Person {i}")],
+            )
+            .unwrap();
+        }
+
+        let (page1, total) = store(&conn).search_customers("Person", 2, 0).unwrap();
+        assert_eq!(total, 5);
+        assert_eq!(page1.len(), 2);
+
+        let (page3, _) = store(&conn).search_customers("Person", 2, 4).unwrap();
+        assert_eq!(page3.len(), 1);
+
+        let (oversized, _) = store(&conn).search_customers("Person", 10_000, 0).unwrap();
+        assert!(oversized.len() <= 100, "limit must be clamped to 100");
+    }
+
+    #[test]
+    fn search_customers_literal_wildcards_are_escaped() {
+        let conn = fresh();
+        seed_customers(&conn);
+        conn.execute(
+            "INSERT INTO customers (id, name, created_at, updated_at)
+             VALUES ('c-pct', '100%', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        // Escaped: a bare % matches only rows with a literal %, never all.
+        let (items, total) = store(&conn).search_customers("%", 100, 0).unwrap();
+        assert_eq!(total, 1, "a bare % must not broaden to every row");
+        assert_eq!(items[0].id, "c-pct");
+
+        // Same for the single-char wildcard _: no customer name contains a
+        // literal underscore, so an escaped _ matches nothing (it must not
+        // broaden to match every row).
+        let (items, total) = store(&conn).search_customers("_", 100, 0).unwrap();
+        assert_eq!(total, 0, "a bare _ must not broaden to every row");
+        assert!(items.is_empty());
+
+        let (items, _) = store(&conn).search_customers("100%", 100, 0).unwrap();
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn search_customers_empty_query_returns_all_bounded() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let (items, total) = store(&conn).search_customers("", 100, 0).unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(items.len(), 3);
+    }
+
+    #[test]
+    fn search_customers_no_match_returns_empty() {
+        let conn = fresh();
+        seed_customers(&conn);
+        let (items, total) = store(&conn)
+            .search_customers("zzz-no-such", 100, 0)
+            .unwrap();
+        assert!(items.is_empty());
+        assert_eq!(total, 0);
     }
 }
