@@ -44,6 +44,112 @@ impl Store<'_> {
         })?;
         rows.map(|r| Ok(r?)).collect()
     }
+
+    /// List audit log entries with server-side filters and keyset pagination.
+    ///
+    /// AUD-02/AUD-03: filtering and review counts are computed in the database
+    /// (not over a loaded page), and paging uses a stable `(created_at, id)`
+    /// cursor so new rows inserted between requests cannot shift the page
+    /// boundary. Returns `(items, total_matching, has_more)`. The page size is
+    /// clamped to `[1, 200]` and one extra row is fetched to compute `has_more`
+    /// without an offset race.
+    pub fn list_audit_entries_filtered(
+        &self,
+        outcome: Option<&str>,
+        query: Option<&str>,
+        before_created_at: Option<&str>,
+        before_id: Option<&str>,
+        limit: u64,
+    ) -> Result<(Vec<AuditEntry>, u64, bool), CoreError> {
+        let bounded = limit.clamp(1, 200);
+
+        let mut where_clauses: Vec<String> = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        let mut idx = 1usize;
+
+        if let Some(outcome) = outcome {
+            let trimmed = outcome.trim();
+            if !trimmed.is_empty() {
+                where_clauses.push(format!("outcome = ?{idx}"));
+                params.push(Box::new(trimmed.to_string()));
+                idx += 1;
+            }
+        }
+
+        if let Some(query) = query {
+            let trimmed = query.trim();
+            if !trimmed.is_empty() {
+                // Escape LIKE wildcards so literal % or _ in the query does not
+                // broaden the match (mirrors `search_customers`).
+                let escaped = trimmed
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                let pattern = format!("%{escaped}%");
+                where_clauses.push(format!(
+                    "(action LIKE ?{idx} ESCAPE '\\' OR COALESCE(target_type, '') LIKE ?{idx} ESCAPE '\\' \
+                     OR COALESCE(target_id, '') LIKE ?{idx} ESCAPE '\\' OR user_id LIKE ?{idx} ESCAPE '\\')"
+                ));
+                params.push(Box::new(pattern));
+                idx += 1;
+            }
+        }
+
+        if let (Some(ct), Some(id)) = (before_created_at, before_id) {
+            where_clauses.push(format!(
+                "(created_at < ?{idx} OR (created_at = ?{idx} AND id < ?{}))",
+                idx + 1
+            ));
+            params.push(Box::new(ct.to_string()));
+            params.push(Box::new(id.to_string()));
+            idx += 2;
+        }
+
+        let where_sql = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", where_clauses.join(" AND "))
+        };
+
+        // Total matching rows (before the cursor) — powers the server-side
+        // "X of Y" count and the unreviewed badge.
+        let total: u64 = self.conn.query_row(
+            &format!("SELECT COUNT(*) FROM audit_log{where_sql}"),
+            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+            |row| row.get(0),
+        )?;
+
+        // Fetch one extra row to determine whether another page exists.
+        params.push(Box::new(bounded + 1));
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
+             FROM audit_log{where_sql} ORDER BY created_at DESC, id DESC LIMIT ?{idx}"
+        ))?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(
+            params.iter().map(|p| p.as_ref()),
+        ))?;
+        let mut items: Vec<AuditEntry> = Vec::new();
+        while let Some(row) = rows.next()? {
+            items.push(AuditEntry {
+                id: row.get("id")?,
+                user_id: row.get("user_id")?,
+                action: row.get("action")?,
+                target_type: row.get("target_type")?,
+                target_id: row.get("target_id")?,
+                details: row.get("details")?,
+                outcome: row.get("outcome")?,
+                created_at: row.get("created_at")?,
+            });
+            if items.len() as u64 > bounded {
+                break;
+            }
+        }
+        let has_more = items.len() as u64 > bounded;
+        if has_more {
+            items.truncate(bounded as usize);
+        }
+        Ok((items, total, has_more))
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────
@@ -440,5 +546,100 @@ mod tests {
             Some("oz-pos.settings.v3")
         );
         assert_eq!(entries[0].target_id.as_deref(), Some("workspace.123"));
+    }
+
+    // ── Filtered + keyset pagination (AUD-02/AUD-03) ──────────────
+
+    #[test]
+    fn filtered_entries_outcome_filter_matches_db_rows() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let (items, total, has_more) = store(&conn)
+            .list_audit_entries_filtered(Some("failure"), None, None, None, 50)
+            .unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].action, "user.login");
+        assert!(!has_more);
+    }
+
+    #[test]
+    fn filtered_entries_free_text_query_matches_action_and_target() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        // Query matches action (sale) — 2 rows.
+        let (items, total, _) = store(&conn)
+            .list_audit_entries_filtered(None, Some("sale"), None, None, 50)
+            .unwrap();
+        assert_eq!(total, 2);
+        assert_eq!(items.len(), 2);
+        // Query matches target_id (prod-1) — 1 row.
+        let (items, total, _) = store(&conn)
+            .list_audit_entries_filtered(None, Some("prod-1"), None, None, 50)
+            .unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(items[0].id, "aud-3");
+    }
+
+    #[test]
+    fn filtered_entries_wildcard_query_is_escaped() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.log_audit(&AuditEntry::new(
+            "user-1",
+            "bulk.import",
+            Some("product".to_string()),
+            Some("batch-50%".to_string()),
+            None::<String>,
+            "success",
+        ))
+        .unwrap();
+        // A bare '%' must not match every row — only literal-% rows.
+        let (items, total, _) = store(&conn)
+            .list_audit_entries_filtered(None, Some("%"), None, None, 50)
+            .unwrap();
+        assert_eq!(total, 1);
+        assert_eq!(items[0].target_id.as_deref(), Some("batch-50%"));
+    }
+
+    #[test]
+    fn filtered_entries_keyset_cursor_is_stable_and_excludes_prior_rows() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        // Page 1: most recent 2 (aud-4, aud-3).
+        let (page1, total1, has_more1) = store(&conn)
+            .list_audit_entries_filtered(None, None, None, None, 2)
+            .unwrap();
+        assert_eq!(total1, 4);
+        assert_eq!(page1.len(), 2);
+        assert_eq!(page1[0].id, "aud-4");
+        assert_eq!(page1[1].id, "aud-3");
+        assert!(has_more1);
+
+        // Page 2: continue strictly before (created_at, id) of last row.
+        let last = &page1[1];
+        let (page2, _, has_more2) = store(&conn)
+            .list_audit_entries_filtered(None, None, Some(&last.created_at), Some(&last.id), 2)
+            .unwrap();
+        assert_eq!(page2.len(), 2);
+        assert_eq!(page2[0].id, "aud-2");
+        assert_eq!(page2[1].id, "aud-1");
+        assert!(!has_more2);
+    }
+
+    #[test]
+    fn filtered_entries_limit_clamped_to_200() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let (items, total, _) = store(&conn)
+            .list_audit_entries_filtered(None, None, None, None, 10_000)
+            .unwrap();
+        assert_eq!(items.len(), 4);
+        assert_eq!(total, 4);
+        // 0 clamps to 1 and still returns a row.
+        let (items, _, _) = store(&conn)
+            .list_audit_entries_filtered(None, None, None, None, 0)
+            .unwrap();
+        assert_eq!(items.len(), 1);
     }
 }

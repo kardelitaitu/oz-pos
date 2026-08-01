@@ -205,6 +205,7 @@ pub fn run() {
             })
             .invoke_handler(tauri::generate_handler![
                 commands::audit::list_audit_log,
+                commands::audit::list_audit_log_scoped,
                 commands::auth::staff_login,
                 commands::auth::staff_check_username,
                 commands::auth::create_session,

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::db::Store;
+use oz_core::permissions;
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -62,10 +64,18 @@ fn default_limit() -> i64 {
     100
 }
 
+/// Default `limit` for the store-scoped args (unsigned page size).
+fn default_limit_u64() -> u64 {
+    100
+}
+
 /// Fetch audit log entries in reverse chronological order.
 ///
 /// Supports pagination via `limit` and `offset`. Returns an array of
 /// [`AuditEntryDto`] with action, target, outcome, and timestamp.
+///
+/// **Deprecated for multi-store UI paths (ADR #7):** Use
+/// [`list_audit_log_scoped`] so the session selects the store and user.
 #[command]
 pub async fn list_audit_log(
     args: ListAuditLogArgs,
@@ -76,6 +86,81 @@ pub async fn list_audit_log(
     let entries = store.list_audit_entries(args.limit, args.offset)?;
     drop(db);
     Ok(entries.into_iter().map(AuditEntryDto::from).collect())
+}
+
+// ── Store-scoped audit log (AUD-01/AUD-02/AUD-03) ───────────────
+
+/// Server-filtered, keyset-paginated page of audit entries (AUD-02/AUD-03).
+#[derive(Debug, Serialize)]
+pub struct AuditLogPageDto {
+    /// Entries on this page (most recent first).
+    pub items: Vec<AuditEntryDto>,
+    /// Total matching rows across all pages.
+    pub total: u64,
+    /// Whether another page follows the cursor.
+    pub has_more: bool,
+}
+
+/// Arguments for the store-scoped audit log query.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAuditLogScopedArgs {
+    /// Maximum entries per page (clamped to `[1, 200]` server-side).
+    #[serde(default = "default_limit_u64")]
+    pub limit: u64,
+    /// Optional outcome filter (`success` | `failure` | anything).
+    pub outcome: Option<String>,
+    /// Optional free-text query over action/target/user.
+    pub query: Option<String>,
+    /// Keyset cursor: fetch entries strictly older than `(created_at, id)`.
+    pub before_created_at: Option<String>,
+    pub before_id: Option<String>,
+}
+
+/// Fetch audit log entries scoped to the session's store (AUD-01).
+///
+/// Resolves the store and authenticated user from the session token,
+/// enforces `audit:view`, and reads the session store's audit table — so a
+/// multi-store deployment cannot disclose another store's events. Filtering
+/// and pagination run server-side with a stable `(created_at, id)` cursor
+/// (AUD-02/AUD-03).
+#[command]
+pub async fn list_audit_log_scoped(
+    session_token: String,
+    args: ListAuditLogScopedArgs,
+    state: State<'_, AppState>,
+) -> Result<AuditLogPageDto, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_audit_permission(&state, &session.user_id, permissions::AUDIT_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let (items, total, has_more) = store.list_audit_entries_filtered(
+        args.outcome.as_deref(),
+        args.query.as_deref(),
+        args.before_created_at.as_deref(),
+        args.before_id.as_deref(),
+        args.limit,
+    )?;
+    Ok(AuditLogPageDto {
+        items: items.into_iter().map(AuditEntryDto::from).collect(),
+        total,
+        has_more,
+    })
+}
+
+/// Users and roles are global authentication records (ADR #4 / ADR #7);
+/// audit events are read from the store-scoped connection after this check
+/// succeeds. Mirror of `require_customer_permission` in customers.rs.
+async fn require_audit_permission(
+    state: &AppState,
+    user_id: &str,
+    permission: &str,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, user_id, permission)
 }
 
 #[cfg(test)]
