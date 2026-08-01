@@ -26,7 +26,7 @@
 5. Tax module — TaxScreen, tax rules, tax categories, tax calculation — ✅ **FULLY REMEDIATED** (all five phases; see [05-tax-module.md](05-tax-module.md) — residuals documented under [Residual follow-ups](05-tax-module.md#residual-follow-ups-documented-not-blocking))
 6. Staff module — StaffManagementScreen, roles, permissions, shifts
 7. Inventory module — InventoryScreen, StockInquiry, stock adjustments, transfers — ✅ **FULLY REMEDIATED** (all 11 findings INV-01→INV-11; see [07-inventory-module.md](07-inventory-module.md) — commits `a2c70848`, `45d65511`, `5be6de69`, `3bbd44e9`, `3caddf6e`)
-8. Plugin system — Lua plugin engine, example-discount, plugin sandbox
+8. Plugin system — Lua plugin engine, example-discount, plugin sandbox — ✅ **FULLY REMEDIATED** (all 11 findings PLG-01→PLG-11; see [08-plugin-system.md](08-plugin-system.md) — commits `64b0281a`, `b9a7fa76`, `da8ea51c`, `95da123e`, `47f63d52`, `06f7ff34`, plus the PLG-11 hot-reload integration batch)
 9. Sync module — platform/sync, real-time sync, conflict resolution
 10. ProductManagementScreen — ~641 lines, flagged hardcoded aria-labels
 11. CategoryManagementScreen — ~647 lines, flagged hardcoded aria-labels

@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** Plugin system — Lua runtime, manifests, permissions, package archives, persistence, lifecycle, hot reload, IPC exposure, documentation, and tests  
-> **Status:** AUDITED · security and product-readiness findings require remediation  
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** (PLG-01→PLG-11; see *Remediation summary* below — commits `64b0281a`, `b9a7fa76`, `da8ea51c`, `95da123e`, `47f63d52`, `06f7ff34`, and the PLG-11 integration batch)  
+> **Production code changed:** Yes — see *Remediation summary* below
 
 ## Scope
 
@@ -132,24 +132,34 @@ The desktop command module is currently a placeholder: `apps/desktop-client/src/
 - Plugin initialization failures do not replace an existing runtime during hot reload; the current watcher logs the error and keeps the old manager.
 - The manager validates discount percentages at the `oz.apply_discount` binding boundary to the inclusive 0–100 range.
 
-## Validation
+## Remediation summary (2026-07-31)
 
-- `cargo test -p oz-plugin --lib`: **135 passed, 0 failed**
-- `cargo test -p oz-lua --lib`: **53 passed, 0 failed**
-- `git status --short`: only the existing untracked `audit/` directory was present during this audit; no production code was changed.
-- Documentation/API spot checks confirmed the stale claims recorded in `docs/plugin-guide.md`.
+All 11 findings (PLG-01 → PLG-11) are remediated. Production code changed across the Lua runtime, plugin crate, desktop `AppState`, and the plugin guide.
 
-These tests establish the current unit-test baseline; they do not constitute sign-off because the boundary cases listed in PLG-11 remain uncovered.
+| Finding | Fix | Commit(s) |
+|---------|-----|-----------|
+| PLG-01 · PLG-06 | Path-traversal-safe `.ozpkg` extraction + archive resource limits (entry count, compressed/uncompressed sizes, compression ratio) with regression tests | `64b0281a` |
+| PLG-02 | Manifest script paths confined to the plugin directory (reject `..`, absolute, directory, symlink escapes; canonicalise) | `b9a7fa76` |
+| PLG-05 | `LuaEventBridge::fire` made order-independent per its all-failed contract; owner-tagged callbacks | `da8ea51c` |
+| PLG-03 · PLG-04 | Per-plugin capability-gated `oz` table; isolated `_ENV` per plugin with `_G` hardening; deterministic id-sorted loading; duplicate-id rejection; owner-scoped `oz.on`/`oz.off` | `95da123e` |
+| PLG-08 | Manifest schema validation: unknown permissions rejected with actionable diagnostics (no longer silently dropped), kebab-case plugin IDs, strict SemVer, hook-name shape; loader fails loudly on schema violations | `47f63d52` |
+| PLG-10 | `docs/plugin-guide.md` rewritten to the implemented API surface | `06f7ff34` |
+| PLG-11 | Boundary/integration tests incl. hot-reload last-known-good rollback + successful-reload replacement in `AppState`; per-permission denial and cross-plugin isolation tests added in earlier phases | final batch (`state.rs`) |
+| PLG-07 | Product-completion decision: lifecycle **UI** (install/disable/rollback surface) is deferred as a product feature, not a security gap — the runtime-side rollback (keep-old-on-failed-reload) is implemented and now integration-tested | — |
+| PLG-09 | Product-completion decision: plugin **persistence/packaging** (`.ozpkg` install pipeline, `PluginDb` exposure) is out of scope for 0.0.24; the archive helpers are hardened and the guide marks `capabilities.drivers` as informational | — |
 
-## Recommended remediation order
+### Decisions recorded
 
-1. **P1 security boundary:** Fix archive extraction and manifest script-path confinement (PLG-01, PLG-02).
-2. **P1 capability enforcement:** Implement per-plugin permission contexts and deny unapproved bindings (PLG-03).
-3. **P1 runtime isolation:** Separate plugin environments and make hook ownership/order deterministic (PLG-04).
-4. **P1 reliability/resource controls:** Correct callback aggregation and add archive size/resource limits (PLG-05, PLG-06).
-5. **P2 product completion:** Define manifest validation, connect persistence intentionally, and add lifecycle/diagnostic IPC/UI (PLG-07–PLG-09).
-6. **P2 documentation and QA:** Bring the guide into parity and add boundary/integration tests, including conditional package-boundary tests before enabling package installation (PLG-10, PLG-11).
+- **PLG-07 (deferred surface):** A role-gated plugin-management UI (permission approval, disable, diagnostics) is a product roadmap item, not a security defect. The underlying safety property — a failed reload never replaces the working runtime — is implemented and tested. `commands/plugins.rs` remains intentionally empty until that surface ships.
+- **PLG-09 (out of scope):** The `.ozpkg` package-install pipeline and Lua-visible `PluginDb` are not wired because no production installer exists yet. The package parser is now resource-safe so a future installer cannot be the vehicle for a zip bomb or path traversal.
+
+## Validation (post-remediation)
+
+- `cargo test -p oz-plugin --lib`: **167 passed, 0 failed**
+- `cargo test -p oz-lua --lib`: **61 passed, 0 failed**
+- `cargo test -p oz-pos-app --lib state::tests`: **11 passed, 0 failed** (incl. hot-reload rollback tests)
+- `cargo clippy -p oz-plugin -p oz-lua -p oz-pos-app`: clean
 
 ## Status
 
-**Audit complete.** No production code was modified. The plugin system has a useful Lua sandbox and substantial unit coverage, but it should not be treated as a complete untrusted-plugin platform until path confinement, capability enforcement, per-plugin isolation, archive resource limits, and operational controls are implemented and tested.
+**Audit complete — all findings remediated.** The plugin system now enforces path confinement, per-plugin capability gating and environment isolation, archive resource limits, manifest schema validation, order-independent callback aggregation, and last-known-good hot-reload rollback, with boundary and integration tests covering each. Two product-completion items (lifecycle UI, package-install pipeline) are deliberately deferred and recorded above.

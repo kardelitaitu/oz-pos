@@ -39,7 +39,7 @@ findings: unsafe env::set_var removed; terminal_id typed field added; Drop bound
 //! `std::sync::Mutex`, document why in the field's doc comment.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -522,24 +522,34 @@ fn start_plugin_watcher(
             tokio::time::sleep(Duration::from_secs(1)).await;
             if reload_flag.swap(false, Ordering::SeqCst) {
                 tracing::info!("plugin change detected, hot-reloading…");
-                let mut guard = plugins.lock().await;
-                match PluginManager::new(&plugins_dir) {
-                    Ok(pm) => {
-                        *guard = Some(pm);
-                        tracing::info!("plugins hot-reloaded successfully");
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
-                            "failed to hot-reload plugins, keeping old runtime"
-                        );
-                    }
-                }
+                reload_plugins(&plugins, &plugins_dir).await;
             }
         }
     });
 
     (Some(watcher), Some(handle))
+}
+
+/// Rebuild the plugin manager from `plugins_dir`, replacing the shared
+/// handle only on success.
+///
+/// Last-known-good rollback (PLG-07): if the reload fails (invalid manifest,
+/// unsafe script path, etc.) the previous runtime is kept untouched so a
+/// broken edit can never take the plugin subsystem down.
+async fn reload_plugins(plugins: &Arc<Mutex<Option<PluginManager>>>, plugins_dir: &Path) {
+    let mut guard = plugins.lock().await;
+    match PluginManager::new(plugins_dir) {
+        Ok(pm) => {
+            *guard = Some(pm);
+            tracing::info!("plugins hot-reloaded successfully");
+        }
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                "failed to hot-reload plugins, keeping old runtime"
+            );
+        }
+    }
 }
 
 fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -834,5 +844,84 @@ mod tests {
         assert!(state.app.is_none());
         assert!(state.plugin_watcher.is_none());
         assert!(state.plugin_hot_reload_task.is_none());
+    }
+
+    // ── PLG-11: hot-reload last-known-good rollback ────────────────────
+
+    /// Write a minimal valid plugin directory for integration tests.
+    fn write_plugin_dir(root: &Path, script: &str) {
+        let plugin_dir = root.join("test-plugin");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(
+            plugin_dir.join("plugin.toml"),
+            r#"[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[capabilities]
+scripts = ["main.lua"]
+
+[permissions]
+required_permissions = ["cart:read", "cart:write"]
+"#,
+        )
+        .unwrap();
+        std::fs::write(plugin_dir.join("main.lua"), script).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reload_plugins_keeps_old_runtime_on_failed_reload() {
+        // A valid plugin that queues a discount at load time.
+        let tmp = tempfile::tempdir().unwrap();
+        write_plugin_dir(tmp.path(), "oz.apply_discount(\"cart\", 10)\n");
+
+        let plugins: Arc<Mutex<Option<PluginManager>>> =
+            Arc::new(Mutex::new(Some(PluginManager::new(tmp.path()).unwrap())));
+
+        // Corrupt the manifest: the reload must fail and KEEP the old runtime.
+        std::fs::write(
+            tmp.path().join("test-plugin/plugin.toml"),
+            "[plugin]\nname = \"broken",
+        )
+        .unwrap();
+        reload_plugins(&plugins, tmp.path()).await;
+
+        let guard = plugins.lock().await;
+        assert!(
+            guard.is_some(),
+            "failed reload must keep the last-known-good runtime"
+        );
+        // The old runtime is still live: its plugin's discount (queued at
+        // initial load) is still drainable.
+        let d = guard.as_ref().unwrap().drain_pending_discounts();
+        assert_eq!(d.len(), 1, "old runtime must stay live after failed reload");
+    }
+
+    #[tokio::test]
+    async fn reload_plugins_replaces_runtime_on_success() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_plugin_dir(tmp.path(), "oz.apply_discount(\"cart\", 10)\n");
+
+        let plugins: Arc<Mutex<Option<PluginManager>>> =
+            Arc::new(Mutex::new(Some(PluginManager::new(tmp.path()).unwrap())));
+
+        // Change the script so a fresh runtime queues a different discount.
+        std::fs::write(
+            tmp.path().join("test-plugin/main.lua"),
+            "oz.apply_discount(\"cart\", 20)\n",
+        )
+        .unwrap();
+        reload_plugins(&plugins, tmp.path()).await;
+
+        let guard = plugins.lock().await;
+        let mgr = guard
+            .as_ref()
+            .expect("successful reload must set a runtime");
+        let d = mgr.drain_pending_discounts();
+        assert_eq!(d.len(), 1);
+        assert_eq!(
+            d[0].percent, 20,
+            "successful reload must pick up the change"
+        );
     }
 }
