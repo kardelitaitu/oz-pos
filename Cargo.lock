@@ -4225,6 +4225,7 @@ dependencies = [
  "oz-lua",
  "regex",
  "rusqlite",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",

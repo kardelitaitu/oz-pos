@@ -134,6 +134,9 @@ pub fn load_plugins(plugins_dir: &Path) -> Result<PluginRegistry, PluginError> {
                     registry.plugins.push(plugin);
                 }
                 Err(e) => {
+                    // Unsafe script path (PLG-02): reject just this plugin but
+                    // keep the rest of the registry — the plugin is skipped
+                    // loudly in the log rather than loaded unsafely.
                     tracing::warn!(
                         dir = %path.display(),
                         error = %e,
@@ -142,7 +145,10 @@ pub fn load_plugins(plugins_dir: &Path) -> Result<PluginRegistry, PluginError> {
                 }
             },
             Err(e) => {
-                tracing::warn!(dir = %path.display(), error = %e, "failed to load plugin");
+                // Manifest schema violation (PLG-08): fail loudly instead of
+                // silently skipping — a typo'd manifest must never appear as
+                // "loaded and doing nothing".
+                return Err(e);
             }
         }
     }

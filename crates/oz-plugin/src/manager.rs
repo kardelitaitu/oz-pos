@@ -671,7 +671,7 @@ required_permissions = ["cart:read"]
     }
 
     #[test]
-    fn plugin_with_unknown_permission_silently_ignored() {
+    fn plugin_with_unknown_permission_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let plugin_dir = dir.path().join("unknown-perm");
         std::fs::create_dir(&plugin_dir).unwrap();
@@ -686,13 +686,14 @@ required_permissions = ["cart:read", "super:admin"]
 "#,
         )
         .unwrap();
-        // "super:admin" is unrecognised — silently ignored for forward compat.
-        // "cart:read" is valid, so this plugin should load.
-        let result = PluginManager::new(dir.path());
+        // "super:admin" is unrecognised — PLG-08 rejects unknown permissions
+        // with an actionable diagnostic instead of silently dropping them.
+        let err = PluginManager::new(dir.path()).unwrap_err();
         assert!(
-            result.is_ok(),
-            "unknown permission should be silently ignored (forward compat)"
+            err.to_string().contains("unknown permission"),
+            "expected actionable rejection, got: {err}"
         );
+        assert!(err.to_string().contains("super:admin"));
     }
 
     #[test]
