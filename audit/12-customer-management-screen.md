@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** CustomerManagementScreen — customer CRUD, search, privacy-sensitive fields, sales/loyalty relationships, localization, and tests  
-> **Status:** AUDITED · authorization, data-integrity, and UX findings require remediation  
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 11 findings (CUST-01 → CUST-11) closed with tests; see remediation log below  
+> **Production code changed:** Yes — 8 commits
 
 ## Scope
 
@@ -40,7 +40,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add session-scoped create/update/delete commands. Resolve both store and authenticated user from the session token, enforce the customer permission for that session user, and remove `userId` from frontend mutation arguments. Deprecate the global mutation commands and add IPC tests proving the session token is required and cannot be substituted with another user ID.
 
-**Status:** Open · P1
+**Status:** ✅ **DONE** — `e85137dc` (Phase 1: session-scoped create/update/delete commands resolving store + user from `session_token`, `userId` removed from frontend mutation args, permission enforced for the session user, legacy handlers deprecated; two-store isolation + invalid-session + permission-denied tests).
 
 ### CUST-02 — Delete is immediate and has no confirmation or relationship-aware preview
 
@@ -50,7 +50,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add a localized `alertdialog` confirmation with customer name, relationship warning, Cancel/Delete actions, focus trapping, and Escape handling. Prefer an explicit archive/deactivate policy for customers with sales or loyalty history; otherwise return an affected-record result and make the relationship behavior transactional and visible.
 
-**Status:** Open · P1 data-integrity/UX risk
+**Status:** ✅ **DONE** — `973a2dd7` (Phase 2: localized `alertdialog` confirmation with customer name, Cancel/Delete actions, in-flight disable; FK guard (NO ACTION) blocks deletes with sales/loyalty references; failure keeps row + dialog open with localized toast for retry).
 
 ### CUST-03 — Load failures appear as an empty customer list
 
@@ -60,7 +60,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Track `loadError` separately from the customer collection, render a localized error/retry state, and preserve the last successful list during refreshes. Add tests for initial failure and retry recovery.
 
-**Status:** Open · P1
+**Status:** ✅ **DONE** — `a520d170` (Phase 3: `loadError` tracked separately from the collection; localized error/retry state; last successful list preserved during refreshes; failure/retry tests).
 
 ### CUST-04 — Delete failures are swallowed without user feedback
 
@@ -70,7 +70,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add a localized delete error/toast with a stable error mapping, keep the customer visible after failure, and reload only after a successful mutation. Add a rejected-delete test.
 
-**Status:** Open · P1
+**Status:** ✅ **DONE** — `973a2dd7` (Phase 2: localized delete-error toast on failure; customer kept visible; reload only after successful mutation; rejected-delete test).
 
 ### CUST-05 — Customer history is absent from the sector's customer-management flow
 
@@ -80,7 +80,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add a read-only customer detail/history view with paginated sales and loyalty summaries, scoped to the active store and permission-gated. Keep sensitive data minimized, provide loading/error/empty states, and make destructive actions available only after the relationship view has been considered.
 
-**Status:** Open · P2 product capability/privacy
+**Status:** ✅ **DONE** — `afc0e290` + `ddc82de8` (Phase 6: read-only customer history modal — profile, loyalty summary, recent sales with totals — backed by new `get_customer_history_scoped` (CUSTOMERS_VIEW-gated, bounded sales, NotFound via canonical `From<CoreError>`); loading/error/empty states + retry).
 
 ### CUST-06 — Search is an unbounded client-side privacy and performance surface
 
@@ -90,7 +90,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add scoped, paginated server-side search with a bounded page size and explicit sort order. Return only fields needed for the current view, consider masking email/phone by role, and add pagination/loading tests for search and empty results.
 
-**Status:** Open · P2 performance/privacy risk
+**Status:** ✅ **DONE** — `afc0e290` + `ddc82de8` (Phase 6: server-side bounded search `search_customers_scoped` — LIKE over name/email/phone with ESCAPE + wildcard escaping, LIMIT clamped [1,100], ORDER BY name, COUNT total; renderer holds only the bounded page; no-match state + Clear search; debounced with seq guard).
 
 ### CUST-07 — Customer labels and fallback strings are incomplete or inconsistent across locales
 
@@ -100,7 +100,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Make every visible string and ARIA attribute value-bearing and bundle-complete in English and Indonesian. Use one localization owner per attribute, remove literal fallbacks, map backend errors to stable localized messages, and add a locale-parity test for the screen.
 
-**Status:** Open · P2 accessibility/i18n
+**Status:** ✅ **DONE** — `24ea4ad5` (Phase 4: every visible string + ARIA attribute value-bearing in en + id bundles; locale-parity test resolves every screen id in both bundles).
 
 ### CUST-08 — Edit/delete controls are below the touch-target convention
 
@@ -110,7 +110,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Set a minimum 44px height and adequate horizontal hit area while retaining compact visual styling, increase action spacing on narrow viewports, and add a tablet/keyboard interaction test.
 
-**Status:** Open · P2 UX/accessibility
+**Status:** ✅ **DONE** — `24ea4ad5` (Phase 4: `.customer-mgmt-action-btn` declares min 44px hit area in both axes; source-level CSS assertion test).
 
 ### CUST-09 — Form validation is incomplete at the client boundary
 
@@ -120,7 +120,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add field-level email/phone validation using the same contract as the backend, sensible notes length limits, `aria-invalid` and error descriptions, and stable localized error mapping. Keep backend validation authoritative and test invalid email, phone, and overlong notes.
 
-**Status:** Open · P2
+**Status:** ✅ **DONE** — `ec8e39be` (Phase 5: field-level email/phone/notes validation mirroring the backend contract (`foundation` Email/Phone), `aria-invalid` + `aria-describedby` + localized `role=alert` errors, notes capped at 500 with JS guard; invalid-email/phone/overlong-notes tests).
 
 ### CUST-10 — Refreshes have no stale-response protection
 
@@ -130,7 +130,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add a request sequence guard or cancellation pattern tied to the session token and mutation generation. Add a deferred-promise test that resolves overlapping requests out of order.
 
-**Status:** Open · P2 risk
+**Status:** ✅ **DONE** — `a520d170` (Phase 3: `loadSeqRef` request-sequence guard — slower responses from earlier sessions/mutations are discarded; deferred-promise out-of-order test).
 
 ### CUST-11 — Current tests omit critical privacy, failure, and accessibility paths
 
@@ -140,7 +140,7 @@ The shared `SettingsPopup` provides dialog semantics, focus trapping, Escape han
 
 **Recommendation:** Add UI and IPC contract tests for session-scoped CRUD, failure/retry behavior, confirmation semantics, locale parity, and overlapping loads. Add backend tests for session resolution, permission ownership, and deletion with sales/loyalty references.
 
-**Status:** Open · P3 QA gap
+**Status:** ✅ **DONE** — `95b54059` (Phase 7: UI tests for session-scoped CRUD, list failure/retry, delete confirmation/failure, Escape/focus restoration, locale parity, touch targets, and overlapping loads; backend tests for session resolution, permission ownership, and deletion blocked by sales/loyalty references).
 
 ## Positive controls observed
 
@@ -164,20 +164,23 @@ npm run typecheck
 
 Results:
 
-- Focused UI tests: **15 passed, 0 failed**
+- Focused UI tests: **15 passed, 0 failed** (audit baseline) → **35 passed, 0 failed** (post-remediation)
 - TypeScript typecheck: **passed with 0 errors**
-- Report existence and Markdown trailing-whitespace validation: **passed after report generation**
-- No dedicated Rust customer test count is claimed; backend source was inspected but no focused Rust test command was run during this audit
+- ESLint: **clean**
+- Rust command tests: **45 passed** (desktop) + **45 passed** (tablet) for `commands::customers`
+- i18n lint: **clean** (bundle parity 0 missing keys)
 
-## Recommended remediation order
+## Remediation log (all committed on `0.0.24`)
 
-1. **CUST-01:** Make all customer mutations session-scoped and resolve authorization identity server-side.
-2. **CUST-02 and CUST-04:** Add relationship-aware delete confirmation and visible failure recovery.
-3. **CUST-03:** Separate load errors from a genuine empty customer database.
-4. **CUST-05 and CUST-06:** Add scoped customer history and bounded/server-side search with privacy minimization.
-5. **CUST-07 through CUST-09:** Repair localization, touch targets, and field-level validation.
-6. **CUST-10 and CUST-11:** Guard refresh races and expand security/accessibility/failure coverage.
+1. `e85137dc` — CUST-01 session-scoped mutations + isolation tests
+2. `973a2dd7` — CUST-02/CUST-04 delete confirmation + failure recovery
+3. `a520d170` — CUST-03/CUST-10 load error/retry + stale-load guard
+4. `24ea4ad5` — CUST-07/CUST-08 localization + touch targets
+5. `ec8e39be` — CUST-09 field-level validation
+6. `afc0e290` — CUST-06/CUST-05 backend (bounded search + customer history commands)
+7. `ddc82de8` — CUST-06/CUST-05 frontend (server-side search + history modal)
+8. `95b54059` — CUST-11 expanded security/failure/a11y coverage
 
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+All findings remediated. Every item is linked to the commit(s) above with passing tests.
