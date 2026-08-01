@@ -78,6 +78,25 @@
   margin: 0;
 }
 
+/* Durable product-load error (INV-08) — persistent alert with retry. */
+.inv-adjust-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-xl);
+  background: var(--color-danger-bg);
+  margin-top: var(--space-3);
+}
+
+.inv-adjust-load-error-text {
+  margin: 0;
+  color: var(--color-danger-fg, var(--color-danger));
+  font-size: var(--text-sm);
+}
+
 /* ── Product list ─────────────────────────────────────────────────── */
 
 .inv-adjust-product-list {

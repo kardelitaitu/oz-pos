@@ -248,4 +248,42 @@ describe('LocationPicker', () => {
     }, { timeout: 5000 });
     expect(screen.queryByRole('button', { name: /select inventory location/i })).not.toBeInTheDocument();
   });
+
+  // ── Durable error state (INV-08) ───────────────────────────────
+
+  it('shows a persistent error with retry when the locations fetch fails', async () => {
+    mockListLocations.mockRejectedValue(new Error('boom'));
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
+    );
+
+    // The error message (loc-picker-error-load = "Failed to load locations")
+    // must render persistently instead of silently returning null.
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.getByText('Failed to load locations')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('recovers when Retry succeeds after a failed load', async () => {
+    const user = userEvent.setup();
+    mockListLocations.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(mockLocations);
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /select inventory location/i })).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

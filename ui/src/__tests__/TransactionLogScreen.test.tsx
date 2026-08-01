@@ -239,6 +239,43 @@ describe('TransactionLogScreen', () => {
     });
   });
 
+  // ── Durable load error (INV-08) ────────────────────────────────
+
+  it('shows a persistent error with retry when the initial load fails', async () => {
+    mockListTransactions.mockRejectedValue(new Error('boom'));
+    mockListLocations.mockRejectedValue(new Error('boom'));
+    await renderPage();
+
+    await waitFor(() => {
+      expect(document.querySelector('.log-error')).toBeInTheDocument();
+    });
+    expect(document.querySelector('.log-error')!.textContent).toContain('boom');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('recovers when Retry succeeds after a failed initial load', async () => {
+    mockListTransactions
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce([
+        tx({ id: 'tx-1', type: 'sale', created_at: '2026-07-19T10:00:00.000Z' }),
+      ]);
+    mockListLocations
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce([loc({ id: 'loc-main', name: 'Main Store' })]);
+    await renderPage();
+
+    await waitFor(() => {
+      expect(document.querySelector('.log-error')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(document.querySelector('.log-error')).not.toBeInTheDocument();
+    });
+    expect(document.querySelectorAll('.log-row-expandable').length).toBe(1);
+  });
+
   // ── Row count with no results ───────────────────────────────────
 
   it('shows empty table when no transactions match filters', async () => {

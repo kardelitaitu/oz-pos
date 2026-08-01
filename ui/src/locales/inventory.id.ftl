@@ -205,6 +205,7 @@ inv-alert-error-ack = Gagal menanggapi
 loc-picker-label = Lokasi
 loc-picker-trigger-aria = Pilih lokasi inventaris. Saat ini: { $name }
 loc-picker-listbox-aria = Lokasi inventaris
+loc-picker-error-load = Gagal memuat lokasi
 
 # ── Table Management ──
 

@@ -28,11 +28,14 @@ const LocationPicker = memo(function LocationPicker({
 }: LocationPickerProps) {
   const { sessionToken } = useWorkspace();
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
   const token = sessionToken ?? '';
 
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   // ── Load locations ────────────────────────────────────────────────
@@ -42,15 +45,19 @@ const LocationPicker = memo(function LocationPicker({
       setLoading(false);
       return;
     }
+    setLoading(true);
+    setLoadError(null);
     try {
       const data = await listInventoryLocations(token);
       setLocations(data.filter((loc) => loc.is_active));
     } catch {
-      // silently fail
+      // Durable error state (INV-08): surface a retry affordance instead
+      // of silently rendering nothing when the locations fetch fails.
+      setLoadError(requiredLocalized(l10nRef.current, 'loc-picker-error-load'));
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     load();
@@ -102,7 +109,25 @@ const LocationPicker = memo(function LocationPicker({
 
   // ── Render ─────────────────────────────────────────────────────
 
-  if (loading || locations.length === 0) return null;
+  if (loading) return null;
+
+  if (loadError) {
+    return (
+      <div className="location-picker location-picker-error" role="alert">
+        <span className="location-picker-error-text">{loadError}</span>
+        <button
+          type="button"
+          className="location-picker-retry"
+          onClick={load}
+          aria-label={requiredLocalized(l10n, 'retry')}
+        >
+          {requiredLocalized(l10n, 'retry')}
+        </button>
+      </div>
+    );
+  }
+
+  if (locations.length === 0) return null;
 
   return (
     <div className="location-picker" ref={ref}>

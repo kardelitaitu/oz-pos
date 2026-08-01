@@ -183,4 +183,5 @@ inv-alert-error-ack = Failed to acknowledge
 loc-picker-label = Location
 loc-picker-trigger-aria = Select inventory location. Current: { $name }
 loc-picker-listbox-aria = Inventory locations
+loc-picker-error-load = Failed to load locations
 

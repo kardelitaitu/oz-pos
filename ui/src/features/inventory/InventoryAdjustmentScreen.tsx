@@ -31,6 +31,7 @@ const ADJUSTMENT_REASONS = [
 export default function InventoryAdjustmentScreen() {
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Form state
   const [selectedSku, setSelectedSku] = useState('');
@@ -56,11 +57,16 @@ export default function InventoryAdjustmentScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await listProducts();
       if (mountedRef.current) setProducts(data);
     } catch {
       if (mountedRef.current) {
+        // Durable error state (INV-08): the product search area previously
+        // looked like a usable empty screen after a silent toast. Now it
+        // shows a persistent alert with a retry button.
+        setLoadError(requiredLocalized(l10n, 'inv-error-load'));
         addToast({ message: requiredLocalized(l10n, 'inv-error-load'), type: 'error' });
       }
     } finally {
@@ -240,7 +246,14 @@ export default function InventoryAdjustmentScreen() {
               </Localized>
             </div>
 
-            {loading ? (
+            {loadError ? (
+              <div className="inv-adjust-load-error" role="alert">
+                <p className="inv-adjust-load-error-text">{loadError}</p>
+                <Button variant="secondary" size="sm" onClick={load}>
+                  <Localized id="retry"><span>Retry</span></Localized>
+                </Button>
+              </div>
+            ) : loading ? (
               <div className="inv-adjust-loading-skeleton" aria-hidden="true">
                 {[0, 1, 2, 3, 4].map((i) => (
                   <div key={i} className="inv-adjust-product-item">

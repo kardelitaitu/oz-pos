@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
@@ -24,6 +24,7 @@ export default function TransactionLogScreen() {
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Expanded row tracking
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
@@ -37,21 +38,31 @@ export default function TransactionLogScreen() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  useEffect(() => {
+  // Durable load with retry (INV-08): the initial failure previously only
+  // surfaced a transient toast. Now a persistent error block with a Retry
+  // button renders in place of the table until the reload succeeds.
+  const load = useCallback(async () => {
     if (!sessionToken) return;
-
     setLoading(true);
-    Promise.all([
-      listInventoryTransactions(sessionToken),
-      listInventoryLocations(sessionToken),
-    ])
-      .then(([txs, locs]) => {
-        setTransactions(txs);
-        setLocations(locs);
-      })
-      .catch((err) => addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-log-error-load')), type: 'error' }))
-      .finally(() => setLoading(false));
+    setLoadError(null);
+    try {
+      const [txs, locs] = await Promise.all([
+        listInventoryTransactions(sessionToken),
+        listInventoryLocations(sessionToken),
+      ]);
+      setTransactions(txs);
+      setLocations(locs);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'inv-log-error-load'));
+      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-log-error-load')), type: 'error' });
+    } finally {
+      setLoading(false);
+    }
   }, [sessionToken, addToast]); // l10n via ref — stable dep chain
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleRowClick = async (txId: string) => {
     if (!sessionToken) return;
@@ -194,6 +205,13 @@ export default function TransactionLogScreen() {
           <Localized id="inv-loading">
             <span>Loading...</span>
           </Localized>
+        </div>
+      ) : loadError ? (
+        <div className="log-error" role="alert">
+          <p className="log-error-text">{loadError}</p>
+          <Button variant="secondary" size="sm" onClick={load}>
+            <Localized id="retry"><span>Retry</span></Localized>
+          </Button>
         </div>
       ) : (
         <div aria-live="polite" aria-relevant="additions text">

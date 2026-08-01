@@ -148,6 +148,15 @@ The main inventory primitives are:
 
 **Priority:** P2 — operational safety and recoverability.
 
+**Status: ✅ REMEDIATED** — durable error/retry states now cover every screen named in the evidence:
+
+- **StockCountsScreen / StockCountHistory / StockCountDetail:** persistent `role="alert"` error blocks with Retry, replacing toast-only failure handling (Phase 2, commit `45d65511`).
+- **TransitAuditScreen:** durable error state + Retry via the batch API rewrite (commit `5be6de69`).
+- **LocationPicker:** no longer returns `null` silently on fetch failure — it renders a compact `.location-picker-error` alert with a Retry button (`loc-picker-error-load` key in both bundles); `load()` uses the `l10nRef` pattern for a stable dep chain.
+- **TransactionLogScreen:** initial `Promise.all` failure now renders a `.log-error` alert with a Retry button wired to a retryable `load()` callback (was toast-only).
+- **InventoryAdjustmentScreen:** product-load failure now renders a persistent `.inv-adjust-load-error` alert with Retry in the search area (was toast-only); the search area is no longer indistinguishable from a usable empty screen.
+- New tests cover the error-and-recover path on all three screens (LocationPicker, TransactionLog, InventoryAdjustment); full 12-file inventory UI sweep **134/134 passed**.
+
 ---
 
 ### INV-09 — Transit audit performs an avoidable N+1 request pattern (P2)
