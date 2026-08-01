@@ -2103,12 +2103,7 @@ mod tests {
             .unwrap();
         // Seed two products linked to cat-1 and one to cat-2.
         for (sku, cat) in [("SKU-1", "cat-1"), ("SKU-2", "cat-1"), ("SKU-3", "cat-2")] {
-            let currency = Currency::from_str("USD").unwrap();
-            let money = crate::Money {
-                minor_units: 100,
-                currency,
-            };
-            s.create_product(sku, sku, money, Some(cat), None, 0, None)
+            s.create_product(sku, sku, price(100), Some(cat), None, 0, None)
                 .unwrap();
         }
 

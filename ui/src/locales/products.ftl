@@ -224,6 +224,13 @@ categories-create = Create
 categories-save = Save
 categories-delete-confirm = Delete Category
 categories-delete-warning = This will unlink all products in this category.
+categories-delete-unlinked = { $count ->
+    [one] Unlinked 1 product in this category.
+   *[other] Unlinked { $count } products in this category.
+}
+categories-error-create = Failed to create category
+categories-error-update = Failed to update category
+categories-error-delete = Failed to delete category
 categories-preview = Preview
 categories-name-aria =
     .aria-label = Category Name

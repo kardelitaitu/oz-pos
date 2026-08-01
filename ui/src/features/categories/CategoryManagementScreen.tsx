@@ -2,9 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listCategoriesScoped,
-  createCategory,
-  updateCategory,
-  deleteCategory,
+  createCategoryScoped,
+  updateCategoryScoped,
+  deleteCategoryScoped,
   type CategoryDto,
 } from '@/api/products';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -230,15 +230,15 @@ export default function CategoryManagementScreen() {
 
     try {
       const id = colourToId(trimmed);
-      await createCategory({ id, name: trimmed, colour: newColour, icon: newIcon });
+      await createCategoryScoped(sessionToken, { id, name: trimmed, colour: newColour, icon: newIcon });
       setShowModal(false);
       await load();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create category');
+      setCreateError(err instanceof Error ? err.message : requiredLocalized(l10n, 'categories-error-create'));
     } finally {
       setSaving(false);
     }
-  }, [newName, newColour, newIcon, load]);
+  }, [newName, newColour, newIcon, load, sessionToken, l10n]);
 
   // ── Edit handlers ────────────────────────────────────────────────
 
@@ -259,15 +259,15 @@ export default function CategoryManagementScreen() {
     setEditError(null);
 
     try {
-      await updateCategory({ id: editTarget.id, name: trimmed, colour: editColour, icon: editIcon });
+      await updateCategoryScoped(sessionToken, { id: editTarget.id, name: trimmed, colour: editColour, icon: editIcon });
       setEditTarget(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Failed to update category');
+      setEditError(err instanceof Error ? err.message : requiredLocalized(l10n, 'categories-error-update'));
     } finally {
       setEditSaving(false);
     }
-  }, [editTarget, editName, editColour, editIcon, load]);
+  }, [editTarget, editName, editColour, editIcon, load, sessionToken, l10n]);
 
   // ── Delete handlers ──────────────────────────────────────────────
 
@@ -276,14 +276,25 @@ export default function CategoryManagementScreen() {
     setDeleting(deleteTarget.id);
     setDeleteTarget(null);
     try {
-      await deleteCategory(deleteTarget.id);
+      // CAT-02: the backend unlinks products transactionally and reports how
+      // many were affected — surface that to the operator.
+      const result = await deleteCategoryScoped(sessionToken, deleteTarget.id);
+      if (result.affected_products > 0) {
+        addToast({
+          message: requiredLocalized(l10n, 'categories-delete-unlinked', { count: String(result.affected_products) }),
+          type: 'success',
+        });
+      }
       await load();
-    } catch {
-      addToast({ message: l10n.getString('category-delete-failed'), type: 'error' });
+    } catch (err) {
+      addToast({
+        message: err instanceof Error ? err.message : requiredLocalized(l10n, 'categories-error-delete'),
+        type: 'error',
+      });
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load, addToast, l10n]);
+  }, [deleteTarget, load, addToast, l10n, sessionToken]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);

@@ -235,6 +235,13 @@ categories-create = Buat
 categories-save = Simpan
 categories-delete-confirm = Hapus Kategori
 categories-delete-warning = Ini akan memutuskan tautan semua produk dalam kategori ini.
+categories-delete-unlinked = { $count ->
+    [one] 1 produk terlepas taut di kategori ini.
+   *[other] { $count } produk terlepas taut di kategori ini.
+}
+categories-error-create = Gagal membuat kategori
+categories-error-update = Gagal memperbarui kategori
+categories-error-delete = Gagal menghapus kategori
 categories-preview = Pratinjau
 categories-name-aria =
     .aria-label = Nama Kategori

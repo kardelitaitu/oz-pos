@@ -18,15 +18,31 @@ const { mockListCategories, mockCreateCategory, mockUpdateCategory, mockDeleteCa
     mockDeleteCategory: vi.fn(),
   }));
 
+// CAT-01: prove the session token flows through every scoped call. The
+// mock preserves both args (token first) so tests can assert on them.
+const TOKEN = 'mock-session-token';
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: TOKEN,
+    workspaceId: 'workspace-1',
+    storeId: 'store-1',
+  }),
+  useWorkspaceScope: () => null,
+}));
+
 vi.mock('@/api/products', () => ({
   listCategories: () => mockListCategories(),
   listCategoriesScoped: (...args: unknown[]) => mockListCategories(...args),
   createCategory: (args: unknown) => mockCreateCategory(args),
-  createCategoryScoped: (args: unknown) => mockCreateCategory(args),
+  createCategoryScoped: (sessionToken: string, args: unknown) =>
+    mockCreateCategory(sessionToken, args),
   updateCategory: (args: unknown) => mockUpdateCategory(args),
-  updateCategoryScoped: (args: unknown) => mockUpdateCategory(args),
+  updateCategoryScoped: (sessionToken: string, args: unknown) =>
+    mockUpdateCategory(sessionToken, args),
   deleteCategory: (id: string) => mockDeleteCategory(id),
-  deleteCategoryScoped: (id: string) => mockDeleteCategory(id),
+  deleteCategoryScoped: (sessionToken: string, id: string) =>
+    mockDeleteCategory(sessionToken, id),
 }));
 
 const bundle = new FluentBundle('en-US');
@@ -60,7 +76,7 @@ describe('CategoryManagementScreen', () => {
     mockListCategories.mockResolvedValue([]);
     mockCreateCategory.mockResolvedValue({ id: 'new-cat' });
     mockUpdateCategory.mockResolvedValue({ id: 'cat-1' });
-    mockDeleteCategory.mockResolvedValue(undefined);
+    mockDeleteCategory.mockResolvedValue({ affected_products: 0 });
   });
 
   it('renders the title', async () => {
@@ -139,7 +155,7 @@ describe('CategoryManagementScreen', () => {
     );
   });
 
-  it('calls deleteCategory on confirm', async () => {
+  it('calls deleteCategoryScoped on confirm with the session token (CAT-01)', async () => {
     mockListCategories.mockResolvedValue([makeCategory()]);
     renderScreen();
     await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
@@ -148,11 +164,76 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
 
     // Confirm delete — click the danger Delete button in the SettingsPopup footer.
-    // Card delete buttons have aria-label="Delete category {name}", modal has exact "Delete".
     const modalDeleteBtn = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(modalDeleteBtn);
 
-    await waitFor(() => expect(mockDeleteCategory).toHaveBeenCalledWith('cat-bakery'));
+    // CAT-01: the scoped command must receive the session token first.
+    await waitFor(() =>
+      expect(mockDeleteCategory).toHaveBeenCalledWith(TOKEN, 'cat-bakery'),
+    );
+  });
+
+  it('reports how many products were unlinked after deletion (CAT-02)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    mockDeleteCategory.mockResolvedValue({ affected_products: 3 });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(document.querySelector('.cat-mgmt-delete-btn')!);
+    await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    // Fluent wraps the interpolated count in Unicode directional-isolate
+    // characters (⁨3⁩), so match on the message shape, not a literal regex.
+    await waitFor(() =>
+      expect(
+        screen.getByText((content) => /^unlinked/i.test(content) && content.includes('3')),
+      ).toBeDefined(),
+    );
+  });
+
+  it('surfaces a delete failure instead of swallowing it (CAT-01)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    mockDeleteCategory.mockRejectedValue(new Error('category has linked tax config'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(document.querySelector('.cat-mgmt-delete-btn')!);
+    await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/category has linked tax config/i)).toBeDefined(),
+    );
+  });
+
+  it('calls createCategoryScoped and updateCategoryScoped with the session token (CAT-01)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    // Create flow
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Snacks');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    // CAT-01: token must precede the payload in the scoped call.
+    await waitFor(() =>
+      expect(mockCreateCategory).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'Snacks' }),
+      ),
+    );
+
+    // Edit flow
+    await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
+    await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(mockUpdateCategory).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ id: 'cat-bakery' }),
+      ),
+    );
   });
 
   it('opens add modal when Add Category is clicked', async () => {

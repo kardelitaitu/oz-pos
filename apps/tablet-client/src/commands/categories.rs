@@ -95,12 +95,14 @@ pub async fn create_category_scoped(
     state: State<'_, AppState>,
 ) -> Result<CreateCategoryResult, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    // Permission is checked against the GLOBAL identity DB (ADR #4/#7);
+    // the store-scoped DB has no user rows.
+    require_category_permission(&state, &session.user_id, permissions::PRODUCTS_CREATE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_CREATE)?;
     store.create_category(&args.id, &args.name, &args.colour, &args.icon)?;
 
     Ok(CreateCategoryResult { id: args.id })
@@ -152,12 +154,12 @@ pub async fn update_category_scoped(
     state: State<'_, AppState>,
 ) -> Result<UpdateCategoryResult, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_category_permission(&state, &session.user_id, permissions::PRODUCTS_UPDATE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_UPDATE)?;
     store.update_category(&args.id, &args.name, &args.colour, &args.icon)?;
     Ok(UpdateCategoryResult { id: args.id })
 }
@@ -205,19 +207,37 @@ pub async fn delete_category_scoped(
     state: State<'_, AppState>,
 ) -> Result<DeleteCategoryResult, AppError> {
     let (session, conn) = state.resolve_scope(&session_token)?;
+    require_category_permission(&state, &session.user_id, permissions::PRODUCTS_DELETE).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_DELETE)?;
     let affected_products = store.delete_category_with_unlink(&args.id)?;
     Ok(DeleteCategoryResult { affected_products })
+}
+
+/// Verify a category permission against the global identity database.
+///
+/// Users and roles are global authentication records (ADR #4 / ADR #7);
+/// category business data is read from the store-scoped connection after
+/// this check succeeds. Mirror of `require_tax_permission` in tax.rs.
+async fn require_category_permission(
+    state: &AppState,
+    user_id: &str,
+    permission: &str,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, user_id, permission)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::session::SessionContext;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
 
     #[test]
     fn category_dto_debug() {
@@ -274,5 +294,68 @@ mod tests {
         assert!(debug.contains("cat-99"));
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["id"], "cat-99");
+    }
+
+    // ── Scoped-command permission + isolation (CAT-01) ─────────────────
+
+    fn create_args(id: &str) -> CreateCategoryArgs {
+        CreateCategoryArgs {
+            id: id.into(),
+            name: format!("Category {id}"),
+            colour: "#06b6d4".into(),
+            icon: "coffee".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn scoped_category_command_rejects_invalid_session() {
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test())
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result =
+            create_category_scoped("missing-token".into(), create_args("c"), app.state()).await;
+        assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_category_command_denies_user_without_permission() {
+        // Cashier role lacks products:create/update/delete (ROLE_PRESETS).
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            "cashier-token".into(),
+            SessionContext::new(
+                "user-cashier".into(),
+                "role-cashier".into(),
+                "terminal-1".into(),
+                "store-cashier".into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result =
+            create_category_scoped("cashier-token".into(), create_args("c"), app.state()).await;
+        assert!(matches!(result, Err(AppError::PermissionDenied(_))));
     }
 }
