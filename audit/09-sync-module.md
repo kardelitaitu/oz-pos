@@ -2,8 +2,9 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Sync module — offline queue, HTTP transport, replication, conflict resolution, background daemons, tenant scope, cloud endpoints, settings UI, and tests
-> **Status:** AUDITED · production-readiness findings require remediation
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 12 findings closed (SYNC-01→SYNC-12)
+> **Remediation commits:** `a1ea01e7` (SYNC-01), `b722740f` (SYNC-02+05), `5229e296` (SYNC-03+04), `85e323c7` (SYNC-06), `5633e790` (SYNC-07/08/09/10/11), `178abfbf` (SYNC-12)
+> **Production code changed:** Yes — see commit chain above
 
 ## Scope
 
@@ -46,7 +47,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Persist a per-tenant/per-store pull cursor or authoritative server anchor. Pass it to every pull, advance it only after the corresponding page is applied successfully, and use a durable remote-item ID ledger/unique constraint so replay is harmless. Add a regression test that runs two daemon ticks against the same remote item and verifies the local mutation occurs once.
 
-**Status:** Open · P0 if `SyncDaemon` is enabled in production; otherwise latent P1/P2 until startup wiring is confirmed
+**Status:** ✅ **Remediated** (`a1ea01e7`) — durable pull anchor (`sync_pull_state` single-row table) + remote-item idempotency ledger (`sync_applied_items` with `INSERT OR IGNORE`); two-cycle replay regression test added
 
 ### SYNC-02 — Daemon conflict handling bypasses the ADR #21 resolver
 
@@ -56,7 +57,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Extract one conflict-application service used by both paths. It must persist the resolution result, preserve both source items for auditability, and apply the same ADR #21 strategy regardless of trigger.
 
-**Status:** Open · P1
+**Status:** ✅ **Remediated** (`b722740f`) — shared conflict service + consumable CRDT merge envelope used by both the engine and the daemon
 
 ### SYNC-03 — `sync_pull` IPC contract is incomplete in the front end
 
@@ -66,7 +67,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Change the typed API to `syncPull(confirmDestructive: boolean)` or, preferably, `syncPull({ confirmDestructive: true })`; make the confirmation dialog and command payload one explicit flow. Add a UI/API contract test asserting the exact IPC arguments and a command test that rejects false/missing consent.
 
-**Status:** Open · P1
+**Status:** ✅ **Remediated** (`5229e296`) — typed `SyncPullArgs { confirmDestructive }` contract, confirm-dialog flow end-to-end, contract + consent-rejection tests
 
 ### SYNC-04 — Manual offline retry marks items synced without performing cloud sync
 
@@ -76,7 +77,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Remove the placeholder command from production registration until it delegates to the real sync pipeline, or make it call the authenticated sync service and mark each item only after an accepted outcome. Add tests for network failure, rejection, conflict, and successful retry.
 
-**Status:** Open · P1
+**Status:** ✅ **Remediated** (`5229e296`) — `retry_offline_sync` delegates to the real pipeline (config → async push → per-item outcome); network/rejection/conflict/success tests added
 
 ### SYNC-05 — CRDT conflict merge payload cannot be consumed by the queue applier
 
@@ -86,7 +87,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Represent a CRDT merge as two idempotent ledger events, or add an explicit `crdt_delta` action/decoder that validates and applies both nested deltas transactionally. Test the complete path from `resolve_conflict()` through `apply_resolution()` and eventual `apply_remote()`.
 
-**Status:** Open · P1
+**Status:** ✅ **Remediated** (`b722740f`) — CRDT merge represented as two idempotent ledger events executable through the normal remote dispatcher
 
 ### SYNC-06 — Snapshot endpoint exports password/PIN hashes to sync clients
 
@@ -96,7 +97,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Remove `pin_hash` from the snapshot contract and prohibit user credential replication. If user metadata must sync, return only the minimum non-secret fields and use a separate, tightly authorized identity-management flow for credential changes. Add a contract test asserting sensitive fields never appear in snapshot JSON.
 
-**Status:** Open · P1
+**Status:** ✅ **Remediated** (`85e323c7`) — `pin_hash` removed from the snapshot contract on all three paths (server, client, platform-sync); `deny_unknown_fields` + placeholder on insert, existing hash preserved on conflict; raw-bytes sensitive-field test; `verify_pin` fails closed
 
 ### SYNC-07 — Local queue tenancy is not consistently bound to the authenticated store/session
 
@@ -106,7 +107,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Require a resolved tenant/store context for enqueue, list, count, mark, and delete operations. Keep the server JWT tenant authoritative and add tests that exercise two tenant IDs through the client queue boundary.
 
-**Status:** Open · P2 risk
+**Status:** ✅ **Remediated** (`5633e790`) — tenant-scoped queue variants (mark synced strict NotFound, mark failed / delete / count scoped) + four two-tenant boundary tests
 
 ### SYNC-08 — The Settings sync connection test is simulated, not a connectivity test
 
@@ -116,7 +117,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Replace the simulation with `testSyncConnection(serverURL.trim())`, surface the returned status/latency, and keep the same timeout/error taxonomy as the daemon. Add tests for success, timeout, invalid URL, and server rejection.
 
-**Status:** Open · P2
+**Status:** ✅ **Remediated** (`5633e790`) — `useCloudSync.testConnection` now calls the real `test_sync_connection` IPC (shared with the StatusBar poller) and surfaces the server status; success/timeout/unreachable/exception tests added
 
 ### SYNC-09 — Snapshot and pull error handling can present an empty success
 
@@ -126,7 +127,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Return appropriate non-2xx status codes and a typed error envelope. Reject an error-shaped or structurally incomplete snapshot before applying it, and distinguish “valid empty snapshot” from “request failed” in the UI.
 
-**Status:** Open · P2
+**Status:** ✅ **Remediated** (`5633e790`) — snapshot handler returns non-2xx with an error envelope on query failure; cache path returns Ok; client rejects non-success before applying
 
 ### SYNC-10 — Pull row decode failures are silently discarded by the cloud endpoint
 
@@ -136,7 +137,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Collect row conversion errors explicitly, log/metric the affected tenant and cursor, and return a 5xx response rather than silently truncating data. Add a test with a malformed row/schema fixture.
 
-**Status:** Open · P2
+**Status:** ✅ **Remediated** (`5633e790`) — pull row decode failures return 500 + `sync_pull_row_decode_failures_total` metric instead of silent `filter_map` drops; snapshot queries fail loudly too; malformed-row test added
 
 ### SYNC-11 — Transport and UI contracts contain stale or inconsistent shapes
 
@@ -146,7 +147,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Generate or contract-test DTOs from the Rust command schema, remove unused duplicate result types, and expose one canonical retry operation. Add a compile-time/API contract test covering every registered offline/sync command.
 
-**Status:** Open · P2
+**Status:** ✅ **Remediated** (`5633e790`) — `OfflineQueueItemDto` TS type matches the Rust serializer (`payload` restored); `SyncResult` DTO aligned (`syncedCount`/`failedCount`/`totalCount`); IPC contract tests cover every offline/sync command
 
 ### SYNC-12 — Sync UI has accessibility and localization drift in shared status surfaces
 
@@ -156,7 +157,7 @@ The desktop commands provide immediate push (`sync_run`), destructive snapshot i
 
 **Recommendation:** Move all visible labels and ARIA names to Fluent keys with fallbacks, inject localization into the connection hook or localize at the render boundary, and use a semantic CSS class/token for the warning icon.
 
-**Status:** Open · P3
+**Status:** ✅ **Remediated** (`178abfbf`) — all StatusBar labels + ARIA through Fluent keys with en/id parity; conflict icon uses a semantic token class; `useSyncConnection` no longer fabricates hardcoded labels (render-boundary localization)
 
 ## Positive controls observed
 
@@ -188,14 +189,31 @@ The integration suite's ignored status is important: it is not evidence that the
 
 ## Recommended remediation order
 
-1. **SYNC-01:** Add durable pull anchors and idempotent remote application before enabling daemon sync broadly.
-2. **SYNC-02 and SYNC-05:** Unify conflict handling and make CRDT merges executable end-to-end.
-3. **SYNC-03 and SYNC-04:** Repair the destructive-pull contract and remove the placeholder retry path.
-4. **SYNC-06:** Remove credential hashes from snapshots and add a sensitive-field contract test.
-5. **SYNC-07 through SYNC-11:** Close scope, error, API-shape, and observability gaps.
-6. **SYNC-12:** Complete the shared status-bar i18n and token cleanup.
-7. Run the full integration suite with `slow-tests`, then add a two-cycle replay test as a release gate.
+1. **SYNC-01:** Add durable pull anchors and idempotent remote application before enabling daemon sync broadly. — ✅ done
+2. **SYNC-02 and SYNC-05:** Unify conflict handling and make CRDT merges executable end-to-end. — ✅ done
+3. **SYNC-03 and SYNC-04:** Repair the destructive-pull contract and remove the placeholder retry path. — ✅ done
+4. **SYNC-06:** Remove credential hashes from snapshots and add a sensitive-field contract test. — ✅ done
+5. **SYNC-07 through SYNC-11:** Close scope, error, API-shape, and observability gaps. — ✅ done
+6. **SYNC-12:** Complete the shared status-bar i18n and token cleanup. — ✅ done
+7. Run the full integration suite with `slow-tests`, then add a two-cycle replay test as a release gate. — ⚠️ remaining: the `slow-tests`-gated integration suite (19 tests) is not run by the default CI; a scheduled/CI job should execute `cargo test -p platform-sync --features slow-tests` and publish the result.
 
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until a remediation commit links tests and validation results to each item.
+✅ **FULLY REMEDIATED** — all 12 findings closed across 6 commits:
+
+| Finding | Severity | Commit |
+|---------|----------|--------|
+| SYNC-01 durable pull anchor + idempotency | P0/P1 | `a1ea01e7` |
+| SYNC-02 shared conflict service | P1 | `b722740f` |
+| SYNC-03 pull consent contract | P1 | `5229e296` |
+| SYNC-04 real offline retry | P1 | `5229e296` |
+| SYNC-05 CRDT merge executability | P1 | `b722740f` |
+| SYNC-06 no credential hashes in snapshots | P1 | `85e323c7` |
+| SYNC-07 client queue tenancy | P2 | `5633e790` |
+| SYNC-08 real connection test | P2 | `5633e790` |
+| SYNC-09 snapshot error status | P2 | `5633e790` |
+| SYNC-10 no silent row drops | P2 | `5633e790` |
+| SYNC-11 DTO contract shapes | P2 | `5633e790` |
+| SYNC-12 status-bar i18n | P3 | `178abfbf` |
+
+**Residual (documented, not blocking):** the `slow-tests`-gated integration suite should be wired into a scheduled/CI job as a release gate.
