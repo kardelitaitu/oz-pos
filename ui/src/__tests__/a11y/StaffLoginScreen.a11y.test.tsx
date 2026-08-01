@@ -7,7 +7,8 @@ import { renderWithProviders, checkA11y } from './axe-helper';
 import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
 
 vi.mock('@/api/staff', () => ({
-  checkUsername: vi.fn(() => Promise.resolve({ found: true, is_active: true })),
+  // STAFF-06: uniform pre-auth response.
+  checkUsername: vi.fn(() => Promise.resolve({ proceed: true })),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({

@@ -610,6 +610,14 @@ pub const ALL: &[Migration] = &[
         id: "110_sale_line_tax_breakdown.sql",
         sql: include_str!("../migrations/110_sale_line_tax_breakdown.sql"),
     },
+    // ── 111: Device-scoped login abuse controls (audit/06 STAFF-07) ─
+    // Adds device_id to login_attempts so the rate limiter can combine
+    // per-account throttling with per-device and global limits, using
+    // exponential backoff instead of a fixed short lock.
+    Migration {
+        id: "111_login_attempts_device.sql",
+        sql: include_str!("../migrations/111_login_attempts_device.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

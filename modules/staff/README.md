@@ -1,4 +1,5 @@
 <!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/user.rs + db/staff.rs, commands/{staff,auth}.rs, features/staff, api/staff.ts, ui/src/locales/staff.ftl; modules/staff/src/lib.rs has StaffModule; manifest deps [] + permissions [staff:view,staff:edit,staff:auth] match · Kernel API matches -->
+<!-- 2026-07-31 · audit/06 remediation: commands are session-scoped (*_scoped, STAFF-01), role-hierarchy enforced (STAFF-02), PIN rotation invalidates sessions (STAFF-03), atomic profile+workspace save (STAFF-05), uniform pre-auth response (STAFF-06), device/global login rate limiter (STAFF-07) → see audit/06-staff-module.md -->
 
 # Staff Module
 

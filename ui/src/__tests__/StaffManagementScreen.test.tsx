@@ -156,13 +156,23 @@ describe('StaffManagementScreen', () => {
 
   // ── New edge-case tests ─────────────────────────────────────────
 
-  it('deactivates an active staff member when Deactivate is clicked', async () => {
+  it('deactivates an active staff member after confirming the dialog (STAFF-10)', async () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
 
     // Find the Deactivate button for Jane (active)
     const deactivateBtn = screen.getByRole('button', { name: /deactivate.*jane smith/i });
     fireEvent.click(deactivateBtn);
+
+    // The confirmation dialog must appear before any request is sent.
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('update_staff_scoped', expect.objectContaining({
+      args: expect.objectContaining({ id: 'staff-1', is_active: false }),
+    }));
+
+    // Confirm the deactivation.
+    fireEvent.click(within(dialog).getByRole('button', { name: /deactivate/i }));
 
     // update_staff_scoped should be called with is_active: false
     await waitFor(() => {

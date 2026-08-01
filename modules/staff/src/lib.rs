@@ -1,9 +1,14 @@
 /*
-last audited 19-07-26 by RSA-Agent
+last audited 31-07-26 (audit/06 remediation: STAFF-01..13)
 crate: modules-staff | status: SAFE | lint: CLEAN
 findings: Transitional module implementing Module trait. No unsafe code. Re-exports User, Role,
-  builtin_roles, seed_users from oz-core. 9 unit tests pass.
-next: Migrate auth/staff commands into this module | perf: N/A.
+  builtin_roles, seed_users from oz-core. Staff CRUD commands are now session-scoped
+  (*_scoped) with server-side caller resolution (STAFF-01), role-hierarchy enforcement
+  (STAFF-02), PIN rotation with session invalidation (STAFF-03), atomic profile+workspace
+  save with compensating rollback (STAFF-05), uniform pre-auth response closing the
+  enumeration oracle (STAFF-06), and device/global login rate limiting with exponential
+  backoff (STAFF-07). Legacy unscoped commands remain as deprecated wrappers.
+next: Migrate auth/staff commands physically into this module | perf: N/A.
 */
 #![warn(missing_docs)]
 

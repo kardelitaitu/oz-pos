@@ -246,6 +246,14 @@ pub struct UpdateStaffScopedArgs {
     /// validated, hashed server-side, and persisted via `update_user_pin`.
     /// `None`/empty leaves the current PIN unchanged.
     pub pin: Option<String>,
+    /// Optional workspace key assignment (STAFF-05). When `Some`, the
+    /// profile update and the workspace assignment are applied by this one
+    /// command — the front-end no longer issues two separate IPC calls. If
+    /// the store-scoped workspace write fails after the profile commits,
+    /// the profile change is rolled back (compensating update) and a clear
+    /// partial-failure error is returned.
+    #[serde(default)]
+    pub workspace_keys: Option<Vec<String>>,
 }
 
 /// List staff members. Caller identity is resolved from the session token.
@@ -383,6 +391,12 @@ fn enforce_role_assignment_policy(
 /// STAFF-02: enforces the role-assignment hierarchy (Owner-only promotion,
 /// no self-promotion, last-owner protection).
 /// STAFF-03: optionally rotates the PIN when `args.pin` is a non-empty value.
+/// STAFF-05: the profile update and (optional) workspace assignment run as
+/// one command. The profile lives in the GLOBAL identity DB while workspace
+/// assignments live in the STORE-scoped DB, so a single SQLite transaction
+/// across both is impossible; instead we apply the profile first and, if the
+/// store-scoped workspace write then fails, compensate by restoring the
+/// previous profile values and returning a clear partial-failure error.
 #[tauri::command]
 pub async fn update_staff_scoped(
     session_token: String,
@@ -407,6 +421,21 @@ pub async fn update_staff_scoped(
             args.is_active,
         )?;
     }
+
+    // STAFF-05 compensation: snapshot the profile BEFORE the update so we can
+    // restore it if the store-scoped workspace write fails afterwards.
+    let previous_profile = {
+        let store = Store::new(&db);
+        store.get_user(&args.id)?.map(|u| {
+            (
+                u.username,
+                u.display_name,
+                u.role_id,
+                u.is_active,
+                u.pin_hash,
+            )
+        })
+    };
 
     // STAFF-03: profile + PIN rotate atomically inside one transaction so a
     // failed PIN hash never leaves the profile half-updated (STAFF-05). The
@@ -445,6 +474,38 @@ pub async fn update_staff_scoped(
         (user, roles, pin_rotated)
     };
     drop(db);
+
+    // STAFF-05: apply the workspace assignment as part of this same command.
+    // If it fails, compensate by restoring the previous profile and surface a
+    // clear partial-failure error instead of leaving a half-updated account.
+    if let Some(keys) = &args.workspace_keys {
+        let result = {
+            let conn = state
+                .db_manager
+                .open_store(&session.store_id)
+                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+            let sdb = conn
+                .lock()
+                .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+            let store = Store::new(&sdb);
+            let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
+            store.set_user_workspaces_legacy(&args.id, key_refs)
+        };
+        if let Err(e) = result {
+            // Compensate: roll the profile back to its previous values.
+            if let Some((username, display_name, role_id, is_active, pin_hash)) = &previous_profile
+            {
+                let db = state.db.lock().await;
+                let store = Store::new(&db);
+                let _ = store.update_user(&args.id, username, display_name, role_id, *is_active);
+                let _ = store.update_user_pin(&args.id, pin_hash);
+                drop(db);
+            }
+            return Err(AppError::Internal(format!(
+                "profile updated but workspace assignment failed — profile rolled back: {e}"
+            )));
+        }
+    }
 
     if pin_rotated {
         // STAFF-03: a rotated PIN invalidates every OTHER session issued
@@ -883,6 +944,7 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: None,
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -966,6 +1028,7 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: None,
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1009,6 +1072,7 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: None,
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1044,6 +1108,7 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: false,
                 pin: None,
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1076,6 +1141,7 @@ mod tests {
                 role_id: "role-cashier".into(),
                 is_active: true,
                 pin: Some("9876".into()),
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1124,6 +1190,7 @@ mod tests {
                 role_id: "role-cashier".into(),
                 is_active: true,
                 pin: Some("9876".into()),
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1177,6 +1244,7 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: Some("4321".into()),
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1217,6 +1285,7 @@ mod tests {
                 role_id: "role-cashier".into(),
                 is_active: true,
                 pin: Some("9876".into()),
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1289,6 +1358,7 @@ mod tests {
                 role_id: "role-cashier".into(),
                 is_active: true,
                 pin: Some("9876".into()),
+                workspace_keys: None,
             },
             app.state(),
         )
@@ -1327,6 +1397,7 @@ mod tests {
                 role_id: "role-cashier".into(),
                 is_active: true,
                 pin: Some("12".into()),
+                workspace_keys: None,
             },
             app.state(),
         )

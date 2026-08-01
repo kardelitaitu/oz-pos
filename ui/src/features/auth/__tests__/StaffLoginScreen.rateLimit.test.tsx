@@ -48,7 +48,8 @@ vi.mock('@/contexts/BrandContext', () => ({
 }));
 
 vi.mock('@/api/staff', () => ({
-  checkUsername: vi.fn().mockResolvedValue({ found: true, is_active: true }),
+  // STAFF-06: uniform pre-auth response.
+  checkUsername: vi.fn().mockResolvedValue({ proceed: true }),
 }));
 
 vi.mock('@/frontend/shared/Toast', () => ({

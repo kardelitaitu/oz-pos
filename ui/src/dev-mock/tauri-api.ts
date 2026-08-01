@@ -249,12 +249,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // AUTH / STAFF
   // ═══════════════════════════════════════════════════════════════
 
-  'staff_check_username': (args) => {
-    const { username } = args as { username: string };
-    const staff = MOCK_STAFF[username.toLowerCase()];
-    if (!staff) return { found: false, is_active: false };
-    return { found: true, is_active: staff.is_active };
-  },
+  // STAFF-06: uniform pre-auth response — never reveals account existence or
+  // activation state (enumeration oracle closed).
+  'staff_check_username': (_args) => ({ proceed: true }),
 
   'staff_login': (args) => {
     const { username, pin } = args as { username: string; pin: string };

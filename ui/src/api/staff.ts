@@ -8,6 +8,8 @@ import { loggedInvoke } from '@/utils/logged-invoke';
 export interface StaffLoginArgs {
   username: string;
   pin: string;
+  /** Optional device/terminal id for per-device abuse controls (STAFF-07). */
+  device_id?: string;
 }
 
 /** A login session with user and role info. */
@@ -28,10 +30,14 @@ export interface CheckUsernameArgs {
   username: string;
 }
 
-/** Result of a username existence check. */
+/**
+ * Result of the uniform username pre-check (STAFF-06).
+ *
+ * Always `{ proceed: true }` — the pre-check never reveals whether an
+ * account exists or is active, so it cannot be used to enumerate staff.
+ */
 export interface CheckUsernameResult {
-  found: boolean;
-  is_active: boolean;
+  proceed: boolean;
 }
 
 /** Check if a username exists and is active before proceeding to PIN. */
@@ -144,6 +150,11 @@ export interface UpdateStaffScopedArgs {
   is_active: boolean;
   /** STAFF-03: optional new PIN; hashed server-side. Omit to keep current. */
   pin?: string;
+  /**
+   * STAFF-05: workspace key assignment applied atomically with the profile
+   * update (single IPC call). Omit to leave workspace assignments untouched.
+   */
+  workspace_keys?: string[];
 }
 
 /** List all staff members (caller resolved from session token). */

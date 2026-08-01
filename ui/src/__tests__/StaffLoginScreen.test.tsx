@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeAll } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { LocalizationProvider, ReactLocalization } from '@fluent/react';
@@ -16,7 +16,9 @@ const mockLogout = vi.fn();
 const mockClearError = vi.fn();
 
 vi.mock('@/api/staff', () => ({
-  checkUsername: vi.fn(() => Promise.resolve({ found: true, is_active: true })),
+  // STAFF-06: the pre-check returns a uniform { proceed: true } — the screen
+  // must never branch on account existence or activation state.
+  checkUsername: vi.fn(() => Promise.resolve({ proceed: true })),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -132,8 +134,10 @@ describe('StaffLoginScreen', () => {
     expect(document.activeElement).toBe(pinWrap);
   });
 
-  it('shows deactivated toast and stays on username step when account is inactive', async () => {
-    vi.mocked(checkUsername).mockResolvedValueOnce({ found: true, is_active: false });
+  it('always advances to the PIN step regardless of account state (STAFF-06)', async () => {
+    // The pre-check never reveals existence/activation — the screen advances
+    // to the PIN step for any syntactically valid username.
+    vi.mocked(checkUsername).mockResolvedValueOnce({ proceed: true });
     const user = userEvent.setup();
     renderScreen();
 
@@ -141,11 +145,12 @@ describe('StaffLoginScreen', () => {
     await user.type(input, 'deactivated_user');
     await user.click(screen.getByRole('button', { name: /next/i }));
 
-    const toast = await screen.findByRole('alert');
-    expect(toast).toHaveTextContent('Account is deactivated');
-
-    // should NOT advance to PIN step
-    expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+    // Should advance to the PIN step.
+    await waitFor(() => {
+      expect(document.querySelector('.staff-login-pin-wrap')).toBeTruthy();
+    });
+    // No enumeration toast is shown.
+    expect(screen.queryByText('Account is deactivated')).not.toBeInTheDocument();
   });
 });
 

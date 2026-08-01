@@ -59,6 +59,18 @@ staff-field-username-aria = Username
 staff-field-name-aria = Display Name
 staff-field-pin-aria = PIN
 staff-error-generic = { $message }
+staff-error-load = Failed to load staff data
+staff-retry = Retry
+
+# ── Workspace Data Unavailable (STAFF-08) ────────────────────────────────
+staff-workspaces-unavailable = Workspace data unavailable
+staff-workspaces-unavailable-hint = Could not load workspace assignments. Staff data below is still current.
+
+# ── Deactivate Confirmation (STAFF-10) ───────────────────────────────────
+staff-deactivate-confirm-title = Deactivate staff member?
+staff-deactivate-confirm-body = This will remove { $name }'s access to all stores immediately. They can be reactivated later. Continue?
+staff-deactivate-confirm-confirm = Deactivate
+staff-deactivate-confirm-cancel = Cancel
 
 # ── Toast Notifications ───────────────────────────────────────────────────
 staff-toast-created = { $name } created successfully
@@ -95,8 +107,6 @@ staff-login-digit-aria =
 staff-login-submit = Login
 staff-login-submitting = Logging in…
 staff-login-verifying = Verifying...
-staff-login-error-deactivated = Account is deactivated
-staff-login-error-not-found = User not found
 staff-login-error-connection = Could not verify username. Check your connection.
 staff-login-back = ← Back
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.

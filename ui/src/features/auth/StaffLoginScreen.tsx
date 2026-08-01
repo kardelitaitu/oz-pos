@@ -304,15 +304,12 @@ export default function StaffLoginScreen() {
     clearError();
 
     try {
-      const result = await checkUsername({ username: trimmed });
-      if (!result.found) {
-        addToast({ type: 'error', message: l10n.getString('staff-login-error-not-found') });
-        return;
-      }
-      if (!result.is_active) {
-        addToast({ type: 'error', message: l10n.getString('staff-login-error-deactivated') });
-        return;
-      }
+      // STAFF-06: the pre-check returns a uniform { proceed: true } and never
+      // reveals whether the account exists or is active, so we always advance
+      // to the PIN step. Any credential/state problem is reported only by the
+      // login endpoint as a single uniform error — this screen must not branch
+      // on account existence or activation status.
+      await checkUsername({ username: trimmed });
       setStep('pin');
     } catch {
       addToast({ type: 'error', message: l10n.getString('staff-login-error-connection') });
