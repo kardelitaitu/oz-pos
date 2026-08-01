@@ -254,4 +254,114 @@ describe('CategoryManagementScreen', () => {
     await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
     await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
   });
+
+  // ── CAT-03: load errors are distinct from an empty store ──────────────
+
+  it('renders a load error state with Retry instead of the empty state (CAT-03)', async () => {
+    mockListCategories.mockRejectedValue(new Error('database locked'));
+    renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText('Failed to load categories')).toBeDefined(),
+    );
+    // The genuine empty-state copy must NOT be shown.
+    expect(screen.queryByText('No categories yet')).toBeNull();
+    // The raw backend message is surfaced as detail.
+    expect(screen.getByText('database locked')).toBeDefined();
+  });
+
+  it('recovers via Retry after a load failure (CAT-03)', async () => {
+    mockListCategories
+      .mockRejectedValueOnce(new Error('database locked'))
+      .mockResolvedValueOnce([makeCategory()]);
+    renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText('Failed to load categories')).toBeDefined(),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+    expect(screen.queryByText('Failed to load categories')).toBeNull();
+  });
+
+  // ── CAT-08: overlapping loads resolve in order ────────────────────────
+
+  it('ignores a stale load that resolves after a newer one (CAT-08)', async () => {
+    // Load #1 (mount) hangs; load #2 (post-create refresh) resolves first.
+    let resolveFirst: (v: CategoryDto[]) => void = () => {};
+    let resolveSecond: (v: CategoryDto[]) => void = () => {};
+    mockListCategories
+      .mockImplementationOnce(
+        () =>
+          new Promise<CategoryDto[]>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<CategoryDto[]>((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+
+    renderScreen();
+    // Trigger the second load through the create flow (handleCreate calls
+    // `await load()` after createCategoryScoped succeeds).
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Fresh');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    // Second load resolves FIRST with fresh data.
+    resolveSecond([makeCategory({ id: 'cat-fresh', name: 'Fresh' })]);
+    await waitFor(() => expect(screen.getByText('Fresh')).toBeDefined());
+
+    // The stale first load resolves later with older data — must be ignored.
+    resolveFirst([makeCategory({ id: 'cat-stale', name: 'Stale' })]);
+    await waitFor(() => expect(screen.queryByText('Stale')).toBeNull());
+    expect(screen.getByText('Fresh')).toBeDefined();
+  });
+
+  // ── CAT-09: field-level validation ────────────────────────────────────
+
+  it('explains a disabled Save with a localized error once the name is typed then cleared (CAT-09)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // The Save/Create button stays disabled while the name is empty; the
+    // field-level message appears once the operator has typed and cleared it.
+    const createBtn = screen.getByRole('button', {
+      name: 'Create',
+    }) as HTMLButtonElement;
+    expect(createBtn.disabled).toBe(true);
+
+    const nameInput = screen.getByPlaceholderText(/e\.g\. bakery/i);
+    await userEvent.type(nameInput, 'Snacks');
+    await userEvent.clear(nameInput);
+    await waitFor(() =>
+      expect(screen.getByText('Category name is required')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate category ID with a localized conflict error (CAT-09)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // "Bakery" derives the same id (cat-bakery) as the existing category.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Bakery');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
 });
