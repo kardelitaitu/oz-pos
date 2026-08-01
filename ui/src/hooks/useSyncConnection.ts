@@ -12,14 +12,19 @@ import { testSyncConnection } from '@/api/offline';
 /** Connection state to the cloud sync server. */
 export type SyncConnectionState = 'checking' | 'connected' | 'disconnected';
 
-/** Return type of the `useSyncConnection` hook. */
+/**
+ * Return type of the `useSyncConnection` hook.
+ *
+ * SYNC-12: the hook is deliberately presentation-agnostic — it exposes only
+ * raw state and latency, never user-visible label strings. Renderers
+ * (StatusBar, login screens) localize at the boundary via Fluent keys, so
+ * no hardcoded English (`Checking…` / `Disconnected`) can leak here.
+ */
 export interface SyncConnectionStatus {
   /** Current connectivity state. */
   state: SyncConnectionState;
   /** Round-trip latency in milliseconds, or null if unknown/offline. */
   latencyMs: number | null;
-  /** Human-readable status string from the server, e.g. "Connected (12ms)". */
-  label: string;
 }
 
 const POLL_INTERVAL_MS = 60_000;
@@ -27,8 +32,8 @@ const POLL_INTERVAL_MS = 60_000;
 /**
  * Poll the cloud sync server health endpoint on mount and every 60 s.
  *
- * Returns `{ state, latencyMs, label }` suitable for rendering a
- * connection indicator dot in the StatusBar.
+ * Returns `{ state, latencyMs }` suitable for rendering a connection
+ * indicator dot in the StatusBar.
  *
  * - `'checking'` — initial state before the first ping resolves.
  * - `'connected'` — last ping succeeded (`ok: true`).
@@ -37,7 +42,6 @@ const POLL_INTERVAL_MS = 60_000;
 export function useSyncConnection(): SyncConnectionStatus {
   const [state, setState] = useState<SyncConnectionState>('checking');
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [label, setLabel] = useState<string>('Checking…');
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -51,17 +55,14 @@ export function useSyncConnection(): SyncConnectionStatus {
         if (result.ok) {
           setState('connected');
           setLatencyMs(result.latencyMs);
-          setLabel(result.status);
         } else {
           setState('disconnected');
           setLatencyMs(null);
-          setLabel(result.status);
         }
       } catch {
         if (!mountedRef.current) return;
         setState('disconnected');
         setLatencyMs(null);
-        setLabel('Disconnected');
       }
     }
 
@@ -75,5 +76,5 @@ export function useSyncConnection(): SyncConnectionStatus {
     };
   }, []);
 
-  return { state, latencyMs, label };
+  return { state, latencyMs };
 }

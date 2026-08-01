@@ -257,6 +257,12 @@ staff-login-license-active = License active
 staff-login-license-inactive = License inactive
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } sync conflict(s) resolved
+# SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
+statusbar-app-status-aria = Application status
+statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-sync-name = Sync
+statusbar-gateway-name = Stripe
+statusbar-license = Proprietary License
 
 # Audit Action Labels
 audit-action-sale-void = Void Sale

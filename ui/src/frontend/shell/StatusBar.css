@@ -100,6 +100,14 @@
   white-space: nowrap;
 }
 
+/* ── Conflict count icon (SYNC-12: token-based, no inline color) ── */
+
+.statusbar-conflict-icon {
+  color: var(--color-warning);
+  margin-right: var(--space-1);
+  line-height: 1;
+}
+
 /* ── Gateway pill ─────────────────────────────────── */
 
 .statusbar-gateway {

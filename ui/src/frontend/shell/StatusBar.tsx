@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Localized, useLocalization } from "@fluent/react";
+import { requiredLocalized } from "@/frontend/shared";
 import { useGatewayStatus } from "@/hooks/useGatewayStatus";
 import { useSyncConnection } from "@/hooks/useSyncConnection";
 import { useWorkspaceNav } from "@/hooks/useWorkspaceNav";
@@ -68,7 +69,7 @@ export default function StatusBar() {
       <footer
         className="app-statusbar"
         role="status"
-        aria-label="Application status"
+        aria-label={requiredLocalized(l10n, "statusbar-app-status-aria")}
       >
         {/* ── Left segment: connection + version ── */}
         <div className="statusbar-left">
@@ -79,7 +80,7 @@ export default function StatusBar() {
                 aria-hidden="true"
               />
               <span className="statusbar-version">
-                OZ-POS Enterprise v0.0.24
+                {requiredLocalized(l10n, "statusbar-version")}
               </span>
             </div>
           </Tooltip>
@@ -88,7 +89,7 @@ export default function StatusBar() {
           {conflictCount > 0 && (
             <Tooltip content={l10n.getString('statusbar-conflict-count', { count: String(conflictCount) })} position="top">
               <div className="statusbar-segment statusbar-conflict" role="status" aria-live="polite">
-                <span aria-hidden="true" style={{ color: 'var(--color-warning, #eab308)', marginRight: 4 }}>&#9888;</span>
+                <span aria-hidden="true" className="statusbar-conflict-icon">&#9888;</span>
                 <span>{conflictCount}</span>
               </div>
             </Tooltip>
@@ -116,7 +117,9 @@ export default function StatusBar() {
                 }`}
                 aria-hidden="true"
               />
-              <span className="statusbar-gateway-name">Sync</span>
+              <span className="statusbar-gateway-name">
+                {requiredLocalized(l10n, "statusbar-sync-name")}
+              </span>
             </div>
           </Tooltip>
 
@@ -126,10 +129,10 @@ export default function StatusBar() {
               content={
                 stripeStatus.online
                   ? l10n.getString("gateway-status-online-aria", {
-                      name: "Stripe",
+                      name: requiredLocalized(l10n, "statusbar-gateway-name"),
                     })
                   : l10n.getString("gateway-status-offline-aria", {
-                      name: "Stripe",
+                      name: requiredLocalized(l10n, "statusbar-gateway-name"),
                     })
               }
               position="top"
@@ -139,13 +142,17 @@ export default function StatusBar() {
                   className={`statusbar-dot ${stripeStatus.online ? "statusbar-dot--online" : "statusbar-dot--offline"}`}
                   aria-hidden="true"
                 />
-                <span className="statusbar-gateway-name">Stripe</span>
+                <span className="statusbar-gateway-name">
+                  {requiredLocalized(l10n, "statusbar-gateway-name")}
+                </span>
               </div>
             </Tooltip>
           )}
 
           <span className="statusbar-divider" aria-hidden="true" />
-          <span className="statusbar-license">Proprietary License</span>
+          <span className="statusbar-license">
+            {requiredLocalized(l10n, "statusbar-license")}
+          </span>
         </div>
 
         {/* ── Right segment: user + workspace + theme ── */}

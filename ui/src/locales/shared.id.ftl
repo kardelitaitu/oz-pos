@@ -55,6 +55,12 @@ staff-login-license-active = Lisensi aktif
 staff-login-license-inactive = Lisensi tidak aktif
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
+# SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
+statusbar-app-status-aria = Status aplikasi
+statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-sync-name = Sinkronisasi
+statusbar-gateway-name = Stripe
+statusbar-license = Lisensi Proprieter
 
 # POS Cart Line Items
 shared-loading = Memuat…
