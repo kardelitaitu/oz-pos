@@ -87,7 +87,7 @@ npm ci --no-audit --no-fund
   or anywhere else) unless the user explicitly asks you to bump it.
 
 ### Rust Standards
-- **Development Iteration:** Use `cargo check` (or `cargo check -p <crate>`) for quick compilation validation and run specific target tests (e.g. `cargo test -p <crate> <test_name>`) during active development.
+- **Development Iteration:** Use `cargo check` (or `cargo check -p <crate>`) for quick compilation validation and run specific target tests (e.g. `cargo test -p <crate> <test_name>`) during active development. **Agents must NOT run `cargo clippy` or full workspace tests (`cargo test --workspace`) during routine iteration unless specifically requested by the user or executing final pre-push verification.**
 - **Pre-Push Verification:** Run `cargo fmt --all`, `cargo clippy --all-targets --all-features -- -D warnings` (resolving all warnings), and full workspace tests prior to pushing code or completing final verification.
 - Every public function, struct, and trait must have a doc comment (`///`).
 - Prefer `thiserror` for error types and `anyhow` for application-level error propagation.
