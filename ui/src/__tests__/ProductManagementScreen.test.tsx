@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import productsFtl from '@/locales/products.ftl?raw';
@@ -416,6 +416,87 @@ describe('ProductManagementScreen', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/stock must be a whole, non-negative number/i);
     });
     expect(invokeMock).not.toHaveBeenCalledWith('create_product_scoped', expect.anything());
+  });
+
+  it('surfaces a stock-alert poll failure with a retry action (PROD-10)', async () => {
+    // First poll fails, then the retry succeeds.
+    let failAlerts = true;
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === 'list_products' || cmd === 'list_products_scoped') return Promise.resolve(SAMPLE_PRODUCTS);
+      if (cmd === 'list_currencies_scoped') return Promise.resolve(SAMPLE_CURRENCIES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      if (cmd === 'active_stock_alerts_scoped') {
+        if (failAlerts) return Promise.reject(new Error('alert service down'));
+        return Promise.resolve([{ id: 'a1', sku: 'LATTE', product_name: 'Caffè Latte', current_qty: 2, threshold: 5 }]);
+      }
+      return Promise.resolve([]);
+    }) as unknown as typeof invokeMock);
+
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+
+    // Open the drawer — the failed poll must be visible, not silent.
+    await userEvent.click(screen.getByRole('button', { name: /open stock alerts/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/could not load stock alerts/i)).toBeInTheDocument();
+    });
+
+    // Retry recovers and the error banner disappears.
+    failAlerts = false;
+    await userEvent.click(screen.getByRole('button', { name: /reload alerts/i }));
+    await waitFor(() => {
+      expect(screen.queryByText(/could not load stock alerts/i)).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
+    });
+  });
+
+  it('ignores a stale load when a newer load resolves first (PROD-11)', async () => {
+    // Two overlapping loads: the delete-refresh load (call 2) stays in flight
+    // while a second delete triggers call 3 which resolves immediately; the
+    // stale call 2 then lands last and must NOT clobber the fresh result.
+    let listCalls = 0;
+    let resolveStale: ((v: unknown) => void) | null = null;
+    invokeMock.mockImplementation(((cmd: string) => {
+      if (cmd === 'list_products' || cmd === 'list_products_scoped') {
+        listCalls += 1;
+        if (listCalls === 2) {
+          // The first delete-refresh load hangs until we release it.
+          return new Promise((resolve) => { resolveStale = resolve; });
+        }
+        return Promise.resolve([...SAMPLE_PRODUCTS]);
+      }
+      if (cmd === 'delete_product' || cmd === 'delete_product_scoped') return Promise.resolve({ sku: 'LATTE' });
+      if (cmd === 'list_currencies_scoped') return Promise.resolve(SAMPLE_CURRENCIES);
+      if (cmd === 'list_categories' || cmd === 'list_categories_scoped') return Promise.resolve(SAMPLE_CATEGORIES);
+      if (cmd === 'list_tax_rates_scoped') return Promise.resolve(SAMPLE_TAX_RATES);
+      return Promise.resolve([]);
+    }) as unknown as typeof invokeMock);
+
+    renderWithFluentSync(<ProductManagementScreen />, productsFtl);
+    await waitForTable();
+
+    // Delete #1 → its refresh (call 2) starts and stays in flight.
+    await userEvent.click(screen.getByRole('button', { name: /delete caffè latte/i }));
+    await screen.findByRole('dialog');
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+    await waitFor(() => expect(listCalls).toBe(2));
+
+    // Delete #2 → its refresh (call 3) resolves immediately with fresh data.
+    await userEvent.click(screen.getByRole('button', { name: /delete plain bagel/i }));
+    await screen.findByRole('dialog');
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+    await waitFor(() => expect(listCalls).toBe(3));
+
+    // Now release the stale call 2 with data that would clobber the fresh
+    // result if the guard were missing — the 'STALE' name must never appear.
+    await act(async () => {
+      resolveStale?.([{ ...SAMPLE_PRODUCTS[0], name: 'STALE' }]);
+    });
+    expect(screen.queryByText('STALE')).not.toBeInTheDocument();
+    expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
   });
 
   it('shows error message when createProduct fails (no silent swallow)', async () => {

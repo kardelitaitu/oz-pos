@@ -95,6 +95,7 @@ export default function ProductManagementScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState('default');
   const [selectedLocationName, setSelectedLocationName] = useState('Location');
   const [alertCount, setAlertCount] = useState(0);
+  const [alertError, setAlertError] = useState(false);
 
   const handleLocationChange = useCallback((locationId: string, locationName: string) => {
     setSelectedLocationId(locationId);
@@ -102,23 +103,31 @@ export default function ProductManagementScreen() {
   }, []);
 
   // ── Poll active stock alerts for the bell badge count ──────
-  useEffect(() => {
+  // PROD-10: a failed poll is now visible (alertError) instead of being
+  // silently ignored, and the drawer offers an explicit retry. The seq guard
+  // (same pattern as `load`) ensures a slow poll for an old location/session
+  // can never overwrite a newer one.
+  const pollSeqRef = useRef(0);
+  const fetchAlerts = useCallback(async () => {
     const token = sessionToken ?? '';
     if (!token) return;
-
-    const fetchAlerts = async () => {
-      try {
-        const alerts = await getActiveStockAlerts(token, selectedLocationId);
-        setAlertCount(alerts.length);
-      } catch {
-        // Silently ignore — badge just won't show count.
-      }
-    };
-
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 30_000);
-    return () => clearInterval(interval);
+    const seq = ++pollSeqRef.current;
+    try {
+      const alerts = await getActiveStockAlerts(token, selectedLocationId);
+      if (seq !== pollSeqRef.current) return;
+      setAlertCount(alerts.length);
+      setAlertError(false);
+    } catch {
+      if (seq !== pollSeqRef.current) return;
+      setAlertError(true);
+    }
   }, [sessionToken, selectedLocationId]);
+
+  useEffect(() => {
+    void fetchAlerts();
+    const interval = setInterval(() => { void fetchAlerts(); }, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchAlerts]);
 
   const { l10n } = useLocalization();
   // PROD-04: keep l10n in a ref so `load` is not recreated (and the product
@@ -140,24 +149,45 @@ export default function ProductManagementScreen() {
   }, []);
   useFocusTrap(alertDrawerRef, showAlertPanel && !showModal, closeAlertDrawer);
 
+  // PROD-11: request-sequence guard so a slower earlier load can never
+  // overwrite a newer result (session switch or mutation refresh).
+  const loadSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  // A workspace/session switch is a fresh catalog — reset the skeleton gate
+  // so the new store's first load shows loading instead of the old store's
+  // rows while it resolves.
+  useEffect(() => {
+    hasLoadedOnceRef.current = false;
+  }, [sessionToken]);
   const load = useCallback(async () => {
-    setLoading(true);
+    const seq = ++loadSeqRef.current;
+    // Only the first load shows the skeleton — refreshes preserve the last
+    // known catalog on screen (PROD-04) instead of flashing a skeleton over
+    // rows the operator may be looking at.
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
     setLoadError(null);
     try {
       // TAX-01: tax rates and categories are read from the session store,
       // not the global DB — per-product tax assignment must resolve the same
       // store the products came from.
       const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRatesScoped(sessionToken), listCategoriesScoped(sessionToken), listCurrenciesScoped(sessionToken)]);
+      if (seq !== loadSeqRef.current) return;
       setProductDtos(dtos);
       setProducts(dtos.map(dtoToProduct));
       setTaxRates(rates);
       setCategories(cats);
       setCurrencies(currencyList);
+      hasLoadedOnceRef.current = true;
     } catch (err) {
       // PROD-04: distinguish a failed load from a genuinely empty catalog.
+      if (seq !== loadSeqRef.current) return;
       setLoadError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'product-mgmt-error-load'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [sessionToken]);
 
@@ -414,7 +444,7 @@ export default function ProductManagementScreen() {
                   </td>
                   <td>
                     {p.stockQty != null && p.stockQty < 10 ? (
-                      <span className="product-mgmt-stock-low" style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                      <span className="product-mgmt-stock-low">
                         {p.stockQty}
                       </span>
                     ) : p.stockQty != null ? (
@@ -617,11 +647,11 @@ export default function ProductManagementScreen() {
                   <Localized id="product-mgmt-field-tax-rates">
                     <legend className="product-mgmt-label">Tax Rates</legend>
                   </Localized>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginTop: 'var(--space-1)' }}>
+                  <div className="product-mgmt-tax-rate-list">
                     {taxRates.map((tr) => (
                       <label
                         key={tr.id}
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer', fontSize: 'var(--text-sm)' }}
+                        className="product-mgmt-tax-rate-option"
                       >
                         <input
                           type="checkbox"
@@ -714,6 +744,18 @@ export default function ProductManagementScreen() {
               </Localized>
             </button>
           </div>
+          {alertError && (
+            <div className="product-mgmt-alert-error" role="alert">
+              <span>{requiredLocalized(l10n, 'product-mgmt-alert-error')}</span>
+              <button
+                type="button"
+                className="product-mgmt-alert-error-retry"
+                onClick={() => { void fetchAlerts(); }}
+              >
+                {requiredLocalized(l10n, 'product-mgmt-alert-error-retry')}
+              </button>
+            </div>
+          )}
           <StockAlertPanel
             locationId={selectedLocationId}
             pollIntervalMs={30_000}
@@ -740,7 +782,9 @@ export default function ProductManagementScreen() {
           sku: deleteConfirmSku ?? '',
         })}
         variant="danger"
-        loading={deleting !== null}
+        // Loading is scoped to the SKU being deleted so a second delete
+        // remains confirmable while an earlier one is still in flight.
+        loading={deleting !== null && deleting === deleteConfirmSku}
         confirmLabel={requiredLocalized(l10n, 'product-mgmt-delete-confirm-btn')}
       />
     </div>
