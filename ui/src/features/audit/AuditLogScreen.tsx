@@ -268,7 +268,7 @@ export default function AuditLogScreen() {
         <div className="audit-log-header-right">
           {isManager && unreviewedCount > 0 && (
             <Button variant="secondary" onClick={() => void handleMarkReviewed()} loading={markingReviewed} size="sm">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 4 }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" className="audit-log-btn-icon">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <Localized id="audit-log-mark-reviewed"><span>Mark Reviewed</span></Localized>
@@ -410,7 +410,7 @@ export default function AuditLogScreen() {
           <table className="audit-log-table" aria-label={l10n.getString('audit-log-table-label')}>
             <thead>
               <tr>
-                <th style={{ width: '4px', padding: 0 }} />
+                <th className="audit-log-critical-th" />
                 <Localized id="audit-log-col-date"><th><span>Date</span></th></Localized>
                 <Localized id="audit-log-col-action"><th><span>Action</span></th></Localized>
                 <Localized id="audit-log-col-target"><th><span>Target</span></th></Localized>
@@ -423,7 +423,7 @@ export default function AuditLogScreen() {
                 const isCritical = CRITICAL_ACTIONS.has(entry.action) || entry.outcome === 'failure';
                 return (
                   <tr key={entry.id} className={isCritical ? 'audit-log-row--critical' : ''}>
-                    <td className="audit-log-critical-indicator" style={{ width: '4px', padding: 0 }}>
+                    <td className="audit-log-critical-indicator">
                       {isCritical && <div className="audit-log-critical-bar" />}
                     </td>
                     <td className="audit-log-cell-date">
