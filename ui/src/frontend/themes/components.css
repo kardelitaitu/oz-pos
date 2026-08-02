@@ -618,7 +618,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--color-pos-modal-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
@@ -633,10 +633,10 @@
 
 .modal-panel {
   position: relative;
-  background: #111827;
-  border: 1px solid #374151;
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-2xl);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+  box-shadow: var(--color-pos-modal-shadow);
   width: 90%;
   max-width: 560px;
   max-height: 85vh;
@@ -908,11 +908,9 @@
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   /* Fully opaque panel — no alpha channel on background */
-  background: #1e2535;
-  border: 1px solid #374151;
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.6),
-    0 2px 6px rgba(0, 0, 0, 0.4);
+  background: var(--color-toast-bg);
+  border: 1px solid var(--color-toast-border);
+  box-shadow: var(--color-toast-shadow);
   /* GPU-composite layer so the panel never inherits opacity from ancestors */
   will-change: transform, opacity;
   transform: translateZ(0);
@@ -929,7 +927,7 @@
   font-weight: 500;
   line-height: var(--leading-normal);
   /* Locked foreground — won't bleed through from a transparent parent */
-  color: #f9fafb;
+  color: var(--color-toast-fg);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -946,7 +944,7 @@
   margin-bottom: calc(-1 * var(--space-2));
   border-radius: var(--radius-sm);
   /* Locked colour — independent of parent opacity */
-  color: #9ca3af;
+  color: var(--color-toast-fg-muted);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -954,26 +952,26 @@
 }
 
 .toast__dismiss:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f9fafb;
+  background: var(--color-toast-hover-bg);
+  color: var(--color-toast-fg);
 }
 
 /* ── Per-variant accent colours (left border + icon tint) ── */
 .toast--success {
-  border-left-color: #10b981;
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, #1e2535 40%);
+  border-left-color: var(--color-toast-accent-success);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-success) 12%, transparent) 0%, var(--color-toast-bg) 40%);
 }
 .toast--error {
-  border-left-color: #ef4444;
-  background: linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, #1e2535 40%);
+  border-left-color: var(--color-toast-accent-error);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-error) 12%, transparent) 0%, var(--color-toast-bg) 40%);
 }
 .toast--warning {
-  border-left-color: #f59e0b;
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, #1e2535 40%);
+  border-left-color: var(--color-toast-accent-warning);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-warning) 12%, transparent) 0%, var(--color-toast-bg) 40%);
 }
 .toast--info {
-  border-left-color: #3b82f6;
-  background: linear-gradient(90deg, rgba(59, 130, 246, 0.12) 0%, #1e2535 40%);
+  border-left-color: var(--color-toast-accent-info);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-info) 12%, transparent) 0%, var(--color-toast-bg) 40%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1043,7 +1041,7 @@
   padding: var(--space-12) var(--space-6);
 }
 .empty-state__icon {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
   margin-bottom: var(--space-4);
   color: var(--color-fg-tertiary);
 }
@@ -1088,7 +1086,7 @@
   padding: var(--space-12) var(--space-6);
 }
 .error-state__icon {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
   margin-bottom: var(--space-4);
   color: var(--color-danger);
 }

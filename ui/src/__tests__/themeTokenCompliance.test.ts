@@ -413,8 +413,10 @@ function findFeatureCssFiles(dir: string): string[] {
         if (entry.name === 'node_modules' || entry.name === '.git') continue;
         results.push(...findFeatureCssFiles(join(dir, entry.name)));
       } else if (entry.name.endsWith('.css')) {
-        // Skip the design token definition files themselves
-        if (entry.name === 'tokens.css' || entry.name === 'components.css') continue;
+        // Skip the design token definition files themselves (tokens.css defines
+        // the tokens; components.css is scanned like any other CSS file so its
+        // values must stay token-driven too).
+        if (entry.name === 'tokens.css') continue;
         results.push(fullPath);
       }
     }

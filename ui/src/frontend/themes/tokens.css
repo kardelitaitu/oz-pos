@@ -34,6 +34,7 @@
   --text-2xl:  1.5rem;    /* 24px */
   --text-3xl:  1.875rem;  /* 30px */
   --text-4xl:  2.25rem;   /* 36px */
+  --text-5xl:  2.5rem;    /* 40px — empty-state hero icons */
   --text-hero: 4rem;      /* 64px — kiosk hero title */
 
   --font-weight-normal:   400;
@@ -298,6 +299,18 @@
   --color-pos-modal-btn-hover-bg: #4b5563;
   --color-pos-modal-btn-hover-fg: #ffffff;
   --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
+
+  /* ── Toast Tokens (default = dark panel, always-on contrast) ─ */
+  --color-toast-bg:            #1e2535;
+  --color-toast-border:        #374151;
+  --color-toast-fg:            #f9fafb;
+  --color-toast-fg-muted:      #9ca3af;
+  --color-toast-hover-bg:      rgba(255, 255, 255, 0.1);
+  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --color-toast-accent-success: #10b981;
+  --color-toast-accent-error:   #ef4444;
+  --color-toast-accent-warning: #f59e0b;
+  --color-toast-accent-info:    #3b82f6;
 }
 
 /* ── Light mode (Steel Blue Elevated) ────────────────────────────── */
@@ -427,6 +440,18 @@
   --color-pos-modal-btn-hover-bg: #e5e7eb;
   --color-pos-modal-btn-hover-fg: #111827;
   --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.15);
+
+  /* ── Toast Tokens (light = light panel, dark text) ─ */
+  --color-toast-bg:            #ffffff;
+  --color-toast-border:        #d1d5db;
+  --color-toast-fg:            #111827;
+  --color-toast-fg-muted:      #6b7280;
+  --color-toast-hover-bg:      rgba(17, 24, 39, 0.06);
+  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --color-toast-accent-success: #059669;
+  --color-toast-accent-error:   #dc2626;
+  --color-toast-accent-warning: #d97706;
+  --color-toast-accent-info:    #2563eb;
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -553,6 +578,18 @@
   --color-pos-modal-btn-hover-bg: var(--neutral-400);
   --color-pos-modal-btn-hover-fg: var(--neutral-950);
   --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
+
+  /* ── Toast Tokens (dark = dark panel, always-on contrast) ─ */
+  --color-toast-bg:            var(--neutral-100);
+  --color-toast-border:        var(--neutral-300);
+  --color-toast-fg:            var(--neutral-900);
+  --color-toast-fg-muted:      var(--neutral-600);
+  --color-toast-hover-bg:      rgba(255, 255, 255, 0.1);
+  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --color-toast-accent-success: #10b981;
+  --color-toast-accent-error:   #ef4444;
+  --color-toast-accent-warning: #f59e0b;
+  --color-toast-accent-info:    #3b82f6;
 }
 
 /* ── Smooth theme transitions ──────────────────── */
