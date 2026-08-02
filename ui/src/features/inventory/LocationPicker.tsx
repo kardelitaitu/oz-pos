@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import { useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { requiredLocalized } from '@/frontend/shared';
@@ -15,6 +15,9 @@ type PickerLocation = InventoryLocation & {
   is_primary?: boolean;
   allow_negative_stock?: boolean;
 };
+
+// LOC-09: sets large enough to need an inline search field.
+const SEARCH_THRESHOLD = 8;
 
 // ── Location type label mapping (LOC-05) ───────────────────────────
 // Every supported type maps to a value-bearing Fluent key; unknown future
@@ -76,8 +79,10 @@ const LocationPicker = memo(function LocationPicker({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   // LOC-07: request-generation guard — a slower earlier request (session
   // switch, refreshKey bump, or instance change) must never overwrite a
   // newer result, and no load may re-trigger an outdated effect teardown.
@@ -171,6 +176,33 @@ const LocationPicker = memo(function LocationPicker({
     [onChange, value],
   );
 
+  // ── LOC-09: deterministic selected-first ordering ──────────────
+  // The currently-selected location is always the first option so the
+  // operator's active scope sits on top; the rest sort by name so the list is
+  // stable across loads and workspace switches.
+  const orderedLocations = useMemo(() => {
+    const sorted = [...locations].sort((a, b) => a.name.localeCompare(b.name));
+    const selectedIdx = sorted.findIndex((loc) => loc.id === value);
+    if (selectedIdx <= 0) return sorted;
+    // selectedIdx > 0 guarantees the element exists (noUncheckedIndexedAccess).
+    const [selected] = sorted.splice(selectedIdx, 1);
+    return [selected!, ...sorted];
+  }, [locations, value]);
+
+  // ── LOC-09: inline search over the ordered list ─────────────────
+  // A search query narrows the options by name or localized type label; the
+  // active descendant and keyboard navigation always operate on the filtered
+  // (visible) list so the highlighted option matches what is rendered.
+  const query = search.trim().toLowerCase();
+  const visibleLocations = useMemo(() => {
+    if (!query) return orderedLocations;
+    return orderedLocations.filter(
+      (loc) =>
+        loc.name.toLowerCase().includes(query) ||
+        locationTypeLabel(l10nRef.current, loc.type).toLowerCase().includes(query),
+    );
+  }, [orderedLocations, query]); // l10n via ref — stable dep chain
+
   // ── Keyboard: full listbox navigation (LOC-04) ──────────────
   // ArrowUp/Down move the active descendant (wrapping), Home/End jump to the
   // first/last option, Enter/Space select the active option, Escape closes and
@@ -179,8 +211,14 @@ const LocationPicker = memo(function LocationPicker({
 
   useEffect(() => {
     if (!open) return;
-    listboxRef.current?.focus();
-  }, [open]);
+    // Large sets start in the search field (LOC-09); otherwise the listbox
+    // itself takes focus so arrow navigation is announced immediately.
+    if (locations.length >= SEARCH_THRESHOLD) {
+      searchRef.current?.focus();
+    } else {
+      listboxRef.current?.focus();
+    }
+  }, [open, locations.length]);
 
   useEffect(() => {
     if (!open || activeIndex < 0 || !listboxRef.current) return;
@@ -193,20 +231,30 @@ const LocationPicker = memo(function LocationPicker({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (locations.length === 0) return;
+      const isSearchFocused = e.target === searchRef.current;
+      // Space types in the search field (LOC-09) — never hijack it. Enter from
+      // the search box still selects the highlighted option (combobox-style).
+      if (e.key === ' ' && isSearchFocused) return;
+      // Escape must work even in the no-results state (visibleLocations is
+      // empty after a query matches nothing) so keyboard users can always
+      // dismiss the dropdown.
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setActiveIndex(-1);
+        ref.current?.querySelector<HTMLButtonElement>('.location-picker-trigger')?.focus();
+        return;
+      }
+      if (visibleLocations.length === 0) return;
+      // NOTE: Escape is handled above (before this guard) so it also works in
+      // the no-results state — no duplicate case here.
       switch (e.key) {
-        case 'Escape':
-          setOpen(false);
-          setActiveIndex(-1);
-          ref.current?.querySelector<HTMLButtonElement>('.location-picker-trigger')?.focus();
-          break;
         case 'ArrowDown':
           e.preventDefault();
-          setActiveIndex((i) => (i + 1) % locations.length);
+          setActiveIndex((i) => (i + 1) % visibleLocations.length);
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setActiveIndex((i) => (i <= 0 ? locations.length - 1 : i - 1));
+          setActiveIndex((i) => (i <= 0 ? visibleLocations.length - 1 : i - 1));
           break;
         case 'Home':
           e.preventDefault();
@@ -214,13 +262,13 @@ const LocationPicker = memo(function LocationPicker({
           break;
         case 'End':
           e.preventDefault();
-          setActiveIndex(locations.length - 1);
+          setActiveIndex(visibleLocations.length - 1);
           break;
         case 'Enter':
         case ' ': {
           e.preventDefault();
-          if (activeIndex >= 0 && locations[activeIndex]) {
-            handleSelect(locations[activeIndex]);
+          if (activeIndex >= 0 && visibleLocations[activeIndex]) {
+            handleSelect(visibleLocations[activeIndex]);
           }
           break;
         }
@@ -230,7 +278,7 @@ const LocationPicker = memo(function LocationPicker({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, locations, activeIndex, handleSelect]);
+  }, [open, visibleLocations, activeIndex, handleSelect]);
 
   // ── Find current location name ─────────────────────────────────
 
@@ -268,7 +316,8 @@ const LocationPicker = memo(function LocationPicker({
         onClick={() => {
           const next = !open;
           if (next) {
-            const currentIdx = locations.findIndex((loc) => loc.id === value);
+            setSearch('');
+            const currentIdx = orderedLocations.findIndex((loc) => loc.id === value);
             setActiveIndex(currentIdx >= 0 ? currentIdx : 0);
           } else {
             setActiveIndex(-1);
@@ -312,48 +361,77 @@ const LocationPicker = memo(function LocationPicker({
       </button>
 
       {open && (
-        <ul
-          id="location-picker-listbox"
-          ref={listboxRef}
-          className="location-picker-dropdown"
-          role="listbox"
-          tabIndex={-1}
-          aria-label={requiredLocalized(l10n, 'loc-picker-listbox-aria')}
-          aria-activedescendant={
-            activeIndex >= 0 && locations[activeIndex]
-              ? `location-picker-option-${locations[activeIndex].id}`
-              : undefined
-          }
-        >
-          {locations.map((loc, idx) => (
-            <li key={loc.id} role="none">
-              <button
-                type="button"
-                role="option"
-                id={`location-picker-option-${loc.id}`}
-                data-index={idx}
-                aria-selected={loc.id === value}
-                className={`location-picker-option ${loc.id === value ? 'location-picker-option--active' : ''} ${activeIndex === idx ? 'location-picker-option--highlighted' : ''}`}
-                onClick={() => handleSelect(loc)}
-              >
-                <span className="location-picker-option-name">{loc.name}</span>
-                <span className="location-picker-option-meta">
-                  {locationTypeLabel(l10n, loc.type)}
-                  {loc.is_primary && (
-                    <span className="location-picker-badge location-picker-badge--primary">
-                      {requiredLocalized(l10n, 'loc-picker-badge-primary')}
-                    </span>
-                  )}
-                  {loc.allow_negative_stock && (
-                    <span className="location-picker-badge location-picker-badge--neg">
-                      {requiredLocalized(l10n, 'loc-picker-badge-neg-stock')}
-                    </span>
-                  )}
+        <div className="location-picker-dropdown">
+          {locations.length >= SEARCH_THRESHOLD && (
+            <div className="location-picker-search-wrap">
+              <input
+                ref={searchRef}
+                type="search"
+                className="location-picker-search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  // LOC-09: keep the highlight valid when the query narrows
+                  // the list — an out-of-range activeIndex would leave
+                  // aria-activedescendant undefined and Enter a no-op.
+                  setActiveIndex(0);
+                }}
+                placeholder={requiredLocalized(l10n, 'loc-picker-search-placeholder')}
+                aria-label={requiredLocalized(l10n, 'loc-picker-search-aria')}
+              />
+            </div>
+          )}
+          <ul
+            id="location-picker-listbox"
+            ref={listboxRef}
+            className="location-picker-listbox"
+            role="listbox"
+            tabIndex={-1}
+            aria-label={requiredLocalized(l10n, 'loc-picker-listbox-aria')}
+            aria-activedescendant={
+              activeIndex >= 0 && visibleLocations[activeIndex]
+                ? `location-picker-option-${visibleLocations[activeIndex].id}`
+                : undefined
+            }
+          >
+            {visibleLocations.length === 0 ? (
+              <li role="none">
+                <span className="location-picker-no-results">
+                  {requiredLocalized(l10n, 'loc-picker-no-results')}
                 </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ) : (
+              visibleLocations.map((loc, idx) => (
+                <li key={loc.id} role="none">
+                  <button
+                    type="button"
+                    role="option"
+                    id={`location-picker-option-${loc.id}`}
+                    data-index={idx}
+                    aria-selected={loc.id === value}
+                    className={`location-picker-option ${loc.id === value ? 'location-picker-option--active' : ''} ${activeIndex === idx ? 'location-picker-option--highlighted' : ''}`}
+                    onClick={() => handleSelect(loc)}
+                  >
+                    <span className="location-picker-option-name">{loc.name}</span>
+                    <span className="location-picker-option-meta">
+                      {locationTypeLabel(l10n, loc.type)}
+                      {loc.is_primary && (
+                        <span className="location-picker-badge location-picker-badge--primary">
+                          {requiredLocalized(l10n, 'loc-picker-badge-primary')}
+                        </span>
+                      )}
+                      {loc.allow_negative_stock && (
+                        <span className="location-picker-badge location-picker-badge--neg">
+                          {requiredLocalized(l10n, 'loc-picker-badge-neg-stock')}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );

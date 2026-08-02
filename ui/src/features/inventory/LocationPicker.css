@@ -79,21 +79,57 @@
   transform: rotate(180deg);
 }
 
+/* LOC-09: the dropdown is now a wrapper (popover chrome) around the optional
+   inline search field and the listbox <ul>. */
 .location-picker-dropdown {
   position: absolute;
   left: 0;
   top: calc(100% + 4px);
   min-width: 220px;
-  max-height: 320px;
-  overflow-y: auto;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: var(--z-dropdown);
+  padding: var(--space-1);
+}
+
+/* LOC-09: inline search shown for large location sets (SEARCH_THRESHOLD). */
+.location-picker-search-wrap {
+  padding: 0 var(--space-1) var(--space-1_5);
+}
+
+.location-picker-search {
+  width: 100%;
+  padding: var(--space-1_5) var(--space-2_5);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}
+
+.location-picker-search:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* LOC-09: the listbox itself scrolls inside the popover wrapper. */
+.location-picker-listbox {
   list-style: none;
   margin: 0;
-  padding: var(--space-1);
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* LOC-09: no-results state for a search query that matches nothing. */
+.location-picker-no-results {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-sm);
+  font-style: italic;
 }
 
 .location-picker-option {
