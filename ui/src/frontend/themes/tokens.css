@@ -140,6 +140,13 @@
   --color-danger-bg:       rgba(220, 38, 38, 0.12);
   --color-danger-dim:      #fca5a5;
   --color-danger-fg:       #ffffff;
+  /* Status surface foreground pairs (TBL-11) — contrast-safe text on the
+     status gradients. Dark text on the luminous bright fills used by the
+     default/dark themes; light text on the saturated deep fills of the
+     light theme. */
+  --color-success-fg:      #07111d;
+  --color-warning-fg:      #07111d;
+  --color-cleaning-fg:     #ffffff;
   --color-info:            #60a5fa;
   --color-info-bg:         rgba(96, 165, 250, 0.08);
 
@@ -365,6 +372,11 @@
   --color-danger-bg:       #fef2f2;
   --color-danger-dim:      #fecaca;
   --color-danger-fg:       #ffffff;
+  /* Status surface foreground pairs (TBL-11) — light text on the darker
+     semantic fills of the light theme. */
+  --color-success-fg:      #ffffff;
+  --color-warning-fg:      #ffffff;
+  --color-cleaning-fg:     #ffffff;
   --color-info:            #2563eb;
   --color-info-bg:         #eff6ff;
 
@@ -486,6 +498,11 @@
   --color-danger-hover:    #b91c1c;
   --color-danger-bg:       rgba(220, 38, 38, 0.12);
   --color-danger-fg:       #ffffff;
+  /* Status surface foreground pairs (TBL-11) — same contrast logic as the
+     default theme: dark text on luminous fills. */
+  --color-success-fg:      #07111d;
+  --color-warning-fg:      #07111d;
+  --color-cleaning-fg:     #ffffff;
   --color-info:            #60a5fa;
   --color-info-bg:         rgba(96, 165, 250, 0.08);
 

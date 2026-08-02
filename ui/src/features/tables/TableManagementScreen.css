@@ -184,7 +184,7 @@
   justify-content: center;
   border: 2px solid color-mix(in srgb, var(--color-fg-primary) 40%, transparent); /* design exception: white border on colored status bg (table) */
   cursor: pointer;
-  color: var(--color-accent-fg);
+  color: var(--color-accent-fg); /* fallback; overridden per-status below */
   font-weight: var(--font-weight-semibold);
   text-shadow: 0 1px 3px color-mix(in srgb, var(--color-fg) 40%, transparent);
   padding: var(--space-1);
@@ -226,6 +226,7 @@
 /* Available */
 .tables-table--available {
   background: linear-gradient(135deg, var(--color-success) 0%, color-mix(in srgb, var(--color-success) 80%, black) 100%);
+  color: var(--color-success-fg); /* TBL-11: dedicated status foreground pair */
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-success) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -244,6 +245,7 @@
 }
 .tables-table--occupied {
   background: linear-gradient(135deg, var(--color-danger) 0%, color-mix(in srgb, var(--color-danger) 80%, black) 100%);
+  color: var(--color-danger-fg); /* TBL-11: dedicated status foreground pair */
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-danger) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -257,6 +259,7 @@
 /* Reserved */
 .tables-table--reserved {
   background: linear-gradient(135deg, var(--color-warning) 0%, color-mix(in srgb, var(--color-warning) 80%, black) 100%);
+  color: var(--color-warning-fg); /* TBL-11: dedicated status foreground pair */
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-warning) 25%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -270,6 +273,7 @@
 /* Cleaning */
 .tables-table--cleaning {
   background: linear-gradient(135deg, var(--color-fg-tertiary) 0%, color-mix(in srgb, var(--color-fg-tertiary) 80%, black) 100%);
+  color: var(--color-cleaning-fg); /* TBL-11: dedicated status foreground pair */
   box-shadow: 
     0 4px 12px color-mix(in srgb, var(--color-fg-tertiary) 20%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -309,7 +313,6 @@
 
 .tables-table-status {
   font-size: var(--text-xs);
-  opacity: 0.85;
   font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -421,6 +424,34 @@
   @keyframes fadeIn {
     from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
     to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+}
+
+/* ── Forced-colors (Windows high-contrast) support (TBL-11) ─────── */
+@media (forced-colors: active) {
+  .tables-table {
+    border: 2px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  .tables-table--available,
+  .tables-table--occupied,
+  .tables-table--reserved,
+  .tables-table--cleaning {
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
+  .tables-table:hover {
+    border-color: Highlight;
+  }
+
+  .tables-table:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }
 
