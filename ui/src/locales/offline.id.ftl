@@ -31,5 +31,7 @@ offline-queue-conflict-count = { $count } item diselesaikan melalui konflik sink
 # ERR-07: Non-blocking notice after repeated poll failures
 offline-queue-status-stale = Status antrean mungkin tidak terbarui.
 offline-queue-last-refreshed = Terakhir diperbarui { $time }
+# ERR-09: Status yang dapat diakses saat muat ulang sedang berlangsung dengan baris terlihat
+offline-queue-refreshing = Menyegarkan…
 
 # ── Terminal Management ──

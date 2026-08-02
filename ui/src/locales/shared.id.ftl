@@ -231,6 +231,8 @@ audit-log-user-system = sistem
 audit-log-loading = Memuat…
 audit-log-refresh = Segarkan
 audit-log-retry = Coba Lagi
+# ERR-09: Status yang dapat diakses saat muat ulang sedang berlangsung dengan baris terlihat
+audit-log-refreshing = Menyegarkan…
 audit-log-filter-all = Semua
 audit-log-filter-success = Berhasil
 audit-log-filter-failure = Gagal

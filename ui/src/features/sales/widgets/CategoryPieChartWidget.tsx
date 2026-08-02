@@ -6,6 +6,7 @@ import { getCategoryBreakdown } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasPieChart from '@/components/charts/CanvasPieChart';
 import type { PieSlice } from '@/components/charts/CanvasPieChart';
+import { l10nErrorMessage } from '@/utils/app-error';
 
 /** Canvas 2D category breakdown donut chart widget for the reporting dashboard. */
 export default function CategoryPieChartWidget() {
@@ -34,11 +35,12 @@ export default function CategoryPieChartWidget() {
         })),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // ERR-05: never render raw backend messages — map to user-safe copy.
+      setError(l10nErrorMessage(e, l10n, 'app-error-generic'));
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 

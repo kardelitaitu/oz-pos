@@ -14,6 +14,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { deriveAsyncPhase } from '@/utils/retry-state';
 import './OfflineQueueScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -173,6 +174,15 @@ export default function OfflineQueueScreen() {
 
   // ── Render ─────────────────────────────────────────────────────
 
+  // ERR-09: derive the standardized async phase so a reload with rows on
+  // screen is `refreshing` (rows stay visible + status announced) instead
+  // of blanking to the skeleton.
+  const phase = deriveAsyncPhase({
+    loading,
+    error: error !== null,
+    hasData: items.length > 0,
+  });
+
   return (
     <div className="offline-queue-screen">
       <div className="offline-queue-header">
@@ -263,7 +273,7 @@ export default function OfflineQueueScreen() {
         </div>
       )}
 
-      {loading ? (
+      {phase === 'loading' ? (
         <div className="offline-queue-loading-skeleton" {...pullRefreshProps}>
           {/* Header skeleton */}
           <div className="offline-queue-skeleton-header">
@@ -299,7 +309,7 @@ export default function OfflineQueueScreen() {
             </table>
           </div>
         </div>
-      ) : error ? (
+      ) : phase === 'error' ? (
         <Card shadow="sm">
           <div className="offline-queue-empty">
             <Localized id="offline-queue-error">
@@ -310,7 +320,7 @@ export default function OfflineQueueScreen() {
             </Localized>
           </div>
         </Card>
-      ) : items.length === 0 ? (
+      ) : phase === 'idle' ? (
         <Card shadow="sm">
           <div className="offline-queue-empty" {...pullRefreshProps}>
             <Localized id="offline-queue-empty">
@@ -320,6 +330,14 @@ export default function OfflineQueueScreen() {
         </Card>
       ) : (
         <div className="offline-queue-table-wrap" {...pullRefreshProps}>
+          {/* ERR-09: rows stay visible during a reload — announce the retry intent */}
+          {phase === 'refreshing' && (
+            <div className="offline-queue-refreshing" role="status" aria-live="polite">
+              <Localized id="offline-queue-refreshing">
+                <span>Refreshing…</span>
+              </Localized>
+            </div>
+          )}
           {/* P7-3: Pull-to-refresh indicator */}
           {pullState !== 'idle' && (
             <div

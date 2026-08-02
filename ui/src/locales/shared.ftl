@@ -88,6 +88,8 @@ audit-log-user-system = system
 audit-log-loading = Loading…
 audit-log-refresh = Refresh
 audit-log-retry = Retry
+# ERR-09: Accessible status while a reload is in flight with rows visible
+audit-log-refreshing = Refreshing…
 audit-log-filter-all = All
 audit-log-filter-success = Success
 audit-log-filter-failure = Failure

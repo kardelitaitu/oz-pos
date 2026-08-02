@@ -3,6 +3,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getDailyRevenue } from '@/api/reports';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasLineChart from '@/components/charts/CanvasLineChart';
 import type { LineChartPoint } from '@/components/charts/CanvasLineChart';
@@ -34,11 +35,12 @@ export default function RevenueLineChartWidget() {
       }));
       setData(points);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // ERR-05: never render raw backend messages — map to user-safe copy.
+      setError(l10nErrorMessage(e, l10n, 'app-error-generic'));
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 

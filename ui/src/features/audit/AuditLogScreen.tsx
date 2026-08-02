@@ -408,6 +408,14 @@ export default function AuditLogScreen() {
         </Card>
       ) : (
         <div className="audit-log-table-wrap" aria-live="polite" aria-relevant="additions text">
+          {/* ERR-09: rows stay visible during a reload — announce the retry intent */}
+          {loading && entries.length > 0 && (
+            <div className="audit-log-refreshing" role="status" aria-live="polite">
+              <Localized id="audit-log-refreshing">
+                <span>Refreshing…</span>
+              </Localized>
+            </div>
+          )}
           <table className="audit-log-table" aria-label={l10n.getString('audit-log-table-label')}>
             <thead>
               <tr>

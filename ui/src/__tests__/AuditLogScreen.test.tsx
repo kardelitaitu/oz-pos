@@ -114,6 +114,26 @@ describe('AuditLogScreen', () => {
     );
   });
 
+  it('keeps rows visible and announces refreshing during a reload (ERR-09)', async () => {
+    // First load resolves with rows.
+    mockListAuditLogScoped.mockResolvedValueOnce(makePage([makeEntry()]));
+    // The reload stays pending so the `refreshing` phase is observable.
+    mockListAuditLogScoped.mockImplementationOnce(() => new Promise(() => {}));
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Date')).toBeDefined());
+
+    // Trigger Refresh while rows are on screen.
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    // Rows stay visible (no skeleton), and the refreshing status announces
+    // the retry intent (ERR-09).
+    await waitFor(() => {
+      expect(screen.getByText('Date')).toBeDefined();
+      expect(document.querySelector('.audit-log-refreshing')).toBeTruthy();
+    });
+    expect(document.querySelector('.audit-log-loading-skeleton')).toBeNull();
+  });
+
   it('calls load(reset) when Refresh is clicked', async () => {
     mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry()]));
     await renderScreen();

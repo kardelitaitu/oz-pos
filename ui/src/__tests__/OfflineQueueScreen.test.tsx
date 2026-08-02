@@ -247,6 +247,37 @@ describe('OfflineQueueScreen', () => {
     }
   });
 
+  it('keeps rows visible and announces refreshing during a reload (ERR-09)', async () => {
+    // First load resolves with rows.
+    mockListAllOffline.mockResolvedValueOnce([makeQueueItem()]);
+    mockPendingOfflineCount.mockResolvedValue(1);
+    // The reload (via Sync All → load) stays pending so the `refreshing`
+    // phase is observable.
+    mockListAllOffline.mockImplementationOnce(() => new Promise(() => {}));
+    mockRetryOfflineSync.mockResolvedValue({ syncedCount: 0, failedCount: 0, totalCount: 1 });
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('sale.create')).toBeTruthy();
+    });
+
+    // Trigger a reload while rows are on screen.
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Sync All'));
+
+    // Rows stay visible (no skeleton), and an accessible refreshing status
+    // announces the retry intent.
+    await waitFor(() => {
+      expect(screen.getByText('sale.create')).toBeTruthy();
+      const refreshing = document.querySelector('.offline-queue-refreshing');
+      expect(refreshing).toBeTruthy();
+      expect(refreshing?.getAttribute('role')).toBe('status');
+      expect(refreshing?.getAttribute('aria-live')).toBe('polite');
+    });
+    expect(document.querySelector('.offline-queue-loading-skeleton')).toBeNull();
+  });
+
   it('shows sync result after Sync All succeeds', async () => {
     mockListAllOffline.mockResolvedValue([makeQueueItem()]);
     mockPendingOfflineCount.mockResolvedValue(1);

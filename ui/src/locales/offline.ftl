@@ -33,3 +33,5 @@ offline-queue-conflict-count = { $count } item(s) resolved via sync conflict.
 # ERR-07: Non-blocking notice after repeated poll failures
 offline-queue-status-stale = Queue status may be out of date.
 offline-queue-last-refreshed = Last refreshed { $time }
+# ERR-09: Accessible status while a reload is in flight with rows visible
+offline-queue-refreshing = Refreshing…
