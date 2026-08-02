@@ -77,3 +77,34 @@ export const markAuditReviewedScoped = (
   args: { reviewedThroughCreatedAt: string; reviewedThroughId: string },
 ): Promise<ReviewCheckpointDto> =>
   loggedInvoke<ReviewCheckpointDto>('mark_audit_reviewed_scoped', { sessionToken, args });
+
+// ── Export (AUD-09) ───────────────────────────────────────────────
+
+/** Arguments for the server-side audit export (AUD-09). */
+export interface ExportAuditLogArgs {
+  outcome?: string;
+  query?: string;
+}
+
+/** Result of a server-side audit export (AUD-09). */
+export interface AuditExportDto {
+  /** RFC-4180 CSV artifact (UTF-8 BOM + header + rows, newest first). */
+  csv: string;
+  /** Number of rows exported. */
+  row_count: number;
+  /** ISO-8601 generation timestamp. */
+  generated_at: string;
+  /** User who requested the export. */
+  requested_by: string;
+}
+
+/**
+ * Export the session store's audit log to CSV (AUD-09). Server-side: the
+ * session selects the store and user, `audit:export` is enforced, and an
+ * `audit.export` event records the filter scope + row count.
+ */
+export const exportAuditLogScoped = (
+  sessionToken: string,
+  args: ExportAuditLogArgs,
+): Promise<AuditExportDto> =>
+  loggedInvoke<AuditExportDto>('export_audit_log_scoped', { sessionToken, args });

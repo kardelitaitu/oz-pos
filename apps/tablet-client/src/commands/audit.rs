@@ -272,6 +272,109 @@ pub async fn mark_audit_reviewed_scoped(
     Ok(ReviewCheckpointDto::from(cp))
 }
 
+// ── Export (AUD-09) ──────────────────────────────────────────────────
+
+/// Arguments for the server-side audit export (AUD-09).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportAuditLogArgs {
+    /// Optional outcome filter (`success` | `failure` | anything).
+    pub outcome: Option<String>,
+    /// Optional free-text query over action/target/user.
+    pub query: Option<String>,
+}
+
+/// Result of a server-side audit export (AUD-09).
+#[derive(Debug, Serialize)]
+pub struct AuditExportDto {
+    /// RFC-4180 CSV artifact (UTF-8 BOM + header + rows, newest first).
+    pub csv: String,
+    /// Number of rows exported.
+    pub row_count: u64,
+    /// ISO-8601 generation timestamp.
+    pub generated_at: String,
+    /// User who requested the export.
+    pub requested_by: String,
+}
+
+/// Build an RFC-4180 CSV row from the given fields (quotes embedded quotes).
+fn csv_row(fields: &[&str]) -> String {
+    let escaped: Vec<String> = fields
+        .iter()
+        .map(|f| format!("\"{}\"", f.replace('\"', "\"\"")))
+        .collect();
+    escaped.join(",")
+}
+
+/// Export the session store's audit log to CSV (AUD-09).
+///
+/// Resolves the store and authenticated user from the session token,
+/// enforces `audit:export`, and reads the full matching set (bounded by
+/// `MAX_AUDIT_EXPORT_ROWS`) from the store DB. Records an `audit.export`
+/// event capturing the filter scope, requesting user, and row count so the
+/// handoff itself is auditable.
+#[command]
+pub async fn export_audit_log_scoped(
+    session_token: String,
+    args: ExportAuditLogArgs,
+    state: State<'_, AppState>,
+) -> Result<AuditExportDto, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_audit_permission(&state, &session.user_id, permissions::AUDIT_EXPORT).await?;
+    // Read + export-event write happen on the SAME store connection (matching
+    // every other scoped audit mutation, e.g. mark_audit_reviewed_scoped), so
+    // the export action is visible in the store-scoped audit log. The guard
+    // never crosses an await, keeping the command future Send.
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let entries =
+        store.list_audit_entries_export(args.outcome.as_deref(), args.query.as_deref())?;
+
+    let mut csv = String::with_capacity(entries.len() * 160 + 256);
+    csv.push('\u{FEFF}'); // UTF-8 BOM for spreadsheet compatibility
+    csv.push_str("id,created_at,user_id,action,target_type,target_id,outcome,details\n");
+    for e in &entries {
+        csv.push_str(&csv_row(&[
+            &e.id,
+            &e.created_at,
+            &e.user_id,
+            &e.action,
+            e.target_type.as_deref().unwrap_or(""),
+            e.target_id.as_deref().unwrap_or(""),
+            &e.outcome,
+            &e.details,
+        ]));
+        csv.push('\n');
+    }
+
+    // The export action itself becomes an audit event (AUD-09 handoff scope),
+    // persisted to the store DB so it appears in the same audit log being
+    // exported.
+    let details = format!(
+        "{{\"outcome\":{},\"query\":{},\"row_count\":{}}}",
+        serde_json::to_string(&args.outcome).unwrap_or_else(|_| "null".into()),
+        serde_json::to_string(&args.query).unwrap_or_else(|_| "null".into()),
+        entries.len(),
+    );
+    store.log_audit(&oz_core::AuditEntry::new(
+        session.user_id.clone(),
+        "system.export",
+        Some("audit"),
+        None::<String>,
+        Some(details),
+        "success",
+    ))?;
+
+    Ok(AuditExportDto {
+        csv,
+        row_count: entries.len() as u64,
+        generated_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        requested_by: session.user_id,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +456,50 @@ mod tests {
         };
         let debug = format!("{:?}", args);
         assert!(debug.contains("50"));
+    }
+
+    // ── Export (AUD-09) ────────────────────────────────────────────
+
+    #[test]
+    fn export_args_deserialize_camel_case() {
+        let json = r#"{"outcome":"failure","query":"sale"}"#;
+        let args: ExportAuditLogArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.outcome.as_deref(), Some("failure"));
+        assert_eq!(args.query.as_deref(), Some("sale"));
+    }
+
+    #[test]
+    fn export_args_deserialize_empty() {
+        let json = r#"{}"#;
+        let args: ExportAuditLogArgs = serde_json::from_str(json).unwrap();
+        assert!(args.outcome.is_none());
+        assert!(args.query.is_none());
+    }
+
+    #[test]
+    fn csv_row_quotes_embedded_quotes_and_commas() {
+        // RFC-4180: embedded quotes are doubled; every field is quoted.
+        let row = csv_row(&["a\"b", "c,d", "plain"]);
+        assert_eq!(row, "\"a\"\"b\",\"c,d\",\"plain\"");
+    }
+
+    #[test]
+    fn csv_row_empty_and_nullable_fields() {
+        let row = csv_row(&["id-1", "", "user-1"]);
+        assert_eq!(row, "\"id-1\",\"\",\"user-1\"");
+    }
+
+    #[test]
+    fn export_dto_serialize_has_all_fields() {
+        let dto = AuditExportDto {
+            csv: "\u{FEFF}id\n".into(),
+            row_count: 1,
+            generated_at: "2026-08-01T00:00:00.000Z".into(),
+            requested_by: "user-1".into(),
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["row_count"], 1);
+        assert_eq!(json["requested_by"], "user-1");
+        assert!(json["csv"].as_str().unwrap().starts_with('\u{FEFF}'));
     }
 }

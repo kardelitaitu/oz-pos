@@ -37,6 +37,11 @@ const REDACTED_MARKER: &str = "[REDACTED]";
 /// (AUD-06). Oversized payloads are truncated with an explicit marker.
 const MAX_DETAIL_LEN: usize = 4000;
 
+/// Maximum number of rows returned by a server-side audit export (AUD-09).
+/// Guards memory/response size while still covering full incident and
+/// retention windows.
+pub const MAX_AUDIT_EXPORT_ROWS: u64 = 100_000;
+
 /// True when any key in the JSON tree matches a sensitive key name
 /// (case-insensitive). Used to decide whether re-serialisation is needed.
 fn has_sensitive_key(value: &serde_json::Value) -> bool {
@@ -254,6 +259,80 @@ impl Store<'_> {
             items.truncate(bounded as usize);
         }
         Ok((items, total, has_more))
+    }
+
+    /// Return ALL audit entries matching the optional filters (AUD-09).
+    ///
+    /// Unlike [`Self::list_audit_entries_filtered`] (which clamps pages to
+    /// 200 rows), this returns every matching row in deterministic
+    /// newest-first `(created_at, id)` order for a server-side export
+    /// snapshot, bounded by [`MAX_AUDIT_EXPORT_ROWS`] so a runaway table
+    /// cannot exhaust memory. Shares the exact outcome/query WHERE
+    /// construction of the filtered listing (no keyset cursor — an export
+    /// is a full snapshot, not a paged continuation).
+    pub fn list_audit_entries_export(
+        &self,
+        outcome: Option<&str>,
+        query: Option<&str>,
+    ) -> Result<Vec<AuditEntry>, CoreError> {
+        let mut where_clauses: Vec<String> = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        let mut idx = 1usize;
+
+        if let Some(outcome) = outcome {
+            let trimmed = outcome.trim();
+            if !trimmed.is_empty() {
+                where_clauses.push(format!("outcome = ?{idx}"));
+                params.push(Box::new(trimmed.to_string()));
+                idx += 1;
+            }
+        }
+
+        if let Some(query) = query {
+            let trimmed = query.trim();
+            if !trimmed.is_empty() {
+                let escaped = trimmed
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                let pattern = format!("%{escaped}%");
+                where_clauses.push(format!(
+                    "(action LIKE ?{idx} ESCAPE '\\' OR COALESCE(target_type, '') LIKE ?{idx} ESCAPE '\\' \
+                     OR COALESCE(target_id, '') LIKE ?{idx} ESCAPE '\\' OR user_id LIKE ?{idx} ESCAPE '\\')"
+                ));
+                params.push(Box::new(pattern));
+                idx += 1;
+            }
+        }
+
+        let where_sql = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", where_clauses.join(" AND "))
+        };
+
+        params.push(Box::new(MAX_AUDIT_EXPORT_ROWS));
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT id, user_id, action, target_type, target_id, details, outcome, created_at
+             FROM audit_log{where_sql} ORDER BY created_at DESC, id DESC LIMIT ?{idx}"
+        ))?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(
+            params.iter().map(|p| p.as_ref()),
+        ))?;
+        let mut items: Vec<AuditEntry> = Vec::new();
+        while let Some(row) = rows.next()? {
+            items.push(AuditEntry {
+                id: row.get("id")?,
+                user_id: row.get("user_id")?,
+                action: row.get("action")?,
+                target_type: row.get("target_type")?,
+                target_id: row.get("target_id")?,
+                details: row.get("details")?,
+                outcome: row.get("outcome")?,
+                created_at: row.get("created_at")?,
+            });
+        }
+        Ok(items)
     }
 
     // ── Review checkpoints (AUD-04) ────────────────────────────────
@@ -815,6 +894,48 @@ mod tests {
         assert_eq!(page2[0].id, "aud-2");
         assert_eq!(page2[1].id, "aud-1");
         assert!(!has_more2);
+    }
+
+    // ── Export snapshot (AUD-09) ───────────────────────────────────
+
+    #[test]
+    fn export_entries_returns_all_matching_rows_newest_first() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let items = store(&conn).list_audit_entries_export(None, None).unwrap();
+        // All 4 rows, newest first (aud-4 … aud-1) — not clamped to a page.
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].id, "aud-4");
+        assert_eq!(items[1].id, "aud-3");
+        assert_eq!(items[2].id, "aud-2");
+        assert_eq!(items[3].id, "aud-1");
+    }
+
+    #[test]
+    fn export_entries_applies_outcome_and_query_filters() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        // Outcome filter only.
+        let items = store(&conn)
+            .list_audit_entries_export(Some("failure"), None)
+            .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].action, "user.login");
+        // Query filter only.
+        let items = store(&conn)
+            .list_audit_entries_export(None, Some("sale"))
+            .unwrap();
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn export_entries_with_no_matches_returns_empty() {
+        let conn = fresh();
+        seed_audit_entries(&conn);
+        let items = store(&conn)
+            .list_audit_entries_export(Some("success"), Some("nonexistent-action"))
+            .unwrap();
+        assert!(items.is_empty());
     }
 
     #[test]

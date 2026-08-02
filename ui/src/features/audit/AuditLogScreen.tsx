@@ -5,6 +5,7 @@ import {
   listAuditLogScoped,
   getAuditReviewStatusScoped,
   markAuditReviewedScoped,
+  exportAuditLogScoped,
   type AuditEntryDto,
 } from '@/api/audit';
 import { useAuth } from '@/contexts/AuthContext';
@@ -97,6 +98,11 @@ export default function AuditLogScreen() {
   const [reviewedAt, setReviewedAt] = useState<string | null>(null);
   const [unreviewedCount, setUnreviewedCount] = useState(0);
   const [markingReviewed, setMarkingReviewed] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  // Dedicated export-failure notice (AUD-09): the table load error state only
+  // renders when the table is empty, so an export failure with rows present
+  // would otherwise be silent.
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Filters (server-side). Search is debounced to avoid an IPC per keystroke.
   const [searchInput, setSearchInput] = useState('');
@@ -204,6 +210,35 @@ export default function AuditLogScreen() {
     void load({ reset: false });
   }, [load]);
 
+  // ── Export (AUD-09) ────────────────────────────────────────────
+
+  const handleExport = useCallback(async () => {
+    if (!sessionToken || exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const result = await exportAuditLogScoped(sessionToken, {
+        ...(outcomeFilter !== 'all' ? { outcome: outcomeFilter } : {}),
+        ...(searchQuery ? { query: searchQuery } : {}),
+      });
+      // Hand the CSV artifact to the browser as a download.
+      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Dedicated inline notice — always visible regardless of table state.
+      setExportError(requiredLocalized(l10n, 'audit-log-export-error'));
+    } finally {
+      setExporting(false);
+    }
+  }, [sessionToken, exporting, outcomeFilter, searchQuery, l10n]);
+
   // ── Render ────────────────────────────────────────────────────────
 
   // With server-side filtering the page only ever holds matching rows, so the
@@ -239,6 +274,18 @@ export default function AuditLogScreen() {
               <Localized id="audit-log-mark-reviewed"><span>Mark Reviewed</span></Localized>
             </Button>
           )}
+          {isManager && (
+            <Button variant="secondary" onClick={() => void handleExport()} loading={exporting}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <Localized id="audit-log-export">
+                <span>Export CSV</span>
+              </Localized>
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => void load({ reset: true })} loading={loading}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
               <polyline points="1 4 1 10 7 10" />
@@ -250,6 +297,14 @@ export default function AuditLogScreen() {
           </Button>
         </div>
       </div>
+
+      {/* Export failure notice (AUD-09) — independent of the table load error */}
+      {exportError && (
+        <div className="audit-log-export-error" role="alert">
+          <span className="audit-log-export-error-icon" aria-hidden="true">⚠</span>
+          {exportError}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="audit-log-filters">

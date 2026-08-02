@@ -225,6 +225,7 @@ pub fn run() {
             commands::audit::list_audit_log_scoped,
             commands::audit::get_audit_review_status_scoped,
             commands::audit::mark_audit_reviewed_scoped,
+            commands::audit::export_audit_log_scoped,
             commands::auth::staff_login,
             commands::auth::staff_check_username,
             commands::auth::create_session,

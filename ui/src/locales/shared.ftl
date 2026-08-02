@@ -91,6 +91,9 @@ audit-log-count-of = { $shown } of { $total } entr{ $shown ->
   [one] y
   *[other] ies
 }
+audit-log-export = Export CSV
+audit-log-export-error = Export failed. Please try again.
+audit-log-export-progress = Exporting audit log…
 
 # Update Banner
 update-banner-title = Update available

@@ -15,11 +15,12 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 import sharedIdFtl from '@/locales/shared.id.ftl?raw';
 import type { AuditEntryDto, AuditLogPageDto } from '@/api/audit';
 
-const { mockListAuditLogScoped, mockGetAuditReviewStatusScoped, mockMarkAuditReviewedScoped } =
+const { mockListAuditLogScoped, mockGetAuditReviewStatusScoped, mockMarkAuditReviewedScoped, mockExportAuditLogScoped } =
   vi.hoisted(() => ({
     mockListAuditLogScoped: vi.fn(),
     mockGetAuditReviewStatusScoped: vi.fn(),
     mockMarkAuditReviewedScoped: vi.fn(),
+    mockExportAuditLogScoped: vi.fn(),
   }));
 
 vi.mock('@/api/audit', () => ({
@@ -27,6 +28,7 @@ vi.mock('@/api/audit', () => ({
   listAuditLogScoped: (token: string, args: unknown) => mockListAuditLogScoped(token, args),
   getAuditReviewStatusScoped: (token: string) => mockGetAuditReviewStatusScoped(token),
   markAuditReviewedScoped: (token: string, args: unknown) => mockMarkAuditReviewedScoped(token, args),
+  exportAuditLogScoped: (token: string, args: unknown) => mockExportAuditLogScoped(token, args),
 }));
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
@@ -86,6 +88,7 @@ describe('AuditLogScreen', () => {
     mockListAuditLogScoped.mockReset();
     mockGetAuditReviewStatusScoped.mockReset();
     mockMarkAuditReviewedScoped.mockReset();
+    mockExportAuditLogScoped.mockReset();
     mockGetAuditReviewStatusScoped.mockResolvedValue({ checkpoint: null, unreviewed_count: 0 });
     mockListAuditLogScoped.mockResolvedValue(makePage([]));
   });
@@ -531,6 +534,63 @@ describe('AuditLogScreen', () => {
       expect(el?.getAttribute('dateTime')).toBe('2026-07-02T00:00:00Z');
       expect(el?.textContent).toContain('2026');
     });
+  });
+
+  // ── Export (AUD-09) ─────────────────────────────────────────────
+
+  it('calls the scoped export API with current filters and triggers a download (AUD-09)', async () => {
+    mockExportAuditLogScoped.mockResolvedValue({
+      csv: '\uFEFFid,created_at\n"a-1","2026-07-01T12:00:00Z"\n',
+      row_count: 1,
+      generated_at: '2026-08-01T00:00:00.000Z',
+      requested_by: 'user-1',
+    });
+    // Stub the browser download plumbing.
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    mockListAuditLogScoped.mockResolvedValue(makePage([
+      makeEntry({ id: 'a-1', outcome: 'failure', action: 'login.failed' }),
+    ]));
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Export CSV')).toBeDefined());
+
+    // Apply the Failure filter so the export carries the server-side scope.
+    await userEvent.click(screen.getByRole('radio', { name: 'Failure' }));
+    await waitFor(() => expect(screen.getByText('Export CSV')).toBeDefined());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => {
+      expect(mockExportAuditLogScoped).toHaveBeenCalledWith(
+        'tok',
+        expect.objectContaining({ outcome: 'failure' }),
+      );
+    });
+    expect(createUrl).toHaveBeenCalled();
+    expect(clickSpy).toHaveBeenCalled();
+    expect(revokeUrl).toHaveBeenCalled();
+
+    createUrl.mockRestore();
+    revokeUrl.mockRestore();
+    clickSpy.mockRestore();
+  });
+
+  it('shows a localized export-error notice even when the table has rows (AUD-09)', async () => {
+    mockExportAuditLogScoped.mockRejectedValue(new Error('export boom'));
+    // Rows present — the table-load error branch (error && entries.length === 0)
+    // does NOT render here, so the dedicated export notice must appear instead.
+    mockListAuditLogScoped.mockResolvedValue(makePage([makeEntry()]));
+    await renderScreen();
+    await waitFor(() => expect(screen.getByText('Export CSV')).toBeDefined());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() =>
+      expect(screen.getByText('Export failed. Please try again.')).toBeDefined(),
+    );
+    // The table is still rendered — the notice did not replace the content.
+    expect(document.querySelector('.audit-log-table')).toBeDefined();
   });
 
   // ── Action/outcome catalog parity (AUD-08) ──────────────────────
