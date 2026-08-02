@@ -25,12 +25,14 @@ export function KdsHistoryPanel() {
     try {
       const result = await listKdsOrdersScoped(sessionToken, statusFilter);
       setOrders(result);
-    } catch (e) {
-      setError(String(e));
+    } catch {
+      // LOAD-08: a raw String(e) leaks implementation details; surface
+      // the localized failure and let the user Retry.
+      setError(requiredLocalized(l10n, 'kds-history-error'));
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, statusFilter]);
+  }, [sessionToken, statusFilter, l10n]);
 
   useEffect(() => {
     fetchHistory();
@@ -53,8 +55,19 @@ export function KdsHistoryPanel() {
         ))}
       </div>
 
-      {/* Error */}
-      {error && <p className="kds-history-error">{error}</p>}
+      {/* Error — LOAD-08: localized message + Retry, never raw String(e) */}
+      {error && (
+        <div className="kds-history-error" role="alert">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="kds-history-retry"
+            onClick={() => fetchHistory()}
+          >
+            {requiredLocalized(l10n, 'retry')}
+          </button>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (

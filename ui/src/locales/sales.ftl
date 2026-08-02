@@ -200,6 +200,7 @@ payment-shortfall-cancelled = Sale cancelled due to insufficient stock.
 # Sales History
 sales-history-title = Sales History
 sales-history-loading = Loading sales…
+sales-history-error-load = Failed to load sales history
 sales-history-empty = No sales recorded yet
 sales-history-empty-filtered = No sales match your filters
 sales-history-count = { $count } sale{ $count ->

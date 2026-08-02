@@ -72,14 +72,12 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
   const [error, setError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Fetch products when modal opens.
-  useEffect(() => {
-    if (!isOpen) return;
+  // LOAD-08: isolated loader so a Retry action can re-run it, and the
+  // failure message is localized — never a raw String(e). Declared before
+  // the open effect that calls it (no TDZ on first render).
+  const loadProducts = useCallback(() => {
     setLoading(true);
-    setSearch('');
-    setPicked([]);
     setError(null);
-
     listProductsScoped(sessionToken)
       .then((all) => {
         // Only show restaurant/both type products.
@@ -89,14 +87,21 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
         setProducts(restaurant);
         setLoading(false);
       })
-      .catch((e) => {
-        setError(String(e));
+      .catch(() => {
+        setError(requiredLocalized(l10n, 'kds-picker-error'));
         setLoading(false);
       });
+  }, [sessionToken, l10n]);
 
+  // Fetch products when modal opens (and on manual Retry).
+  useEffect(() => {
+    if (!isOpen) return;
+    setSearch('');
+    setPicked([]);
+    loadProducts();
     // Focus search input on open.
     requestAnimationFrame(() => searchRef.current?.focus());
-  }, [isOpen, sessionToken]);
+  }, [isOpen, sessionToken, loadProducts]);
 
   const filtered = products.filter(
     (p) =>
@@ -212,8 +217,19 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
           />
         </div>
 
-        {/* ── Error ─────────────────────────────────────────────── */}
-        {error && <p className="kds-picker-error">{error}</p>}
+        {/* ── Error (LOAD-08: localized + Retry) ─────────────────── */}
+        {error && (
+          <div className="kds-picker-error" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="kds-picker-retry"
+              onClick={() => loadProducts()}
+            >
+              {requiredLocalized(l10n, 'retry')}
+            </button>
+          </div>
+        )}
 
         <div className="kds-picker-body">
           {/* ── Product list (left) ─────────────────────────────── */}

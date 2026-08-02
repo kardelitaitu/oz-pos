@@ -23,7 +23,7 @@ import { useSwipe } from '@/hooks/useSwipe';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
-import { EmptyState, requiredLocalized } from '@/frontend/shared';
+import { EmptyState, ErrorState, requiredLocalized } from '@/frontend/shared';
 import { NoSalesIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import RefundModal from './RefundModal';
@@ -125,6 +125,7 @@ export default function SalesHistoryScreen() {
   const { l10n } = useLocalization();
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [detail, setDetail] = useState<SaleDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -176,6 +177,7 @@ export default function SalesHistoryScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [items, staffList] = await Promise.all([
         listSales(),
@@ -186,11 +188,13 @@ export default function SalesHistoryScreen() {
       setSales(items);
       setStaff(staffList);
     } catch {
-      // IPC unavailable.
+      // LOAD-02: an initial load failure must not look like an empty
+      // database — surface the error and offer Retry instead.
+      setLoadError(requiredLocalized(l10n, 'sales-history-error-load'));
     } finally {
       setLoading(false);
     }
-  }, [sessionToken]);
+  }, [sessionToken, l10n]);
 
   // P7-3: Pull-to-refresh gesture
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
@@ -680,6 +684,16 @@ export default function SalesHistoryScreen() {
             </table>
           </div>
         </div>
+      ) : loadError && sales.length === 0 ? (
+        <Card shadow="sm">
+          <div className="sales-history-empty">
+            <ErrorState
+              title={loadError}
+              onRetry={() => { load(); }}
+              retryLabel={requiredLocalized(l10n, 'retry')}
+            />
+          </div>
+        </Card>
       ) : filteredSales.length === 0 ? (
         <Card shadow="sm">
           <div className="sales-history-empty">

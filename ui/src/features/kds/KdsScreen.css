@@ -875,6 +875,43 @@
   box-shadow: 0 0 0 2px var(--color-accent);
 }
 
+/* ── History error + retry (LOAD-08) ───────────────────────── */
+
+.kds-history-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-sm);
+}
+
+.kds-history-retry {
+  margin-left: auto;
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-fg-inverse);
+  background: var(--color-danger);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: filter var(--duration-100);
+}
+
+.kds-history-retry:hover {
+  filter: brightness(1.08);
+}
+
+.kds-history-retry:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
 /* ── Loading skeleton ───────────────────────────────────────── */
 
 .kds-loading-container {

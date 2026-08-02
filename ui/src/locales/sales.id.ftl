@@ -263,6 +263,7 @@ sales-report-revenue-label = Pendapatan
 sales-report-rank = #
 sales-history-title = Riwayat Penjualan
 sales-history-loading = Memuat penjualan…
+sales-history-error-load = Gagal memuat riwayat penjualan
 sales-history-empty = Belum ada penjualan tercatat
 sales-history-empty-filtered = Tidak ada penjualan yang cocok dengan filter Anda
 sales-history-count = { $count } penjualan
