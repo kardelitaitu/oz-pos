@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
 import { AccessibleChartSummary } from './AccessibleChartSummary';
+import { boundAccessibleItems, boundLinePoints } from '@/utils/chart-policy';
 import './charts.css';
 
 /** A single data point for the line chart. */
@@ -32,7 +33,7 @@ interface CanvasLineChartProps {
 
 /** Canvas-based line chart with gradient fill, grid lines, and DPR-aware rendering. */
 export default function CanvasLineChart({
-  data,
+  data: rawData,
   label,
   summary,
   colorVar = '--color-accent',
@@ -40,6 +41,13 @@ export default function CanvasLineChart({
   gridLines = 4,
   minHeight = '220px',
 }: CanvasLineChartProps) {
+  // PERF-09: bound the point count before drawing and keep the accessible
+  // data list synchronized with the same cap (A11Y-09 parity). `data` below
+  // is the bounded array, so the draw loop and the sr-only list both stay
+  // within the policy regardless of report size.
+  const data = useMemo(() => boundLinePoints(rawData), [rawData]);
+  const accessible = useMemo(() => boundAccessibleItems(data), [data]);
+
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const pad = { top: 16, right: 16, bottom: 32, left: 56 };
     const chartW = w - pad.left - pad.right;
@@ -142,7 +150,7 @@ export default function CanvasLineChart({
       {/* A11Y-09: accessible text summary + data list (visually hidden) so
           the underlying values are available to screen readers. */}
       <AccessibleChartSummary summary={summary}>
-        {data.map((d, i) => (
+        {accessible.items.map((d, i) => (
           <li key={i}>
             {d.label}: {formatValue ? formatValue(d.value) : String(d.value)}
           </li>

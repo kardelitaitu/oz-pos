@@ -92,6 +92,7 @@ export default function CategoryPieChartWidget() {
       </div>
       <CanvasPieChart
         data={slices}
+        otherLabel={requiredLocalized(l10n, 'sales-dashboard-chart-other')}
         label={requiredLocalized(l10n, 'sales-dashboard-category-aria')}
         summary={requiredLocalized(l10n, 'sales-dashboard-category-summary', {
           count: String(slices.length),

@@ -355,6 +355,7 @@ sales-dashboard-hourly-aria = Penjualan per jam
 sales-dashboard-hourly-bars-aria = Grafik penjualan per jam
 sales-dashboard-category-aria = Rincian kategori
 sales-dashboard-heatmap-aria = Peta panas penjualan per jam
+sales-dashboard-chart-other = Lainnya
 sales-dashboard-revenue-aria = Grafik pendapatan 14 hari
 sales-dashboard-revenue-summary = Grafik pendapatan 14 hari: { $total } total dari { $days } hari
 sales-dashboard-category-summary = Rincian kategori: { $count } kategori

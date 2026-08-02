@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
 import { AccessibleChartSummary } from './AccessibleChartSummary';
+import { boundAccessibleItems } from '@/utils/chart-policy';
 import './charts.css';
 
 /** A single heatmap cell. */
@@ -59,6 +60,23 @@ export default function CanvasHeatmap({
   }, [data]);
 
   const maxVal = useMemo(() => Math.max(...grid.flat(), 1), [grid]);
+
+  // PERF-09: the 7×24 grid already bounds the draw loop; cap the accessible
+  // data list so an arbitrarily large cell payload cannot balloon the DOM.
+  const accessible = useMemo(
+    () =>
+      boundAccessibleItems(
+        data.filter(
+          (c) =>
+            c.value > 0 &&
+            c.dayOfWeek >= 0 &&
+            c.dayOfWeek < 7 &&
+            c.hour >= 0 &&
+            c.hour < 24,
+        ),
+      ),
+    [data],
+  );
 
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const pad = { top: 8, right: 8, bottom: 8, left: 32 };
@@ -146,16 +164,7 @@ export default function CanvasHeatmap({
           non-zero cells are listed to keep the list meaningful and avoid
           misleading labels for malformed cells (grid builder guards 0–6/0–23). */}
       <AccessibleChartSummary summary={summary}>
-        {data
-          .filter(
-            (c) =>
-              c.value > 0 &&
-              c.dayOfWeek >= 0 &&
-              c.dayOfWeek < 7 &&
-              c.hour >= 0 &&
-              c.hour < 24,
-          )
-          .map((c, i) => (
+        {accessible.items.map((c, i) => (
             <li key={i}>
               {DAY_LABELS[c.dayOfWeek] ?? c.dayOfWeek} {c.hour}:00 —{' '}
               {formatValue ? formatValue(c.value) : String(c.value)}

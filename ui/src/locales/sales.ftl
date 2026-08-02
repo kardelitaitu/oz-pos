@@ -337,6 +337,7 @@ sales-dashboard-hourly-aria = Sales by hour
 sales-dashboard-hourly-bars-aria = Hourly sales bars
 sales-dashboard-category-aria = Category breakdown
 sales-dashboard-heatmap-aria = Hourly sales heatmap
+sales-dashboard-chart-other = Other
 sales-dashboard-revenue-aria = 14-day revenue chart
 sales-dashboard-revenue-summary = 14-day revenue chart: { $total } total across { $days } days
 sales-dashboard-category-summary = Category breakdown: { $count } categories

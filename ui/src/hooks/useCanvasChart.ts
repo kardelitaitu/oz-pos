@@ -71,9 +71,23 @@ export function useCanvasChart(
     drawRef.current(ctx, w, h);
   }, [enableHiDpi]);
 
+  // PERF-09: coalesce redraw requests into a single draw per animation
+  // frame. Multiple redraw() calls in the same frame (data change plus a
+  // resize burst, or rapid filter drags) collapse into one canvas pass
+  // instead of N synchronous full-canvas redraws.
+  const rafPending = useRef(false);
+  const redraw = useCallback(() => {
+    if (rafPending.current) return;
+    rafPending.current = true;
+    requestAnimationFrame(() => {
+      rafPending.current = false;
+      scheduleDraw();
+    });
+  }, [scheduleDraw]);
+
   useEffect(() => {
     // Initial draw after mount
-    requestAnimationFrame(scheduleDraw);
+    redraw();
 
     const canvas = canvasRef.current;
     const parent = canvas?.parentElement;
@@ -81,7 +95,7 @@ export function useCanvasChart(
     if (typeof ResizeObserver === 'undefined') return;
 
     const ro = new ResizeObserver(() => {
-      requestAnimationFrame(scheduleDraw);
+      redraw();
     });
     ro.observe(parent);
 
@@ -89,7 +103,7 @@ export function useCanvasChart(
       ro.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleDraw, ...deps]);
+  }, [redraw, ...deps]);
 
   const getCssVar = useCallback((name: string, fallback = '#888'): string => {
     const el = canvasRef.current;
@@ -97,5 +111,5 @@ export function useCanvasChart(
     return getComputedStyle(el).getPropertyValue(name).trim() || fallback;
   }, []);
 
-  return { canvasRef, redraw: scheduleDraw, getCssVar };
+  return { canvasRef, redraw, getCssVar };
 }
