@@ -261,8 +261,12 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
 
         {/* ── Content area ─────────────────────────── */}
         <main className="app-content" id="app-main-content">
+          {/* A11Y-07: the topbar lives INSIDE <main>, so it must not carry the
+              banner landmark role (banner is top-level-only per aria; axe's
+              `landmark-banner-is-top-level` flags it under global rules). The
+              content is already contained by the main landmark. */}
           {!ADMIN_ROUTES.has(route) && (
-            <div className="app-topbar" role="banner">
+            <div className="app-topbar">
               <div className="app-topbar-left">
                 <Tooltip content={l10n.getString(sidebarCollapsed ? 'nav-sidebar-expand' : 'nav-sidebar-collapse')} position="bottom" showDelay={800}>
                   <button

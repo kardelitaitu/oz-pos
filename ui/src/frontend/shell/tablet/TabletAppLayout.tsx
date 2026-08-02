@@ -94,6 +94,13 @@ export default function TabletAppLayout({
         </main>
 
         {/* ── Bottom tab bar ────────────────────────── */}
+        {/* A11Y-07: the tab bar is navigation — wrap it in a <nav> landmark so
+            its buttons are contained in a landmark (axe `region` rule) and the
+            shell exposes a consistent navigation landmark on both layouts. */}
+        <nav
+          className="tablet-tab-bar-nav"
+          aria-label={l10n.getString('nav-tablist-aria')}
+        >
         <div
           className="tablet-tab-bar"
           role="tablist"
@@ -127,6 +134,7 @@ export default function TabletAppLayout({
             </button>
           ))}
         </div>
+        </nav>
       </div>
     </div>
   );
