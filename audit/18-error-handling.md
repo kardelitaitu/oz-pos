@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** Error boundaries, async failures, toast consistency, retry behavior, loading/error fallbacks, cancellation, and logging  
-> **Status:** AUDITED · recovery and observability findings require remediation  
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 10 findings (ERR-01→ERR-10) closed across 5 commits  
+> **Remediation commits:** `10f1bae0` (ERR-01/05/06), `c586c3d6` (ERR-04/05), `537f5867` (ERR-07/08), `31adb7c3` (ERR-02/03), `5dacd75f` (ERR-09/10)
 
 ## Scope
 
@@ -46,7 +46,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P1 · reliability
 
-**Status:** Open
+**Status:** Remediated — commit `10f1bae0` (ERR-01/05/06: typed AppError normalizer + global async-failure reporter)
 
 ### ERR-02 — Error-boundary fallback is not integrated with the active locale or design-token system
 
@@ -58,7 +58,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P1 · UX and accessibility
 
-**Status:** Open
+**Status:** Remediated — commit `31adb7c3` (ERR-02/03: tokenized/localized ErrorBoundary + consolidated primitives)
 
 ### ERR-03 — Two ErrorState implementations can drift in behavior and styling
 
@@ -70,7 +70,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P2 · consistency and maintainability
 
-**Status:** Open
+**Status:** Remediated — commit `31adb7c3` (ERR-02/03: shared ErrorState/EmptyState/Spinner are thin re-exports + import-policy test)
 
 ### ERR-04 — Async failure presentation is inconsistent across feature screens
 
@@ -82,7 +82,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P1 · user trust and data correctness
 
-**Status:** Open
+**Status:** Remediated — commit `c586c3d6` (ERR-04/05: ~50 screens routed through user-safe error mapper)
 
 ### ERR-05 — Several screens expose raw backend error messages directly to users
 
@@ -94,7 +94,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P1 · security, localization, and UX
 
-**Status:** Open
+**Status:** Remediated — commits `10f1bae0` + `c586c3d6` (ERR-05 sweep + `5dacd75f` policy gate caught 3 chart-widget leaks)
 
 ### ERR-06 — `loggedInvoke` logs timing but does not normalize, classify, or correlate failures
 
@@ -106,7 +106,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P2 · observability and consistency
 
-**Status:** Open
+**Status:** Remediated — commit `10f1bae0` (loggedInvoke normalizes via parseAppError + structured IPC error event)
 
 ### ERR-07 — Offline queue polling ignores failures and has no explicit unmount guard for its async callback
 
@@ -118,7 +118,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P1 · offline correctness
 
-**Status:** Open
+**Status:** Remediated — commit `537f5867` (ERR-07: generation-safe poll + stale indicator)
 
 ### ERR-08 — Connection-status checks can overlap and retry scheduling is not request-aware
 
@@ -130,7 +130,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P2 · network-state correctness
 
-**Status:** Open
+**Status:** Remediated — commit `537f5867` (ERR-08: in-flight guard + request-aware scheduling)
 
 ### ERR-09 — Retry controls do not consistently preserve or reset state intentionally
 
@@ -142,7 +142,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P2 · recovery UX
 
-**Status:** Open
+**Status:** Remediated — commit `5dacd75f` (ERR-09: shared retry-state contract + refreshing status)
 
 ### ERR-10 — Error and toast test coverage is strong for primitives but thin for application-wide failure paths
 
@@ -154,7 +154,7 @@ Rust commands return a typed `AppError` with `kind`, optional typed `subKind`, a
 
 **Severity:** P2 · quality assurance
 
-**Status:** Open
+**Status:** Remediated — commit `5dacd75f` (ERR-10: errorPolicyCompliance static gate + contract tests)
 
 ## Positive controls observed
 
@@ -189,12 +189,22 @@ These checks establish existing control behavior and representative retry/error 
 
 ## Recommended remediation order
 
-1. **ERR-01/ERR-05/ERR-06:** Add typed, localized, redacted error normalization and a deliberate global async-failure policy.
-2. **ERR-04:** Eliminate silent catches and standardize initial-load, mutation, and background-refresh recovery states.
-3. **ERR-07/ERR-08:** Make polling and connectivity checks generation-safe and expose stale-status information.
-4. **ERR-02/ERR-03:** Tokenize/localize the emergency boundary and consolidate duplicate shared error primitives.
-5. **ERR-09/ERR-10:** Define a shared retry state contract and add cross-screen policy tests/static checks.
+1. **ERR-01/ERR-05/ERR-06:** Add typed, localized, redacted error normalization and a deliberate global async-failure policy. → `10f1bae0`
+2. **ERR-04:** Eliminate silent catches and standardize initial-load, mutation, and background-refresh recovery states. → `c586c3d6`
+3. **ERR-07/ERR-08:** Make polling and connectivity checks generation-safe and expose stale-status information. → `537f5867`
+4. **ERR-02/ERR-03:** Tokenize/localize the emergency boundary and consolidate duplicate shared error primitives. → `31adb7c3`
+5. **ERR-09/ERR-10:** Define a shared retry state contract and add cross-screen policy tests/static checks. → `5dacd75f`
 
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+✅ **FULLY REMEDIATED (2026-08-02).** All 10 findings are closed by five remediation commits:
+
+| Finding | Commit | Validation |
+|---|---|---|
+| ERR-01/05/06 — typed normalizer + global async reporter + loggedInvoke normalization | `10f1bae0` | typecheck ✓ · app-error 24 tests ✓ · GlobalErrorReporter ✓ · lint+i18n ✓ |
+| ERR-04/05 — ~50 screens routed through user-safe mapper | `c586c3d6` | typecheck ✓ · 274 tests ✓ · lint+i18n ✓ |
+| ERR-07/08 — generation-safe polling + in-flight guard | `537f5867` | typecheck ✓ · 23 tests ✓ · lint+i18n ✓ |
+| ERR-02/03 — tokenized ErrorBoundary + consolidated primitives | `31adb7c3` | typecheck ✓ · 49 tests ✓ · lint+i18n ✓ |
+| ERR-09/10 — retry-state contract + policy gate | `5dacd75f` | typecheck ✓ · 87 tests ✓ · lint+i18n ✓ |
+
+The `errorPolicyCompliance` static gate (`5dacd75f`) immediately caught three real ERR-05 leaks in the reporting widgets (CategoryPieChartWidget, HourlyHeatmapWidget, RevenueLineChartWidget), which were fixed in the same commit — the drift guard is already earning its keep.
