@@ -63,12 +63,28 @@ function makeTable(overrides: Partial<Table> = {}): Table {
   };
 }
 
+async function openTableDetail(table: Table) {
+  mockListTables.mockResolvedValue([table]);
+  renderScreen();
+  await waitFor(() => expect(screen.getByText(table.name)).toBeDefined());
+  await userEvent.click(screen.getByText(table.name).closest('button')!);
+  await waitFor(() => expect(document.querySelector('.tables-detail')).toBeDefined());
+}
+
 describe('TableManagementScreen', () => {
   beforeEach(() => {
+    mockListTables.mockReset();
+    mockListSections.mockReset();
+    mockUpdateTableStatus.mockReset();
+    mockReleaseTable.mockReset();
     mockListTables.mockResolvedValue([]);
     mockListSections.mockResolvedValue([]);
-    mockUpdateTableStatus.mockResolvedValue({});
-    mockReleaseTable.mockResolvedValue({});
+    mockUpdateTableStatus.mockImplementation((_token: string, id: string, status: string) =>
+      Promise.resolve(makeTable({ id, status })),
+    );
+    mockReleaseTable.mockImplementation((_token: string, id: string) =>
+      Promise.resolve(makeTable({ id, status: 'cleaning' })),
+    );
   });
 
   it('renders the title', async () => {
@@ -170,10 +186,16 @@ describe('TableManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
   });
 
-  it('shows table status on each table button', async () => {
+  it('shows the localized status on each table button (TBL-07)', async () => {
     mockListTables.mockResolvedValue([makeTable({ status: 'occupied' })]);
     renderScreen();
-    await waitFor(() => expect(screen.getByText('occupied')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Occupied')).toBeDefined());
+  });
+
+  it('falls back to a localized label for an unknown status (TBL-07)', async () => {
+    mockListTables.mockResolvedValue([makeTable({ status: 'mystery' })]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Unknown status')).toBeDefined());
   });
 
   it('uses absolute positioning from pos_x/pos_y props', async () => {
@@ -185,6 +207,16 @@ describe('TableManagementScreen', () => {
       const style = (btns[0] as HTMLElement).style;
       expect(style.left).toBe('25%');
       expect(style.top).toBe('50%');
+    });
+  });
+
+  it('clamps sub-2% persisted geometry to a minimum interactive size (TBL-08)', async () => {
+    mockListTables.mockResolvedValue([makeTable({ width: 0.5, height: 1 })]);
+    renderScreen();
+    await waitFor(() => {
+      const btn = document.querySelector('.tables-table') as HTMLElement;
+      expect(btn.style.width).toBe('2%');
+      expect(btn.style.height).toBe('2%');
     });
   });
 
@@ -225,33 +257,29 @@ describe('TableManagementScreen', () => {
     await userEvent.click(tableBtn);
 
     await waitFor(() => {
-      // Detail panel shows table name as h2
       const detailHeading = document.querySelector('.tables-detail h2');
       expect(detailHeading?.textContent).toBe('Table 1');
     });
   });
 
-  it('shows Mark Available button for available tables in detail', async () => {
-    mockListTables.mockResolvedValue([makeTable({ status: 'available' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
-
-    await userEvent.click(screen.getByText('Table 1').closest('button')!);
-
-    await waitFor(() => expect(screen.getByText('Mark Available')).toBeDefined());
+  it('shows a Mark Reserved action for available tables in detail (TBL-01 hold model)', async () => {
+    await openTableDetail(makeTable({ status: 'available' }));
+    expect(screen.getByText('Mark Reserved')).toBeDefined();
   });
 
   it('shows Release button for occupied tables in detail', async () => {
-    mockListTables.mockResolvedValue([makeTable({ status: 'occupied' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
+    await openTableDetail(makeTable({ status: 'occupied' }));
+    expect(screen.getByText('Release')).toBeDefined();
+  });
 
-    await userEvent.click(screen.getByText('Table 1').closest('button')!);
+  it('shows Mark Available for reserved tables in detail', async () => {
+    await openTableDetail(makeTable({ status: 'reserved' }));
+    expect(screen.getByText('Mark Available')).toBeDefined();
+  });
 
-    await waitFor(() => {
-      const releaseBtn = screen.getByText('Release');
-      expect(releaseBtn).toBeDefined();
-    });
+  it('shows Mark Available for cleaning tables in detail', async () => {
+    await openTableDetail(makeTable({ status: 'cleaning' }));
+    expect(screen.getByText('Mark Available')).toBeDefined();
   });
 
   it('dismisses detail panel on Close click', async () => {
@@ -260,55 +288,155 @@ describe('TableManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
 
     await userEvent.click(screen.getByText('Table 1').closest('button')!);
-
     await waitFor(() => expect(screen.getByText('Close')).toBeDefined());
 
-    const closeBtn = screen.getByText('Close').closest('button')!;
-    await userEvent.click(closeBtn);
-
+    await userEvent.click(screen.getByText('Close').closest('button')!);
     await waitFor(() =>
       expect(document.querySelector('.tables-detail')).toBeNull(),
     );
   });
 
-  it('calls updateTableStatus on context menu for available tables', async () => {
+  // ── TBL-05: context menu opens the accessible detail (no direct mutation) ──
+
+  it('context menu opens the detail panel instead of mutating (TBL-05)', async () => {
     mockListTables.mockResolvedValue([makeTable({ status: 'available' })]);
     renderScreen();
     await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
 
     const tableBtn = screen.getByText('Table 1').closest('button')!;
-    // Right-click triggers context menu → statusAction
     await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
 
+    await waitFor(() => expect(document.querySelector('.tables-detail')).toBeDefined());
+    // No mutation fires from the context-menu gesture itself.
+    expect(mockUpdateTableStatus).not.toHaveBeenCalled();
+    expect(mockReleaseTable).not.toHaveBeenCalled();
+  });
+
+  // ── TBL-03: async pending-guarded, error-aware mutations ──
+
+  it('applies the Mark Reserved action for an available table (TBL-01/03)', async () => {
+    await openTableDetail(makeTable({ status: 'available' }));
+    await userEvent.click(screen.getByText('Mark Reserved').closest('button')!);
     await waitFor(() =>
-      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'occupied'),
+      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'reserved'),
     );
   });
 
-  it('calls releaseTable on context menu for occupied tables', async () => {
-    mockListTables.mockResolvedValue([makeTable({ status: 'occupied' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
-
-    const tableBtn = screen.getByText('Table 1').closest('button')!;
-    await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
-
+  it('releases an occupied table through the detail action (TBL-03)', async () => {
+    await openTableDetail(makeTable({ status: 'occupied' }));
+    await userEvent.click(screen.getByText('Release').closest('button')!);
     await waitFor(() =>
       expect(mockReleaseTable).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1'),
     );
   });
 
-  it('calls updateTableStatus to available for reserved tables via context menu', async () => {
-    mockListTables.mockResolvedValue([makeTable({ status: 'reserved' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
-
-    const tableBtn = screen.getByText('Table 1').closest('button')!;
-    await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
-
+  it('marks a reserved table available through the detail action (TBL-03)', async () => {
+    await openTableDetail(makeTable({ status: 'reserved' }));
+    await userEvent.click(screen.getByText('Mark Available').closest('button')!);
     await waitFor(() =>
       expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'available'),
     );
+  });
+
+  it('marks a cleaning table available through the detail action (TBL-03)', async () => {
+    await openTableDetail(makeTable({ status: 'cleaning' }));
+    await userEvent.click(screen.getByText('Mark Available').closest('button')!);
+    await waitFor(() =>
+      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'available'),
+    );
+  });
+
+  it('keeps the panel open with a localized error when a mutation fails (TBL-03)', async () => {
+    mockUpdateTableStatus.mockRejectedValueOnce(new Error('occupied requires an active sale'));
+    await openTableDetail(makeTable({ status: 'available' }));
+    await userEvent.click(screen.getByText('Mark Reserved').closest('button')!);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+      expect(screen.getByText('Could not update this table.')).toBeDefined();
+      expect(document.querySelector('.tables-detail')).toBeDefined();
+    });
+    // The panel did not silently close.
+    expect(document.querySelector('.tables-detail h2')?.textContent).toBe('Table 1');
+  });
+
+  it('guards against duplicate clicks while a mutation is pending (TBL-03)', async () => {
+    let resolveMutation: (v: Table) => void;
+    mockUpdateTableStatus.mockReturnValueOnce(new Promise((res) => { resolveMutation = res; }));
+    await openTableDetail(makeTable({ status: 'available' }));
+
+    const actionBtn = screen.getByText('Mark Reserved').closest('button')!;
+    await userEvent.click(actionBtn);
+    await userEvent.click(actionBtn);
+
+    await waitFor(() => expect(mockUpdateTableStatus).toHaveBeenCalledTimes(1));
+    resolveMutation!(makeTable({ status: 'reserved' }));
+    await waitFor(() =>
+      expect(document.querySelector('.tables-detail h2')?.textContent).toBe('Table 1'),
+    );
+  });
+
+  it('patches the floor plan in place after a successful mutation (TBL-03)', async () => {
+    await openTableDetail(makeTable({ status: 'reserved' }));
+    await userEvent.click(screen.getByText('Mark Available').closest('button')!);
+    // No extra list fetch — the returned table is patched into the floor plan.
+    await waitFor(() => expect(mockListTables).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('Available')).toBeDefined());
+    expect(screen.queryByText('Reserved')).toBeNull();
+  });
+
+  it('does not clobber a section change that lands during a pending mutation (TBL-03/02)', async () => {
+    // Mutation stays pending; the operator switches sections while it runs.
+    let resolveMutation: (v: Table) => void;
+    mockUpdateTableStatus.mockReturnValueOnce(new Promise((res) => { resolveMutation = res; }));
+    mockListSections.mockResolvedValue(['Patio']);
+    await openTableDetail(makeTable({ status: 'reserved', section: 'Patio' }));
+
+    // Switch to Patio, then fire the mutation.
+    await userEvent.click(screen.getByText('Patio'));
+    await waitFor(() =>
+      expect(mockListTables).toHaveBeenLastCalledWith('Patio'),
+    );
+    await userEvent.click(screen.getByText('Mark Available').closest('button')!);
+
+    // The section-scoped load resolved with the table as reserved.
+    resolveMutation!(makeTable({ status: 'available', section: 'Patio' }));
+    await waitFor(() => expect(screen.getByText('Available')).toBeDefined());
+    // The floor plan still shows the Patio table — the in-place patch does
+    // not fire a stale full reload that would clobber the section's data.
+    // (The dialog h2 also shows the name, so query for multiple matches.)
+    expect(screen.getAllByText('Table 1').length).toBeGreaterThan(0);
+    expect(mockListTables).toHaveBeenCalledTimes(2); // mount + section switch
+  });
+
+  // ── TBL-06: complete dialog interaction ──
+
+  it('marks the detail panel as a modal dialog (TBL-06)', async () => {
+    await openTableDetail(makeTable());
+    const dialog = document.querySelector('.tables-detail');
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+  });
+
+  it('moves focus into the dialog when opened (TBL-06)', async () => {
+    await openTableDetail(makeTable({ status: 'available' }));
+    // The shared focus trap auto-focuses the first focusable control — the
+    // primary action button.
+    await waitFor(() => expect(screen.getByText('Mark Reserved').closest('button')).toHaveFocus());
+  });
+
+  it('closes the dialog on Escape and restores focus to the trigger (TBL-06)', async () => {
+    mockListTables.mockResolvedValue([makeTable()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
+    const tableBtn = screen.getByText('Table 1').closest('button')!;
+    await userEvent.click(tableBtn);
+    await waitFor(() => expect(document.querySelector('.tables-detail')).toBeDefined());
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(document.querySelector('.tables-detail')).toBeNull());
+    // Focus returns to the table button that opened the dialog.
+    expect(tableBtn).toHaveFocus();
   });
 
   it('has region role with accessible label', async () => {
@@ -318,33 +446,11 @@ describe('TableManagementScreen', () => {
     );
   });
 
-  it('shows capacity and status in detail panel', async () => {
-    mockListTables.mockResolvedValue([makeTable({ capacity: 6, status: 'reserved', section: 'Patio' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
-
-    await userEvent.click(screen.getByText('Table 1').closest('button')!);
-
-    // The detail panel shows "Capacity: 6", "Status: reserved", "Section: Patio"
-    // via Fluent Localized vars; use DOM query since Fluent wraps in <span>
-    await waitFor(() => {
-      const detail = document.querySelector('.tables-detail');
-      expect(detail?.textContent).toMatch(/6/);
-      expect(detail?.textContent).toMatch(/reserved/);
-      expect(detail?.textContent).toMatch(/Patio/);
-    });
-  });
-
-  it('calls updateTableStatus to available for cleaning tables via context menu', async () => {
-    mockListTables.mockResolvedValue([makeTable({ status: 'cleaning' })]);
-    renderScreen();
-    await waitFor(() => expect(screen.getByText('Table 1')).toBeDefined());
-
-    const tableBtn = screen.getByText('Table 1').closest('button')!;
-    await userEvent.pointer({ keys: '[MouseRight]', target: tableBtn });
-
-    await waitFor(() =>
-      expect(mockUpdateTableStatus).toHaveBeenCalledWith(MOCK_SESSION_TOKEN, 't-1', 'available'),
-    );
+  it('shows capacity, localized status, and section in detail panel', async () => {
+    await openTableDetail(makeTable({ capacity: 6, status: 'reserved', section: 'Patio' }));
+    const detail = document.querySelector('.tables-detail');
+    expect(detail?.textContent).toMatch(/6/);
+    expect(detail?.textContent).toMatch(/Reserved/);
+    expect(detail?.textContent).toMatch(/Patio/);
   });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   listTablesScoped,
   listSectionsScoped,
@@ -10,6 +11,14 @@ import {
   type Table,
 } from '@/api/tables';
 import './TableManagementScreen.css';
+
+/** TBL-07: finite status enum → localized Fluent message id. Unknown values fall back to a safe localized label. */
+const STATUS_LABEL_IDS: Record<string, string> = {
+  available: 'tables-available',
+  occupied: 'tables-occupied',
+  reserved: 'tables-reserved',
+  cleaning: 'tables-cleaning',
+};
 
 /** Table management screen — interactive floor-plan view for managing restaurant table status (available, occupied, reserved, cleaning). */
 export default function TableManagementScreen() {
@@ -23,9 +32,25 @@ export default function TableManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // TBL-03: the table currently persisting a mutation; guards duplicate clicks.
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  // Ref mirror of pendingId so the guard is immune to stale closures: two
+  // rapid clicks in the same tick must not both pass the check.
+  const pendingRef = useRef<string | null>(null);
+  // TBL-03: localized error surfaced inside the open detail panel.
+  const [actionError, setActionError] = useState<string | null>(null);
   // Request-generation guard (TBL-02): a stale response from an earlier
   // section/token/refresh can never overwrite a fresher result.
   const loadSeqRef = useRef(0);
+  // TBL-06: dialog panel + the trigger that opened it (for focus restoration).
+  const detailRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  // TBL-07: localized label for a raw status value, with unknown fallback.
+  const statusLabel = useCallback(
+    (status: string) => l10n.getString(STATUS_LABEL_IDS[status] ?? 'tables-status-unknown'),
+    [l10n],
+  );
 
   // TBL-09: sections are stable metadata loaded independently of the table
   // page, so selecting a section never makes the other filters disappear and
@@ -71,6 +96,62 @@ export default function TableManagementScreen() {
   }, [loadTables, sessionToken, refreshKey]);
 
   const retry = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  // TBL-06: opening the dialog remembers the trigger so focus can be restored
+  // on close. The shared useFocusTrap provides initial focus, Tab trapping,
+  // Escape-to-close, and body scroll lock.
+  const openDetail = useCallback((t: Table) => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+    setActionError(null);
+    setSelected(t);
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setSelected(null);
+    setActionError(null);
+    triggerRef.current?.focus();
+  }, []);
+
+  useFocusTrap(detailRef, selected !== null, closeDetail);
+
+  // TBL-03: async, pending-guarded, error-aware status mutation. The affected
+  // table is disabled while persisting; the panel stays open with a localized
+  // error on failure instead of silently closing. TBL-01: `available` uses the
+  // reservation hold model (occupancy requires an order assignment, which this
+  // floor-plan view does not perform — a bare "occupy" is rejected server-side).
+  const statusAction = useCallback(
+    async (table: Table) => {
+      if (pendingRef.current) return; // duplicate-click guard (ref, not state)
+      pendingRef.current = table.id;
+      setPendingId(table.id);
+      setActionError(null);
+      try {
+        let updated: Table;
+        if (table.status === 'available') {
+          updated = await updateTableStatusScoped(sessionToken, table.id, 'reserved');
+        } else if (table.status === 'occupied') {
+          updated = await releaseTableScoped(sessionToken, table.id);
+        } else {
+          updated = await updateTableStatusScoped(sessionToken, table.id, 'available');
+        }
+        setSelected(updated);
+        // Patch the floor plan in place so the new status shows immediately.
+        // Deliberately NOT a full reload: a reload would close over this
+        // render's `section`, so a section change that lands while the
+        // mutation is in flight could be clobbered by the stale reload (the
+        // exact TBL-02 stale-data class). Patching is also cheaper — the
+        // mutation never changes `section`, so the table stays in the right
+        // filtered list.
+        setTables((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        pendingRef.current = null;
+        setPendingId(null);
+      }
+    },
+    [sessionToken],
+  );
 
   const showEmpty = !loading && !error && tables.length === 0;
 
@@ -132,32 +213,52 @@ export default function TableManagementScreen() {
           const h = Math.max(t.height, 2);
           return (
             <Button variant="ghost" size="sm" key={t.id} className={`tables-table tables-table--${t.status} tables-table--${shape}`}
-              onClick={() => setSelected(t)}
-              onContextMenu={(e) => { e.preventDefault(); statusAction(t, sessionToken); }}
+              onClick={() => openDetail(t)}
+              // TBL-05: the context-menu shortcut opens the accessible detail
+              // panel (the visible, keyboard-operable actions menu) instead of
+              // mutating directly, so every operator path goes through the same
+              // confirmed, error-aware action.
+              onContextMenu={(e) => { e.preventDefault(); openDetail(t); }}
+              disabled={pendingId === t.id}
               style={{
                 left: `${t.pos_x}%`, top: `${t.pos_y}%`,
                 width: `${w}%`, height: `${h}%`,
               }}
-              aria-label={l10n.getString('tables-table-label', { name: t.name, status: t.status })}
+              aria-label={l10n.getString('tables-table-label', { name: t.name, status: statusLabel(t.status) })}
             >
               <span className="tables-table-name">{t.name}</span>
-              <span className="tables-table-status">{t.status}</span>
+              <span className="tables-table-status">{statusLabel(t.status)}</span>
             </Button>
           );
         })}
       </div>
 
       {selected && (
-        <div className="tables-detail" role="dialog" aria-label={l10n.getString('tables-detail-label')}>
+        <div className="tables-detail" ref={detailRef} role="dialog" aria-modal="true" aria-label={l10n.getString('tables-detail-label')}>
           <h2>{selected.name}</h2>
           <p><Localized id="tables-capacity-label" vars={{ capacity: selected.capacity }}><span>Capacity: {selected.capacity}</span></Localized></p>
-          <p><Localized id="tables-status-label" vars={{ status: selected.status }}><span>Status: {selected.status}</span></Localized></p>
+          <p><Localized id="tables-status-label" vars={{ status: statusLabel(selected.status) }}><span>Status: {statusLabel(selected.status)}</span></Localized></p>
           <p><Localized id="tables-section-label" vars={{ section: selected.section || '—' }}><span>Section: {selected.section || '—'}</span></Localized></p>
+
+          {actionError && (
+            <p className="tables-action-error" role="alert">
+              <Localized id="tables-action-error">Could not update this table.</Localized>
+              <span className="tables-action-error-detail">{actionError}</span>
+            </p>
+          )}
+
           <div className="tables-detail-actions">
-            <Button variant={selected.status === 'occupied' ? 'danger' : 'primary'} size="sm" onClick={() => { statusAction(selected, sessionToken); setSelected(null); }}>
-              <Localized id={selected.status === 'occupied' ? 'tables-release' : 'tables-mark-available'}>{selected.status === 'occupied' ? 'Release' : 'Mark Available'}</Localized>
+            <Button
+              variant={selected.status === 'occupied' ? 'danger' : 'primary'}
+              size="sm"
+              state={pendingId === selected.id ? 'processing' : 'ready'}
+              onClick={() => void statusAction(selected)}
+            >
+              <Localized id={selected.status === 'occupied' ? 'tables-release' : selected.status === 'available' ? 'tables-mark-reserved' : 'tables-mark-available'}>
+                {selected.status === 'occupied' ? 'Release' : selected.status === 'available' ? 'Mark Reserved' : 'Mark Available'}
+              </Localized>
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
+            <Button variant="ghost" size="sm" onClick={closeDetail}>
               <Localized id="close">Close</Localized>
             </Button>
           </div>
@@ -165,22 +266,4 @@ export default function TableManagementScreen() {
       )}
     </div>
   );
-}
-
-/**
- * Fire the status transition for a table (available→occupied / occupied→release /
- * reserved|cleaning→available). Phase 3 makes this async, pending-guarded, and
- * error-aware (TBL-03) and moves the quick action behind an accessible menu
- * instead of the context-menu-only shortcut (TBL-05).
- */
-function statusAction(table: Table, sessionToken: string) {
-  if (table.status === 'available') {
-    updateTableStatusScoped(sessionToken, table.id, 'occupied');
-  } else if (table.status === 'occupied') {
-    releaseTableScoped(sessionToken, table.id);
-  } else if (table.status === 'reserved') {
-    updateTableStatusScoped(sessionToken, table.id, 'available');
-  } else if (table.status === 'cleaning') {
-    updateTableStatusScoped(sessionToken, table.id, 'available');
-  }
 }
