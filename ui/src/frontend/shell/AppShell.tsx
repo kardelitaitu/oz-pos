@@ -7,6 +7,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { isAnyAriaModalOpen, consumeShortcut } from '@/utils/modal-guard';
 import AppLayout, { type AppRoute } from './AppLayout';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
@@ -35,8 +36,10 @@ const WorkspaceSettingsModal = lazy(() => import('@/features/settings/WorkspaceS
 
 // ── Workspace navigation keyboard shortcuts ───────────────────────
 // Escape: return to workspace picker (only when no modal is open).
-// Ctrl+Shift+Escape: global shortcut to return to workspace picker
-// regardless of modals.
+// Ctrl+Shift+Escape: deliberate EMERGENCY escape — returns to the workspace
+// picker even with a modal open, so a stuck overlay can never trap the
+// operator. It consumes the event so no other Escape listener reacts to the
+// same key (KEY-05); the topmost modal owns plain Escape while it is open.
 function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
   useEffect(() => {
     if (!active) return;
@@ -44,8 +47,10 @@ function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
       if (e.key === 'Escape') {
         // Ctrl+Shift+Escape always returns to the picker, bypassing modals.
         if (e.ctrlKey && e.shiftKey) {
+          consumeShortcut(e);
           onBack();
-        } else if (!document.querySelector('[aria-modal="true"]')) {
+        } else if (!isAnyAriaModalOpen()) {
+          consumeShortcut(e);
           onBack();
         }
       }
@@ -247,7 +252,8 @@ export default function AppShell() {
       if (e.key === 'F10') {
         e.preventDefault();
         // Don't open if a modal is already active (e.g., a nested modal).
-        if (!document.querySelector('[aria-modal="true"]')) {
+        if (!isAnyAriaModalOpen()) {
+          consumeShortcut(e);
           setSettingsModalOpen((p) => !p);
         }
       }

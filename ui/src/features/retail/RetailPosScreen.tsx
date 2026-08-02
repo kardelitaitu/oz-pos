@@ -7,6 +7,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { plainErrorMessage } from '@/utils/app-error';
 import { isEditableTarget } from '@/utils/isEditableTarget';
+import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -1160,8 +1161,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Keyboard shortcuts ────────────────────────────────────────
 
+  // KEY-04: shared modal-ownership check (modal-guard.ts) so AppShell and the
+  // retail POS agree on when a modal owns the keyboard.
   const isAnyModalOpen = useCallback(
-    () => document.querySelector('[aria-modal="true"]') !== null,
+    () => isAnyAriaModalOpen(),
     []);
 
   const isAnyOverlayOpen = useCallback(() =>
