@@ -524,6 +524,26 @@
   background: var(--color-bg-elevated);
 }
 
+.restaurant-context-item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--color-border-focus);
+  background: var(--color-bg-elevated);
+}
+
+.restaurant-context-swatch:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+/* Forced-colors — roving focus must stay visible with the system Highlight (A11Y-10/A11Y-06) */
+@media (forced-colors: active) {
+  .restaurant-context-item:focus-visible,
+  .restaurant-context-swatch:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+}
+
 .restaurant-context-divider {
   height: 1px;
   background: var(--color-border);
