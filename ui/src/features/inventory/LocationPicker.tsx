@@ -36,7 +36,9 @@ const LocationPicker = memo(function LocationPicker({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLUListElement>(null);
 
   // ── Load locations ────────────────────────────────────────────────
 
@@ -75,20 +77,6 @@ const LocationPicker = memo(function LocationPicker({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ── Keyboard: close on Escape ─────────────────────────────────
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false);
-        ref.current?.querySelector('button')?.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open]);
-
   // ── Selection ──────────────────────────────────────────────────
 
   const handleSelect = useCallback(
@@ -100,6 +88,67 @@ const LocationPicker = memo(function LocationPicker({
     },
     [onChange, value],
   );
+
+  // ── Keyboard: full listbox navigation (LOC-04) ──────────────
+  // ArrowUp/Down move the active descendant (wrapping), Home/End jump to the
+  // first/last option, Enter/Space select the active option, Escape closes and
+  // restores focus to the trigger. Focus moves to the listbox while open so
+  // `aria-activedescendant` is announced by screen readers.
+
+  useEffect(() => {
+    if (!open) return;
+    listboxRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || activeIndex < 0 || !listboxRef.current) return;
+    const optionEl = listboxRef.current.querySelector(`[data-index="${activeIndex}"]`);
+    // jsdom lacks scrollIntoView — guard the call so tests (and old browsers)
+    // don't crash on the navigation effect.
+    optionEl?.scrollIntoView?.({ block: 'nearest' });
+  }, [open, activeIndex]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (locations.length === 0) return;
+      switch (e.key) {
+        case 'Escape':
+          setOpen(false);
+          setActiveIndex(-1);
+          ref.current?.querySelector<HTMLButtonElement>('.location-picker-trigger')?.focus();
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setActiveIndex((i) => (i + 1) % locations.length);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setActiveIndex((i) => (i <= 0 ? locations.length - 1 : i - 1));
+          break;
+        case 'Home':
+          e.preventDefault();
+          setActiveIndex(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          setActiveIndex(locations.length - 1);
+          break;
+        case 'Enter':
+        case ' ': {
+          e.preventDefault();
+          if (activeIndex >= 0 && locations[activeIndex]) {
+            handleSelect(locations[activeIndex]);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, locations, activeIndex, handleSelect]);
 
   // ── Find current location name ─────────────────────────────────
 
@@ -134,9 +183,19 @@ const LocationPicker = memo(function LocationPicker({
       <button
         type="button"
         className="location-picker-trigger"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          const next = !open;
+          if (next) {
+            const currentIdx = locations.findIndex((loc) => loc.id === value);
+            setActiveIndex(currentIdx >= 0 ? currentIdx : 0);
+          } else {
+            setActiveIndex(-1);
+          }
+          setOpen(next);
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls="location-picker-listbox"
         aria-label={requiredLocalized(l10n, 'loc-picker-trigger-aria', { name: currentName })}
       >
         <svg
@@ -172,17 +231,27 @@ const LocationPicker = memo(function LocationPicker({
 
       {open && (
         <ul
+          id="location-picker-listbox"
+          ref={listboxRef}
           className="location-picker-dropdown"
           role="listbox"
+          tabIndex={-1}
           aria-label={requiredLocalized(l10n, 'loc-picker-listbox-aria')}
+          aria-activedescendant={
+            activeIndex >= 0 && locations[activeIndex]
+              ? `location-picker-option-${locations[activeIndex].id}`
+              : undefined
+          }
         >
-          {locations.map((loc) => (
+          {locations.map((loc, idx) => (
             <li key={loc.id} role="none">
               <button
                 type="button"
                 role="option"
+                id={`location-picker-option-${loc.id}`}
+                data-index={idx}
                 aria-selected={loc.id === value}
-                className={`location-picker-option ${loc.id === value ? 'location-picker-option--active' : ''}`}
+                className={`location-picker-option ${loc.id === value ? 'location-picker-option--active' : ''} ${activeIndex === idx ? 'location-picker-option--highlighted' : ''}`}
                 onClick={() => handleSelect(loc)}
               >
                 <span className="location-picker-option-name">{loc.name}</span>

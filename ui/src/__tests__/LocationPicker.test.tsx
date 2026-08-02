@@ -288,4 +288,100 @@ describe('LocationPicker', () => {
     }, { timeout: 10000 });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  // ── Listbox keyboard navigation (LOC-04) ───────────────────────
+
+  it('moves the highlighted option with ArrowDown and selects with Enter', async () => {
+    const user = userEvent.setup();
+    const handleChange = vi.fn();
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={handleChange} />,
+      inventoryFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const trigger = screen.getByRole('button', { name: /select inventory location/i });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    // Open focuses the listbox; the current value is pre-highlighted (index 0).
+    const listbox = screen.getByRole('listbox');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('location-picker-option-loc-warehouse');
+
+    // ArrowDown → Store Front (index 1)
+    await user.keyboard('{ArrowDown}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('location-picker-option-loc-store');
+
+    // Enter selects it
+    await user.keyboard('{Enter}');
+    expect(handleChange).toHaveBeenCalledWith('loc-store', 'Store Front');
+  });
+
+  it('wraps ArrowUp and jumps with Home/End', async () => {
+    const user = userEvent.setup();
+    const handleChange = vi.fn();
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={handleChange} />,
+      inventoryFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const trigger = screen.getByRole('button', { name: /select inventory location/i });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const listbox = screen.getByRole('listbox');
+    // Current value loc-warehouse is index 0 → pre-highlighted.
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('location-picker-option-loc-warehouse');
+
+    // ArrowUp from the first option wraps to the last (index 2 = loc-transit)
+    await user.keyboard('{ArrowUp}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('location-picker-option-loc-transit');
+
+    // Home jumps to the first option
+    await user.keyboard('{Home}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('location-picker-option-loc-warehouse');
+
+    // End jumps to the last option
+    await user.keyboard('{End}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('location-picker-option-loc-transit');
+
+    // Space selects the highlighted option
+    await user.keyboard(' ');
+    expect(handleChange).toHaveBeenCalledWith('loc-transit', 'In Transit');
+  });
+
+  it('restores focus to the trigger and closes on Escape', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const trigger = screen.getByRole('button', { name: /select inventory location/i });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(trigger).toHaveFocus();
+  });
 });

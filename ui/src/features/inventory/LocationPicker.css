@@ -127,6 +127,18 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Keyboard-highlighted option (LOC-04) — visual cue for aria-activedescendant.
+   The outline signals keyboard position; the currently-selected option keeps
+   its accent-subtle background (don't override it with bg-surface). */
+.location-picker-option--highlighted {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.location-picker-option--highlighted:not(.location-picker-option--active) {
+  background: var(--color-bg-surface);
+}
+
 .location-picker-option--active:hover {
   background: var(--color-accent-subtle);
 }
