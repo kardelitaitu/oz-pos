@@ -62,10 +62,17 @@ export async function loginAs(
  *
  * Uses `data-testid="workspace-card"` for selector robustness.
  * Matches by the workspace display name via `.filter({ hasText })`.
+ *
+ * `opts.force` bypasses Playwright's actionability stability check
+ * (workspace cards carry an infinite `ws-bg-shift` animation, which can
+ * keep a default click retrying "element is not stable" on slower
+ * targets). Use it when the test cares about the navigation result, not
+ * card-interaction mechanics (e.g. the perf smoke suite).
  */
 export async function selectWorkspace(
   page: Page,
   typeKey: string,
+  opts?: { force?: boolean },
 ): Promise<void> {
   // Wait for the workspace picker.
   await page.getByTestId('workspace-home').waitFor({ timeout: 10_000 });
@@ -87,7 +94,11 @@ export async function selectWorkspace(
   await expect(card).toBeVisible({ timeout: 5_000 });
 
   // The card is a <button> — click it to activate the workspace.
-  await card.click();
+  if (opts?.force) {
+    await card.click({ force: true });
+  } else {
+    await card.click();
+  }
 
   // Wait for navigation to complete.
   await page.waitForTimeout(2_000);

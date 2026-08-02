@@ -23,6 +23,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test --config e2e/playwright.config.ts --headed",
+    "test:e2e:perf": "playwright test --config e2e/playwright.config.ts e2e/perf-smoke.spec.ts",
     "test:scripts": "node --test ../scripts/__tests__/run-e2e.test.mjs",
     "e2e": "node ../scripts/run-e2e.mjs",
     "e2e:headed": "node ../scripts/run-e2e.mjs --headed",

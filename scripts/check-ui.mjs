@@ -82,6 +82,16 @@ function dockerAvailable() {
   }
 }
 
+/** Check whether Playwright browsers are installed (for the perf smoke suite). */
+function playwrightAvailable() {
+  try {
+    execSync('npx playwright --version', { stdio: 'pipe', timeout: 30_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ── Main ───────────────────────────────────────────────────────────── */
 function main() {
   const totalStart = Date.now();
@@ -114,6 +124,16 @@ function main() {
   } else {
     console.log(`  ${YELLOW}SKIP (Docker not available)${NC}`);
     results.push({ gate: 'E2E tests (Playwright)', status: 'skip', duration: '0.0' });
+  }
+
+  // ── 8. Perf smoke suite (PERF-10) — UI-only, no Docker required ────────
+  // Runs the Playwright performance smoke suite (desktop + tablet budgets).
+  // Skipped when Playwright browsers are not installed locally.
+  if (playwrightAvailable()) {
+    gate('Perf smoke (Playwright)', 'npm run test:e2e:perf', { timeout: 600_000 });
+  } else {
+    console.log(`  ${YELLOW}SKIP (Playwright not available)${NC}`);
+    results.push({ gate: 'Perf smoke (Playwright)', status: 'skip', duration: '0.0' });
   }
 
   // ── Summary ────────────────────────────────────────────────────────────

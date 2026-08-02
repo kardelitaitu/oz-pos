@@ -11,6 +11,7 @@ import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/setting
 import { useFeatures } from '@/hooks/useFeatures';
 import { useTerminalProfile } from '@/hooks/useTerminalProfile';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
+import { recordMark } from '@/utils/perf-metrics';
 import PermissionDenied from '@/components/PermissionDenied';
 import { LazyBoundary } from '@/components/LazyBoundary';
 import type { WizardState } from '@/features/setup/SetupWizard';
@@ -115,6 +116,8 @@ export default function AppShell() {
       setHasCompletedSetup(true);
       setHasActiveLicense(true);
       setLoading(false);
+      // PERF-06: time-to-shell marker — app shell became interactive.
+      recordMark('oz:shell-ready');
       return;
     }
 
@@ -163,6 +166,8 @@ export default function AppShell() {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          // PERF-06: time-to-shell marker — app shell became interactive.
+          recordMark('oz:shell-ready');
         }
       }
     })();

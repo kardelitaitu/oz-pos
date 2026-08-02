@@ -9,6 +9,7 @@ import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import TabletAppShell from '@/frontend/shell/tablet/TabletAppShell';
 import { registerAllFeatures } from '@/features';
+import { installPerfProbe } from './utils/perf-metrics';
 import './frontend/themes/reset.css';
 import './frontend/themes/tokens.css';
 import './frontend/themes/components.css';
@@ -16,6 +17,9 @@ import './frontend/themes/responsive.css';
 
 // ── Register all UI features ─────────────────────────────────────────
 registerAllFeatures();
+
+// PERF-06: expose aggregate-only runtime metrics to automated checks.
+installPerfProbe();
 
 // ── Render ───────────────────────────────────────────────────────
 const l10n = createEnUsLocalization();

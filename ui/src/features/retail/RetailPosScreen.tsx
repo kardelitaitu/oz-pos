@@ -19,6 +19,7 @@ import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto 
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
+import { recordMark } from '@/utils/perf-metrics';
 import { type CartId, type CartLine, type CourseId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
@@ -441,7 +442,13 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setCategoriesLoading(true);
     setLoadError(null);
     listProductsScoped(token)
-      .then((prods) => { if (!controller.signal.aborted) setProducts(prods); })
+      .then((prods) => {
+        if (!controller.signal.aborted) {
+          setProducts(prods);
+          // PERF-06: time-to-interactive-POS marker — catalog rendered.
+          recordMark('oz:pos-interactive');
+        }
+      })
       .catch(() => {
         if (controller.signal.aborted) return;
         setProducts(RETAIL_SAMPLE_PRODUCTS);
