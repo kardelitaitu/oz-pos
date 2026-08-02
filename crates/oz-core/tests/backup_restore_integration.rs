@@ -600,3 +600,123 @@ fn check_integrity_on_empty_healthy_db() {
     }
     fs::remove_file(&p).ok();
 }
+
+// ── RUST-02: online backup API (no VACUUM INTO SQL interpolation) ─────
+
+/// Backup to a path containing a single quote, spaces, and Unicode —
+/// previously handled by escaping into `VACUUM INTO '{escaped}'`; now
+/// the path goes through rusqlite's typed online backup API untouched.
+#[test]
+fn backup_to_quote_unicode_path_succeeds() {
+    let db_path = fresh_db_path("quote-src");
+    let dir = std::env::temp_dir().join(format!("oz-pos-test-quote-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let backup_path = dir
+        .join("o'neil store — 商店.db")
+        .to_string_lossy()
+        .to_string();
+
+    {
+        let mut conn = open_db(&db_path);
+        run_migrations(&mut conn);
+        let s = store(&conn);
+        s.create_product("QUOTE-1", "Quote", price(100), None, None, 10, None)
+            .unwrap();
+        s.backup(&backup_path).unwrap();
+    }
+
+    // The backup must open cleanly and contain the product.
+    {
+        let conn = Connection::open(&backup_path).unwrap();
+        let s = store(&conn);
+        s.check_integrity().unwrap();
+        assert_eq!(s.list_products().unwrap().len(), 1);
+    }
+
+    fs::remove_file(&db_path).ok();
+    fs::remove_file(&backup_path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Backup to an unwritable destination directory must return a typed
+/// error rather than silently producing nothing (RUST-02 destination
+/// validation at the application boundary).
+#[test]
+fn backup_to_unwritable_destination_errors() {
+    let db_path = fresh_db_path("unwritable-src");
+    let dir = std::env::temp_dir().join(format!("oz-pos-test-unwritable-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(&dir).unwrap();
+    // Target is a directory — not a file — so the backup must fail.
+    let target = dir.join("is-a-directory").to_string_lossy().to_string();
+    std::fs::create_dir_all(&target).unwrap();
+
+    {
+        let mut conn = open_db(&db_path);
+        run_migrations(&mut conn);
+        let s = store(&conn);
+        let result = s.backup(&target);
+        assert!(result.is_err(), "backup to a directory target must fail");
+    }
+
+    fs::remove_file(&db_path).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+// ── RUST-03: repair propagates destination filesystem errors ──────────
+
+/// Repair to a directory target must return a typed error (not a
+/// swallowed `let _ =` remove failure).
+#[test]
+fn repair_to_directory_target_errors() {
+    let src = fresh_db_path("repair-dir-src");
+    let dir = std::env::temp_dir().join(format!("oz-pos-test-repair-dir-{}", uuid::Uuid::now_v7()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dst_dir = dir.join("dst-dir").to_string_lossy().to_string();
+    std::fs::create_dir_all(&dst_dir).unwrap();
+
+    {
+        let mut c = open_db(&src);
+        run_migrations(&mut c);
+        let s = store(&c);
+        s.create_product("RD-1", "RD", price(100), None, None, 5, None)
+            .unwrap();
+        let result = s.repair_to(&dst_dir);
+        assert!(
+            result.is_err(),
+            "repair to a directory target must fail with an error"
+        );
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("backup destination") || msg.contains("backup") || msg.contains("repair"),
+            "error should mention the destination, got: {msg}"
+        );
+    }
+
+    fs::remove_file(&src).ok();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Repair to a path whose parent directory does not exist must fail
+/// with a typed error rather than being reported as a SQL failure.
+#[test]
+fn repair_to_missing_parent_dir_errors() {
+    let src = fresh_db_path("repair-parent-src");
+    let missing = std::env::temp_dir()
+        .join(format!("oz-pos-no-such-dir-{}", uuid::Uuid::now_v7()))
+        .join("out.db")
+        .to_string_lossy()
+        .to_string();
+
+    {
+        let mut c = open_db(&src);
+        run_migrations(&mut c);
+        let s = store(&c);
+        let result = s.repair_to(&missing);
+        assert!(
+            result.is_err(),
+            "repair to a missing parent directory must fail"
+        );
+    }
+
+    fs::remove_file(&src).ok();
+}
