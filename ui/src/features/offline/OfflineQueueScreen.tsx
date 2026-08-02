@@ -68,7 +68,13 @@ export default function OfflineQueueScreen() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [conflictCount, setConflictCount] = useState<number>(0);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ERR-07: generation guard + last-refresh tracking for the poll loop.
+  // A late poll response after unmount/supersession is ignored, and repeated
+  // failures surface a non-blocking stale indicator instead of being silent.
+  const pollGenRef = useRef(0);
+  const pollFailuresRef = useRef(0);
+  const [pollStale, setPollStale] = useState(false);
+  const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -99,21 +105,41 @@ export default function OfflineQueueScreen() {
   useEffect(() => { load(); }, [load]);
 
   // Poll pending count and conflict count every 10 seconds (P1-3).
+  // ERR-07: recursive timeout with a generation guard instead of a fixed
+  // interval so a slow poll never overlaps the next one, late results after
+  // unmount are ignored, and repeated failures become visible.
   useEffect(() => {
-    pollRef.current = setInterval(async () => {
+    const gen = ++pollGenRef.current;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
       try {
         const [count, summary] = await Promise.all([
           pendingOfflineCount(),
           getOfflineQueueStatusSummary().catch(() => null),
         ]);
+        if (gen !== pollGenRef.current) return; // superseded or unmounted
         setPendingCount(count);
         if (summary) setConflictCount(summary.conflictCount);
+        pollFailuresRef.current = 0;
+        setPollStale(false);
+        setLastPolledAt(new Date());
       } catch {
-        // Silently ignore poll errors.
+        if (gen !== pollGenRef.current) return;
+        // Three consecutive failures → show a stale notice (ERR-07).
+        pollFailuresRef.current += 1;
+        if (pollFailuresRef.current >= 3) setPollStale(true);
+      } finally {
+        if (gen === pollGenRef.current) {
+          timer = setTimeout(() => { void poll(); }, 10_000);
+        }
       }
-    }, 10_000);
+    };
+
+    void poll();
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      pollGenRef.current += 1; // invalidate any in-flight poll
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -180,6 +206,22 @@ export default function OfflineQueueScreen() {
           <Localized id="offline-queue-conflict-count" vars={{ count: String(conflictCount) }}>
             <span>{conflictCount} item(s) resolved via sync conflict.</span>
           </Localized>
+        </div>
+      )}
+
+      {/* ERR-07: non-blocking stale notice after repeated poll failures */}
+      {pollStale && (
+        <div className="offline-queue-stale" role="status">
+          <Localized id="offline-queue-status-stale">
+            <span>Queue status may be out of date.</span>
+          </Localized>
+          {lastPolledAt && (
+            <span className="offline-queue-stale-time">
+              {requiredLocalized(l10n, 'offline-queue-last-refreshed', {
+                time: lastPolledAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+              })}
+            </span>
+          )}
         </div>
       )}
 

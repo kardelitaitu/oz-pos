@@ -28,5 +28,8 @@ offline-queue-delete-error = Gagal menghapus item
 offline-queue-sync-error = Sinkronisasi gagal
 # P1-3: Shown when sync conflicts were resolved during the last sync cycle
 offline-queue-conflict-count = { $count } item diselesaikan melalui konflik sinkron.
+# ERR-07: Non-blocking notice after repeated poll failures
+offline-queue-status-stale = Status antrean mungkin tidak terbarui.
+offline-queue-last-refreshed = Terakhir diperbarui { $time }
 
 # ── Terminal Management ──
