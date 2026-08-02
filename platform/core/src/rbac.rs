@@ -351,6 +351,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
@@ -452,6 +453,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
@@ -544,6 +546,31 @@ mod preset_tests {
         assert!(!preset.permissions.contains(&permissions::SALES_VOID));
         assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
         assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
+    }
+
+    #[test]
+    fn location_manage_permission_follows_inventory_roles() {
+        // LOC-06: location CRUD/rebind is a management capability, not a sales
+        // one. Manager and Staff (inventory managers) hold it; cashier must not
+        // be able to create/rename/deactivate or rebind locations.
+        let manager = &ROLE_PRESETS[1];
+        assert!(
+            manager
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+        );
+        let staff = &ROLE_PRESETS[4];
+        assert!(
+            staff
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+        );
+        let cashier = &ROLE_PRESETS[2];
+        assert!(
+            !cashier
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+        );
     }
 
     #[test]
@@ -656,6 +683,8 @@ pub mod permissions {
     pub const INVENTORY_TRANSFER: &str = "inventory:transfer";
     /// Perform a physical inventory count.
     pub const INVENTORY_COUNT: &str = "inventory:count";
+    /// Create, rename, deactivate, or rebind inventory locations.
+    pub const INVENTORY_LOCATIONS_MANAGE: &str = "inventory:locations_manage";
 
     // ── Staff ─────────────────────────────────────────────────────
     /// Create a new staff user.
@@ -1025,6 +1054,7 @@ mod tests {
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_CREATE,
             permissions::STAFF_READ,
             permissions::STAFF_UPDATE,
@@ -1097,6 +1127,7 @@ mod tests {
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_CREATE,
             permissions::STAFF_READ,
             permissions::STAFF_UPDATE,

@@ -14,11 +14,28 @@ use oz_core::{
 };
 use tauri::State;
 
+/// Check a permission against the GLOBAL identity DB (ADR #4/#7).
+///
+/// Users and roles are global authentication records; the store-scoped DBs
+/// contain no users. Every inventory command must authorise through this
+/// helper rather than `require_permission_for_user(&store, …)` on the store
+/// connection, which would fail with "user not found" for every caller.
+async fn require_inventory_permission(
+    state: &AppState,
+    user_id: &str,
+    permission: &str,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, user_id, permission)
+}
+
 // ── Locations CRUD ──────────────────────────────────────────────────
 
 /// Create a new inventory location.
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_LOCATIONS_MANAGE` permission (LOC-06) — location
+/// management is a dedicated capability, not a side effect of sales processing.
 #[tauri::command]
 pub async fn create_inventory_location(
     session_token: String,
@@ -28,6 +45,12 @@ pub async fn create_inventory_location(
     state: State<'_, AppState>,
 ) -> Result<String, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_LOCATIONS_MANAGE,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -36,12 +59,6 @@ pub async fn create_inventory_location(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let id = store.create_inventory_location(&name, &location_type, &description)?;
     Ok(id)
@@ -49,13 +66,20 @@ pub async fn create_inventory_location(
 
 /// List all inventory locations.
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_VIEW` permission (LOC-06) — reading the picker list
+/// needs only stock visibility, not sales processing.
 #[tauri::command]
 pub async fn list_inventory_locations(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<InventoryLocation>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_VIEW,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -65,19 +89,13 @@ pub async fn list_inventory_locations(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
-
     let locs = store.list_inventory_locations()?;
     Ok(locs)
 }
 
 /// Update details of an existing inventory location.
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_LOCATIONS_MANAGE` permission (LOC-06).
 #[tauri::command]
 pub async fn update_inventory_location(
     session_token: String,
@@ -88,6 +106,12 @@ pub async fn update_inventory_location(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_LOCATIONS_MANAGE,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -96,12 +120,6 @@ pub async fn update_inventory_location(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.update_inventory_location(&id, &name, &location_type, &description)?;
     Ok(())
@@ -109,7 +127,7 @@ pub async fn update_inventory_location(
 
 /// Deactivate an inventory location (fails if contains stock or pending transfers).
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_LOCATIONS_MANAGE` permission (LOC-06).
 #[tauri::command]
 pub async fn deactivate_inventory_location(
     session_token: String,
@@ -117,6 +135,12 @@ pub async fn deactivate_inventory_location(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_LOCATIONS_MANAGE,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -126,19 +150,14 @@ pub async fn deactivate_inventory_location(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
-
     store.deactivate_inventory_location(&id)?;
     Ok(())
 }
 
 /// Resolve locations bound to a workspace instance (unified resolver ADR-19 §10).
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_VIEW` permission (LOC-06) — reading the bound-location
+/// set is a stock-visibility operation.
 #[tauri::command]
 pub async fn get_workspace_locations_scoped(
     session_token: String,
@@ -147,6 +166,12 @@ pub async fn get_workspace_locations_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceLocationBinding>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_VIEW,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -154,25 +179,27 @@ pub async fn get_workspace_locations_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let binding = get_workspace_locations(&db, &instance_id, &type_key)?;
     Ok(binding)
 }
 
 /// Invalidate the location resolver cache.
+///
+/// Requires `INVENTORY_VIEW` permission (LOC-06) — cache invalidation is a
+/// read-path hygiene operation.
 #[tauri::command]
 pub async fn invalidate_location_cache_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let _session = state.resolve_session(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_VIEW,
+    )
+    .await?;
     invalidate_location_cache();
     Ok(())
 }
@@ -181,7 +208,8 @@ pub async fn invalidate_location_cache_scoped(
 
 /// Set inventory location bindings for a workspace instance.
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_LOCATIONS_MANAGE` permission (LOC-06) — binding is a
+/// stock-policy management operation.
 #[tauri::command]
 pub async fn set_workspace_inventory_locations(
     session_token: String,
@@ -190,6 +218,12 @@ pub async fn set_workspace_inventory_locations(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_LOCATIONS_MANAGE,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -198,12 +232,6 @@ pub async fn set_workspace_inventory_locations(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.set_workspace_inventory_locations(&instance_id, &locations)?;
     Ok(())
@@ -211,7 +239,7 @@ pub async fn set_workspace_inventory_locations(
 
 /// Get inventory location bindings for a workspace instance.
 ///
-/// Requires `SALES_PROCESS` permission.
+/// Requires `INVENTORY_VIEW` permission (LOC-06).
 #[tauri::command]
 pub async fn get_workspace_inventory_locations(
     session_token: String,
@@ -219,6 +247,12 @@ pub async fn get_workspace_inventory_locations(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceInventoryLocation>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::INVENTORY_VIEW,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -227,12 +261,6 @@ pub async fn get_workspace_inventory_locations(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let locs = store.get_workspace_inventory_locations(&instance_id)?;
     Ok(locs)
@@ -251,6 +279,12 @@ pub async fn start_inventory_shift(
     state: State<'_, AppState>,
 ) -> Result<InventoryShift, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -259,12 +293,6 @@ pub async fn start_inventory_shift(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let shift = store.start_inventory_shift(
         &session.user_id,
@@ -285,6 +313,12 @@ pub async fn end_inventory_shift(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -293,12 +327,6 @@ pub async fn end_inventory_shift(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.end_inventory_shift(&shift_id)?;
     Ok(())
@@ -313,6 +341,12 @@ pub async fn get_active_inventory_shift(
     state: State<'_, AppState>,
 ) -> Result<Option<InventoryShift>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -321,12 +355,6 @@ pub async fn get_active_inventory_shift(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let shift = store.get_active_inventory_shift(&session.user_id)?;
     Ok(shift)
@@ -341,6 +369,12 @@ pub async fn list_inventory_shifts(
     state: State<'_, AppState>,
 ) -> Result<Vec<InventoryShift>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -349,12 +383,6 @@ pub async fn list_inventory_shifts(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let shifts = store.list_inventory_shifts()?;
     Ok(shifts)
@@ -375,6 +403,12 @@ pub async fn create_inventory_transaction(
     state: State<'_, AppState>,
 ) -> Result<String, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -383,12 +417,6 @@ pub async fn create_inventory_transaction(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let ttype = InventoryTransactionType::from_stored_str(&type_str)
         .ok_or_else(|| AppError::Invalid(format!("invalid transaction type: {}", type_str)))?;
@@ -412,6 +440,12 @@ pub async fn list_inventory_transactions(
     state: State<'_, AppState>,
 ) -> Result<Vec<InventoryTransaction>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -420,12 +454,6 @@ pub async fn list_inventory_transactions(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let txs = store.list_inventory_transactions()?;
     Ok(txs)
@@ -443,6 +471,12 @@ pub async fn list_inventory_transactions_for_shift(
     state: State<'_, AppState>,
 ) -> Result<Vec<InventoryTransaction>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -451,12 +485,6 @@ pub async fn list_inventory_transactions_for_shift(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let txs =
         store.list_inventory_transactions_for_shift(&session.user_id, &location_id, &since)?;
@@ -473,6 +501,12 @@ pub async fn get_inventory_transaction(
     state: State<'_, AppState>,
 ) -> Result<Option<(InventoryTransaction, Vec<InventoryTransactionLine>)>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -481,12 +515,6 @@ pub async fn get_inventory_transaction(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let detail = store.get_inventory_transaction(&id)?;
     Ok(detail)
@@ -507,6 +535,12 @@ pub async fn set_stock_threshold(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -515,12 +549,6 @@ pub async fn set_stock_threshold(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.set_stock_threshold(&product_id, location_id.as_deref(), threshold, enabled)?;
     Ok(())
@@ -536,6 +564,12 @@ pub async fn get_stock_thresholds(
     state: State<'_, AppState>,
 ) -> Result<Vec<StockThreshold>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -544,12 +578,6 @@ pub async fn get_stock_thresholds(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let thresholds = store.get_stock_thresholds(location_id.as_deref())?;
     Ok(thresholds)
@@ -565,6 +593,12 @@ pub async fn delete_stock_threshold(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -573,12 +607,6 @@ pub async fn delete_stock_threshold(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.delete_stock_threshold(&id)?;
     Ok(())
@@ -595,6 +623,12 @@ pub async fn get_low_stock_alerts_at_location_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::reports::LowStockAlert>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -603,12 +637,6 @@ pub async fn get_low_stock_alerts_at_location_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let alerts = store.low_stock_alerts_at_location(&location_id, default_threshold)?;
     Ok(alerts)
@@ -626,6 +654,12 @@ pub async fn active_stock_alerts_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::reports::StockAlertEvent>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -634,12 +668,6 @@ pub async fn active_stock_alerts_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let alerts = store.active_stock_alerts(&location_id)?;
     Ok(alerts)
@@ -655,6 +683,12 @@ pub async fn acknowledge_stock_alert_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -663,12 +697,6 @@ pub async fn acknowledge_stock_alert_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.acknowledge_stock_alert(&alert_id, &session.user_id)?;
     Ok(())
@@ -686,6 +714,12 @@ pub async fn finalize_sale(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -694,12 +728,6 @@ pub async fn finalize_sale(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.finalize_sale(&sale_id)?;
     Ok(())
@@ -715,6 +743,12 @@ pub async fn void_pending_sale(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_inventory_permission(
+        &state,
+        &session.user_id,
+        oz_core::permissions::SALES_PROCESS,
+    )
+    .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -724,12 +758,228 @@ pub async fn void_pending_sale(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
 
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
-
     store.void_pending_sale(&sale_id)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oz_core::session::SessionContext;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
+
+    fn seed_cashier_user(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn seed_owner_user(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn scoped_state_with_token(
+        conn: rusqlite::Connection,
+        token: &str,
+        user_id: &str,
+        role_id: &str,
+        store_id: &str,
+    ) -> AppState {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        state.session_store.write().unwrap().insert(
+            token.into(),
+            SessionContext::new(
+                user_id.into(),
+                role_id.into(),
+                "terminal-1".into(),
+                store_id.into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        state
+    }
+
+    // ── LOC-06: least-privilege permission matrix ──────────────────────
+
+    #[tokio::test]
+    async fn cashier_can_list_locations_but_cannot_create_them() {
+        // Cashier preset has INVENTORY_VIEW (list is allowed) but must NOT
+        // hold INVENTORY_LOCATIONS_MANAGE (create/rename/deactivate/rebind
+        // are management capabilities, not sales side-effects).
+        let conn = oz_core::migrations::fresh_db();
+        seed_cashier_user(&conn);
+        let state = scoped_state_with_token(
+            conn,
+            "cashier-token",
+            "user-cashier",
+            "role-cashier",
+            "store-cashier",
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Read: cashier is allowed. Migrations seed two default locations,
+        // so the list is non-empty — the point is the read path works.
+        let listed = list_inventory_locations("cashier-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            listed.iter().any(|l| l.name == "Default Inventory"),
+            "cashier should be able to list seeded locations"
+        );
+
+        // Mutation: cashier is denied with PermissionDenied.
+        let created = create_inventory_location(
+            "cashier-token".into(),
+            "Rogue Loc".into(),
+            "store".into(),
+            String::new(),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(created, Err(AppError::PermissionDenied(_))));
+
+        // And the denied create must not have leaked a row.
+        let after = list_inventory_locations("cashier-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            !after.iter().any(|l| l.name == "Rogue Loc"),
+            "denied create must not insert a location"
+        );
+    }
+
+    #[tokio::test]
+    async fn owner_can_create_and_deactivate_locations() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+        let state = scoped_state_with_token(
+            conn,
+            "owner-token",
+            "user-owner",
+            "role-owner",
+            "store-owner",
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let id = create_inventory_location(
+            "owner-token".into(),
+            "Backroom".into(),
+            "warehouse".into(),
+            "Secondary storage".into(),
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert!(!id.is_empty());
+
+        let deactivated =
+            deactivate_inventory_location("owner-token".into(), id, app.state()).await;
+        assert!(deactivated.is_ok());
+    }
+
+    #[tokio::test]
+    async fn sales_process_gated_inventory_commands_authorise_via_global_db() {
+        // The SALES_PROCESS-gated inventory commands (shifts/transactions/
+        // thresholds/alerts/pending-sale) must also authorise against the
+        // GLOBAL identity DB — the store DB has no users, so a store-scoped
+        // check would deny every caller with "user not found".
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+        let state = scoped_state_with_token(
+            conn,
+            "owner-token",
+            "user-owner",
+            "role-owner",
+            "store-owner",
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let shifts = list_inventory_shifts("owner-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(shifts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn location_read_is_scoped_to_session_store() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_owner_user(&conn);
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        for (token, store_id) in [("store-a-token", "store-a"), ("store-b-token", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-owner".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+
+        // Seed a location ONLY into store A's database. The guard is scoped
+        // to a block so it drops before the async commands below.
+        {
+            let store_a_conn = state.db_manager.open_store("store-a").unwrap();
+            let store_a_db = store_a_conn.lock().unwrap();
+            Store::new(&store_a_db)
+                .create_inventory_location("Store A Only", "warehouse", "")
+                .unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let store_a = list_inventory_locations("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        let store_b = list_inventory_locations("store-b-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            store_a.iter().any(|l| l.name == "Store A Only"),
+            "store A must see its own location"
+        );
+        assert!(
+            !store_b.iter().any(|l| l.name == "Store A Only"),
+            "store B must not see store A locations"
+        );
+    }
 }
