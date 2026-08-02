@@ -481,6 +481,7 @@ modifier-base-price = Harga dasar
 modifier-addons = Tambahan
 modifier-total = Total
 modifier-add-to-cart = Tambah ke Keranjang
+modifier-dialog-aria = Sesuaikan { $productName }
 
 # ── EOD Report ──
 eod-title = Laporan Akhir Hari

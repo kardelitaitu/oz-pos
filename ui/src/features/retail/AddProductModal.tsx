@@ -97,7 +97,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
               Add New Product
             </h3>
           </Localized>
-          <Localized id="retail-edit-modal-close-aria">
+          <Localized id="retail-edit-modal-close-aria" attrs={{ 'aria-label': true }}>
             <button
               type="button"
               className="retail-edit-modal-close"

@@ -305,7 +305,7 @@ export default function PromotionManagementScreen() {
                   <select id="promo-field-type" value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
                     {PROMO_TYPES.map((t) => (
                       <option key={t} value={t}>
-                        {l10n.getString(PROMO_TYPE_LABELS[t] ?? 'promotions-percentage') || t}
+                        {requiredLocalized(l10n, PROMO_TYPE_LABELS[t] ?? 'promotions-percentage')}
                       </option>
                     ))}
                   </select>

@@ -14,6 +14,11 @@ kds-no-orders = Belum ada pesanan
 
 # Staff Login
 kds-cancelled = Dibatalkan
+kds-item-status-pending = Tertunda
+kds-item-status-preparing = Disiapkan
+kds-item-status-ready = Siap
+kds-item-status-served = Tersaji
+kds-item-status-cancelled = Dibatalkan
 kds-tap-to-advance-label = Pesanan { $number }, ketuk untuk lanjut
 kds-order-count = { $count } pesanan
 kds-time-ago-now = sekarang

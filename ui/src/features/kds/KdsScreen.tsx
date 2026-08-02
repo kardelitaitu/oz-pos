@@ -48,11 +48,11 @@ const LAYOUT_MAP: Record<KdsLayout, React.ComponentType<KdsLayoutProps>> = {
 };
 
 /** Keyboard shortcut descriptions for the help popover. */
-const SHORTCUTS: { key: string; label: string; id: string }[] = [
-  { key: '1-9', label: 'Select ticket by position', id: 'kds-shortcut-select' },
-  { key: 'Space', label: 'Advance selected ticket', id: 'kds-shortcut-advance' },
-  { key: '↑↓', label: 'Navigate tickets', id: 'kds-shortcut-navigate' },
-  { key: 'Esc', label: 'Deselect / close', id: 'kds-shortcut-deselect' },
+const SHORTCUTS: { key: string; id: string }[] = [
+  { key: '1-9', id: 'kds-shortcut-select' },
+  { key: 'Space', id: 'kds-shortcut-advance' },
+  { key: '↑↓', id: 'kds-shortcut-navigate' },
+  { key: 'Esc', id: 'kds-shortcut-deselect' },
 ];
 
 /** KDS (Kitchen Display System) screen — real-time order queue with switchable layouts and per-user preferences. */
@@ -443,7 +443,7 @@ export default function KdsScreen() {
               {SHORTCUTS.map((s) => (
                 <div key={s.id} className="kds-shortcut-row">
                   <kbd className="kds-shortcut-key">{s.key}</kbd>
-                  <span className="kds-shortcut-desc">{l10n.getString(s.id) || s.label}</span>
+                  <span className="kds-shortcut-desc">{requiredLocalized(l10n, s.id)}</span>
                 </div>
               ))}
             </div>

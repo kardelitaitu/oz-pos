@@ -541,7 +541,7 @@ export default function EmailReportSettings() {
                   ['category_breakdown', 'settings-schedule-report-type-category-breakdown'],
                   ['low_stock_alerts', 'settings-schedule-report-type-low-stock-alerts'],
                 ] as const).map(([key, i18nKey]) => {
-                  const localized = l10n.getString(i18nKey) || i18nKey.replace(/^settings-schedule-report-type-/g, '').replace(/-/g, ' ');
+                  const localized = requiredLocalized(l10n, i18nKey);
                   return (
                     <label key={key} className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                       <input

@@ -181,7 +181,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
   const courseLabel = useCallback((course: string | null): string => {
     if (!course) return requiredLocalized(l10n, 'kds-course-other');
     const key = COURSE_L10N_KEYS[course];
-    if (key) return l10n.getString(key) || course.toUpperCase();
+    if (key) return requiredLocalized(l10n, key);
     return requiredLocalized(l10n, 'kds-course-other');
   }, [l10n]);
 
@@ -238,7 +238,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                       e.stopPropagation();
                     }
                   } : undefined}
-                  aria-label={canAdvanceItem ? `${item.display_name} — ${item.item_status}` : undefined}
+                  aria-label={canAdvanceItem ? `${item.display_name} — ${requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}` : undefined}
                 >
                   <div className="kds-ticket-item-status-row">
                     <span className={`kds-ticket-item-status-dot kds-ticket-item-status-dot--${item.item_status}`} aria-hidden="true" />
@@ -246,7 +246,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                       {item.qty > 1 ? `${item.display_name} x${item.qty}` : item.display_name}
                     </span>
                     <span className="kds-ticket-item-status-label">
-                      {l10n.getString(`kds-item-status-${item.item_status}`) || item.item_status}
+                      {requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}
                     </span>
                   </div>
                   {item.modifiers.length > 0 && (

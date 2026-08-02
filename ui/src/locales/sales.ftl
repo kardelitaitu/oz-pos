@@ -463,6 +463,7 @@ modifier-base-price = Base price
 modifier-addons = Add-ons
 modifier-total = Total
 modifier-add-to-cart = Add to Cart
+modifier-dialog-aria = Customise { $productName }
 
 # EOD Report
 eod-title = End-of-Day Report

@@ -68,7 +68,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               Add New Category
             </h3>
           </Localized>
-          <Localized id="retail-edit-modal-close-aria">
+          <Localized id="retail-edit-modal-close-aria" attrs={{ 'aria-label': true }}>
             <button
               type="button"
               className="retail-edit-modal-close"

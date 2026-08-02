@@ -49,16 +49,20 @@ const defaultProps: ItemModifierModalProps = {
 
 const ftl = `
 modifier-no-options = No customisation options available
+modifier-dialog-aria = Customise { $productName }
 modifier-free = Free
 modifier-base-price = Base price
 modifier-addons = Add-ons
 modifier-total = Total
 cancel = Cancel
+close = Close
 modifier-add-to-cart = Add to Order
 `;
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  const bundle = new FluentBundle('en');
+  // Match production (i18n/index.ts) — useIsolating: false avoids
+  // U+2068/U+2069 isolation markers around interpolated variables.
+  const bundle = new FluentBundle('en', { useIsolating: false });
   bundle.addResource(new FluentResource(ftl));
   const l10n = new ReactLocalization([bundle]);
   return <LocalizationProvider l10n={l10n}>{children}</LocalizationProvider>;
