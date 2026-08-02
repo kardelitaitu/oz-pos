@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import type { Product } from '@/types/domain';
 import sharedFtl from '@/locales/shared.ftl?raw';
+import productsFtl from '@/locales/products.ftl?raw';
 
 const mockProducts = [
   {
@@ -107,7 +108,9 @@ afterEach(() => {
 
 function renderMenu(props: { onAddProduct?: (product: Product) => void } = {}) {
   const { onAddProduct } = props;
-  return renderWithFluentSync(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl);
+  // LOAD-05: the loading label resolves via requiredLocalized, so the
+  // products bundle (restaurant-menu-loading) must be present.
+  return renderWithFluentSync(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl, productsFtl);
 }
 
 describe('RestaurantMenu', () => {
@@ -120,7 +123,8 @@ describe('RestaurantMenu', () => {
   it('shows empty state', () => {
     mockUseProducts.mockReturnValue({ products: [], categories: [], categoryMeta: [], loading: false });
     renderMenu();
-    expect(screen.getByText('No items available')).toBeTruthy();
+    // Real bundle value (products.ftl) now that the bundle is loaded.
+    expect(screen.getByText('Menu is empty')).toBeTruthy();
   });
 
   it('renders product cards', () => {
@@ -200,7 +204,7 @@ describe('RestaurantMenu', () => {
   it('shows empty state when no products match filter', () => {
     mockUseProducts.mockReturnValue({ products: [], categories: ['Makanan'], categoryMeta: [], loading: false });
     renderMenu();
-    expect(screen.getByText('No items available')).toBeTruthy();
+    expect(screen.getByText('Menu is empty')).toBeTruthy();
   });
 
   it('hides out-of-stock products when marked unavailable via context menu', async () => {

@@ -58,6 +58,7 @@ kds-zone-all = Semua
 kds-rush-badge = PRIORITAS
 
 # ── 2b: History/recall view ──
+kds-loading = Memuat pesanan…
 kds-history-toggle-aria = Tampilkan riwayat pesanan
 kds-history-toggle-title = Riwayat pesanan
 kds-history-filter-aria = Filter berdasarkan status

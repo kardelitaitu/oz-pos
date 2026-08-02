@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { listProductsScoped, type ProductDto } from '@/api/products';
@@ -235,9 +235,10 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
           {/* ── Product list (left) ─────────────────────────────── */}
           <div className="kds-picker-products">
             {loading ? (
-              <p className="kds-picker-loading">
-                {requiredLocalized(l10n, 'kds-picker-loading')}
-              </p>
+              <LoadingStatus
+                className="kds-picker-loading"
+                label={requiredLocalized(l10n, 'kds-picker-loading')}
+              />
             ) : filtered.length === 0 ? (
               <p className="kds-picker-empty">
                 {requiredLocalized(l10n, 'kds-picker-no-products')}

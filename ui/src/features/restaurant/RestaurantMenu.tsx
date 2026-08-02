@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized } from '@/components/Localized';
 import { type Product } from '@/types/domain';
 import { useLocalization } from '@fluent/react';
@@ -692,13 +692,11 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
 
       {/* ── Product grid ───────────────────────────── */}
       {loading ? (
-        <div className="restaurant-empty">
-          <span className="restaurant-empty-text">
-            <Localized id="restaurant-menu-loading">
-              <span>Loading menu…</span>
-            </Localized>
-          </span>
-        </div>
+        // LOAD-05: localized status announcement for the loading region.
+        <LoadingStatus
+          className="restaurant-empty"
+          label={requiredLocalized(l10n, 'restaurant-menu-loading')}
+        />
       ) : filtered.length === 0 ? (
         <div className="restaurant-empty">
           <span className="restaurant-empty-text">

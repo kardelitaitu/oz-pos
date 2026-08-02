@@ -8,7 +8,7 @@ import { getKdsQueueScoped, updateKdsStatusScoped, updateKdsOrderItemsScoped, up
 import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { isEditableTarget } from '@/utils/isEditableTarget';
 import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
@@ -384,24 +384,26 @@ export default function KdsScreen() {
   // ── Initial loading skeleton ──────────────────────────────────
   const renderContent = () => {
     if (initialLoading) {
+      // LOAD-05: the skeleton columns are decorative; the localized
+      // status line (role=status) is what screen readers announce.
       return (
-        <div className="kds-loading-container">
-          <div className="kds-loading-columns">
-            {['pending', 'preparing', 'ready'].map((status) => (
-              <div key={status} className="kds-loading-column">
-                <div className="kds-loading-header" />
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="kds-loading-card">
-                    <div className="kds-loading-line kds-loading-line--short" />
-                    <div className="kds-loading-line kds-loading-line--long" />
-                    <div className="kds-loading-line kds-loading-line--medium" />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
+        <LoadingStatus className="kds-loading-container" label={requiredLocalized(l10n, 'kds-loading')}>
+            <div className="kds-loading-columns">
+              {['pending', 'preparing', 'ready'].map((status) => (
+                <div key={status} className="kds-loading-column">
+                  <div className="kds-loading-header" />
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="kds-loading-card">
+                      <div className="kds-loading-line kds-loading-line--short" />
+                      <div className="kds-loading-line kds-loading-line--long" />
+                      <div className="kds-loading-line kds-loading-line--medium" />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </LoadingStatus>
+        );
     }
 
     if (showHistory) {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listKdsOrdersScoped, type KdsOrder, type KdsStatus } from '@/api/kds';
@@ -69,12 +69,14 @@ export function KdsHistoryPanel() {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading — LOAD-05: status wrapper + localized label */}
       {loading && (
-        <div className="kds-history-loading">
+        <LoadingStatus
+          className="kds-history-loading"
+          label={requiredLocalized(l10n, 'kds-history-loading')}
+        >
           <span className="kds-refresh-spinner" />
-          <Localized id="kds-history-loading">Loading history...</Localized>
-        </div>
+        </LoadingStatus>
       )}
 
       {/* Empty state */}

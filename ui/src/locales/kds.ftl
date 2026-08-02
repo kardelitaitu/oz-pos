@@ -56,6 +56,7 @@ kds-zone-all = All
 kds-rush-badge = RUSH
 
 # ── 2b: History/recall view ──
+kds-loading = Loading orders…
 kds-history-toggle-aria = Toggle order history
 kds-history-toggle-title = Order history
 kds-history-filter-aria = Filter by status
