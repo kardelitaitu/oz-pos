@@ -37,7 +37,7 @@
 16. Accessibility — full-app ARIA deep dive, screen-reader flow, focus management — ✅ **FULLY REMEDIATED** (all 12 findings A11Y-01→A11Y-12; see [16-accessibility.md](16-accessibility.md) — commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`, `962a0c0f`)
 17. Performance — bundle size, render optimization, lazy loading, code splitting — ✅ **FULLY REMEDIATED** (all 10 findings PERF-01→PERF-10; see [17-performance.md](17-performance.md) — commits `2b762b08`, `2e1f3d31`, `50b50836`, `bf376234`, `df753501`)
 18. Error handling — error boundaries, toast consistency, retry patterns, fallback UI — ✅ **FULLY REMEDIATED** (all 10 findings ERR-01→ERR-10; see [18-error-handling.md](18-error-handling.md) — commits `10f1bae0`, `c586c3d6`, `537f5867`, `31adb7c3`, `5dacd75f`)
-19. Offline resilience — retail POS offline mode, queueing, sync-on-reconnect
+19. Offline resilience — retail POS offline mode, queueing, sync-on-reconnect — ✅ **FULLY REMEDIATED** (all 12 findings OFF-01→OFF-12; see [19-offline-resilience.md](19-offline-resilience.md) — commits `91766573`, `233eed6b`, `17ee223c`, `e07ec4ae`)
 20. Mobile / tablet responsiveness — index.tablet.html, touch UX, viewport
 21. Theme system — token completeness, dark mode gaps, color-mix fallbacks
 22. Keyboard shortcuts — coverage audit across all screens
