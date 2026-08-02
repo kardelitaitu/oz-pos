@@ -9,6 +9,8 @@ import { useKdsPreferences, type KdsLayout } from '@/features/kds/hooks/useKdsPr
 import { useNewTicketSound } from '@/features/kds/hooks/useNewTicketSound';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
+import { isEditableTarget } from '@/utils/isEditableTarget';
+import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { KdsLayoutKanban } from '@/features/kds/KdsLayoutKanban';
 import { KdsLayoutFocus } from '@/features/kds/KdsLayoutFocus';
 import { KdsLayoutMetro } from '@/features/kds/KdsLayoutMetro';
@@ -70,6 +72,8 @@ export default function KdsScreen() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
   const shortcutsRef = useRef<HTMLDivElement>(null);
+  // KEY-07: ARIA tabs pattern — zone chips get roving tabindex + arrow keys.
+  const zoneTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   // 3f: Product picker state — which order is being edited.
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
@@ -288,14 +292,17 @@ export default function KdsScreen() {
     kdsRef.current?.focus();
   }, []);
 
+  // KEY-07: managed screen-level listener with editable + modal guards.
+  // Previously the handler was bound to the root element, so shortcuts stopped
+  // working whenever focus left the region. Binding to `document` (with guards)
+  // keeps 1-9/Arrow/Space/Escape working regardless of where focus lands, and
+  // the KDS component unmounting removes the listener.
   useEffect(() => {
-    const el = kdsRef.current;
-    if (!el) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept when focus is inside an input/textarea.
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Guard: never intercept while the user is typing in an editable target.
+      if (isEditableTarget(e.target)) return;
+      // Guard: never intercept while a modal owns the keyboard.
+      if (isAnyAriaModalOpen()) return;
 
       if (e.key >= '1' && e.key <= '9') {
         e.preventDefault();
@@ -330,8 +337,8 @@ export default function KdsScreen() {
       }
     };
 
-    el.addEventListener('keydown', handleKeyDown);
-    return () => el.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [orders, advanceStatus]);
 
   // P7-3: Pull-to-refresh gesture on KDS ticket board
@@ -347,6 +354,30 @@ export default function KdsScreen() {
     }
     return [...zoneSet].sort();
   }, [orders]);
+
+  // KEY-07: ARIA tabs pattern — ArrowLeft/ArrowRight/Home/End move between the
+  // zone chips (roving tabindex: the selected chip keeps tabIndex 0, others -1),
+  // and the chip reached by arrow keys becomes the active zone filter.
+  const handleZoneTablistKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const chips = zoneTabRefs.current;
+    if (!chips || chips.length === 0) return;
+    const current = chips.findIndex((c) => c === document.activeElement);
+    let next = -1;
+    if (e.key === 'ArrowRight') {
+      next = current < 0 ? 0 : (current + 1) % chips.length;
+    } else if (e.key === 'ArrowLeft') {
+      next = current < 0 ? chips.length - 1 : (current - 1 + chips.length) % chips.length;
+    } else if (e.key === 'Home') {
+      next = 0;
+    } else if (e.key === 'End') {
+      next = chips.length - 1;
+    }
+    if (next < 0) return;
+    e.preventDefault();
+    chips[next]?.focus();
+    // chip 0 = "All" (zone ''), chips 1..n = zones[0..n-1]
+    setKdsZone(next === 0 ? '' : (zones[next - 1] ?? ''));
+  }, [zones, setKdsZone]);
 
   const LayoutComponent = LAYOUT_MAP[prefs.layout];
 
@@ -415,22 +446,31 @@ export default function KdsScreen() {
         </div>
         <div className="kds-header-center">
           {zones.length > 0 && (
-            <div className="kds-zone-chips" role="tablist" aria-label={requiredLocalized(l10n, 'kds-zone-filter-aria')}>
+            <div
+              className="kds-zone-chips"
+              role="tablist"
+              aria-label={requiredLocalized(l10n, 'kds-zone-filter-aria')}
+              onKeyDown={handleZoneTablistKeyDown}
+            >
               <button
                 className={`kds-zone-chip${!prefs.kdsZone ? ' kds-zone-chip--active' : ''}`}
                 onClick={() => setKdsZone('')}
                 role="tab"
                 aria-selected={!prefs.kdsZone}
+                tabIndex={!prefs.kdsZone ? 0 : -1}
+                ref={(el) => { zoneTabRefs.current[0] = el; }}
               >
                 <Localized id="kds-zone-all">All</Localized>
               </button>
-              {zones.map((zone) => (
+              {zones.map((zone, i) => (
                 <button
                   key={zone}
                   className={`kds-zone-chip${prefs.kdsZone === zone ? ' kds-zone-chip--active' : ''}`}
                   onClick={() => setKdsZone(zone)}
                   role="tab"
                   aria-selected={prefs.kdsZone === zone}
+                  tabIndex={prefs.kdsZone === zone ? 0 : -1}
+                  ref={(el) => { zoneTabRefs.current[i + 1] = el; }}
                 >
                   {zone}
                 </button>
@@ -446,6 +486,7 @@ export default function KdsScreen() {
             onClick={() => setShowShortcuts((p) => !p)}
             aria-label={requiredLocalized(l10n, 'kds-shortcuts-aria')}
             aria-expanded={showShortcuts}
+            aria-controls="kds-shortcuts-popover"
           >
             <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
@@ -453,9 +494,10 @@ export default function KdsScreen() {
           </button>
           {showShortcuts && (
             <div
+              id="kds-shortcuts-popover"
               ref={shortcutsRef}
               className="kds-shortcuts-popover"
-              role="tooltip"
+              role="region"
               aria-label={requiredLocalized(l10n, 'kds-shortcuts-label')}
             >
               {SHORTCUTS.map((s) => (
