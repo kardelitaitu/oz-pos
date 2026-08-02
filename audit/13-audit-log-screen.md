@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** AuditLogScreen — append-only event visibility, filters, pagination, review workflow, authorization, privacy, localization, and tests  
-> **Status:** PARTIALLY REMEDIATED · audit-log labels, placeholders, and retry affordance localized post-audit (commit `1bec6777`); authorization, pagination, review-persistence, privacy, and export findings remain open  
-> **Production code changed:** Yes — partial post-audit remediation (see “Post-audit remediation” below)
+> **Status:** FULLY REMEDIATED · all 11 findings (AUD-01 → AUD-11) landed across six commits (`1a4fd1b5`, `174d839f`, `359ad440`, `69abc5af`, `166aa991`, `6e488510`) plus the earlier localized-label sweep (`1bec6777`); see “Post-audit remediation” below  
+> **Production code changed:** Yes — full remediation (see “Post-audit remediation” below)
 
 ## Scope
 
@@ -36,7 +36,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Add `list_audit_log_scoped(session_token, args)` that resolves the store and authenticated user server-side, enforces an audit-view permission, and applies a store/tenant predicate. Remove caller-controlled identity from the authorization path, deprecate the global command, and add IPC tests for unauthenticated, cross-store, and insufficient-role calls.
 
-**Status:** Open · P0/P1 conditional
+**Status:** Remediated · `1a4fd1b5` — `list_audit_log_scoped` resolves the store + authenticated user from the session token, enforces `audit:view`, and reads the session store's audit table; cross-store/unauthenticated tests added
 
 ### AUD-02 — Filtering and unreviewed counts cover only the loaded page set
 
@@ -46,7 +46,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Move filtering and review-count computation to scoped backend queries with explicit filter parameters and total counts, or clearly label the current values as “loaded entries.” Add server-side pagination metadata and tests proving matches beyond the first page are discoverable.
 
-**Status:** Open · P1 compliance/UX
+**Status:** Remediated · `1a4fd1b5` — outcome/query filters and total counts now run in the store DB, not over the loaded page; the unreviewed badge counts the full table (`174d839f`)
 
 ### AUD-03 — Offset pagination can duplicate or skip entries while new events arrive
 
@@ -56,7 +56,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Use a stable cursor such as `(created_at, id)` with deterministic ordering, return a continuation cursor and `has_more`, and deduplicate by entry ID in the UI as a defense in depth. Add an integration test that inserts an event between page requests.
 
-**Status:** Open · P1 integrity risk
+**Status:** Remediated · `1a4fd1b5` — keyset `(created_at, id)` cursor with `has_more`, plus dedupe-by-id in the UI (defense in depth); keyset stability test added
 
 ### AUD-04 — “Mark Reviewed” is device-local and is not an auditable review event
 
@@ -66,7 +66,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Persist review checkpoints server-side with tenant, reviewer, timestamp, and cursor/high-water mark. Write a corresponding audit event, enforce manager permission on the mutation, and expose the review history. Keep local storage only as an optional UI cache.
 
-**Status:** Open · P1 compliance gap
+**Status:** Remediated · `174d839f` — server-side `audit_review_checkpoints` table with reviewer/store/cursor, `audit.review` event emitted in the same transaction, manager-gated mutation
 
 ### AUD-05 — Refresh and Load More requests lack request-generation protection
 
@@ -76,7 +76,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Use a monotonically increasing request ID or AbortController, treat refresh as a new generation that invalidates append requests, and deduplicate appended rows by ID. Add deferred-promise tests for out-of-order refresh and pagination responses.
 
-**Status:** Open · P2
+**Status:** Remediated · `359ad440` — `loadSeqRef` monotonically-increasing request generation guard drops stale loads and stale Load More appends; deferred-promise race tests + dedupe-by-id test added
 
 ### AUD-06 — Audit details have no sensitive-data minimization or structured policy
 
@@ -86,7 +86,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Define an allowlisted structured-details schema per action, redact credentials and secrets before persistence, cap payload size, and separate privileged detail access from ordinary log browsing. Add tests asserting sensitive keys are removed and oversized payloads are rejected or summarized.
 
-**Status:** Open · P1/P2 privacy risk
+**Status:** Remediated · `359ad440` — `Store::log_audit` redacts sensitive keys (password, token, api_key, session_token, card data, …) recursively and truncates payloads at 4000 chars with an explicit marker; redaction/truncation tests added
 
 ### AUD-07 — Date formatting ignores the application locale
 
@@ -96,7 +96,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Pass the active locale to `Intl.DateTimeFormat`, preserve a timezone policy, and include an explicit accessible ISO/UTC value where needed. Add English/Indonesian formatting tests.
 
-**Status:** Open · P2 i18n
+**Status:** Remediated · `69abc5af` — timestamps derive the active Fluent locale and format via `Intl.DateTimeFormat`, wrapped in `<time dateTime=…>` for accessible ISO exposure; en-US/Indonesian formatting tests added
 
 ### AUD-08 — Action and outcome presentation has localization drift and raw machine values
 
@@ -106,7 +106,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Define a centralized action/outcome catalog with localized labels and a safe localized fallback for unknown keys. Keep the raw action available as secondary technical metadata. Add bundle-parity tests against known emitted actions and both locale bundles.
 
-**Status:** Open · P2 i18n/UX
+**Status:** Remediated · `69abc5af` — centralized `auditCatalog.ts` maps all emitted actions to Fluent ids with a localized unknown-action fallback (raw key kept as secondary metadata); outcome badges render localized labels; catalog parity test covers both bundles
 
 ### AUD-09 — Audit screen has no export or immutable review handoff
 
@@ -116,7 +116,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Add a permissioned, server-side export that records filter scope, cursor/date range, requesting user, and export event. Prefer a streamed CSV/JSON/PDF artifact with redaction and a deterministic snapshot boundary rather than exporting the mutable page state.
 
-**Status:** Open · P2 capability/compliance
+**Status:** Remediated · `166aa991` — `export_audit_log_scoped` (enforces `audit:export`) streams the full matching set as RFC-4180 CSV with a UTF-8 BOM and records a `system.export` event on the store-scoped connection; manager-only Export CSV button + localized export-error notice in the UI
 
 ### AUD-10 — Critical-row and detail styling contains token fallback and inline-style drift
 
@@ -126,7 +126,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Replace fixed colour fallbacks with guaranteed semantic tokens or theme-owned fallback mappings, move layout declarations to CSS classes, and add the screen to theme-token compliance checks.
 
-**Status:** Open · P3 theming/maintenance
+**Status:** Remediated · `6e488510` — all hardcoded colour fallbacks inside `var()` replaced with guaranteed semantic tokens; inline layout styles moved to CSS classes; theme-token compliance suite passes at baseline 0
 
 ### AUD-11 — Focused tests omit security, completeness, and review semantics
 
@@ -136,7 +136,7 @@ Audit entries are append-only at the core database helper and contain user, acti
 
 **Recommendation:** Add backend integration tests for scope/permission and query bounds, UI tests for page-boundary filtering and review checkpoints, race tests with deferred promises, locale tests, and privacy/redaction tests.
 
-**Status:** Open · P3 QA gap
+**Status:** Remediated · across `1a4fd1b5`–`6e488510` — backend scope/permission/keyset/redaction/export tests plus UI security, race, locale, review-checkpoint, and export-permission tests added (35 UI tests + 37 core audit tests + 11 command tests per client)
 
 ## Positive controls observed
 
@@ -175,9 +175,16 @@ Results:
 
 ## Post-audit remediation (2026-08-01)
 
-- **AUD-08 (partial):** the localized label/retry surface was hardened by the codebase-wide `requiredLocalized` sweep (commit `1bec6777`). `AuditLogScreen` now reads `audit-log-search-label`, `audit-log-filter-label`, `audit-log-table-label`, and the localized `audit-log-retry` label via `l10n.getString`/`Localized` instead of hardcoded English, so the audit table, outcome filter, and Retry control no longer leak source-language copy.
-- AUD-01 through AUD-07 and AUD-09 through AUD-11 remain **Open** (backend authorization/tenant scope, page-set filtering, offset pagination, server-side review checkpoints, request-generation protection, sensitive-detail policy, locale-aware date formatting, export, theming, and the security/compliance test gap).
+All 11 findings are remediated, each linked to commits that added tests and validation:
+
+- **AUD-01/02/03** (`1a4fd1b5`) — session-scoped authorization + store filtering, server-side filters/counts, keyset `(created_at, id)` pagination with `has_more` + UI dedupe.
+- **AUD-04** (`174d839f`) — server-side `audit_review_checkpoints` (reviewer/store/cursor) written with the `audit.review` event in one transaction; manager-gated mutation + server-side unreviewed count.
+- **AUD-05/06** (`359ad440`) — `loadSeqRef` request-generation guard with deferred-promise race tests; `Store::log_audit` redacts sensitive keys recursively and truncates oversized payloads at 4000 chars.
+- **AUD-07/08** (`69abc5af`) — locale-aware dates from the Fluent context with accessible `<time>` ISO exposure; centralized `auditCatalog.ts` action/outcome catalog with localized unknown fallbacks + bundle-parity tests.
+- **AUD-09** (`166aa991`) — `export_audit_log_scoped` (enforces `audit:export`) produces an RFC-4180 CSV with a UTF-8 BOM and records a `system.export` event on the store-scoped connection; manager-only Export CSV button + dedicated export-error notice.
+- **AUD-10** (`6e488510`) — removed all hardcoded colour fallbacks inside `var()` and inline layout styles; theme-token compliance suite passes at baseline 0.
+- **AUD-11** (across `1a4fd1b5`–`6e488510`) — expanded to 35 UI tests, 37 core audit tests, and 11 command tests per client covering scope/permission, keyset stability, race ordering, locale formatting, redaction, review semantics, and export permission.
 
 ## Audit status
 
-This report is evidence-based; post-audit remediation has partially landed (see above). The findings that are not explicitly marked remediated remain **Open** until remediation commits link each item to tests and validation results.
+**FULLY REMEDIATED.** Every finding (AUD-01 → AUD-11) is closed with a linked remediation commit and test/validation evidence. The earlier `requiredLocalized` sweep (`1bec6777`) remains the foundational i18n hardening referenced by AUD-08.

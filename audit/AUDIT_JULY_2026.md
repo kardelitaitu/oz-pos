@@ -31,7 +31,7 @@
 10. ProductManagementScreen — ~641 lines, flagged hardcoded aria-labels — ✅ **FULLY REMEDIATED** (all 12 findings PROD-01→PROD-12; see [10-product-management-screen.md](10-product-management-screen.md) — commits `f399c703`, `beba8dad`, `6a6840aa`, `6b9aead9`, `67bb09c1`)
 11. CategoryManagementScreen — ~647 lines, flagged hardcoded aria-labels — ✅ **FULLY REMEDIATED** (all 10 findings CAT-01→CAT-10; see [11-category-management-screen.md](11-category-management-screen.md) — commits `3201dcd6`, `9ef25a9f`, `ba6da1f7`, `2e1d28ca`, `382d2e2f`)
 12. CustomerManagementScreen — ~429 lines, flagged hardcoded aria-labels — ✅ **FULLY REMEDIATED** (all 11 findings CUST-01→CUST-11; see [12-customer-management-screen.md](12-customer-management-screen.md) — commits `e85137dc`, `973a2dd7`, `a520d170`, `24ea4ad5`, `ec8e39be`, `afc0e290`, `ddc82de8`, `95b54059`, `8bd25e52`)
-13. AuditLogScreen — audit trails, log filtering, export
+13. AuditLogScreen — audit trails, log filtering, export — ✅ **FULLY REMEDIATED** (all 11 findings AUD-01→AUD-11; see [13-audit-log-screen.md](13-audit-log-screen.md) — commits `1a4fd1b5`, `174d839f`, `359ad440`, `69abc5af`, `166aa991`, `6e488510`)
 14. LocationPicker / LocationManagement — location CRUD, picker UX
 15. TableManagement — Restaurant table layouts, drag-and-drop, floor plans
 16. Accessibility — full-app ARIA deep dive, screen-reader flow, focus management
