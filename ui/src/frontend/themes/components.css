@@ -1040,10 +1040,29 @@
   text-align: center;
   padding: var(--space-12) var(--space-6);
 }
+
+/* EMPTY-08: region variants — one tokenized layout primitive with
+   spacing tailored to the surface that hosts the empty state.
+   Feature screens must use these (or the EmptyState component's
+   `region` prop) instead of bespoke empty wrappers. */
+.empty-state--region-full {
+  padding: var(--space-16) var(--space-8);
+}
+.empty-state--region-table {
+  padding: var(--space-10) var(--space-4);
+}
+.empty-state--region-grid {
+  padding: var(--space-10) var(--space-4);
+}
+.empty-state--region-modal {
+  padding: var(--space-8) var(--space-4);
+}
+
 .empty-state__icon {
   font-size: var(--text-5xl);
   margin-bottom: var(--space-4);
   color: var(--color-fg-tertiary);
+  line-height: 1;
 }
 .empty-state__title {
   font-size: var(--text-lg);
@@ -1059,6 +1078,12 @@
 }
 .empty-state__action {
   margin-top: var(--space-2);
+}
+
+/* Ensure feature screens' actions inside empty states keep the shared
+   touch-friendly sizing without duplicating Button rules. */
+.empty-state__action .btn {
+  margin-top: 0;
 }
 
 /* ── Touch-friendly sizing ─────────────────────────── */
