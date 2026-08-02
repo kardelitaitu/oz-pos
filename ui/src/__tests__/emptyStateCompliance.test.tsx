@@ -119,7 +119,7 @@ describe('empty-state compliance — filter-aware no-results (EMPTY-04)', () => 
 
     const now = Date.now();
     const order = {
-      id: 'o1', sale_id: 's1', store_id: null, status: 'pending',
+      id: 'o1', sale_id: 's1', store_id: null, status: 'pending' as const,
       items_summary: 'Coffee x2', item_count: 2, display_number: 1,
       received_at: new Date(now - 60000).toISOString(), started_at: null,
       ready_at: null, served_at: null, prep_time_seconds: 0,
