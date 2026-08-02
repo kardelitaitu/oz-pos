@@ -356,12 +356,12 @@
 .settings-footer-shortcut kbd::after,
 .toggle-thumb::after,
 .topology-node::after,
-.node-selected::after,
-.settings-shortcuts-popover::after,
-.canvas-hud::after,
-.panel::after,
-:global(.dark) .panel::after {
-  content: '';
+.node-selected::after,  .settings-shortcuts-popover::after,
+  .canvas-hud::after,
+  .customer-mgmt-history::after,
+  .panel::after,
+  :global(.dark) .panel::after {
+    content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -469,6 +469,7 @@
   .node-selected::after,
   .settings-shortcuts-popover::after,
   .canvas-hud::after,
+  .customer-mgmt-history::after,
   .panel::after,
   :global(.dark) .panel::after { display: none; }
 }
@@ -565,6 +566,7 @@
 .node-selected::after,
 .settings-shortcuts-popover::after,
 .canvas-hud::after,
+.customer-mgmt-history::after,
 .panel::after,
 :global(.dark) .panel::after { display: none; }
 }

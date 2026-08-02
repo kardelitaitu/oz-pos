@@ -290,6 +290,9 @@
 }
 
 .customer-mgmt-history {
+  /* Positioned ancestor for the noise-dither ::after (inset: 0) — the
+     overlay must resolve against the dialog, not the fixed overlay. */
+  position: relative;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);

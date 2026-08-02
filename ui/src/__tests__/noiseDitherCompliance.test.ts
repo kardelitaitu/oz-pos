@@ -25,7 +25,7 @@ const COMPONENTS_CSS = resolve(UI_SRC, 'frontend/themes/components.css');
 // When a new shadow-using component is added, its CSS class selector
 // must be added to the ::after list in components.css AND to this set.
 //
-// Current count: 37 selectors (5 core + 1 utility + 31 deprecated legacy).
+// Current count: 38 selectors (5 core + 1 utility + 32 deprecated legacy).
 // Increment when adding new selectors; decrement when cleaning up legacy.
 const KNOWN_NOISE_SELECTORS = [
   // Core pattern classes (always covered)
@@ -120,6 +120,7 @@ const KNOWN_NOISE_SELECTORS = [
   '.node-selected',
   '.settings-shortcuts-popover',
   '.canvas-hud',
+  '.customer-mgmt-history',
   '.panel',
   ':global(.dark) .panel',
 ];
