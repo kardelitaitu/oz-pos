@@ -29,6 +29,12 @@ interface LocationPickerProps {
   onChange: (locationId: string, locationName: string) => void;
   /** Label for the dropdown trigger (defaults to the localized 'Location'). */
   label?: string;
+  /**
+   * Bump to force a reload after location or binding changes elsewhere
+   * (LOC-07 invalidation version). Consumers increment this when they
+   * create/rename/deactivate a location or rebind a workspace.
+   */
+  refreshKey?: number;
 }
 
 /**
@@ -42,8 +48,12 @@ const LocationPicker = memo(function LocationPicker({
   value,
   onChange,
   label,
+  refreshKey,
 }: LocationPickerProps) {
-  const { sessionToken } = useWorkspace();
+  const { sessionToken, activeInstance } = useWorkspace();
+  // LOC-07: reload whenever the active workspace instance changes so a picker
+  // left mounted across a workspace/store switch never serves stale locations.
+  const instanceId = activeInstance?.instance_id;
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
@@ -56,6 +66,10 @@ const LocationPicker = memo(function LocationPicker({
   const [activeIndex, setActiveIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
+  // LOC-07: request-generation guard — a slower earlier request (session
+  // switch, refreshKey bump, or instance change) must never overwrite a
+  // newer result, and no load may re-trigger an outdated effect teardown.
+  const loadSeqRef = useRef(0);
 
   // ── Load locations ────────────────────────────────────────────────
 
@@ -64,23 +78,31 @@ const LocationPicker = memo(function LocationPicker({
       setLoading(false);
       return;
     }
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setLoadError(null);
     try {
       const data = await listInventoryLocations(token);
+      if (seq !== loadSeqRef.current) return;
       setLocations(data.filter((loc) => loc.is_active));
     } catch {
+      if (seq !== loadSeqRef.current) return;
       // Durable error state (INV-08): surface a retry affordance instead
       // of silently rendering nothing when the locations fetch fails.
       setLoadError(requiredLocalized(l10nRef.current, 'loc-picker-error-load'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [token]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     load();
-  }, [load]);
+    // LOC-07: reload when the workspace instance or an explicit invalidation
+    // version changes, so a renamed/deactivated location or rebinding in
+    // another screen is picked up without unmounting the picker. The load
+    // sequence guard inside `load` (loadSeqRef) ensures a slower earlier
+    // request can never overwrite the fresher result.
+  }, [load, instanceId, refreshKey]);
 
   // ── Click outside to close ──────────────────────────────────────
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
@@ -16,7 +17,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({
     sessionToken: 'mock-session-token',
-    currentInstanceId: 'inst-1',
+    activeInstance: { instance_id: 'inst-1' },
     swapSessionToken: vi.fn(),
   }),
 }));
@@ -388,6 +389,110 @@ describe('LocationPicker', () => {
     // Space selects the highlighted option
     await user.keyboard(' ');
     expect(handleChange).toHaveBeenCalledWith('loc-transit', 'In Transit');
+  });
+
+  // ── LOC-07: invalidation + out-of-order response guard ──────────
+  //
+  // These tests drive `refreshKey` through a stateful harness instead of RTL
+  // `rerender()`: rerender replaces the WHOLE root element, which would drop
+  // the Fluent LocalizationProvider / DefaultProviders wrapper and crash the
+  // component (useLocalization has no context). The harness bumps a stateful
+  // refreshKey the same way a real consumer would after a location mutation.
+
+  // Hoisted so LocationPicker (a memo() component) never sees a fresh onChange
+  // reference on every harness re-render (which would defeat memo short-circuit).
+  const noopChange = vi.fn();
+
+  function RefreshKeyHarness({
+    onChange = noopChange,
+  }: {
+    onChange?: (locationId: string, locationName: string) => void;
+  }) {
+    const [refreshKey, setRefreshKey] = useState(0);
+    return (
+      <>
+        <button type="button" onClick={() => setRefreshKey((k) => k + 1)}>
+          bump-refresh
+        </button>
+        <LocationPicker
+          value="loc-warehouse"
+          onChange={onChange}
+          refreshKey={refreshKey}
+        />
+      </>
+    );
+  }
+
+  it('refetches locations when refreshKey is bumped (external invalidation)', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RefreshKeyHarness />, inventoryFtl);
+
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(mockListLocations).toHaveBeenCalledTimes(1);
+
+    // A location is renamed elsewhere; the consumer bumps refreshKey and the
+    // picker must reload to pick up the fresh list.
+    mockListLocations.mockResolvedValue([
+      { id: 'loc-warehouse', name: 'Warehouse A (renamed)', type: 'warehouse', description: '', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      ...mockLocations.slice(1),
+    ]);
+    await user.click(screen.getByRole('button', { name: 'bump-refresh' }));
+
+    await waitFor(() => {
+      expect(mockListLocations).toHaveBeenCalledTimes(2);
+    }, { timeout: 5000 });
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A (renamed)')).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByText('Warehouse A')).not.toBeInTheDocument();
+  });
+
+  it('guards against out-of-order responses (stale load never overwrites fresh)', async () => {
+    const user = userEvent.setup();
+    // Two overlapping loads: the SECOND resolves first, the FIRST resolves
+    // last. Only the second (newest) result may be applied.
+    let resolveFirst!: (v: typeof mockLocations) => void;
+    let resolveSecond!: (v: typeof mockLocations) => void;
+    const first = new Promise<typeof mockLocations>((r) => { resolveFirst = r; });
+    const second = new Promise<typeof mockLocations>((r) => { resolveSecond = r; });
+
+    mockListLocations
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+
+    renderWithProviders(<RefreshKeyHarness />, inventoryFtl);
+
+    // First load is in flight.
+    await waitFor(() => {
+      expect(mockListLocations).toHaveBeenCalledTimes(1);
+    }, { timeout: 5000 });
+
+    // Bump refreshKey → second load starts.
+    await user.click(screen.getByRole('button', { name: 'bump-refresh' }));
+    await waitFor(() => {
+      expect(mockListLocations).toHaveBeenCalledTimes(2);
+    }, { timeout: 5000 });
+
+    // The NEW request resolves first with the fresh list.
+    await act(async () => {
+      resolveSecond(mockLocations);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    // The STALE first request resolves last with an outdated payload — the
+    // seq guard must drop it.
+    await act(async () => {
+      resolveFirst([
+        { id: 'loc-stale', name: 'Stale Warehouse', type: 'warehouse', description: '', is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      ]);
+    });
+    expect(screen.queryByText('Stale Warehouse')).not.toBeInTheDocument();
+    // The fresh list is still what's shown.
+    expect(screen.getByText('Warehouse A')).toBeInTheDocument();
   });
 
   it('restores focus to the trigger and closes on Escape', async () => {
