@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { LocalizedErrorBoundary } from '@/components/LocalizedErrorBoundary';
 import { GlobalErrorReporter } from '@/components/GlobalErrorReporter';
 import { LocaleProvider } from '@/i18n/LocaleContext';
 import { BrandProvider } from '@/contexts/BrandContext';
@@ -19,8 +20,9 @@ interface AppProvidersProps {
  * Composite provider wrapper that establishes application contexts in optimal dependency order.
  * 
  * Order of nesting:
- * 1. ErrorBoundary (Catches root render errors)
+ * 1. ErrorBoundary (Catches root render errors — emergency fallback)
  * 2. LocaleProvider (i18n string resolution)
+ * 3. LocalizedErrorBoundary (Catches app render errors with localized copy)
  * 3. BrandProvider (Branding & Whitelabel settings)
  * 4. ThemeProvider (CSS custom properties, consumes useBrand)
  * 5. CurrencyProvider (Global currency state)
@@ -34,6 +36,10 @@ export function AppProviders({ children }: AppProvidersProps) {
   return (
     <ErrorBoundary>
       <LocaleProvider>
+        {/* ERR-02: inner boundary resolves fallback copy through the active
+            locale; the outer ErrorBoundary stays as the locale-independent
+            emergency fallback in case LocaleProvider itself fails. */}
+        <LocalizedErrorBoundary>
         <BrandProvider>
           <ThemeProvider>
             <CurrencyProvider>
@@ -55,6 +61,7 @@ export function AppProviders({ children }: AppProvidersProps) {
             </CurrencyProvider>
           </ThemeProvider>
         </BrandProvider>
+        </LocalizedErrorBoundary>
       </LocaleProvider>
     </ErrorBoundary>
   );

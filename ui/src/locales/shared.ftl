@@ -35,6 +35,7 @@ empty-state-cta = Add Product
 
 # Error boundary
 error-boundary-title = Something went wrong
+error-boundary-retry = Try Again
 
 # Error state
 error-state-title = Something went wrong

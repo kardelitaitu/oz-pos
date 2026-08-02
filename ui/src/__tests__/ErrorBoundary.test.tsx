@@ -162,4 +162,32 @@ describe('ErrorBoundary', () => {
     );
     expect(screen.getByText('Async safe')).toBeInTheDocument();
   });
+
+  // ── ERR-02: tokenized + injectable-localized fallback ───────────
+
+  it('fallback uses token-backed CSS classes instead of inline styles', () => {
+    render(
+      <ErrorBoundary>
+        <BrokenComponent shouldThrow />
+      </ErrorBoundary>,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert.className).toBe('error-boundary');
+    expect(alert.querySelector('.error-boundary__card')).not.toBeNull();
+    // No inline `style` attributes — styling lives in ErrorBoundary.css.
+    expect(alert.getAttribute('style')).toBeNull();
+  });
+
+  it('uses injected localized title and retry label when provided', () => {
+    render(
+      <ErrorBoundary title="Terjadi kesalahan" retryLabel="Coba Lagi">
+        <BrokenComponent shouldThrow />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('heading', { name: 'Terjadi kesalahan' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Coba Lagi' })).toBeInTheDocument();
+    // Static English emergency copy must NOT leak when props are injected.
+    expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try Again' })).not.toBeInTheDocument();
+  });
 });

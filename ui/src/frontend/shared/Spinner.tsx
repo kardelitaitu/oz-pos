@@ -1,38 +1,9 @@
-import { type HTMLAttributes } from 'react';
-import { useLocalization } from '@fluent/react';
+// ui/src/frontend/shared/Spinner.tsx
+//
+// ERR-03 consolidation: this is a compatibility re-export of the canonical
+// `@/components/Spinner` implementation. The project must have exactly one
+// Spinner source of truth. Do not reimplement the component here — see
+// src/__tests__/errorPrimitivesImportPolicy.test.ts.
 
-export type SpinnerSize = 'sm' | 'md' | 'lg';
-
-export interface SpinnerProps extends HTMLAttributes<HTMLSpanElement> {
-  /** Size preset. @default 'md' */
-  size?: SpinnerSize;
-  /** Optional accessible label. Defaults to "Loading". */
-  label?: string;
-}
-
-export function Spinner({
-  size = 'md',
-  label,
-  className,
-  ...rest
-}: SpinnerProps) {
-  const { l10n } = useLocalization();
-  const classNames = [
-    'spinner',
-    `spinner--${size}`,
-    className ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  return (
-    <span
-      role="status"
-      className={classNames}
-      aria-label={label ?? l10n.getString('spinner-label')}
-      {...rest}
-    >
-      {label && <span className="spinner__label">{label}</span>}
-    </span>
-  );
-}
+export { Spinner } from '@/components/Spinner';
+export type { SpinnerProps, SpinnerSize } from '@/components/Spinner';

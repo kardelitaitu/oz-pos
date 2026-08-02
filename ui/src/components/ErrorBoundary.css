@@ -1,0 +1,72 @@
+/* ── Error Boundary (ERR-02) ───────────────────────────────────────
+   Emergency fallback UI shown when the rest of the app cannot render.
+   Uses design tokens (not hardcoded colors/typography) so the fallback
+   follows the brand theme, dark mode, and forced-colors overrides.
+   The layout is deliberately simple and conservative. */
+
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--space-8);
+  font-family: var(--font-sans);
+  color: var(--color-danger);
+  background: var(--color-bg);
+}
+
+.error-boundary__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 480px;
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.error-boundary__title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-danger);
+}
+
+.error-boundary__message {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--color-fg-secondary);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.error-boundary__retry {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--text-base);
+  font-family: inherit;
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out);
+}
+
+.error-boundary__retry:hover {
+  background: var(--color-danger);
+  color: var(--color-bg-elevated);
+}
+
+.error-boundary__retry:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}

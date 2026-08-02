@@ -40,6 +40,7 @@ nav-logout = Keluar
 nav-orders = Pesanan
 
 error-boundary-title = Terjadi kesalahan
+error-boundary-retry = Coba Lagi
 
 # Status Bar
 status-bar-connected = Backend terhubung
