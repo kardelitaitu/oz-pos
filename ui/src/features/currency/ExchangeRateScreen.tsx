@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listExchangeRates,
@@ -52,7 +52,12 @@ export default function ExchangeRateScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  // LOAD-07: request-generation guard — a slow response from an earlier
+  // load/unmount must never overwrite newer state.
+  const loadSeqRef = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -60,12 +65,16 @@ export default function ExchangeRateScreen() {
         listExchangeRates(),
         listCurrencies(),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setRates(items);
       setCurrencies(currs);
     } catch {
+      if (seq !== loadSeqRef.current) return;
       setError(l10n.getString('currency-load-error'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [l10n]);
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -16,23 +16,43 @@ export function KdsHistoryPanel() {
   const sessionToken = rawToken || '';
   const [orders, setOrders] = useState<KdsOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<KdsStatus>('served');
+  // LOAD-07: request-generation guard — a slow response from an earlier
+  // filter/session must never overwrite a newer one.
+  const loadSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   const fetchHistory = useCallback(async () => {
-    setLoading(true);
+    const seq = ++loadSeqRef.current;
     setError(null);
+    // LOAD-04: only the first load (or a load with nothing on screen)
+    // shows the full loading state — a filter change over existing orders
+    // preserves the last-known list and marks the region refreshing.
+    if (!hasLoadedOnceRef.current || orders.length === 0) {
+      setLoading(true);
+      setRefreshing(false);
+    } else {
+      setRefreshing(true);
+    }
     try {
       const result = await listKdsOrdersScoped(sessionToken, statusFilter);
+      if (seq !== loadSeqRef.current) return;
       setOrders(result);
+      hasLoadedOnceRef.current = true;
     } catch {
       // LOAD-08: a raw String(e) leaks implementation details; surface
       // the localized failure and let the user Retry.
+      if (seq !== loadSeqRef.current) return;
       setError(requiredLocalized(l10n, 'kds-history-error'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [sessionToken, statusFilter, l10n]);
+  }, [sessionToken, statusFilter, l10n, orders.length]);
 
   useEffect(() => {
     fetchHistory();
@@ -77,6 +97,15 @@ export function KdsHistoryPanel() {
         >
           <span className="kds-refresh-spinner" />
         </LoadingStatus>
+      )}
+
+      {/* LOAD-04: filter change over existing orders — keep the list
+          visible and announce the in-place refresh. */}
+      {refreshing && (
+        <div className="kds-history-refreshing" role="status" aria-live="polite">
+          <span className="kds-refresh-spinner" />
+          <Localized id="kds-history-loading">Loading history...</Localized>
+        </div>
       )}
 
       {/* Empty state */}
