@@ -61,19 +61,108 @@ pub struct PullResponse {
     pub next_cursor: Option<String>,
 }
 
+/// Snapshot schema version understood by this client.
+///
+/// Snapshots claiming a newer version are rejected (RUST-04 fail-closed).
+pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
+
+/// Legacy servers omit the version field — treat them as schema v1.
+fn default_snapshot_version() -> u32 {
+    SNAPSHOT_SCHEMA_VERSION
+}
+
+/// A product row in a server snapshot (typed, RUST-04).
+///
+/// Required fields (id, sku, name, price_minor, currency) fail
+/// deserialization when missing, so malformed reference data is rejected
+/// at the transport boundary instead of imported with defaults.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotProduct {
+    /// Server-side row id.
+    pub id: String,
+    /// Unique product SKU.
+    pub sku: String,
+    /// Display name.
+    pub name: String,
+    /// Price in minor currency units.
+    pub price_minor: i64,
+    /// ISO-4217 currency code.
+    pub currency: String,
+    /// Optional category foreign key.
+    #[serde(default)]
+    pub category_id: Option<String>,
+    /// Optional barcode.
+    #[serde(default)]
+    pub barcode: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub price_updated_at: Option<String>,
+    /// Serial-number tracking flag.
+    #[serde(default)]
+    pub track_serial: bool,
+}
+
+/// A tax-rate row in a server snapshot (typed, RUST-04).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotTaxRate {
+    /// Server-side row id.
+    pub id: String,
+    /// Tax-rate display name.
+    pub name: String,
+    /// Rate in basis points (1/10000); must be >= 0.
+    pub rate_bps: i64,
+    #[serde(default)]
+    pub is_default: bool,
+    #[serde(default)]
+    pub is_inclusive: bool,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+/// A user row in a server snapshot (typed, RUST-04).
+///
+/// `pin_hash` is deliberately absent — credential verifier material
+/// never travels over the sync channel (SYNC-06).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotUser {
+    /// Server-side row id.
+    pub id: String,
+    /// Login username.
+    pub username: String,
+    /// Display name.
+    pub display_name: String,
+    /// Role foreign key.
+    pub role_id: String,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
 /// Response from the snapshot endpoint (P-3 Steps 3-5).
 ///
 /// Contains the server's authoritative reference data for a tenant.
 /// The client imports this wholesale when its sync anchor has expired
-/// (data pruned server-side).
+/// (data pruned server-side). All rows are typed (RUST-04) so malformed
+/// reference data fails at the boundary rather than importing defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncSnapshotResponse {
+    /// Snapshot schema version. Missing defaults to 1 (legacy servers).
+    #[serde(default = "default_snapshot_version")]
+    pub version: u32,
     /// Product rows keyed by SKU.
-    pub products: Vec<serde_json::Value>,
+    pub products: Vec<SnapshotProduct>,
     /// Tax-rate rows keyed by ID.
-    pub tax_rates: Vec<serde_json::Value>,
+    pub tax_rates: Vec<SnapshotTaxRate>,
     /// User rows keyed by username.
-    pub users: Vec<serde_json::Value>,
+    pub users: Vec<SnapshotUser>,
 }
 
 /// Classifies a `reqwest::Error` into a human-readable transport error message
@@ -656,13 +745,47 @@ mod tests {
 
     // ── SyncSnapshotResponse tests ──────────────────────────────
 
+    /// Build a typed snapshot response (RUST-04) with valid rows.
+    fn typed_response() -> SyncSnapshotResponse {
+        SyncSnapshotResponse {
+            version: 1,
+            products: vec![SnapshotProduct {
+                id: "p-1".into(),
+                sku: "ITEM-1".into(),
+                name: "Item One".into(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+            }],
+            tax_rates: vec![SnapshotTaxRate {
+                id: "t-1".into(),
+                name: "Tax One".into(),
+                rate_bps: 1000,
+                is_default: false,
+                is_inclusive: false,
+                created_at: None,
+                updated_at: None,
+            }],
+            users: vec![SnapshotUser {
+                id: "u-1".into(),
+                username: "admin".into(),
+                display_name: "Admin".into(),
+                role_id: "r-1".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        }
+    }
+
     #[test]
     fn sync_snapshot_response_debug() {
-        let resp = SyncSnapshotResponse {
-            products: vec![],
-            tax_rates: vec![],
-            users: vec![],
-        };
+        let resp = typed_response();
         let debug = format!("{resp:?}");
         assert!(debug.contains("products"));
         assert!(debug.contains("tax_rates"));
@@ -671,25 +794,48 @@ mod tests {
 
     #[test]
     fn sync_snapshot_response_serde_roundtrip() {
-        let resp = SyncSnapshotResponse {
-            products: vec![serde_json::json!({"sku": "ITEM-1"})],
-            tax_rates: vec![serde_json::json!({"id": 1, "rate": 10})],
-            users: vec![serde_json::json!({"username": "admin"})],
-        };
+        let resp = typed_response();
         let json = serde_json::to_string(&resp).unwrap();
         let rt: SyncSnapshotResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(rt.products.len(), 1);
         assert_eq!(rt.tax_rates.len(), 1);
         assert_eq!(rt.users.len(), 1);
+        assert_eq!(rt.version, 1);
+    }
+
+    #[test]
+    fn sync_snapshot_response_defaults_version_to_one_when_absent() {
+        // RUST-04: legacy servers omit `version`; it must default to 1.
+        let wire = r#"{"products":[],"tax_rates":[],"users":[]}"#;
+        let rt: SyncSnapshotResponse = serde_json::from_str(wire).unwrap();
+        assert_eq!(rt.version, 1, "missing version defaults to schema v1");
+    }
+
+    #[test]
+    fn sync_snapshot_response_rejects_missing_required_product_fields() {
+        // RUST-04: missing required fields fail deserialization at the
+        // transport boundary instead of importing with defaults.
+        let wire = r#"{"products":[{"name":"No Sku"}],"tax_rates":[],"users":[]}"#;
+        let result: Result<SyncSnapshotResponse, _> = serde_json::from_str(wire);
+        assert!(
+            result.is_err(),
+            "product missing sku must fail deserialization"
+        );
+    }
+
+    #[test]
+    fn sync_snapshot_response_rejects_missing_required_user_fields() {
+        let wire = r#"{"products":[],"tax_rates":[],"users":[{"username":"x"}]}"#;
+        let result: Result<SyncSnapshotResponse, _> = serde_json::from_str(wire);
+        assert!(
+            result.is_err(),
+            "user missing display_name/role_id must fail"
+        );
     }
 
     #[test]
     fn sync_snapshot_response_clone() {
-        let resp = SyncSnapshotResponse {
-            products: vec![serde_json::json!({"sku": "ITEM-1"})],
-            tax_rates: vec![],
-            users: vec![],
-        };
+        let resp = typed_response();
         let cloned = resp.clone();
         let json1 = serde_json::to_string(&resp).unwrap();
         let json2 = serde_json::to_string(&cloned).unwrap();
