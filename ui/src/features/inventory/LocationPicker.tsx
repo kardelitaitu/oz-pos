@@ -5,6 +5,23 @@ import { requiredLocalized } from '@/frontend/shared';
 import { listInventoryLocations, type InventoryLocation } from '@/api/inventory';
 import './LocationPicker.css';
 
+// ── Location type label mapping (LOC-05) ───────────────────────────
+// Every supported type maps to a value-bearing Fluent key; unknown future
+// types fall back to `loc-type-unknown` so the dropdown never shows raw
+// machine values (e.g. `warehouse`, `transit`) in any locale.
+const LOCATION_TYPE_KEYS: Record<InventoryLocation['type'], string> = {
+  store: 'loc-type-store',
+  warehouse: 'loc-type-warehouse',
+  transit: 'loc-type-transit',
+  damaged: 'loc-type-damaged',
+  virtual: 'loc-type-virtual',
+};
+
+function locationTypeLabel(l10n: ReturnType<typeof useLocalization>['l10n'], type: string): string {
+  const key = LOCATION_TYPE_KEYS[type as InventoryLocation['type']] ?? 'loc-type-unknown';
+  return requiredLocalized(l10n, key);
+}
+
 interface LocationPickerProps {
   /** Currently selected location ID. */
   value: string;
@@ -256,7 +273,7 @@ const LocationPicker = memo(function LocationPicker({
               >
                 <span className="location-picker-option-name">{loc.name}</span>
                 <span className="location-picker-option-meta">
-                  {loc.type}
+                  {locationTypeLabel(l10n, loc.type)}
                 </span>
               </button>
             </li>

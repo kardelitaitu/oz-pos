@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
+import inventoryIdFtl from '@/locales/inventory.id.ftl?raw';
 import LocationPicker from '@/features/inventory/LocationPicker';
 
 // ── Mock auth and workspace contexts ───────────────────────────
@@ -188,7 +189,7 @@ describe('LocationPicker', () => {
 
   // ── Shows type metadata in dropdown ─────────────────────────────
 
-  it('displays location type metadata in dropdown options', async () => {
+  it('displays localized location type metadata in dropdown options', async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
@@ -202,11 +203,39 @@ describe('LocationPicker', () => {
     const trigger = screen.getByRole('button', { name: /select inventory location/i });
     await user.click(trigger);
 
+    // Raw machine values (warehouse/store/transit) must never leak — the
+    // en bundle renders capitalized Fluent labels instead (LOC-05).
     await waitFor(() => {
-      expect(screen.getByText('warehouse')).toBeInTheDocument();
-      expect(screen.getByText('store')).toBeInTheDocument();
-      expect(screen.getByText('transit')).toBeInTheDocument();
+      expect(screen.getByText('Warehouse')).toBeInTheDocument();
+      expect(screen.getByText('Store')).toBeInTheDocument();
+      expect(screen.getByText('Transit')).toBeInTheDocument();
     }, { timeout: 5000 });
+    expect(screen.queryByText('warehouse')).not.toBeInTheDocument();
+    expect(screen.queryByText('store')).not.toBeInTheDocument();
+  });
+
+  it('renders Indonesian type labels from the id bundle', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryIdFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    // The id bundle renders the trigger aria-label in Indonesian, so query by
+    // the Indonesian label text rather than the English regex.
+    const trigger = screen.getByRole('button', { name: /pilih lokasi inventaris/i });
+    await user.click(trigger);
+
+    // Indonesian bundle: warehouse → Gudang, store → Toko.
+    await waitFor(() => {
+      expect(screen.getByText('Gudang')).toBeInTheDocument();
+      expect(screen.getByText('Toko')).toBeInTheDocument();
+    }, { timeout: 5000 });
+    expect(screen.queryByText('warehouse')).not.toBeInTheDocument();
   });
 
   // ── Highlights active location with aria-selected ──────────────

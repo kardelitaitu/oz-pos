@@ -184,4 +184,10 @@ loc-picker-label = Location
 loc-picker-trigger-aria = Select inventory location. Current: { $name }
 loc-picker-listbox-aria = Inventory locations
 loc-picker-error-load = Failed to load locations
+loc-type-store = Store
+loc-type-warehouse = Warehouse
+loc-type-transit = Transit
+loc-type-damaged = Damaged
+loc-type-virtual = Virtual
+loc-type-unknown = Unknown
 

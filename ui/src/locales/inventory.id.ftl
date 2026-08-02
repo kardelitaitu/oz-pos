@@ -206,6 +206,12 @@ loc-picker-label = Lokasi
 loc-picker-trigger-aria = Pilih lokasi inventaris. Saat ini: { $name }
 loc-picker-listbox-aria = Lokasi inventaris
 loc-picker-error-load = Gagal memuat lokasi
+loc-type-store = Toko
+loc-type-warehouse = Gudang
+loc-type-transit = Transit
+loc-type-damaged = Rusak
+loc-type-virtual = Virtual
+loc-type-unknown = Tidak Diketahui
 
 # ── Table Management ──
 
