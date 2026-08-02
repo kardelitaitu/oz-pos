@@ -64,4 +64,18 @@ describe('EmptyState', () => {
     render(<EmptyState title="Status" />);
     expect(screen.getByRole('status')).toBeTruthy();
   });
+
+  it('applies no region class when region is not provided (EMPTY-08)', () => {
+    render(<EmptyState title="Empty" />);
+    const container = document.querySelector('.empty-state');
+    expect(container).toBeTruthy();
+    expect(container!.className).toBe('empty-state');
+  });
+
+  it.each(['full', 'table', 'grid', 'modal'] as const)('applies the tokenized %s region variant (EMPTY-08)', (region) => {
+    render(<EmptyState title="Empty" region={region} />);
+    const container = document.querySelector('.empty-state');
+    expect(container).toBeTruthy();
+    expect(container!.classList.contains(`empty-state--region-${region}`)).toBe(true);
+  });
 });
