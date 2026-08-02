@@ -7,8 +7,10 @@
   "license": "SEE LICENSE IN ../LICENSE",
   "scripts": {
     "dev": "vite",
+    "dev:tablet": "vite --config vite.tablet.config.ts",
     "check:all": "node ../scripts/check-ui.mjs",
     "build": "tsc -b && vite build",
+    "build:tablet": "tsc -b && vite build --config vite.tablet.config.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
