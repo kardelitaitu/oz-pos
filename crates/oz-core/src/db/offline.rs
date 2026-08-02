@@ -103,6 +103,21 @@ impl Store<'_> {
         self.enqueue_offline_inner(action, payload, "default", priority)
     }
 
+    /// Enqueue a transaction scoped to a tenant with a specific priority.
+    ///
+    /// OFF-09: this is the combined tenant + priority entry point so the
+    /// command boundary can preserve both multi-store isolation and the
+    /// P-2 priority tier in a single call.
+    pub fn enqueue_offline_scoped(
+        &self,
+        action: &str,
+        payload: &str,
+        tenant_id: &str,
+        priority: SyncPriority,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        self.enqueue_offline_inner(action, payload, tenant_id, priority)
+    }
+
     fn enqueue_offline_inner(
         &self,
         action: &str,
@@ -688,6 +703,49 @@ mod tests {
 
         let b_items = s.list_pending_offline_for_tenant("tenant-b").unwrap();
         assert_eq!(b_items.len(), 1);
+    }
+
+    #[test]
+    fn enqueue_offline_scoped_combines_tenant_and_priority() {
+        // OFF-09: the combined tenant + priority entry point the command
+        // boundary uses must persist both fields on the same row.
+        let conn = fresh();
+        let s = store(&conn);
+        let item = s
+            .enqueue_offline_scoped("complete_sale", "{}", "store-a", SyncPriority::Critical)
+            .unwrap();
+        assert_eq!(item.tenant_id, "store-a");
+        assert_eq!(item.priority, SyncPriority::Critical);
+
+        let loaded = s.list_pending_offline_for_tenant("store-a").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].priority, SyncPriority::Critical);
+
+        // A different tenant never sees it.
+        let other = s.list_pending_offline_for_tenant("store-b").unwrap();
+        assert!(other.is_empty());
+    }
+
+    #[test]
+    fn pending_batch_orders_critical_before_normal_before_low() {
+        // OFF-09: the retry command sorts the batch by priority so Critical
+        // items always transmit first. Pins the ordering contract on the
+        // raw items returned by the store.
+        let conn = fresh();
+        let s = store(&conn);
+        s.enqueue_offline_scoped("settings.change", "{}", "default", SyncPriority::Low)
+            .unwrap();
+        s.enqueue_offline_scoped("complete_sale", "{}", "default", SyncPriority::Critical)
+            .unwrap();
+        s.enqueue_offline_scoped("product.update", "{}", "default", SyncPriority::Normal)
+            .unwrap();
+
+        let mut batch = s.list_pending_offline().unwrap();
+        batch.sort_by_key(|i| i.priority);
+        assert_eq!(batch.len(), 3);
+        assert_eq!(batch[0].priority, SyncPriority::Critical);
+        assert_eq!(batch[1].priority, SyncPriority::Normal);
+        assert_eq!(batch[2].priority, SyncPriority::Low);
     }
 
     #[test]

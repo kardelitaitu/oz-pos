@@ -426,7 +426,7 @@ pub async fn get_customer_history_scoped(
         store
             .get_customer(&customer_id)?
             .ok_or_else(|| oz_core::error::CoreError::NotFound {
-                entity: "customer".into(),
+                entity: "customer",
                 id: customer_id.clone(),
             })?;
 

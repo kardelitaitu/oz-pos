@@ -33,6 +33,29 @@ impl From<i32> for SyncPriority {
     }
 }
 
+impl SyncPriority {
+    /// Stable lowercase string for DTO serialization (OFF-09).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::Normal => "normal",
+            Self::Low => "low",
+        }
+    }
+
+    /// Parse a lowercase priority string back into a tier (OFF-09).
+    ///
+    /// Unknown values fall back to `Normal` so a stale front-end can
+    /// never escalate a payload into a `Critical` tier by accident.
+    pub fn from_str_lenient(s: &str) -> Self {
+        match s {
+            "critical" => Self::Critical,
+            "low" => Self::Low,
+            _ => Self::Normal,
+        }
+    }
+}
+
 /// A queued offline transaction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OfflineQueueItem {

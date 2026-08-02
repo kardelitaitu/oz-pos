@@ -201,7 +201,7 @@ pub use location_resolver::{
 };
 pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
 pub use money::{Currency, Money};
-pub use offline::{OfflineQueueItem, OfflineQueueStatus};
+pub use offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 pub use payment::{Payment, PaymentSplitArg};
 pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
 pub use product::{Product, ProductType};

@@ -343,15 +343,24 @@ pub fn apply_sync_outcomes(
                 global_error = Some(reason.clone());
             }
             PushOutcome::Conflict(server_item) => {
+                // OFF-11: the server already holds this queued action, so the
+                // server's copy wins. Record it as a *resolved* conflict (via
+                // `mark_offline_resolved`) rather than a bare failure — this is
+                // the marker the `offline_queue_status_summary` conflict_count
+                // query counts (`last_error LIKE 'resolved: conflict%'`), so the
+                // UI's conflict observability reflects real command-boundary
+                // conflicts instead of always reading zero.
                 tracing::warn!(
                     item_id = %item.id,
                     server_action = %server_item.action,
-                    "sync conflict: item already exists on server with different data"
+                    "sync conflict: item already exists on server with different data; server copy wins"
                 );
-                let msg = "server conflict: item already exists with different data";
-                store.mark_offline_failed(&item.id, msg)?;
-                failed += 1;
-                global_error = Some(msg.into());
+                let resolution = format!(
+                    "server item wins (action={} already on server)",
+                    server_item.action
+                );
+                store.mark_offline_resolved(&item.id, &resolution)?;
+                synced += 1;
             }
         }
     }
@@ -1006,7 +1015,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_sync_outcomes_conflict_marks_failed_never_synced() {
+    fn apply_sync_outcomes_conflict_resolves_with_server_copy_wins() {
         let store = setup();
         let local = store
             .enqueue_offline("complete_sale", r#"{"id":1}"#)
@@ -1028,20 +1037,28 @@ mod tests {
         };
         let outcomes = vec![PushOutcome::Conflict(server_item)];
         let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
-        assert_eq!(result.synced, 0);
-        assert_eq!(result.failed, 1);
+        assert_eq!(result.synced, 1);
+        assert_eq!(result.failed, 0);
 
-        // The local item must be marked failed — never silently synced.
+        // The local item is marked *resolved* (server copy wins), not silently
+        // dropped — OFF-11: the resolution marker is what the summary's
+        // conflict_count query counts, so the UI sees real conflicts.
         let all = store.list_all_offline().unwrap();
-        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Synced);
         assert!(
             all[0]
                 .last_error
                 .as_deref()
                 .unwrap_or_default()
-                .contains("conflict"),
-            "conflict failure message must explain the conflict"
+                .starts_with("resolved: conflict"),
+            "conflict resolution marker must be recorded, got {:?}",
+            all[0].last_error
         );
+
+        // The summary's conflict_count must now reflect the real path.
+        let summary = store.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.conflict_count, 1);
+        assert_eq!(summary.synced_count, 1);
     }
 
     #[test]

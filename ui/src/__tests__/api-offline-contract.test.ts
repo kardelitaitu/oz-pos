@@ -162,6 +162,8 @@ describe('offline.ts IPC contract', () => {
         lastError: null,
         createdAt: '2026-01-01T00:00:00Z',
         syncedAt: null,
+        tenantId: 'store-a',
+        priority: 'critical',
       },
     ]);
     const items = await listPendingOffline();
@@ -171,6 +173,28 @@ describe('offline.ts IPC contract', () => {
     const first = items[0]!;
     expect(first.payload).toBe('{"sale_id":"s-1"}');
     expect(first.action).toBe('complete_sale');
+    // OFF-09: tenant + priority metadata must survive the IPC round-trip
+    // too — the Rust DTO serializes camelCase tenantId/priority.
+    expect(first.tenantId).toBe('store-a');
+    expect(first.priority).toBe('critical');
+  });
+
+  it('enqueueOffline forwards optional tenantId + priority (OFF-09)', async () => {
+    mockInvoke.mockResolvedValue({ id: 'q1' });
+    await enqueueOffline({
+      action: 'complete_sale',
+      payload: '{}',
+      tenantId: 'store-b',
+      priority: 'critical',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('enqueue_offline', {
+      args: {
+        action: 'complete_sale',
+        payload: '{}',
+        tenantId: 'store-b',
+        priority: 'critical',
+      },
+    });
   });
 
   it('listAllOffline invokes "list_all_offline" with no args', async () => {

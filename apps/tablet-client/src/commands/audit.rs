@@ -114,6 +114,7 @@ pub struct ListAuditLogScopedArgs {
     pub query: Option<String>,
     /// Keyset cursor: fetch entries strictly older than `(created_at, id)`.
     pub before_created_at: Option<String>,
+    /// Keyset cursor tie-breaker: `audit_log.id` of the oldest loaded entry.
     pub before_id: Option<String>,
 }
 

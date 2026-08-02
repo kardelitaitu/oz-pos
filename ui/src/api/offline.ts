@@ -18,12 +18,20 @@ export interface OfflineQueueItemDto {
   lastError: string | null;
   createdAt: string;
   syncedAt: string | null;
+  /** Tenant / store ID for multi-store isolation (OFF-09). */
+  tenantId: string;
+  /** Sync priority tier: "critical" | "normal" | "low" (OFF-09). */
+  priority: string;
 }
 
 /** Arguments for enqueuing an offline action. */
 export interface EnqueueOfflineArgs {
   action: string;
   payload: string;
+  /** Optional tenant / store ID (OFF-09). Defaults to "default". */
+  tenantId?: string;
+  /** Optional sync priority tier (OFF-09): "critical" | "normal" | "low". */
+  priority?: 'critical' | 'normal' | 'low';
 }
 
 /**

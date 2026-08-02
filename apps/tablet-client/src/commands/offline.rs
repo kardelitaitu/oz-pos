@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
 use oz_core::sync_client::{self, SyncConfig};
-use oz_core::{OfflineQueueItem, Store};
+use oz_core::{OfflineQueueItem, Store, SyncPriority};
 
 use foundation::validate_not_empty;
 
@@ -36,6 +36,10 @@ pub struct OfflineQueueItemDto {
     pub created_at: String,
     /// Synced At.
     pub synced_at: Option<String>,
+    /// Tenant / store ID for multi-store isolation (OFF-09).
+    pub tenant_id: String,
+    /// Sync priority tier: "critical" | "normal" | "low" (OFF-09).
+    pub priority: String,
 }
 
 impl From<OfflineQueueItem> for OfflineQueueItemDto {
@@ -49,6 +53,8 @@ impl From<OfflineQueueItem> for OfflineQueueItemDto {
             last_error: item.last_error,
             created_at: item.created_at,
             synced_at: item.synced_at,
+            tenant_id: item.tenant_id,
+            priority: item.priority.as_str().to_owned(),
         }
     }
 }
@@ -73,6 +79,13 @@ pub struct EnqueueOfflineArgs {
     pub action: String,
     /// JSON-serialized payload for the action.
     pub payload: String,
+    /// Optional tenant / store ID (OFF-09). Defaults to "default" for
+    /// single-store deployments.
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+    /// Optional sync priority tier (OFF-09): "critical" | "normal" | "low".
+    #[serde(default)]
+    pub priority: Option<String>,
 }
 
 // ── Commands ──────────────────────────────────────────────────────────
@@ -86,12 +99,23 @@ pub async fn enqueue_offline(
     validate_not_empty("action", &args.action).map_err(|e| AppError::Invalid(e.to_string()))?;
     validate_not_empty("payload", &args.payload).map_err(|e| AppError::Invalid(e.to_string()))?;
 
+    // OFF-09: preserve tenant isolation and priority tier at the command
+    // boundary. `enqueue_offline_scoped` records both in the row; a missing
+    // tenant falls back to the "default" single-store tenant and a missing
+    // priority to Normal (never escalated from a stale front-end).
+    let tenant_id = args.tenant_id.as_deref().unwrap_or("default");
+    let priority = args
+        .priority
+        .as_deref()
+        .map(SyncPriority::from_str_lenient)
+        .unwrap_or(SyncPriority::Normal);
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let item = store.enqueue_offline(&args.action, &args.payload)?;
+    let item = store.enqueue_offline_scoped(&args.action, &args.payload, tenant_id, priority)?;
     drop(db);
 
-    tracing::info!(id = %item.id, action = %item.action, "offline transaction enqueued");
+    tracing::info!(id = %item.id, action = %item.action, tenant_id, "offline transaction enqueued");
     Ok(item.into())
 }
 
@@ -176,6 +200,12 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
             total_count: 0,
         });
     }
+
+    // OFF-09: critical-before-normal ordering. `list_pending_offline`
+    // returns created_at ASC, so re-order the batch so Critical items
+    // always transmit before Normal/Low.
+    let mut pending_items = pending_items;
+    pending_items.sort_by_key(|i| i.priority);
 
     // Phase 2: Async HTTP push (no DB lock held).
     let outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
@@ -339,9 +369,13 @@ mod tests {
             last_error: None,
             created_at: "2025-01-01".into(),
             synced_at: None,
+            tenant_id: "store-a".into(),
+            priority: "critical".into(),
         };
         let d = format!("{dto:?}");
         assert!(d.contains("complete_sale"));
+        assert!(d.contains("store-a"));
+        assert!(d.contains("critical"));
     }
 
     #[test]
@@ -355,11 +389,33 @@ mod tests {
             last_error: Some("timeout".into()),
             created_at: "2025-02-01".into(),
             synced_at: Some("2025-02-02".into()),
+            tenant_id: "store-b".into(),
+            priority: "normal".into(),
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["action"], "void_sale");
         assert_eq!(json["retryCount"], 1);
         assert!(json["lastError"].is_string());
+        // OFF-09: tenant + priority metadata survive the serializer.
+        assert_eq!(json["tenantId"], "store-b");
+        assert_eq!(json["priority"], "normal");
+    }
+
+    #[test]
+    fn enqueue_offline_args_optional_tenant_and_priority() {
+        // OFF-09: tenant + priority are optional for backward compat, and a
+        // front-end can never escalate to Critical by passing junk.
+        let bare: EnqueueOfflineArgs =
+            serde_json::from_str(r#"{"action":"a","payload":"{}"}"#).unwrap();
+        assert!(bare.tenant_id.is_none());
+        assert!(bare.priority.is_none());
+
+        let scoped: EnqueueOfflineArgs = serde_json::from_str(
+            r#"{"action":"a","payload":"{}","tenantId":"store-a","priority":"critical"}"#,
+        )
+        .unwrap();
+        assert_eq!(scoped.tenant_id.as_deref(), Some("store-a"));
+        assert_eq!(scoped.priority.as_deref(), Some("critical"));
     }
 
     #[test]
@@ -399,6 +455,8 @@ mod tests {
         let args = EnqueueOfflineArgs {
             action: "test".into(),
             payload: "{}".into(),
+            tenant_id: None,
+            priority: None,
         };
         let d = format!("{args:?}");
         assert!(d.contains("test"));
