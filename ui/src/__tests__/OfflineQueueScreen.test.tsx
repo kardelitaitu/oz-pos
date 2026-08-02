@@ -302,4 +302,30 @@ describe('OfflineQueueScreen', () => {
       expect(syncMessages.some((el) => el.textContent?.includes('items'))).toBe(true);
     });
   });
+
+  it('renders the exact synced/failed counts from the Rust camelCase DTO (OFF-02)', async () => {
+    // OFF-02: the UI must render the counts exactly as the Rust SyncResult
+    // serializes them (syncedCount/failedCount/totalCount). A mismatched
+    // contract would render undefined counts and mislead the operator.
+    mockListAllOffline.mockResolvedValue([makeQueueItem()]);
+    mockPendingOfflineCount.mockResolvedValue(1);
+    mockRetryOfflineSync.mockResolvedValue({ syncedCount: 3, failedCount: 2, totalCount: 5 });
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync All')).not.toBeDisabled();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Sync All'));
+
+    // The localized message is "Synced { $synced } items, { $failed } failed."
+    await waitFor(() => {
+      const msg = screen.getByText(/Synced 3 items, 2 failed/);
+      expect(msg).toBeTruthy();
+    });
+    // No undefined counts leak into the message.
+    expect(screen.queryByText(/Synced undefined/)).toBeNull();
+  });
 });
