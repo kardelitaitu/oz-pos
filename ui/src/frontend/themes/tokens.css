@@ -155,6 +155,14 @@
   --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
 
+  /* Muted foreground + subtle status surfaces (THM-05) — formally ghost
+     tokens that components referenced with hardcoded fallbacks. */
+  --color-fg-muted:        #94a3b8;
+  --color-purple:          #9333ea;
+  --color-warning-border:  #ffc107;
+  --color-danger-subtle:   #fee2e2;
+  --color-warning-subtle:  #fef3c7;
+
   --color-bg-primary:      var(--neutral-50);
   --color-bg-secondary:    var(--neutral-100);
   --color-bg-hover:        rgba(90, 159, 212, 0.1);
@@ -397,6 +405,13 @@
   --color-link-hover:      var(--primary-700);
   --color-link-visited:    #6d28d9;
 
+  /* Muted foreground + subtle status surfaces (THM-05) — light-theme values. */
+  --color-fg-muted:        #64748b;
+  --color-purple:          #9333ea;
+  --color-warning-border:  #d97706;
+  --color-danger-subtle:   #fef2f2;
+  --color-warning-subtle:  #fffbeb;
+
   --color-bg-primary:      #ffffff;
   --color-bg-secondary:    var(--neutral-100);
   --color-bg-hover:        rgba(16, 82, 188, 0.06);
@@ -534,6 +549,13 @@
   --color-link:            #73b2e0;
   --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
+
+  /* Muted foreground + subtle status surfaces (THM-05) — dark-theme values. */
+  --color-fg-muted:        #94a3b8;
+  --color-purple:          #9333ea;
+  --color-warning-border:  #ffc107;
+  --color-danger-subtle:   #fee2e2;
+  --color-warning-subtle:  #fef3c7;
 
   --color-bg-primary:      var(--neutral-100);
   --color-bg-secondary:    var(--neutral-200);

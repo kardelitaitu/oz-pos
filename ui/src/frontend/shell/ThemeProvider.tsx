@@ -43,11 +43,13 @@ interface ThemeProviderProps {
 
 /**
  * Provides the active theme and a toggle function to the component
- * tree. On first render it respects:
- * 1. `localStorage` (manual override persisted across sessions)
- * 2. `prefers-color-scheme` (OS-level preference)
+ * tree. On first render it reads the persisted override from
+ * `localStorage` and otherwise falls back to the default (dark glass)
+ * theme — it deliberately does NOT follow the OS `prefers-color-scheme`,
+ * because the default theme is itself dark regardless of the OS.
  *
- * Sets `data-theme` on `<html>` so the CSS dark-mode selector works.
+ * Sets `data-theme` on `<html>` so the CSS theme selectors work
+ * (`:root:not([data-theme='light'])` covers default + dark).
  * Also reactively applies the brand accent palette from BrandContext
  * whenever the primary colour changes.
  */
