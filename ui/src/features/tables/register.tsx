@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import TableManagementScreen from './TableManagementScreen';
+const TableManagementScreen = lazy(() => import('./TableManagementScreen'));
 
 export function registerTablesFeature() {
   registerPage({ route: 'tables', component: TableManagementScreen, label: 'Tables', feature: 'table-management' });

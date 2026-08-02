@@ -1,8 +1,9 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import SuppliersScreen from './SuppliersScreen';
-import PurchaseOrdersScreen from './PurchaseOrdersScreen';
+const SuppliersScreen = lazy(() => import('./SuppliersScreen'));
+const PurchaseOrdersScreen = lazy(() => import('./PurchaseOrdersScreen'));
 
 export function registerPurchasingFeature() {
   registerPage({ route: 'suppliers', component: SuppliersScreen, label: 'Suppliers', feature: 'purchase-orders' });

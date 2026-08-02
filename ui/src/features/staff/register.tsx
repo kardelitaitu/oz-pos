@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import StaffManagementScreen from './StaffManagementScreen';
+const StaffManagementScreen = lazy(() => import('./StaffManagementScreen'));
 
 export function registerStaffFeature() {
   registerPage({ route: 'staff', component: StaffManagementScreen, label: 'Staff', requiredRole: 'manager' });

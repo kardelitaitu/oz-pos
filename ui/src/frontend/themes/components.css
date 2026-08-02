@@ -1108,6 +1108,17 @@
   margin-top: var(--space-2);
 }
 
+/* ── Lazy chunk Suspense fallback (PERF-01) ────────────────────── */
+.lazy-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--color-fg-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+}
+
 /* Screen reader only utility (globally accessible) */
 .sr-only {
   position: absolute;

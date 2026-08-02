@@ -1,8 +1,9 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import InventoryAdjustmentScreen from './InventoryAdjustmentScreen';
-import StockCountsFlow from './StockCountsFlow';
+const InventoryAdjustmentScreen = lazy(() => import('./InventoryAdjustmentScreen'));
+const StockCountsFlow = lazy(() => import('./StockCountsFlow'));
 
 export function registerInventoryFeature() {
   registerPage({ route: 'inventory-adjustment', component: InventoryAdjustmentScreen, label: 'Stock Adjust', requiredRole: 'manager' });

@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import TaxConfigurationScreen from './TaxConfigurationScreen';
+const TaxConfigurationScreen = lazy(() => import('./TaxConfigurationScreen'));
 
 export function registerTaxFeature() {
   registerPage({ route: 'tax-config', component: TaxConfigurationScreen, label: 'Tax Rates', feature: 'tax-engine', requiredRole: 'manager' });

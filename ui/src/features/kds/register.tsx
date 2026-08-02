@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import KdsScreen from './KdsScreen';
+const KdsScreen = lazy(() => import('./KdsScreen'));
 
 export function registerKdsFeature() {
   registerPage({ route: 'kds', component: KdsScreen, label: 'KDS', feature: 'kitchen-display' });

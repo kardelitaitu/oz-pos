@@ -1,9 +1,10 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import ProductLookupScreen from './ProductLookupScreen';
-import ProductManagementScreen from './ProductManagementScreen';
-import BundleManagementScreen from './BundleManagementScreen';
+const ProductLookupScreen = lazy(() => import('./ProductLookupScreen'));
+const ProductManagementScreen = lazy(() => import('./ProductManagementScreen'));
+const BundleManagementScreen = lazy(() => import('./BundleManagementScreen'));
 
 export function registerProductsFeature() {
   registerPage({ route: 'products', component: ProductLookupScreen, label: 'Products' });

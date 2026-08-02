@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import PromotionManagementScreen from './PromotionManagementScreen';
+const PromotionManagementScreen = lazy(() => import('./PromotionManagementScreen'));
 
 export function registerPromotionsFeature() {
   registerPage({ route: 'promotions', component: PromotionManagementScreen, label: 'Promotions', requiredRole: 'manager' });

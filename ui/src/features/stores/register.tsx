@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import { MultiStoreDashboardScreen } from './index';
+const MultiStoreDashboardScreen = lazy(() => import('./MultiStoreDashboardScreen'));
 
 export function registerStoresFeature() {
   registerPage({ route: 'stores', component: MultiStoreDashboardScreen, label: 'Stores', feature: 'multi-store', requiredRole: 'manager' });

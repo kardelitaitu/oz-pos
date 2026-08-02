@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import CustomerManagementScreen from './CustomerManagementScreen';
+const CustomerManagementScreen = lazy(() => import('./CustomerManagementScreen'));
 
 export function registerCustomersFeature() {
   registerPage({ route: 'customers', component: CustomerManagementScreen, label: 'Customers' });

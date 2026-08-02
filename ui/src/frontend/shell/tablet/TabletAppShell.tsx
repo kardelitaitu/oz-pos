@@ -1,20 +1,23 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useOrientation } from '@/hooks/useOrientation';
 import TabletAppLayout from './TabletAppLayout';
-import SetupWizard from '@/features/setup/SetupWizard';
-import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
-import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
+import { LazyBoundary } from '@/components/LazyBoundary';
 import type { WizardState } from '@/features/setup/SetupWizard';
-import RetailPosScreen from '@/features/retail/RetailPosScreen';
-import PosScreen from '@/features/sales/PosScreen';
-import KdsScreen from '@/features/kds/KdsScreen';
+
+// ── PERF-01: workspace/flow screens load on demand ────────────────
+const SetupWizard = lazy(() => import('@/features/setup/SetupWizard'));
+const StaffLoginScreen = lazy(() => import('@/features/auth/StaffLoginScreen'));
+const WorkspaceHome = lazy(() => import('@/features/workspaces/WorkspaceHome'));
+const RetailPosScreen = lazy(() => import('@/features/retail/RetailPosScreen'));
+const PosScreen = lazy(() => import('@/features/sales/PosScreen'));
+const KdsScreen = lazy(() => import('@/features/kds/KdsScreen'));
 
 /**
  * Tablet-optimised application shell.
@@ -130,11 +133,19 @@ export default function TabletAppShell() {
   }
 
   if (!session) {
-    return <StaffLoginScreen />;
+    return (
+      <LazyBoundary>
+        <StaffLoginScreen />
+      </LazyBoundary>
+    );
   }
 
   if (!hasCompletedSetup) {
-    return <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />;
+    return (
+      <LazyBoundary>
+        <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+      </LazyBoundary>
+    );
   }
 
   // ADR #4 Phase 3b: Workspace routing — same pattern as desktop AppShell.
@@ -144,7 +155,9 @@ export default function TabletAppShell() {
   if (!activeWorkspace) {
     return (
       <div className="workspace-home-wrapper">
-        <WorkspaceHome />
+        <LazyBoundary>
+          <WorkspaceHome />
+        </LazyBoundary>
       </div>
     );
   }
@@ -153,7 +166,9 @@ export default function TabletAppShell() {
   if (activeWorkspace === 'restaurant-pos') {
     return (
       <div className="workspace-fullscreen">
-        <PosScreen onNavigate={handleNavigate} />
+        <LazyBoundary>
+          <PosScreen onNavigate={handleNavigate} />
+        </LazyBoundary>
       </div>
     );
   }
@@ -161,7 +176,9 @@ export default function TabletAppShell() {
   if (activeWorkspace === 'store-pos') {
     return (
       <div className="workspace-fullscreen">
-        <RetailPosScreen onNavigate={handleNavigate} />
+        <LazyBoundary>
+          <RetailPosScreen onNavigate={handleNavigate} />
+        </LazyBoundary>
       </div>
     );
   }
@@ -169,7 +186,9 @@ export default function TabletAppShell() {
   if (activeWorkspace === 'kds') {
     return (
       <div className="workspace-fullscreen">
-        <KdsScreen />
+        <LazyBoundary>
+          <KdsScreen />
+        </LazyBoundary>
       </div>
     );
   }
@@ -193,7 +212,9 @@ export default function TabletAppShell() {
           requiredRole={pageRegistration?.requiredRole ?? ''}
         />
       ) : PageComponent ? (
-        <PageComponent />
+        <LazyBoundary>
+          <PageComponent />
+        </LazyBoundary>
       ) : null}
     </TabletAppLayout>
   );

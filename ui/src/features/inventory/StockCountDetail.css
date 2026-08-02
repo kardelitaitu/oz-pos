@@ -232,3 +232,17 @@
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
 }
+
+/* ── Load error state ─────────────────────────────────────────────── */
+.sc-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-10) 0;
+  color: var(--color-danger);
+}
+
+.sc-load-error p {
+  margin: 0;
+}

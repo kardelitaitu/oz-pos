@@ -12,9 +12,9 @@
  *   1. Lint          — ESLint (jsx-a11y, react-hooks)
  *   2. TypeScript    — tsc --noEmit (strict type checking)
  *   3. Unit tests    — vitest run (214 files, 3230+ tests)
- *   4. i18n lint     — Fluent key consistency check
- *   5. FTL dedupe    — detect duplicate Fluent keys
- *   6. E2E tests     — Playwright (SKIPPED if Docker is unavailable)
+ *   4. i18n lint     — Fluent key consistency check *  5. FTL dedupe    — detect duplicate Fluent keys
+ *  6. Bundle budget — gzip budgets on the production build (PERF-02)
+ *  7. E2E tests     — Playwright (SKIPPED if Docker is unavailable)
  */
 
 import { execSync } from 'child_process';
@@ -105,7 +105,10 @@ function main() {
   // ── 5. FTL dedupe ──────────────────────────────────────────────────────
   gate('FTL dedupe', 'npm run dedupe:ftl');
 
-  // ── 6. E2E tests (optional — requires Docker) ──────────────────────────
+  // ── 6. Bundle budget (PERF-02) — production build + gzip size gates ────
+  gate('Bundle budget', 'npm run bundle:check', { timeout: 300_000 });
+
+  // ── 7. E2E tests (optional — requires Docker) ──────────────────────────
   if (dockerAvailable()) {
     gate('E2E tests (Playwright)', 'npm run test:e2e', { timeout: 600_000 });
   } else {

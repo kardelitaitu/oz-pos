@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy } from 'react';
 import { Localized } from '@fluent/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
@@ -7,24 +7,29 @@ import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import AppLayout, { type AppRoute } from './AppLayout';
-import SetupWizard from '@/features/setup/SetupWizard';
-import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
-import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
 import { useTerminalProfile } from '@/hooks/useTerminalProfile';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
 import PermissionDenied from '@/components/PermissionDenied';
+import { LazyBoundary } from '@/components/LazyBoundary';
 import type { WizardState } from '@/features/setup/SetupWizard';
-import RetailPosScreen from '@/features/retail/RetailPosScreen';
-import PosScreen from '@/features/sales/PosScreen';
-import KdsScreen from '@/features/kds/KdsScreen';
-import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
 import type { WorkspaceType } from '@/features/settings/WorkspaceSettingsModal';
 import { getLicenseStatus } from '@/api/license';
 import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
 import CreatePinScreen from '@/features/auth/CreatePinScreen';
 import SessionLockScreen from '@/features/auth/SessionLockScreen';
+
+// ── PERF-01: workspace/flow screens load on demand ────────────────
+// These screens are only reachable after login, so each is code-split
+// into its own chunk (Suspense boundary: LazyBoundary at render sites).
+const SetupWizard = lazy(() => import('@/features/setup/SetupWizard'));
+const StaffLoginScreen = lazy(() => import('@/features/auth/StaffLoginScreen'));
+const WorkspaceHome = lazy(() => import('@/features/workspaces/WorkspaceHome'));
+const RetailPosScreen = lazy(() => import('@/features/retail/RetailPosScreen'));
+const PosScreen = lazy(() => import('@/features/sales/PosScreen'));
+const KdsScreen = lazy(() => import('@/features/kds/KdsScreen'));
+const WorkspaceSettingsModal = lazy(() => import('@/features/settings/WorkspaceSettingsModal'));
 
 // ── Workspace navigation keyboard shortcuts ───────────────────────
 // Escape: return to workspace picker (only when no modal is open).
@@ -255,12 +260,14 @@ export default function AppShell() {
 
   // Shared settings modal extracted once to avoid duplicating JSX across 6+ branches.
   const settingsModal = settingsModalOpen && workspaceType ? (
-    <WorkspaceSettingsModal
-      open={settingsModalOpen}
-      onClose={() => setSettingsModalOpen(false)}
-      workspaceType={workspaceType}
-      terminalId={terminalId}
-    />
+    <LazyBoundary>
+      <WorkspaceSettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        workspaceType={workspaceType}
+        terminalId={terminalId}
+      />
+    </LazyBoundary>
   ) : null;
 
   // ── F11 toggles fullscreen across all workpaces ───────────────
@@ -331,13 +338,17 @@ export default function AppShell() {
 
   if (!session) {
     return (
-      <StaffLoginScreen />
+      <LazyBoundary>
+        <StaffLoginScreen />
+      </LazyBoundary>
     );
   }
 
   if (!hasCompletedSetup) {
     return (
-      <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+      <LazyBoundary>
+        <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+      </LazyBoundary>
     );
   }
 
@@ -347,7 +358,9 @@ export default function AppShell() {
       <>
         <div className="workspace-fullscreen">
           <div className="kds-workspace">
-            <KdsScreen />
+            <LazyBoundary>
+              <KdsScreen />
+            </LazyBoundary>
           </div>
         </div>
         {settingsModal}
@@ -358,7 +371,9 @@ export default function AppShell() {
   if (!activeWorkspace) {
     return (
       <div className="workspace-home-wrapper">
-        <WorkspaceHome />
+        <LazyBoundary>
+          <WorkspaceHome />
+        </LazyBoundary>
       </div>
     );
   }
@@ -387,7 +402,9 @@ export default function AppShell() {
                   </Localized>
                 </button>
               </div>
-              <KdsScreen />
+              <LazyBoundary>
+                <KdsScreen />
+              </LazyBoundary>
             </div>
           </div>
           {settingsModal}
@@ -397,7 +414,9 @@ export default function AppShell() {
     return (
       <>
         <div className="workspace-fullscreen">
-          <PosScreen onNavigate={handleNavigate} />
+          <LazyBoundary>
+            <PosScreen onNavigate={handleNavigate} />
+          </LazyBoundary>
         </div>
         {settingsModal}
       </>
@@ -423,7 +442,9 @@ export default function AppShell() {
                   </Localized>
                 </button>
               </div>
-              <KdsScreen />
+              <LazyBoundary>
+                <KdsScreen />
+              </LazyBoundary>
             </div>
           </div>
           {settingsModal}
@@ -433,7 +454,9 @@ export default function AppShell() {
     return (
       <>
         <div className="workspace-fullscreen">
-          <RetailPosScreen onNavigate={handleNavigate} />
+          <LazyBoundary>
+            <RetailPosScreen onNavigate={handleNavigate} />
+          </LazyBoundary>
         </div>
         {settingsModal}
       </>
@@ -445,7 +468,9 @@ export default function AppShell() {
     return (
       <>
         <div className="workspace-fullscreen">
-          <KdsScreen />
+          <LazyBoundary>
+            <KdsScreen />
+          </LazyBoundary>
         </div>
         {settingsModal}
       </>
@@ -460,7 +485,9 @@ export default function AppShell() {
         requiredRole={pageRegistration!.requiredRole!}
       />
     ) : PageComponent ? (
-      <PageComponent />
+      <LazyBoundary>
+        <PageComponent />
+      </LazyBoundary>
     ) : null;
   }
 
@@ -478,7 +505,9 @@ export default function AppShell() {
             requiredRole={pageRegistration!.requiredRole!}
           />
         ) : PageComponent ? (
-          <PageComponent />
+          <LazyBoundary>
+            <PageComponent />
+          </LazyBoundary>
         ) : null}
       </AppLayout>
       {settingsModal}

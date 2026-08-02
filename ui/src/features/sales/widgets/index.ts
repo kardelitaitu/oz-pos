@@ -3,12 +3,16 @@
  * WidgetRegistry so they can be rendered dynamically on the
  * reporting dashboard page.
  */
+import { lazy } from 'react';
 import { registerWidget } from '@/platform/ui/widget-registry';
-import DailyTotalWidget from './DailyTotalWidget';
-import SalesByHourWidget from './SalesByHourWidget';
-import RevenueLineChartWidget from './RevenueLineChartWidget';
-import CategoryPieChartWidget from './CategoryPieChartWidget';
-import HourlyHeatmapWidget from './HourlyHeatmapWidget';
+
+// PERF-01: each widget is lazy-loaded so its chunk only downloads when
+// the reporting dashboard renders it (chart libs stay out of the entry).
+const DailyTotalWidget = lazy(() => import('./DailyTotalWidget'));
+const SalesByHourWidget = lazy(() => import('./SalesByHourWidget'));
+const RevenueLineChartWidget = lazy(() => import('./RevenueLineChartWidget'));
+const CategoryPieChartWidget = lazy(() => import('./CategoryPieChartWidget'));
+const HourlyHeatmapWidget = lazy(() => import('./HourlyHeatmapWidget'));
 
 export {
   DailyTotalWidget,

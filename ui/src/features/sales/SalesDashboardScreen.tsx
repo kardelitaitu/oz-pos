@@ -3,6 +3,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { getWidgets } from '@/platform/ui/widget-registry';
 import { useFeatures } from '@/hooks/useFeatures';
 import { Card } from '@/components/Card';
+import { LazyBoundary } from '@/components/LazyBoundary';
 import './widgets/widgets.css';
 import './SalesDashboardScreen.css';
 
@@ -38,7 +39,10 @@ export default function SalesDashboardScreen() {
             return (
               <div key={w.id} role="listitem" aria-label={w.title}>
                 <Card shadow="sm" className={widthClass}>
-                  <WidgetComponent />
+                  {/* PERF-01: lazy widgets need a Suspense boundary per card */}
+                  <LazyBoundary>
+                    <WidgetComponent />
+                  </LazyBoundary>
                 </Card>
               </div>
             );

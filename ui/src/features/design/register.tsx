@@ -1,8 +1,9 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import DesignSystem from './DesignSystem';
-import TooltipPreview from './TooltipPreview';
+const DesignSystem = lazy(() => import('./DesignSystem'));
+const TooltipPreview = lazy(() => import('./TooltipPreview'));
 
 export function registerDesignFeature() {
   registerPage({ route: 'design', component: DesignSystem, label: 'Design System' });

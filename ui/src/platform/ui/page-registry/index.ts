@@ -16,19 +16,28 @@
  * ```
  */
 
-import type { ComponentType } from 'react';
+import type { ComponentType, LazyExoticComponent } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 /** Role levels used for page access gating. */
 export type RequiredRole = 'manager' | 'owner';
 
+/**
+ * A page component may be a plain component or a `lazy()`-loaded
+ * chunk (PERF-01 route-level code splitting). Render sites must wrap
+ * the component in a `<Suspense>` boundary (see `LazyBoundary`).
+ */
+export type PageComponent =
+  | ComponentType
+  | LazyExoticComponent<ComponentType>;
+
 /** A page registered with the dynamic routing system. */
 export interface PageRegistration {
   /** Route name used for navigation (e.g. 'sales', 'products'). */
   route: string;
-  /** The React component to render for this route. */
-  component: ComponentType;
+  /** The React component to render for this route (may be lazy). */
+  component: PageComponent;
   /** Human-readable label for nav items. */
   label: string;
   /** Optional feature key that must be enabled for this page to appear. */

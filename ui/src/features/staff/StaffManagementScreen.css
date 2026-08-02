@@ -426,3 +426,34 @@
   padding-left: calc(1.125rem + var(--space-3));
   /* 18px = box width, var(--space-3) = horizontal gap on .staff-mgmt-ws-checkbox */
 }
+
+/* ── Load error + degraded workspace states ───────────────────────── */
+.staff-mgmt-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) 0;
+  color: var(--color-danger);
+}
+
+.staff-mgmt-load-error-message {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.staff-mgmt-ws-unavailable {
+  border: 1px solid var(--color-warning-border, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg, rgba(245, 158, 11, 0.08));
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-3) 0;
+  font-size: var(--text-sm);
+}
+
+.staff-mgmt-ws-unavailable strong {
+  display: block;
+  color: var(--color-warning, var(--color-fg));
+  margin-bottom: var(--space-1);
+}

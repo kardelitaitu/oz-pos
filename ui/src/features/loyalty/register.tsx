@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import LoyaltyManagementScreen from './LoyaltyManagementScreen';
+const LoyaltyManagementScreen = lazy(() => import('./LoyaltyManagementScreen'));
 
 export function registerLoyaltyFeature() {
   registerPage({ route: 'loyalty', component: LoyaltyManagementScreen, label: 'Loyalty', requiredRole: 'manager' });

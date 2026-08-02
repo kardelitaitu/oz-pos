@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import ExchangeRateScreen from './ExchangeRateScreen';
+const ExchangeRateScreen = lazy(() => import('./ExchangeRateScreen'));
 
 export function registerCurrencyFeature() {
   registerPage({ route: 'exchange-rates', component: ExchangeRateScreen, label: 'Exchange Rates', requiredRole: 'manager' });

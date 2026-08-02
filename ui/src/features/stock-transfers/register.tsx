@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import StockTransfersScreen from './StockTransfersScreen';
+const StockTransfersScreen = lazy(() => import('./StockTransfersScreen'));
 
 export function registerStockTransfersFeature() {
   registerPage({ route: 'stock-transfers', component: StockTransfersScreen, label: 'Stock Transfers', feature: 'stock-transfers' });

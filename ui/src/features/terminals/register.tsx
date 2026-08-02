@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import TerminalManagementScreen from './TerminalManagementScreen';
+const TerminalManagementScreen = lazy(() => import('./TerminalManagementScreen'));
 
 export function registerTerminalsFeature() {
   registerPage({ route: 'terminals', component: TerminalManagementScreen, label: 'Terminals', requiredRole: 'manager' });

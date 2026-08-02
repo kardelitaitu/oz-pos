@@ -15,6 +15,8 @@
     "lint:i18n": "bash ../scripts/lint-i18n.sh",
     "dedupe:ftl": "python3 ../scripts/dedupe-ftl.py",
     "typecheck": "tsc --noEmit",
+    "bundle:check": "node ../scripts/check-bundle.mjs",
+    "bundle:check:tablet": "node ../scripts/check-bundle.mjs --config=vite.tablet.config.ts",
     "test": "vitest run",
     "test:a11y": "vitest run --reporter=verbose src/__tests__/a11y/",
     "test:watch": "vitest",

@@ -23,6 +23,17 @@ export default defineConfig({
     outDir: 'dist-tablet',
     rollupOptions: {
       input: fileURLToPath(new URL('./index.tablet.html', import.meta.url)),
+      output: {
+        // PERF-05: isolate vendor libraries so they cache independently
+        // of app code and stay out of the tablet entry bundle.
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-fluent': ['@fluent/bundle', '@fluent/react'],
+          'vendor-charts': ['recharts'],
+          'vendor-search': ['fuse.js'],
+          'vendor-window': ['react-window'],
+        },
+      },
     },
   },
 

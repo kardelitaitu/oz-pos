@@ -31,6 +31,30 @@ export default defineConfig({
 
   // Vite options tailored for Tauri development.
   clearScreen: false,
+
+  // ── Build: vendor chunking + code-splitting (PERF-05) ─────────────
+  // Lazy-loaded routes (PERF-01) already split feature screens into
+  // per-route chunks. manualChunks additionally isolates the heavy
+  // vendor libraries so their long-lived cache stays stable and the
+  // entry bundle stays small.
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-fluent': ['@fluent/bundle', '@fluent/react'],
+          'vendor-charts': ['recharts'],
+          'vendor-search': ['fuse.js'],
+          'vendor-window': ['react-window'],
+        },
+      },
+    },
+    // The recharts vendor chunk legitimately exceeds Vite's default 500 kB
+    // raw threshold; real enforcement lives in scripts/check-bundle.mjs
+    // (PERF-02), which measures gzip against explicit budgets.
+    chunkSizeWarningLimit: 600,
+  },
+
   server: {
     port: 1420,
     strictPort: true,

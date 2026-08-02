@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import ShiftManagementScreen from './ShiftManagementScreen';
+const ShiftManagementScreen = lazy(() => import('./ShiftManagementScreen'));
 
 export function registerShiftsFeature() {
   registerPage({ route: 'shifts', component: ShiftManagementScreen, label: 'Shifts', requiredRole: 'manager' });

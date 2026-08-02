@@ -342,3 +342,14 @@
     transition: all var(--duration-150) var(--ease-out);
   }
 }
+
+/* ── Load error state ─────────────────────────────────────────────── */
+.loyalty-mgmt-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) 0;
+  color: var(--color-danger);
+}

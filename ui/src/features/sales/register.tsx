@@ -1,12 +1,13 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import PosScreen from './PosScreen';
-import SalesHistoryScreen from './SalesHistoryScreen';
-import SalesDashboardScreen from './SalesDashboardScreen';
-import EodReportScreen from './EodReportScreen';
-import VoidOrdersScreen from './VoidOrdersScreen';
 import { registerSalesWidgets } from './widgets';
+const PosScreen = lazy(() => import('./PosScreen'));
+const SalesHistoryScreen = lazy(() => import('./SalesHistoryScreen'));
+const SalesDashboardScreen = lazy(() => import('./SalesDashboardScreen'));
+const EodReportScreen = lazy(() => import('./EodReportScreen'));
+const VoidOrdersScreen = lazy(() => import('./VoidOrdersScreen'));
 
 export function registerSalesFeature() {
   registerSalesWidgets();
