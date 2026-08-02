@@ -344,13 +344,30 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="product-empty">
+        /* EMPTY-04/05/06: a search/category filter that returns nothing is
+           not the same as an empty catalog — announce the transition and
+           offer a clear/reset action when a filter is active. */
+        <div className="product-empty" role="status">
           <PackageIcon />
           <span className="product-empty-text">
             <Localized id="product-lookup-no-results">
               <span />
             </Localized>
           </span>
+          {(searchQuery.trim() || activeCategory !== 'All') && (
+            <button
+              type="button"
+              className="product-empty-clear-search"
+              onClick={() => {
+                setSearchQuery('');
+                setActiveCategory('All');
+              }}
+            >
+              <Localized id="product-lookup-clear-search">
+                <span />
+              </Localized>
+            </button>
+          )}
         </div>
       ) : (
         <div ref={gridContainerRef} className="product-grid"

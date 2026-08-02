@@ -50,6 +50,7 @@ product-lookup-barcode-scan = Scan
 product-lookup-scan-btn-aria =
     .aria-label = Submit the entered barcode
 product-lookup-no-results = No products found
+product-lookup-clear-search = Clear search
 product-lookup-loading = Loading products…
 product-lookup-add = Add to cart
 product-lookup-in-stock = In stock

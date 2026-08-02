@@ -240,9 +240,20 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
                 label={requiredLocalized(l10n, 'kds-picker-loading')}
               />
             ) : filtered.length === 0 ? (
-              <p className="kds-picker-empty">
-                {requiredLocalized(l10n, 'kds-picker-no-products')}
-              </p>
+              <div className="kds-picker-empty" role="status">
+                <p>{requiredLocalized(l10n, 'kds-picker-no-products')}</p>
+                {search.trim() && (
+                  /* EMPTY-05: an active search that returns nothing needs a
+                     clear/reset action, not a dead end. */
+                  <button
+                    type="button"
+                    className="kds-picker-clear-search"
+                    onClick={() => setSearch('')}
+                  >
+                    {requiredLocalized(l10n, 'kds-picker-clear-search')}
+                  </button>
+                )}
+              </div>
             ) : (
               filtered.map((product) => {
                 const isPicked = picked.some((e) => e.sku === product.sku);

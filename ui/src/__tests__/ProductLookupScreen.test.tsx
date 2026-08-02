@@ -122,6 +122,37 @@ describe('ProductLookupScreen', () => {
     expect(screen.getByText(/no products found/i)).toBeInTheDocument();
   });
 
+  it('offers a clear-search action that restores results (EMPTY-05)', async () => {
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
+    await waitForProducts();
+    fillInput(/search for products/i, 'zzzznotfound');
+    expect(screen.getByText(/no products found/i)).toBeInTheDocument();
+
+    // The no-results state must announce via role=status and offer Clear search.
+    const status = document.querySelector('[role="status"]');
+    expect(status?.textContent).toMatch(/no products found/i);
+    clickButton(/clear search/i);
+
+    // Grid returns after clearing the search.
+    await waitForProducts();
+    expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
+  });
+
+  it('offers clear-search after a search + category combo empties the grid (EMPTY-05)', async () => {
+    await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
+    await waitForProducts();
+    // A non-matching search plus an active category filter leaves the grid
+    // empty; the clear action must reset BOTH so results return.
+    fillInput(/search for products/i, 'zzzznotfound');
+    clickRadio(/^Food$/);
+    await waitFor(() => {
+      expect(screen.getByText(/no products found/i)).toBeInTheDocument();
+    });
+    clickButton(/clear search/i);
+    await waitForProducts();
+    expect(screen.getByText('Caffè Latte')).toBeInTheDocument();
+  });
+
   it('filters by category using chip button', async () => {
     await renderWithFluent(<ToastProvider><ProductLookupScreen /></ToastProvider>, productsFtl);
     await waitForProducts();

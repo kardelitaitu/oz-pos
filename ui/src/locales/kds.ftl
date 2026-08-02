@@ -116,6 +116,7 @@ kds-picker-search-aria = Search products
 kds-picker-loading = Loading products...
 kds-picker-error = Failed to load products
 kds-picker-no-products = No products found
+kds-picker-clear-search = Clear search
 kds-picker-selected = Selected
 kds-picker-picked-empty = Click products to add them
 kds-picker-course-aria = Course

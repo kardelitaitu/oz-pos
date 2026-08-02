@@ -442,3 +442,27 @@
   font-size: var(--text-base);
   font-weight: var(--font-weight-medium);
 }
+
+/* EMPTY-05: clear/reset action in the no-results state. */
+.product-empty-clear-search {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.product-empty-clear-search:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.product-empty-clear-search:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

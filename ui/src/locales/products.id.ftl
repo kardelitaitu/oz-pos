@@ -59,6 +59,7 @@ product-lookup-barcode-scan = Pindai
 product-lookup-scan-btn-aria =
     .aria-label = Kirim barcode yang dimasukkan
 product-lookup-no-results = Tidak ada produk ditemukan
+product-lookup-clear-search = Hapus pencarian
 product-lookup-loading = Memuat produk…
 product-lookup-add = Tambah ke Keranjang
 product-lookup-in-stock = Tersedia

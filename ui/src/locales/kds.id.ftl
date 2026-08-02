@@ -118,6 +118,7 @@ kds-picker-search-aria = Cari produk
 kds-picker-loading = Memuat produk...
 kds-picker-error = Gagal memuat produk
 kds-picker-no-products = Produk tidak ditemukan
+kds-picker-clear-search = Hapus pencarian
 kds-picker-selected = Dipilih
 kds-picker-picked-empty = Klik produk untuk menambahkannya
 kds-picker-course-aria = Kursus
