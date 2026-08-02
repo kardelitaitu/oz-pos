@@ -6,6 +6,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { plainErrorMessage } from '@/utils/app-error';
+import { isEditableTarget } from '@/utils/isEditableTarget';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -1183,23 +1184,33 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
       // Guard: block hotkeys while local overlays/dialogs are visible
       if (isAnyOverlayOpen()) return;
+
+      // KEY-03: suppress high-impact hotkeys while the user is typing in an
+      // input/textarea/select/contenteditable (covers shift notes, customer
+      // notes, and the SKU input during manual entry) so a keystroke cannot
+      // accidentally pay, void, discount, hold, or navigate. F5 is exempted as
+      // the hardware-terminal escape hatch: it only focuses the SKU input.
+      const editing = isEditableTarget(e.target);
+      const typing = editing && e.key !== 'F5';
       switch (e.key) {
-        case 'F1': if (e.cancelable) e.preventDefault(); handlePay(); break;
-        case 'F2': if (e.cancelable) e.preventDefault(); if (lines.length > 0) handleRequestClear(); break;
-        case 'F3': if (e.cancelable) e.preventDefault(); if (lines.length > 0) setShowDiscount(true); break;
-        case 'F4': if (e.cancelable) e.preventDefault(); if (heldCartId) handleResume(); else handleHold(); break;
+        case 'F1': if (typing) break; if (e.cancelable) e.preventDefault(); handlePay(); break;
+        case 'F2': if (typing) break; if (e.cancelable) e.preventDefault(); if (lines.length > 0) handleRequestClear(); break;
+        case 'F3': if (typing) break; if (e.cancelable) e.preventDefault(); if (lines.length > 0) setShowDiscount(true); break;
+        case 'F4': if (typing) break; if (e.cancelable) e.preventDefault(); if (heldCartId) handleResume(); else handleHold(); break;
         case 'F5': if (e.cancelable) e.preventDefault(); skuInputRef.current?.focus(); break;
-        case 'F6': if (e.cancelable) e.preventDefault(); goToSubView(setShowSalesHistory); break;
-        case 'F7': if (e.cancelable) e.preventDefault(); setShowCustomerSearch(true); break;
-        case 'F8': if (e.cancelable) e.preventDefault(); goToSubView(setShowStockInquiry); break;
-        case 'F9': if (e.cancelable) e.preventDefault(); if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
+        case 'F6': if (typing) break; if (e.cancelable) e.preventDefault(); goToSubView(setShowSalesHistory); break;
+        case 'F7': if (typing) break; if (e.cancelable) e.preventDefault(); setShowCustomerSearch(true); break;
+        case 'F8': if (typing) break; if (e.cancelable) e.preventDefault(); goToSubView(setShowStockInquiry); break;
+        case 'F9': if (typing) break; if (e.cancelable) e.preventDefault(); if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
         // F10 is handled globally by AppShell.tsx — opens the WorkspaceSettingsModal.
         // The button-based settings navigation (onOpenSettings) still works via RetailFnBar.
-        case 'F11': if (e.cancelable) e.preventDefault(); setShowQuickReturn(true); break;
-        case '?': setShowShortcuts((v) => !v); break;
-        case 'F12': if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
-        case 'l': if (e.ctrlKey && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
-        case 'k': if (e.ctrlKey && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); setShowCreditList(true); } break;
+        case 'F11': if (typing) break; if (e.cancelable) e.preventDefault(); setShowQuickReturn(true); break;
+        case '?': if (typing) break; setShowShortcuts((v) => !v); break;
+        case 'F12': if (typing) break; if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
+        // Ctrl+L / Ctrl+K: full editable-target guard (not just INPUT) —
+        // textarea/select/contenteditable are covered too (KEY-03).
+        case 'l': if (e.ctrlKey && !isEditableTarget(document.activeElement)) { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
+        case 'k': if (e.ctrlKey && !isEditableTarget(document.activeElement)) { e.preventDefault(); setShowCreditList(true); } break;
       }
     };
     document.addEventListener('keydown', handler);
