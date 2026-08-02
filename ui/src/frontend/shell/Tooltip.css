@@ -32,17 +32,13 @@
 
 /* In light mode: --neutral-800 = #262626 (dark gray) → white text ✓ */
 /* In dark  mode: --neutral-800 = #e5e5e5 (light) — wrong for tooltip.
-   Override with a proper dark shade for the tooltip bubble. */
-[data-theme='dark'] .tooltip-content {
+   Override with a proper dark shade for the tooltip bubble. Theme-driven
+   (default glass + dark), NOT OS-driven: the default theme is dark regardless
+   of the OS colour scheme, so gating on prefers-color-scheme left the default
+   theme with the light bubble on light-OS machines. */
+:root:not([data-theme='light']) .tooltip-content {
   --tooltip-bg: #2a2a3e;
   --tooltip-fg: #f0f0f0;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .tooltip-content {
-    --tooltip-bg: #2a2a3e;
-    --tooltip-fg: #f0f0f0;
-  }
 }
 
 .tooltip-content--visible {
