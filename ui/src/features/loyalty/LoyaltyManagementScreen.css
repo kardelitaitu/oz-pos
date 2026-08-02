@@ -35,11 +35,6 @@
   pointer-events: none;
 }
 
-.loyalty-mgmt-empty {
-  padding: var(--space-12) var(--space-4);
-  text-align: center;
-  color: var(--color-fg-secondary);
-}
 
 .loyalty-accounts-section {
   padding: var(--space-2) 0;

@@ -438,46 +438,5 @@ export function NoCustomersIcon({ width = 48, height = 48 }: IlluProps) {
   );
 }
 
-// ── Resource → icon mapping (EMPTY-09) ─────────────────────────────
-
-/** Resource types with a dedicated empty-state illustration. */
-export type EmptyStateResource =
-  | 'products'
-  | 'sales'
-  | 'staff'
-  | 'shifts'
-  | 'categories'
-  | 'customers'
-  | 'gift-cards'
-  | 'suppliers'
-  | 'purchase-orders'
-  | 'variants'
-  | 'promotions'
-  | 'loyalty'
-  | 'terminals'
-  | 'search'
-  | 'generic';
-
-/** Small mapping from common resource types to their illustration. */
-export const EMPTY_STATE_RESOURCE_ICONS: Record<EmptyStateResource, (props: IlluProps) => React.JSX.Element> = {
-  products: NoProductsIcon,
-  sales: NoSalesIcon,
-  staff: NoStaffIcon,
-  shifts: NoShiftsIcon,
-  categories: NoCategoriesIcon,
-  customers: NoCustomersIcon,
-  'gift-cards': NoGiftCardsIcon,
-  suppliers: NoSuppliersIcon,
-  'purchase-orders': NoPurchaseOrdersIcon,
-  variants: NoVariantsIcon,
-  promotions: NoPromotionsIcon,
-  loyalty: NoLoyaltyIcon,
-  terminals: NoTerminalsIcon,
-  search: NotFoundIcon,
-  generic: EmptyBoxIcon,
-};
-
-/** Returns the illustration component for a resource type (fallback: generic box). */
-export function emptyStateIconFor(resource: EmptyStateResource | string): (props: IlluProps) => React.JSX.Element {
-  return EMPTY_STATE_RESOURCE_ICONS[resource as EmptyStateResource] ?? EmptyBoxIcon;
-}
+// Resource → icon mapping lives in `./emptyStateResourceIcons.ts`
+// (EMPTY-09) so this file stays components-only for fast refresh.

@@ -31,11 +31,6 @@
   pointer-events: none;
 }
 
-.promo-mgmt-empty {
-  text-align: center;
-  padding: var(--space-12) var(--space-4);
-  color: var(--color-fg-secondary);
-}
 
 .promo-mgmt-table-wrap {
   overflow-x: auto;

@@ -48,12 +48,6 @@
   color: var(--color-fg-secondary);
 }
 
-.cat-mgmt-empty-desc {
-  font-size: var(--text-sm);
-  color: var(--color-fg-tertiary);
-  max-width: 20rem;
-  line-height: var(--leading-normal);
-}
 
 /* CAT-03: load-failure state (distinct from a genuinely empty store) */
 .cat-mgmt-load-error-title {

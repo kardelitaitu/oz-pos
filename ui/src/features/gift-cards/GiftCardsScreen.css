@@ -67,11 +67,6 @@
   pointer-events: none;
 }
 
-.gift-cards-empty {
-  padding: var(--space-12) var(--space-4);
-  text-align: center;
-  color: var(--color-fg-secondary);
-}
 
 .gift-cards-list {
   display: flex;

@@ -10,7 +10,8 @@ import {
 } from '@/api/products';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoVariantsIcon } from '@/components/EmptyStateIllustrations';
 
 interface Props {
   productSku: string;
@@ -208,14 +209,15 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               </div>
             </div>
           ) : variants.length === 0 ? (
-            <div className="product-mgmt-empty">
-              <Localized id="variant-mgmt-empty">
-                <p>No variants yet.</p>
-              </Localized>
-              <Localized id="variant-mgmt-empty-cta">
-                <Button variant="secondary" onClick={openCreate}>Add a variant</Button>
-              </Localized>
-            </div>
+            <EmptyState
+              region="modal"
+              icon={<NoVariantsIcon />}
+              title={requiredLocalized(l10n, 'variant-mgmt-empty')}
+              action={{
+                label: requiredLocalized(l10n, 'variant-mgmt-empty-cta'),
+                onClick: openCreate,
+              }}
+            />
           ) : (
             <div className="product-mgmt-table-wrap">
               <table className="product-mgmt-table" aria-label={l10n.getString('variant-mgmt-table-aria')}>

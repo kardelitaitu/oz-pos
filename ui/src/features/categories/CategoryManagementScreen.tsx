@@ -12,7 +12,8 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoCategoriesIcon } from '@/components/EmptyStateIllustrations';
 import { useToast } from '@/frontend/shared/Toast';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './CategoryManagementScreen.css';
@@ -450,17 +451,16 @@ export default function CategoryManagementScreen() {
         </Card>
       ) : categories.length === 0 ? (
         <Card shadow="sm">
-          <div className="cat-mgmt-empty">
-            <Localized id="categories-no-categories">
-              <p>No categories yet</p>
-            </Localized>
-            <Localized id="categories-empty-desc">
-              <p className="cat-mgmt-empty-desc">Categories group your products.</p>
-            </Localized>
-            <Localized id="categories-add-first">
-              <Button variant="secondary" onClick={openCreate}>Add your first category</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoCategoriesIcon />}
+            title={requiredLocalized(l10n, 'categories-no-categories')}
+            description={requiredLocalized(l10n, 'categories-empty-desc')}
+            action={{
+              label: requiredLocalized(l10n, 'categories-add-first'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : (
         <div className="cat-mgmt-grid">

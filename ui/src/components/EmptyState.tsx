@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { Button } from './Button';
 
+/** Layout region the empty state appears in (EMPTY-08). */
+export type EmptyStateRegion = 'full' | 'table' | 'grid' | 'modal';
+
 /** Props for the EmptyState placeholder component. */
 export interface EmptyStateProps {
   /** Optional icon/illustration displayed above the title. */
@@ -16,6 +19,11 @@ export interface EmptyStateProps {
     label: string;
     onClick: () => void;
   };
+  /**
+   * Layout region — applies the matching tokenized spacing variant
+   * (full-page, table, grid, or modal). Defaults to the base padding.
+   */
+  region?: EmptyStateRegion;
   /** Additional content (e.g. custom CTA, tips). */
   children?: ReactNode;
 }
@@ -31,10 +39,12 @@ export function EmptyState({
   headingLevel = 3,
   description,
   action,
+  region,
   children,
 }: EmptyStateProps) {
+  const regionClass = region ? ` empty-state--region-${region}` : '';
   return (
-    <div className="empty-state" role="status">
+    <div className={`empty-state${regionClass}`} role="status">
       {icon && (
         <div className="empty-state__icon" aria-hidden="true">
           {icon}

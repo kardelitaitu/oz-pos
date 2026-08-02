@@ -9,7 +9,8 @@ import {
   type GiftCardFilter,
 } from '@/api/giftCards';
 import { useToast } from '@/frontend/shared/Toast';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoGiftCardsIcon } from '@/components/EmptyStateIllustrations';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -160,11 +161,11 @@ export default function GiftCardsScreen() {
         </div>
       ) : cards.length === 0 ? (
         <Card shadow="sm">
-          <div className="gift-cards-empty">
-            <Localized id="gift-cards-no-cards">
-              <p>No gift cards found</p>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoGiftCardsIcon />}
+            title={requiredLocalized(l10n, 'gift-cards-no-cards')}
+          />
         </Card>
       ) : (
         <div className="gift-cards-list">

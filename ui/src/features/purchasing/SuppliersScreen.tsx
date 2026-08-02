@@ -11,7 +11,8 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoSuppliersIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
 import { l10nErrorMessage } from '@/utils/app-error';
 import './SuppliersScreen.css';
 
@@ -223,25 +224,27 @@ export default function SuppliersScreen() {
         </div>
       ) : suppliers.length === 0 ? (
         <Card shadow="sm">
-          <div className="suppliers-empty">
-            <Localized id="suppliers-no-data">
-              <p>No suppliers yet.</p>
-            </Localized>
-            <Localized id="suppliers-add-first">
-              <Button variant="secondary" onClick={openCreate}>Add your first supplier</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoSuppliersIcon />}
+            title={requiredLocalized(l10n, 'suppliers-no-data')}
+            action={{
+              label: requiredLocalized(l10n, 'suppliers-add-first'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
-          <div className="suppliers-empty">
-            <Localized id="suppliers-no-results">
-              <p>No suppliers match your search.</p>
-            </Localized>
-            <Localized id="suppliers-clear-search">
-              <Button variant="ghost" onClick={() => setSearchQuery('')}>Clear search</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NotFoundIcon />}
+            title={requiredLocalized(l10n, 'suppliers-no-results')}
+            action={{
+              label: requiredLocalized(l10n, 'suppliers-clear-search'),
+              onClick: () => setSearchQuery(''),
+            }}
+          />
         </Card>
       ) : (
         <div className="suppliers-table-wrap">

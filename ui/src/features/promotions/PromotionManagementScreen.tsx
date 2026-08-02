@@ -12,7 +12,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useToast } from '@/frontend/shared/Toast';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoPromotionsIcon } from '@/components/EmptyStateIllustrations';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -198,11 +199,11 @@ export default function PromotionManagementScreen() {
         </div>
       ) : promotions.length === 0 ? (
         <Card shadow="sm">
-          <div className="promo-mgmt-empty">
-            <Localized id="promotions-no-promotions">
-              <p>No promotions yet.</p>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoPromotionsIcon />}
+            title={requiredLocalized(l10n, 'promotions-no-promotions')}
+          />
         </Card>
       ) : (
         <div className="promo-mgmt-table-wrap">

@@ -6,4 +6,4 @@
 // src/__tests__/errorPrimitivesImportPolicy.test.ts.
 
 export { EmptyState } from '@/components/EmptyState';
-export type { EmptyStateProps } from '@/components/EmptyState';
+export type { EmptyStateProps, EmptyStateRegion } from '@/components/EmptyState';

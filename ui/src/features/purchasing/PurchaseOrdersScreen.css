@@ -62,15 +62,6 @@
   pointer-events: none;
 }
 
-.po-empty {
-  padding: var(--space-12) var(--space-4);
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--color-fg-secondary);
-}
 
 .po-table-wrap {
   overflow-x: auto;

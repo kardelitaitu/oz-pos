@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
-import { requiredLocalized } from '@/frontend/shared';
+import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoPurchaseOrdersIcon } from '@/components/EmptyStateIllustrations';
 import {
   listPurchaseOrders,
   updatePoStatus,
@@ -158,20 +159,19 @@ export default function PurchaseOrdersScreen() {
         </div>
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
-          <div className="po-empty">
-            {statusFilter === 'all' ? (
-              <Localized id="po-empty">
-                <p>No purchase orders yet.</p>
-              </Localized>
-            ) : (
-              <Localized id="po-empty-filtered" vars={{ status: statusFilter }}>
-                <p>{`No purchase orders with status "${statusFilter}".`}</p>
-              </Localized>
-            )}
-            <Localized id="po-add">
-              <Button variant="secondary" onClick={openCreate}>Create Purchase Order</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoPurchaseOrdersIcon />}
+            title={
+              statusFilter === 'all'
+                ? requiredLocalized(l10n, 'po-empty')
+                : requiredLocalized(l10n, 'po-empty-filtered', { status: statusFilter })
+            }
+            action={{
+              label: requiredLocalized(l10n, 'po-add'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : (
         <div className="po-table-wrap">

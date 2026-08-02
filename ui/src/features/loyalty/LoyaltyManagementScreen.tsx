@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { EmptyState, requiredLocalized } from '@/frontend/shared';
+import { NoLoyaltyIcon } from '@/components/EmptyStateIllustrations';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listLoyaltyAccounts,
@@ -269,11 +271,11 @@ export default function LoyaltyManagementScreen() {
         <div className="loyalty-accounts-section">
           {accounts.length === 0 ? (
             <Card shadow="sm">
-              <div className="loyalty-mgmt-empty">
-                <Localized id="loyalty-no-accounts">
-                  <p>No loyalty accounts yet</p>
-                </Localized>
-              </div>
+              <EmptyState
+                region="table"
+                icon={<NoLoyaltyIcon />}
+                title={requiredLocalized(l10n, 'loyalty-no-accounts')}
+              />
             </Card>
           ) : (
             <div className="loyalty-table-wrap">

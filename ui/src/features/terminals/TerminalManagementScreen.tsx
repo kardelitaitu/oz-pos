@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { SettingsPopup, useToast, requiredLocalized } from '@/frontend/shared';
+import { SettingsPopup, useToast, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoTerminalsIcon } from '@/components/EmptyStateIllustrations';
 import {
   listTerminals,
   registerTerminal,
@@ -510,24 +511,15 @@ export default function TerminalManagementScreen() {
         </Card>
       ) : terminals.length === 0 ? (
         <Card shadow="sm">
-          <div className="terminal-mgmt-empty">
-            <div className="terminal-mgmt-empty-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="48" height="48">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-                <path d="M7 7l3 3-3 3" />
-              </svg>
-            </div>
-            <Localized id="terminal-management-empty">
-              <p>No terminals registered yet. Register the first terminal to get started.</p>
-            </Localized>
-            <Localized id="terminal-register">
-              <Button variant="secondary" onClick={openCreate}>
-                Register Terminal
-              </Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoTerminalsIcon />}
+            title={requiredLocalized(l10n, 'terminal-management-empty')}
+            action={{
+              label: requiredLocalized(l10n, 'terminal-register'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : (
         <div className="terminal-mgmt-table-wrap">
