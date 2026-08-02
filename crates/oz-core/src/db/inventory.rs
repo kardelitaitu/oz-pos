@@ -136,14 +136,41 @@ impl Store<'_> {
     }
 
     /// Deactivate an inventory location. Enforces constraints that the location
-    /// must have zero stock and no pending in-flight transfers.
+    /// must exist, be active, have a zero stock balance (positive or negative),
+    /// and have no pending in-flight transfers.
     pub fn deactivate_inventory_location(&self, id: &str) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Constraint 1: Check that there is no positive stock in stock_summary for this location
+        // Constraint 0: The location must exist and be active. A stale or
+        // cross-workspace ID must not be reported as a successful no-op.
+        let active_res = tx.query_row(
+            "SELECT is_active FROM inventory_locations WHERE id = ?1",
+            params![id],
+            |row| row.get::<_, i64>(0),
+        );
+        let active = match active_res {
+            Ok(v) => v,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(CoreError::NotFound {
+                    entity: "inventory_location",
+                    id: id.to_owned(),
+                });
+            }
+            Err(e) => return Err(CoreError::Db(e)),
+        };
+        if active == 0 {
+            return Err(CoreError::Validation {
+                field: "location",
+                message: "location is already inactive".into(),
+            });
+        }
+
+        // Constraint 1: Block deactivation when ANY balance is non-zero. A
+        // negative balance would otherwise be hidden from active-location
+        // workflows while its ledger still needs reconciliation.
         let stock_count: i64 = tx
             .query_row(
-                "SELECT COUNT(*) FROM stock_summary WHERE location_id = ?1 AND qty > 0",
+                "SELECT COUNT(*) FROM stock_summary WHERE location_id = ?1 AND qty <> 0",
                 params![id],
                 |row| row.get(0),
             )
@@ -152,7 +179,7 @@ impl Store<'_> {
         if stock_count > 0 {
             return Err(CoreError::Validation {
                 field: "location",
-                message: "cannot deactivate location with active stock".into(),
+                message: "cannot deactivate location with a non-zero stock balance".into(),
             });
         }
 
@@ -907,18 +934,132 @@ mod tests {
             }
         ));
         assert!(
-            err.to_string().contains("active stock"),
-            "expected active stock message, got: {}",
+            err.to_string().contains("non-zero stock balance"),
+            "expected non-zero stock balance message, got: {}",
             err
         );
     }
 
     #[test]
-    fn deactivate_inventory_location_nonexistent_succeeds() {
+    fn deactivate_inventory_location_with_negative_stock_errors() {
         let conn = fresh();
         let s = store(&conn);
-        // deactivate on a non-existent location currently succeeds (no row matched)
-        assert!(s.deactivate_inventory_location("nonexistent").is_ok());
+
+        let loc_id = s
+            .create_inventory_location("Negative Loc", "store", "")
+            .unwrap();
+        // Seed a product with a NEGATIVE balance at this location — a negative
+        // balance must block deactivation just like a positive one (LOC-02).
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-neg', 'SKU-NEG', 'Prod', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-neg', ?1, -3)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let err = s.deactivate_inventory_location(&loc_id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "location",
+                ..
+            }
+        ));
+        assert!(
+            err.to_string().contains("non-zero stock balance"),
+            "expected non-zero stock balance message, got: {}",
+            err
+        );
+        // The location must still be active afterwards.
+        let active: i64 = conn
+            .query_row(
+                "SELECT is_active FROM inventory_locations WHERE id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            active, 1,
+            "location must remain active after failed deactivation"
+        );
+    }
+
+    #[test]
+    fn deactivate_inventory_location_with_zero_balance_succeeds() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let loc_id = s
+            .create_inventory_location("Zero Loc", "store", "")
+            .unwrap();
+        // A zero-balance row must NOT block deactivation.
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-zero', 'SKU-ZERO', 'Prod', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-zero', ?1, 0)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        s.deactivate_inventory_location(&loc_id).unwrap();
+        let active: i64 = conn
+            .query_row(
+                "SELECT is_active FROM inventory_locations WHERE id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(active, 0, "zero-balance location should deactivate");
+    }
+
+    #[test]
+    fn deactivate_inventory_location_nonexistent_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        // A missing ID must surface a NotFound error rather than a silent no-op (LOC-03).
+        let err = s.deactivate_inventory_location("nonexistent").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "inventory_location",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn deactivate_inventory_location_already_inactive_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let loc_id = s
+            .create_inventory_location("Inactive Loc", "store", "")
+            .unwrap();
+        s.deactivate_inventory_location(&loc_id).unwrap();
+
+        // Deactivating an already-inactive location should report a clear error.
+        let err = s.deactivate_inventory_location(&loc_id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "location",
+                ..
+            }
+        ));
+        assert!(
+            err.to_string().contains("already inactive"),
+            "expected already-inactive message, got: {}",
+            err
+        );
     }
 
     #[test]
