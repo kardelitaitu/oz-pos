@@ -192,6 +192,32 @@
   border-radius: var(--tablet-radius);
 }
 
+/* ── Skip-to-content link (A11Y-03) — keyboard-only, first focusable ── */
+/* The desktop shell defines .skip-to-content in AppLayout.css, but the tablet
+ * entry never loads that stylesheet, so the class is styled here too. */
+.tablet-shell .skip-to-content {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--text-base);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  z-index: var(--z-tooltip);
+  text-decoration: none;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tablet-shell .skip-to-content:focus-visible {
+  clip: auto;
+  white-space: normal;
+}
+
 /* ── Safe area handling ───────────────────────────── */
 .tablet-shell {
   padding-top: env(safe-area-inset-top, 0);

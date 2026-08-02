@@ -80,6 +80,15 @@
   outline-offset: -2px;
 }
 
+.store-switcher-option--highlighted {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.store-switcher-option--highlighted:not(.store-switcher-option--active) {
+  background: var(--color-bg-surface);
+}
+
 .store-switcher-option--active {
   background: var(--color-accent-subtle);
   color: var(--color-accent-active);
