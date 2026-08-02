@@ -101,8 +101,17 @@ beforeEach(() => {
 // Vitest does not auto-cleanup testing-library renders the way Jest
 // does. Leaving portals/overlays mounted can pollute the DOM for the
 // next test and cause order-dependent flakes.
-afterEach(() => {
+//
+// PERF-08: the catalog cache is module-level state — reset it between
+// tests so a cached product/category snapshot never leaks. This must be
+// a DYNAMIC import: a top-level import here would load `catalog-cache`
+// (and its real `@/api/products` bindings) before test files' hoisted
+// `vi.mock('@/api/products')` runs, so every test would silently bind to
+// the real module instead of the file's mock.
+afterEach(async () => {
   cleanup();
+  const { invalidateCatalog } = await import('@/utils/catalog-cache');
+  invalidateCatalog();
 });
 
 // matchMedia is not implemented in jsdom; Fluent uses it for

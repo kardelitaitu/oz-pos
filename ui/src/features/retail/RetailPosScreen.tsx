@@ -13,7 +13,9 @@ import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerialBatch, l
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { listProductsScoped, listCategories, lookupProductBySkuScoped, lookupByBarcodeScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { lookupProductBySkuScoped, lookupByBarcodeScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { loadCatalog, invalidateCatalog } from '@/utils/catalog-cache';
+import { usePagedList } from '@/hooks/usePagedList';
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto } from '@/api/shifts';
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
@@ -441,32 +443,27 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setProductsLoading(true);
     setCategoriesLoading(true);
     setLoadError(null);
-    listProductsScoped(token)
-      .then((prods) => {
-        if (!controller.signal.aborted) {
-          setProducts(prods);
-          // PERF-06: time-to-interactive-POS marker — catalog rendered.
-          recordMark('oz:pos-interactive');
-        }
+    // PERF-08: one deduplicated, cached IPC load for the whole catalog
+    // instead of two independent requests on every workspace/session load.
+    loadCatalog(token)
+      .then(({ products: prods, categories: cats }) => {
+        if (controller.signal.aborted) return;
+        setProducts(prods);
+        setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
+        // PERF-06: time-to-interactive-POS marker — catalog rendered.
+        recordMark('oz:pos-interactive');
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setProducts(RETAIL_SAMPLE_PRODUCTS);
-        setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
-      })
-      .finally(() => { if (!controller.signal.aborted) setProductsLoading(false); });
-    listCategories()
-      .then((cats) => {
-        if (controller.signal.aborted) return;
-        setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
         setCategories(RETAIL_SAMPLE_CATEGORIES);
         setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setCategoriesLoading(false);
+        if (!controller.signal.aborted) {
+          setProductsLoading(false);
+          setCategoriesLoading(false);
+        }
       });
     return () => { controller.abort(); };
   }, []);
@@ -504,9 +501,6 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     [products],
   );
 
-  const [productPage, setProductPage] = useState(0);
-  const PAGE_SIZE = 50;
-
   const [editingProduct, setEditingProduct] = useState<ProductDto | null>(null);
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -519,17 +513,23 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setProducts((prev) =>
       prev.map((p) => (p.sku === updatedProduct.sku ? updatedProduct : p)),
     );
+    // PERF-08: catalog mutated — next load must refetch.
+    invalidateCatalog(sessionToken);
     setEditingProduct(null);
-  }, [setProducts]);
+  }, [setProducts, sessionToken]);
 
   const handleSaveNewCategory = useCallback((newCat: CategoryDto) => {
     setCategories((prev) => [...prev, newCat]);
+    // PERF-08: catalog mutated — next load must refetch.
+    invalidateCatalog(sessionToken);
     setActiveCategory(newCat.id);
-  }, [setCategories]);
+  }, [setCategories, sessionToken]);
 
   const handleSaveNewProduct = useCallback((newProd: ProductDto) => {
     setProducts((prev) => [newProd, ...prev]);
-  }, [setProducts]);
+    // PERF-08: catalog mutated — next load must refetch.
+    invalidateCatalog(sessionToken);
+  }, [setProducts, sessionToken]);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.product_type === 'retail');
@@ -588,14 +588,15 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     return list;
   }, [filteredProducts, sortField, sortOrder]);
 
-  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / PAGE_SIZE));
-  const pagedProducts = useMemo(
-    () => sortedProducts.slice(productPage * PAGE_SIZE, (productPage + 1) * PAGE_SIZE),
-    [sortedProducts, productPage],
-  );
+  // PERF-07: bounded pagination via the shared list policy — the grid
+  // renders only the active page, never the full catalog.
+  const { page: productPage, total: totalPages, pageItems: pagedProducts, setPage: setProductPage, resetPage } = usePagedList(sortedProducts);
 
-  // Reset page when filter changes
-  useEffect(() => { setProductPage(0); }, [activeCategory, searchQuery, filterLowStock]);
+  // Reset page when filter changes (PERF-07: keep the page in range).
+  // Deps use the stable `resetPage` callback — NOT the `usePagedList`
+  // result object, which is a fresh reference every render and would
+  // re-run this effect (and reset the page) on every render.
+  useEffect(() => { resetPage(); }, [activeCategory, searchQuery, filterLowStock, resetPage]);
 
   const catHue = useCallback((catId: string | null) => {
     if (!catId) return 210;
