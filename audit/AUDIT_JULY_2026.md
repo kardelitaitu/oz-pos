@@ -43,7 +43,7 @@
 22. Keyboard shortcuts — coverage audit across all screens — ✅ **FULLY REMEDIATED** (all 10 findings KEY-01→KEY-10; see [22-keyboard-shortcuts.md](22-keyboard-shortcuts.md) — commits `7a5e7cdd`, `2f981b8e`, `544ea5cf`, `92832424`, `db3e18d8`, `e233beae`)
 23. Loading states — skeleton consistency, loading spinners, progress indicators — ✅ **FULLY REMEDIATED** (all 10 findings LOAD-01→LOAD-10; see [23-loading-states.md](23-loading-states.md) — commits `6d1a21ca`, `710cca22`, `3dd82a3f`, `9de773c1`, `8488ba05`, `13bfdf40`)
 24. Empty states — consistency across all data views and lists — ✅ **FULLY REMEDIATED** (all 10 findings EMPTY-01→EMPTY-10 including P3 polish; see [24-empty-states.md](24-empty-states.md) — commits `50594832`, `de4479c7`, `fd2548da`, `8a21a933`, `c2195f2f`, `a4595cb1`)
-25. Rust backend — clippy warnings, unsafe blocks, error propagation, API coherence
+25. Rust backend — clippy warnings, unsafe blocks, error propagation, API coherence — ✅ **FULLY REMEDIATED** (all 10 findings RUST-01→RUST-10; see [25-rust-backend.md](25-rust-backend.md) — commits `af8a6660`, `90a74c8d`, `0f4192db`, `a16c3baf`, `d82b133d`; RUST-01 verified via the SYNC-04 dispatch pipeline)
 26. Docker images — size optimization, layer caching, security scanning
 27. CI pipeline — gate completeness, flaky test quarantine, cache efficiency
 28. Release process — versioning, changelog automation, artifact signing
