@@ -3,7 +3,7 @@
 > **Audit date:** 2026-07-31  
 > **Sector:** Full-app accessibility — ARIA semantics, screen-reader flow, keyboard navigation, focus management, dialogs, localization, reduced motion, and accessibility tests  
 > **Status:** ✅ **FULLY REMEDIATED** — all 12 findings (A11Y-01 → A11Y-12) closed  
-> **Production code changed:** Yes — commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`
+> **Production code changed:** Yes — commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`, `962a0c0f`
 
 ## Scope
 
@@ -75,7 +75,7 @@ Accessibility coverage is primarily component-level. The axe helper wraps screen
 
 **Recommendation:** Move every user-facing accessible name, status, placeholder, chart description, and table label into value-bearing Fluent messages in all supported bundles. Use typed key maps and a deliberate fallback policy that is localized or visibly reports missing translations; do not use raw machine enum values as accessible names. Add a CI scan for literal `aria-label` values and fallback strings.
 
-**Status:** ✅ Closed · `7dd33263` — chart, Qris, price-override, and other hardcoded accessible names moved to Fluent messages in all bundles; `requiredLocalized` replaces `|| 'English'` fallbacks across production components.
+**Status:** ✅ Closed · `7dd33263` (initial sweep) + `962a0c0f` (residual sweep) — chart, Qris, price-override, and other hardcoded accessible names moved to Fluent messages in all bundles; `requiredLocalized` replaces `|| 'English'` fallbacks across production components. `962a0c0f` closed the remaining 10 `getString(...) || raw/English` sites (KdsTicketCard ×2, KdsScreen shortcuts, PromotionManagementScreen, EmailReportSettings, SetupWizard ×5) and added the missing `kds-item-status-*` FTL keys (were referenced but absent from both bundles) plus `modifier-dialog-aria`. A repo-wide grep now confirms zero `getString(...) ||` fallbacks remain in production code.
 
 ### A11Y-05 — Custom listbox, combobox, menu, and tab patterns are only partially implemented
 
@@ -145,7 +145,7 @@ Accessibility coverage is primarily component-level. The axe helper wraps screen
 
 **Recommendation:** Remove redundant ARIA from table headers when the visual header is intentionally empty, use `<caption>`/scope relationships for data tables, replace nested buttons with sibling controls, and minimize `role="application"`. Require accessible names to identify both action and target (for example, localized “Delete {product}”).
 
-**Status:** ✅ Closed · `7dd33263` — redundant ARIA, hardcoded table/action labels, and `role="application"` containers cleaned; accessible names now identify action + target via Fluent.
+**Status:** ✅ Closed · `7dd33263` + `962a0c0f` — redundant ARIA, hardcoded table/action labels, and `role="application"` containers cleaned; accessible names now identify action + target via Fluent. `962a0c0f` localized the last hardcoded labels: ItemModifierModal dialog (`modifier-dialog-aria`) + close button (shared `close` key), and added `attrs={{ 'aria-label': true }}` to the three retail modals' `<Localized id="retail-edit-modal-close-aria">` close buttons (previously the label never localized).
 
 ### A11Y-12 — Accessibility tests do not cover dynamic state transitions and assistive announcements
 
@@ -201,6 +201,7 @@ Every remediation commit ran its focused suites plus typecheck/eslint/i18n lint 
 | `6c1747a9` | A11Y-09 chart data summaries | typecheck clean; 10/10 `chartsA11y` tests; eslint + i18n clean |
 | `d8db28c6` | A11Y-10 forced-colors + compliance gate | typecheck clean; forced-colors + focus-visible + animation suites green (4 tests); eslint + i18n clean |
 | `5c49c449` | A11Y-06 context-menu keyboard pattern | typecheck clean; 16/16 `RestaurantMenu` tests; eslint + i18n clean; forced-colors gate green |
+| `962a0c0f` | A11Y-04/11 residuals — `getString||fallback` sweep (10 sites) + hardcoded aria-labels | typecheck clean; 19 files / 177 tests green (10 affected suites + a11y gates); eslint + i18n lint clean; bundle parity 0 missing; repo-wide grep: zero `getString(...) ||` fallbacks remain |
 
 Final aggregated run: **typecheck 0 errors · eslint clean · i18n lint clean · bundle parity 0 missing · all new suites green** (see `scripts/check.sh`).
 
@@ -214,6 +215,6 @@ Final aggregated run: **typecheck 0 errors · eslint clean · i18n lint clean ·
 
 ## Audit status
 
-✅ **FULLY REMEDIATED.** All 12 findings (A11Y-01 → A11Y-12) are closed by commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`, each linking its item to tests and validation results above.
+✅ **FULLY REMEDIATED.** All 12 findings (A11Y-01 → A11Y-12) are closed by commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`, `962a0c0f`, each linking its item to tests and validation results above. A post-remediation verification sweep re-checked every claimed finding against the codebase: all `role="dialog"` surfaces carry `aria-modal` (A11Y-02 — earlier flag was a false positive), all `<th aria-label="Actions">` are localized, and the remaining `getString(...) ||` fallbacks + hardcoded aria-labels surfaced by that sweep were fixed in `962a0c0f`.
 
 Documented residual (accepted, non-blocking): the shared settings Copy/Paste context menu (`frontend/shared/useContextMenu`) remains pointer-only — the same function is available natively via Ctrl+C/Ctrl+V, so no keyboard-operational gap remains. It is not covered by the `forcedColorsCompliance` gate.

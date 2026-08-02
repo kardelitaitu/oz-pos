@@ -34,7 +34,7 @@
 13. AuditLogScreen — audit trails, log filtering, export — ✅ **FULLY REMEDIATED** (all 11 findings AUD-01→AUD-11; see [13-audit-log-screen.md](13-audit-log-screen.md) — commits `1a4fd1b5`, `174d839f`, `359ad440`, `69abc5af`, `166aa991`, `6e488510`)
 14. LocationPicker / LocationManagement — location CRUD, picker UX
 15. TableManagement — Restaurant table layouts, drag-and-drop, floor plans
-16. Accessibility — full-app ARIA deep dive, screen-reader flow, focus management — ✅ **FULLY REMEDIATED** (all 12 findings A11Y-01→A11Y-12; see [16-accessibility.md](16-accessibility.md) — commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`)
+16. Accessibility — full-app ARIA deep dive, screen-reader flow, focus management — ✅ **FULLY REMEDIATED** (all 12 findings A11Y-01→A11Y-12; see [16-accessibility.md](16-accessibility.md) — commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`, `962a0c0f`)
 17. Performance — bundle size, render optimization, lazy loading, code splitting
 18. Error handling — error boundaries, toast consistency, retry patterns, fallback UI
 19. Offline resilience — retail POS offline mode, queueing, sync-on-reconnect
