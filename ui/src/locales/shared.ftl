@@ -231,6 +231,8 @@ nav-switch-workspace = Switch Workspace
 # Workspace home
 workspace-home-fullscreen-aria = Toggle fullscreen
 workspace-home-fullscreen-hint = F11
+fullscreen-enabled = Fullscreen mode enabled
+fullscreen-disabled = Fullscreen mode disabled
 workspace-home-loading = Loading workspaces…
 workspace-home-loading-aria = Loading workspaces
 workspace-home-sr-error = Connection error

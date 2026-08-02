@@ -286,6 +286,8 @@ spinner-label = Memuat…
 # ── Workspace Home ──
 workspace-home-fullscreen-aria = Alihkan layar penuh
 workspace-home-fullscreen-hint = F11
+fullscreen-enabled = Mode layar penuh aktif
+fullscreen-disabled = Mode layar penuh nonaktif
 workspace-home-user-aria = Masuk sebagai { $name }
 workspace-home-loading = Memuat ruang kerja…
 workspace-home-loading-aria = Memuat ruang kerja

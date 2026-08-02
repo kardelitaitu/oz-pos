@@ -33,8 +33,16 @@ function browserToggleFS(): Promise<boolean> {
  *
  * @param onToggle Optional callback fired after the fullscreen state changes.
  *   Receives `true` when entering fullscreen, `false` when exiting.
+ * @param options.enabled Whether the global F11 listener is active (default
+ *   `true`). Pass `false` when another surface owns F11 — e.g. the retail POS
+ *   assigns F11 to Quick Return, so the shell disables the global fullscreen
+ *   binding while the store-pos workspace is active (KEY-01). The returned
+ *   `toggleFullscreen` function remains available regardless, for buttons.
  */
-export function useFullscreen(onToggle?: (isFullscreen: boolean) => void) {
+export function useFullscreen(
+  onToggle?: (isFullscreen: boolean) => void,
+  options?: { enabled?: boolean },
+) {
   const onToggleRef = useRef(onToggle);
   onToggleRef.current = onToggle;
 
@@ -51,7 +59,9 @@ export function useFullscreen(onToggle?: (isFullscreen: boolean) => void) {
     toggle();
   }, [toggle]);
 
+  const enabled = options?.enabled ?? true;
   useEffect(() => {
+    if (!enabled) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'F11') {
         e.preventDefault();
@@ -60,7 +70,7 @@ export function useFullscreen(onToggle?: (isFullscreen: boolean) => void) {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [toggle]);
+  }, [toggle, enabled]);
 
   return { toggleFullscreen };
 }

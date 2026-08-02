@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -59,6 +60,7 @@ function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
  * and renders the main AppLayout with registry-based page routing.
  */
 export default function AppShell() {
+  const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [hasActiveLicense, setHasActiveLicense] = useState(false);
@@ -276,14 +278,20 @@ export default function AppShell() {
   ) : null;
 
   // ── F11 toggles fullscreen across all workpaces ───────────────
-  useFullscreen((isFullscreen) => {
-    addToast({
-      type: 'info',
-      message: isFullscreen
-        ? 'Fullscreen mode enabled'
-        : 'Fullscreen mode disabled',
-    });
-  });
+  // KEY-01: the retail POS (store-pos) assigns F11 to Quick Return, so the
+  // global fullscreen binding is disabled there — F11 has exactly one owner
+  // per workspace. (Fullscreen stays reachable via the WorkspaceHome button.)
+  useFullscreen(
+    (isFullscreen) => {
+      addToast({
+        type: 'info',
+        message: isFullscreen
+          ? requiredLocalized(l10n, 'fullscreen-enabled')
+          : requiredLocalized(l10n, 'fullscreen-disabled'),
+      });
+    },
+    { enabled: activeWorkspace !== 'store-pos' },
+  );
 
   // ── Escape key navigates back to workspace picker ────────────
 

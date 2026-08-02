@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { formatMoney, type Money, type LineId } from '@/types/domain';
@@ -8,6 +8,7 @@ import type { ShiftDto } from '@/api/shifts';
 import type { StoreSettingsDto, CreditSaleDto } from '@/api/settings';
 import type { ProductDto, CategoryDto } from '@/api/products';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { RETAIL_HELP_SHORTCUTS } from './retailShortcuts';
 import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
 import { EditProductModal } from './EditProductModal';
 import { AddCategoryModal } from './AddCategoryModal';
@@ -714,22 +715,16 @@ export default function RetailModals(props: RetailModalsProps) {
             className={`retail-shortcuts-modal${shortcuts.exit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`}
           >
             <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
+            {/* Shortcut list is rendered from the typed manifest (retailShortcuts.ts)
+                so the help overlay, function bar, and keydown handler cannot drift
+                apart (KEY-02). F11 is listed as Quick Return — its single owner. */}
             <div className="retail-shortcuts-grid">
-              <span className="retail-shortcuts-key">F1</span><span>{l10n.getString('retail-shortcut-pay')}</span>
-              <span className="retail-shortcuts-key">F2</span><span>{l10n.getString('retail-shortcut-clear')}</span>
-              <span className="retail-shortcuts-key">F3</span><span>{l10n.getString('retail-shortcut-discount')}</span>
-              <span className="retail-shortcuts-key">F4</span><span>{l10n.getString('retail-shortcut-hold')}</span>
-              <span className="retail-shortcuts-key">F5</span><span>{l10n.getString('retail-shortcut-sku')}</span>
-              <span className="retail-shortcuts-key">F6</span><span>{l10n.getString('retail-fn-history')}</span>
-              <span className="retail-shortcuts-key">F7</span><span>{l10n.getString('retail-fn-pelanggan')}</span>
-              <span className="retail-shortcuts-key">F8</span><span>{l10n.getString('retail-fn-stok')}</span>
-              <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
-              <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
-              <span className="retail-shortcuts-key">F11</span><span>{requiredLocalized(l10n, 'retail-shortcut-fullscreen')}</span>
-              <span className="retail-shortcuts-key">?</span><span>{l10n.getString('retail-shortcut-list')}</span>
-              <span className="retail-shortcuts-key">Ctrl+K</span><span>{requiredLocalized(l10n, 'retail-shortcut-credit')}</span>
-              <span className="retail-shortcuts-key">F12</span><span>{requiredLocalized(l10n, 'kds-title')}</span>
-              <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
+              {RETAIL_HELP_SHORTCUTS.map((s) => (
+                <Fragment key={s.action}>
+                  <span className="retail-shortcuts-key">{s.key}</span>
+                  <span>{requiredLocalized(l10n, s.labelId)}</span>
+                </Fragment>
+              ))}
             </div>
             <button type="button" className="retail-shortcuts-close" onClick={() => shortcuts.exit.requestClose()}>{l10n.getString('close')}</button>
           </div>

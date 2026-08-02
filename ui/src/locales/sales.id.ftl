@@ -773,6 +773,7 @@ retail-shortcut-list = Daftar pintasan
 retail-shortcut-close = Tutup modal / Opsi
 retail-shortcut-fullscreen = Alihkan Layar Penuh
 retail-shortcut-credit = Pengingat kredit
+retail-shortcut-low-stock = Filter produk stok rendah
 retail-toast-failed-products = Gagal memuat produk
 retail-toast-failed-categories = Gagal memuat kategori
 retail-toast-failed-settings = Gagal memuat pengaturan toko

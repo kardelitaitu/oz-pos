@@ -783,6 +783,7 @@ retail-shortcut-list = This shortcut list
 retail-shortcut-close = Close modal / Options
 retail-shortcut-fullscreen = Toggle Fullscreen
 retail-shortcut-credit = Credit reminders
+retail-shortcut-low-stock = Filter low-stock products
 retail-toast-failed-products = Failed to load products
 retail-toast-failed-categories = Failed to load categories
 retail-toast-failed-settings = Failed to load store settings
