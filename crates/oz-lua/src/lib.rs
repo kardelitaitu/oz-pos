@@ -34,7 +34,10 @@ findings: Migrated from rlua to mlua 0.9. Native memory limit (10 MiB) now enfor
 //! | `calc_line_tax` | `(sku, qty, unit_price_minor, currency) → {rate_bps, is_inclusive} \| nil` | During tax computation |
 //! | `validate_order` | `(lines_json, total_minor, currency) → string[]` | Before completion |
 
-#![warn(unsafe_code)]
+// RUST-06: deny at crate root — the only unsafe items are the two
+// `unsafe impl Send/Sync` for `LuaRuntime` below, each narrowly scoped
+// with `#[allow(unsafe_code)]` and a `// SAFETY:` rationale.
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 use std::path::Path;

@@ -19,7 +19,7 @@ next: None | perf: Arc<Mutex<Connection>> is the standard axum+rusqlite pattern;
 //! # use oz_api::serve;
 //! // In apps/desktop-client/src/main.rs or a background task:
 //! let rt = tokio::runtime::Runtime::new().unwrap();
-//! rt.block_on(serve());
+//! rt.block_on(serve()).expect("API server failed to start");
 //! ```
 //!
 //! Then generate a token:
@@ -127,14 +127,19 @@ pub fn router(state: AppState) -> Router {
 /// Opens the SQLite database at `OZ_DB_PATH` (default `oz-pos.db`), runs
 /// migrations, and blocks on the server loop. Spawn in a background
 /// `tokio::task` if the caller needs to continue.
-pub async fn serve() {
+///
+/// RUST-07: startup failures (DB open, migration, bind) are returned as
+/// [`Result`] instead of panicking, so the caller can log and exit with a
+/// structured error rather than a process-fatal panic.
+pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
-    let mut conn = Connection::open(&db_path).expect("failed to open API database");
+    let mut conn = Connection::open(&db_path)
+        .map_err(|e| format!("failed to open API database at {db_path}: {e}"))?;
     conn.pragma_update(None, "foreign_keys", "ON")
-        .expect("enabling foreign_keys");
+        .map_err(|e| format!("enabling foreign_keys: {e}"))?;
     conn.pragma_update(None, "journal_mode", "WAL")
-        .expect("enabling WAL");
-    oz_core::migrations::run(&mut conn).expect("running migrations");
+        .map_err(|e| format!("enabling WAL: {e}"))?;
+    oz_core::migrations::run(&mut conn).map_err(|e| format!("running migrations: {e}"))?;
 
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
@@ -147,11 +152,12 @@ pub async fn serve() {
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
-        .expect("failed to bind API port");
+        .map_err(|e| format!("failed to bind API port {port}: {e}"))?;
     info!(port, "OZ-POS API server listening");
     axum::serve(listener, router(state))
         .await
-        .expect("API server exited with error");
+        .map_err(|e| format!("API server exited with error: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,12 +1,15 @@
 /*
 last audited 19-07-26 by RSA-Agent
 crate: oz-hal | status: SAFE | lint: CLEAN
-findings: No actual unsafe blocks present. #![allow(unsafe_code)] is forward-looking for planned
-  FFI drivers (barcode scanners, receipt printers). All traits have programmable mocks (drivers::mock).
-  13 unit tests pass. DriverRegistry provides safe abstraction over device enumeration.
+findings: No actual unsafe blocks present. #![deny(unsafe_code)] (RUST-06): the crate is currently
+  pure-safe — all device drivers are mocked. When a real FFI driver lands, the unsafe block MUST
+  be scoped to that module with a `// SAFETY:` comment and an item-level `#[allow(unsafe_code)]`,
+  keeping the crate root deny in force everywhere else.
 next: Add SAFETY comments when real FFI drivers are implemented | perf: Mock drivers are zero-alloc.
 */
-#![allow(unsafe_code)]
+// RUST-06: no unsafe code exists today; deny at crate root so any future
+// unsafe addition requires an explicit, narrowly-scoped reviewable allow.
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 //! Hardware Abstraction Layer for OZ-POS.

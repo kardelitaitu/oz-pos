@@ -8,6 +8,36 @@
 //!
 //! Domain methods are organised into sub-modules, each one implementing
 //! `impl Store<'_>` for a logical domain (products, sales, customers, etc.).
+//!
+//! # Repository transaction contract (RUST-08)
+//!
+//! The facade deliberately uses [`rusqlite::Connection::unchecked_transaction`]
+//! rather than the checked `Connection::transaction` because [`Store`] borrows
+//! `&Connection` (checked transactions require `&mut Connection`, which would
+//! force callers to hold a mutable borrow of the shared pool for the whole
+//! write). The contract for every method in this module is:
+//!
+//! 1. **Standalone atomic commands own their transaction.** Any method that
+//!    must write multiple rows atomically opens its own
+//!    `unchecked_transaction()` and commits it before returning. Callers rely
+//!    on this: a single `Store::method(...)` call is always all-or-nothing.
+//! 2. **Composable methods never nest.** A method that calls another `Store`
+//!    method which itself opens a transaction MUST NOT wrap that call in an
+//!    outer transaction — SQLite rejects nested transactions, and the inner
+//!    `unchecked_transaction()` would fail with "cannot start a transaction
+//!    within a transaction". See `db/settings.rs` workspace tests which
+//!    pin this boundary. If true cross-method atomicity is required, implement
+//!    a dedicated method that performs all writes inside one transaction.
+//! 3. **Read-only methods never open a transaction.** Queries run directly on
+//!    the connection; a reader must never hold a write lock.
+//! 4. **Error paths roll back.** Every `unchecked_transaction()` result is
+//!    mapped with `?`/`map_err` so a failure drops the transaction (rollback)
+//!    instead of committing a partial write.
+//!
+//! Adding a new database method that opens a transaction internally is a
+//! review point: confirm it is standalone-atomic (not composable), confirm it
+//! cannot be invoked from inside another transaction, and document any
+//! deliberate exception here.
 
 use rusqlite::Connection;
 
