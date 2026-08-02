@@ -2,8 +2,19 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { requiredLocalized } from '@/frontend/shared';
-import { listInventoryLocations, type InventoryLocation } from '@/api/inventory';
+import {
+  listInventoryLocations,
+  getWorkspaceLocations,
+  type InventoryLocation,
+} from '@/api/inventory';
 import './LocationPicker.css';
+
+// LOC-08: a location the picker can offer, optionally annotated with the
+// binding policy of the current workspace (primary / negative-stock allowance).
+type PickerLocation = InventoryLocation & {
+  is_primary?: boolean;
+  allow_negative_stock?: boolean;
+};
 
 // ── Location type label mapping (LOC-05) ───────────────────────────
 // Every supported type maps to a value-bearing Fluent key; unknown future
@@ -54,12 +65,13 @@ const LocationPicker = memo(function LocationPicker({
   // LOC-07: reload whenever the active workspace instance changes so a picker
   // left mounted across a workspace/store switch never serves stale locations.
   const instanceId = activeInstance?.instance_id;
+  const typeKey = activeInstance?.type_key;
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
   const token = sessionToken ?? '';
 
-  const [locations, setLocations] = useState<InventoryLocation[]>([]);
+  const [locations, setLocations] = useState<PickerLocation[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,7 +96,38 @@ const LocationPicker = memo(function LocationPicker({
     try {
       const data = await listInventoryLocations(token);
       if (seq !== loadSeqRef.current) return;
-      setLocations(data.filter((loc) => loc.is_active));
+      let scoped = data.filter((loc) => loc.is_active);
+
+      // LOC-08: when a workspace instance is active, restrict the picker to
+      // locations BOUND to that workspace (with their binding policy) so the
+      // selection always matches the stock-operation scope. Falls back to the
+      // full active list when the workspace declares no bindings — a fresh
+      // workspace without bindings must still be able to pick a location.
+      if (instanceId && typeKey) {
+        try {
+          const bindings = await getWorkspaceLocations(token, instanceId, typeKey);
+          if (seq !== loadSeqRef.current) return;
+          if (bindings.length > 0) {
+            const bindingById = new Map(bindings.map((b) => [b.location_id, b]));
+            scoped = scoped
+              .filter((loc) => bindingById.has(loc.id))
+              .map((loc) => {
+                const b = bindingById.get(loc.id)!;
+                return {
+                  ...loc,
+                  is_primary: b.is_primary,
+                  allow_negative_stock: b.allow_negative_stock,
+                };
+              });
+          }
+        } catch {
+          // Binding fetch failure is non-fatal: fall back to the full active
+          // list rather than hiding the picker (same resilience as the main
+          // load — the picker must never silently disappear).
+        }
+      }
+
+      setLocations(scoped);
     } catch {
       if (seq !== loadSeqRef.current) return;
       // Durable error state (INV-08): surface a retry affordance instead
@@ -93,7 +136,7 @@ const LocationPicker = memo(function LocationPicker({
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [token]); // l10n via ref — stable dep chain
+  }, [token, instanceId, typeKey]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     load();
@@ -296,6 +339,16 @@ const LocationPicker = memo(function LocationPicker({
                 <span className="location-picker-option-name">{loc.name}</span>
                 <span className="location-picker-option-meta">
                   {locationTypeLabel(l10n, loc.type)}
+                  {loc.is_primary && (
+                    <span className="location-picker-badge location-picker-badge--primary">
+                      {requiredLocalized(l10n, 'loc-picker-badge-primary')}
+                    </span>
+                  )}
+                  {loc.allow_negative_stock && (
+                    <span className="location-picker-badge location-picker-badge--neg">
+                      {requiredLocalized(l10n, 'loc-picker-badge-neg-stock')}
+                    </span>
+                  )}
                 </span>
               </button>
             </li>

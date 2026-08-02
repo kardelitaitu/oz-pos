@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
@@ -17,7 +17,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({
     sessionToken: 'mock-session-token',
-    activeInstance: { instance_id: 'inst-1' },
+    activeInstance: { instance_id: 'inst-1', type_key: 'store-pos' },
     swapSessionToken: vi.fn(),
   }),
 }));
@@ -31,6 +31,7 @@ const mockLocations = [
 ];
 
 const mockListLocations = vi.fn();
+const mockGetWorkspaceLocations = vi.fn();
 
 vi.mock('@/api/inventory', async (importOriginal) => {
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -38,6 +39,7 @@ vi.mock('@/api/inventory', async (importOriginal) => {
   return {
     ...actual,
     listInventoryLocations: (...args: unknown[]) => mockListLocations(...args),
+    getWorkspaceLocations: (...args: unknown[]) => mockGetWorkspaceLocations(...args),
   };
 });
 
@@ -45,6 +47,9 @@ describe('LocationPicker', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockListLocations.mockResolvedValue(mockLocations);
+    // Default: no workspace bindings → the picker falls back to the full
+    // active list (LOC-08). LOC-08 tests override this with real bindings.
+    mockGetWorkspaceLocations.mockResolvedValue([]);
   });
 
   // ── Renders trigger with current value ──────────────────────────
@@ -493,6 +498,70 @@ describe('LocationPicker', () => {
     expect(screen.queryByText('Stale Warehouse')).not.toBeInTheDocument();
     // The fresh list is still what's shown.
     expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+  });
+
+  // ── LOC-08: workspace-bound picker source ───────────────────────
+
+  it('scopes the dropdown to workspace bindings and shows policy badges', async () => {
+    const user = userEvent.setup();
+    // Only Store Front (primary) and In Transit (negative stock) are bound to
+    // this workspace — Warehouse A is globally active but belongs to another
+    // workspace's binding set, so it must NOT be offered here.
+    mockGetWorkspaceLocations.mockResolvedValue([
+      { location_id: 'loc-store', location_name: 'Store Front', is_primary: true, allow_negative_stock: false },
+      { location_id: 'loc-transit', location_name: 'In Transit', is_primary: false, allow_negative_stock: true },
+    ]);
+    renderWithProviders(
+      <LocationPicker value="loc-store" onChange={vi.fn()} />,
+      inventoryFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Store Front')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const trigger = screen.getByRole('button', { name: /select inventory location/i });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const listbox = screen.getByRole('listbox');
+    // Bound locations appear; the unbound Warehouse A must be absent.
+    expect(within(listbox).getByText('Store Front')).toBeInTheDocument();
+    expect(within(listbox).getByText('In Transit')).toBeInTheDocument();
+    expect(within(listbox).queryByText('Warehouse A')).not.toBeInTheDocument();
+    // Binding policy is surfaced: Primary badge + negative-stock badge.
+    expect(within(listbox).getByText('Primary')).toBeInTheDocument();
+    expect(within(listbox).getByText('Neg. stock')).toBeInTheDocument();
+  });
+
+  it('falls back to the full active list when the workspace has no bindings', async () => {
+    const user = userEvent.setup();
+    // Default mockGetWorkspaceLocations resolves [] → full list fallback.
+    renderWithProviders(
+      <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
+      inventoryFtl,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Warehouse A')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const trigger = screen.getByRole('button', { name: /select inventory location/i });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    const listbox = screen.getByRole('listbox');
+    // Every globally-active location is offered (pre-binding fallback).
+    expect(within(listbox).getByText('Warehouse A')).toBeInTheDocument();
+    expect(within(listbox).getByText('Store Front')).toBeInTheDocument();
+    expect(within(listbox).getByText('In Transit')).toBeInTheDocument();
+    // No binding policy badges when the workspace declares none.
+    expect(within(listbox).queryByText('Primary')).not.toBeInTheDocument();
+    expect(within(listbox).queryByText('Neg. stock')).not.toBeInTheDocument();
   });
 
   it('restores focus to the trigger and closes on Escape', async () => {
