@@ -323,8 +323,11 @@
 
 @media (pointer: coarse) {
   .staff-login-submit-btn {
-    width: 2.75rem;
-    height: 2.75rem;
+    /* 48px (matches the --tablet-tap-target token) instead of the 2rem
+       desktop size: guarantees the ≥44px WCAG touch-target floor even
+       after devicePixelRatio sub-pixel rounding on tablet screens. */
+    width: 3rem;
+    height: 3rem;
   }
 }
 
