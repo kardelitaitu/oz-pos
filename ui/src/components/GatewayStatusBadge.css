@@ -22,3 +22,18 @@
 .gateway-badge__name {
   color: var(--color-fg-secondary);
 }
+
+/* Forced-colors — solid = online, hollow = offline (A11Y-10) */
+@media (forced-colors: active) {
+  .gateway-badge__dot {
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+  .gateway-badge__dot.online {
+    background: ButtonText;
+  }
+  .gateway-badge__dot.offline {
+    background: ButtonFace;
+    border: 1px solid ButtonText;
+  }
+}

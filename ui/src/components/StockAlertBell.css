@@ -44,3 +44,17 @@
   text-align: center;
   pointer-events: none;
 }
+
+/* Forced-colors — badge keeps a visible pill outline; the count text is the
+   non-colour redundancy (A11Y-10). Focus ring uses system Highlight. */
+@media (forced-colors: active) {
+  .stock-alert-bell-badge {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+  .stock-alert-bell:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

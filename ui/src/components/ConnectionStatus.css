@@ -69,3 +69,28 @@
   50% { opacity: 1; }
   100% { opacity: 0.5; }
 }
+
+/* Forced-colors — structural status indicators (A11Y-10)
+ * checking = dashed, online = solid fill, warning = hollow, offline = thick hollow */
+@media (forced-colors: active) {
+  .status-indicator {
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+  .status-indicator.checking {
+    background: ButtonFace;
+    border: 1px dashed ButtonText;
+    animation: none;
+  }
+  .status-indicator.online {
+    background: ButtonText;
+  }
+  .status-indicator.warning {
+    background: ButtonFace;
+    border: 1px solid ButtonText;
+  }
+  .status-indicator.offline {
+    background: ButtonFace;
+    border: 2px solid ButtonText;
+  }
+}
