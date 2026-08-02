@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** Front-end and IPC performance — bundle size, code splitting, initial load, React render efficiency, polling, IPC round trips, database/query efficiency, assets, and measurement  
-> **Status:** AUDITED · bundle, render, IPC, and measurement findings require remediation  
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 10 findings (PERF-01→PERF-10) closed across 5 phases; see Remediation log below  
+> **Production code changed:** Yes — see commit chain in Remediation log
 
 ## Scope
 
@@ -44,7 +44,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Make page registrations lazy-loadable while preserving the registry API, or split the registry into lightweight metadata plus dynamic component loaders. Keep authentication/setup gates in the critical path, but defer secondary features until navigation. Add a Suspense fallback and route-level chunk-load error recovery. Measure cold-start and first-interaction time before and after the change.
 
-**Status:** Open · P1 initial-load performance
+**Status:** REMEDIATED · P1 initial-load performance — see Remediation log (commit `2b762b08`)
 
 ### PERF-02 — The production entry bundle exceeds a practical performance budget
 
@@ -54,7 +54,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Define budgets for initial JS/CSS, route chunks, and total compressed assets. Fail CI on meaningful regressions with a documented exception process. Track raw and gzip/brotli sizes per build, then split large domains and remove unused code/assets from the initial path.
 
-**Status:** Open · P1 release-performance governance
+**Status:** REMEDIATED · P1 release-performance governance — see Remediation log (commit `2b762b08`)
 
 ### PERF-03 — Retail serial-tracking lookup performs one IPC request per unique cart SKU
 
@@ -64,7 +64,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Add a batch command/API accepting a bounded SKU array and return a map, or expose tracking capability in the product payload already loaded by the grid. Cache results by store/session and invalidate only when product configuration changes. Add a contract test for batching and a performance test at realistic cart sizes.
 
-**Status:** Open · P1 IPC efficiency
+**Status:** REMEDIATED · P1 IPC efficiency — see Remediation log (commit `2e1f3d31`)
 
 ### PERF-04 — Cart resize updates React state and localStorage on every mousemove
 
@@ -74,7 +74,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Store the live width in a ref/CSS custom property during the drag and schedule at most one update per animation frame. Persist only on mouseup (or with a debounced write). Avoid repeated layout reads where possible by using the initial panel geometry and pointer delta. Add a drag performance regression test or browser trace budget.
 
-**Status:** Open · P2 interaction performance
+**Status:** REMEDIATED · P2 interaction performance — see Remediation log (commit `2e1f3d31`)
 
 ### PERF-05 — No deliberate production route-level chunk strategy is configured
 
@@ -84,7 +84,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Establish stable domain chunks for sales/POS, inventory, reports, settings, and optional integrations, or use lazy page components to let Rollup form route chunks. Verify that shared dependencies remain shared and that critical POS dependencies are not duplicated across chunks.
 
-**Status:** Open · P2 architecture/performance
+**Status:** REMEDIATED · P2 architecture/performance — see Remediation log (commit `2b762b08`)
 
 ### PERF-06 — Performance measurement is not an enforced part of the development or release loop
 
@@ -94,7 +94,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Define a small set of measurable budgets: time to first shell, time to interactive POS, route chunk load, long tasks during checkout, IPC p95 latency, and initial bundle gzip size. Collect development/CI traces without sending production-sensitive data, and publish results alongside release checks.
 
-**Status:** Open · P2 observability gap
+**Status:** REMEDIATED · P2 observability gap — see Remediation log (commit `50b50836`)
 
 ### PERF-07 — Large-list virtualization is not an established cross-feature contract
 
@@ -104,7 +104,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Set explicit limits and pagination rules for every unbounded collection, then use virtualization only where row height and interaction semantics support it. Add a shared data-list primitive with loading/empty/error states and performance tests at 1k/10k-row fixtures.
 
-**Status:** Open · P2 scalability risk
+**Status:** REMEDIATED · P2 scalability risk — see Remediation log (commit `bf376234`)
 
 ### PERF-08 — Product and category loading can perform multiple independent requests on every retail workspace/session load
 
@@ -114,7 +114,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Add a scoped catalog cache with request deduplication and explicit invalidation after product/category mutations. Return only fields needed for the product grid or provide a paginated/search API for large catalogs. Instrument payload bytes and request latency before optimizing.
 
-**Status:** Open · P2 data-loading efficiency
+**Status:** REMEDIATED · P2 data-loading efficiency — see Remediation log (commit `bf376234`)
 
 ### PERF-09 — Chart rendering and canvas assets lack a documented accessibility/performance policy
 
@@ -124,7 +124,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Bound or aggregate chart points before rendering, coalesce redraws with requestAnimationFrame, avoid drawing every label at high cardinality, and add a chart fixture benchmark for small/medium/large datasets. Keep the accessible data representation from the accessibility audit synchronized with the performance limit.
 
-**Status:** Open · P3 reporting performance
+**Status:** REMEDIATED · P3 reporting performance — see Remediation log (commit `df753501`)
 
 ### PERF-10 — Performance validation is build-centric and lacks runtime desktop/tablet coverage
 
@@ -134,7 +134,7 @@ The largest observed production build artifact was a single `dist/assets/index-B
 
 **Recommendation:** Add a small repeatable Playwright performance smoke suite for desktop and tablet: startup to interactive, route transition, product search, add-to-cart, checkout open, and KDS refresh. Store only aggregate timings and fail on large regressions with environment-aware thresholds.
 
-**Status:** Open · P3 QA gap
+**Status:** REMEDIATED · P3 QA gap — see Remediation log (commit `50b50836`)
 
 ## Positive controls observed
 
@@ -176,6 +176,18 @@ These checks establish a baseline; they do not replace runtime profiling on repr
 4. **PERF-07/PERF-08:** Standardize large-list limits, virtualization, and catalog request caching.
 5. **PERF-09:** Bound and measure chart redraw/render cost.
 
+## Remediation log
+
+All 10 findings were remediated in five phases, each validated locally (typecheck, unit tests, lint, and targeted E2E) before commit:
+
+| Phase | Findings | Commit | Validation |
+|---|---|---|---|
+| 1 | PERF-01/02/05 — route-level code splitting, vendor chunks, compressed bundle budget gate | `2b762b08` | `npm run build` passes the new budget gate; typecheck + lint clean |
+| 2 | PERF-03/04 — batch serial-tracking IPC (kills the per-SKU N+1) + rAF-throttled retail cart resize | `2e1f3d31` | typecheck clean; 133/133 retail/serial tests green; lint clean |
+| 3 | PERF-06/10 — runtime metrics capture (`ui/src/utils/perf-metrics.ts` + probe) + Playwright perf smoke suite (`ui/e2e/perf-smoke.spec.ts`) wired into `npm run e2e` / `check-ui.mjs` | `50b50836` | 12/12 perf smoke tests pass on desktop + tablet; 28/28 metrics unit tests |
+| 4 | PERF-07/08 — shared list policy (`list-policy.ts`) + `usePagedList` hook + scoped catalog cache (`catalog-cache.ts`) with in-flight dedup + explicit invalidation | `bf376234` | typecheck clean; 17/17 policy/cache tests; 70/70 retail POS tests |
+| 5 | PERF-09 — chart rendering policy (`chart-policy.ts`): point/slice downsampling, accessible-list cap, rAF-coalesced redraws, localized "Other" slice, fixture benchmark | `df753501` | typecheck clean; 18/18 policy benchmark tests; 10/10 chart a11y tests; 33/33 dashboard/widget tests; i18n lint + bundle parity clean |
+
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+This evidence-based audit was fully remediated on 2026-08-02. Each PERF finding above links to its closing commit and the validation that preceded it. The Playwright perf smoke suite (`ui/e2e/perf-smoke.spec.ts`) and the bundle budget gate now guard against regression in CI; `scripts/check-ui.mjs` runs them automatically when Playwright is available.

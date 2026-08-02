@@ -35,7 +35,7 @@
 14. LocationPicker / LocationManagement — location CRUD, picker UX
 15. TableManagement — Restaurant table layouts, drag-and-drop, floor plans
 16. Accessibility — full-app ARIA deep dive, screen-reader flow, focus management — ✅ **FULLY REMEDIATED** (all 12 findings A11Y-01→A11Y-12; see [16-accessibility.md](16-accessibility.md) — commits `ef370c19`, `ee8c6580`, `7dd33263`, `00c99b75`, `6c1747a9`, `d8db28c6`, `5c49c449`, `962a0c0f`)
-17. Performance — bundle size, render optimization, lazy loading, code splitting
+17. Performance — bundle size, render optimization, lazy loading, code splitting — ✅ **FULLY REMEDIATED** (all 10 findings PERF-01→PERF-10; see [17-performance.md](17-performance.md) — commits `2b762b08`, `2e1f3d31`, `50b50836`, `bf376234`, `df753501`)
 18. Error handling — error boundaries, toast consistency, retry patterns, fallback UI
 19. Offline resilience — retail POS offline mode, queueing, sync-on-reconnect
 20. Mobile / tablet responsiveness — index.tablet.html, touch UX, viewport
