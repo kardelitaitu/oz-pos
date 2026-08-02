@@ -17,5 +17,9 @@ tables-section-label = Bagian: { $section }
 tables-mark-available = Tandai Tersedia
 tables-release = Lepaskan
 tables-table-label = { $name }, { $status }
+tables-load-error = Gagal memuat denah.
+tables-empty = Belum ada meja yang dikonfigurasi.
+tables-empty-desc = Tambahkan meja dari layar pengaturan untuk membuat denah Anda.
+tables-empty-filtered = Tidak ada meja di bagian ini.
 
 # ── Tax Configuration ──

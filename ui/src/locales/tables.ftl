@@ -19,3 +19,7 @@ tables-section-label = Section: { $section }
 tables-mark-available = Mark Available
 tables-release = Release
 tables-table-label = { $name }, { $status }
+tables-load-error = Could not load the floor plan.
+tables-empty = No tables configured yet.
+tables-empty-desc = Add tables from the settings screen to build your floor plan.
+tables-empty-filtered = No tables in this section.
