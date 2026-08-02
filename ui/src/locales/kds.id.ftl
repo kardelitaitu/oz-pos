@@ -81,6 +81,12 @@ kds-edit-cancel-aria = Batal edit
 kds-offline-label = Luring — menampilkan pesanan tersimpan
 kds-offline-queued = { $count } pembaruan antri — luring
 kds-offline-queued-update = Pembaruan antri — akan sinkron saat online
+# OFF-05: aksi yang kehabisan percobaan dan butuh perhatian operator
+kds-offline-dead-letter = { $count } pembaruan tidak dapat disinkronkan setelah beberapa percobaan. Ketuk Coba Lagi untuk mengantre ulang atau hapus untuk menutup.
+kds-offline-dead-letter-aria = Pembaruan gagal menunggu perhatian operator
+kds-offline-dead-letter-clear-aria = Hapus pembaruan gagal
+# OFF-08: penyimpanan lokal tidak tersedia — aksi antre tidak permanen
+kds-offline-storage-unavailable = Penyimpanan luring lokal tidak tersedia. Pembaruan yang antre akan hilang saat memuat ulang.
 kds-offline-retry = Coba Lagi
 kds-offline-retry-aria = Coba lagi pembaruan tertunda
 kds-offline-dismiss-aria = Tutup banner luring

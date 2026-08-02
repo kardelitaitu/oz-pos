@@ -103,8 +103,9 @@ export default function KdsScreen() {
 
   // 3b: Offline resilience — cache, retry queue, optimistic updates.
   const {
-    online, pendingQueueLength,
-    wrapFetch, wrapUpdate, retryPending,
+    online, pendingQueueLength, deadLetterLength,
+    wrapFetch, wrapUpdate, retryPending, clearDeadLetter,
+    forceRetryCounter, storageUnavailable,
   } = useKdsOffline();
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
@@ -236,6 +237,21 @@ export default function KdsScreen() {
       // Silent — the backend will emit kds:orders-changed on next poll.
     }
   }, [sessionToken, speak, l10n]);
+
+  // OFF-04: reconnect is a first-class transition. When the OS fires an
+  // `online` event the hook bumps forceRetryCounter; we turn that into a
+  // bounded fetch/probe cycle. The probe succeeds only if the backend is
+  // reachable, and the post-fetch flush replays any queued actions.
+  const reconnectRef = useRef(false);
+  useEffect(() => {
+    if (forceRetryCounter === 0) return;
+    // Serialize: skip if a fetch/retry is already in flight.
+    if (reconnectRef.current) return;
+    reconnectRef.current = true;
+    void fetchOrders().finally(() => {
+      reconnectRef.current = false;
+    });
+  }, [forceRetryCounter, fetchOrders]);
 
   // 1c: Auto-acknowledge — when enabled, advance pending tickets to
   // preparing after acknowledgeDelayMin minutes without manual tap.
@@ -500,6 +516,50 @@ export default function KdsScreen() {
             className="kds-error-dismiss-btn"
             onClick={clearError}
             aria-label={requiredLocalized(l10n, 'kds-error-dismiss-aria')}
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* OFF-08: local persistence is unavailable — queued actions are not durable */}
+      {storageUnavailable && (
+        <div className="kds-offline-banner kds-offline-banner--storage" role="alert">
+          <span className="kds-offline-banner-text">
+            {requiredLocalized(l10n, 'kds-offline-storage-unavailable')}
+          </span>
+        </div>
+      )}
+
+      {/* OFF-05: actions that exhausted retries and need operator attention */}
+      {deadLetterLength > 0 && (
+        <div className="kds-offline-banner kds-offline-banner--deadletter" role="alert">
+          <span className="kds-offline-banner-text">
+            {requiredLocalized(l10n, 'kds-offline-dead-letter', { count: String(deadLetterLength) })}
+          </span>
+          <button
+            className="kds-offline-retry-btn"
+            onClick={() => {
+              // Re-queue dead-letter actions: clear the dead list so the next
+              // fetch/retry cycle picks up the operator intent; then flush.
+              clearDeadLetter();
+              retryPending(async (action) => {
+                try {
+                  await updateKdsStatusScoped(sessionToken, action.orderId, action.targetStatus);
+                  return true;
+                } catch {
+                  return false;
+                }
+              });
+            }}
+            aria-label={requiredLocalized(l10n, 'kds-offline-retry-aria')}
+          >
+            <Localized id="kds-offline-retry">Retry</Localized>
+          </button>
+          <button
+            className="kds-offline-dismiss-btn"
+            onClick={clearDeadLetter}
+            aria-label={requiredLocalized(l10n, 'kds-offline-dead-letter-clear-aria')}
           >
             &times;
           </button>

@@ -89,6 +89,12 @@ kds-course-modifier-separator =:
 kds-offline-label = Offline — showing cached orders
 kds-offline-queued = { $count } update(s) queued — offline
 kds-offline-queued-update = Update queued — will sync when online
+# OFF-05: actions that exhausted retries and need operator attention
+kds-offline-dead-letter = { $count } update(s) could not be synced after repeated attempts. Tap Retry to re-queue or clear to dismiss.
+kds-offline-dead-letter-aria = Failed updates awaiting operator attention
+kds-offline-dead-letter-clear-aria = Clear failed updates
+# OFF-08: local persistence is unavailable — queued actions are not durable
+kds-offline-storage-unavailable = Local offline storage is unavailable. Queued updates will be lost on reload.
 kds-offline-retry = Retry
 kds-offline-retry-aria = Retry pending updates
 kds-offline-dismiss-aria = Dismiss offline banner

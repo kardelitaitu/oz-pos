@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useKdsOffline } from '@/hooks/useKdsOffline';
+import { useKdsOffline, MAX_RETRY_ATTEMPTS } from '@/hooks/useKdsOffline';
 import type { KdsOrder } from '@/api/kds';
 import type { PendingKdsAction } from '@/hooks/useKdsOffline';
 
@@ -9,6 +9,7 @@ import type { PendingKdsAction } from '@/hooks/useKdsOffline';
 const LS_CACHED_ORDERS = 'kds-cached-orders';
 const LS_LAST_SYNC = 'kds-last-sync';
 const LS_OFFLINE_QUEUE = 'kds-offline-queue';
+const LS_DEAD_LETTER = 'kds-offline-dead-letter';
 
 function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
   return {
@@ -40,6 +41,7 @@ function drainLocalStorage(): void {
   localStorage.removeItem(LS_CACHED_ORDERS);
   localStorage.removeItem(LS_LAST_SYNC);
   localStorage.removeItem(LS_OFFLINE_QUEUE);
+  localStorage.removeItem(LS_DEAD_LETTER);
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────
@@ -386,7 +388,8 @@ describe('useKdsOffline', () => {
       expect(count).toBe(0);
       expect(result.current.pendingQueueLength).toBe(1);
       expect(result.current.pendingActions[0]!.retryCount).toBe(1);
-      expect(result.current.pendingActions[0]!.lastError).toBe('Retry failed');
+      // OFF-05: the real error is preserved (not a generic 'Retry failed').
+      expect(result.current.pendingActions[0]!.lastError).toBe('Execute error');
     });
 
     it('returns to online when all pending actions succeed', async () => {
@@ -402,6 +405,168 @@ describe('useKdsOffline', () => {
       });
 
       expect(result.current.online).toBe(true);
+    });
+  });
+
+  // ── OFF-03: durable optimistic projection ────────────────────────
+
+  describe('OFF-03 durable optimistic projection', () => {
+    it('persists the optimistic status into the cached snapshot on update failure', async () => {
+      // Seed a cache, then fail an update — the cached order must flip to the
+      // locally-advanced status and be written to localStorage.
+      seedLocalStorage(LS_CACHED_ORDERS, [makeOrder({ id: 'o-1', status: 'pending' })]);
+      const { result } = renderHook(() => useKdsOffline());
+
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('Down')));
+      });
+
+      const cached = JSON.parse(localStorage.getItem(LS_CACHED_ORDERS) || '[]');
+      expect(cached[0].status).toBe('preparing');
+      expect(result.current.pendingQueueLength).toBe(1);
+    });
+
+    it('reload keeps the projected status (localStorage survives a remount)', async () => {
+      seedLocalStorage(LS_CACHED_ORDERS, [makeOrder({ id: 'o-1', status: 'pending' })]);
+      const { result } = renderHook(() => useKdsOffline());
+
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('Down')));
+      });
+
+      // Simulate reload: new hook instance reads the same localStorage.
+      const { result: result2 } = renderHook(() => useKdsOffline());
+      expect(result2.current.cachedOrders?.[0]?.status).toBe('preparing');
+      expect(result2.current.pendingActions).toHaveLength(1);
+    });
+
+    it('a successful fetch replays queued projections over fresh data', async () => {
+      // Queue an action, then a fetch succeeds with the OLD server status.
+      const { result } = renderHook(() => useKdsOffline());
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('Down')));
+      });
+
+      await act(async () => {
+        await result.current.wrapFetch(() =>
+          Promise.resolve([makeOrder({ id: 'o-1', status: 'pending' })]),
+        );
+      });
+
+      // The cache must show the projected status, not the stale server value.
+      expect(result.current.cachedOrders?.[0]?.status).toBe('preparing');
+      expect(result.current.pendingQueueLength).toBe(1);
+    });
+  });
+
+  // ── OFF-05: bounded retry + dead-letter ──────────────────────────
+
+  describe('OFF-05 bounded retry and dead-letter', () => {
+    it('moves an exhausted action to the dead-letter list', async () => {
+      const { result } = renderHook(() => useKdsOffline());
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('err')));
+      });
+
+      // Retry until exhaustion. Each retry increments retryCount; the backoff
+      // window (nextAttemptAt) is in the future, so we stub Date.now to keep
+      // advancing past it.
+      const realNow = Date.now;
+      let fakeNow = realNow();
+      vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
+      try {
+        for (let i = 0; i < MAX_RETRY_ATTEMPTS; i += 1) {
+          let count = 0;
+          await act(async () => {
+            count = await result.current.retryPending(() => Promise.resolve(false));
+          });
+          expect(count).toBe(0);
+          fakeNow += 120_000; // advance past the backoff window
+        }
+      } finally {
+        vi.restoreAllMocks();
+      }
+
+      expect(result.current.pendingQueueLength).toBe(0);
+      expect(result.current.deadLetterLength).toBe(1);
+      expect(result.current.deadLetterActions[0]?.orderId).toBe('o-1');
+      expect(result.current.deadLetterActions[0]?.retryCount).toBeGreaterThanOrEqual(MAX_RETRY_ATTEMPTS);
+      // Dead letter persists to localStorage.
+      const stored = JSON.parse(localStorage.getItem(LS_DEAD_LETTER) || '[]');
+      expect(stored).toHaveLength(1);
+    });
+
+    it('skips actions whose backoff window has not elapsed', async () => {
+      const { result } = renderHook(() => useKdsOffline());
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('err')));
+      });
+
+      // First retry fails → retryCount 1, nextAttemptAt in the future.
+      await act(async () => {
+        await result.current.retryPending(() => Promise.resolve(false));
+      });
+      expect(result.current.pendingActions[0]?.retryCount).toBe(1);
+      expect(result.current.pendingActions[0]?.nextAttemptAt).toBeDefined();
+
+      // Immediate retry within the backoff window must not execute the action.
+      const execute = vi.fn(() => Promise.resolve(true));
+      await act(async () => {
+        await result.current.retryPending(execute);
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(result.current.pendingQueueLength).toBe(1);
+    });
+
+    it('clearDeadLetter empties the dead-letter list', async () => {
+      const { result } = renderHook(() => useKdsOffline());
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('err')));
+      });
+
+      // Exhaust retries, advancing fake time past each backoff window so the
+      // action actually reaches the dead-letter list.
+      const realNow = Date.now;
+      let fakeNow = realNow();
+      vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
+      try {
+        for (let i = 0; i < MAX_RETRY_ATTEMPTS; i += 1) {
+          await act(async () => {
+            await result.current.retryPending(() => Promise.resolve(false));
+          });
+          fakeNow += 120_000;
+        }
+      } finally {
+        vi.restoreAllMocks();
+      }
+      expect(result.current.deadLetterLength).toBe(1);
+
+      act(() => result.current.clearDeadLetter());
+      expect(result.current.deadLetterLength).toBe(0);
+      expect(JSON.parse(localStorage.getItem(LS_DEAD_LETTER) || '[]')).toEqual([]);
+    });
+  });
+
+  // ── OFF-08: persistence-failure visibility ───────────────────────
+
+  describe('OFF-08 persistence-failure visibility', () => {
+    it('surfaces storageUnavailable when localStorage writes fail', async () => {
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+      try {
+        const { result } = renderHook(() => useKdsOffline());
+        expect(result.current.storageUnavailable).toBe(false);
+
+        await act(async () => {
+          await result.current.wrapFetch(() => Promise.resolve([makeOrder()]));
+        });
+
+        // The operator must see that persistence is broken.
+        expect(result.current.storageUnavailable).toBe(true);
+      } finally {
+        setItemSpy.mockRestore();
+      }
     });
   });
 
