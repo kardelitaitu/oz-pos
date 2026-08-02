@@ -8,6 +8,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import type { PriceOverrideModalProps } from '@/features/sales/PriceOverrideModal';
 
 vi.mock('@/api/staff', () => ({
@@ -28,7 +30,7 @@ const defaultProps: PriceOverrideModalProps = {
 };
 
 function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
-  return render(<PriceOverrideModal {...defaultProps} {...props} />);
+  return render(withFluent(<PriceOverrideModal {...defaultProps} {...props} />, salesFtl));
 }
 
 // ── Navigation helpers (fireEvent ~1ms vs userEvent ~60ms) ────────

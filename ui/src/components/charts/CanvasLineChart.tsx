@@ -10,6 +10,8 @@ export interface LineChartPoint {
 
 interface CanvasLineChartProps {
   data: LineChartPoint[];
+  /** Localized accessible name for the chart (A11Y-04/09). */
+  label: string;
   /** Accent color CSS var, e.g. '--color-accent' */
   colorVar?: string;
   /** Formatter for Y-axis labels. */
@@ -23,6 +25,7 @@ interface CanvasLineChartProps {
 /** Canvas-based line chart with gradient fill, grid lines, and DPR-aware rendering. */
 export default function CanvasLineChart({
   data,
+  label,
   colorVar = '--color-accent',
   formatValue,
   gridLines = 4,
@@ -126,7 +129,7 @@ export default function CanvasLineChart({
 
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
-      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label="Line chart" role="img" />
+      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
     </div>
   );
 }

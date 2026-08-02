@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { animDuration } from '@/utils/animation';
 import { staffLogin } from '@/api/staff';
 import { formatMoney, type Money } from '@/types/domain';
@@ -22,6 +24,7 @@ export default function PriceOverrideModal({
   onConfirm,
   onClose,
 }: PriceOverrideModalProps) {
+  const { l10n } = useLocalization();
   const ANIM_MS = animDuration(200);
   const [exiting, setExiting] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,7 +55,7 @@ export default function PriceOverrideModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceError, setPriceError] = useState<string | null>(
-    currentPrice.minor_units <= 0 ? 'Price must be greater than 0' : null,
+    currentPrice.minor_units <= 0 ? requiredLocalized(l10n, 'price-override-error-zero') : null,
   );
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const pinWrapRef = useRef<HTMLDivElement>(null);
@@ -76,14 +79,14 @@ export default function PriceOverrideModal({
       const result = await staffLogin({ username: username.trim(), pin: pin.join('') });
       await onConfirm(newPriceMinor, result.session.user_id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'PIN verification failed';
+      const message = err instanceof Error ? err.message : requiredLocalized(l10n, 'price-override-pin-failed');
       setError(message);
       setPin([]);
       pinSubmitted.current = false;
     } finally {
       setLoading(false);
     }
-  }, [pin, username, newPriceMinor, onConfirm]);
+  }, [pin, username, newPriceMinor, onConfirm, l10n]);
 
   useEffect(() => {
     if (pin.length === MAX_PIN_LENGTH && !loading && !pinSubmitted.current) {
@@ -99,18 +102,18 @@ export default function PriceOverrideModal({
 
   const handlePriceConfirm = useCallback(() => {
     if (newPriceMinor <= 0) {
-      setPriceError('Price must be greater than 0');
+      setPriceError(requiredLocalized(l10n, 'price-override-error-zero'));
       return;
     }
     const maxPrice = currentPrice.minor_units * 10;
     if (newPriceMinor > maxPrice) {
-      setPriceError(`Price exceeds 10x the current price. Maximum allowed is ${maxPrice}.`);
+      setPriceError(requiredLocalized(l10n, 'price-override-error-max', { max: String(maxPrice) }));
       return;
     }
     setStep('username');
     setError(null);
     setPriceError(null);
-  }, [newPriceMinor, currentPrice.minor_units]);
+  }, [newPriceMinor, currentPrice.minor_units, l10n]);
 
   const handleUsernameSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -174,7 +177,13 @@ export default function PriceOverrideModal({
   if (!open && !exiting) return null;
 
   const renderPinDots = (length: number) => (
-    <div className="price-override-pin-dots" aria-label={`PIN entry: ${length} of ${MAX_PIN_LENGTH} digits`}>
+    <div
+      className="price-override-pin-dots"
+      aria-label={requiredLocalized(l10n, 'price-override-pin-dots-aria', {
+        count: String(length),
+        max: String(MAX_PIN_LENGTH),
+      })}
+    >
       {Array.from({ length: MAX_PIN_LENGTH }, (_, i) => (
         <span
           key={i}
@@ -186,7 +195,7 @@ export default function PriceOverrideModal({
   );
 
   const renderPinPad = () => (
-    <div className="price-override-pin-pad" role="group" aria-label="Numeric keypad">
+    <div className="price-override-pin-pad" role="group" aria-label={requiredLocalized(l10n, 'price-override-keypad-aria')}>
       {[7, 8, 9].map((d) => (
         <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
@@ -196,9 +205,11 @@ export default function PriceOverrideModal({
       {[1, 2, 3].map((d) => (
         <button key={d} type="button" className="price-override-pin-key" onClick={() => handlePinDigit(String(d))} disabled={loading}>{d}</button>
       ))}
-      <button type="button" className="price-override-pin-key price-override-pin-key--clear" onClick={handlePinClear} disabled={loading || pin.length === 0}>Clear</button>
+      <button type="button" className="price-override-pin-key price-override-pin-key--clear" onClick={handlePinClear} disabled={loading || pin.length === 0}>
+        {requiredLocalized(l10n, 'price-override-clear')}
+      </button>
       <button type="button" className="price-override-pin-key" onClick={() => handlePinDigit('0')} disabled={loading}>0</button>
-      <button type="button" className="price-override-pin-key price-override-pin-key--backspace" onClick={handlePinBackspace} disabled={loading || pin.length === 0} aria-label="Backspace">
+      <button type="button" className="price-override-pin-key price-override-pin-key--backspace" onClick={handlePinBackspace} disabled={loading || pin.length === 0} aria-label={requiredLocalized(l10n, 'price-override-backspace-aria')}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
           <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" />
           <line x1="18" y1="9" x2="12" y2="15" />
@@ -209,28 +220,30 @@ export default function PriceOverrideModal({
   );
 
   return (
-    <div className={`price-override-overlay${exiting ? ' price-override-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Price override">
+    <div className={`price-override-overlay${exiting ? ' price-override-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={requiredLocalized(l10n, 'price-override-dialog-aria')}>
       <div className={`price-override-modal${exiting ? ' price-override-modal--exiting' : ''}`} ref={panelRef}>
         <button
           type="button"
           className="price-override-close"
           onClick={handleClose}
-          aria-label="Close"
+          aria-label={requiredLocalized(l10n, 'price-override-close-aria')}
         >
           &times;
         </button>
 
-        <h2 className="price-override-title">Price Override</h2>
+        <Localized id="price-override-title">
+          <h2 className="price-override-title">Price Override</h2>
+        </Localized>
         <p className="price-override-item">{lineDescription}</p>
 
         {step === 'price' && (
           <div className="price-override-price-step">
             <div className="price-override-current">
-              <span className="price-override-current-label">Current price</span>
+              <span className="price-override-current-label">{requiredLocalized(l10n, 'price-override-current-label')}</span>
               <span className="price-override-current-value">{formatMoney(currentPrice)}</span>
             </div>
             <label className="price-override-new-label" htmlFor="price-override-input">
-              New price (in minor units)
+              {requiredLocalized(l10n, 'price-override-new-label')}
             </label>
             <input
               id="price-override-input"
@@ -243,18 +256,20 @@ export default function PriceOverrideModal({
                 setNewPriceMinor(val);
                 setPriceError(null);
               }}
-              aria-label="Enter new price in minor units"
+              aria-label={requiredLocalized(l10n, 'price-override-new-aria')}
             />
             {priceError && <div className="price-override-error" role="alert">{priceError}</div>}
             <div className="price-override-actions">
-              <button type="button" className="price-override-cancel-btn" onClick={handleClose}>Cancel</button>
+              <button type="button" className="price-override-cancel-btn" onClick={handleClose}>
+                {requiredLocalized(l10n, 'price-override-cancel')}
+              </button>
               <button
                 type="button"
                 className="price-override-next-btn"
                 onClick={handlePriceConfirm}
                 disabled={newPriceMinor <= 0}
               >
-                Next
+                {requiredLocalized(l10n, 'price-override-next')}
               </button>
             </div>
           </div>
@@ -262,27 +277,29 @@ export default function PriceOverrideModal({
 
         {step === 'username' && (
           <form onSubmit={handleUsernameSubmit} className="price-override-username-step">
-            <p className="price-override-step-label">Enter manager username</p>
+            <p className="price-override-step-label">{requiredLocalized(l10n, 'price-override-username-label')}</p>
             <input
               ref={usernameInputRef}
               className="price-override-username-input"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
+              placeholder={requiredLocalized(l10n, 'price-override-username-placeholder')}
               autoComplete="off"
-              aria-label="Manager username"
+              aria-label={requiredLocalized(l10n, 'price-override-username-aria')}
               disabled={loading}
             />
             {error && <div className="price-override-error" role="alert">{error}</div>}
             <div className="price-override-actions">
-              <button type="button" className="price-override-cancel-btn" onClick={handleGoBack} disabled={loading}>Back</button>
+              <button type="button" className="price-override-cancel-btn" onClick={handleGoBack} disabled={loading}>
+                {requiredLocalized(l10n, 'price-override-back')}
+              </button>
               <button
                 type="submit"
                 className="price-override-next-btn"
                 disabled={!username.trim() || loading}
               >
-                Next
+                {requiredLocalized(l10n, 'price-override-next')}
               </button>
             </div>
           </form>
@@ -296,15 +313,17 @@ export default function PriceOverrideModal({
             tabIndex={-1}
             onKeyDown={handlePinKeyDown}
             role="application"
-            aria-label="PIN entry"
+            aria-label={requiredLocalized(l10n, 'price-override-pin-aria')}
           >
-            <p className="price-override-step-label">Enter manager PIN</p>
+            <p className="price-override-step-label">{requiredLocalized(l10n, 'price-override-pin-label')}</p>
             {renderPinDots(pin.length)}
             {renderPinPad()}
             {error && <div className="price-override-error" role="alert">{error}</div>}
-            {loading && <div className="price-override-loading" role="status">Verifying…</div>}
+            {loading && <div className="price-override-loading" role="status">{requiredLocalized(l10n, 'price-override-verifying')}</div>}
             <div className="price-override-actions">
-              <button type="button" className="price-override-cancel-btn" onClick={handleGoBack} disabled={loading}>Back</button>
+              <button type="button" className="price-override-cancel-btn" onClick={handleGoBack} disabled={loading}>
+                {requiredLocalized(l10n, 'price-override-back')}
+              </button>
             </div>
           </div>
         )}

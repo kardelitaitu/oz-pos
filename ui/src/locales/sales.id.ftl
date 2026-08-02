@@ -126,6 +126,40 @@ payment-failed = Pembayaran Gagal
 payment-gateway-status = Status Gateway
 payment-qris-scan = Pindai dengan aplikasi QRIS
 payment-qris-waiting = Menunggu konfirmasi pembayaran…
+payment-qris-dialog-aria = Pembayaran QR QRIS
+payment-qris-close-aria = Tutup pembayaran QR
+payment-qris-qr-aria = Kode QR
+payment-qris-waiting-aria = Menunggu pembayaran
+payment-qris-confirmed-aria = Pembayaran dikonfirmasi
+payment-qris-confirmed = Pembayaran dikonfirmasi!
+payment-qris-amount = Jumlah
+payment-qris-reference = Referensi
+payment-qris-merchant = Pedagang
+payment-qris-merchant-name = OZ-POS Store
+
+# Price Override Modal
+price-override-dialog-aria = Override harga
+price-override-close-aria = Tutup
+price-override-title = Override Harga
+price-override-current-label = Harga saat ini
+price-override-new-label = Harga baru (dalam unit minor)
+price-override-new-aria = Masukkan harga baru dalam unit minor
+price-override-cancel = Batal
+price-override-next = Lanjut
+price-override-back = Kembali
+price-override-username-label = Masukkan username manajer
+price-override-username-placeholder = Username
+price-override-username-aria = Username manajer
+price-override-pin-label = Masukkan PIN manajer
+price-override-pin-aria = Entri PIN
+price-override-pin-dots-aria = Entri PIN: { $count } dari { $max } digit
+price-override-keypad-aria = Papan angka
+price-override-clear = Hapus
+price-override-backspace-aria = Backspace
+price-override-verifying = Memverifikasi…
+price-override-error-zero = Harga harus lebih besar dari 0
+price-override-error-max = Harga melebihi 10x harga saat ini. Maksimum yang diizinkan adalah { $max }.
+price-override-pin-failed = Verifikasi PIN gagal
 
 orders-title = Pesanan
 orders-search = Cari pesanan…
@@ -321,6 +355,7 @@ sales-dashboard-hourly-aria = Penjualan per jam
 sales-dashboard-hourly-bars-aria = Grafik penjualan per jam
 sales-dashboard-category-aria = Rincian kategori
 sales-dashboard-heatmap-aria = Peta panas penjualan per jam
+sales-dashboard-revenue-aria = Grafik pendapatan 14 hari
 
 # ── Void Orders ──
 void-orders-title = Pesanan

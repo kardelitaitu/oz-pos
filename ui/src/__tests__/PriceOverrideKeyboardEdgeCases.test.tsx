@@ -9,6 +9,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import type { PriceOverrideModalProps } from '@/features/sales/PriceOverrideModal';
 
 vi.mock('@/api/staff', () => ({
@@ -29,7 +31,7 @@ const defaultProps: PriceOverrideModalProps = {
 };
 
 function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
-  return render(<PriceOverrideModal {...defaultProps} {...props} />);
+  return render(withFluent(<PriceOverrideModal {...defaultProps} {...props} />, salesFtl));
 }
 
 // ── Navigation helpers (fireEvent.click ~1ms vs userEvent.click ~80ms) ─
@@ -230,7 +232,7 @@ describe('PriceOverrideModal — keyboard and edge cases', () => {
   it('resets price input to currentPrice on reopen after cancel', async () => {
     const onClose = vi.fn();
     const { unmount } = render(
-      <PriceOverrideModal {...defaultProps} open={true} onClose={onClose} />,
+      withFluent(<PriceOverrideModal {...defaultProps} open={true} onClose={onClose} />, salesFtl),
     );
 
     const input = screen.getByLabelText('Enter new price in minor units') as HTMLInputElement;
@@ -246,7 +248,7 @@ describe('PriceOverrideModal — keyboard and edge cases', () => {
     });
 
     unmount();
-    render(<PriceOverrideModal {...defaultProps} open={true} onClose={onClose} />);
+    render(withFluent(<PriceOverrideModal {...defaultProps} open={true} onClose={onClose} />, salesFtl));
 
     await waitFor(() => {
       const newInput = screen.getByLabelText('Enter new price in minor units') as HTMLInputElement;

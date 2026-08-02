@@ -93,6 +93,7 @@ export default function HourlyHeatmapWidget() {
       </div>
       <CanvasHeatmap
         data={cells}
+        label={requiredLocalized(l10n, 'sales-dashboard-heatmap-aria')}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',

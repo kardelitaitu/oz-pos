@@ -12,6 +12,8 @@ export interface PieSlice {
 
 interface CanvasPieChartProps {
   data: PieSlice[];
+  /** Localized accessible name for the chart (A11Y-04/09). */
+  label: string;
   /** Inner radius ratio (0 = pie, >0 = donut). Default 0.45. */
   innerRadiusRatio?: number;
   /** Minimum height of the canvas container. */
@@ -32,6 +34,7 @@ const DEFAULT_COLORS = [
  */
 export default function CanvasPieChart({
   data,
+  label,
   innerRadiusRatio = 0.45,
   minHeight = '220px',
   formatValue,
@@ -129,7 +132,7 @@ export default function CanvasPieChart({
 
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
-      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label="Pie chart" role="img" />
+      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
     </div>
   );
 }

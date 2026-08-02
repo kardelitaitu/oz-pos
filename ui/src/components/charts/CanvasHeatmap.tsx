@@ -13,6 +13,8 @@ export interface HeatmapCell {
 
 interface CanvasHeatmapProps {
   data: HeatmapCell[];
+  /** Localized accessible name for the chart (A11Y-04/09). */
+  label: string;
   /** Formatter for cell values in aria-label. */
   formatValue?: (v: number) => string;
   /** Minimum height of the canvas container. */
@@ -31,6 +33,7 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  */
 export default function CanvasHeatmap({
   data,
+  label,
   formatValue,
   minHeight = '160px',
   colorLow,
@@ -129,7 +132,7 @@ export default function CanvasHeatmap({
 
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
-      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label="Hourly heatmap" role="img" />
+      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
     </div>
   );
 }

@@ -6,6 +6,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import type { PriceOverrideModalProps } from '@/features/sales/PriceOverrideModal';
 
 vi.mock('@/api/staff', () => ({
@@ -23,12 +25,12 @@ const defaultProps: PriceOverrideModalProps = {
 };
 
 function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
-  return render(<PriceOverrideModal {...defaultProps} {...props} />);
+  return render(withFluent(<PriceOverrideModal {...defaultProps} {...props} />, salesFtl));
 }
 
 describe('PriceOverrideModal — rendering', () => {
   it('renders nothing when open is false', () => {
-    render(<PriceOverrideModal {...defaultProps} open={false} />);
+    render(withFluent(<PriceOverrideModal {...defaultProps} open={false} />, salesFtl));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

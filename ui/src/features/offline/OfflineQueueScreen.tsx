@@ -239,7 +239,7 @@ export default function OfflineQueueScreen() {
                   <th>Last Error</th>
                   <th>Created</th>
                   <th>Synced At</th>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
                 </tr>
               </thead>
               <tbody>{Array.from({ length: 5 }).map((_, i) => (

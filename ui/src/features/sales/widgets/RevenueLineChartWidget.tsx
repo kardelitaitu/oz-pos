@@ -1,6 +1,7 @@
 import { useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { WorkspaceContext } from '@/contexts/WorkspaceContext';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { getDailyRevenue } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasLineChart from '@/components/charts/CanvasLineChart';
@@ -8,6 +9,7 @@ import type { LineChartPoint } from '@/components/charts/CanvasLineChart';
 
 /** Canvas 2D revenue line chart widget for the reporting dashboard. */
 export default function RevenueLineChartWidget() {
+  const { l10n } = useLocalization();
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [data, setData] = useState<LineChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function RevenueLineChartWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--revenue" aria-label="14-day revenue chart">
+    <div className="reporting-widget reporting-widget--revenue" aria-label={requiredLocalized(l10n, 'sales-dashboard-revenue-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-revenue-title">
           <h3 className="reporting-widget-title">Revenue (14d)</h3>
@@ -85,6 +87,7 @@ export default function RevenueLineChartWidget() {
       </div>
       <CanvasLineChart
         data={data}
+        label={requiredLocalized(l10n, 'sales-dashboard-revenue-aria')}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
