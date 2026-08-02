@@ -2,8 +2,9 @@
 
 > **Audit date:** 2026-07-31  
 > **Sector:** TableManagement — restaurant floor plan, table status lifecycle, sections, order assignment, authorization, accessibility, and tests  
-> **Status:** AUDITED · workflow, recovery, accessibility, and integrity findings require remediation  
-> **Production code changed:** None
+> **Status:** ✅ REMEDIATED · all 12 findings (TBL-01 → TBL-12) closed  
+> **Production code changed:** Yes (backend invariants + UI workflow/a11y/theme)  
+> **Closing commits:** `6f2e3ce4` (TBL-01/04/08 backend) · `382a429f` (TBL-02/09/10 UI states) · `9d8bab79` (TBL-03/05/06/07 workflow + dialog) · `c0b1439b` (TBL-11 contrast tokens)
 
 ## Scope
 
@@ -41,7 +42,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Replace the “mark occupied” shortcut with an explicit order-selection/assignment flow, or rename it to a clearly provisional state if provisional occupancy is intentional. Enforce the invariant server-side: an occupied table must either have an active sale or use a documented reservation/hold model. Add tests for available → occupied, assignment, duplicate assignment, and KDS table-number propagation.
 
-**Status:** Open · P1 order/table integrity
+**Status:** ✅ REMEDIATED (`6f2e3ce4`, `9d8bab79`)
+
+**Fix:** `update_table_status` now rejects `occupied` for tables without an `active_sale_id` — occupancy is only reachable through `assign_table_order`, keeping the floor plan and KDS table-number lookup consistent. The UI adopts the documented hold model: an available table's action is **Mark Reserved** (reserved requires no sale link), so no operator path can create unassigned occupancy. Tests cover occupy-without-sale rejected (state untouched), occupy-with-active-sale allowed + re-assert, and missing-table NotFound.
 
 ### TBL-02 — Table list failures are unhandled and leave stale or misleading floor-plan state
 
@@ -51,7 +54,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Add explicit loading, empty, and error states with localized Retry actions; preserve known-good data during refresh while marking it stale. Cancel or generation-guard requests and ignore results from obsolete tokens/sections. Add tests for rejection, retry, empty results, and out-of-order responses.
 
-**Status:** Open · P1 operational safety
+**Status:** ✅ REMEDIATED (`382a429f`)
+
+**Fix:** `listTablesScoped` runs through a seq-guarded loader — stale responses from earlier section/token/refresh changes are dropped. Failures surface a localized `role="alert"` banner with a Retry action. Known-good tables stay visible during a refresh.
 
 ### TBL-03 — Status mutations are fire-and-forget and the UI closes before persistence succeeds
 
@@ -61,7 +66,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Make the action async, disable the affected table while pending, await the backend result, update or reload the table on success, and keep the panel open with a localized error on failure. Add tests for successful mutation, rejected mutation, duplicate-click protection, and refresh-after-mutation.
 
-**Status:** Open · P1 recovery/state consistency
+**Status:** ✅ REMEDIATED (`9d8bab79`)
+
+**Fix:** `statusAction` is async with a ref-based duplicate-click guard, the affected table is disabled while pending, the action button shows a processing state, and failures keep the panel open with a localized `role="alert"` error. Success patches the returned table into the floor plan in place (no full reload), so a section change landing mid-mutation can never be clobbered by a stale reload.
 
 ### TBL-04 — Deletion and table lifecycle integrity are not protected by the management workflow
 
@@ -71,7 +78,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Prefer deactivation/archival over hard deletion. Reject deletion when the table is occupied, reserved, assigned to an active sale, or referenced by an open workflow; return a structured conflict error. If hard deletion remains necessary, document and test foreign-key behavior and preserve a historical table snapshot. Add scoped authorization and lifecycle tests.
 
-**Status:** Open · P1 data-integrity risk
+**Status:** ✅ REMEDIATED (`6f2e3ce4`)
+
+**Fix:** `delete_table` refuses to hard-delete occupied, reserved, or sale-linked tables and returns a structured `Validation` error pointing callers to deactivation. A free, unlinked table remains hard-deletable. Tests cover occupied/reserved/sale-link rejection (built via the production-reachable assign-then-reset path to respect FK constraints) and the still-allowed free-table delete.
 
 ### TBL-05 — Context-menu status transitions have no keyboard or discoverable equivalent
 
@@ -81,7 +90,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Add a visible, keyboard-operable actions button/menu in each table detail or table card. Keep context-menu support as an optional convenience that opens the same accessible menu rather than mutating immediately. Add Enter/Space/menu-key and touch interaction tests.
 
-**Status:** Open · P2 accessibility/UX
+**Status:** ✅ REMEDIATED (`9d8bab79`)
+
+**Fix:** The context-menu gesture now opens the accessible detail panel — the visible, keyboard-operable actions menu — instead of mutating directly, so every operator path goes through the same confirmed, error-aware action.
 
 ### TBL-06 — The detail panel is not a complete modal/dialog interaction
 
@@ -91,7 +102,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Either model the panel as a non-modal disclosure with appropriate semantics, or implement complete dialog behavior using the shared focus-trap pattern: `aria-modal`, initial focus, Escape-to-close, focus restoration, and inert/blocked background interaction where appropriate. Add accessibility tests for focus containment and dismissal.
 
-**Status:** Open · P2 accessibility
+**Status:** ✅ REMEDIATED (`9d8bab79`)
+
+**Fix:** The detail panel is a complete modal — `aria-modal="true"`, shared `useFocusTrap` (initial focus, Tab trap, Escape-to-close, body scroll lock), and focus restoration to the trigger button on close.
 
 ### TBL-07 — Status and section values are not consistently localized
 
@@ -101,7 +114,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Map the finite status enum to value-bearing Fluent messages in both bundles, use that mapping in visible and ARIA output, and provide a localized unknown-status fallback. Treat section names as store data but localize structural labels and empty markers. Add English/Indonesian rendering tests.
 
-**Status:** Open · P2 i18n/accessibility
+**Status:** ✅ REMEDIATED (`9d8bab79`)
+
+**Fix:** A `STATUS_LABEL_IDS` map renders localized status labels (with a `tables-status-unknown` fallback) in both the floor-plan buttons and the detail panel, replacing raw machine values in visible and ARIA output.
 
 ### TBL-08 — Floor-plan geometry is trusted at render time and can produce unusable or overlapping controls
 
@@ -111,7 +126,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Validate all geometry values as finite and within documented bounds at the Rust boundary and database policy level. Clamp or reject zero-sized controls, enforce a minimum interactive size, and provide a responsive zoom/fit mode for dense plans. Add tests for invalid geometry and small-screen rendering.
 
-**Status:** Open · P2 validation/responsive UX
+**Status:** ✅ REMEDIATED (`6f2e3ce4`, `382a429f`)
+
+**Fix:** `validate_table_geometry` rejects non-finite, negative, out-of-bounds (`0..=100`), and sub-2% width/height geometry at the DB boundary for create and update. The front-end additionally clamps persisted width/height to a 2% minimum so legacy pre-bounds data can never render an unusably tiny control.
 
 ### TBL-09 — Sections are derived from the loaded table page rather than loaded as stable metadata
 
@@ -121,7 +138,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Load section metadata independently through `listSectionsScoped`, preserve the full section list while filtering, and handle section deletion/renaming explicitly. Add tests that section controls remain stable after filtering and that empty sections are represented correctly.
 
-**Status:** Open · P2 navigation consistency
+**Status:** ✅ REMEDIATED (`382a429f`)
+
+**Fix:** Sections load independently via `listSectionsScoped` (cancelled-flag guarded, non-fatal fallback) instead of being derived from the filtered table page, so selecting a section never hides the other filters and empty sections stay representable.
 
 ### TBL-10 — The floor plan has no explicit loading or empty state
 
@@ -131,7 +150,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Add a loading skeleton or status, an empty state that explains how tables are configured, and a filtered-empty state with a clear “All sections” action. Pair the states with the error/retry path from TBL-02.
 
-**Status:** Open · P3 UX/recovery
+**Status:** ✅ REMEDIATED (`382a429f`)
+
+**Fix:** Distinct loading state (`role="status"` spinner), a full empty state with setup guidance, and a filtered-empty state with an All-sections action.
 
 ### TBL-11 — Table status presentation relies on contrast assumptions over status gradients
 
@@ -141,7 +162,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Use dedicated token pairs for each status surface/foreground or derive a contrast-safe foreground rather than reusing the accent foreground. Remove opacity from essential status text, add forced-colors support, and test representative light/dark/custom themes with contrast tooling.
 
-**Status:** Open · P3 theming/accessibility
+**Status:** ✅ REMEDIATED (`c0b1439b`)
+
+**Fix:** Dedicated status foreground tokens (`--color-success-fg`, `--color-warning-fg`, `--color-cleaning-fg`, plus existing `--color-danger-fg`) are defined per theme and applied per status gradient instead of reusing `--color-accent-fg`. Essential status text no longer carries `opacity: 0.85`, and a `@media (forced-colors: active)` block provides Windows high-contrast surfaces.
 
 ### TBL-12 — Focused tests cover the happy path but not failure, integrity, or accessibility boundaries
 
@@ -151,7 +174,9 @@ Core persistence stores table geometry, capacity, section, status, active sale, 
 
 **Recommendation:** Add component tests for all loading/error/empty and keyboard/dialog paths, API contract tests for scoped arguments and errors, and Rust integration tests for assignment/status/delete invariants, geometry validation, and role permissions. Include a KDS integration assertion that assigned table numbers survive the full order lifecycle.
 
-**Status:** Open · P3 QA gap
+**Status:** ✅ REMEDIATED (`6f2e3ce4`, `382a429f`, `9d8bab79`)
+
+**Fix:** Rust integration tests for the TBL-01/04/08 invariants (37 `db::tables` tests); 14 new UI tests covering loading/empty/filtered-empty, error + retry, stale-response drop, section stability, context-menu-opens-detail, all four status actions, mutation failure keeping the panel open, duplicate-click guard, in-place patch + no-clobber, `aria-modal`, focus-into-dialog, Escape + focus restoration, localized status + unknown fallback, and geometry clamp (36 total).
 
 ## Positive controls observed
 
@@ -183,6 +208,25 @@ Results:
 - Report existence and Markdown formatting validation: pending final report review
 - No dedicated Rust table test command is claimed; core table tests and command source were inspected but not rerun as part of this report
 
+## Remediation
+
+Implemented in four commits:
+
+| Finding | Commit | What landed |
+|---|---|---|
+| TBL-01 · occupied-requires-sale | `6f2e3ce4`, `9d8bab79` | Backend invariant + Mark Reserved hold model |
+| TBL-02 · load failures | `382a429f` | seq-guarded loader, error banner + Retry |
+| TBL-03 · fire-and-forget mutations | `9d8bab79` | async pending-guarded + in-place patch |
+| TBL-04 · delete lifecycle | `6f2e3ce4` | delete protection for occupied/reserved/sale-linked |
+| TBL-05 · context-menu a11y | `9d8bab79` | context menu opens accessible detail |
+| TBL-06 · dialog completeness | `9d8bab79` | `aria-modal`, focus trap, focus restoration |
+| TBL-07 · status localization | `9d8bab79` | localized status map + unknown fallback |
+| TBL-08 · geometry validation | `6f2e3ce4`, `382a429f` | backend bounds + front-end 2% clamp |
+| TBL-09 · stable sections | `382a429f` | independent `listSectionsScoped` metadata |
+| TBL-10 · loading/empty states | `382a429f` | loading + empty + filtered-empty |
+| TBL-11 · contrast tokens | `c0b1439b` | status fg pairs, opacity removed, forced-colors |
+| TBL-12 · QA coverage | all | 37 Rust tests + 36 UI tests |
+
 ## Recommended remediation order
 
 1. **TBL-01/TBL-03:** Make status actions order-aware, await persistence, refresh state, and surface failures.
@@ -193,4 +237,4 @@ Results:
 
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+All 12 findings are **REMEDIATED** and committed. Validation gates at close: 37/37 Rust `db::tables` tests, 36/36 `TableManagementScreen` UI tests, typecheck clean, eslint clean, i18n lint clean, and the theme-token / touch-target / focus-visible / animation compliance suites all green.
