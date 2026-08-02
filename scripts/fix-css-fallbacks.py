@@ -16,7 +16,10 @@ from collections import defaultdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "styles" / "tokens.css"
+# THM-01: the design tokens live in ui/src/frontend/themes/tokens.css.
+# (The old ui/src/styles/tokens.css path never existed — the fixer
+# silently no-opped against the wrong file.)
+TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "frontend" / "themes" / "tokens.css"
 UI_SRC_DIR = PROJECT_ROOT / "ui" / "src"
 EXCLUDE_DIRS = {"node_modules"}
 
@@ -82,9 +85,17 @@ def build_rules(tokens: dict[str, str]) -> list[tuple[re.Pattern, str]]:
             continue
         actual_clean = actual_value.strip().lower()
         # Build regex: var(--token-name\s*,\s*<fallback>)
-        # Match any fallback, not just specific ones - catches all
+        # Match any fallback, not just specific ones - catches all.
+        #
+        # IMPORTANT (THM-01): the fallback may itself contain parentheses
+        # (e.g. rgba(16, 82, 188, 0.08), var(--other-token), or multi-stop
+        # shadows). A naive `[^)]*` stops at the FIRST `)`, which for
+        # `var(--x, rgba(1, 2, 3, 0.5))` leaves a dangling `)` behind and
+        # produces the broken `var(--x))`. Use a balanced-paren group
+        # instead: any run of non-paren chars, or a single paren group
+        # without nesting (covers rgba()/var()/gradient fallbacks).
         pattern = re.compile(
-            rf"var\(--{re.escape(token_name)}\s*,\s*[^)]*\)",
+            rf"var\(--{re.escape(token_name)}\s*,\s*(?:[^()]|\([^()]*\))*\)",
             re.IGNORECASE,
         )
         # Replace with bare var(--token-name)

@@ -157,7 +157,7 @@
   color: var(--color-warning-fg, #856404);
   background: var(--color-warning-bg, #fff3cd);
   border: 1px solid var(--color-warning-border, #ffc107);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -176,7 +176,7 @@
 }
 
 .pos-cart-deduction-override {
-  color: var(--color-danger-fg, #dc3545);
+  color: var(--color-danger-fg);
   font-weight: var(--font-weight-semibold);
 }
 

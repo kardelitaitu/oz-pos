@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal, 1000);
+  z-index: var(--z-modal);
 }
 
 .kds-picker-modal {
@@ -19,9 +19,9 @@
   position: relative;
   width: min(90vw, 56rem);
   height: min(85vh, 40rem);
-  background: var(--color-bg-elevated, #1e293b);
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border, #334155);
-  border-radius: var(--radius-xl, 0.75rem);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-glow, 0 8px 32px rgba(0, 0, 0, 0.4));
   overflow: hidden;
 }
@@ -39,7 +39,7 @@
 
 .kds-picker-title {
   margin: 0;
-  font-size: var(--text-lg, 1.125rem);
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--color-fg, #e2e8f0);
 }
@@ -80,7 +80,7 @@
 .kds-picker-search {
   width: 100%;
   padding: var(--space-1_5, 0.375rem) var(--space-2_5, 0.625rem);
-  font-size: var(--text-base, 1rem);
+  font-size: var(--text-base);
   font-family: inherit;
   color: var(--color-fg, #e2e8f0);
   background: var(--color-bg-surface, #0f172a);
@@ -105,10 +105,10 @@
 .kds-picker-error {
   margin: 0 var(--space-4, 1rem) var(--space-2, 0.5rem);
   padding: var(--space-1_5, 0.375rem) var(--space-2, 0.5rem);
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   color: var(--color-danger, #ef4444);
   background: var(--color-danger-bg, rgba(239, 68, 68, 0.1));
-  border-radius: var(--radius-sm, 0.25rem);
+  border-radius: var(--radius-sm);
 }
 
 /* ── Body (flex row: product list + picked list) ─────────────────────── */
@@ -135,7 +135,7 @@
 .kds-picker-empty {
   text-align: center;
   color: var(--color-fg-secondary, #94a3b8);
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   padding: var(--space-4, 1rem);
 }
 
@@ -172,13 +172,13 @@
 }
 
 .kds-picker-product-name {
-  font-size: var(--text-base, 1rem);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--color-fg, #e2e8f0);
 }
 
 .kds-picker-product-course {
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   color: var(--color-fg-tertiary, #64748b);
   flex-shrink: 0;
 }
@@ -190,14 +190,14 @@
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface, #0f172a);
-  border-radius: var(--radius-lg, 0.5rem);
+  border-radius: var(--radius-lg);
   padding: var(--space-2_5, 0.625rem);
   overflow-y: auto;
 }
 
 .kds-picker-picked-title {
   margin: 0 0 var(--space-2, 0.5rem);
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-fg-secondary, #94a3b8);
   display: flex;
@@ -212,9 +212,9 @@
   min-width: 1.25rem;
   height: 1.25rem;
   padding: 0 var(--space-0_5, 0.125rem);
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   font-weight: 700;
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   background: var(--color-accent, #3b82f6);
   border-radius: var(--radius-full, 9999px);
 }
@@ -222,7 +222,7 @@
 .kds-picker-picked-empty {
   text-align: center;
   color: var(--color-fg-tertiary, #64748b);
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   padding: var(--space-4, 1rem) 0;
 }
 
@@ -240,13 +240,13 @@
   flex-direction: column;
   gap: var(--space-1, 0.25rem);
   padding: var(--space-1_5, 0.375rem) var(--space-2, 0.5rem);
-  background: var(--color-bg-elevated, #1e293b);
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border, #334155);
   border-radius: var(--radius-md, 0.375rem);
 }
 
 .kds-picker-picked-name {
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-fg, #e2e8f0);
 }
@@ -260,12 +260,12 @@
 
 .kds-picker-picked-course {
   padding: var(--space-0_25, 0.0625rem) var(--space-1, 0.25rem);
-  font-size: var(--text-xs, 0.75rem);
+  font-size: var(--text-xs);
   font-family: inherit;
   color: var(--color-fg, #e2e8f0);
   background: var(--color-bg-surface, #0f172a);
   border: 1px solid var(--color-border, #334155);
-  border-radius: var(--radius-sm, 0.25rem);
+  border-radius: var(--radius-sm);
   outline: none;
   cursor: pointer;
 }
@@ -286,12 +286,12 @@
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: 700;
   color: var(--color-fg, #e2e8f0);
   background: var(--color-bg-surface, #0f172a);
   border: 1px solid var(--color-border, #334155);
-  border-radius: var(--radius-sm, 0.25rem);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background var(--duration-100, 100ms);
 }
@@ -308,7 +308,7 @@
 .kds-picker-qty-value {
   min-width: 1.5rem;
   text-align: center;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-fg, #e2e8f0);
 }
@@ -322,7 +322,7 @@
   color: var(--color-fg-tertiary, #64748b);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm, 0.25rem);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: color var(--duration-100, 100ms), background var(--duration-100, 100ms);
   margin-left: auto;
@@ -347,7 +347,7 @@
 
 .kds-picker-cancel {
   padding: var(--space-1_5, 0.375rem) var(--space-3, 0.75rem);
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-fg-secondary, #94a3b8);
   background: transparent;
@@ -364,9 +364,9 @@
 
 .kds-picker-confirm {
   padding: var(--space-1_5, 0.375rem) var(--space-4, 1rem);
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
   font-weight: 700;
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   background: var(--color-accent, #3b82f6);
   border: 1px solid var(--color-accent, #3b82f6);
   border-radius: var(--radius-md, 0.375rem);

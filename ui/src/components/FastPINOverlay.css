@@ -10,7 +10,7 @@
 .fastpin-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal, 1000);
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -24,7 +24,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .fastpin-overlay {
     animation: fastpin-fade-in var(--duration-200, 200ms)
-      var(--ease-out, ease-out);
+      var(--ease-out);
   }
 }
 
@@ -48,7 +48,7 @@
 
 .fastpin-overlay--exiting {
   animation: fastpin-fade-out var(--duration-200, 200ms)
-    var(--ease-in, ease-in) forwards;
+    var(--ease-in) forwards;
   pointer-events: none;
 }
 
@@ -79,7 +79,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .fastpin-card {
     animation: fastpin-slide-up var(--duration-300, 300ms)
-      var(--ease-out, ease-out);
+      var(--ease-out);
   }
 }
 
@@ -107,7 +107,7 @@
 
 .fastpin-card--exiting {
   animation: fastpin-slide-down var(--duration-200, 200ms)
-    var(--ease-in, ease-in) forwards;
+    var(--ease-in) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -134,8 +134,8 @@
   color: var(--color-fg-tertiary);
   cursor: pointer;
   transition:
-    background-color var(--duration-100, 100ms) var(--ease-out, ease-out),
-    color var(--duration-100, 100ms) var(--ease-out, ease-out);
+    background-color var(--duration-100, 100ms) var(--ease-out),
+    color var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-close-btn:hover {
@@ -194,7 +194,7 @@
 /* ── Active user label ────────────────────────────────── */
 
 .fastpin-active-user {
-  font-size: var(--text-sm, 14px);
+  font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
   margin: 0;
 }
@@ -202,7 +202,7 @@
 /* ── Step label ───────────────────────────────────────── */
 
 .fastpin-step-label {
-  font-size: var(--text-base, 16px);
+  font-size: var(--text-base);
   font-weight: var(--font-weight-medium, 500);
   color: var(--color-fg);
   margin: 0;
@@ -227,11 +227,11 @@
   border-radius: var(--radius-md, 8px);
   background: var(--color-bg);
   color: var(--color-fg);
-  font-size: var(--text-base, 16px);
+  font-size: var(--text-base);
   font-family: inherit;
   /* outline suppressed — focus ring provided by box-shadow on :focus-visible */
   outline: none;
-  transition: border-color var(--duration-100, 100ms) var(--ease-out, ease-out);
+  transition: border-color var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-input:focus-visible {
@@ -257,13 +257,13 @@
   border-radius: var(--radius-md, 8px);
   background: var(--color-accent);
   color: var(--color-accent-fg); /* high-contrast text on accent button */
-  font-size: var(--text-base, 16px);
+  font-size: var(--text-base);
   font-weight: var(--font-weight-semibold, 600);
   font-family: inherit;
   cursor: pointer;
   transition:
-    background-color var(--duration-100, 100ms) var(--ease-out, ease-out),
-    opacity var(--duration-100, 100ms) var(--ease-out, ease-out);
+    background-color var(--duration-100, 100ms) var(--ease-out),
+    opacity var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-submit-btn:hover:not(:disabled) {
@@ -324,8 +324,8 @@
   border: 2px solid var(--color-border);
   background: transparent;
   transition:
-    background-color var(--duration-100, 100ms) var(--ease-out, ease-out),
-    border-color var(--duration-100, 100ms) var(--ease-out, ease-out);
+    background-color var(--duration-100, 100ms) var(--ease-out),
+    border-color var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-pin-dot--filled {
@@ -363,9 +363,9 @@
   cursor: pointer;
   user-select: none;
   transition:
-    background-color var(--duration-100, 100ms) var(--ease-out, ease-out),
-    border-color var(--duration-100, 100ms) var(--ease-out, ease-out),
-    transform var(--duration-100, 100ms) var(--ease-out, ease-out);
+    background-color var(--duration-100, 100ms) var(--ease-out),
+    border-color var(--duration-100, 100ms) var(--ease-out),
+    transform var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-pad-key:hover:not(:disabled) {
@@ -388,7 +388,7 @@
 }
 
 .fastpin-pad-key--action {
-  font-size: var(--text-sm, 14px);
+  font-size: var(--text-sm);
   color: var(--color-fg-tertiary);
 }
 
@@ -403,13 +403,13 @@
   background: none;
   border: none;
   color: var(--color-fg-tertiary);
-  font-size: var(--text-sm, 14px);
+  font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;
   padding: var(--space-2, 8px) var(--space-2, 8px);
   min-height: var(--touch-target-min);
-  border-radius: var(--radius-sm, 4px);
-  transition: color var(--duration-100, 100ms) var(--ease-out, ease-out);
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-back-btn:hover:not(:disabled) {
@@ -437,7 +437,7 @@
   border: 1px solid var(--color-danger, #ef4444);
   border-radius: var(--radius-md, 8px);
   color: var(--color-danger, #ef4444);
-  font-size: var(--text-sm, 14px);
+  font-size: var(--text-sm);
   width: 100%;
 }
 
@@ -450,7 +450,7 @@
 }
 
 .fastpin-rate-limit--lockout {
-  color: var(--color-danger-fg, #dc2626);
+  color: var(--color-danger-fg);
 }
 
 /* ── Cancel footer ────────────────────────────────────── */
@@ -467,15 +467,15 @@
   background: none;
   border: none;
   color: var(--color-fg-tertiary);
-  font-size: var(--text-sm, 14px);
+  font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;
   padding: var(--space-2, 8px) var(--space-3, 12px);
   min-height: var(--touch-target-min);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   transition:
-    color var(--duration-100, 100ms) var(--ease-out, ease-out),
-    background-color var(--duration-100, 100ms) var(--ease-out, ease-out);
+    color var(--duration-100, 100ms) var(--ease-out),
+    background-color var(--duration-100, 100ms) var(--ease-out);
 }
 
 .fastpin-cancel-btn:hover:not(:disabled) {

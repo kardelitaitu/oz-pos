@@ -171,6 +171,6 @@
 
 .log-error-text {
   margin: 0;
-  color: var(--color-danger-fg, var(--color-danger));
+  color: var(--color-danger-fg);
   font-size: var(--text-sm);
 }

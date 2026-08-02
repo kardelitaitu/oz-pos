@@ -50,7 +50,7 @@
 }
 
 .location-picker-error-text {
-  color: var(--color-danger-fg, var(--color-danger));
+  color: var(--color-danger-fg);
   font-size: var(--text-sm);
 }
 
