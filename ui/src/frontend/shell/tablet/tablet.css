@@ -23,10 +23,16 @@
 }
 
 /* ── Layout ───────────────────────────────────────── */
+/* TAB-02: the tablet entry never loads AppLayout.css, so the base
+ * `.app-layout` rules (display:flex etc.) must be re-declared here for
+ * the shell to be self-contained. `flex-direction: column-reverse` puts
+ * the tab bar at the bottom (thumb-reachable). */
 .tablet-shell .app-layout {
+  display: flex;
   flex-direction: column-reverse;
   height: 100dvh;
   overflow: hidden;
+  background: var(--color-bg);
 }
 
 /* Hide the desktop sidebar */
