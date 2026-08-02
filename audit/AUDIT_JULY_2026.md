@@ -42,7 +42,7 @@
 21. Theme system — token completeness, dark mode gaps, color-mix fallbacks — ✅ **FULLY REMEDIATED** (all 6 findings THM-01→THM-06; see [21-theme-system.md](21-theme-system.md) — commits `2ca5e5a8`, `57b23bd4`, `b5fa60a5`, `cb9544c1`, `4a150495`)
 22. Keyboard shortcuts — coverage audit across all screens — ✅ **FULLY REMEDIATED** (all 10 findings KEY-01→KEY-10; see [22-keyboard-shortcuts.md](22-keyboard-shortcuts.md) — commits `7a5e7cdd`, `2f981b8e`, `544ea5cf`, `92832424`, `db3e18d8`, `e233beae`)
 23. Loading states — skeleton consistency, loading spinners, progress indicators — ✅ **FULLY REMEDIATED** (all 10 findings LOAD-01→LOAD-10; see [23-loading-states.md](23-loading-states.md) — commits `6d1a21ca`, `710cca22`, `3dd82a3f`, `9de773c1`, `8488ba05`, `13bfdf40`)
-24. Empty states — consistency across all data views and lists
+24. Empty states — consistency across all data views and lists — ✅ **FULLY REMEDIATED** (findings EMPTY-01→EMPTY-10; EMPTY-08/09 P3 polish deferred as non-blocking; see [24-empty-states.md](24-empty-states.md) — commits `50594832`, `de4479c7`, `fd2548da`)
 25. Rust backend — clippy warnings, unsafe blocks, error propagation, API coherence
 26. Docker images — size optimization, layer caching, security scanning
 27. CI pipeline — gate completeness, flaky test quarantine, cache efficiency

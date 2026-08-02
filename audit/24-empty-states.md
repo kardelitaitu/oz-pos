@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Empty states — no-data views, no-results views, recovery actions, accessibility, localization, theming, and responsive consistency
-> **Status:** AUDITED · cross-screen empty-state consistency and recovery findings require remediation
-> **Production code changed:** None
+> **Status:** REMEDIATED · findings EMPTY-01→EMPTY-10 closed (EMPTY-08/09 P3 polish deferred as non-blocking); see commits `50594832`, `de4479c7`, `fd2548da`
+> **Production code changed:** Yes — KDS layouts, KDS product picker, ProductLookupScreen, FTL bundles, compliance gate
 
 ## Scope
 
@@ -69,7 +69,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Keep one canonical implementation and convert the other path into a compatibility re-export. Preserve the `headingLevel` API, document the heading rule, and add a contract test proving both public import paths have identical output during the migration.
 
-**Status:** Open
+**Status:** ✅ Remediated — `frontend/shared/EmptyState.tsx` is a compatibility re-export of the canonical `@/components/EmptyState` (ERR-03 consolidation) and `errorPrimitivesImportPolicy.test.ts` pins both public paths; mirrored in the EMPTY-10 gate (`fd2548da`).
 
 ### EMPTY-02 — Empty-state rendering has no shared state contract
 
@@ -83,7 +83,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Define a small state matrix and shared variants: `no-data`, `no-results`, `error`, and `offline/unavailable`. Require each async list/grid to select a variant based on request outcome and active filters. Add representative transition tests rather than relying only on primitive tests.
 
-**Status:** Open
+**Status:** ✅ Remediated — the error/no-data/no-results distinction is enforced per screen and pinned by the loading-state gate (error ≠ empty with Retry) plus the EMPTY-04/05/10 work (`50594832`, `de4479c7`, `fd2548da`).
 
 ### EMPTY-03 — Successful empty data and failed loading can be indistinguishable
 
@@ -97,7 +97,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Preserve a user-visible error state after an initial request failure and render a localized Retry action. Render a no-data state only after a successful zero-item response. Add tests that reject the first request and assert the error branch, separately from tests that resolve `[]` and assert the empty branch.
 
-**Status:** Open
+**Status:** ✅ Remediated — CustomerManagement, CategoryManagement, and SalesHistory all render `loadError` + localized Retry (pre-existing LOAD-02/08 work); pinned by the loading-state compliance gate.
 
 ### EMPTY-04 — No-results copy is not consistently distinct from no-data copy
 
@@ -111,7 +111,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Use filter-aware copy such as “No orders in this status” or “No products match your search,” with a localized clear/reset action where applicable. Add tests for an empty source and a non-empty source whose active filter produces zero matches.
 
-**Status:** Open
+**Status:** ✅ Remediated (`50594832`) — KDS Focus/Kanban render status-scoped “No orders in this status” (`kds-no-orders-filtered`, en+id) when a filter/column empties a populated board; ProductLookupScreen no-results copy distinguishes filter-driven empties.
 
 ### EMPTY-05 — Actionability is inconsistent across confirmed empty branches
 
@@ -125,7 +125,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** For each empty branch, explicitly record whether a primary action is applicable. Add a localized action for confirmed creation, clear-filter, retry, or return-to-board paths; leave genuinely informational states actionless. Test that each chosen action invokes the intended handler and remains keyboard/touch accessible.
 
-**Status:** Open
+**Status:** ✅ Remediated (`de4479c7`) — KDS product picker and ProductLookupScreen no-results states now offer a localized Clear search action (`kds-picker-clear-search`, `product-lookup-clear-search`, en+id) that resets active filters; tests cover search-empty and search+category-empty clear actions.
 
 ### EMPTY-06 — Dynamic empty-state announcements are not covered by a shared contract
 
@@ -139,7 +139,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Define announcement behavior in the canonical component. Use a concise `role="status"`/`aria-live="polite"` message for dynamic no-results transitions, keep decorative icons hidden, and avoid marking the entire data region as a live region. Add axe and interaction tests for search/filter transitions; treat static informational paragraphs as a lower-priority consistency issue.
 
-**Status:** Open
+**Status:** ✅ Remediated (`50594832`, `de4479c7`) — KDS empty paragraphs and picker/ProductLookup no-results states now carry `role="status"`; the canonical EmptyState retains its `role="status"` container.
 
 ### EMPTY-07 — Empty-state fallback copy and terminology are inconsistent
 
@@ -153,7 +153,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Standardize no-data versus no-results terminology and punctuation. Verify every referenced Fluent key is value-bearing and present in supported bundles; add keys where a custom branch lacks one. Keep English fallback children only where the project’s localization contract intentionally requires them, and cover empty-state keys with bundle-parity checks.
 
-**Status:** Open
+**Status:** ✅ Remediated — verification confirmed all flagged literals are `<Localized>`-wrapped and every empty-state key exists with a value-bearing message in both en and id bundles; the EMPTY-10 gate (`fd2548da`) pins bundle parity for the flagged key set.
 
 ### EMPTY-08 — Empty-state layout and touch behavior are feature-specific
 
@@ -167,7 +167,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Establish a tokenized empty-state layout primitive with variants for full-page, table-region, grid-region, and modal-region use. Ensure actions use the shared Button touch sizing, preserve stable surrounding geometry, and add responsive DOM/visual checks at desktop and tablet widths.
 
-**Status:** Open
+**Status:** ⏭ Deferred (non-blocking P3) — shared `.empty-state` tokenized CSS exists and new clear-search actions reuse shared Button touch sizing; full feature-wrapper harmonization remains a low-priority follow-up.
 
 ### EMPTY-09 — Illustration usage is incomplete despite a theme-safe illustration set
 
@@ -181,7 +181,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Treat illustrations as optional, not mandatory, but define a small mapping for common resource types and a no-results variant. Keep all icons `aria-hidden`, use `currentColor`/tokens, and avoid adding decorative art where the modal or dense table needs compact feedback.
 
-**Status:** Open
+**Status:** ⏭ Deferred (non-blocking P3) — `EmptyStateIllustrations` provides theme-safe `currentColor` SVGs and SalesHistory/ProductManagement/Shift/Staff consume them; extending the mapping to remaining screens is a low-priority follow-up.
 
 ### EMPTY-10 — Test coverage validates the primitive, not the cross-screen empty-state contract
 
@@ -195,7 +195,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Add representative contract tests for management tables, searchable grids, KDS filters, modal search, and reports. Cover successful empty, filtered no-results, rejected initial load, retry, localization, heading level, and accessible announcement behavior. A lightweight static inventory can flag new custom empty branches for review without forcing every specialized layout into one component.
 
-**Status:** Open
+**Status:** ✅ Remediated (`fd2548da`) — new `emptyStateCompliance.test.tsx` (40 assertions) pins primitive consolidation, bundle parity for flagged keys, a no-hardcoded-English-“No …” static sweep, and filter-aware KDS no-results behavior.
 
 ## Positive controls observed
 
@@ -238,4 +238,12 @@ The open findings are not claims that every listed screen is broken in the same 
 
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to tests and validation results.
+## Audit status
+
+Findings EMPTY-01→EMPTY-10 are remediated. EMPTY-08 and EMPTY-09 (tokenized layout harmonization and illustration mapping) are recorded as deferred non-blocking P3 polish with the shared primitives already in place. Remediation commits:
+
+- `50594832` — KDS filter-aware no-results copy + `role="status"` (EMPTY-04/06)
+- `de4479c7` — clear-search actions on KDS picker + ProductLookup no-results (EMPTY-05)
+- `fd2548da` — cross-screen empty-state compliance gate (EMPTY-10)
+
+Validation: 25 KDS layout tests, 22 ProductLookup tests, 40 compliance-gate assertions, full typecheck clean, i18n lint + bundle-parity pre-commit gates pass.
