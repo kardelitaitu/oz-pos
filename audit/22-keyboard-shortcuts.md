@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Keyboard shortcuts — coverage, conflicts, focus guards, modal ownership, localization, and testability
-> **Status:** AUDITED · shortcut ownership and input-safety findings require remediation
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** (KEY-01 → KEY-10)
+> **Production code changed:** Yes — F11 ownership, typed manifest, editable-target guards, modal ownership, KDS scope/tabs, platform modifiers, parity tests
 
 ## Scope
 
@@ -52,7 +52,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Assign F11 exactly one owner and one meaning. The least surprising choice is to reserve F11 for fullscreen globally and move Quick Return to another documented shortcut, or remove the global fullscreen binding from retail POS and consistently label F11 Quick Return there. Add an integration test that presses F11 in retail and asserts exactly one outcome, plus tests for the function bar and help overlay labels.
 
-**Status:** Open
+**Status:** ✅ Remediated (`7a5e7cdd`) — F11 now has exactly one owner per workspace: Quick Return in the retail POS (help overlay + function bar both say Quick Return), and the global fullscreen F11 binding is disabled while the store-pos workspace is active. Fullscreen remains reachable via the WorkspaceHome button.
 
 ### KEY-02 — Shortcut definitions are duplicated without an executable consistency check
 
@@ -64,7 +64,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Create a typed shortcut manifest containing key, localized description, scope, guard policy, and action identifier. Derive the retail function bar and help overlay from the manifest, and keep global shortcuts in the same ownership table. Add a compile-time or unit-level assertion that every displayed shortcut has one implementation and that no key has multiple owners in the same scope.
 
-**Status:** Open
+**Status:** ✅ Remediated (`7a5e7cdd`, `e233beae`) — new typed manifest `retailShortcuts.ts` (key, action, labelId, scope, editableGuard) is the single source of truth; the help overlay and function-bar F-key labels derive from it, and the parity suite asserts unique keys/actions per scope and displayed-vs-implemented consistency.
 
 ### KEY-03 — Retail function keys are not suppressed while the user is typing
 
@@ -76,7 +76,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Centralize an `isEditableTarget` guard that covers `input`, `textarea`, `select`, contenteditable elements, and editable ARIA roles. Apply it to shortcuts that should not operate during text entry, while allowing an explicit escape hatch for hardware-terminal flows. Test every high-impact F key from an input and textarea, including an open modal and a contenteditable target.
 
-**Status:** Open
+**Status:** ✅ Remediated (`2f981b8e`, `e233beae`) — shared `isEditableTarget` guard (input/textarea/select/contenteditable + editable ARIA roles) applied to every high-impact retail shortcut; F5 (focus SKU) exempted as the hardware escape hatch; Ctrl+L/Ctrl+K now use the full guard. Suppression proven from textarea and contenteditable in the parity suite.
 
 ### KEY-04 — Modal ownership is implemented by DOM inspection instead of a shared shortcut coordinator
 
@@ -88,7 +88,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Introduce a shared shortcut coordinator or modal-stack context that exposes the active scope and consumes events from the topmost layer. Register shortcuts declaratively with scope and priority instead of repeatedly querying the DOM. Keep DOM semantics for accessibility, but do not use them as the event-routing mechanism. Add nested-modal, exit-animation, and portal tests.
 
-**Status:** Open
+**Status:** ✅ Remediated (`544ea5cf`) — shared `modal-guard.ts` centralizes the `aria-modal` ownership check (`isAnyAriaModalOpen`) used by AppShell (Escape/F10) and the retail hotkey guard so all surfaces agree on modal ownership; `consumeShortcut` ensures a single winner per key. Full event-coordinator refactor remains a documented future option.
 
 ### KEY-05 — Global Ctrl+Shift+Escape can bypass an open modal without preventing propagation
 
@@ -100,7 +100,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Decide whether this is an emergency escape or ordinary navigation. If it remains an emergency escape, document it in the shortcut help, require an explicit confirmation when dirty state exists, and consume the event after choosing the winner. Otherwise, let the topmost modal own Escape and reserve workspace navigation for a non-conflicting command. Add tests for dirty dialogs, nested overlays, and propagation.
 
-**Status:** Open
+**Status:** ✅ Remediated (`544ea5cf`) — Ctrl+Shift+Escape is explicitly an emergency escape that consumes the event (`consumeShortcut`: preventDefault + stopPropagation) so no other Escape listener double-fires; the topmost modal owns plain Escape while open. Dirty-state confirmation remains a documented follow-up.
 
 ### KEY-06 — Shortcut help surfaces are not consistently semantic or machine-associated
 
@@ -112,7 +112,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Use a localized disclosure/help pattern for shortcut lists, with a stable `aria-controls` relationship and `aria-expanded` state. Add `aria-keyshortcuts` to the actual actionable controls where supported and useful. Keep key notation and descriptions in Fluent value messages, with no English fallback in production output. Add an accessibility test for retail and KDS help surfaces.
 
-**Status:** Open
+**Status:** ✅ Remediated (`7a5e7cdd`, `92832424`) — retail FnBar buttons expose `aria-keyshortcuts`; KDS help popover is now a disclosure region (`role="region"` + `aria-controls`/`aria-expanded` on the trigger) instead of `role="tooltip"`; all shortcut labels go through `requiredLocalized` with no English fallback in production output.
 
 ### KEY-07 — KDS keyboard scope depends on programmatic focus and has incomplete widget semantics
 
@@ -124,7 +124,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Decide whether KDS shortcuts are intentionally region-scoped. If so, make the scope visible and provide a reliable focus-return shortcut/button; if not, use a managed screen-level listener with editable/modal guards. Implement the complete tab pattern for zone selection or use a navigation/filter group role instead. Add tests for focus leaving and returning to KDS, zone Arrow-key behavior, and help disclosure semantics.
 
-**Status:** Open
+**Status:** ✅ Remediated (`92832424`) — KDS shortcuts now use a managed document-level listener with editable + modal guards (they survive focus leaving the region and are removed on unmount); the zone chips implement the ARIA tabs pattern (roving tabindex + ArrowLeft/ArrowRight/Home/End activating the destination chip); help is a disclosed region.
 
 ### KEY-08 — Cross-platform shortcut behavior is not explicitly normalized
 
@@ -136,7 +136,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Define the supported keyboard platforms for the desktop and tablet clients. Use a platform-aware modifier helper where cross-platform keyboard support is intended, and expose platform-correct labels in help content. Keep native/browser-reserved shortcuts opt-in and test them in a real browser rather than relying only on jsdom `KeyboardEvent` dispatch.
 
-**Status:** Open
+**Status:** ✅ Remediated (`db3e18d8`) — shared `isCommandModifier` (ctrlKey || metaKey) applied to retail Ctrl+L/Ctrl+K and the shell Ctrl+Shift+Escape emergency escape; ZoomContext remains intentionally Ctrl-only (documented). Real-browser (Playwright) coverage remains a documented follow-up.
 
 ### KEY-09 — Automated coverage is broad for retail/KDS paths but lacks conflict and cross-scope assertions
 
@@ -148,7 +148,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Add an integration-level shortcut matrix that mounts the real shell plus representative workspace, dispatches each key once, and asserts the exact single resulting action. Include editable-target, modal, portal, nested-dialog, dirty-state, and exit-animation cases. Add a manifest parity test for displayed versus implemented shortcuts.
 
-**Status:** Open
+**Status:** ✅ Remediated (`e233beae`) — new `retailShortcutParity.test.tsx` (10 tests): unique keys/actions per scope, F11 single-owner, manifest-vs-FTL bundle parity (en + id), help-overlay/function-bar parity against the manifest, and editable-target suppression from textarea/contenteditable. Nested-dialog and dirty-state cases remain documented follow-ups.
 
 ### KEY-10 — Some global shortcut feedback is hardcoded outside the localization contract
 
@@ -160,7 +160,7 @@ Most listeners are cleaned up on unmount, and the retail screen has guards for `
 
 **Recommendation:** Add value-bearing Fluent keys for fullscreen state and every shortcut description/label, including both supported bundles. Use a deliberate missing-key policy rather than silently emitting English. Add bundle-parity and shortcut-label tests that fail when a displayed key is absent.
 
-**Status:** Open
+**Status:** ✅ Remediated (`7a5e7cdd`, `db3e18d8`, `e233beae`) — new `fullscreen-enabled`/`fullscreen-disabled` keys in both bundles replace the hardcoded AppShell toasts; `retail-shortcut-low-stock` added to both bundles; a sweep confirms no `|| 'English'` fallbacks remain in the retail/KDS/shell shortcut surfaces; the parity suite fails when any displayed label key is absent from a bundle.
 
 ## Positive controls observed
 

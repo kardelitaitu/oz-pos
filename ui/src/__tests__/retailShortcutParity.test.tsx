@@ -12,12 +12,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
-import { createUsePosStateMock } from '@/__tests__/test-utils/mocks/usePosState';
-import { createBarcodeScannerModuleMock } from '@/__tests__/test-utils/mocks/barcodeScanner';
-import { createRetailProductsApiMock, retailProducts } from '@/__tests__/test-utils/mocks/retailPos';
-import { createShiftsApiMock, createSettingsApiMock, createHardwareApiMock, createSalesApiMock } from '@/__tests__/test-utils/mocks/api';
-import { createRetailKdsApiMock, createRetailCurrencyApiMock, createRetailCustomersApiMock } from '@/__tests__/test-utils/mocks/retailPos';
-import { createTableManagementScreenStub, createSalesHistoryScreenStub, createProductLookupScreenStub } from '@/__tests__/test-utils/mocks/retailPos';
 import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
@@ -181,7 +175,6 @@ describe('rendered shortcut parity (KEY-09)', () => {
   });
 
   it('function bar derives F-key labels from the manifest (KEY-02)', async () => {
-    const user = userEvent.setup();
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
 
     const fnBar = await screen.findByRole('toolbar');
