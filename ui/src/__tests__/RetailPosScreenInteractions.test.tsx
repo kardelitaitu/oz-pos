@@ -570,4 +570,36 @@ describe('RetailPosScreen — interactions', () => {
     await userEvent.click(confirmBtns[1]!);
     expect(resetCart).toHaveBeenCalledTimes(1);
   });
+
+  // ── PERF-04: rAF-throttled cart resize ───────────────────────────
+
+  it('flushes the final cart width to localStorage on mouseup even when the rAF frame never runs', async () => {
+    // Simulate a fast drag where the rAF callback is skipped (stubbed to no-op):
+    // the ONLY path that applies the final pointer position is the synchronous
+    // flush in stopResize. Regression guard for the flush-ordering bug where
+    // isResizing was cleared before the flush made it early-return.
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    localStorage.removeItem('retail-cart-width');
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+
+    // Give the root a deterministic right edge so the width math is exact:
+    // right(800) - clientX(400) = 400, within [280, min(1024*0.5, 800)].
+    const main = document.getElementById('retail-main');
+    expect(main).not.toBeNull();
+    const rectSpy = vi.spyOn(main!, 'getBoundingClientRect').mockReturnValue({ right: 800 } as DOMRect);
+
+    const handle = document.querySelector('.retail-resize-handle');
+    expect(handle).not.toBeNull();
+    fireEvent.mouseDown(handle!);
+    fireEvent.mouseMove(window, { clientX: 400 });
+    fireEvent.mouseUp(window);
+
+    expect(localStorage.getItem('retail-cart-width')).toBe('400');
+    expect(handle!.getAttribute('aria-valuenow')).toBe('400');
+
+    rafSpy.mockRestore();
+    cafSpy.mockRestore();
+    rectSpy.mockRestore();
+  });
 });

@@ -77,6 +77,7 @@ export function createRetailProductsApiMock() {
     deleteCategory: vi.fn(),
     getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
     getProductTrackSerialScoped: vi.fn(() => Promise.resolve(false)),
+    getProductTrackSerialBatch: vi.fn((_skus: string[]) => Promise.resolve([])),
   };
 }
 

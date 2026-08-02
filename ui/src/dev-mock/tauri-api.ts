@@ -566,6 +566,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'get_product_track_serial': () => false,
   'get_product_track_serial_scoped': () => false,
+  'get_product_track_serial_batch': (args) => {
+    const { skus } = args as { skus: string[] };
+    return (skus ?? []).map((sku) => ({ sku, track_serial: false }));
+  },
+  'get_product_track_serial_batch_scoped': (args) => {
+    const { skus } = args as { skus: string[] };
+    return (skus ?? []).map((sku) => ({ sku, track_serial: false }));
+  },
   'get_product_stock': () => ({ quantity: 50 }),
 
   'adjust_stock': () => 50,

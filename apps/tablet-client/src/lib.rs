@@ -365,6 +365,7 @@ pub fn run() {
                 commands::products::lookup_product_by_sku,
                 commands::products::adjust_stock,
                 commands::products::get_product_track_serial,
+                commands::products::get_product_track_serial_batch,
                 commands::promotions::list_promotions,
                 commands::promotions::get_promotion,
                 commands::promotions::create_promotion,

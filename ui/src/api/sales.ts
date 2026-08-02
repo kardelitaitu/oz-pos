@@ -224,6 +224,19 @@ export const overrideCartDeductionLocation = (sessionToken: string, cartId: stri
 export const getProductTrackSerial = (sku: string): Promise<boolean> =>
   loggedInvoke<boolean>('get_product_track_serial', { sku });
 
+/** One serial-tracking flag row in a batch response. */
+export interface SerialTrackRow {
+  sku: string;
+  track_serial: boolean;
+}
+
+/**
+ * Check serial-tracking flags for many SKUs in a single IPC round trip
+ * (PERF-03 — replaces the N+1 per-SKU loop in the retail cart).
+ */
+export const getProductTrackSerialBatch = (skus: string[]): Promise<SerialTrackRow[]> =>
+  loggedInvoke<SerialTrackRow[]>('get_product_track_serial_batch', { skus });
+
 /** Apply a percentage-based discount to a cart. */
 export const setCartDiscount = (args: SetCartDiscountArgs): Promise<void> =>
   loggedInvoke<void>('set_cart_discount', { args });

@@ -458,6 +458,51 @@ pub async fn get_product_track_serial(
     Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
 }
 
+/// A single serial-tracking flag keyed by SKU (batch response row).
+#[derive(Debug, Serialize)]
+pub struct SerialTrackRow {
+    /// Stock-keeping unit.
+    pub sku: String,
+    /// Whether the product is configured for serial tracking.
+    pub track_serial: bool,
+}
+
+/// Check serial-tracking flags for many SKUs in one round trip
+/// (PERF-03: replaces the N+1 `get_product_track_serial` loop).
+/// Unknown SKUs resolve to `track_serial: false`; order is preserved.
+#[command]
+pub async fn get_product_track_serial_batch(
+    skus: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SerialTrackRow>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let rows = run_get_product_track_serial_batch(&store, &skus);
+    drop(db);
+    Ok(rows)
+}
+
+/// Business logic for the batch serial-tracking lookup (extracted for testing).
+fn run_get_product_track_serial_batch(store: &Store<'_>, skus: &[String]) -> Vec<SerialTrackRow> {
+    skus.iter()
+        .map(|sku| {
+            // get_product returns Result<Option<ProductWithDetails>> —
+            // collapse both error and missing-product into `false` so the
+            // batch never fails for unknown SKUs (matches single-SKU).
+            let track_serial = store
+                .get_product(sku)
+                .ok()
+                .flatten()
+                .map(|p| p.product.track_serial)
+                .unwrap_or(false);
+            SerialTrackRow {
+                sku: sku.clone(),
+                track_serial,
+            }
+        })
+        .collect()
+}
+
 // ── Delete product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]

@@ -65,6 +65,7 @@ export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
     printSalesReceipt: vi.fn(() => Promise.resolve({ printed: true })),
     onReceiptPrinted: vi.fn(),
     getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
+    getProductTrackSerialBatch: vi.fn((_skus: string[]) => Promise.resolve([])),
     holdCartScoped: vi.fn((_token: string) => Promise.resolve({ id: 'held-1' })),
     listHeldCartsScoped: vi.fn((_token: string) => Promise.resolve([])),
     getHeldCartScoped: vi.fn((_token: string, _id: string) => Promise.resolve(null)),

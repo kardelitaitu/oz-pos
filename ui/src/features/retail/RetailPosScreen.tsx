@@ -9,7 +9,7 @@ import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
 import ItemModifierModal from '@/features/sales/components/ItemModifierModal';
-import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerial, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
+import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerialBatch, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -160,14 +160,30 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     for (const sku of pendingTrackFetchRef.current) {
       if (!uniqueSkus.includes(sku as Sku)) pendingTrackFetchRef.current.delete(sku);
     }
-    for (const sku of uniqueSkus) {
-      if (trackSerialMap[sku] === undefined && !pendingTrackFetchRef.current.has(sku)) {
-        pendingTrackFetchRef.current.add(sku);
-        getProductTrackSerial(sku).then((track) => {
-          setTrackSerialMap((prev) => ({ ...prev, [sku]: track }));
-        }).catch(() => { /* serial track lookup is best-effort */ });
-      }
-    }
+    const missing = uniqueSkus.filter(
+      (sku) => trackSerialMap[sku] === undefined && !pendingTrackFetchRef.current.has(sku),
+    );
+    if (missing.length === 0) return;
+    for (const sku of missing) pendingTrackFetchRef.current.add(sku);
+    // PERF-03: fetch every missing flag in ONE IPC round trip instead of
+    // one get_product_track_serial call per SKU (N+1 elimination).
+    getProductTrackSerialBatch(missing as string[])
+      .then((rows) => {
+        setTrackSerialMap((prev) => {
+          const next = { ...prev };
+          for (const row of rows) next[row.sku] = row.track_serial;
+          return next;
+        });
+      })
+      .catch(() => {
+        // best-effort: release the pending guard so a later cart change
+        // re-fetches the batch (a transient IPC failure must not pin these
+        // SKUs to non-tracking for the whole session). Leaving the map
+        // undefined keeps the serial-capture UI hidden, same as false — and
+        // since the map is unchanged, the effect won't re-run here, so the
+        // re-fetch only happens on the next explicit cart mutation.
+        for (const sku of missing) pendingTrackFetchRef.current.delete(sku);
+      });
   }, [lines, trackSerialMap]);
 
   const handleSerialChange = useCallback((lineId: string, serial: string) => {
@@ -232,6 +248,22 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   });
   const isResizing = useRef(false);
   const retailPosRef = useRef<HTMLDivElement>(null);
+  // PERF-04: hold the latest clamped width + pointer X so mouseup can flush
+  // the final value instead of writing localStorage on every mousemove.
+  const latestClampedRef = useRef(retailCartWidth);
+  const lastClientXRef = useRef(0);
+
+  /** Compute + apply the cart width from the latest pointer position. */
+  const applyWidthFromPointer = useCallback(() => {
+    if (!isResizing.current || !retailPosRef.current) return;
+    const rect = retailPosRef.current.getBoundingClientRect();
+    const clamped = clampRetailCartWidth(
+      rect.right - lastClientXRef.current,
+      window.innerWidth,
+    );
+    latestClampedRef.current = clamped;
+    setRetailCartWidth(clamped);
+  }, []);
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -241,27 +273,44 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, []);
 
   useEffect(() => {
+    let rafId: number | null = null;
     const stopResize = () => {
       if (!isResizing.current) return;
+      // Flush any pending frame synchronously while still resizing so a fast
+      // drag-then-release never loses the final pointer position (PERF-04).
+      // Order matters: applyWidthFromPointer() early-returns once isResizing
+      // is cleared, so flush BEFORE resetting the flag.
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        applyWidthFromPointer();
+      }
       isResizing.current = false;
+      // Persist the final width once, at the end of the drag.
+      localStorage.setItem('retail-cart-width', String(latestClampedRef.current));
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
     const onMouseMove = (e: MouseEvent) => {
       if (!isResizing.current || !retailPosRef.current) return;
-      const rect = retailPosRef.current.getBoundingClientRect();
-      const clamped = clampRetailCartWidth(rect.right - e.clientX, window.innerWidth);
-      setRetailCartWidth(clamped);
-      localStorage.setItem('retail-cart-width', String(clamped));
+      lastClientXRef.current = e.clientX;
+      // Coalesce mousemove events into ONE state update per animation
+      // frame (PERF-04) instead of setState on every pointer move.
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyWidthFromPointer();
+      });
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', stopResize);
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', stopResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
       stopResize();
     };
-  }, []);
+  }, [applyWidthFromPointer]);
 
   useEffect(() => {
     const onResize = () => {

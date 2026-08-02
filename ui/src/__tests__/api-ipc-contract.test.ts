@@ -38,6 +38,7 @@ import {
   finalizeSale,
   voidPendingSale,
   setCartDiscountScoped,
+  getProductTrackSerialBatch,
 } from '@/api/sales';
 
 describe('sales.ts IPC contract', () => {
@@ -191,6 +192,21 @@ describe('sales.ts IPC contract', () => {
       sessionToken: 'tok',
       args: { cartId: 'c1' as CartId, percent: 10, label: 'Senior' },
     });
+  });
+
+  it('getProductTrackSerialBatch invokes "get_product_track_serial_batch" with skus (PERF-03)', async () => {
+    mockInvoke.mockResolvedValue([
+      { sku: 'TRACKED', track_serial: true },
+      { sku: 'PLAIN', track_serial: false },
+    ]);
+    const rows = await getProductTrackSerialBatch(['TRACKED', 'PLAIN']);
+    expect(mockInvoke).toHaveBeenCalledWith('get_product_track_serial_batch', {
+      skus: ['TRACKED', 'PLAIN'],
+    });
+    expect(rows).toEqual([
+      { sku: 'TRACKED', track_serial: true },
+      { sku: 'PLAIN', track_serial: false },
+    ]);
   });
 
   it('propagates errors from the backend (does not swallow)', async () => {

@@ -458,6 +458,8 @@ pub fn run() {
             commands::products::adjust_stock_scoped,
             commands::products::get_product_track_serial,
             commands::products::get_product_track_serial_scoped,
+            commands::products::get_product_track_serial_batch,
+            commands::products::get_product_track_serial_batch_scoped,
             commands::promotions::list_promotions,
             commands::promotions::list_promotions_scoped,
             commands::promotions::get_promotion,
