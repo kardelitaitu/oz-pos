@@ -84,7 +84,7 @@ function PackageIcon() {
 export default function ProductLookupScreen({ onAddProduct }: ProductLookupScreenProps) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { products, categories, loading, usingFallback } = useProducts();
+  const { products, categories, loading, error, usingFallback, reload } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -324,6 +324,24 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
               <span />
             </Localized>
           </span>
+        </div>
+      ) : error && !usingFallback ? (
+        /* LOAD-03/LOAD-08: a production load failure must not look like an
+           empty catalog — render a localized unavailable state with Retry. */
+        <div className="product-empty" role="alert">
+          <span className="product-empty-text">
+            {error}
+          </span>
+          <button
+            type="button"
+            className="product-retry-btn"
+            onClick={reload}
+            aria-label={l10n.getString('retry')}
+          >
+            <Localized id="retry">
+              <span />
+            </Localized>
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="product-empty">

@@ -9,6 +9,7 @@ import { plainErrorMessage } from '@/utils/app-error';
 import { isEditableTarget } from '@/utils/isEditableTarget';
 import { isAnyAriaModalOpen } from '@/utils/modal-guard';
 import { isCommandModifier } from '@/utils/keyboard-modifier';
+import { isDemoMode } from '@/utils/demo-mode';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -54,7 +55,10 @@ function toProduct(p: ProductDto): Product {
   };
 }
 
-// ── Retail sample product fallback (when IPC is unavailable) ──────
+// ── Retail sample product fallback (dev/demo builds only — LOAD-03) ──
+// These catalogs may NEVER surface in a production build, even when the
+// live IPC catalog request fails: a cashier could otherwise see and select
+// products that are not in the store. `isDemoMode()` gates them.
 const RETAIL_SAMPLE_PRODUCTS: ProductDto[] = [
   { sku: 'CPU-R7-7800X3D', name: 'AMD Ryzen 7 7800X3D 8-Core',  category: 'cat-cpu',       price: { minor_units: 6250000, currency: 'IDR' }, barcode: '730143314930', in_stock: true,  stock_qty: 15, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
   { sku: 'CPU-I7-14700K',  name: 'Intel Core i7-14700K 20-Core', category: 'cat-cpu',       price: { minor_units: 6450000, currency: 'IDR' }, barcode: '503203727850', in_stock: true,  stock_qty: 10, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
@@ -453,15 +457,25 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       .then(({ products: prods, categories: cats }) => {
         if (controller.signal.aborted) return;
         setProducts(prods);
-        setCategories(cats && cats.length > 0 ? cats : RETAIL_SAMPLE_CATEGORIES);
+        // LOAD-03: empty category list is a legitimate empty catalog in
+        // production — never substitute demo categories outside dev.
+        setCategories(cats && cats.length > 0 ? cats : (isDemoMode() ? RETAIL_SAMPLE_CATEGORIES : []));
         // PERF-06: time-to-interactive-POS marker — catalog rendered.
         recordMark('oz:pos-interactive');
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setProducts(RETAIL_SAMPLE_PRODUCTS);
-        setCategories(RETAIL_SAMPLE_CATEGORIES);
-        setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
+        // LOAD-03: demo catalog only in dev/demo builds; production keeps
+        // the real (empty) state and shows the unavailable banner + Retry.
+        if (isDemoMode()) {
+          setProducts(RETAIL_SAMPLE_PRODUCTS);
+          setCategories(RETAIL_SAMPLE_CATEGORIES);
+          setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
+        } else {
+          setProducts([]);
+          setCategories([]);
+          setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error-unavailable'));
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) {

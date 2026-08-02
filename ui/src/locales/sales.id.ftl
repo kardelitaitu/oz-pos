@@ -674,6 +674,7 @@ pos-shift-open-aria = Buka shift baru
 
 # ── Retail POS load error / retry ──
 retail-load-error = Gagal memuat produk. Menampilkan data demo.
+retail-load-error-unavailable = Gagal memuat produk. Periksa koneksi lalu coba lagi.
 retail-load-error-retry-aria = Coba lagi memuat produk
 
 # ── Retail POS screen ──

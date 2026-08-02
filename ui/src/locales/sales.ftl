@@ -684,6 +684,7 @@ pos-open-bills-resume = Resume
 
 # ── Retail POS load error / retry ──
 retail-load-error = Failed to load products. Showing demo data.
+retail-load-error-unavailable = Failed to load products. Check the connection and retry.
 retail-load-error-retry-aria = Retry loading products
 
 # ── Retail POS screen ──

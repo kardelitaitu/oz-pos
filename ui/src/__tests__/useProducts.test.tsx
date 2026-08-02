@@ -188,6 +188,62 @@ describe('useProducts', () => {
     });
   });
 
+  describe('production mode (LOAD-03)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('does NOT expose demo products when listProducts rejects in a production build', async () => {
+      // Simulate a production build: DEV=false and VITE_DEMO_MODE unset.
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_DEMO_MODE', undefined);
+      mocks.listProducts.mockRejectedValue(new Error('IPC unavailable'));
+
+      const { result } = renderHook(() => useProducts());
+
+      await waitFor(() => {
+        expect(result.current.usingFallback).toBe(false);
+        expect(result.current.products).toEqual([]);
+        expect(result.current.error).not.toBeNull();
+      });
+    });
+
+    it('does NOT substitute sample products for an empty DB in a production build', async () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_DEMO_MODE', undefined);
+      mocks.listProducts.mockResolvedValue([]);
+
+      const { result } = renderHook(() => useProducts());
+
+      await waitFor(() => {
+        expect(result.current.usingFallback).toBe(false);
+        expect(result.current.products).toEqual([]);
+        expect(result.current.error).toBeNull();
+      });
+    });
+
+    it('surfaces a Retry action that refetches after a production failure', async () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_DEMO_MODE', undefined);
+      mocks.listProducts.mockRejectedValueOnce(new Error('IPC unavailable'));
+      mocks.listProducts.mockResolvedValueOnce([makeProductDto()]);
+
+      const { result } = renderHook(() => useProducts());
+
+      await waitFor(() => {
+        expect(result.current.products).toEqual([]);
+        expect(result.current.error).not.toBeNull();
+      });
+
+      act(() => result.current.reload());
+
+      await waitFor(() => {
+        expect(result.current.products).toHaveLength(1);
+        expect(result.current.error).toBeNull();
+      });
+    });
+  });
+
   describe('cleanup', () => {
     it('does not set state after unmount', () => {
       let resolve!: (v: unknown) => void;
