@@ -186,7 +186,7 @@ impl Store<'_> {
         // rusqlite 0.31: `Backup::new` takes the two distinct connections;
         // `run_to_completion` copies the whole source database in 5-page
         // chunks with a 250 ms pause between chunks.
-        let mut backup = rusqlite::backup::Backup::new(self.conn, &mut dst).map_err(|e| {
+        let backup = rusqlite::backup::Backup::new(self.conn, &mut dst).map_err(|e| {
             CoreError::Internal(format!(
                 "failed to start online backup to '{output_path}': {e}"
             ))

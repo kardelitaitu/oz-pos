@@ -231,25 +231,46 @@ impl SyncDaemon {
             }
         };
 
-        // Phase 2: Do async sync if configured and there are pending items
-        let pushed;
-        let pulled;
+        // Phase 2: Do async sync if configured and there are pending items.
+        // `pushed`/`pulled` start at 0 so every code path (including the
+        // RUST-05 fail-closed transport skip) yields a defined value for the
+        // daemon status below.
+        let mut pushed = 0;
+        let mut pulled = 0;
         let mut sync_error: Option<String> = None;
 
         if let Some(cfg) = &config {
             if !cfg.server_url.is_empty() && !pending.is_empty() {
-                let transport = SyncTransport::new(&cfg.server_url, cfg.api_key.as_deref());
-                match transport.push_items(&pending).await {
-                    Ok(results) => {
-                        pushed = results.len();
-                        // Phase 3: Apply push results to DB (blocking).
-                        // SYNC-02: carry the FULL local items (not just ids)
-                        // so a conflict is resolved by the shared ADR #21
-                        // conflict-application service — the same strategy the
-                        // immediate SyncEngine uses, never a blanket LWW.
-                        let db_clone = db.clone();
-                        let local_items = pending;
-                        let outcome = tokio::task::spawn_blocking(move || {
+                // RUST-05: fail closed — never sync through an
+                // unauthenticated, timeout-less client. A construction
+                // failure records the error and skips the push phase.
+                let transport = match SyncTransport::try_new(
+                    &cfg.server_url,
+                    cfg.api_key.as_deref(),
+                ) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        pushed = 0;
+                        sync_error = Some(format!("transport construction failed: {e}"));
+                        tracing::error!(
+                            error = %e,
+                            "sync transport construction failed — skipping push (RUST-05 fail-closed)"
+                        );
+                        None
+                    }
+                };
+                if let Some(transport) = transport {
+                    match transport.push_items(&pending).await {
+                        Ok(results) => {
+                            pushed = results.len();
+                            // Phase 3: Apply push results to DB (blocking).
+                            // SYNC-02: carry the FULL local items (not just ids)
+                            // so a conflict is resolved by the shared ADR #21
+                            // conflict-application service — the same strategy the
+                            // immediate SyncEngine uses, never a blanket LWW.
+                            let db_clone = db.clone();
+                            let local_items = pending;
+                            let outcome = tokio::task::spawn_blocking(move || {
                             let conn = db_clone.blocking_lock();
                             let store = Store::new(&conn);
                             let queue = SyncQueue::new();
@@ -293,26 +314,27 @@ impl SyncDaemon {
                         })
                         .await;
 
-                        if let Err(e) = outcome {
-                            sync_error = Some(format!("apply push phase: {e}"));
+                            if let Err(e) = outcome {
+                                sync_error = Some(format!("apply push phase: {e}"));
+                            }
                         }
-                    }
-                    Err(e) => {
-                        pushed = 0;
-                        // ADR #11: If the server migrated, update the local
-                        // URL so the next cycle connects to the new server.
-                        if let SyncError::ServerMigrated { new_url } = &e {
-                            let db = db.clone();
-                            let url = new_url.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
-                                let conn = db.blocking_lock();
-                                let store = Store::new(&conn);
-                                let _ = Settings::set_sync_server_url(store.conn(), &url);
-                            })
-                            .await;
-                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                        Err(e) => {
+                            pushed = 0;
+                            // ADR #11: If the server migrated, update the local
+                            // URL so the next cycle connects to the new server.
+                            if let SyncError::ServerMigrated { new_url } = &e {
+                                let db = db.clone();
+                                let url = new_url.clone();
+                                let _ = tokio::task::spawn_blocking(move || {
+                                    let conn = db.blocking_lock();
+                                    let store = Store::new(&conn);
+                                    let _ = Settings::set_sync_server_url(store.conn(), &url);
+                                })
+                                .await;
+                                tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                            }
+                            sync_error = Some(e.to_string());
                         }
-                        sync_error = Some(e.to_string());
                     }
                 }
             } else {
@@ -337,19 +359,37 @@ impl SyncDaemon {
                     .unwrap_or((None, None))
                 };
 
-                let transport = SyncTransport::new(&cfg.server_url, cfg.api_key.as_deref());
-                match transport
-                    .pull_updates(pull_since.as_deref(), pull_cursor.as_deref())
-                    .await
-                {
-                    Ok(pull_resp) => {
-                        pulled = pull_resp.items.len();
-                        if !pull_resp.items.is_empty() {
-                            let db_clone = db.clone();
-                            let items = pull_resp.items;
-                            let next_cursor = pull_resp.next_cursor;
-                            let prev_since = pull_since.clone();
-                            let outcome = tokio::task::spawn_blocking(move || {
+                // RUST-05: fail closed for the pull phase as well.
+                let transport = match SyncTransport::try_new(
+                    &cfg.server_url,
+                    cfg.api_key.as_deref(),
+                ) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        pulled = 0;
+                        if sync_error.is_none() {
+                            sync_error = Some(format!("transport construction failed: {e}"));
+                        }
+                        tracing::error!(
+                            error = %e,
+                            "sync transport construction failed — skipping pull (RUST-05 fail-closed)"
+                        );
+                        None
+                    }
+                };
+                if let Some(transport) = transport {
+                    match transport
+                        .pull_updates(pull_since.as_deref(), pull_cursor.as_deref())
+                        .await
+                    {
+                        Ok(pull_resp) => {
+                            pulled = pull_resp.items.len();
+                            if !pull_resp.items.is_empty() {
+                                let db_clone = db.clone();
+                                let items = pull_resp.items;
+                                let next_cursor = pull_resp.next_cursor;
+                                let prev_since = pull_since.clone();
+                                let outcome = tokio::task::spawn_blocking(move || {
                                 let conn = db_clone.blocking_lock();
                                 let store = Store::new(&conn);
                                 let queue = SyncQueue::new();
@@ -456,40 +496,41 @@ impl SyncDaemon {
                                 anchor_error
                             })
                             .await;
-                            // SYNC-01: propagate both spawn_blocking panics AND
-                            // anchor-persistence failures into sync_error so the
-                            // daemon status/backoff reflect them.
-                            match outcome {
-                                Ok(Some(msg)) => {
-                                    if sync_error.is_none() {
-                                        sync_error = Some(msg);
+                                // SYNC-01: propagate both spawn_blocking panics AND
+                                // anchor-persistence failures into sync_error so the
+                                // daemon status/backoff reflect them.
+                                match outcome {
+                                    Ok(Some(msg)) => {
+                                        if sync_error.is_none() {
+                                            sync_error = Some(msg);
+                                        }
                                     }
-                                }
-                                Ok(None) => {}
-                                Err(e) => {
-                                    if sync_error.is_none() {
-                                        sync_error = Some(format!("apply pull phase: {e}"));
+                                    Ok(None) => {}
+                                    Err(e) => {
+                                        if sync_error.is_none() {
+                                            sync_error = Some(format!("apply pull phase: {e}"));
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    Err(e) => {
-                        pulled = 0;
-                        // ADR #11: Handle server migration redirect.
-                        if let SyncError::ServerMigrated { new_url } = &e {
-                            let db = db.clone();
-                            let url = new_url.clone();
-                            let _ = tokio::task::spawn_blocking(move || {
-                                let conn = db.blocking_lock();
-                                let store = Store::new(&conn);
-                                let _ = Settings::set_sync_server_url(store.conn(), &url);
-                            })
-                            .await;
-                            tracing::info!(new_url = %new_url, "server migrated — local config updated");
-                        }
-                        if sync_error.is_none() {
-                            sync_error = Some(format!("pull phase: {e}"));
+                        Err(e) => {
+                            pulled = 0;
+                            // ADR #11: Handle server migration redirect.
+                            if let SyncError::ServerMigrated { new_url } = &e {
+                                let db = db.clone();
+                                let url = new_url.clone();
+                                let _ = tokio::task::spawn_blocking(move || {
+                                    let conn = db.blocking_lock();
+                                    let store = Store::new(&conn);
+                                    let _ = Settings::set_sync_server_url(store.conn(), &url);
+                                })
+                                .await;
+                                tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                            }
+                            if sync_error.is_none() {
+                                sync_error = Some(format!("pull phase: {e}"));
+                            }
                         }
                     }
                 }

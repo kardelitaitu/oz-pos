@@ -107,12 +107,12 @@ pub struct SyncTransport {
 impl SyncTransport {
     /// Create a new transport targeting the given server URL.
     ///
-    ///
-    /// If the HTTP client cannot be built (e.g. TLS backend unavailable),
-    /// falls back to a default client and logs an error. Previously this
-    /// fallback was silent — now the error is logged so operators can
-    /// detect the degraded state.
-    pub fn new(server_url: &str, api_key: Option<&str>) -> Self {
+    /// RUST-05: fails **closed**. If the HTTP client cannot be built with
+    /// the configured bearer token and 30-second timeout, returns an error
+    /// instead of silently falling back to an unauthenticated,
+    /// timeout-less `reqwest::Client`. Production callers (e.g. the sync
+    /// daemon) use this and degrade the cycle gracefully.
+    pub fn try_new(server_url: &str, api_key: Option<&str>) -> Result<Self, SyncError> {
         let mut headers = reqwest::header::HeaderMap::new();
         if let Some(key) = api_key
             && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
@@ -125,21 +125,29 @@ impl SyncTransport {
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_else(|e| {
-                tracing::error!(
-                    error = %e,
-                    "failed to build HTTP client for sync transport — falling back to default (no auth, no timeout)"
-                );
-                tracing::warn!(
-                    "sync transport operating without timeout — requests may hang indefinitely"
-                );
-                reqwest::Client::new()
-            });
+            .map_err(|e| {
+                SyncError::Transport(format!(
+                    "failed to build sync HTTP client with configured auth/timeout: {e}"
+                ))
+            })?;
 
-        Self {
+        Ok(Self {
             client,
             base_url: server_url.trim_end_matches('/').to_owned(),
-        }
+        })
+    }
+
+    /// Convenience constructor for tests and [`crate::SyncEngine::new`].
+    ///
+    /// Delegates to [`SyncTransport::try_new`] and panics only when the
+    /// client cannot be built — a documented impossible invariant (the
+    /// builder is called with a valid header value and fixed options).
+    /// Production paths call [`SyncTransport::try_new`] and degrade the
+    /// cycle gracefully instead of panicking.
+    pub fn new(server_url: &str, api_key: Option<&str>) -> Self {
+        Self::try_new(server_url, api_key).expect(
+            "sync transport client construction must succeed with valid config (RUST-05 invariant)",
+        )
     }
 
     /// Push pending items to the server.
@@ -255,7 +263,11 @@ impl SyncTransport {
             .no_proxy()
             .timeout(std::time::Duration::from_secs(5))
             .build()
-            .unwrap_or_default();
+            .map_err(|e| {
+                SyncError::Transport(format!(
+                    "failed to build health-check client with 5s timeout: {e}"
+                ))
+            })?;
         let resp = health_client
             .get(&url)
             .send()
@@ -776,6 +788,89 @@ mod tests {
     }
 
     // ── health_check integration test ───────────────────────────────
+
+    // ── RUST-05: fail-closed auth/timeout guarantees ────────────────
+
+    /// Spawn a push endpoint that records the Authorization header it
+    /// received, so tests can assert the transport never silently drops
+    /// the configured bearer token (RUST-05).
+    async fn spawn_push_server_capturing_auth()
+    -> (String, std::sync::Arc<std::sync::Mutex<Option<String>>>) {
+        use axum::{Router, routing::post};
+        use std::sync::{Arc, Mutex};
+
+        let seen: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let seen_clone = Arc::clone(&seen);
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(
+            axum::extract::State(seen): axum::extract::State<Arc<Mutex<Option<String>>>>,
+            request: axum::extract::Request,
+        ) -> (axum::http::StatusCode, axum::Json<PushResponse>) {
+            let auth = request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_owned());
+            *seen.lock().unwrap() = auth;
+            let body = axum::body::to_bytes(request.into_body(), 1024 * 1024)
+                .await
+                .unwrap_or_default();
+            let item_count = serde_json::from_slice::<Vec<serde_json::Value>>(&body)
+                .map(|v| v.len())
+                .unwrap_or(0);
+            (
+                axum::http::StatusCode::OK,
+                axum::Json(PushResponse {
+                    results: vec![PushOutcome::Accepted; item_count],
+                }),
+            )
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .with_state(seen_clone);
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), seen)
+    }
+
+    #[tokio::test]
+    async fn push_items_sends_bearer_token_when_api_key_configured() {
+        let (server_url, seen) = spawn_push_server_capturing_auth().await;
+        let transport = SyncTransport::new(&server_url, Some("sk-test-123"));
+
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":1}"#);
+        transport.push_items(&[item]).await.unwrap();
+
+        let captured = seen.lock().unwrap().clone();
+        assert_eq!(
+            captured.as_deref(),
+            Some("Bearer sk-test-123"),
+            "the configured bearer token must reach the server (RUST-05)"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_without_api_key_sends_no_auth_header() {
+        let (server_url, seen) = spawn_push_server_capturing_auth().await;
+        let transport = SyncTransport::new(&server_url, None);
+
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":2}"#);
+        transport.push_items(&[item]).await.unwrap();
+
+        let captured = seen.lock().unwrap().clone();
+        assert_eq!(
+            captured, None,
+            "no Authorization header may be sent when no API key is configured"
+        );
+    }
 
     #[tokio::test]
     async fn health_check_succeeds_with_healthy_server() {
