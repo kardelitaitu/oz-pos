@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
@@ -40,8 +41,12 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
   // Summary modal state
   const [showSummary, setShowSummary] = useState(false);
   const [shiftSummaryTxs, setShiftSummaryTxs] = useState<InventoryTransaction[]>([]);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // A11Y-02: complete dialog semantics for the shift-summary modal.
+  useFocusTrap(summaryRef, showSummary, () => setShowSummary(false));
 
   // Load locations and active shift
   useEffect(() => {
@@ -199,7 +204,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
 
       {showSummary && (
         <div className="shift-summary-overlay">
-          <div className="shift-summary-modal" role="dialog" aria-modal="true">
+          <div className="shift-summary-modal" ref={summaryRef} role="dialog" aria-modal="true">
             <Localized id="inv-shift-summary-title">
               <h3>Shift Summary</h3>
             </Localized>

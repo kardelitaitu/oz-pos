@@ -68,6 +68,12 @@ export function useFocusTrap(
     const panel = panelRef.current;
     if (!panel) return;
 
+    // A11Y-01: remember the previously-focused element so focus can be
+    // returned to it when the trap is torn down (dialog/popover closes).
+    // Captured BEFORE the auto-focus below moves focus into the panel.
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
     // Auto-focus the first focusable element inside the panel.
     const focusable = panel.querySelector<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
@@ -84,6 +90,16 @@ export function useFocusTrap(
     return () => {
       document.body.style.overflow = originalOverflow;
       document.removeEventListener('keydown', handleKeyDown);
+      // A11Y-01: restore focus to the trigger if it is still connected and
+      // not disabled. Guards keep this a no-op when the trigger was removed
+      // or became inert while the panel was open.
+      if (
+        previouslyFocused &&
+        previouslyFocused.isConnected &&
+        !previouslyFocused.hasAttribute('disabled')
+      ) {
+        previouslyFocused.focus();
+      }
     };
   }, [active, panelRef, handleKeyDown]);
 }

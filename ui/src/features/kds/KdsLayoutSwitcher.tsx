@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import './KdsLayoutSwitcher.css';
 
@@ -71,11 +72,12 @@ export function KdsLayoutSwitcher({
 
   const close = useCallback(() => setOpen(false), []);
 
+  // A11Y-02: complete dialog semantics via the shared trap — initial focus,
+  // Tab containment, Escape, scroll lock, and focus restoration.
+  useFocusTrap(popoverRef, open, close);
+
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
     const handleClickOutside = (e: MouseEvent) => {
       if (
         popoverRef.current &&
@@ -86,10 +88,8 @@ export function KdsLayoutSwitcher({
         close();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [open, close]);
@@ -112,6 +112,7 @@ export function KdsLayoutSwitcher({
           ref={popoverRef}
           className="kds-layout-popover"
           role="dialog"
+          aria-modal="true"
           aria-label={requiredLocalized(l10n, 'kds-layout-popover-aria')}
         >
           <p className="kds-layout-popover-section-title"><Localized id="kds-layout-label">Layout</Localized></p>

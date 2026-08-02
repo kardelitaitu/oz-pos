@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './QrisQrDisplay.css';
 
 interface QrisQrDisplayProps {
@@ -85,10 +86,16 @@ export default function QrisQrDisplay({
   // two mirrored keyframes play in parallel.
   const exit = useExitAnimation(isOpen, onClose);
 
+  // A11Y-02: complete dialog semantics — initial focus, Tab containment,
+  // Escape, scroll lock, and focus restoration all via the shared trap.
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(overlayRef, exit.shouldRender && !exit.exiting, () => exit.requestClose());
+
   if (!exit.shouldRender) return null;
 
   return (
     <div
+      ref={overlayRef}
       className={`qris-overlay${exit.exiting ? ' qris-overlay--exiting' : ''}`}
       role="dialog"
       aria-modal="true"

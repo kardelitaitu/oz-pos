@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import './KdsSettingsPanel.css';
 
 /** Display density for KDS ticket cards. */
@@ -59,11 +60,12 @@ export function KdsSettingsPanel({
 
   const close = useCallback(() => setOpen(false), []);
 
+  // A11Y-02: complete dialog semantics via the shared trap — initial focus,
+  // Tab containment, Escape, scroll lock, and focus restoration.
+  useFocusTrap(popoverRef, open, close);
+
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
     const handleClickOutside = (e: MouseEvent) => {
       if (
         popoverRef.current &&
@@ -74,10 +76,8 @@ export function KdsSettingsPanel({
         close();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [open, close]);
@@ -101,6 +101,7 @@ export function KdsSettingsPanel({
           ref={popoverRef}
           className="kds-settings-popover"
           role="dialog"
+          aria-modal="true"
           aria-label={requiredLocalized(l10n, 'kds-settings-aria')}
         >
           {/* Sound toggle */}
