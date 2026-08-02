@@ -94,6 +94,9 @@ export default function HourlyHeatmapWidget() {
       <CanvasHeatmap
         data={cells}
         label={requiredLocalized(l10n, 'sales-dashboard-heatmap-aria')}
+        summary={requiredLocalized(l10n, 'sales-dashboard-heatmap-summary', {
+          count: String(cells.filter((c) => c.value > 0).length),
+        })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',

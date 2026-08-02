@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
+import { AccessibleChartSummary } from './AccessibleChartSummary';
 import './charts.css';
 
 /** A single data point for the line chart. */
@@ -12,6 +13,13 @@ interface CanvasLineChartProps {
   data: LineChartPoint[];
   /** Localized accessible name for the chart (A11Y-04/09). */
   label: string;
+  /**
+   * Localized text summary of the chart (A11Y-09). Rendered as visually
+   * hidden text so screen-reader users get the trend in words, not just
+   * the raw pixel drawing. Callers pass a localized sentence that
+   * summarises the data (e.g. total + span).
+   */
+  summary?: string;
   /** Accent color CSS var, e.g. '--color-accent' */
   colorVar?: string;
   /** Formatter for Y-axis labels. */
@@ -26,6 +34,7 @@ interface CanvasLineChartProps {
 export default function CanvasLineChart({
   data,
   label,
+  summary,
   colorVar = '--color-accent',
   formatValue,
   gridLines = 4,
@@ -130,6 +139,15 @@ export default function CanvasLineChart({
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
       <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
+      {/* A11Y-09: accessible text summary + data list (visually hidden) so
+          the underlying values are available to screen readers. */}
+      <AccessibleChartSummary summary={summary}>
+        {data.map((d, i) => (
+          <li key={i}>
+            {d.label}: {formatValue ? formatValue(d.value) : String(d.value)}
+          </li>
+        ))}
+      </AccessibleChartSummary>
     </div>
   );
 }

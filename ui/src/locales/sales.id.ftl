@@ -356,6 +356,9 @@ sales-dashboard-hourly-bars-aria = Grafik penjualan per jam
 sales-dashboard-category-aria = Rincian kategori
 sales-dashboard-heatmap-aria = Peta panas penjualan per jam
 sales-dashboard-revenue-aria = Grafik pendapatan 14 hari
+sales-dashboard-revenue-summary = Grafik pendapatan 14 hari: { $total } total dari { $days } hari
+sales-dashboard-category-summary = Rincian kategori: { $count } kategori
+sales-dashboard-heatmap-summary = Peta panas penjualan per jam: { $count } slot waktu aktif
 
 # ── Void Orders ──
 void-orders-title = Pesanan

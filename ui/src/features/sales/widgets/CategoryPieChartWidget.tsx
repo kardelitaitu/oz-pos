@@ -93,6 +93,9 @@ export default function CategoryPieChartWidget() {
       <CanvasPieChart
         data={slices}
         label={requiredLocalized(l10n, 'sales-dashboard-category-aria')}
+        summary={requiredLocalized(l10n, 'sales-dashboard-category-summary', {
+          count: String(slices.length),
+        })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',

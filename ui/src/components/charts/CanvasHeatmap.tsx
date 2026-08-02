@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
+import { AccessibleChartSummary } from './AccessibleChartSummary';
 import './charts.css';
 
 /** A single heatmap cell. */
@@ -15,6 +16,12 @@ interface CanvasHeatmapProps {
   data: HeatmapCell[];
   /** Localized accessible name for the chart (A11Y-04/09). */
   label: string;
+  /**
+   * Localized text summary of the chart (A11Y-09). Rendered as visually
+   * hidden text so screen-reader users get the traffic pattern in words
+   * (e.g. peak day/hour) rather than only the pixel grid.
+   */
+  summary?: string;
   /** Formatter for cell values in aria-label. */
   formatValue?: (v: number) => string;
   /** Minimum height of the canvas container. */
@@ -34,6 +41,7 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default function CanvasHeatmap({
   data,
   label,
+  summary,
   formatValue,
   minHeight = '160px',
   colorLow,
@@ -133,6 +141,27 @@ export default function CanvasHeatmap({
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
       <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
+      {/* A11Y-09: accessible text summary + per-cell data list (visually
+          hidden) so screen readers get the underlying values. Only in-range
+          non-zero cells are listed to keep the list meaningful and avoid
+          misleading labels for malformed cells (grid builder guards 0–6/0–23). */}
+      <AccessibleChartSummary summary={summary}>
+        {data
+          .filter(
+            (c) =>
+              c.value > 0 &&
+              c.dayOfWeek >= 0 &&
+              c.dayOfWeek < 7 &&
+              c.hour >= 0 &&
+              c.hour < 24,
+          )
+          .map((c, i) => (
+            <li key={i}>
+              {DAY_LABELS[c.dayOfWeek] ?? c.dayOfWeek} {c.hour}:00 —{' '}
+              {formatValue ? formatValue(c.value) : String(c.value)}
+            </li>
+          ))}
+      </AccessibleChartSummary>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
+import { AccessibleChartSummary } from './AccessibleChartSummary';
 import './charts.css';
 
 /** A slice in the pie chart. */
@@ -14,6 +15,12 @@ interface CanvasPieChartProps {
   data: PieSlice[];
   /** Localized accessible name for the chart (A11Y-04/09). */
   label: string;
+  /**
+   * Localized text summary of the chart (A11Y-09). Rendered as visually
+   * hidden text so screen-reader users get the category mix in words
+   * (e.g. "{ N } categories, top seller X") rather than only the drawing.
+   */
+  summary?: string;
   /** Inner radius ratio (0 = pie, >0 = donut). Default 0.45. */
   innerRadiusRatio?: number;
   /** Minimum height of the canvas container. */
@@ -35,6 +42,7 @@ const DEFAULT_COLORS = [
 export default function CanvasPieChart({
   data,
   label,
+  summary,
   innerRadiusRatio = 0.45,
   minHeight = '220px',
   formatValue,
@@ -133,6 +141,15 @@ export default function CanvasPieChart({
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
       <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
+      {/* A11Y-09: accessible text summary + per-slice data list (visually
+          hidden) so screen readers get the underlying values. */}
+      <AccessibleChartSummary summary={summary}>
+        {data.map((d, i) => (
+          <li key={i}>
+            {d.name}: {formatValue ? formatValue(d.value) : String(d.value)}
+          </li>
+        ))}
+      </AccessibleChartSummary>
     </div>
   );
 }

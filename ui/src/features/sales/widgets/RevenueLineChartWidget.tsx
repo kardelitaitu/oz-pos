@@ -88,6 +88,14 @@ export default function RevenueLineChartWidget() {
       <CanvasLineChart
         data={data}
         label={requiredLocalized(l10n, 'sales-dashboard-revenue-aria')}
+        summary={requiredLocalized(l10n, 'sales-dashboard-revenue-summary', {
+          total: new Intl.NumberFormat('en', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+          }).format(totalRevenue / 100),
+          days: String(data.length),
+        })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
