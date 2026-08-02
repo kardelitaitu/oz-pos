@@ -12,49 +12,39 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import {
+  ACTION_FLUENT_IDS,
+  ACTION_FALLBACK_ID,
+  OUTCOME_FLUENT_IDS,
+  OUTCOME_FALLBACK_ID,
+  CRITICAL_ACTIONS,
+} from './auditCatalog';
 import './AuditLogScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-const ACTION_FLUENT_IDS: Record<string, string> = {
-  'sale.void': 'audit-action-sale-void',
-  'sale.complete': 'audit-action-sale-complete',
-  'sale.refund': 'audit-action-sale-refund',
-  'login': 'audit-action-login',
-  'login.failed': 'audit-action-login-failed',
-  'user.create': 'audit-action-user-create',
-  'user.update': 'audit-action-user-update',
-  'product.create': 'audit-action-product-create',
-  'product.update': 'audit-action-product-update',
-  'product.delete': 'audit-action-product-delete',
-  'stock.adjust': 'audit-action-stock-adjust',
-  'setting.change': 'audit-action-setting-change',
-  'system.backup': 'audit-action-system-backup',
-  'system.restore': 'audit-action-system-restore',
-  'system.export': 'audit-action-system-export',
-  'system.import': 'audit-action-system-import',
-  'audit.review': 'audit-action-audit-review',
-};
-
-// P12-3: Actions considered critical/security for audit review
-const CRITICAL_ACTIONS = new Set([
-  'login.failed', 'user.create', 'user.update',
-  'setting.change', 'system.backup', 'system.restore',
-  'system.export', 'system.import', 'product.delete',
-]);
-
-function outcomeBadgeClass(outcome: string): string {
-  switch (outcome) {
-    case 'success': return 'audit-badge--success';
-    case 'failure': return 'audit-badge--failure';
-    default: return 'audit-badge--info';
+/**
+ * Resolve the active application locale from the Fluent localization
+ * context (AUD-07). `ReactLocalization` exposes its bundles as an
+ * iterable; the first bundle's locale is the negotiated language.
+ */
+function activeLocale(l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  for (const bundle of l10n.bundles) {
+    const locales = bundle.locales;
+    const primary = locales && locales.length > 0 ? locales[0] : undefined;
+    if (primary) return primary;
   }
+  return 'en';
 }
 
-function formatDate(iso: string): string {
+/**
+ * Format an ISO timestamp for display using the application locale
+ * (AUD-07). Falls back to the raw ISO string when the date is invalid.
+ */
+function formatDate(iso: string, locale: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
+    return d.toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -63,6 +53,14 @@ function formatDate(iso: string): string {
     });
   } catch {
     return iso;
+  }
+}
+
+function outcomeBadgeClass(outcome: string): string {
+  switch (outcome) {
+    case 'success': return 'audit-badge--success';
+    case 'failure': return 'audit-badge--failure';
+    default: return 'audit-badge--info';
   }
 }
 
@@ -79,6 +77,7 @@ type OutcomeFilter = 'all' | 'success' | 'failure';
 /** Audit log screen — view filtered action history with date range, action type, and outcome filters for compliance monitoring. */
 export default function AuditLogScreen() {
   const { l10n } = useLocalization();
+  const locale = activeLocale(l10n);
   const { isManager } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
@@ -225,7 +224,9 @@ export default function AuditLogScreen() {
           )}
           {reviewedAt && (
             <span className="audit-log-reviewed-at">
-              <Localized id="audit-log-reviewed-at" vars={{ date: new Date(reviewedAt).toLocaleDateString() }}><span>Reviewed: {new Date(reviewedAt).toLocaleDateString()}</span></Localized>
+              <time dateTime={reviewedAt} title={reviewedAt}>
+                <Localized id="audit-log-reviewed-at" vars={{ date: formatDate(reviewedAt, locale) }}><span>Reviewed: {formatDate(reviewedAt, locale)}</span></Localized>
+              </time>
             </span>
           )}
         </div>
@@ -370,12 +371,14 @@ export default function AuditLogScreen() {
                     <td className="audit-log-critical-indicator" style={{ width: '4px', padding: 0 }}>
                       {isCritical && <div className="audit-log-critical-bar" />}
                     </td>
-                    <td className="audit-log-cell-date">{formatDate(entry.created_at)}</td>
+                    <td className="audit-log-cell-date">
+                      <time dateTime={entry.created_at} title={entry.created_at}>{formatDate(entry.created_at, locale)}</time>
+                    </td>
                     <td>
-                      <Localized id={ACTION_FLUENT_IDS[entry.action] ?? entry.action}>
+                      <Localized id={ACTION_FLUENT_IDS[entry.action] ?? ACTION_FALLBACK_ID}>
                         <span className="audit-log-action-label"><span>{entry.action}</span></span>
                       </Localized>
-                      <span className="audit-log-action-key">{entry.action}</span>
+                      <span className="audit-log-action-key" title={entry.action}>{entry.action}</span>
                     </td>
                     <td>
                       {entry.target_type ? (
@@ -391,8 +394,10 @@ export default function AuditLogScreen() {
                     </td>
                     <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : requiredLocalized(l10n, 'audit-log-user-system')}</td>
                     <td>
-                      <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`}>
-                        {entry.outcome}
+                      <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`} title={entry.outcome}>
+                        <Localized id={OUTCOME_FLUENT_IDS[entry.outcome] ?? OUTCOME_FALLBACK_ID}>
+                          <span>{entry.outcome}</span>
+                        </Localized>
                       </span>
                     </td>
                     <td className="audit-log-cell-details">

@@ -254,6 +254,13 @@ audit-action-system-export = Ekspor Data
 audit-action-system-import = Impor Data
 audit-action-system-restore = Pulihkan
 audit-action-audit-review = Audit Ditinjau
+audit-action-sale-create = Penjualan Dibuat
+audit-action-bulk-import = Impor Massal
+audit-action-inventory-sync = Stok Disinkronkan
+audit-action-unknown = Tindakan Tidak Diketahui
+audit-log-outcome-success = Berhasil
+audit-log-outcome-failure = Gagal
+audit-log-outcome-unknown = Tidak Diketahui
 
 # ── Setup Wizard ──
 spinner-label = Memuat…
