@@ -8,6 +8,7 @@ import {
   type ProductDto,
 } from '@/api/products';
 import { formatMoney } from '@/types/domain';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -158,7 +159,7 @@ export default function InventoryAdjustmentScreen() {
       // Reload to get fresh stock data.
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('inv-error-generic'));
+      setError(l10nErrorMessage(err, l10n, 'inv-error-generic'));
     } finally {
       setSaving(false);
     }

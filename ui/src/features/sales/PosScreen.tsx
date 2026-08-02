@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
 import { useLocalization } from '@fluent/react';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
+import { plainErrorMessage } from '@/utils/app-error';
+import { l10nErrorMessage } from '@/utils/app-error';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
@@ -867,7 +869,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         currency: overrideTarget.unit_price.currency,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Override failed';
+      const msg = plainErrorMessage(err, 'Override failed');
       addToast({ message: msg, type: 'error' });
     } finally {
       setOverrideTarget(null);
@@ -993,7 +995,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       setClosedShiftSummary(closed);
       setActiveShift(null); // no longer active
     } catch (err) {
-      const msg = err instanceof Error ? err.message : l10nRef.current.getString('pos-close-shift-failed');
+      const msg = l10nErrorMessage(err, l10nRef.current, 'pos-close-shift-failed');
       setCloseShiftError(msg);
     } finally {
       setClosingShift(false);

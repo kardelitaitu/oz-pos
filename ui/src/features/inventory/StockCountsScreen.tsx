@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listStockCounts,
   type StockCountDto,
@@ -34,9 +35,7 @@ export default function StockCountsScreen() {
       const data = await listStockCounts(sessionToken);
       setCounts(data);
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : requiredLocalized(l10nRef.current, 'sc-error-load');
+      const message = l10nErrorMessage(err, l10nRef.current, 'sc-error-load');
       setError(message);
       addToast({ message, type: 'error' });
     } finally {

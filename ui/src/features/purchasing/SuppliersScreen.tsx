@@ -12,6 +12,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './SuppliersScreen.css';
 
 interface FormData {
@@ -147,7 +148,7 @@ export default function SuppliersScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('supplier-save-failed'));
+      setError(l10nErrorMessage(err, l10n, 'supplier-save-failed'));
     } finally {
       setSaving(false);
     }

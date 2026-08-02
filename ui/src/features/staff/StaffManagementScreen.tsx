@@ -19,6 +19,7 @@ import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
 import { EmptyState } from '@/frontend/shared';
@@ -145,7 +146,7 @@ export default function StaffManagementScreen() {
       }
     } catch (err) {
       // STAFF-08: surface a retryable error instead of swallowing it.
-      setLoadError(err instanceof Error ? err.message : requiredLocalized(l10n, 'staff-error-load'));
+      setLoadError(l10nErrorMessage(err, l10n, 'staff-error-load'));
       setStaff([]);
       setRoles([]);
     } finally {
@@ -287,7 +288,7 @@ export default function StaffManagementScreen() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('staff-error-save-failed'));
+      setError(l10nErrorMessage(err, l10n, 'staff-error-save-failed'));
     } finally {
       setSaving(false);
     }

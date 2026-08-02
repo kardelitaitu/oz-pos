@@ -6,6 +6,7 @@ import { issueGiftCard, type IssueGiftCardInput } from '@/api/giftCards';
 import { Button } from '@/components/Button';
 import { generateGiftCardNumber } from '@/utils/giftCardBarcode';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 
 /** Props for the IssueGiftCardModal component. */
 export interface IssueGiftCardModalProps {
@@ -78,7 +79,7 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
       await issueGiftCard(input);
       onIssued();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (requiredLocalized(l10n, 'gift-cards-error-issue')));
+      setError(l10nErrorMessage(err, l10n, 'gift-cards-error-issue'));
     } finally {
       setProcessing(false);
     }

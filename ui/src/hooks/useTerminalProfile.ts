@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getTerminalProfile, listTerminals, type TerminalProfileDto } from '@/api/terminals';
+import { plainErrorMessage } from '@/utils/app-error';
 
 /** Return type of the `useTerminalProfile` hook. */
 export interface UseTerminalProfileResult {
@@ -59,7 +60,7 @@ export function useTerminalProfile(): UseTerminalProfileResult {
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : 'Failed to load terminal profile',
+            plainErrorMessage(err, 'Failed to load terminal profile'),
           );
           setProfile(null);
         }

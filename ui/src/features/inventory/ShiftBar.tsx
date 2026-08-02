@@ -6,6 +6,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   startInventoryShift,
   endInventoryShift,
@@ -111,7 +112,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setNotes('');
       if (onShiftChange) onShiftChange(shift);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-shift-error-start')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-shift-error-start'), type: 'error' });
     }
   };
 
@@ -131,7 +132,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setActiveShift(null);
       if (onShiftChange) onShiftChange(null);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-shift-error-end')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-shift-error-end'), type: 'error' });
     }
   };
 

@@ -22,6 +22,7 @@ import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { formatMoney } from '@/types/domain';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './CustomerManagementScreen.css';
 
 // ── Form state ──────────────────────────────────────────────────────
@@ -146,9 +147,7 @@ export default function CustomerManagementScreen() {
       // CUST-03: a failed load must not be indistinguishable from an empty store.
       if (seq !== loadSeqRef.current) return;
       setLoadError(
-        err instanceof Error
-          ? err.message
-          : requiredLocalized(l10nRef.current, 'customer-mgmt-error-load'),
+        l10nErrorMessage(err, l10nRef.current, 'customer-mgmt-error-load'),
       );
     } finally {
       if (seq === loadSeqRef.current) {

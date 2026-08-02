@@ -14,6 +14,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './VoidOrdersScreen.css';
 
 // ── Reason options ──────────────────────────────────────────────────
@@ -105,7 +106,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
       const items = await listSales();
       setSales(items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('void-orders-error-load'));
+      setError(l10nErrorMessage(err, l10n, 'void-orders-error-load'));
     } finally {
       setLoading(false);
     }
@@ -196,7 +197,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
       const updated = await getSale(activeSaleId);
       if (updated) setDetail(updated);
     } catch (err) {
-      setVoidError(err instanceof Error ? err.message : l10n.getString('void-orders-error-void'));
+      setVoidError(l10nErrorMessage(err, l10n, 'void-orders-error-void'));
     } finally {
       setVoiding(false);
     }

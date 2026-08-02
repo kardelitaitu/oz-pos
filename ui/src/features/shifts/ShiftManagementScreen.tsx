@@ -8,6 +8,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -113,7 +114,7 @@ export default function ShiftManagementScreen() {
       setOpeningBalance('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'shift-open-error'));
+      setError(l10nErrorMessage(err, l10n, 'shift-open-error'));
     } finally {
       setSaving(false);
     }
@@ -142,7 +143,7 @@ export default function ShiftManagementScreen() {
       setClosedShiftSummary(closed);
       setActiveShift(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'shift-close-error'));
+      setError(l10nErrorMessage(err, l10n, 'shift-close-error'));
     } finally {
       setSaving(false);
     }
@@ -178,7 +179,7 @@ export default function ShiftManagementScreen() {
       setPayoutReason('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'shift-payout-error'));
+      setError(l10nErrorMessage(err, l10n, 'shift-payout-error'));
     } finally {
       setSaving(false);
     }

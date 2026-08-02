@@ -6,6 +6,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { listInTransitTransfers, cancelStockTransfer, type TransferWithLines } from '@/api/stockTransfers';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './TransitAuditScreen.css';
 
 const TRANSIT_EXPIRY_HOURS = 24;
@@ -34,9 +35,7 @@ export default function TransitAuditScreen() {
       const enriched = await listInTransitTransfers(sessionToken);
       setTransfers(enriched);
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : requiredLocalized(l10nRef.current, 'inv-transit-error-load');
+      const message = l10nErrorMessage(err, l10nRef.current, 'inv-transit-error-load');
       setLoadError(message);
       addToast({ message, type: 'error' });
     } finally {
@@ -60,7 +59,7 @@ export default function TransitAuditScreen() {
       await loadTransfers();
       addToast({ message: requiredLocalized(l10n, 'inv-transit-reversed-toast'), type: 'success' });
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-transit-error-reverse')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'inv-transit-error-reverse'), type: 'error' });
     }
   };
 

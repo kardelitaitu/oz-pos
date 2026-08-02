@@ -4,6 +4,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { StockAlertEvent } from '@/api/inventory';
 import { getActiveStockAlerts, acknowledgeStockAlert } from '@/api/inventory';
+import { l10nErrorMessage } from '@/utils/app-error';
 
 import './StockAlertPanel.css';
 
@@ -48,7 +49,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       const data = await getActiveStockAlerts(token, locationId);
       setAlerts(data.slice(0, maxAlerts));
     } catch (err) {
-      setError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'inv-alert-error-load'));
+      setError(l10nErrorMessage(err, l10nRef.current, 'inv-alert-error-load'));
     } finally {
       setLoading(false);
     }
@@ -75,7 +76,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         // Remove from local state immediately for snappy UX
         setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       } catch (err) {
-        setError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'inv-alert-error-ack'));
+        setError(l10nErrorMessage(err, l10nRef.current, 'inv-alert-error-ack'));
       } finally {
         setAcknowledging((prev) => {
           const next = new Set(prev);

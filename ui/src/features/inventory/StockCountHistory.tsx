@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listStockCounts,
   listStockAdjustments,
@@ -42,9 +43,7 @@ export default function StockCountHistory() {
       setCounts(c.filter((cnt) => cnt.status === 'completed' || cnt.status === 'cancelled'));
       setAdjustments(a);
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : requiredLocalized(l10nRef.current, 'sc-error-load-history');
+      const message = l10nErrorMessage(err, l10nRef.current, 'sc-error-load-history');
       setError(message);
       addToast({ message, type: 'error' });
     } finally {

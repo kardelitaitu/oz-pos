@@ -14,6 +14,7 @@ import {
   type StockThreshold,
   type InventoryLocation,
 } from '@/api/inventory';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './ThresholdConfigScreen.css';
 
 export default function ThresholdConfigScreen() {
@@ -51,7 +52,7 @@ export default function ThresholdConfigScreen() {
       setLocations(locs);
       setThresholds(thresh);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-threshold-error-load')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'inv-threshold-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ export default function ThresholdConfigScreen() {
       setIsDialogOpen(false);
       await loadData();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-threshold-error-save')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'inv-threshold-error-save'), type: 'error' });
     }
   };
 
@@ -113,7 +114,7 @@ export default function ThresholdConfigScreen() {
       setDeleteConfirmId(null);
       await loadData();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'inv-threshold-error-delete')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'inv-threshold-error-delete'), type: 'error' });
     }
   };
 

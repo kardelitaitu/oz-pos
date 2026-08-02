@@ -227,8 +227,10 @@ describe('CategoryManagementScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() =>
-      expect(screen.getByText(/category has linked tax config/i)).toBeDefined(),
+      // ERR-05: raw backend text never renders — the localized copy does.
+      expect(screen.getByText('Failed to delete category')).toBeDefined(),
     );
+    expect(screen.queryByText(/category has linked tax config/i)).toBeNull();
   });
 
   it('calls createCategoryScoped and updateCategoryScoped with the session token (CAT-01)', async () => {
@@ -290,8 +292,8 @@ describe('CategoryManagementScreen', () => {
     );
     // The genuine empty-state copy must NOT be shown.
     expect(screen.queryByText('No categories yet')).toBeNull();
-    // The raw backend message is surfaced as detail.
-    expect(screen.getByText('database locked')).toBeDefined();
+    // ERR-05: the raw backend message is NEVER surfaced as detail.
+    expect(screen.queryByText('database locked')).toBeNull();
   });
 
   it('recovers via Retry after a load failure (CAT-03)', async () => {

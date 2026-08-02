@@ -277,7 +277,9 @@ describe('ProductManagementScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/product has sales history/i);
+      // ERR-05: raw backend text never renders — the localized copy does.
+      expect(screen.getByRole('alert')).toHaveTextContent(/failed to delete product/i);
+      expect(screen.queryByText(/product has sales history/i)).toBeNull();
     });
   });
 
@@ -291,7 +293,9 @@ describe('ProductManagementScreen', () => {
 
     renderWithFluentSync(<ProductManagementScreen />, productsFtl);
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/database locked/i);
+      // ERR-05: raw backend text never renders — the localized copy does.
+      expect(screen.getByRole('alert')).toHaveTextContent(/failed to load products/i);
+      expect(screen.queryByText(/database locked/i)).toBeNull();
     });
     // The empty-catalog CTA must NOT be shown for a failed load.
     expect(screen.queryByText(/add your first product/i)).not.toBeInTheDocument();

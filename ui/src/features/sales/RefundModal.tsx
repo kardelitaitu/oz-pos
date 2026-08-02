@@ -8,6 +8,7 @@ import { formatMoney, type Money } from '@/types/domain';
 import { Button } from '@/components/Button';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './RefundModal.css';
 
 interface RefundModalProps {
@@ -87,7 +88,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
       });
       setResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('refund-error', null, 'Refund failed'));
+      setError(l10nErrorMessage(err, l10n, 'refund-error'));
     } finally {
       setProcessing(false);
     }

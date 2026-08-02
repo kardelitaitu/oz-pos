@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
-import { requiredLocalized } from '@/frontend/shared';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listInventoryTransactions,
   listInventoryLocations,
@@ -53,8 +53,8 @@ export default function TransactionLogScreen() {
       setTransactions(txs);
       setLocations(locs);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'inv-log-error-load'));
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-log-error-load')), type: 'error' });
+      setLoadError(l10nErrorMessage(err, l10nRef.current, 'inv-log-error-load'));
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-log-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,7 @@ export default function TransactionLogScreen() {
         setExpandedLines(detail[1]);
       }
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'inv-log-error-lines')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-log-error-lines'), type: 'error' });
     } finally {
       setLoadingLines(false);
     }

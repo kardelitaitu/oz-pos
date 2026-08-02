@@ -10,6 +10,7 @@ import {
 } from '@/api/giftCards';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -63,7 +64,7 @@ export default function GiftCardsScreen() {
       }
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (requiredLocalized(l10n, 'gift-cards-error-freeze')), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'gift-cards-error-freeze'), type: 'error' });
     }
   }, [load, addToast, l10n]);
 
@@ -80,7 +81,7 @@ export default function GiftCardsScreen() {
       setTopUpAmount('');
       await load();
     } catch (err) {
-      setTopUpError(err instanceof Error ? err.message : (requiredLocalized(l10n, 'gift-cards-error-topup')));
+      setTopUpError(l10nErrorMessage(err, l10n, 'gift-cards-error-topup'));
     }
   }, [topUpAmount, load, l10n]);
 

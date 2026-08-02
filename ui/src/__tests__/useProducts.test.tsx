@@ -164,11 +164,14 @@ describe('useProducts', () => {
 
     it('sets error message when API throws', async () => {
       mocks.listProducts.mockRejectedValue(new Error('IPC timeout'));
+      // ERR-05: the localized copy (what getString returns) is surfaced —
+      // never the raw backend message.
+      mocks.getString.mockReturnValue('Failed to load products');
 
       const { result } = renderHook(() => useProducts());
 
       await waitFor(() => {
-        expect(result.current.error).toBe('IPC timeout');
+        expect(result.current.error).toBe('Failed to load products');
         expect(result.current.usingFallback).toBe(true);
       });
     });

@@ -130,7 +130,9 @@ describe('LoyaltyManagementScreen', () => {
     renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Database unavailable');
+      // ERR-05: raw backend text never renders — the localized copy does.
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to load loyalty data');
+      expect(screen.queryByText('Database unavailable')).toBeNull();
       expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     });
     expect(screen.queryByText('No loyalty accounts yet')).not.toBeInTheDocument();

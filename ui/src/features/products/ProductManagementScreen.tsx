@@ -14,6 +14,7 @@ import {
 import { listTaxRatesScoped, type TaxRateDto } from '@/api/tax';
 import { listCurrenciesScoped, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -183,7 +184,7 @@ export default function ProductManagementScreen() {
     } catch (err) {
       // PROD-04: distinguish a failed load from a genuinely empty catalog.
       if (seq !== loadSeqRef.current) return;
-      setLoadError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'product-mgmt-error-load'));
+      setLoadError(l10nErrorMessage(err, l10nRef.current, 'product-mgmt-error-load'));
     } finally {
       if (seq === loadSeqRef.current) {
         setLoading(false);
@@ -282,9 +283,7 @@ export default function ProductManagementScreen() {
       await load();
     } catch (err) {
       setSaveError(
-        err instanceof Error
-          ? err.message
-          : l10n.getString('product-mgmt-error-save')
+        l10nErrorMessage(err, l10n, 'product-mgmt-error-save')
       );
     } finally {
       setSaving(false);
@@ -313,7 +312,7 @@ export default function ProductManagementScreen() {
     } catch (err) {
       // PROD-03: surface the failure instead of swallowing it.
       setDeleteConfirmSku(null);
-      setDeleteError(err instanceof Error ? err.message : requiredLocalized(l10nRef.current, 'product-mgmt-error-delete'));
+      setDeleteError(l10nErrorMessage(err, l10nRef.current, 'product-mgmt-error-delete'));
     } finally {
       setDeleting(null);
     }

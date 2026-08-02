@@ -29,6 +29,7 @@ import {
   CloseIcon,
   LockIcon,
 } from './NodeTopologyIcons';
+import { plainErrorMessage } from '@/utils/app-error';
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -381,7 +382,7 @@ export default function NodeTopologyEditor({
         // rather than silently swallowed.
         if (cancelled) return;
         addToast({
-          message: `${l10n.getString('topology-toast-load-error')}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
       });
@@ -1005,7 +1006,7 @@ export default function NodeTopologyEditor({
                   }
                 } catch (err) {
                   addToast({
-                    message: `${l10n.getString('topology-toast-save-error')}: ${err instanceof Error ? err.message : String(err)}`,
+                    message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
                     type: 'error',
                   });
                   skipNextLoadRef.current = false;

@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
+import { plainErrorMessage } from '@/utils/app-error';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -879,7 +880,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         currency: overrideTarget.unit_price.currency,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Override failed';
+      const msg = plainErrorMessage(err, 'Override failed');
       addToast({ message: msg, type: 'error' });
     } finally {
       setOverrideTarget(null);

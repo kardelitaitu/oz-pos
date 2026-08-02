@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { listProducts, listCategories, type ProductDto, type CategoryDto } from '@/api/products';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { type Product, type Sku } from '@/types/domain';
 
 // ── Sample product fallback ─────────────────────────────────────────
@@ -122,7 +123,7 @@ export function useProducts(): UseProductsResult {
       } catch (err) {
         // IPC unavailable — fall back to sample data
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : l10nRef.current.getString('product-lookup-error-load'));
+        setError(l10nErrorMessage(err, l10nRef.current, 'product-lookup-error-load'));
         setProducts(SAMPLE_PRODUCTS);
         setCategoryMeta(SAMPLE_CATEGORY_META);
         setUsingFallback(true);

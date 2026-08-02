@@ -10,6 +10,7 @@ import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './PurchaseOrderForm.css';
 
 interface LineItem {
@@ -91,7 +92,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
       await createPurchaseOrder(args);
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10nRef.current.getString('po-form-error-generic'));
+      setError(l10nErrorMessage(err, l10nRef.current, 'po-form-error-generic'));
     } finally {
       setSaving(false);
     }

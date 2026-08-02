@@ -20,6 +20,7 @@ import {
   OUTCOME_FALLBACK_ID,
   CRITICAL_ACTIONS,
 } from './auditCatalog';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './AuditLogScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ export default function AuditLogScreen() {
         }
       } catch (err) {
         if (seq !== loadSeqRef.current) return;
-        setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'audit-log-error-load'));
+        setError(l10nErrorMessage(err, l10n, 'audit-log-error-load'));
       } finally {
         if (seq === loadSeqRef.current) setLoading(false);
       }

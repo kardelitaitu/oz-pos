@@ -8,6 +8,8 @@ import ConnectionStatus from '@/components/ConnectionStatus';
 import MachineIdStatus from '@/components/MachineIdStatus';
 import { Localized, useLocalization } from '@fluent/react';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { plainErrorMessage } from '@/utils/app-error';
 import './LicenseActivationScreen.css';
 
 // ── Environment / service URLs (extracted for configurability) ─────
@@ -103,14 +105,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
         setErrorMsg(l10n.getString('auth-activation-failed'));
       }
     } catch (err: unknown) {
-      let message = l10n.getString('auth-activation-error');
-      if (err instanceof Error) {
-        message = err.message;
-      } else if (typeof err === 'string') {
-        message = err;
-      } else if (err && typeof err === 'object' && 'message' in err) {
-        message = String((err as Record<string, unknown>)['message']);
-      }
+      const message = l10nErrorMessage(err, l10n, 'auth-activation-error');
       
       addToast({ 
         type: 'error', 
@@ -143,7 +138,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       }
     } catch (err: unknown) {
       console.error('Failed to read clipboard', err);
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = plainErrorMessage(err);
       addToast({ 
         message: `${l10n.getString('auth-error-title')}: ${l10n.getString('auth-clipboard-error', { message: errMsg })}`, 
         type: 'error' 

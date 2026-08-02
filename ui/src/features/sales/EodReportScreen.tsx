@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { Localized } from '@/components/Localized';
 import { useLocalization } from '@fluent/react';
 import { printReceipt } from '@/api/hardware';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './EodReportScreen.css';
 
 // ── Shift Summary Sub-component ──────────────────────────────────
@@ -400,7 +401,7 @@ export default function EodReportScreen() {
       setShifts(shiftData);
       setLastRefresh(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('eod-error-fallback'));
+      setError(l10nErrorMessage(err, l10n, 'eod-error-fallback'));
     } finally {
       setLoading(false);
     }

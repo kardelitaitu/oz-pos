@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getHardwareSettings, setHardwareSettings, type HardwareSettingsDto } from '@/api/settings';
+import { plainErrorMessage } from '@/utils/app-error';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -316,7 +317,7 @@ export function useTerminalHardware(
       await setHardwareSettings(toHardwareSettingsDto(profile), userId ?? '');
       setIsLoading(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save hardware profile';
+      const msg = plainErrorMessage(err, 'Failed to save hardware profile');
       setError(msg);
       setIsLoading(false);
     }

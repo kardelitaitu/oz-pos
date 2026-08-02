@@ -4,6 +4,7 @@ import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
+import { plainErrorMessage } from '@/utils/app-error';
 import './WeightScaleWidget.css';
 
 /** Props for the WeightScaleWidget — optional callback for when a stable weight is obtained, plus device identifiers. */
@@ -51,7 +52,7 @@ export function WeightScaleWidget({
       if (result) onWeightObtained?.(result);
     } catch (err) {
       if (!mountedRef.current) return;
-      const msg = err instanceof Error ? err.message : 'Scale read failed';
+      const msg = plainErrorMessage(err, 'Scale read failed');
       setError(msg);
       addToast({ message: msg, type: 'error' });
     } finally {

@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { staffLogin, type LoginSessionDto } from "@/api/staff";
+import { plainErrorMessage } from "@/utils/app-error";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
         onLogin?.();
       } catch (err) {
         const message = (err as Record<string, unknown> | null)?.['message'] as string
-          ?? (err instanceof Error ? err.message : "Login failed");
+          ?? plainErrorMessage(err, "Login failed");
         setError(message);
       } finally {
         setLoading(false);

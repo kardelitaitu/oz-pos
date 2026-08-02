@@ -21,6 +21,7 @@
  */
 
 import { isAppError, type AppError } from '@/types/domain';
+import type { ReactLocalization } from '@fluent/react';
 
 /** Retry classification derived from the typed error (ERR-06). */
 export type RetryClass = 'retryable' | 'non-retryable';
@@ -182,24 +183,76 @@ export function userErrorKey(err: AppError | unknown): string {
   }
 }
 
-/** Resolve the localized user-safe message for a thrown error. */
+/** English fallbacks for every user-safe key (localized bundles carry the real copy). */
+export const USER_ERROR_FALLBACKS: Record<string, string> = {
+  'app-error-generic': 'Something went wrong. Please try again.',
+  'app-error-validation': 'Please check the information you entered and try again.',
+  'app-error-permission': "You don't have permission to do this.",
+  'app-error-session': 'Your session has expired. Please sign in again.',
+  'app-error-conflict': 'This record was changed by someone else. Refresh and try again.',
+  'app-error-not-found': 'The requested item could not be found.',
+  'app-error-offline': 'You appear to be offline. Check your connection and try again.',
+  'app-error-hardware': 'A hardware device did not respond. Check it and try again.',
+  'app-error-subscription': 'This action is not included in your current plan.',
+};
+
+/**
+ * Adapter so screens can pass their Fluent `l10n` directly:
+ * `userErrorMessage(err, fluentErrorGetter(l10n))`.
+ * Fluent's `getString(id, args?, fallback?)` takes the fallback in the third
+ * slot, which is awkward at call sites — this bridges the two signatures.
+ */
+export function fluentErrorGetter(l10n: ReactLocalization) {
+  return (key: string, fallback?: string): string => l10n.getString(key, null, fallback);
+}
+
+/**
+ * Resolve the localized user-safe message for a thrown error.
+ *
+ * Typed `AppError`s always map to the shared `app-error-*` copy (validation,
+ * permission, session, conflict, offline, hardware). Unrecognized values fall
+ * back to `fallbackKey` — the screen's own localized message — so each screen
+ * keeps its operational context while raw backend text never renders.
+ */
 export function userErrorMessage(
   err: AppError | unknown,
   getString: (key: string, fallback?: string) => string,
+  fallbackKey = 'app-error-generic',
 ): string {
-  const key = userErrorKey(err);
-  const fallback: Record<string, string> = {
-    'app-error-generic': 'Something went wrong. Please try again.',
-    'app-error-validation': 'Please check the information you entered and try again.',
-    'app-error-permission': "You don't have permission to do this.",
-    'app-error-session': 'Your session has expired. Please sign in again.',
-    'app-error-conflict': 'This record was changed by someone else. Refresh and try again.',
-    'app-error-not-found': 'The requested item could not be found.',
-    'app-error-offline': 'You appear to be offline. Check your connection and try again.',
-    'app-error-hardware': 'A hardware device did not respond. Check it and try again.',
-    'app-error-subscription': 'This action is not included in your current plan.',
-  };
-  return getString(key, fallback[key] ?? fallback['app-error-generic']);
+  const typed = parseAppError(err);
+  if (!typed) {
+    return getString(fallbackKey, USER_ERROR_FALLBACKS[fallbackKey] ?? USER_ERROR_FALLBACKS['app-error-generic']);
+  }
+  const key = userErrorKey(typed);
+  return getString(key, USER_ERROR_FALLBACKS[key] ?? USER_ERROR_FALLBACKS['app-error-generic']);
+}
+
+/**
+ * Convenience wrapper so a screen can pass its Fluent `l10n` object directly:
+ * `l10nErrorMessage(err, l10n, 'audit-log-error-load')`.
+ * Same semantics as `userErrorMessage` — one import instead of two.
+ */
+export function l10nErrorMessage(
+  err: AppError | unknown,
+  l10n: ReactLocalization,
+  fallbackKey = 'app-error-generic',
+): string {
+  return userErrorMessage(err, fluentErrorGetter(l10n), fallbackKey);
+}
+
+/**
+ * For non-Fluent contexts (hooks, plain modules): resolve the user-safe copy
+ * from the shared English fallback map, or `fallback` when the key is unknown.
+ * Typed `AppError`s still map to their user-safe copy, so raw backend text
+ * never reaches a hook consumer either.
+ */
+export function plainErrorMessage(
+  err: AppError | unknown,
+  fallback: string = USER_ERROR_FALLBACKS['app-error-generic'] ?? 'Something went wrong. Please try again.',
+): string {
+  const typed = parseAppError(err);
+  if (!typed) return fallback;
+  return USER_ERROR_FALLBACKS[userErrorKey(typed)] ?? fallback;
 }
 
 // ── Redaction & normalization ──────────────────────────────────────

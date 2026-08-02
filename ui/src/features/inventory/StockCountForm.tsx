@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { createStockCount, type StockCountDto } from '@/api/inventoryCounts';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import './StockCountForm.css';
@@ -35,7 +36,7 @@ export default function StockCountForm({ onCreated, onCancel }: Props) {
       });
       onCreated(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('sc-error-create'));
+      setError(l10nErrorMessage(err, l10n, 'sc-error-create'));
     } finally {
       setSaving(false);
     }

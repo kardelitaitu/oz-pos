@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -122,7 +123,7 @@ export default function PromotionManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : requiredLocalized(l10n, 'promotions-error-save'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-save'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -136,7 +137,7 @@ export default function PromotionManagementScreen() {
       await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : requiredLocalized(l10n, 'promotions-error-delete'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-delete'), type: 'error' });
     } finally {
       setDeleting(null);
     }
@@ -147,7 +148,7 @@ export default function PromotionManagementScreen() {
       await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : requiredLocalized(l10n, 'promotions-error-toggle'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-toggle'), type: 'error' });
     }
   }, [load, addToast, l10n, session?.user_id]);
 

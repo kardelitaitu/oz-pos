@@ -14,6 +14,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './CategoryManagementScreen.css';
 
 // ── Predefined colour palette for the colour picker ──────────────────
@@ -252,9 +253,7 @@ export default function CategoryManagementScreen() {
       // CAT-03: a failed load must not be indistinguishable from an empty store.
       if (seq !== loadSeqRef.current) return;
       setLoadError(
-        err instanceof Error
-          ? err.message
-          : requiredLocalized(l10nRef.current, 'categories-error-load'),
+        l10nErrorMessage(err, l10nRef.current, 'categories-error-load'),
       );
     } finally {
       if (seq === loadSeqRef.current) {
@@ -375,7 +374,7 @@ export default function CategoryManagementScreen() {
       await load();
     } catch (err) {
       addToast({
-        message: err instanceof Error ? err.message : requiredLocalized(l10n, 'categories-error-delete'),
+        message: l10nErrorMessage(err, l10n, 'categories-error-delete'),
         type: 'error',
       });
     } finally {

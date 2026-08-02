@@ -3,6 +3,7 @@ import { useToast } from '@/frontend/shared/Toast';
 import { bootstrapOwner } from '@/api/staff';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized, useLocalization } from '@fluent/react';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './CreatePinScreen.css';
 
 /** Props for the CreatePinScreen component. */
@@ -51,18 +52,22 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
       addToast({ type: 'success', message: l10n.getString('auth-create-pin-success') });
       onCreated();
       } catch (err: unknown) {
-        let message = l10n.getString('auth-create-pin-error-generic');
-        if (err instanceof Error) message = err.message;
-        else if (typeof err === 'string') message = err;
-        else if (err && typeof err === 'object' && 'message' in err) {
-          message = String((err as Record<string, unknown>)['message']);
-        }
+        // The "already exists" redirect needs the raw backend text; everything
+        // displayed goes through the localized user-safe mapper.
+        const rawMessage =
+          typeof err === 'string'
+            ? err
+            : err instanceof Error
+              ? err.message
+              : err && typeof err === 'object' && 'message' in err
+                ? String((err as Record<string, unknown>)['message'])
+                : '';
         // Users already exist — someone else set up already, go to login.
-        if (message.toLowerCase().includes('already exist')) {
+        if (rawMessage.toLowerCase().includes('already exist')) {
           onCreated();
           return;
         }
-        setErrorMsg(message);
+        setErrorMsg(l10nErrorMessage(err, l10n, 'auth-create-pin-error-generic'));
     } finally {
       setLoading(false);
     }

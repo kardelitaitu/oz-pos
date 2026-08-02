@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { getGiftCardBalance, redeemGiftCard } from '@/api/giftCards';
 import { Button } from '@/components/Button';
+import { l10nErrorMessage } from '@/utils/app-error';
 
 
 export interface GiftCardPaymentProps {
@@ -59,7 +60,7 @@ export default function GiftCardPayment({
       }
       setCardBalance({ minor: result.balance_minor, currency: result.currency, status: result.status });
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('gift-cards-payment-lookup-failed'));
+      setError(l10nErrorMessage(err, l10n, 'gift-cards-payment-lookup-failed'));
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,7 @@ export default function GiftCardPayment({
       onApplied(amountToRedeem, code);
       onComplete();
     } catch (err) {
-      onError(err instanceof Error ? err.message : l10n.getString('gift-cards-payment-redemption-failed'));
+      onError(l10nErrorMessage(err, l10n, 'gift-cards-payment-redemption-failed'));
     } finally {
       setLoading(false);
     }

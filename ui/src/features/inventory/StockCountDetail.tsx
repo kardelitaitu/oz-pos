@@ -14,6 +14,7 @@ import {
   type StockCountLineDto,
 } from '@/api/inventoryCounts';
 import { type ProductDto, listProductsScoped } from '@/api/products';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -59,9 +60,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         setLines(await getCountLines(sessionToken, countId));
       }
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : requiredLocalized(l10nRef.current, 'sc-error-load');
+      const message = l10nErrorMessage(err, l10nRef.current, 'sc-error-load');
       setError(message);
       addToast({ message, type: 'error' });
     } finally {
@@ -109,7 +108,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       setSearchQuery('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-add-line')));
+      setError(l10nErrorMessage(err, l10nRef.current, 'sc-error-add-line'));
     } finally {
       setSaving(false);
     }
@@ -121,7 +120,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await updateCountLine(sessionToken, { lineId, countedQty, notes: '' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-update-line')));
+      setError(l10nErrorMessage(err, l10nRef.current, 'sc-error-update-line'));
     }
   }, [load, sessionToken]);
 
@@ -131,7 +130,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await removeCountLine(sessionToken, { lineId });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-remove-line')));
+      setError(l10nErrorMessage(err, l10nRef.current, 'sc-error-remove-line'));
     }
   }, [load, sessionToken]);
 
@@ -141,7 +140,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       await updateStockCountStatus(sessionToken, countId, 'in_progress');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-start-count')));
+      setError(l10nErrorMessage(err, l10nRef.current, 'sc-error-start-count'));
     }
   }, [countId, load, sessionToken]);
 
@@ -156,7 +155,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
       );
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (requiredLocalized(l10nRef.current, 'sc-error-complete')));
+      setError(l10nErrorMessage(err, l10nRef.current, 'sc-error-complete'));
     } finally {
       setSaving(false);
     }

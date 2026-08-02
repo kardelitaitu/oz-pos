@@ -5,6 +5,7 @@ import { staffLogin } from "@/api/staff";
 import { Localized } from "@/frontend/shared/Localized";
 import { useLocalization } from "@fluent/react";
 import "./FastPINOverlay.css";
+import { plainErrorMessage } from "@/utils/app-error";
 
 // ── SVG icons ───────────────────────────────────────────────────────
 
@@ -310,8 +311,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
       // Step 5: Dismiss the overlay (after successful verify — snap close intentional).
       onClose();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "PIN verification failed";
+      const message = plainErrorMessage(err, "PIN verification failed");
       setError(message);
       setPin([]);
       // Increment local attempt counter — even if the backend error is

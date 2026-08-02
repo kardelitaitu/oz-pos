@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
-import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
@@ -13,6 +12,7 @@ import { listCustomersScoped, type CustomerDto } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './LoyaltyManagementScreen.css';
 
 interface TierFormData {
@@ -63,9 +63,7 @@ export default function LoyaltyManagementScreen() {
       setCustomers(custs);
       setTiers(t);
     } catch (err) {
-      setLoadError(err instanceof Error
-        ? err.message
-        : requiredLocalized(l10n, 'loyalty-load-error'));
+      setLoadError(l10nErrorMessage(err, l10n, 'loyalty-load-error'));
     } finally {
       setLoading(false);
     }
@@ -121,7 +119,7 @@ export default function LoyaltyManagementScreen() {
       setTiers((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       setEditingTier(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : requiredLocalized(l10n, 'loyalty-save-tier-error'));
+      setError(l10nErrorMessage(err, l10n, 'loyalty-save-tier-error'));
     } finally {
       setSavingTier(false);
     }

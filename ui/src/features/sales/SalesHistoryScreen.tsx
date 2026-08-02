@@ -20,6 +20,7 @@ import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { EmptyState, requiredLocalized } from '@/frontend/shared';
@@ -233,7 +234,7 @@ export default function SalesHistoryScreen() {
       setVoidReason('');
       load();
     } catch (err) {
-      setVoidError(err instanceof Error ? err.message : l10n.getString('sales-history-void-error'));
+      setVoidError(l10nErrorMessage(err, l10n, 'sales-history-void-error'));
     } finally {
       setVoiding(false);
     }

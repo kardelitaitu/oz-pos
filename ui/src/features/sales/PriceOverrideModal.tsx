@@ -5,6 +5,7 @@ import { animDuration } from '@/utils/animation';
 import { staffLogin } from '@/api/staff';
 import { formatMoney, type Money } from '@/types/domain';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './PriceOverrideModal.css';
 
 /** Props for the PriceOverrideModal — requires staff PIN verification before applying a manual price change. */
@@ -79,7 +80,7 @@ export default function PriceOverrideModal({
       const result = await staffLogin({ username: username.trim(), pin: pin.join('') });
       await onConfirm(newPriceMinor, result.session.user_id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : requiredLocalized(l10n, 'price-override-pin-failed');
+      const message = l10nErrorMessage(err, l10n, 'price-override-pin-failed');
       setError(message);
       setPin([]);
       pinSubmitted.current = false;

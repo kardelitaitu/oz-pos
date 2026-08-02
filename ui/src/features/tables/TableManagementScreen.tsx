@@ -3,6 +3,7 @@ import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listTablesScoped,
   listSectionsScoped,
@@ -84,7 +85,7 @@ export default function TableManagementScreen() {
       setTables(data);
     } catch (err) {
       if (seq !== loadSeqRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
+      setError(l10nErrorMessage(err, l10n, 'app-error-generic'));
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
@@ -144,7 +145,7 @@ export default function TableManagementScreen() {
         // filtered list.
         setTables((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : String(err));
+        setActionError(l10nErrorMessage(err, l10n, 'app-error-generic'));
       } finally {
         pendingRef.current = null;
         setPendingId(null);

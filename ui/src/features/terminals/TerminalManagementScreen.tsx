@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './TerminalManagementScreen.css';
 
 // ── Feature groups for the override toggle UI ─────────────────────
@@ -425,7 +426,7 @@ export default function TerminalManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('terminal-error-save'));
+      setError(l10nErrorMessage(err, l10n, 'terminal-error-save'));
     } finally {
       setSaving(false);
     }

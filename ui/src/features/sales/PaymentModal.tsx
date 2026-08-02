@@ -26,6 +26,7 @@ import { animDuration } from '@/utils/animation';
 import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
 import ReceiptPreview from '@/features/sales/ReceiptPreview';
 import type { PrintSalesReceiptArgs } from '@/api/sales';
+import { plainErrorMessage } from '@/utils/app-error';
 import './PaymentModal.css';
 
 type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
@@ -131,7 +132,9 @@ export default function PaymentModal({
     ];
     const isTerminal = terminalPatterns.some((p) => lower.includes(p));
     return {
-      message: errMsg,
+      // The classification above reads the raw text on purpose; the message
+      // surfaced to the user goes through the shared safe mapper (ERR-05).
+      message: plainErrorMessage(err, errMsg),
       retryable: isRetryable && !isTerminal,
     };
   }, []);
@@ -530,7 +533,7 @@ export default function PaymentModal({
 
       setDone(true);
     } catch (err) {
-      addToast({ message: `QR payment failed: ${err instanceof Error ? err.message : String(err)}`, type: 'error' });
+      addToast({ message: `QR payment failed: ${plainErrorMessage(err)}`, type: 'error' });
       const classified = classifyError(err);
       setPaymentError(classified);
     } finally {

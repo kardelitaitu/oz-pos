@@ -149,15 +149,17 @@ describe('AuditLogScreen', () => {
   it('shows error state with retry button', async () => {
     mockListAuditLogScoped.mockRejectedValue(new Error('DB error'));
     await renderScreen();
-    await waitFor(() => expect(screen.getByText('DB error')).toBeDefined());
+    // ERR-05: the raw backend message must never render — the localized copy does.
+    await waitFor(() => expect(screen.getByText('Failed to load audit log')).toBeDefined());
+    expect(screen.queryByText('DB error')).toBeNull();
     expect(screen.getByText('Retry')).toBeDefined();
   });
 
   it('calls load(reset) when retry button is clicked after error', async () => {
-    // First call during mount rejects — shows error state
+    // First call during mount rejects — shows error state (localized, ERR-05)
     mockListAuditLogScoped.mockRejectedValueOnce(new Error('DB error'));
     await renderScreen();
-    await waitFor(() => expect(screen.getByText('DB error')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Failed to load audit log')).toBeDefined());
 
     // Clear mock so retry uses the default resolved value from beforeEach
     mockListAuditLogScoped.mockClear();

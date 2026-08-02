@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getEnabledFeatures } from '@/api/settings';
+import { plainErrorMessage } from '@/utils/app-error';
 
 // ── Feature key constants (must match the Rust Feature enum kebab-case keys) ─
 
@@ -110,7 +111,7 @@ export function useFeatures(): UseFeaturesResult {
         // Enable all features as a reasonable fallback so the UI is fully visible.
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : 'Failed to load features',
+            plainErrorMessage(err, 'Failed to load features'),
           );
           setEnabled(new Set(Object.values(FEATURES)));
         }
