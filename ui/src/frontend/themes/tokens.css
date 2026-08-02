@@ -224,7 +224,11 @@
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
   --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
-  /* QR scan expanding-ring start state (green glow at 30%) */
+  /* QR scan expanding-ring start state (green glow at 30%). The plain-rgba
+     fallback covers engines without color-mix() (WebView2/Chromium < 111,
+     Safari < 16.2); color-mix() unsupported would otherwise drop the whole
+     declaration and the pulse ring would silently disappear (THM-06). */
+  --shadow-pulse: 0 0 0 0 rgba(74, 222, 128, 0.3);
   --shadow-pulse: 0 0 0 0 color-mix(in srgb, var(--color-success) 30%, transparent);
 
   /* ── Timing / transitions ──────────────────────── */
