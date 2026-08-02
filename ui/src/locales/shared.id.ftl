@@ -93,6 +93,18 @@ error-state-title = Terjadi kesalahan
 error-state-desc = Terjadi kesalahan yang tidak terduga. Silakan coba lagi.
 error-state-retry = Coba Lagi
 
+# AppError user-safe copy (ERR-05/ERR-06 — output normalizer terketik)
+app-error-generic = Terjadi kesalahan. Silakan coba lagi.
+app-error-validation = Periksa kembali informasi yang Anda masukkan, lalu coba lagi.
+app-error-permission = Anda tidak memiliki izin untuk melakukan ini.
+app-error-session = Sesi Anda telah berakhir. Silakan masuk kembali.
+app-error-conflict = Catatan ini diubah oleh orang lain. Segarkan dan coba lagi.
+app-error-not-found = Item yang diminta tidak ditemukan.
+app-error-offline = Anda tampaknya luring. Periksa koneksi Anda dan coba lagi.
+app-error-hardware = Perangkat keras tidak merespons. Periksa perangkat dan coba lagi.
+app-error-subscription = Tindakan ini tidak termasuk dalam paket Anda saat ini.
+app-error-global = Terjadi hal yang tidak terduga. Jika ini terus berlanjut, mulai ulang aplikasi.
+
 # Theme toggle
 theme-toggle-label = Alihkan tema
 theme-toggle-aria =

@@ -98,9 +98,18 @@ export type AppError =
   | { kind: 'core'; subKind: string; message: string }
   | { kind: 'hardware'; subKind: string; message: string }
   | { kind: 'invalid'; message: string }
+  | { kind: 'permissionDenied'; message: string }
+  | { kind: 'invalidSession'; message?: string }
   | { kind: 'internal'; message: string };
 
-/** Type guard that checks whether an unknown value is an AppError. */
+/**
+ * Type guard that checks whether an unknown value is an AppError.
+ *
+ * Tauri serializes the Rust `AppError` with a `kind` discriminator
+ * (`core`, `hardware`, `invalid`, `permissionDenied`, `invalidSession`,
+ * `internal`). The typed shape is always preferred over string parsing
+ * — see `ui/src/utils/app-error.ts` for the full normalizer.
+ */
 export const isAppError = (e: unknown): e is AppError =>
   typeof e === 'object' && e !== null && 'kind' in e;
 

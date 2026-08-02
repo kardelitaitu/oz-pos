@@ -41,6 +41,18 @@ error-state-title = Something went wrong
 error-state-desc = An unexpected error occurred. Please try again.
 error-state-retry = Retry
 
+# AppError user-safe copy (ERR-05/ERR-06 — typed normalizer output)
+app-error-generic = Something went wrong. Please try again.
+app-error-validation = Please check the information you entered and try again.
+app-error-permission = You don't have permission to do this.
+app-error-session = Your session has expired. Please sign in again.
+app-error-conflict = This record was changed by someone else. Refresh and try again.
+app-error-not-found = The requested item could not be found.
+app-error-offline = You appear to be offline. Check your connection and try again.
+app-error-hardware = A hardware device did not respond. Check it and try again.
+app-error-subscription = This action is not included in your current plan.
+app-error-global = Something unexpected happened. If this keeps happening, restart the app.
+
 # Navigation
 nav-inventory = Inventory
 

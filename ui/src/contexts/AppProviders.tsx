@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { GlobalErrorReporter } from '@/components/GlobalErrorReporter';
 import { LocaleProvider } from '@/i18n/LocaleContext';
 import { BrandProvider } from '@/contexts/BrandContext';
 import { ThemeProvider } from '@/frontend/shell/ThemeProvider';
@@ -37,15 +38,19 @@ export function AppProviders({ children }: AppProvidersProps) {
           <ThemeProvider>
             <CurrencyProvider>
               <AuthProvider>
-                <ToastProvider>
-                  <WorkspaceProvider>
-                    <ZoomProvider>
-                      <HardwareAccelProvider>
-                        {children}
-                      </HardwareAccelProvider>
-                    </ZoomProvider>
-                  </WorkspaceProvider>
-                </ToastProvider>
+            <ToastProvider>
+              {/* ERR-01: global async-failure surface (window.error +
+                  unhandledrejection) — must live inside ToastProvider so it
+                  can surface a recoverable notification. */}
+              <GlobalErrorReporter />
+              <WorkspaceProvider>
+                <ZoomProvider>
+                  <HardwareAccelProvider>
+                    {children}
+                  </HardwareAccelProvider>
+                </ZoomProvider>
+              </WorkspaceProvider>
+            </ToastProvider>
               </AuthProvider>
             </CurrencyProvider>
           </ThemeProvider>
