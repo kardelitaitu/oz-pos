@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared/requiredLocalized';
 import { getNavItems } from '@/platform/ui/menu-registry';
 import './tablet.css';
 
@@ -84,7 +85,7 @@ export default function TabletAppLayout({
       <div className="app-layout">
         {/* ── A11Y-03: skip-to-content link (first focusable element) ── */}
         <a href="#tablet-main-content" className="skip-to-content">
-          {l10n.getString('a11y-skip-to-content') ?? 'Skip to main content'}
+          {requiredLocalized(l10n, 'a11y-skip-to-content')}
         </a>
         {/* ── Main content area ─────────────────────── */}
         <main className="app-content" role="main" id="tablet-main-content">
