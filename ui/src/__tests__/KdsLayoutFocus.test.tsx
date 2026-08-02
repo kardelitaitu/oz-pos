@@ -137,6 +137,19 @@ describe('KdsLayoutFocus', () => {
     expect(screen.getByText('No orders yet')).toBeInTheDocument();
   });
 
+  it('shows status-scoped copy when a filter empties a populated board', async () => {
+    const user = userEvent.setup();
+    // Only pending orders exist; the Preparing filter should remove them all.
+    renderWithFluentSync(
+      <KdsLayoutFocus {...defaultProps} orders={orders.filter(o => o.status === 'pending')} />,
+      kdsFtl,
+    );
+    await user.click(screen.getByText('Preparing'));
+    // EMPTY-04: never claim the board is empty when a filter caused it.
+    expect(screen.queryByText('No orders yet')).not.toBeInTheDocument();
+    expect(screen.getByText('No orders in this status')).toBeInTheDocument();
+  });
+
   // ── Active filter styling ─────────────────────────────────────
 
   it('applies active class to the current filter button', async () => {

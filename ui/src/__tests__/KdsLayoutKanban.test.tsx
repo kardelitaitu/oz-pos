@@ -135,9 +135,11 @@ describe('KdsLayoutKanban', () => {
       <KdsLayoutKanban {...defaultProps} orders={orders.filter(o => o.status === 'pending')} />,
       kdsFtl,
     );
-    // 1 column has tickets (pending), 2 are empty
-    const emptyMessages = screen.getAllByText('No orders yet');
-    expect(emptyMessages.length).toBe(2); // preparing + ready are empty
+    // 1 column has tickets (pending), 2 are empty — but the board has
+    // orders elsewhere, so the empty columns use status-scoped copy
+    // (EMPTY-04: "No orders yet" would be misleading here).
+    const filteredMessages = screen.getAllByText('No orders in this status');
+    expect(filteredMessages.length).toBe(2); // preparing + ready are empty
   });
 
   // ── Advance action ───────────────────────────────────────────

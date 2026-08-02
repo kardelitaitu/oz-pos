@@ -18,6 +18,7 @@ kds-notes = Notes
 kds-tap-to-advance = Tap to advance
 kds-tap-to-advance-label = Order { $number }, tap to advance
 kds-no-orders = No orders yet
+kds-no-orders-filtered = No orders in this status
 kds-order-count = { $count } orders
 kds-time-ago-now = now
 kds-time-ago = { $minutes }m

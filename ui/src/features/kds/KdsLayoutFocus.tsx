@@ -53,7 +53,16 @@ export function KdsLayoutFocus({ orders, onAdvance, showOrderId, showTableNumber
       </div>
       <div className="kds-focus-tickets">
         {filtered.length === 0 ? (
-          <p className="kds-empty"><Localized id="kds-no-orders">No orders yet</Localized></p>
+          /* EMPTY-04: distinguish an empty board from a status filter that
+             removed every ticket — "No orders yet" is misleading when the
+             board is populated but the selected status has none. */
+          <p className="kds-empty" role="status">
+            {orders.length === 0 ? (
+              <Localized id="kds-no-orders">No orders yet</Localized>
+            ) : (
+              <Localized id="kds-no-orders-filtered">No orders in this status</Localized>
+            )}
+          </p>
         ) : (
           filtered.map((order) => (
             <KdsTicketCard

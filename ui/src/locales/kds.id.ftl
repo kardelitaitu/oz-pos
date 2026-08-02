@@ -9,6 +9,7 @@ kds-items = { $count } item
 kds-notes = Catatan
 kds-tap-to-advance = Ketuk untuk lanjut
 kds-no-orders = Belum ada pesanan
+kds-no-orders-filtered = Tidak ada pesanan pada status ini
 
 # ── New i18n migration IDs ──
 

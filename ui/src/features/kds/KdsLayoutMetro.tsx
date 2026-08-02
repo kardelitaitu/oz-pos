@@ -7,7 +7,7 @@ export function KdsLayoutMetro({ orders, onAdvance, showOrderId, showTableNumber
   return (
     <div className="kds-metro">
       {orders.length === 0 ? (
-        <p className="kds-empty"><Localized id="kds-no-orders">No orders yet</Localized></p>
+        <p className="kds-empty" role="status"><Localized id="kds-no-orders">No orders yet</Localized></p>
       ) : (
         orders.map((order) => (
           <KdsTicketCard
