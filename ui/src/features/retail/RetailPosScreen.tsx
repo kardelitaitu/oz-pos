@@ -8,6 +8,7 @@ import { useLocalization } from '@fluent/react';
 import { plainErrorMessage } from '@/utils/app-error';
 import { isEditableTarget } from '@/utils/isEditableTarget';
 import { isAnyAriaModalOpen } from '@/utils/modal-guard';
+import { isCommandModifier } from '@/utils/keyboard-modifier';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
@@ -1211,9 +1212,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         case '?': if (typing) break; setShowShortcuts((v) => !v); break;
         case 'F12': if (typing) break; if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
         // Ctrl+L / Ctrl+K: full editable-target guard (not just INPUT) —
-        // textarea/select/contenteditable are covered too (KEY-03).
-        case 'l': if (e.ctrlKey && !isEditableTarget(document.activeElement)) { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
-        case 'k': if (e.ctrlKey && !isEditableTarget(document.activeElement)) { e.preventDefault(); setShowCreditList(true); } break;
+        // textarea/select/contenteditable are covered too (KEY-03); Meta
+        // accepted on macOS-like keyboards (KEY-08).
+        case 'l': if (isCommandModifier(e) && !isEditableTarget(document.activeElement)) { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
+        case 'k': if (isCommandModifier(e) && !isEditableTarget(document.activeElement)) { e.preventDefault(); setShowCreditList(true); } break;
       }
     };
     document.addEventListener('keydown', handler);

@@ -8,6 +8,7 @@ import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { isAnyAriaModalOpen, consumeShortcut } from '@/utils/modal-guard';
+import { isCommandModifier } from '@/utils/keyboard-modifier';
 import AppLayout, { type AppRoute } from './AppLayout';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
@@ -45,8 +46,9 @@ function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
     if (!active) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Ctrl+Shift+Escape always returns to the picker, bypassing modals.
-        if (e.ctrlKey && e.shiftKey) {
+        // Ctrl+Shift+Escape (or ⌘+Shift+Escape on macOS) always returns to the
+        // picker, bypassing modals.
+        if (isCommandModifier(e) && e.shiftKey) {
           consumeShortcut(e);
           onBack();
         } else if (!isAnyAriaModalOpen()) {
