@@ -2,7 +2,7 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Empty states — no-data views, no-results views, recovery actions, accessibility, localization, theming, and responsive consistency
-> **Status:** REMEDIATED · findings EMPTY-01→EMPTY-10 closed (EMPTY-08/09 P3 polish deferred as non-blocking); see commits `50594832`, `de4479c7`, `fd2548da`
+> **Status:** REMEDIATED · findings EMPTY-01→EMPTY-10 closed; see commits `50594832`, `de4479c7`, `fd2548da`, `8a21a933`, `c2195f2f`, `a4595cb1`
 > **Production code changed:** Yes — KDS layouts, KDS product picker, ProductLookupScreen, FTL bundles, compliance gate
 
 ## Scope
@@ -167,7 +167,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Establish a tokenized empty-state layout primitive with variants for full-page, table-region, grid-region, and modal-region use. Ensure actions use the shared Button touch sizing, preserve stable surrounding geometry, and add responsive DOM/visual checks at desktop and tablet widths.
 
-**Status:** ⏭ Deferred (non-blocking P3) — shared `.empty-state` tokenized CSS exists and new clear-search actions reuse shared Button touch sizing; full feature-wrapper harmonization remains a low-priority follow-up.
+**Status:** ✅ Remediated — the canonical `.empty-state` primitive gained tokenized region variants (`empty-state--region-full/table/grid/modal`); eight feature-specific empty wrappers (GiftCards, Suppliers, PurchaseOrders, Variants, Promotions, Loyalty, Terminals, Categories) were migrated onto the shared `<EmptyState>` with region variants, and their dead feature CSS was removed. Pinned by `EmptyState.test.tsx` region tests. Commits `8a21a933`, `c2195f2f`, `a4595cb1`.
 
 ### EMPTY-09 — Illustration usage is incomplete despite a theme-safe illustration set
 
@@ -181,7 +181,7 @@ Adoption is partial. Product management, sales history, shifts, and staff use th
 
 **Recommendation:** Treat illustrations as optional, not mandatory, but define a small mapping for common resource types and a no-results variant. Keep all icons `aria-hidden`, use `currentColor`/tokens, and avoid adding decorative art where the modal or dense table needs compact feedback.
 
-**Status:** ⏭ Deferred (non-blocking P3) — `EmptyStateIllustrations` provides theme-safe `currentColor` SVGs and SalesHistory/ProductManagement/Shift/Staff consume them; extending the mapping to remaining screens is a low-priority follow-up.
+**Status:** ✅ Remediated — `emptyStateResourceIcons.ts` adds a resource→icon mapping (`EMPTY_STATE_RESOURCE_ICONS` + `emptyStateIconFor`) covering products, sales, staff, shifts, categories, customers, gift-cards, suppliers, purchase-orders, variants, promotions, loyalty, terminals, search, and generic, with new icons for the previously unmapped resources; the migrated screens render their matching illustration. Pinned by `emptyStateResourceIcons.test.tsx`. Commits `8a21a933`, `c2195f2f`, `a4595cb1`.
 
 ### EMPTY-10 — Test coverage validates the primitive, not the cross-screen empty-state contract
 
@@ -240,10 +240,13 @@ The open findings are not claims that every listed screen is broken in the same 
 
 ## Audit status
 
-Findings EMPTY-01→EMPTY-10 are remediated. EMPTY-08 and EMPTY-09 (tokenized layout harmonization and illustration mapping) are recorded as deferred non-blocking P3 polish with the shared primitives already in place. Remediation commits:
+Findings EMPTY-01→EMPTY-10 are fully remediated, including the two P3 polish findings (EMPTY-08/09) closed this session. Remediation commits:
 
 - `50594832` — KDS filter-aware no-results copy + `role="status"` (EMPTY-04/06)
 - `de4479c7` — clear-search actions on KDS picker + ProductLookup no-results (EMPTY-05)
 - `fd2548da` — cross-screen empty-state compliance gate (EMPTY-10)
+- `8a21a933` — tokenized empty-state region variants + resource illustration set (EMPTY-08/09)
+- `c2195f2f` — migrate eight feature empty wrappers onto shared `<EmptyState>` + mapped icons (EMPTY-08/09)
+- `a4595cb1` — tests pinning region variants and the resource-icon mapping (EMPTY-08/09)
 
 Validation: 25 KDS layout tests, 22 ProductLookup tests, 40 compliance-gate assertions, full typecheck clean, i18n lint + bundle-parity pre-commit gates pass.
