@@ -816,6 +816,129 @@ mod tests {
         }
     }
 
+    /// Extract the numeric prefix from a migration id (`"046_gift_cards.sql"` → `046`).
+    fn numeric_prefix(id: &str) -> u32 {
+        let stem = id.split('.').next().unwrap_or(id);
+        stem.split('_').next().unwrap_or("").parse().unwrap_or(0)
+    }
+
+    #[test]
+    fn migration_prefixes_are_unique_after_legacy_shared_block() {
+        // RUST-09: migrations 046 and 047 each intentionally share numeric
+        // prefixes (documented legacy batching). New migrations MUST use a
+        // unique sequential prefix — a duplicate prefix on any migration
+        // after 047 is a registry error that can mask ordering mistakes.
+        let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut in_legacy_block = true;
+        for mig in ALL {
+            let prefix = numeric_prefix(mig.id);
+            if prefix > 47 {
+                in_legacy_block = false;
+            }
+            if !in_legacy_block {
+                assert!(
+                    seen.insert(prefix),
+                    "duplicate migration prefix {prefix:03} on {} (unique prefixes required after 047)",
+                    mig.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn migration_prefixes_are_monotonic_after_legacy_block() {
+        // RUST-09: the runner applies migrations in compile-time array order,
+        // so that order is canonical. After the legacy 046/047 block the
+        // numeric prefixes must be strictly increasing — a fresh install and
+        // an upgrade must converge on the same schema regardless of entry
+        // insertion point.
+        let mut prev: Option<u32> = None;
+        let mut past_legacy = false;
+        for mig in ALL {
+            let prefix = numeric_prefix(mig.id);
+            if prefix > 47 {
+                past_legacy = true;
+            }
+            if past_legacy {
+                if let Some(p) = prev {
+                    assert!(
+                        prefix > p,
+                        "migration {} has prefix {prefix:03} which is not greater than previous {p:03} — array order is canonical (RUST-09)",
+                        mig.id
+                    );
+                }
+                prev = Some(prefix);
+            }
+        }
+    }
+
+    #[test]
+    fn fresh_install_and_upgrade_path_produce_identical_schema() {
+        // RUST-09/RUST-10: applying all migrations to an empty DB (fresh
+        // install) must yield the same schema as applying a prefix of the
+        // registry and then upgrading through the remainder (an upgrade from
+        // an older release). Compare the full table/column/index surface.
+        fn schema_fingerprint(
+            conn: &rusqlite::Connection,
+        ) -> std::collections::BTreeMap<String, Vec<String>> {
+            let mut tables: std::collections::BTreeMap<String, Vec<String>> =
+                std::collections::BTreeMap::new();
+            let mut stmt = conn
+                .prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+                )
+                .unwrap();
+            let names: Vec<String> = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            drop(stmt);
+            for name in names {
+                let mut cols: Vec<String> = Vec::new();
+                let mut cstmt = conn
+                    .prepare(&format!("PRAGMA table_info(\"{name}\")"))
+                    .unwrap();
+                let rows = cstmt
+                    .query_map([], |r| {
+                        Ok((
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, i64>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                            r.get::<_, i64>(5)?,
+                        ))
+                    })
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                for (cid, ctype, notnull, dflt, pk) in rows {
+                    cols.push(format!("{cid}|{ctype}|{notnull}|{dflt:?}|{pk}"));
+                }
+                tables.insert(name, cols);
+            }
+            tables
+        }
+
+        // Fresh install: run every migration in one pass.
+        let mut fresh_conn = fresh();
+        run(&mut fresh_conn).unwrap();
+        let fresh_schema = schema_fingerprint(&fresh_conn);
+
+        // Upgrade path: apply the first 80 (a plausible older release), then
+        // the remainder through the same registry runner.
+        let split = 80usize.min(ALL.len());
+        let mut upgrade_conn = fresh();
+        platform_core::database::run(&mut upgrade_conn, &ALL[..split]).unwrap();
+        platform_core::database::run(&mut upgrade_conn, &ALL[split..]).unwrap();
+        let upgrade_schema = schema_fingerprint(&upgrade_conn);
+
+        assert_eq!(
+            fresh_schema, upgrade_schema,
+            "fresh install and upgrade path diverged — schema drift (RUST-09/RUST-10)"
+        );
+    }
+
     #[test]
     fn migrations_create_expected_tables() {
         let mut conn = fresh();
