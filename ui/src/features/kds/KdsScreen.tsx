@@ -102,11 +102,13 @@ export default function KdsScreen() {
   }, [showShortcuts]);
 
   // 3b: Offline resilience — cache, retry queue, optimistic updates.
+  // OFF-07: the hook namespaces all localStorage by store scope so switching
+  // stores on a shared terminal never leaks orders or queued mutations.
   const {
     online, pendingQueueLength, deadLetterLength,
     wrapFetch, wrapUpdate, retryPending, clearDeadLetter,
     forceRetryCounter, storageUnavailable,
-  } = useKdsOffline();
+  } = useKdsOffline(workspaceScope?.storeId);
 
   // P3-2: Chime when new tickets arrive (debounced to max 1 per 5s).
   useNewTicketSound(orders, settings.soundEnabled);

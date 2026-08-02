@@ -38,10 +38,17 @@ function seedLocalStorage<K>(key: string, value: K): void {
 }
 
 function drainLocalStorage(): void {
-  localStorage.removeItem(LS_CACHED_ORDERS);
-  localStorage.removeItem(LS_LAST_SYNC);
-  localStorage.removeItem(LS_OFFLINE_QUEUE);
-  localStorage.removeItem(LS_DEAD_LETTER);
+  localStorage.clear();
+}
+
+/** A fresh ISO timestamp so the OFF-07 cache-expiry check passes. */
+function freshIso(): string {
+  return new Date().toISOString();
+}
+
+/** A timestamp old enough to trigger the OFF-07 expiry (age > CACHE_TTL_MS). */
+function staleIso(): string {
+  return new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 }
 
 // ── Suite ─────────────────────────────────────────────────────────────
@@ -72,12 +79,13 @@ describe('useKdsOffline', () => {
 
     it('restores cached orders from localStorage on mount', () => {
       const orders = [makeOrder({ id: 'o-1' }), makeOrder({ id: 'o-2' })];
+      const sync = freshIso();
       seedLocalStorage(LS_CACHED_ORDERS, orders);
-      seedLocalStorage(LS_LAST_SYNC, '2026-07-30T12:00:00.000Z');
+      seedLocalStorage(LS_LAST_SYNC, sync);
 
       const { result } = renderHook(() => useKdsOffline());
       expect(result.current.cachedOrders).toEqual(orders);
-      expect(result.current.lastSyncAt).toBe('2026-07-30T12:00:00.000Z');
+      expect(result.current.lastSyncAt).toBe(sync);
     });
 
     it('restores pending queue from localStorage on mount', () => {
@@ -135,7 +143,7 @@ describe('useKdsOffline', () => {
     it('returns cached orders on fetch failure when cache exists', async () => {
       const orders = [makeOrder()];
       seedLocalStorage(LS_CACHED_ORDERS, orders);
-      seedLocalStorage(LS_LAST_SYNC, '2026-07-30T12:00:00.000Z');
+      seedLocalStorage(LS_LAST_SYNC, freshIso());
 
       const { result } = renderHook(() => useKdsOffline());
 
@@ -544,6 +552,116 @@ describe('useKdsOffline', () => {
       act(() => result.current.clearDeadLetter());
       expect(result.current.deadLetterLength).toBe(0);
       expect(JSON.parse(localStorage.getItem(LS_DEAD_LETTER) || '[]')).toEqual([]);
+    });
+  });
+
+  // ── OFF-07: store-scoped storage + cache expiry ──────────────────
+
+  describe('OFF-07 store-scoped storage and expiry', () => {
+    it('restores an unexpired cache but ignores an expired one', () => {
+      const order = makeOrder({ id: 'o-1' });
+      seedLocalStorage(LS_CACHED_ORDERS, [order]);
+      seedLocalStorage(LS_LAST_SYNC, freshIso());
+      const { result } = renderHook(() => useKdsOffline());
+      expect(result.current.cachedOrders).toEqual([order]);
+    });
+
+    it('treats a snapshot older than the TTL as expired (no stale data)', () => {
+      seedLocalStorage(LS_CACHED_ORDERS, [makeOrder({ id: 'o-1', status: 'ready' })]);
+      seedLocalStorage(LS_LAST_SYNC, staleIso());
+      const { result } = renderHook(() => useKdsOffline());
+      // OFF-07: stale orders must not linger indefinitely on a shared terminal.
+      expect(result.current.cachedOrders).toBeNull();
+    });
+
+    it('isolates cache and queue per store scope', async () => {
+      // Store A seeds a cache + queue.
+      seedLocalStorage('kds-cached-orders:store-a', [makeOrder({ id: 'a-1' })]);
+      seedLocalStorage('kds-last-sync:store-a', freshIso());
+      const queueA: PendingKdsAction[] = [{
+        id: 'a-1->preparing',
+        orderId: 'a-1',
+        targetStatus: 'preparing',
+        retryCount: 1,
+        createdAt: freshIso(),
+        lastError: 'Down',
+        storeId: 'store-a',
+      }];
+      seedLocalStorage('kds-offline-queue:store-a', queueA);
+
+      const { result: storeA } = renderHook(() => useKdsOffline('store-a'));
+      expect(storeA.current.cachedOrders?.[0]?.id).toBe('a-1');
+      expect(storeA.current.pendingQueueLength).toBe(1);
+
+      // Store B sees none of it.
+      const { result: storeB } = renderHook(() => useKdsOffline('store-b'));
+      expect(storeB.current.cachedOrders).toBeNull();
+      expect(storeB.current.pendingQueueLength).toBe(0);
+    });
+
+    it('binds queued mutations to the store scope they were created in', async () => {
+      const { result } = renderHook(() => useKdsOffline('store-a'));
+      await act(async () => {
+        await result.current.wrapUpdate('o-1', 'preparing', () => Promise.reject(new Error('Down')));
+      });
+      expect(result.current.pendingActions[0]?.storeId).toBe('store-a');
+
+      // A different store replay never executes another store's action.
+      const { result: storeB } = renderHook(() => useKdsOffline('store-b'));
+      const execute = vi.fn(() => Promise.resolve(true));
+      await act(async () => {
+        await storeB.current.retryPending(execute);
+      });
+      expect(execute).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── OFF-10: cross-tab coordination ────────────────────────────────
+
+  describe('OFF-10 cross-tab storage coordination', () => {
+    it('reloads the queue when another tab writes the same scope', () => {
+      const { result } = renderHook(() => useKdsOffline('store-a'));
+      expect(result.current.pendingQueueLength).toBe(0);
+
+      const otherTab: PendingKdsAction[] = [{
+        id: 'o-9->ready',
+        orderId: 'o-9',
+        targetStatus: 'ready',
+        retryCount: 0,
+        createdAt: freshIso(),
+        lastError: 'Down',
+        storeId: 'store-a',
+      }];
+      localStorage.setItem('kds-offline-queue:store-a', JSON.stringify(otherTab));
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'kds-offline-queue:store-a' }),
+        );
+      });
+
+      expect(result.current.pendingQueueLength).toBe(1);
+    });
+
+    it('ignores storage events for other keys', () => {
+      const { result } = renderHook(() => useKdsOffline('store-a'));
+
+      localStorage.setItem('kds-offline-queue:store-b', JSON.stringify([{
+        id: 'b-1->ready',
+        orderId: 'b-1',
+        targetStatus: 'ready',
+        retryCount: 0,
+        createdAt: freshIso(),
+        lastError: 'Down',
+        storeId: 'store-b',
+      }]));
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'kds-offline-queue:store-b' }),
+        );
+      });
+
+      // Different scope — not this tab's queue.
+      expect(result.current.pendingQueueLength).toBe(0);
     });
   });
 

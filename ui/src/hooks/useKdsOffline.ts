@@ -9,6 +9,11 @@
 //!     persisted into the cached snapshot so a reload does not undo it
 //!   • OFF-05: bounded retries with exponential backoff + a visible
 //!     dead-letter list for exhausted/permanent failures
+//!   • OFF-07: all storage is namespaced by store scope (`kds-*:{scope}`) and
+//!     the cache carries an expiry, so stale order data and queued mutations
+//!     never survive across stores/workspaces or indefinitely.
+//!   • OFF-10: a `storage` listener keeps multiple tabs of the same scope
+//!     coordinated — a write in one tab reloads the queue in the others.
 //!
 //! The hook does NOT depend on any Tauri APIs, making it testable in
 //! plain vitest/JSDOM. All storage is via localStorage with try/catch
@@ -23,10 +28,10 @@ import type { KdsOrder, KdsStatus } from '@/api/kds';
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const LS_CACHED_ORDERS = 'kds-cached-orders';
-const LS_LAST_SYNC = 'kds-last-sync';
-const LS_OFFLINE_QUEUE = 'kds-offline-queue';
-const LS_DEAD_LETTER = 'kds-offline-dead-letter';
+const LS_PREFIX_CACHED_ORDERS = 'kds-cached-orders';
+const LS_PREFIX_LAST_SYNC = 'kds-last-sync';
+const LS_PREFIX_OFFLINE_QUEUE = 'kds-offline-queue';
+const LS_PREFIX_DEAD_LETTER = 'kds-offline-dead-letter';
 
 /** OFF-05: max attempts before an action moves to the dead-letter list. */
 export const MAX_RETRY_ATTEMPTS = 5;
@@ -34,6 +39,18 @@ export const MAX_RETRY_ATTEMPTS = 5;
 /** OFF-05: backoff base (ms) — 1s, 2s, 4s, 8s with ±30% jitter. */
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_JITTER = 0.3;
+
+/**
+ * OFF-07: cache retention window. A cached order snapshot older than this is
+ * treated as expired on restore (stale orders must not linger indefinitely on
+ * a shared terminal).
+ */
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+/** Build the store-scoped localStorage key. */
+function scopedKey(prefix: string, scope: string | undefined): string {
+  return scope ? `${prefix}:${scope}` : prefix;
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -53,6 +70,8 @@ export interface PendingKdsAction {
   lastError: string;
   /** OFF-05: earliest allowed retry time (ISO). Actions are skipped until then. */
   nextAttemptAt?: string;
+  /** OFF-07: the store scope the action was queued in (isolation). */
+  storeId?: string;
 }
 
 /** OFF-05: an action that exhausted its retries and needs operator attention. */
@@ -65,7 +84,7 @@ export interface DeadLetterKdsAction extends PendingKdsAction {
 export interface UseKdsOfflineReturn {
   /** Whether the backend is currently reachable. */
   online: boolean;
-  /** Last-known-good cached orders, or null if never fetched. */
+  /** Last-known-good cached orders, or null if never fetched/expired. */
   cachedOrders: KdsOrder[] | null;
   /** Timestamp of last successful backend sync (ISO string, or null). */
   lastSyncAt: string | null;
@@ -173,49 +192,43 @@ function applyProjections(
 /**
  * Provide offline resilience for the KDS screen.
  *
- * Caches the last known good order list in localStorage, queues
- * failed status updates for later retry, and exposes connection
- * status so the UI can show a banner.
+ * All storage is namespaced by `storeId` (OFF-07) so switching stores on a
+ * shared terminal never leaks orders or queued mutations across contexts.
+ * The cached snapshot expires after `CACHE_TTL_MS`.
  *
  * @example
  * ```tsx
- * const {
- *   online, cachedOrders, pendingQueueLength,
- *   wrapFetch, wrapUpdate, retryPending,
- * } = useKdsOffline();
- *
- * const fetchOrders = useCallback(async () => {
- *   const { orders } = await wrapFetch(() => getKdsQueueScoped(token));
- *   setOrders(orders);
- *   // ... filter by store_id ...
- * }, [wrapFetch, ...]);
- *
- * const advanceStatus = useCallback(async (order: KdsOrder) => {
- *   const ok = await wrapUpdate(order.id, nextStatus, () =>
- *     updateKdsStatusScoped(token, order.id, nextStatus)
- *   );
- *   if (!ok) {
- *     // Optimistically advance in local state
- *     setOrders(prev => prev.map(o =>
- *       o.id === order.id ? { ...o, status: nextStatus } : o
- *     ));
- *   }
- * }, [wrapUpdate, ...]);
+ * const { online, cachedOrders, pendingQueueLength, wrapFetch, wrapUpdate, retryPending } =
+ *   useKdsOffline(workspaceScope?.storeId);
  * ```
  */
-export function useKdsOffline(): UseKdsOfflineReturn {
+export function useKdsOffline(storeId?: string): UseKdsOfflineReturn {
+  // OFF-07: namespace every key by the store scope.
+  const cachedKey = scopedKey(LS_PREFIX_CACHED_ORDERS, storeId);
+  const syncKey = scopedKey(LS_PREFIX_LAST_SYNC, storeId);
+  const queueKey = scopedKey(LS_PREFIX_OFFLINE_QUEUE, storeId);
+  const deadKey = scopedKey(LS_PREFIX_DEAD_LETTER, storeId);
+
   const [online, setOnline] = useState(true);
-  const [cachedOrders, setCachedOrders] = useState<KdsOrder[] | null>(
-    () => readLS<KdsOrder[] | null>(LS_CACHED_ORDERS, null),
-  );
+  const [cachedOrders, setCachedOrders] = useState<KdsOrder[] | null>(() => {
+    // OFF-07: expiry — an old snapshot is not returned as if it were fresh.
+    const lastSync = readLS<string | null>(syncKey, null);
+    if (lastSync) {
+      const age = Date.now() - new Date(lastSync).getTime();
+      if (!Number.isNaN(age) && age > CACHE_TTL_MS) {
+        return null;
+      }
+    }
+    return readLS<KdsOrder[] | null>(cachedKey, null);
+  });
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(
-    () => readLS<string | null>(LS_LAST_SYNC, null),
+    () => readLS<string | null>(syncKey, null),
   );
   const [pendingActions, setPendingActions] = useState<PendingKdsAction[]>(
-    () => readLS<PendingKdsAction[]>(LS_OFFLINE_QUEUE, []),
+    () => readLS<PendingKdsAction[]>(queueKey, []),
   );
   const [deadLetterActions, setDeadLetterActions] = useState<DeadLetterKdsAction[]>(
-    () => readLS<DeadLetterKdsAction[]>(LS_DEAD_LETTER, []),
+    () => readLS<DeadLetterKdsAction[]>(deadKey, []),
   );
   const [initialLoading, setInitialLoading] = useState(true);
   const [forceRetryCounter, setForceRetryCounter] = useState(0);
@@ -228,55 +241,67 @@ export function useKdsOffline(): UseKdsOfflineReturn {
 
   // ── Cache helpers ──────────────────────────────────────────────────
 
-  const updateCache = useCallback((orders: KdsOrder[]) => {
-    const now = new Date().toISOString();
-    // OFF-03: persist the optimistic projection over fresh server data so a
-    // reload while actions are still queued keeps the locally-advanced state.
-    const queue = readLS<PendingKdsAction[]>(LS_OFFLINE_QUEUE, []);
-    const projected = applyProjections(orders, queue);
-    setCachedOrders(projected);
-    setLastSyncAt(now);
-    const ok1 = writeLS(LS_CACHED_ORDERS, projected);
-    const ok2 = writeLS(LS_LAST_SYNC, now);
-    if (!ok1 || !ok2) setStorageUnavailable(true);
-  }, []);
+  const updateCache = useCallback(
+    (orders: KdsOrder[]) => {
+      const now = new Date().toISOString();
+      // OFF-03: persist the optimistic projection over fresh server data so a
+      // reload while actions are still queued keeps the locally-advanced state.
+      const queue = readLS<PendingKdsAction[]>(queueKey, []);
+      const projected = applyProjections(orders, queue);
+      setCachedOrders(projected);
+      setLastSyncAt(now);
+      const ok1 = writeLS(cachedKey, projected);
+      const ok2 = writeLS(syncKey, now);
+      if (!ok1 || !ok2) setStorageUnavailable(true);
+    },
+    [cachedKey, queueKey, syncKey],
+  );
 
   /** OFF-03: project a single status change onto the cached snapshot. */
-  const projectStatusOntoCache = useCallback((orderId: string, targetStatus: KdsStatus) => {
-    setCachedOrders((prev) => {
-      if (!prev) return prev;
-      const next = prev.map((o) =>
-        o.id === orderId ? { ...o, status: targetStatus } : o,
-      );
-      const ok = writeLS(LS_CACHED_ORDERS, next);
-      if (!ok) setStorageUnavailable(true);
-      return next;
-    });
-  }, []);
+  const projectStatusOntoCache = useCallback(
+    (orderId: string, targetStatus: KdsStatus) => {
+      setCachedOrders((prev) => {
+        if (!prev) return prev;
+        const next = prev.map((o) =>
+          o.id === orderId ? { ...o, status: targetStatus } : o,
+        );
+        const ok = writeLS(cachedKey, next);
+        if (!ok) setStorageUnavailable(true);
+        return next;
+      });
+    },
+    [cachedKey],
+  );
 
   const loadQueue = useCallback(() => {
-    const q = readLS<PendingKdsAction[]>(LS_OFFLINE_QUEUE, []);
+    const q = readLS<PendingKdsAction[]>(queueKey, []);
     setPendingActions(q);
     return q;
-  }, []);
+  }, [queueKey]);
 
-  const saveQueue = useCallback((queue: PendingKdsAction[]) => {
-    setPendingActions(queue);
-    const ok = writeLS(LS_OFFLINE_QUEUE, queue);
-    if (!ok) setStorageUnavailable(true);
-  }, []);
+  const saveQueue = useCallback(
+    (queue: PendingKdsAction[]) => {
+      setPendingActions(queue);
+      const ok = writeLS(queueKey, queue);
+      if (!ok) setStorageUnavailable(true);
+    },
+    [queueKey],
+  );
 
   const loadDeadLetter = useCallback(() => {
-    const d = readLS<DeadLetterKdsAction[]>(LS_DEAD_LETTER, []);
+    const d = readLS<DeadLetterKdsAction[]>(deadKey, []);
     setDeadLetterActions(d);
     return d;
-  }, []);
+  }, [deadKey]);
 
-  const saveDeadLetter = useCallback((dead: DeadLetterKdsAction[]) => {
-    setDeadLetterActions(dead);
-    const ok = writeLS(LS_DEAD_LETTER, dead);
-    if (!ok) setStorageUnavailable(true);
-  }, []);
+  const saveDeadLetter = useCallback(
+    (dead: DeadLetterKdsAction[]) => {
+      setDeadLetterActions(dead);
+      const ok = writeLS(deadKey, dead);
+      if (!ok) setStorageUnavailable(true);
+    },
+    [deadKey],
+  );
 
   // ── wrapFetch ──────────────────────────────────────────────────────
 
@@ -336,6 +361,8 @@ export function useKdsOffline(): UseKdsOfflineReturn {
           retryCount: 0,
           createdAt: new Date().toISOString(),
           lastError: e instanceof Error ? e.message : String(e),
+          // OFF-07: bind the mutation to the store scope it was created in.
+          ...(storeId ? { storeId } : {}),
         };
 
         const queue = loadQueue();
@@ -351,7 +378,7 @@ export function useKdsOffline(): UseKdsOfflineReturn {
         return false;
       }
     },
-    [loadQueue, saveQueue, projectStatusOntoCache],
+    [loadQueue, saveQueue, projectStatusOntoCache, storeId],
   );
 
   // ── retryPending ───────────────────────────────────────────────────
@@ -363,12 +390,19 @@ export function useKdsOffline(): UseKdsOfflineReturn {
       const queue = loadQueue();
       if (queue.length === 0) return 0;
 
+      // OFF-07: never replay actions from another store scope.
+      const scoped = storeId ? queue.filter((a) => !a.storeId || a.storeId === storeId) : queue;
+      if (scoped.length === 0) {
+        saveQueue([]);
+        return 0;
+      }
+
       const now = Date.now();
       let successes = 0;
       const kept: PendingKdsAction[] = [];
       const dead: DeadLetterKdsAction[] = [];
 
-      for (const action of queue) {
+      for (const action of scoped) {
         // OFF-05: skip actions whose backoff window has not elapsed.
         if (action.nextAttemptAt && new Date(action.nextAttemptAt).getTime() > now) {
           kept.push(action);
@@ -421,7 +455,7 @@ export function useKdsOffline(): UseKdsOfflineReturn {
       }
       return successes;
     },
-    [loadQueue, saveQueue, loadDeadLetter, saveDeadLetter],
+    [loadQueue, saveQueue, loadDeadLetter, saveDeadLetter, storeId],
   );
 
   // ── clearPending / clearDeadLetter ─────────────────────────────────
@@ -444,6 +478,24 @@ export function useKdsOffline(): UseKdsOfflineReturn {
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, []);
+
+  // ── OFF-10: cross-tab coordination ─────────────────────────────────
+  // Another tab of the same scope may queue actions or update the cache.
+  // Re-read the scoped keys so all tabs see the same durable state.
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === queueKey) {
+        loadQueue();
+      } else if (e.key === cachedKey) {
+        const v = readLS<KdsOrder[] | null>(cachedKey, null);
+        setCachedOrders(v);
+      } else if (e.key === deadKey) {
+        loadDeadLetter();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [queueKey, cachedKey, deadKey, loadQueue, loadDeadLetter]);
 
   return {
     online,
