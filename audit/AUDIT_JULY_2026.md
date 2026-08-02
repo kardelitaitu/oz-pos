@@ -38,7 +38,7 @@
 17. Performance — bundle size, render optimization, lazy loading, code splitting — ✅ **FULLY REMEDIATED** (all 10 findings PERF-01→PERF-10; see [17-performance.md](17-performance.md) — commits `2b762b08`, `2e1f3d31`, `50b50836`, `bf376234`, `df753501`)
 18. Error handling — error boundaries, toast consistency, retry patterns, fallback UI — ✅ **FULLY REMEDIATED** (all 10 findings ERR-01→ERR-10; see [18-error-handling.md](18-error-handling.md) — commits `10f1bae0`, `c586c3d6`, `537f5867`, `31adb7c3`, `5dacd75f`)
 19. Offline resilience — retail POS offline mode, queueing, sync-on-reconnect — ✅ **FULLY REMEDIATED** (all 12 findings OFF-01→OFF-12; see [19-offline-resilience.md](19-offline-resilience.md) — commits `91766573`, `233eed6b`, `17ee223c`, `e07ec4ae`)
-20. Mobile / tablet responsiveness — index.tablet.html, touch UX, viewport
+20. Mobile / tablet responsiveness — index.tablet.html, touch UX, viewport — ✅ **FULLY REMEDIATED** (all 6 findings TAB-01→TAB-06; see [20-tablet-responsiveness.md](20-tablet-responsiveness.md) — commits `42263ef9`, `ed6ec31f`, `7780c206`, `6aedc287`, `27a1e0e1`, `7a82227a`)
 21. Theme system — token completeness, dark mode gaps, color-mix fallbacks
 22. Keyboard shortcuts — coverage audit across all screens
 23. Loading states — skeleton consistency, loading spinners, progress indicators
