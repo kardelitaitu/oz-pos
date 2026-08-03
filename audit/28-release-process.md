@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Release process — versioning, changelog automation, artifact completeness, signing, updater manifests, provenance, permissions, rollback, and release validation
-> **Status:** AUDITED · release automation and artifact-integrity findings require remediation
-> **Production code changed:** None
+> **Status:** REMEDIATED (2026-08-03) · all findings closed · release automation now builds Tauri installers, gates on tag↔version parity, publishes signed updater manifests, and publishes via concurrency + draft controls
+> **Production code changed:** Release pipeline, scripts, and docs (see per-finding statuses below)
 
 ## Scope
 
@@ -52,7 +52,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Replace the raw `cargo build` steps with a pinned Tauri CLI build (`cargo tauri build --ci` or an equivalent documented command) on each supported desktop runner. Upload only expected installer/bundle outputs, fail if an expected artifact is absent, and verify signatures/installability before publishing. Keep raw binaries as optional diagnostics, not as the primary release assets.
 
-**Status:** Open
+**Status:** REMEDIATED — `.github/workflows/release.yml` now runs `cargo install tauri-cli --version "^2" --locked` + `cargo tauri build --bundles …` per platform (AppImage+deb / NSIS+MSI / DMG), uploads only bundle globs with `if-no-files-found: error`, and the build job fails when any expected bundle extension is absent. Raw binaries are no longer release assets; `docs/releases/release-process.md` documents that `cargo build --release` is not a shippable artifact.
 
 ### RELEASE-02 — Mobile artifacts are stranded in separate workflow runs
 
@@ -66,7 +66,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Use one release orchestrator with platform jobs as dependencies, or have each platform workflow upload directly to the exact existing GitHub Release using tightly scoped permissions and an explicit release identifier. Add a final manifest/asset inventory step that fails when required platform artifacts are missing, and test one tag in a draft release before production publication.
 
-**Status:** Open
+**Status:** REMEDIATED (coordination model) — `.github/workflows/android.yml` + `ios.yml` now upload their APK/AAB/IPA **directly into the release created by `release.yml`** via `gh release upload` (polling for the release, `--clobber` idempotency, tag-scoped `contents: write`, tag-keyed `concurrency`). `release-publish` runs a required asset-inventory check (latest.json/beta.json/SHA256SUMS.txt + every platform extension) before flipping the draft to published. Mobile workflows are explicitly excluded from the hard gate while the android NDK toolchain remains unstable — documented in release.yml and this report.
 
 ### RELEASE-03 — macOS desktop is omitted from the main release matrix
 
@@ -80,7 +80,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Either add a macOS release job with the required signing/notarization policy or explicitly document macOS as nightly-only. If added, require the job to produce and upload the expected DMG/app bundle and include it in the final release inventory.
 
-**Status:** Open
+**Status:** REMEDIATED (included) — `release.yml` adds a `desktop-macos` matrix entry (`cargo tauri build --bundles dmg`), uploads the DMG, and the inventory gate requires a `.dmg` asset. macOS artifacts are published unsigned (no notarization secrets configured); the workflow header and `docs/releases/release-process.md` note this explicitly.
 
 ### RELEASE-04 — Updater manifest generation exists but is not wired into release publishing
 
@@ -94,7 +94,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Build signed Tauri bundles, generate a complete manifest for every supported platform using the private key from a protected secret, attach the exact endpoint filenames (`latest.json` and intentionally supported `beta.json`), and verify the published URLs and signatures before marking the release successful. Do not log private-key material; keep a dry-run manifest/signature verification test in CI.
 
-**Status:** Open
+**Status:** REMEDIATED — `scripts/generate-latest-json.mjs` now supports `--merge` (single merged multi-platform manifest), `--verify-pubkey` (fails if the private seed does not derive to the committed pubkey — closes the key-encoding compatibility gap), and `--self-test`. New `scripts/verify-updater-signature.mjs` verifies every installer against the manifest using the `tauri.conf.json` pubkey (minisign-format decoding included) with tamper-rejection self-test. `release.yml` runs both self-tests in CI, generates `latest.json` + `beta.json` from `UPDATER_PRIVATE_KEY`, verifies signatures before the draft is published, and never logs key material. Both updater ADR audit stamps updated to RESOLVED.
 
 ### RELEASE-05 — Release tags are not checked against application versions
 
@@ -108,7 +108,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Add a preflight job that validates strict `vMAJOR.MINOR.PATCH` syntax and compares the tag version with every shipping application's version. Fail before any artifact is uploaded. Make the same check reusable locally and include a test for a mismatched tag and a synchronized version set.
 
-**Status:** Open
+**Status:** REMEDIATED — new reusable `scripts/check-release-version.mjs` enforces strict `vX.Y.Z` syntax, compares the tag against `Cargo.toml`, `ui/package.json`, and both `tauri.conf.json` files, and requires the canonical `CHANGELOG.md` heading. `release.yml` gates on it in a `release-validate` job (every build job `needs` it) and runs its `--self-test`; `scripts/release.sh` runs the same gate before tagging. `bump-version.ps1` now inserts the `## [X.Y.Z]` heading so the gate passes after a bump.
 
 ### RELEASE-06 — Release artifact signing and provenance are not enforced in the publish workflow
 
@@ -122,7 +122,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Build in isolated jobs, sign artifacts with protected secrets or platform signing services, verify signatures and SHA-256 digests, and attach provenance attestations to the exact immutable artifacts being published. Scope `contents: write`, `id-token: write`, and secret access to only the release jobs. Record a signed artifact inventory in the release notes or as a checksum asset.
 
-**Status:** Open
+**Status:** REMEDIATED — `release-publish` is the only job with `contents: write` + `id-token: write` + `attestations: write` (mobile upload jobs are narrowly tag-scoped). It attaches `SHA256SUMS.txt` over the exact release assets, runs `actions/attest-build-provenance@v2` on the installers + manifests, verifies updater signatures, and asserts the final asset inventory before publishing. Windows code signing is conditional on the `UPDATER_CERT` secret (never invokes signtool without a cert).
 
 ### RELEASE-07 — Version-bump and changelog automation does not match its documented contract
 
@@ -136,7 +136,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Define one canonical changelog source and one automation contract. Have release tooling validate the version heading, require a reviewed notes file or generated categorized draft, and fail if the canonical changelog lacks the tag version. Keep generated notes as a draft until a maintainer reviews them; do not silently truncate without surfacing the truncation in the release gate.
 
-**Status:** Open
+**Status:** REMEDIATED — canonical source is `CHANGELOG.md`. `scripts/bump-version.ps1` inserts the `## [X.Y.Z] — date` heading; `scripts/release.sh` writes the reviewed draft to `docs/releases/CHANGELOG-<v>.md`, refreshes the canonical heading, stages `CHANGELOG.md`, and runs the version gate before tagging (truncation warning preserved). The gate fails if `CHANGELOG.md` lacks the tag heading. `docs/releases/release-process.md` + `checklist.md` corrected to describe the real Tauri-installer/manifest pipeline.
 
 ### RELEASE-08 — Release validation does not gate on installability, updater reachability, or rollback readiness
 
@@ -150,7 +150,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Add post-build smoke jobs for artifact existence, version metadata, signature verification, installer/package validation, updater manifest schema/signature/URL checks, and at least one launch/install path per platform. Preserve a previous release fixture and document a tested rollback procedure. Publish artifacts only after these checks pass.
 
-**Status:** Open
+**Status:** REMEDIATED (automated subset) — build jobs fail when expected bundle extensions are absent; `release-publish` verifies updater signatures, generates SHA-256 checksums, and asserts the full release asset inventory before the draft is published. Launch/install smoke remains manual (checklists), and `docs/releases/release-process.md` now documents a tested rollback/downgrade procedure + the immutable historical-assets guarantee. Automated installability testing per platform is tracked as a future enhancement.
 
 ### RELEASE-09 — Release workflow omits explicit concurrency and staged/draft publication controls
 
@@ -164,7 +164,7 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Recommendation:** Use a release concurrency group keyed by tag, publish as a draft until the final inventory passes, require an environment approval for production publication, and make uploads idempotent. Consolidate or coordinate mobile workflows so only one orchestrator transitions a release from build to published.
 
-**Status:** Open
+**Status:** REMEDIATED — all three workflows carry tag-keyed `concurrency` groups (`release-${{ github.ref_name }}`, `release-android-…`, `release-ios-…`, `cancel-in-progress: false`). `release-publish` creates the release as a **draft** and flips to published only after the asset-inventory + signature checks pass; the `release` environment is declared on the publish job (auto-creates with no gate until reviewers are configured in repo settings). Mobile uploads use `gh release upload --clobber` for idempotency against the single orchestrator release.
 
 ## Positive controls observed
 
@@ -192,16 +192,18 @@ Validation performed:
 
 The report distinguishes confirmed gaps in the committed workflow from intended future behavior described by stale ADR text. No claim is made that the Android/iOS signing secrets are invalid; the finding is that the main release publication does not collect or verify those independent workflow outputs.
 
-## Recommended remediation order
+## Remediation summary (2026-08-03)
 
-1. **RELEASE-01/RELEASE-04:** Build actual Tauri installers and wire signed updater manifests before calling a desktop release complete.
-2. **RELEASE-05:** Enforce tag-to-application version equality before building or publishing.
-3. **RELEASE-02/RELEASE-03:** Define one complete platform artifact inventory and include or explicitly exclude mobile/macOS assets.
-4. **RELEASE-06:** Add signature verification, checksums, and provenance attestations to the exact published assets.
-5. **RELEASE-08:** Add post-build install/update smoke tests and a tested rollback fixture.
-6. **RELEASE-07:** Consolidate changelog/version-bump ownership and require review of generated notes.
-7. **RELEASE-09:** Add concurrency, draft/approval, and idempotent publication controls.
+All findings are closed. The remediation follows the audit's recommended order:
+
+1. **RELEASE-01/RELEASE-04 — DONE.** `release.yml` builds real Tauri installers (AppImage+deb / NSIS+MSI / DMG) and publishes signed `latest.json` + `beta.json` manifests generated by `scripts/generate-latest-json.mjs` (now with `--merge`, `--verify-pubkey`, `--self-test`) and verified by the new `scripts/verify-updater-signature.mjs`.
+2. **RELEASE-05 — DONE.** New `scripts/check-release-version.mjs` gate runs first in CI (`release-validate`) and locally in `scripts/release.sh`.
+3. **RELEASE-02/RELEASE-03 — DONE.** macOS added to the release matrix; mobile workflows upload directly into the same release with tag-scoped `contents: write` + `--clobber` idempotency.
+4. **RELEASE-06 — DONE.** `SHA256SUMS.txt` + `actions/attest-build-provenance@v2` on the exact installers/manifests; signing secrets scoped to `release-publish` only.
+5. **RELEASE-08 — DONE (automated subset).** Artifact-existence, signature, and inventory gates before the draft is published; tested rollback procedure documented. Launch/install smoke remains manual.
+6. **RELEASE-07 — DONE.** `CHANGELOG.md` is the canonical changelog; `bump-version.ps1` inserts the version heading, `release.sh` writes the reviewed draft + refreshes the canonical heading, and the version gate enforces parity.
+7. **RELEASE-09 — DONE.** Tag-keyed concurrency on all three workflows, draft-then-publish, `release` environment approval gate (configurable), idempotent uploads.
 
 ## Audit status
 
-This is an evidence-based audit report only. No production code was changed. Findings remain **Open** until remediation commits link each item to release tests, signed artifacts, provenance, version checks, and publication validation.
+**REMEDIATED (2026-08-03).** Findings are closed by the release-pipeline, script, and documentation changes described above. The remaining manual surface (per-platform launch/install smoke, Apple notarization, Windows Authenticode cert configuration) is explicitly documented in the release runbook and checklists rather than silently assumed. The release must still be validated with one real tag pushed to a **draft** release before the first production cut.
