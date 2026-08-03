@@ -98,3 +98,7 @@ ui/tsconfig.node.tsbuildinfo
 # exception) — its own workspace, so target/ + Cargo.lock are dev-only.
 /scripts/updater-compat-check/target/
 /scripts/updater-compat-check/Cargo.lock
+
+# Python bytecode caches (previously committed by mistake; untracked 2026-08-03)
+__pycache__/
+*.pyc
