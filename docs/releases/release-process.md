@@ -39,6 +39,9 @@ that operators must know how to rotate safely (audit finding **L-4**).
      `SIGNPATH_API_TOKEN` secret + three `SIGNPATH_*` variables), and
      uploads the signed result. This is the route that removes SmartScreen
      "unknown publisher" for **end users** without buying a certificate.
+     One-time onboarding (OSS application, org/project/signing policy,
+     `<zip-file>` artifact config, GitHub App, secrets/vars): see
+     [`signpath-onboarding.md`](./signpath-onboarding.md).
    - `scripts/dev-code-sign.ps1` — self-signed cert for **dev/CI machines**
      only (trust is local to the machine that installs the root).
 

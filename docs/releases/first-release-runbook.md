@@ -270,6 +270,14 @@ or first run the app:
 
 ### One-time setup for the SignPath route
 
+> **Full walkthrough:** [`signpath-onboarding.md`](./signpath-onboarding.md)
+> — applying for free OSS signing, creating the org / project / signing
+> policy, configuring the `<zip-file>` Artifact Configuration, installing the
+> SignPath GitHub App, and setting the `SIGNPATH_*` secrets/vars so the
+> release workflow actually signs.
+
+Summary of the one-time setup:
+
 1. Apply for free open-source signing at signpath.org (org + project +
    signing policy must be approved; GitHub App or API token required).
 2. Configure the SignPath **Artifact Configuration** as `<zip-file>` root —
