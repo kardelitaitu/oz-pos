@@ -55,8 +55,39 @@ impl DbPool {
         }
     }
 
+    /// Detect paths that are obviously non-Linux: a Windows drive-letter
+    /// prefix (`C:/…`, `C:\…`), a bare drive letter (`C:…`), or a
+    /// backslash separator. On Unix targets the cloud server can never
+    /// legitimately use such a path — the usual cause is Git Bash (MSYS)
+    /// path conversion mangling a `docker run -e OZ_DB_PATH=…` argument.
+    ///
+    /// The detector itself is platform-independent so it can be unit-tested
+    /// everywhere; only the rejection in [`Self::connect_sqlite`] is Unix-
+    /// gated (Windows native dev runs legitimately use Windows paths).
+    fn looks_like_windows_path(path: &str) -> bool {
+        let bytes = path.as_bytes();
+        let drive_letter = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+        drive_letter || path.contains('\\')
+    }
+
     /// Connect to a SQLite database at the given path.
     pub fn connect_sqlite(path: &str) -> Result<Self, DbError> {
+        // The cloud server is deployed as a Linux container, so a
+        // Windows-style `OZ_DB_PATH` can never be valid there — it is almost
+        // always a Git Bash (MSYS) path-conversion artifact from
+        // `docker run -e OZ_DB_PATH=/tmp/...` (see
+        // docs/operations/docker-deployment.md). Fail fast with an actionable
+        // message instead of rusqlite's cryptic `unable to open database
+        // file`. No-op on Windows native builds, where Windows paths are
+        // legitimate (dev runs and unit tests use them).
+        if cfg!(unix) && Self::looks_like_windows_path(path) {
+            return Err(DbError::Config(format!(
+                "OZ_DB_PATH is set to {path:?}, which looks like a Windows path but the cloud \
+                 server runs on Linux. This is usually a Git Bash path-conversion artifact: \
+                 prefix the docker run command with `MSYS_NO_PATHCONV=1` or pass a container \
+                 path such as /data/oz-pos.db"
+            )));
+        }
         let mut conn = rusqlite::Connection::open(path)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -227,6 +258,39 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1, "settings table should exist after migrations");
+    }
+
+    #[test]
+    fn windows_style_paths_are_detected() {
+        // Windows drive-letter prefixes (forward or backslash).
+        assert!(DbPool::looks_like_windows_path(
+            "C:/Users/Dika/AppData/Local/Temp/test.db"
+        ));
+        assert!(DbPool::looks_like_windows_path("C:\\Users\\Dika\\test.db"));
+        assert!(DbPool::looks_like_windows_path("c:/data/db.sqlite"));
+        // Bare drive letters and backslash separators.
+        assert!(DbPool::looks_like_windows_path("C:relative.db"));
+        assert!(DbPool::looks_like_windows_path("/data/oz\\pos.db"));
+        // Legitimate Linux/container paths must NOT be flagged.
+        assert!(!DbPool::looks_like_windows_path("/data/oz-pos.db"));
+        assert!(!DbPool::looks_like_windows_path("oz-pos.db"));
+        assert!(!DbPool::looks_like_windows_path(":memory:"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn connect_sqlite_rejects_windows_path_on_unix() {
+        let err = DbPool::connect_sqlite("C:/Users/Dika/AppData/Local/Temp/test.db")
+            .expect_err("Windows-style path must be rejected on Unix");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("MSYS_NO_PATHCONV"),
+            "message should hint the fix: {msg}"
+        );
+        assert!(
+            msg.contains("Windows path"),
+            "message should name the path kind: {msg}"
+        );
     }
 
     #[test]

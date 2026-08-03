@@ -353,6 +353,46 @@ docker compose exec pos-cloud-server /app/oz-cloud-server --migrate
 | Can't access PocketBase admin UI | No superuser created | Run the `superuser upsert` command |
 | Slow product lookups | Redis cache cold | Wait for cache to warm up (first requests are slower) |
 | `docker compose -f docker-compose.yml -f docker-compose.pg.yml up` fails | `PG_PASSWORD` not set or `pos-cloud-db` unavailable | Export `PG_PASSWORD` (required) and ensure `redis` is healthy |
+| `docker run -e OZ_DB_PATH=/tmp/...` fails inside the container with `unable to open database file: C:/Users/...` | Git Bash rewrote the POSIX path into a Windows path before Docker saw it | Prefix the command with `MSYS_NO_PATHCONV=1` (see [Git Bash on Windows](#git-bash-on-windows-path-mangling-msys_no_pathconv1)) |
+
+---
+
+## Git Bash on Windows: Path Mangling (`MSYS_NO_PATHCONV`)
+
+When running `docker run` from **Git Bash** (MSYS2) on Windows, the shell
+silently rewrites command-line arguments that look like POSIX paths into
+Windows paths before handing them to native programs (like `docker.exe`).
+This corrupts any path that is meant to be interpreted **inside the Linux
+container**:
+
+```bash
+# BROKEN — Git Bash rewrites /tmp/test.db into a Windows path
+$ docker run -e OZ_DB_PATH=/tmp/test.db oz-pos-cloud
+# → failed to initialise database: SQLite error: unable to open database
+#   file: C:/Users/<you>/AppData/Local/Temp/test.db
+```
+
+Git Bash maps `/tmp` to your Windows temp directory, so the container
+receives `C:/Users/<you>/AppData/Local/Temp/test.db` — a relative path
+whose parent directories do not exist inside the Linux filesystem, which
+SQLite reports as `unable to open database file`. The same mangling
+applies to bind mounts (`-v /path:/container/path`) and any other
+path-looking argument.
+
+**Fixes:**
+
+| Approach | Command |
+|----------|---------|
+| Disable conversion for one command | `MSYS_NO_PATHCONV=1 docker run -e OZ_DB_PATH=/tmp/test.db ...` |
+| Double the leading slash (MSYS leaves `//tmp` alone) | `docker run -e OZ_DB_PATH=//tmp/test.db ...` |
+| Use a container-internal path that does not start with `/` | `docker run -e OZ_DB_PATH=data.db ...` (relative to the workdir) |
+| Avoid `docker run` entirely | Use `docker compose` — YAML values are never shell-mangled |
+
+> Note: `docker-compose.yml` values are **not** affected — Compose passes
+> them through directly, so the shipped `OZ_DB_PATH=/data/oz-pos.db`
+> (see the environment table above) works from any shell. The gotcha only
+> bites ad-hoc `docker run` invocations typed into Git Bash. Prefer
+> `MSYS_NO_PATHCONV=1` as the one-shot fix.
 
 ---
 
