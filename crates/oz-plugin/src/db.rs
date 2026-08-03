@@ -155,6 +155,51 @@ const BLOCKED_KEYWORDS: &[&str] = &[
     "CREATE VIRTUAL TABLE",
 ];
 
+// ── Static SQL-validation regexes ──────────────────────────────────────
+// The ten pattern literals below are compiled once into `static` `OnceLock`s
+// at first use. Because they are compile-time constants, the only way
+// `Regex::new` can fail is a programming error in the literal itself — so
+// the shared `sql_regex()` helper documents that failure as an unreachable
+// invariant rather than a recoverable runtime condition (RUST-07 policy).
+// `sql_validation_regexes_compile` (test module) additionally compiles every
+// literal under CI so a broken edit fails loudly in tests, never in prod.
+
+/// `FROM <table1>, <table2>, ...` — captures the full comma-separated list.
+const FROM_PATTERN: &str =
+    r"(?i)\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)";
+/// `JOIN <table>`.
+const JOIN_PATTERN: &str = r"(?i)\bJOIN\s+([A-Za-z_][A-Za-z0-9_]*)";
+/// `INTO <table>` (INSERT INTO).
+const INTO_PATTERN: &str = r"(?i)\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)";
+/// `UPDATE <table>`.
+const UPDATE_PATTERN: &str = r"(?i)\bUPDATE\s+([A-Za-z_][A-Za-z0-9_]*)";
+/// `TABLE <table>` (CREATE TABLE / DROP TABLE), skipping `IF [NOT] EXISTS`.
+const TABLE_PATTERN: &str = r"(?i)\bTABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)";
+/// `INSERT INTO <table>`.
+const INSERT_INTO_PATTERN: &str = r"(?i)\bINSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)";
+/// `DELETE FROM <table>`.
+const DELETE_FROM_PATTERN: &str = r"(?i)\bDELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)";
+/// `DROP TABLE <table>`, skipping `IF EXISTS`.
+const DROP_TABLE_PATTERN: &str =
+    r"(?i)\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)";
+/// `WITH [RECURSIVE] <name> AS (`.
+const CTE_PATTERN: &str = r#"(?i)\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#;
+/// `, <name> AS (` for comma-separated CTEs.
+const CTE_COMMA_PATTERN: &str = r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#;
+
+/// Compile a static SQL-validation regex, compiled once into a `OnceLock`.
+///
+/// # Invariant
+///
+/// The pattern is a compile-time constant in this module; `Regex::new` can
+/// only fail if the literal is malformed, which `sql_validation_regexes_compile`
+/// (in the test module) verifies at CI time. A failure here is therefore an
+/// unreachable programming error, not a recoverable runtime condition — the
+/// panic is the deliberate RUST-07 policy for impossible invariants.
+fn sql_regex(pattern: &'static str) -> Regex {
+    Regex::new(pattern).expect("static SQL-validation regex must compile")
+}
+
 /// Validate that a SQL statement only references tables with the required prefix.
 ///
 /// Returns `Ok(())` if validation passes, or `Err(PluginError::PermissionDenined)`
@@ -227,10 +272,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 1: FROM <table1>, <table2>, ...
     static FROM_RE: OnceLock<Regex> = OnceLock::new();
-    let from_re = FROM_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bFROM\s+([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)")
-            .expect("invalid FROM regex")
-    });
+    let from_re = FROM_RE.get_or_init(|| sql_regex(FROM_PATTERN));
     for cap in from_re.captures_iter(sql) {
         let table_list = cap[1].to_string();
         for part in table_list.split(',') {
@@ -243,9 +285,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 2: JOIN <table>
     static JOIN_RE: OnceLock<Regex> = OnceLock::new();
-    let join_re = JOIN_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bJOIN\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid JOIN regex")
-    });
+    let join_re = JOIN_RE.get_or_init(|| sql_regex(JOIN_PATTERN));
     for cap in join_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         if !cte_names.contains(&tbl.to_uppercase()) {
@@ -255,9 +295,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 3: INTO <table> (INSERT INTO)
     static INTO_RE: OnceLock<Regex> = OnceLock::new();
-    let into_re = INTO_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bINTO\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid INTO regex")
-    });
+    let into_re = INTO_RE.get_or_init(|| sql_regex(INTO_PATTERN));
     for cap in into_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -265,9 +303,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 4: UPDATE <table>
     static UPDATE_RE: OnceLock<Regex> = OnceLock::new();
-    let update_re = UPDATE_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bUPDATE\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid UPDATE regex")
-    });
+    let update_re = UPDATE_RE.get_or_init(|| sql_regex(UPDATE_PATTERN));
     for cap in update_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -275,10 +311,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 5: TABLE <table> (CREATE TABLE, DROP TABLE)
     static TABLE_RE: OnceLock<Regex> = OnceLock::new();
-    let table_re = TABLE_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bTABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)")
-            .expect("invalid TABLE regex")
-    });
+    let table_re = TABLE_RE.get_or_init(|| sql_regex(TABLE_PATTERN));
     for cap in table_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -286,10 +319,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 6: INSERT INTO <table>
     static INSERT_INTO_RE: OnceLock<Regex> = OnceLock::new();
-    let insert_into_re = INSERT_INTO_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bINSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)")
-            .expect("invalid INSERT INTO regex")
-    });
+    let insert_into_re = INSERT_INTO_RE.get_or_init(|| sql_regex(INSERT_INTO_PATTERN));
     for cap in insert_into_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         if !tables.contains(&tbl) {
@@ -299,9 +329,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 7: DELETE FROM <table>
     static DELETE_FROM_RE: OnceLock<Regex> = OnceLock::new();
-    let delete_from_re = DELETE_FROM_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bDELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)").expect("invalid DELETE regex")
-    });
+    let delete_from_re = DELETE_FROM_RE.get_or_init(|| sql_regex(DELETE_FROM_PATTERN));
     for cap in delete_from_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -309,10 +337,7 @@ fn extract_table_references(sql: &str) -> Vec<String> {
 
     // Pattern 8: DROP TABLE <table>
     static DROP_TABLE_RE: OnceLock<Regex> = OnceLock::new();
-    let drop_table_re = DROP_TABLE_RE.get_or_init(|| {
-        Regex::new(r"(?i)\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)")
-            .expect("invalid DROP TABLE regex")
-    });
+    let drop_table_re = DROP_TABLE_RE.get_or_init(|| sql_regex(DROP_TABLE_PATTERN));
     for cap in drop_table_re.captures_iter(sql) {
         let tbl = cap[1].to_string();
         tables.push(tbl);
@@ -332,19 +357,13 @@ fn extract_cte_names(sql: &str) -> Vec<String> {
     let mut names = Vec::new();
     // Match: WITH <name> AS ( ... ) or WITH RECURSIVE <name> AS ( ... )
     static CTE_RE: OnceLock<Regex> = OnceLock::new();
-    let cte_re = CTE_RE.get_or_init(|| {
-        Regex::new(r#"(?i)\bWITH\s+(?:RECURSIVE\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#)
-            .expect("invalid CTE regex")
-    });
+    let cte_re = CTE_RE.get_or_init(|| sql_regex(CTE_PATTERN));
     for cap in cte_re.captures_iter(sql) {
         names.push(cap[1].to_uppercase());
     }
     // Also match comma-separated CTEs: , <name> AS (
     static CTE_COMMA_RE: OnceLock<Regex> = OnceLock::new();
-    let cte_comma_re = CTE_COMMA_RE.get_or_init(|| {
-        Regex::new(r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#)
-            .expect("invalid CTE comma regex")
-    });
+    let cte_comma_re = CTE_COMMA_RE.get_or_init(|| sql_regex(CTE_COMMA_PATTERN));
     for cap in cte_comma_re.captures_iter(sql) {
         names.push(cap[1].to_uppercase());
     }
@@ -394,6 +413,32 @@ fn base64_encode(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Static regex compile guard ─────────────────────────────────────
+
+    #[test]
+    fn sql_validation_regexes_compile() {
+        // Every literal fed to `sql_regex` in production must compile. This
+        // makes the `sql_regex` invariant panic unreachable: a malformed edit
+        // to any pattern fails here under CI instead of in a live process.
+        for pattern in [
+            FROM_PATTERN,
+            JOIN_PATTERN,
+            INTO_PATTERN,
+            UPDATE_PATTERN,
+            TABLE_PATTERN,
+            INSERT_INTO_PATTERN,
+            DELETE_FROM_PATTERN,
+            DROP_TABLE_PATTERN,
+            CTE_PATTERN,
+            CTE_COMMA_PATTERN,
+        ] {
+            assert!(
+                Regex::new(pattern).is_ok(),
+                "static SQL-validation regex must compile: {pattern}"
+            );
+        }
+    }
 
     // ── SQL Validator Tests ─────────────────────────────────────────────
 
