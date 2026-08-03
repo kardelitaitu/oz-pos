@@ -94,10 +94,13 @@ pub struct SnapshotProduct {
     /// Optional barcode.
     #[serde(default)]
     pub barcode: Option<String>,
+    /// ISO-8601 creation timestamp; `None` lets the DB default fill it.
     #[serde(default)]
     pub created_at: Option<String>,
+    /// ISO-8601 last-update timestamp; defaults to `now()` on insert.
     #[serde(default)]
     pub updated_at: Option<String>,
+    /// ISO-8601 last price-change timestamp; defaults to `now()`.
     #[serde(default)]
     pub price_updated_at: Option<String>,
     /// Serial-number tracking flag.
@@ -114,12 +117,16 @@ pub struct SnapshotTaxRate {
     pub name: String,
     /// Rate in basis points (1/10000); must be >= 0.
     pub rate_bps: i64,
+    /// Whether this is the store's default tax rate.
     #[serde(default)]
     pub is_default: bool,
+    /// Whether tax is included in the displayed price.
     #[serde(default)]
     pub is_inclusive: bool,
+    /// ISO-8601 creation timestamp.
     #[serde(default)]
     pub created_at: Option<String>,
+    /// ISO-8601 last-update timestamp.
     #[serde(default)]
     pub updated_at: Option<String>,
 }
@@ -138,10 +145,13 @@ pub struct SnapshotUser {
     pub display_name: String,
     /// Role foreign key.
     pub role_id: String,
+    /// Whether the user can log in.
     #[serde(default)]
     pub is_active: bool,
+    /// ISO-8601 creation timestamp.
     #[serde(default)]
     pub created_at: Option<String>,
+    /// ISO-8601 last-update timestamp.
     #[serde(default)]
     pub updated_at: Option<String>,
 }

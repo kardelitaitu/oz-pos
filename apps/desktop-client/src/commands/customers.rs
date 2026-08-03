@@ -431,7 +431,7 @@ pub async fn get_customer_history_scoped(
         store
             .get_customer(&customer_id)?
             .ok_or_else(|| oz_core::error::CoreError::NotFound {
-                entity: "customer".into(),
+                entity: "customer",
                 id: customer_id.clone(),
             })?;
 
@@ -1058,23 +1058,27 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        let store_a = app
-            .state::<AppState>()
-            .db_manager
-            .open_store("store-a")
+        // Seed the store inside a scoped block so the `MutexGuard` from
+        // `store_a.lock()` is dropped before the awaits below
+        // (clippy::await_holding_lock).
+        {
+            let store_a = app
+                .state::<AppState>()
+                .db_manager
+                .open_store("store-a")
+                .unwrap();
+            let db = store_a.lock().unwrap();
+            let store = Store::new(&db);
+            seed_customer_in_store(&db, "cust-1", "Alice");
+            // Loyalty account + one completed sale for the history view.
+            store.get_or_create_loyalty_account("cust-1").unwrap();
+            db.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+                 VALUES ('s-1', 2500, 'USD', 1, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 2500, 0)",
+                [],
+            )
             .unwrap();
-        let db = store_a.lock().unwrap();
-        let store = Store::new(&db);
-        seed_customer_in_store(&db, "cust-1", "Alice");
-        // Loyalty account + one completed sale for the history view.
-        store.get_or_create_loyalty_account("cust-1").unwrap();
-        db.execute(
-            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
-             VALUES ('s-1', 2500, 'USD', 1, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 2500, 0)",
-            [],
-        )
-        .unwrap();
-        drop(db);
+        }
 
         let history = get_customer_history_scoped(
             "store-a-token".into(),

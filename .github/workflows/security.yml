@@ -24,3 +24,48 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install --locked cargo-deny
       - run: cargo deny check
+
+  # ── Container scan (cloud + license) ────────────────────────────
+  #
+  # DOCKER-03: Trivy on BOTH application images, blocking on
+  # CRITICAL/HIGH with a documented exception mechanism (.trivyignore).
+  # Weekly schedule + manual dispatch complement the per-PR scan in ci.yml.
+  container-scan:
+    name: Trivy container scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build cloud image
+        run: docker build -f Dockerfile.server -t oz-pos-cloud:security .
+      - name: Build license image
+        run: docker build -f apps/license-server/Dockerfile -t oz-pos-license:security apps/license-server
+      - name: Scan cloud image (blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: oz-pos-cloud:security
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignorefile: .trivyignore
+          output: trivy-cloud.sarif
+      - name: Scan license image (blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: oz-pos-license:security
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignorefile: .trivyignore
+          output: trivy-license.sarif
+      - name: Upload Trivy SARIF (cloud)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-cloud.sarif
+          category: trivy-cloud
+      - name: Upload Trivy SARIF (license)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-license.sarif
+          category: trivy-license

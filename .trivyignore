@@ -1,0 +1,21 @@
+# ── Trivy ignorefile — documented vulnerability exceptions ────────────
+#
+# The CI container scans (`.github/workflows/ci.yml`, `security.yml`,
+# `release.yml`) run Trivy with `--exit-code 1` for CRITICAL and HIGH
+# severities. Any finding listed here is a *reviewed and accepted*
+# exception and must include a justification.
+#
+# Format: <VULNERABILITY-ID> <optional comment>
+#
+# To refresh the accepted set:
+#   1. Re-scan the image locally:
+#        docker build -f Dockerfile.server -t oz-pos-cloud:scan .
+#        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+#          aquasec/trivy:0.61.0 image oz-pos-cloud:scan
+#   2. Add every accepted CRITICAL/HIGH to this file with a reason
+#      (e.g. "no fix available", "not exploitable in this runtime").
+#   3. Open a PR so the exception is reviewable before it lands on main.
+#
+# As of the DOCKER-03 remediation (2026-08-03) both the cloud and
+# license runtime images scan clean for CRITICAL/HIGH — no exceptions
+# are currently required.

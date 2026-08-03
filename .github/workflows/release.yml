@@ -32,6 +32,8 @@ jobs:
             binary: oz-pos-app.exe
           - target: docker-cloud
             os: ubuntu-latest
+          - target: docker-license
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -69,6 +71,35 @@ jobs:
           docker build -f Dockerfile.server -t oz-pos-cloud:${{ github.ref_name }} .
           docker save oz-pos-cloud:${{ github.ref_name }} -o oz-pos-cloud.tar
 
+      - name: Build license Docker image
+        if: matrix.target == 'docker-license'
+        run: |
+          docker build -f apps/license-server/Dockerfile -t oz-pos-license:${{ github.ref_name }} apps/license-server
+          docker save oz-pos-license:${{ github.ref_name }} -o oz-pos-license.tar
+
+      # DOCKER-03/08: blocking scan on the EXACT release-tagged image.
+      - name: Scan cloud Docker image (blocking)
+        if: matrix.target == 'docker-cloud'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: oz-pos-cloud:${{ github.ref_name }}
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignorefile: .trivyignore
+          output: trivy-cloud.sarif
+
+      - name: Scan license Docker image (blocking)
+        if: matrix.target == 'docker-license'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: oz-pos-license:${{ github.ref_name }}
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignorefile: .trivyignore
+          output: trivy-license.sarif
+
       - name: Upload binary artifact
         if: matrix.target != 'docker-cloud'
         uses: actions/upload-artifact@v4
@@ -83,6 +114,14 @@ jobs:
         with:
           name: docker-cloud
           path: oz-pos-cloud.tar
+          retention-days: 30
+
+      - name: Upload license Docker artifact
+        if: matrix.target == 'docker-license'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-license
+          path: oz-pos-license.tar
           retention-days: 30
 
   release-publish:

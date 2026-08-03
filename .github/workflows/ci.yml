@@ -299,15 +299,23 @@ jobs:
       - name: Run Lighthouse CI
         run: npx -p @lhci/cli@0.14.x -- lhci autorun
 
-  # ── Docker build + Trivy vulnerability scan ────────────────────
+  # ── Docker build + blocking vulnerability scan (both images) ───
+  #
+  # DOCKER-03/08: both application images (cloud + license) are built,
+  # size-checked, and Trivy-scanned as BLOCKING gates (exit-code 1 on
+  # CRITICAL/HIGH). Documented exceptions live in `.trivyignore`. A
+  # Compose smoke test then boots the full E2E stack to verify both
+  # services start, pass healthchecks, and answer their health endpoints.
   docker:
-    name: Docker (cloud-server build + scan)
+    name: Docker (build + scan + smoke)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build Docker image
+      - name: Build cloud-server image
         run: docker build -f Dockerfile.server -t oz-pos-cloud:ci .
-      - name: Verify binary size (< 50 MB)
+      - name: Build license-server image
+        run: docker build -f apps/license-server/Dockerfile -t oz-pos-license:ci apps/license-server
+      - name: Verify cloud binary size (< 50 MB)
         run: |
           SIZE=$(docker run --rm --entrypoint stat oz-pos-cloud:ci --format=%s /app/oz-cloud-server)
           MAX=$((50 * 1024 * 1024))
@@ -317,22 +325,55 @@ jobs:
             exit 1
           fi
           echo "Binary size check passed"
-      - name: Trivy vulnerability scan (non-blocking)
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@master
+      - name: Trivy vulnerability scan (cloud, blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: oz-pos-cloud:ci
-          format: table
-          exit-code: 0
+          format: sarif
+          exit-code: 1
           severity: CRITICAL,HIGH
-          output: trivy-results.txt
-      - name: Upload Trivy results
-        if: always()
-        uses: actions/upload-artifact@v4
+          ignorefile: .trivyignore
+          output: trivy-cloud.sarif
+      - name: Trivy vulnerability scan (license, blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          name: trivy-scan
-          path: trivy-results.txt
-          retention-days: 7
+          image-ref: oz-pos-license:ci
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignorefile: .trivyignore
+          output: trivy-license.sarif
+      - name: Upload Trivy SARIF (cloud)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-cloud.sarif
+          category: trivy-cloud
+      - name: Upload Trivy SARIF (license)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-license.sarif
+          category: trivy-license
+      # DOCKER-08: Compose smoke — verify BOTH services together on the
+      # images built above, using the E2E stack (no rebuild needed).
+      - name: Compose smoke test (cloud + license + redis)
+        env:
+          OZ_API_SECRET: ci-test-secret
+        run: |
+          docker tag oz-pos-cloud:ci e2e-cloud-server:latest
+          docker tag oz-pos-license:ci e2e-license-server:latest
+          # Throwaway RSA-2048 PKCS#8 key (escaped newlines, like run-e2e.mjs).
+          KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | awk '{printf "%s\\n", $0}')
+          export OZ_LICENSE_PRIVATE_KEY="$KEY"
+          docker compose -f docker-compose.e2e.yml up -d --wait --pull=missing
+          echo "── health checks ──"
+          curl -sf http://localhost:3099/api/v1/health && echo " (cloud OK)"
+          curl -sf http://localhost:8080/api/health && echo " (license OK)"
+          echo "── non-root verification (cloud; license lands in DOCKER-01) ──"
+          docker compose -f docker-compose.e2e.yml exec -T e2e-cloud-server id -u | grep -v '^0$' && echo " (cloud non-root OK)"
+          docker compose -f docker-compose.e2e.yml down -v
+        shell: bash
 
   # ── Coverage gate (non-blocking, informational) ─────────────────
   coverage:
