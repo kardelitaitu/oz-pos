@@ -1,0 +1,41 @@
+# ── Docker persistence verification (volume survival) ─────────────
+#
+# Runs scripts/verify-docker-persistence.sh, which verifies that BOTH
+# OZ-POS container images survive a full container replacement on their
+# named volumes — exactly how production restarts them:
+#
+#   cloud   — SQLite at /data/oz-pos.db: product written via API,
+#             container replaced, product must still be readable.
+#   license — PocketBase at /pb/pb_data: superuser + license key created,
+#             container replaced, key must survive AND the first-boot
+#             collection auto-provision must create the 4 business
+#             collections without a manual pb_schema.json import.
+#
+# Triggered on a weekly schedule (digest/volume drift watch), on manual
+# dispatch, and on PRs that touch any container definition.
+
+name: Docker Persistence
+
+on:
+  schedule:
+    # Weekly Monday 04:30 UTC — volume/digest drift watch.
+    - cron: "30 4 * * 1"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile.server
+      - apps/license-server/Dockerfile
+      - docker-compose*.yml
+      - scripts/verify-docker-persistence.sh
+      - .github/workflows/docker-persistence.yml
+
+jobs:
+  verify:
+    name: Persistence (cloud + license volumes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run persistence verification
+        run: bash scripts/verify-docker-persistence.sh
