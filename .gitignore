@@ -93,3 +93,8 @@ ui/tsconfig.node.tsbuildinfo
 /node_modules/
 /package-lock.json
 /.vite/
+
+# AUDIT-28 RELEASE-04: standalone updater-compat harness (mirrors /fuzz/
+# exception) — its own workspace, so target/ + Cargo.lock are dev-only.
+/scripts/updater-compat-check/target/
+/scripts/updater-compat-check/Cargo.lock

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // ── OZ-POS Updater Manifest Generator ─────────────────────────────────
 //
-// Generates a Tauri v2 updater `latest.json` manifest with Ed25519
-// signatures over the installer binaries. Used by the release workflow
-// to attach a signed manifest to every GitHub Release.
+// Generates a Tauri v2 updater `latest.json` manifest with minisign-format
+// Ed25519 signatures over the installer binaries. Used by the release
+// workflow to attach a signed manifest to every GitHub Release.
 //
 // Usage:
 //   node scripts/generate-latest-json.mjs <version> <notes> <platform> <installer-path> [--min-version <version>]
@@ -24,29 +24,36 @@
 //   A valid latest.json platform manifest (single platform, or merged when --merge is used).
 //
 // Requirements:
-//   Node.js 20+ (node:crypto Ed25519 via PKCS8/SPKI DER)
+//   Node.js 20+ (node:crypto Ed25519 via PKCS8/SPKI DER + BLAKE2b-512)
 //
-// AUDIT-28 RELEASE-04: `--verify-pubkey` derives the public key from the
-// private seed and fails if it does not match the Tauri-format public key
-// (raw 32 bytes, or the "untrusted comment: minisign public key:" base64
-// blob stored in tauri.conf.json::plugins.updater.pubkey). This closes the
-// key-encoding compatibility gap: a key that cannot verify against the
-// committed pubkey is rejected before any release artifact is published.
+// AUDIT-28 RELEASE-04: the emitted `signature` field is base64 of a 4-line
+// minisign `.sig` text blob — the exact format the real Tauri updater client
+// (tauri-plugin-updater, minisign_verify) decodes and verifies. The keyid
+// embedded in the signature is extracted from the committed pubkey
+// (--verify-pubkey) so minisign_verify's keyid-equality check passes, and
+// the signature is computed over BLAKE2b-512 of the installer bytes
+// (prehashed mode) plus a global signature over sig64 || trusted comment —
+// matching `tauri signer sign` byte-for-byte (validated against real
+// tauri-cli 2.11.1 output).
 // `--self-test` runs a sign → derive → verify round-trip so CI can prove
 // the toolchain works without real key material.
 //
-// NOTE: WebCrypto (crypto.subtle) raw Ed25519 import rejects the `sign`
-// usage on Node 24, so this script uses the low-level node:crypto API with
-// explicit PKCS8/SPKI DER key encoding — deterministic across Node versions.
+// NOTE: uses node:crypto (PKCS8/SPKI DER) rather than crypto.subtle — Node 24's
+// WebCrypto rejects raw Ed25519 key imports with the `sign` usage, so the
+// low-level API is the deterministic path across Node versions.
 
-import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
+import { createHash, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
-
-// DER prefixes (RFC 8410):
-//   PKCS8 private: SEQUENCE(30 2e) { INTEGER 0, AlgId Ed25519, OCTET STRING { OCTET STRING seed } }
-//   SPKI public:   SEQUENCE(30 2a) { AlgId Ed25519, BIT STRING pubkey }
-const PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
-const SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+import {
+  buildMinisignPubkey,
+  buildMinisignSignature,
+  derivePublicKey,
+  parsePrivateKey,
+  parsePublicKey,
+  privateKeyFromSeed,
+  testKeypair,
+  verifyMinisignSignature,
+} from "./updater-crypto.mjs";
 
 // ── Argument parsing ───────────────────────────────────────────────
 function parseArgs(argv) {
@@ -69,83 +76,6 @@ function parseArgs(argv) {
     }
   }
   return { minVersion, mergePath, verifyPubkey, positional };
-}
-
-// ── Key helpers ────────────────────────────────────────────────────
-// Accepts 64-hex (32 bytes) or base64 of the raw 32-byte seed.
-function parsePrivateKey(env) {
-  let bytes;
-  if (/^[0-9a-fA-F]{64}$/.test(env)) {
-    bytes = Buffer.from(env, "hex");
-  } else {
-    bytes = Buffer.from(env, "base64");
-  }
-  if (bytes.length !== 32) {
-    throw new Error(
-      `Ed25519 private key must be 32 bytes, got ${bytes.length} (secret must be the raw 32-byte seed, hex or base64)`
-    );
-  }
-  return bytes;
-}
-
-function privateKeyFromSeed(seed) {
-  return createPrivateKey({
-    key: Buffer.concat([PKCS8_PREFIX, seed]),
-    format: "der",
-    type: "pkcs8",
-  });
-}
-
-function publicKeyFromRaw(pubkeyRaw) {
-  return createPublicKey({
-    key: Buffer.concat([SPKI_PREFIX, pubkeyRaw]),
-    format: "der",
-    type: "spki",
-  });
-}
-
-// Decodes a public key that may be:
-//   - raw base64 of the 32-byte Ed25519 key
-//   - a minisign-style base64 blob (tauri.conf.json updater.pubkey),
-//     whose final line base64-decodes to 0x45-prefixed 33-byte key
-function parsePublicKey(pubkeyB64) {
-  const buf = Buffer.from(pubkeyB64, "base64");
-  const text = buf.toString("utf8");
-  if (text.includes("untrusted comment") || text.includes("\n")) {
-    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-    const keyLine = lines[lines.length - 1];
-    return stripMinisignPrefix(Buffer.from(keyLine, "base64"));
-  }
-  return stripMinisignPrefix(buf);
-}
-
-function stripMinisignPrefix(bytes) {
-  // minisign Ed25519 keys carry a 0x45 ('E') tag byte before the 32-byte key
-  if (bytes.length === 33 && bytes[0] === 0x45) return bytes.subarray(1);
-  return bytes;
-}
-
-function derivePublicKey(seed) {
-  const jwk = privateKeyFromSeed(seed).export({ format: "jwk" });
-  return Buffer.from(jwk.x, "base64url");
-}
-
-function signBytes(seed, bytes) {
-  return sign(null, bytes, privateKeyFromSeed(seed));
-}
-
-function verifyBytes(pubkeyRaw, bytes, signature) {
-  return verify(null, bytes, publicKeyFromRaw(pubkeyRaw), signature);
-}
-
-function toMinisignPubkey(raw) {
-  // Format matches tauri signer generate output used in tauri.conf.json
-  const tagged = Buffer.concat([Buffer.from([0x45]), raw]);
-  const id = Buffer.from(raw.subarray(0, 8)).toString("hex").toUpperCase();
-  const body = `untrusted comment: minisign public key: ${id}\n${tagged
-    .toString("base64")
-    .replace(/(.{64})/g, "$1\n")}`;
-  return Buffer.from(body, "utf8").toString("base64");
 }
 
 // ── Manifest assembly ──────────────────────────────────────────────
@@ -175,42 +105,36 @@ function mergeManifest(existing, fragment) {
 
 // ── Self-test: proves sign → derive → verify round-trip ───────────
 function selfTest() {
-  const seed = Buffer.alloc(32, 0x42); // deterministic test seed
+  const { seed, raw, keyid } = testKeypair();
   const payload = Buffer.from("oz-pos updater self-test payload", "utf8");
 
-  const pubkeyRaw = derivePublicKey(seed);
-  if (pubkeyRaw.length !== 32) {
-    console.error(`FAIL pubkey derivation: expected 32 bytes, got ${pubkeyRaw.length}`);
+  if (raw.length !== 32 || keyid.length !== 8) {
+    console.error("FAIL test keypair derivation");
     process.exit(1);
   }
 
-  const signature = signBytes(seed, payload);
-  if (signature.length !== 64) {
-    console.error(`FAIL signature length: expected 64 bytes, got ${signature.length}`);
-    process.exit(1);
-  }
-  const ok = verifyBytes(pubkeyRaw, payload, signature);
-  if (!ok) {
-    console.error("FAIL sign/verify round-trip");
+  // Build a minisign.pub blob from the derived key + keyid and re-parse it.
+  const pubkeyB64 = buildMinisignPubkey(raw, keyid);
+  const parsed = parsePublicKey(pubkeyB64);
+  if (!parsed.raw.equals(raw) || !parsed.keyid.equals(keyid)) {
+    console.error("FAIL minisign pubkey round-trip");
     process.exit(1);
   }
 
-  // minisign-format pubkey must round-trip through parsePublicKey
-  const minisign = toMinisignPubkey(pubkeyRaw);
-  const reParsed = parsePublicKey(minisign);
-  if (!reParsed.equals(pubkeyRaw)) {
-    console.error("FAIL minisign pubkey re-parse");
+  // Sign → verify round-trip through the minisign format.
+  const signature = buildMinisignSignature(seed, payload, "self-test.bin", keyid);
+  if (!verifyMinisignSignature(raw, payload, signature)) {
+    console.error("FAIL minisign signature verify");
     process.exit(1);
   }
 
   // tampered payload must be rejected
-  const tampered = verifyBytes(pubkeyRaw, Buffer.concat([payload, Buffer.from([0])]), signature);
-  if (tampered) {
+  if (verifyMinisignSignature(raw, Buffer.concat([payload, Buffer.from([0])]), signature)) {
     console.error("FAIL tampered payload accepted");
     process.exit(1);
   }
 
-  console.log("self-test: Ed25519 sign/derive/verify + minisign pubkey round-trip PASSED");
+  console.log("self-test: minisign sign/verify + pubkey round-trip PASSED");
   process.exit(0);
 }
 
@@ -245,7 +169,7 @@ try {
 }
 
 // Read the installer binary. The Ed25519 signature is computed over
-// the raw bytes (matching `tauri signer sign`), not over a hash.
+// BLAKE2b-512 of the raw bytes (prehashed mode, matching `tauri signer sign`).
 let installerBytes;
 try {
   installerBytes = readFileSync(installerPath);
@@ -257,7 +181,11 @@ try {
 const installerHash = createHash("sha256").update(installerBytes).digest("hex");
 console.error(`Installer SHA-256: ${installerHash}`);
 
-// RELEASE-04: fail fast if the seed does not match the committed pubkey.
+// RELEASE-04: the signature blob must carry the SAME keyid as the committed
+// pubkey (minisign_verify rejects keyid mismatch before any crypto). Extract
+// it from --verify-pubkey; when the pubkey is a raw 32-byte key we fall back
+// to the keyid derived from the seed (self-consistent).
+let keyid;
 if (verifyPubkey) {
   let expected;
   try {
@@ -267,22 +195,26 @@ if (verifyPubkey) {
     process.exit(1);
   }
   const derived = derivePublicKey(seed);
-  if (!derived.equals(expected)) {
+  if (!derived.equals(expected.raw)) {
     console.error(
       `PUBKEY MISMATCH: private seed derives to ${derived.toString("hex")} but ` +
-        `--verify-pubkey decodes to ${expected.toString("hex")}. The signing secret ` +
+        `--verify-pubkey decodes to ${expected.raw.toString("hex")}. The signing secret ` +
         `does not match the pubkey embedded in tauri.conf.json — refusing to sign.`
     );
     process.exit(1);
   }
+  keyid = expected.keyid;
   console.error("Pubkey check PASSED: seed matches the committed updater pubkey");
+} else {
+  keyid = derivePublicKey(seed).subarray(0, 8);
+  console.error("WARNING: no --verify-pubkey given — using seed-derived keyid");
 }
 
-const signature = signBytes(seed, installerBytes).toString("base64");
+const filename = installerPath.split("/").pop().split("\\").pop();
+const signature = buildMinisignSignature(seed, installerBytes, filename, keyid);
 
 // The release URL is deterministic based on the tag name.
 const repo = process.env.REPO || "kardelitaitu/oz-pos";
-const filename = installerPath.split("/").pop().split("\\").pop();
 const url = `https://github.com/${repo}/releases/download/v${version}/${filename}`;
 
 const fragment = buildFragment({ version, notes, platform, signature, url, minVersion });
