@@ -415,6 +415,7 @@ mod tests {
             updated_at: None,
             price_updated_at: None,
             track_serial: false,
+            store_id: None,
         }
     }
 
@@ -476,6 +477,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![],
             users: vec![],
@@ -507,6 +509,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![],
             users: vec![],
@@ -537,6 +540,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![],
             users: vec![],
@@ -567,6 +571,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![],
             users: vec![],
@@ -766,6 +771,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![],
             users: vec![],
@@ -800,6 +806,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![tax_rate("tax-extra", "Extra Tax", 500)],
             users: vec![user("extra-user", "Extra User", "role-1")],
@@ -909,6 +916,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![],
             users: vec![],
@@ -917,6 +925,153 @@ mod tests {
 
         let exists = verify_product_sku_exists("NO-BARCODE", &store);
         assert!(exists, "product with null barcode should be created");
+    }
+
+    #[test]
+    fn import_snapshot_preserves_store_scoping() {
+        // Phase B: the snapshot import must land store-tagged rows scoped.
+        // A product tagged with store-a stays visible only to store-a (plus
+        // the global catalog) — never store-b's — exercising the ?13
+        // store_id write-through in the products upsert.
+        let conn = oz_core::migrations::fresh_db();
+        conn.execute_batch(
+            "INSERT INTO store_profiles (id, name) VALUES \
+             ('store-a', 'Store A'), ('store-b', 'Store B')",
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![
+                transport::SnapshotProduct {
+                    id: "p-a".into(),
+                    sku: "SKU-A".into(),
+                    name: "Prod A".into(),
+                    price_minor: 100,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("store-a".into()),
+                },
+                transport::SnapshotProduct {
+                    id: "p-b".into(),
+                    sku: "SKU-B".into(),
+                    name: "Prod B".into(),
+                    price_minor: 200,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("store-b".into()),
+                },
+                transport::SnapshotProduct {
+                    id: "p-g".into(),
+                    sku: "SKU-G".into(),
+                    name: "Prod Global".into(),
+                    price_minor: 300,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: None,
+                },
+            ],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        import_snapshot(&store, &snapshot).unwrap();
+
+        let a = store.list_products_for_store("store-a").unwrap();
+        let mut a_ids: Vec<&str> = a.iter().map(|p| p.product.sku.as_str()).collect();
+        a_ids.sort_unstable();
+        assert_eq!(
+            a_ids,
+            vec!["SKU-A", "SKU-G"],
+            "store-a must see its own imported row plus the global row"
+        );
+
+        let b = store.list_products_for_store("store-b").unwrap();
+        let mut b_ids: Vec<&str> = b.iter().map(|p| p.product.sku.as_str()).collect();
+        b_ids.sort_unstable();
+        assert_eq!(
+            b_ids,
+            vec!["SKU-B", "SKU-G"],
+            "store-b must see its own imported row plus the global row"
+        );
+    }
+
+    #[test]
+    fn import_snapshot_unknown_store_id_fails_closed_and_rolls_back() {
+        // Phase B: a snapshot row tagged with a store the local DB does not
+        // know must fail the FK and roll back the WHOLE import (no partial
+        // products) — the same fail-closed contract as the oz-core path.
+        let conn = oz_core::migrations::fresh_db();
+        conn.execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('store-a', 'Store A')",
+            [],
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![
+                transport::SnapshotProduct {
+                    id: "p-ok".into(),
+                    sku: "SKU-OK".into(),
+                    name: "Valid".into(),
+                    price_minor: 100,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("store-a".into()),
+                },
+                transport::SnapshotProduct {
+                    id: "p-ghost".into(),
+                    sku: "SKU-GHOST".into(),
+                    name: "Ghost".into(),
+                    price_minor: 200,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("ghost-store".into()),
+                },
+            ],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "snapshot row for an unknown store must fail the FK"
+        );
+
+        // No partial import — the whole transaction rolled back.
+        let count: i64 = store
+            .conn()
+            .query_row("SELECT COUNT(*) FROM products", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "failed import must leave no products behind (transaction rolled back)"
+        );
     }
 }
 
@@ -1046,9 +1201,9 @@ fn import_snapshot(
             .prepare(
                 "INSERT INTO products (id, sku, name, price_minor, currency,
                                        category_id, barcode, created_at, updated_at,
-                                       price_updated_at, track_serial)
+                                       price_updated_at, track_serial, store_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                         COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12)
+                         COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
                  ON CONFLICT(sku) DO UPDATE SET
                      name            = excluded.name,
                      price_minor     = excluded.price_minor,
@@ -1057,7 +1212,8 @@ fn import_snapshot(
                      barcode         = excluded.barcode,
                      updated_at      = COALESCE(excluded.updated_at, ?11),
                      price_updated_at = COALESCE(excluded.price_updated_at, ?11),
-                     track_serial    = excluded.track_serial",
+                     track_serial    = excluded.track_serial,
+                     store_id        = excluded.store_id",
             )
             .map_err(|e| SyncError::Replication(format!("prepare products: {e}")))?;
 
@@ -1075,6 +1231,7 @@ fn import_snapshot(
                 p.price_updated_at.as_deref(),
                 now,
                 p.track_serial as i64,
+                p.store_id.as_deref(),
             ])
             .map_err(|e| SyncError::Replication(format!("upsert product: {e}")))?;
             count += 1;

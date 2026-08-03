@@ -342,7 +342,7 @@ async fn snapshot_handler(
     let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial
+                "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, store_id
                  FROM products WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
@@ -358,7 +358,8 @@ async fn snapshot_handler(
                 "created_at": row.get::<_, String>("created_at")?,
                 "updated_at": row.get::<_, String>("updated_at")?,
                 "price_updated_at": row.get::<_, String>("price_updated_at")?,
-                "track_serial": row.get::<_, bool>("track_serial")?
+                "track_serial": row.get::<_, bool>("track_serial")?,
+                "store_id": row.get::<_, Option<String>>("store_id")?
             }))
         })
         .map_err(|e| e.to_string())?
@@ -756,6 +757,69 @@ mod tests {
         assert!(
             json["error"].is_string(),
             "error envelope must carry a message: {json}"
+        );
+    }
+
+    #[tokio::test]
+    async fn snapshot_serves_store_id_when_present() {
+        // The snapshot contract carries the migration 069/117 soft-scoping
+        // column: a product tagged with a store_id must round-trip through
+        // the handler so the client can import it scoped instead of into
+        // the global catalog.
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        let app = test_router_with_state(state.clone());
+
+        {
+            let conn = state.db.lock().await;
+            conn.execute(
+                "INSERT INTO store_profiles (id, name) VALUES ('store-a', 'Store A')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id, store_id)
+                 VALUES ('prod-a', 'SKU-A', 'Product A', 100, 'USD', 'tenant-a', 'store-a')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ('prod-g', 'SKU-G', 'Global', 200, 'USD', 'tenant-a')",
+                [],
+            )
+            .unwrap();
+        }
+
+        let req = authed(
+            axum::http::Method::GET,
+            "/api/sync/snapshot",
+            Some("tenant-a"),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+
+        let products = json["products"].as_array().unwrap();
+        let scoped = products
+            .iter()
+            .find(|p| p["sku"] == "SKU-A")
+            .expect("scoped product must be present");
+        assert_eq!(
+            scoped["store_id"], "store-a",
+            "store-tagged product must carry its store_id in the snapshot"
+        );
+        let global = products
+            .iter()
+            .find(|p| p["sku"] == "SKU-G")
+            .expect("global product must be present");
+        assert!(
+            global["store_id"].is_null(),
+            "global product must carry a null store_id"
         );
     }
 

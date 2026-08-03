@@ -579,6 +579,14 @@ struct SnapshotProduct {
     /// Whether the product requires serial-number capture at checkout.
     #[serde(default)]
     track_serial: bool,
+    /// Store scoping for the soft-scoping layer (migration 069/117).
+    ///
+    /// `None`/absent means the shared global catalog; `Some(id)` means the
+    /// row is visible only to that store. Backward compatible: servers that
+    /// omit the field deserialize as `None`, so every pulled row lands in
+    /// the global catalog exactly as before.
+    #[serde(default)]
+    store_id: Option<String>,
 }
 
 /// Flat tax-rate row matching the `tax_rates` table columns.
@@ -726,9 +734,9 @@ fn upsert_products(
     let mut stmt = tx.prepare(
         "INSERT INTO products (id, sku, name, price_minor, currency,
                                category_id, barcode, created_at, updated_at,
-                               price_updated_at, track_serial)
+                               price_updated_at, track_serial, store_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12)
+                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
          ON CONFLICT(sku) DO UPDATE SET
              name            = excluded.name,
              price_minor     = excluded.price_minor,
@@ -737,7 +745,8 @@ fn upsert_products(
              barcode         = excluded.barcode,
              updated_at      = COALESCE(excluded.updated_at, ?11),
              price_updated_at = COALESCE(excluded.price_updated_at, ?11),
-             track_serial    = excluded.track_serial",
+             track_serial    = excluded.track_serial,
+             store_id        = excluded.store_id",
     )?;
     for p in rows {
         let id =
@@ -756,6 +765,7 @@ fn upsert_products(
             p.price_updated_at,
             now,
             p.track_serial as i64,
+            p.store_id,
         ])?;
         count += 1;
     }

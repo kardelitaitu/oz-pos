@@ -318,3 +318,100 @@ fn list_sales_for_store_returns_global_and_own_never_other_store() {
         "store-b must see its own sales plus the global set, never store-a's"
     );
 }
+
+// ── Sync snapshot → scoped-read loop (ADR #6) ────────────────────────
+//
+// The snapshot transport contract carries `store_id` (migration 069/117
+// soft-scoping). These tests prove the FULL loop: a server snapshot with
+// store-a / store-b / NULL-tagged products is applied via `apply_snapshot`,
+// and the scoped read APIs from the Phase A repair surface exactly the
+// global+own set — never another store's rows. A snapshot tagging a store
+// the local DB does not know is rejected by the FK (fail closed) instead
+// of silently importing into the global catalog.
+
+/// Apply a wire-format snapshot (as served by the cloud server) and return
+/// the store for assertion.
+fn apply_wire_snapshot<'a>(conn: &'a Connection, json: &'a str) -> oz_core::Store<'a> {
+    let s = store(conn);
+    s.create_store_profile(&make_profile("store-a", "Store A"))
+        .unwrap();
+    s.create_store_profile(&make_profile("store-b", "Store B"))
+        .unwrap();
+    let snap: oz_core::sync_client::Snapshot = serde_json::from_str(json).unwrap();
+    oz_core::sync_client::apply_snapshot(&s, &snap).unwrap();
+    s
+}
+
+/// A snapshot carrying store-scoped products must land scoped: store-a
+/// reads see store-a + global rows, never store-b's, and the DB stays
+/// FK-clean.
+#[test]
+fn snapshot_apply_preserves_store_scoping_end_to_end() {
+    let conn = setup();
+    let json = r#"{
+        "products": [
+            {"id": "p-a", "sku": "SKU-A", "name": "Prod A", "price_minor": 100, "currency": "USD", "store_id": "store-a"},
+            {"id": "p-b", "sku": "SKU-B", "name": "Prod B", "price_minor": 200, "currency": "USD", "store_id": "store-b"},
+            {"id": "p-g", "sku": "SKU-G", "name": "Prod Global", "price_minor": 300, "currency": "USD"}
+        ]
+    }"#;
+    let s = apply_wire_snapshot(&conn, json);
+
+    let a = s.list_products_for_store("store-a").unwrap();
+    let mut a_ids: Vec<&str> = a.iter().map(|r| r.product.sku.as_str()).collect();
+    a_ids.sort_unstable();
+    assert_eq!(
+        a_ids,
+        vec!["SKU-A", "SKU-G"],
+        "store-a must see its own snapshot row plus the global row, never store-b's"
+    );
+
+    let b = s.list_products_for_store("store-b").unwrap();
+    let mut b_ids: Vec<&str> = b.iter().map(|r| r.product.sku.as_str()).collect();
+    b_ids.sort_unstable();
+    assert_eq!(
+        b_ids,
+        vec!["SKU-B", "SKU-G"],
+        "store-b must see its own snapshot row plus the global row, never store-a's"
+    );
+
+    // FK integrity: the import must not have orphaned any store_id.
+    let violations: i64 = conn
+        .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(violations, 0, "snapshot import must leave no FK violations");
+}
+
+/// A snapshot that tags a product with a store the local DB does not know
+/// must be rejected by the FK — never silently imported as global.
+#[test]
+fn snapshot_with_unknown_store_id_is_rejected_fail_closed() {
+    let conn = setup();
+    let json = r#"{
+        "products": [
+            {"id": "p-x", "sku": "SKU-X", "name": "Ghost", "price_minor": 100, "currency": "USD", "store_id": "ghost-store"}
+        ]
+    }"#;
+    let s = store(&conn);
+    s.create_store_profile(&make_profile("store-a", "Store A"))
+        .unwrap();
+    let snap: oz_core::sync_client::Snapshot = serde_json::from_str(json).unwrap();
+
+    let err = oz_core::sync_client::apply_snapshot(&s, &snap);
+    let msg = err.unwrap_err().to_string();
+    assert!(
+        msg.contains("FOREIGN KEY"),
+        "snapshot row for an unknown store must fail the FK, got: {msg}"
+    );
+
+    // Nothing was imported — the transaction rolled back.
+    assert!(s.list_products_for_store("store-a").unwrap().is_empty());
+    assert!(
+        conn.query_row("SELECT COUNT(*) FROM products", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+            == 0,
+        "failed snapshot must leave no rows behind"
+    );
+}

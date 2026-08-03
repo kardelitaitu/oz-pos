@@ -106,6 +106,14 @@ pub struct SnapshotProduct {
     /// Serial-number tracking flag.
     #[serde(default)]
     pub track_serial: bool,
+    /// Store scoping for the soft-scoping layer (migration 069/117).
+    ///
+    /// `None`/absent means the shared global catalog; `Some(id)` means the
+    /// row is visible only to that store. Backward compatible: servers that
+    /// omit the field deserialize as `None`, so every imported row lands in
+    /// the global catalog exactly as before.
+    #[serde(default)]
+    pub store_id: Option<String>,
 }
 
 /// A tax-rate row in a server snapshot (typed, RUST-04).
@@ -773,6 +781,7 @@ mod tests {
                 updated_at: None,
                 price_updated_at: None,
                 track_serial: false,
+                store_id: None,
             }],
             tax_rates: vec![SnapshotTaxRate {
                 id: "t-1".into(),
