@@ -7,13 +7,14 @@
 #   bash scripts/release.sh 0.0.15              # bump to specific version
 #   bash scripts/release.sh --dry-run 0.0.15    # preview only, no changes
 #
-# Steps:
-#   1. Verify working tree is clean
-#   2. Run cargo fmt + clippy
-#   3. Run full test suite (nextest)
-#   4. Bump version in Cargo.toml, package.json, tauri.conf.json
-#   5. Generate changelog from git log since last tag
-#   6. Stage changes and create git tag
+# Steps:#  1. Verify working tree is clean
+#  2. Run cargo fmt + clippy
+#  3. Run full test suite (nextest)
+#  4. Bump version in Cargo.toml, package.json, tauri.conf.json
+#  5. Generate changelog from git log since last tag
+#  6. Run the AUDIT-28 version gate (node scripts/check-release-version.mjs)
+#     so tag/version/CHANGELOG.md parity is enforced before tagging
+#  7. Stage changes and create git tag
 #
 # The tag is NOT pushed — the user must `git push --tags` manually.
 
@@ -104,6 +105,9 @@ else
   CHANGELOG=$(git log --pretty=format:"- %s" --no-merges)
 fi
 
+# RELEASE-07: one canonical changelog source = CHANGELOG.md. The generated
+# per-version file is the reviewed DRAFT; the version gate (step below)
+# fails unless CHANGELOG.md carries a "## [X.Y.Z]" heading for the tag.
 CHANGELOG_FILE="docs/releases/CHANGELOG-${NEW_VERSION}.md"
 if [ "$DRY_RUN" != "true" ]; then
   cat > "$CHANGELOG_FILE" << EOF
@@ -111,10 +115,43 @@ if [ "$DRY_RUN" != "true" ]; then
 
 $(echo "$CHANGELOG")
 EOF
-  echo "  Changelog written to $CHANGELOG_FILE"
+  echo "  Draft changelog written to $CHANGELOG_FILE"
+
+  # Insert/refresh the canonical heading so the release gate passes.
+  if grep -q "^## \[$NEW_VERSION\]" CHANGELOG.md; then
+    echo "  CHANGELOG.md already carries ## [$NEW_VERSION]"
+  else
+    # Insert the heading right after the intro block (first existing "## [").
+    awk -v v="$NEW_VERSION" -v d="$(date +%F)" '
+      /^## \[/ && !done {
+        print "## [" v "] — " d
+        print ""
+        print "Release notes: see docs/releases/CHANGELOG-" v ".md (reviewed before tagging)."
+        print ""
+        print "---"
+        print ""
+        done = 1
+      }
+      { print }
+    ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+    echo "  Inserted ## [$NEW_VERSION] heading into CHANGELOG.md"
+  fi
 else
   echo "  DRY RUN: changelog preview (first 10 entries):"
   echo "$CHANGELOG" | head -10
+fi
+
+# ── Step 3b: AUDIT-28 RELEASE-05 version gate ─────────────────────
+# Reuse the same gate the release workflow runs, so local tagging and CI
+# enforce identical parity (Cargo.toml / package.json / tauri.conf.json /
+# CHANGELOG.md).
+echo ""
+echo "[3b] Running release version gate..."
+if [ "$DRY_RUN" = "true" ]; then
+  echo "  DRY RUN: would run: node scripts/check-release-version.mjs v$NEW_VERSION"
+else
+  node scripts/check-release-version.mjs "v$NEW_VERSION" || { echo "  FAILED — fix version parity before tagging"; exit 1; }
+  echo "  Version gate PASSED"
 fi
 
 # ── Step 4: Stage and commit ──────────────────────────────────────
@@ -122,7 +159,7 @@ echo ""
 echo "[4/5] Staging changes..."
 
 if [ "$DRY_RUN" != "true" ]; then
-  git add Cargo.toml ui/package.json apps/*/tauri.conf.json "$CHANGELOG_FILE" 2>/dev/null || true
+  git add Cargo.toml ui/package.json apps/*/tauri.conf.json CHANGELOG.md "$CHANGELOG_FILE" 2>/dev/null || true
   git commit -m "chore: bump version to $NEW_VERSION"
   echo "  Committed: bump version to $NEW_VERSION"
 fi
