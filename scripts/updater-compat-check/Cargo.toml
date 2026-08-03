@@ -16,3 +16,11 @@ description = "Replicates tauri-plugin-updater's verify_signature against real m
 minisign-verify = "=0.2.5"
 base64 = "0.22"
 serde_json = "1"
+
+# Embeds an `asInvoker` requestedExecutionLevel manifest into the Windows
+# exe (see build.rs + app.manifest). Without a manifest Windows treats the
+# unsigned binary as an unknown app and raises a UAC/SmartScreen consent
+# prompt on EVERY run; the embedded manifest declares it never requests
+# elevation. No-op on non-Windows targets.
+[build-dependencies]
+embed-resource = "2"
