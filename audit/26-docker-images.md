@@ -2,8 +2,8 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Docker images — image size, layer caching, runtime hardening, health checks, secrets, supply-chain pinning, CI scanning, and E2E reliability
-> **Status:** ✅ **FULLY REMEDIATED** — all 9 findings DOCKER-01→DOCKER-09 closed; commits `9f8b7739` (DOCKER-03/08), `2d4cecc9` (DOCKER-01/04), `5bcafce2` (DOCKER-05/06), `464fd37d` (DOCKER-02), `556fefb7` (DOCKER-07), `20b7ec3d` (DOCKER-09)
-> **Production code changed:** None
+> **Status:** ✅ **FULLY REMEDIATED** — all 9 original findings DOCKER-01→DOCKER-09 closed, plus 6 post-remediation hardening items DOCKER-10→DOCKER-15 found during live validation and closed; commits `9f8b7739` (DOCKER-03/08), `2d4cecc9` (DOCKER-01/04), `5bcafce2` (DOCKER-05/06), `464fd37d` (DOCKER-02), `556fefb7` (DOCKER-07), `20b7ec3d` (DOCKER-09), `2dfeb177` (DOCKER-10), `2ed566dc` (DOCKER-11/12), `7d3bf00a` (DOCKER-15), `c06b6cde` (DOCKER-13/14), `70dd2590` (runbook disk-space docs)
+> **Production code changed:** Post-remediation hardening touched `apps/cloud-server/src/db.rs` (DOCKER-15) and `apps/license-server/main.go` (DOCKER-10); the original 9 findings were config/docs/workflow-only
 
 ## Scope
 
@@ -162,6 +162,152 @@ The container design has several good foundations, but security and reliability 
 
 **Status:** ✅ **REMEDIATED** — commit `20b7ec3d`: the cache-priming stage now copies every workspace member manifest (`crates/oz-notification` and `modules/loyalty` were missing and silently breaking the priming build), the unbounded `|| true` is replaced with an explicit logged best-effort marker with a documented rationale, and `scripts/verify-dockerfile-workspace.py` — wired into the ci.yml docker job before the image build — parses root `Cargo.toml` members and fails fast on any cache-stage drift. The same commit fixes a real boot defect the full-build validation exposed: `scripts/docker-entrypoint.sh` was CRLF in Windows checkouts (`.gitattributes` now pins `*.sh` to `eol=lf`); the rebuilt cloud image was verified to boot, serve `/api/v1/health` (200), and run as UID 999.
 
+### DOCKER-10 — License-server first boot is "healthy but broken" (collections never provisioned)
+
+**Evidence:** PocketBase collections are not auto-created. A fresh license
+deployment boots `healthy`, but `/api/v1/license/activate` fails with
+"collections not found" until an operator manually imports `pb_schema.json`
+(Admin UI or `PUT /api/collections/import`). The `DEPLOY.md` / Northflank
+path required exactly that manual step, so every new environment shipped
+functional-looking but broken activation.
+
+**Impact:** A silent operational landmine — the container healthcheck is green
+while the actual activation endpoints fail until an undocumented manual
+import happens.
+
+**Severity:** P2 · first-boot reliability
+
+**Affected files:** `apps/license-server/main.go`, `apps/license-server/main_test.go`.
+
+**Recommendation:** Auto-provision the required collections on first boot
+(idempotent), or fail fast at startup when they are missing instead of
+serving a healthy-but-broken API.
+
+**Status:** ✅ **REMEDIATED** — commit `2dfeb177`: `main.go` embeds
+`pb_schema.json` via `//go:embed` and calls `ensureCollections()` in the
+PocketBase `OnServe` hook; any missing required collection triggers an
+idempotent import. Two unit tests cover fresh-app import and idempotency.
+Verified live: a fresh volume boots with all 4 collections auto-created and no
+manual import, and a license key survived a full container replacement.
+
+### DOCKER-11 — Docker volume persistence is not verified by any automated gate
+
+**Evidence:** Both persistence behaviors (cloud SQLite at `/data`, license
+PocketBase at `/pb/pb_data`) had only ever been exercised manually. No CI job
+boots a fresh volume, writes data, replaces the container, and asserts
+survival — so a volume-mapping or restart regression would ship undetected.
+
+**Impact:** A silent data-loss regression: the images could lose writes across
+a full container replacement with zero test signal.
+
+**Severity:** P2 · data-integrity coverage
+
+**Affected files:** `scripts/verify-docker-persistence.sh`, `.github/workflows/docker-persistence.yml`.
+
+**Recommendation:** Automate a boot → write → replace-container → assert
+round-trip for both images, wired into CI.
+
+**Status:** ✅ **REMEDIATED** — commit `2ed566dc`: the script boots both images
+on fresh named volumes, writes a cloud product and a license key, replaces
+each container, and asserts survival (plus the DOCKER-10 first-boot
+auto-provision check). Wired as `.github/workflows/docker-persistence.yml`
+(weekly + manual dispatch + PR path-filtered). Verified live: all green.
+
+### DOCKER-12 — Pinned image digests can silently drift
+
+**Evidence:** DOCKER-02 froze all base/service pins at 2026-08-03 with no
+re-resolution mechanism. A stale pin, a force-pushed registry digest, or an
+upstream image change would go unnoticed indefinitely, decaying the
+immutability guarantee.
+
+**Impact:** The supply-chain pinning policy erodes silently — "immutable"
+stops meaning anything without periodic verification.
+
+**Severity:** P3 · supply-chain hygiene
+
+**Affected files:** `scripts/verify-docker-digests.sh`, `.github/workflows/docker-digest-drift.yml`.
+
+**Recommendation:** Add a scheduled job that re-resolves every pinned digest
+and flags drift.
+
+**Status:** ✅ **REMEDIATED** — commit `2ed566dc`: `verify-docker-digests.sh`
+re-resolves every `image:tag@sha256:` reference with 3× retry and fails
+closed on unresolvable pins; `.github/workflows/docker-digest-drift.yml` runs
+it weekly and opens a GitHub issue on drift. Verified live: all six pins
+current.
+
+### DOCKER-13 — Compose json-file logs grow unbounded
+
+**Evidence:** No compose service defined a `logging:` block, so every
+container used the default `json-file` driver with no rotation — logs grew
+without limit and could fill the host disk on a long-running stack.
+
+**Impact:** Self-inflicted disk-full outage on production stacks; recovery
+requires manual log surgery.
+
+**Severity:** P2 · operational reliability
+
+**Affected files:** `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.pg.yml`, `docs/operations/runbook.md`.
+
+**Recommendation:** Bound the json-file driver per service (`max-size` /
+`max-file`) and document the cap and prune policy.
+
+**Status:** ✅ **REMEDIATED** — commit `c06b6cde`: `logging:` blocks
+(`json-file`, `max-size: "10m"`, `max-file: "5"` → **50 MB per service**) on
+every service across base/prod/pg compose, validated with `docker compose
+config` across all four merge combos. Commit `70dd2590` documents the cap,
+`docker system df` usage checks, and a safe weekly prune cron in the runbook.
+Verified live: recreated stack shows `{json-file map[max-file:5
+max-size:10m]}` on all containers.
+
+### DOCKER-14 — Compose serves plain HTTP with no TLS recipe
+
+**Evidence:** The services speak plain HTTP on 3099/8080 by design; the
+deployment guide's security note said "use a reverse proxy" but shipped no
+example config, so TLS is easy to skip or misconfigure in production.
+
+**Impact:** Plaintext credentials and traffic if the API ports are exposed
+directly; no turnkey TLS path for operators.
+
+**Severity:** P3 · production posture
+
+**Affected files:** `gateway/Caddyfile.example`, `docs/operations/docker-deployment.md`.
+
+**Recommendation:** Ship a validated TLS gateway example and document
+loopback-only port binding for the app services.
+
+**Status:** ✅ **REMEDIATED** — commit `c06b6cde`: `gateway/Caddyfile.example`
+(Caddy auto-HTTPS, hardened headers; validated with `caddy validate` and
+canonically formatted with `caddy fmt`) plus a Reverse Proxy & TLS section
+covering `127.0.0.1` binding with the `!override` tag (`ports` is a
+multi-value merge key) and host-vs-compose-network upstream resolution.
+
+### DOCKER-15 — Windows Git Bash path mangling yields a cryptic SQLite error
+
+**Evidence:** `docker run -e OZ_DB_PATH=/tmp/test.db` from Git Bash silently
+rewrites the path to `C:/Users/...`, and `apps/cloud-server/src/db.rs` passed
+`OZ_DB_PATH` straight into `rusqlite::Connection::open()` with zero
+validation — producing only `SQLite error: unable to open database file` with
+no hint of cause or fix (the exact log seen in the field).
+
+**Impact:** Opaque startup failures on Windows dev hosts; the mangling also
+affects bind mounts, and the error gives operators nothing to act on.
+
+**Severity:** P3 · operational diagnosability
+
+**Affected files:** `apps/cloud-server/src/db.rs`, `docs/operations/docker-deployment.md`.
+
+**Recommendation:** Validate `OZ_DB_PATH` at startup on Unix, reject
+Windows-style paths with an actionable `MSYS_NO_PATHCONV=1` hint, and
+document the Git Bash gotcha.
+
+**Status:** ✅ **REMEDIATED** — commit `7d3bf00a`: a platform-independent
+`looks_like_windows_path()` detector plus a startup guard in `connect_sqlite`
+(`cfg!(unix)`) returning `DbError::Config` with the actionable message; two
+new tests cover the detector on all platforms and the Unix-gated rejection.
+Verified live: the guard fires in the container with the hint, and all 111
+`oz-cloud-server` tests pass.
+
 ## Positive controls observed
 
 - Both application images use multi-stage builds, keeping compilers and build dependencies out of the runtime layers.
@@ -192,6 +338,18 @@ Validation performed:
 
 The observed CI failures involving Redis rate limiting and the license-server startup/health path are consistent with DOCKER-05 and DOCKER-06. They should be reproduced after remediation with both the unified `npm run e2e` runner and the PR workflow; a successful cloud-only image build would not validate the license image or the complete Compose stack.
 
+### Post-remediation live validation (2026-08-03)
+
+The DOCKER-10→15 hardening was validated against the running stack, not just by config review:
+
+- **Cloud image:** rebuilt with the `OZ_DB_PATH` guard, booted on a fresh named volume with `/data/oz-pos.db` — health `ok` (0.0.24), DB owned by `ozpos` (UID 999), product `PERSIST-001` survived a full container replacement (original `created_at` intact).
+- **License image:** booted with the real RSA key on a fresh `pb_data` volume — healthy in 8 s, non-root (UID 100), schema auto-provisioned (DOCKER-10), license key survived a full container replacement with the same record ID.
+- **Log rotation (DOCKER-13):** stack recreated with the `logging:` blocks; `docker inspect` shows `{json-file map[max-file:5 max-size:10m]}` on all three containers.
+- **Caddy gateway (DOCKER-14):** `caddy validate` → "Valid configuration"; file passed through `caddy fmt`.
+- **Digest drift (DOCKER-12):** script run live — all six pins current.
+- **`OZ_DB_PATH` guard (DOCKER-15):** container run with the mangled Windows path fails with the actionable `MSYS_NO_PATHCONV=1` message; 111 `oz-cloud-server` tests pass.
+- **Compose smoke:** both endpoints answer (`/api/v1/health` and `/api/health` return 200) on the recreated stack.
+
 ## Recommended remediation order
 
 1. **DOCKER-03/DOCKER-08:** Make both application images blocking-scan and release-tested artifacts.
@@ -216,3 +374,9 @@ The observed CI failures involving Redis rate limiting and the license-server st
 | DOCKER-07 no runtime hardening | `docker-compose.prod.yml` profile (read-only, cap drop, no-new-privileges, limits, internal-only infra ports) | `556fefb7` |
 | DOCKER-08 asymmetric build/release | license image built + blocking-scanned + published in release; Compose smoke of both services | `9f8b7739` |
 | DOCKER-09 cache-stage drift | all member manifests in priming stage + workspace↔Dockerfile CI gate + CRLF entrypoint fix | `20b7ec3d` |
+| DOCKER-10 license first boot "healthy but broken" | embed `pb_schema.json` + idempotent `ensureCollections()` on `OnServe` (verified live: 4 collections auto-created, key survives restart) | `2dfeb177` |
+| DOCKER-11 volume persistence unverified | boot → write → replace-container → assert script + weekly/PR workflow | `2ed566dc` |
+| DOCKER-12 pinned digests can drift | weekly re-resolution script, fail-closed, GitHub issue on drift | `2ed566dc` |
+| DOCKER-13 unbounded json-file logs | `max-size 10m` / `max-file 5` (50 MB/service) on all services + runbook disk-space docs | `c06b6cde`, `70dd2590` |
+| DOCKER-14 plain HTTP, no TLS recipe | `gateway/Caddyfile.example` (Caddy) + Reverse Proxy & TLS section (`!override` loopback binding) | `c06b6cde` |
+| DOCKER-15 Windows Git Bash path mangling | `looks_like_windows_path()` guard + actionable `MSYS_NO_PATHCONV=1` error + docs | `7d3bf00a` |
