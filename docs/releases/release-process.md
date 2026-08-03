@@ -8,16 +8,34 @@ that operators must know how to rotate safely (audit finding **L-4**).
 
 1. **Bump version** — run `scripts/bump-version.ps1 <new-version>` from the
    release branch. This rewrites version strings in `Cargo.toml`,
-   `tauri.conf.json`, `ui/package.json`, and `CHANGELOG.md` so they stay in
-   sync.
-2. **Build signed installers** — `cargo build --release` produces the
-   platform binaries; the updater plugin signs them with the Ed25519 pubkey
-   stored in `tauri.conf.json::plugins.updater.pubkey`.
-3. **Generate release manifest** — the build pipeline uploads the signed
-   artifacts and writes a `<version>.json` manifest at the update endpoint
-   referenced from `tauri.conf.json::plugins.updater.endpoints`.
-4. **Tag and announce** — push the signed release tag, publish the GitHub
-   release notes (mirroring the new `CHANGELOG.md` section).
+   `tauri.conf.json`, `ui/package.json`, and inserts the `## [X.Y.Z] — date`
+   heading into the canonical `CHANGELOG.md` so they stay in sync.
+2. **Generate changelog** — run `bash scripts/release.sh <new-version>`
+   (or its `--dry-run` variant) to write the reviewed draft to
+   `docs/releases/CHANGELOG-<version>.md` and refresh the canonical
+   `CHANGELOG.md` heading. The script then runs the AUDIT-28 version gate
+   (`scripts/check-release-version.mjs`), which fails unless the tag, all
+   app version sources, and the `CHANGELOG.md` heading agree.
+3. **Tag and push** — `git tag -a vX.Y.Z && git push origin vX.Y.Z`. The
+   tag-triggered `.github/workflows/release.yml` runs the same version gate,
+   then builds **real Tauri installers** (`cargo tauri build`): AppImage +
+   deb (Linux), NSIS + MSI (Windows, code-signed when `UPDATER_CERT` is
+   configured), and DMG (macOS).
+4. **Signed updater manifest** — the workflow generates `latest.json` and
+   `beta.json` (Ed25519 signatures over the raw installer bytes, using the
+   `UPDATER_PRIVATE_KEY` secret) and verifies them against the pubkey in
+   `tauri.conf.json::plugins.updater.pubkey` **before** publishing. The
+   release is created as a draft and only published after the asset
+   inventory check passes.
+5. **Mobile** — the Android/iOS workflows (tag-triggered) upload their
+   APK/AAB/IPA directly into the same GitHub Release via `gh release upload`.
+6. **Announce** — publish the release notes (mirroring the new
+   `CHANGELOG.md` section).
+
+> **Note:** `cargo build --release` produces raw platform binaries only.
+> Installers, code signing, and updater manifests come from the Tauri build
+> step (`cargo tauri build`) and the release workflow — do not treat a raw
+> binary as a shippable release artifact.
 
 ## Updater pubkey rotation
 
@@ -68,6 +86,25 @@ If the private key is compromised mid-release:
    compromised artifacts).
 3. **Coordinate a forced re-install** with every known downstream
    operator.
+
+## Rollback / downgrade (RELEASE-08)
+
+Rollback is manual but the assets needed for it are always preserved:
+
+1. **Every tagged release is immutable.** GitHub Releases keep all historical
+   installers + their `latest.json`/`beta.json` assets, so an old client can
+   always be pointed at a previous version's tag-specific manifest
+   (`https://github.com/<owner>/<repo>/releases/download/v<old>/latest.json`).
+2. **To roll back a store fleet:** reinstall the previous version's installer
+   on each terminal. A Tauri updater cannot auto-downgrade — the updater only
+   serves versions newer than the installed one, so a downgrade is a manual
+   reinstall by design.
+3. **Verify before rollout:** install the previous installer on a test
+   terminal, confirm `vX.Y.Z` in Settings → About, complete a sale, and
+   confirm sync/offline behaviour — then proceed to production terminals.
+4. **Never delete old release assets** (e.g. during a cleanup) while any
+   terminal still runs a version older than the latest release, or the
+   updater endpoint breaks for those terminals.
 
 ## Pre-release checklist
 
