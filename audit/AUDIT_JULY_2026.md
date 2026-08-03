@@ -45,9 +45,9 @@
 24. Empty states — consistency across all data views and lists — ✅ **FULLY REMEDIATED** (all 10 findings EMPTY-01→EMPTY-10 including P3 polish; see [24-empty-states.md](24-empty-states.md) — commits `50594832`, `de4479c7`, `fd2548da`, `8a21a933`, `c2195f2f`, `a4595cb1`)
 25. Rust backend — clippy warnings, unsafe blocks, error propagation, API coherence — ✅ **FULLY REMEDIATED** (all 10 findings RUST-01→RUST-10; see [25-rust-backend.md](25-rust-backend.md) — commits `af8a6660`, `90a74c8d`, `0f4192db`, `a16c3baf`, `d82b133d`; RUST-01 verified via the SYNC-04 dispatch pipeline)
 26. Docker images — size optimization, layer caching, security scanning — ✅ **FULLY REMEDIATED** (all 15 findings DOCKER-01→DOCKER-15; see [26-docker-images.md](26-docker-images.md) — commits `9f8b7739`, `2d4cecc9`, `5bcafce2`, `464fd37d`, `556fefb7`, `20b7ec3d`, `2dfeb177`, `2ed566dc`, `7d3bf00a`, `c06b6cde`, `70dd2590`, `c375ecf4`, `791aaa8a`)
-27. CI pipeline — gate completeness, flaky test quarantine, cache efficiency
+27. CI pipeline — gate completeness, flaky test quarantine, cache efficiency — ✅ **FULLY REMEDIATED** (all 10 findings CI-01→CI-10; see [27-ci-pipeline.md](27-ci-pipeline.md) — remediation batch uncommitted in working tree at 2026-08-03)
 28. Release process — versioning, changelog automation, artifact signing
-29. Database migrations — idempotency, rollback coverage, index coverage, schema docs — ✅ **FULLY REMEDIATED** (all 8 findings DB-01→DB-08; see [29-database-migrations.md](29-database-migrations.md) — runner checksums + FK isolation, migration 116 unique version, registry parity, populated upgrade fixtures)
+29. Database migrations — idempotency, rollback coverage, index coverage, schema docs — ✅ **FULLY REMEDIATED** (all 8 findings DB-01→DB-08; see [29-database-migrations.md](29-database-migrations.md) — commit `06f0a949`: runner checksums + FK isolation, migration 116 unique version, registry parity, populated upgrade fixtures; DB-04 scoping end-state follow-up implemented in the Phase 2 commit)
 30. API documentation — api-reference.md drift vs actual Tauri commands
 31. Test coverage — files below 50%, untested edge cases, missing integration tests
 32. Flaky tests — quarantine, retry policy, flake root-cause tracking
