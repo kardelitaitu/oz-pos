@@ -2267,4 +2267,208 @@ mod tests {
         assert_eq!(fk_check, 0, "foreign_key_check must be clean after 118");
         run(&mut conn).unwrap();
     }
+
+    // ── Cross-store query audit (migration 117 end-state) ──────────
+
+    /// Run `SELECT id FROM {table} WHERE store_id = ?1` — the canonical
+    /// store-scoped query shape — and return the matching row ids.
+    fn scoped_row_ids(conn: &rusqlite::Connection, table: &str, store: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT id FROM {table} WHERE store_id = ?1 ORDER BY id"
+            ))
+            .unwrap();
+        stmt.query_map(rusqlite::params![store], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    }
+
+    /// Run `SELECT id FROM {table} WHERE store_id IS NULL` — the explicit
+    /// global-scope predicate that is the ONLY way NULL-sentinel rows are
+    /// reachable — and return the matching row ids.
+    fn global_row_ids(conn: &rusqlite::Connection, table: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT id FROM {table} WHERE store_id IS NULL ORDER BY id"
+            ))
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    }
+
+    #[test]
+    fn store_scoped_query_never_returns_null_or_other_store_rows() {
+        // DB-04 query-level audit. Migration 117's FK guarantees a non-NULL
+        // store_id always references a real store_profile, but the audit
+        // also pins the QUERY contract: `WHERE store_id = 'x'` must return
+        // exactly store x's rows — never the NULL global-sentinel rows
+        // (migration 069's "unscoped / legacy / global shared" state) and
+        // never another store's rows. A scoped caller that forgets nothing
+        // gets clean isolation at the predicate level too.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Migration 025 seeds 'default'. Add two more stores so there is a
+        // genuine "other store" to leak against.
+        conn.execute_batch(
+            "INSERT INTO store_profiles (id, name)
+                 VALUES ('store-a', 'Store A'), ('store-b', 'Store B');",
+        )
+        .unwrap();
+
+        // Seed every ADR #4 scoped table with rows owned by store-a, rows
+        // owned by store-b, and NULL-sentinel (global shared) rows.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail', 'store-a'),
+                        ('p-b', 'SKU-B', 'B', 100, 'USD', 'retail', 'store-b'),
+                        ('p-null', 'SKU-N', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO customers (id, name, store_id)
+                 VALUES ('c-a', 'Cust A', 'store-a'),
+                        ('c-b', 'Cust B', 'store-b'),
+                        ('c-null', 'Cust Global', NULL);
+             INSERT INTO sales (id, total_minor, currency, line_count, status, store_id)
+                 VALUES ('s-a', 100, 'USD', 1, 'completed', 'store-a'),
+                        ('s-b', 100, 'USD', 1, 'completed', 'store-b'),
+                        ('s-null', 100, 'USD', 1, 'completed', NULL);
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, store_id)
+                 VALUES ('sl-a', 's-a', 'SKU-A', 1, 100, 100, 'USD', 1, 'store-a'),
+                        ('sl-b', 's-b', 'SKU-B', 1, 100, 100, 'USD', 1, 'store-b'),
+                        ('sl-null', 's-null', 'SKU-N', 1, 100, 100, 'USD', 1, NULL);",
+        )
+        .unwrap();
+
+        // The audit: a store-a scoped query returns EXACTLY the store-a
+        // row on every table — no NULL sentinel, no store-b leakage.
+        for (table, expected) in [
+            ("products", vec!["p-a"]),
+            ("customers", vec!["c-a"]),
+            ("sales", vec!["s-a"]),
+            ("sale_lines", vec!["sl-a"]),
+        ] {
+            let ids = scoped_row_ids(&conn, table, "store-a");
+            assert_eq!(
+                ids, expected,
+                "{table} store-a scoped query must return only store-a rows, got: {ids:?}"
+            );
+        }
+
+        // Mirror for store-b — isolation must hold in both directions.
+        for (table, expected) in [
+            ("products", vec!["p-b"]),
+            ("customers", vec!["c-b"]),
+            ("sales", vec!["s-b"]),
+            ("sale_lines", vec!["sl-b"]),
+        ] {
+            let ids = scoped_row_ids(&conn, table, "store-b");
+            assert_eq!(
+                ids, expected,
+                "{table} store-b scoped query must return only store-b rows, got: {ids:?}"
+            );
+        }
+
+        // NULL-sentinel rows are reachable ONLY through the explicit
+        // global predicate (store_id IS NULL), never through a scoped
+        // query — that is the contract that keeps unscoped rows from
+        // leaking into a single store's view.
+        for (table, expected) in [
+            ("products", vec!["p-null"]),
+            ("customers", vec!["c-null"]),
+            ("sales", vec!["s-null"]),
+            ("sale_lines", vec!["sl-null"]),
+        ] {
+            let ids = global_row_ids(&conn, table);
+            assert_eq!(
+                ids, expected,
+                "{table} global-sentinel query must return only NULL rows, got: {ids:?}"
+            );
+        }
+
+        // FK ownership integrity (migration 117): a store_id with no
+        // matching store_profiles row is rejected at the database layer,
+        // so a scoped query can never be pointed at a phantom store.
+        let ghost = conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-ghost', 'SKU-GHOST', 'Ghost', 100, 'USD', 'retail', 'ghost-store')",
+            [],
+        );
+        assert!(
+            ghost.is_err(),
+            "store_id referencing a missing store_profile must fail the 117 FK"
+        );
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn store_deletion_reverts_scoped_rows_to_null_sentinel() {
+        // ON DELETE SET NULL contract (migration 117): deleting a store
+        // profile must neither block on historical domain rows (RESTRICT)
+        // nor destroy them (CASCADE) — their store_id reverts to the NULL
+        // global sentinel. The rows stay globally visible and a scoped
+        // query for the deleted store returns nothing.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+        conn.execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('store-a', 'Store A')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail', 'store-a'),
+                        ('p-null', 'SKU-N', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO sales (id, total_minor, currency, line_count, status, store_id)
+                 VALUES ('s-a', 100, 'USD', 1, 'completed', 'store-a');",
+        )
+        .unwrap();
+
+        conn.execute("DELETE FROM store_profiles WHERE id = 'store-a'", [])
+            .unwrap();
+
+        // Scoped query for the deleted store returns nothing…
+        assert_eq!(
+            scoped_row_ids(&conn, "products", "store-a"),
+            Vec::<String>::new(),
+            "scoped query for a deleted store must return no rows"
+        );
+        // …but the rows themselves survived, reverted to the NULL sentinel.
+        let sid: Option<String> = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            sid.is_none(),
+            "store-a product must revert to NULL sentinel"
+        );
+        let sale_sid: Option<String> = conn
+            .query_row("SELECT store_id FROM sales WHERE id = 's-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            sale_sid.is_none(),
+            "store-a sale must revert to NULL sentinel"
+        );
+        // The NULL sentinel row is untouched and the FK surface is clean.
+        assert_eq!(
+            global_row_ids(&conn, "products"),
+            vec!["p-a", "p-null"],
+            "reverted row must join the global scope"
+        );
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "no FK violations after SET NULL reversion");
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
 }
