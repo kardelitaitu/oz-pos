@@ -84,7 +84,7 @@ The design has useful safety controls: migration IDs are primary keys, applicati
 
 **Recommendation:** Define an explicit transition policy: backfill legacy rows to a known store or quarantine them, then make tenant ownership non-null for tables that must be isolated. Add foreign keys where the store catalog is authoritative, composite uniqueness/indexes that include the scope, and integration tests proving a store-scoped query cannot return NULL/other-store rows. If global rows remain supported, represent that state explicitly and test every caller's policy rather than relying on NULL semantics.
 
-**Status:** ✅ Remediated (`06f0a949`) — the intentional NULL = “unscoped / legacy / global” semantics are now pinned by dedicated tests (`migration_069_adds_scoping_columns`, `migration_069_scoping_columns_nullable`, `migration_069_scoping_indexes_used_in_query_plan`, `migration_069_creates_scoping_indexes`) documenting the exact contract every caller must honor; the scoping end-state (non-null + FK) is a follow-up migration implemented in Phase 2 of this report's closure.
+**Status:** ✅ Remediated (`06f0a949` + Phase 2 commit) — the intentional NULL = “unscoped / legacy / global” semantics are pinned by dedicated tests (`migration_069_adds_scoping_columns`, `migration_069_scoping_columns_nullable`, `migration_069_scoping_indexes_used_in_query_plan`, `migration_069_creates_scoping_indexes`), and the scoping end-state lands as **migration 117** (`117_scoping_store_id_fk.sql`): it rebuilds products/sales/sale_lines/customers with `store_id REFERENCES store_profiles(id) ON DELETE SET NULL ON UPDATE CASCADE`, quarantines orphaned non-NULL store_ids to NULL during the copy (so an upgrade can never fail on a dangling reference), and preserves NULL as the documented global sentinel — NOT NULL is deliberately not forced because per-store database files are the primary isolation mechanism (docs/decisions/2026-07-10-workspace-type-instance-design.md), so the columns stay soft-scoping for shared/cloud databases. Verified: `migration_117_creates_store_id_foreign_keys` (fresh FK + enforcement), `migration_117_quarantines_orphan_store_ids_on_upgrade` (populated pre-117 DB upgraded with valid/orphan/NULL rows mixed; orphans → NULL, valid survive, `foreign_key_check` = 0, scoping indexes survive).
 
 ### DB-05 — Migration 081 relies on an ineffective foreign-key PRAGMA during a destructive table rebuild
 
@@ -162,7 +162,8 @@ Post-remediation validation (2026-08-03) — all findings closed with live test 
 - FK isolation around rebuild migrations: **passed** — `foreign_keys_disabled_during_rebuild_migration` (parent DROP + rename with populated child row survives)
 - Populated upgrade fixtures: **passed** — 081 rebuild preserves `stock_transfer_lines` with `PRAGMA foreign_key_check` = 0; 092 rebuild conserves the multi-location ledger and zeroes over-sold inventory
 - Migration 116 unique-version enforcement: **passed** — fresh index + legacy dedupe paths
-- `cargo test -p oz-core migrations:: --lib`: **30 passed, 0 failed**
+- Migration 117 scoping FK end-state (Phase 2): **passed** — FK declared on all four domain tables, invalid store_id rejected, orphaned store_ids quarantined to NULL on a populated upgrade (valid rows preserved, `foreign_key_check` = 0, scoping indexes survive)
+- `cargo test -p oz-core migrations:: --lib`: **32 passed, 0 failed**
 - `cargo test -p platform-core --lib`: **222 passed, 0 failed**
 - `cargo fmt --check` on touched crates: **clean**
 
@@ -172,11 +173,11 @@ The findings were remediated in the order below (all closed 2026-08-03):
 
 1. **DB-05/DB-06:** Runner FK isolation around migration apply + populated upgrade fixtures (081 + 092).
 2. **DB-02:** Migration checksums (SHA-256) with fail-closed historical-definition drift detection.
-3. **DB-04:** Documented + pinned the NULL scoping semantics with dedicated tests; end-state enforcement tracked as a follow-up migration.
+3. **DB-04:** Documented + pinned the NULL scoping semantics with dedicated tests; end-state enforcement implemented as migration 117 (store_id FK + orphan quarantine, NULL preserved as the global sentinel).
 4. **DB-07:** Stock-ledger conservation assertions around the 092 destructive rebuild.
 5. **DB-01/DB-03:** Registry/file parity test and forward-only documentation.
 6. **DB-08:** Migration 116 unique `(key, terminal_id, version)` with legacy dedupe.
 
 ## Audit status
 
-All 8 findings (DB-01→DB-08) are **closed**. Production code changed: the generic migration runner (checksum tracking + FK isolation + legacy backfill), migration `116_setting_updated_unique_version.sql`, and substantial migration test coverage. Each finding's Status line names the test or mechanism that closes it; test results are recorded above.
+All 8 findings (DB-01→DB-08) are **closed**. Production code changed: the generic migration runner (checksum tracking + FK isolation + legacy backfill), migrations `116_setting_updated_unique_version.sql` and `117_scoping_store_id_fk.sql`, and substantial migration test coverage. Each finding's Status line names the test or mechanism that closes it; test results are recorded above.

@@ -671,6 +671,17 @@ pub const ALL: &[Migration] = &[
         id: "116_setting_updated_unique_version.sql",
         sql: include_str!("../migrations/116_setting_updated_unique_version.sql"),
     },
+    // ── DB-04 end-state: store_id FK on ADR #4 domain tables (audit/29) ─
+    // 069 added nullable store_id to products/sales/sale_lines/customers
+    // without any database-level link to the store catalog. 117 rebuilds
+    // those four tables with `store_id REFERENCES store_profiles(id)` and
+    // quarantines orphaned store_ids to NULL (the documented global
+    // sentinel). NULL remains valid — per-store DB files are the primary
+    // isolation mechanism, so forcing NOT NULL would break that model.
+    Migration {
+        id: "117_scoping_store_id_fk.sql",
+        sql: include_str!("../migrations/117_scoping_store_id_fk.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1903,5 +1914,198 @@ mod tests {
             )
             .unwrap();
         assert_eq!(value, "new", "the most recently written row must survive");
+    }
+
+    // ── DB-04 end-state (migration 117): store_id FK on domain tables ─
+
+    /// Assert a `store_id` → `store_profiles` FK is declared on `table`.
+    fn assert_store_id_fk(conn: &rusqlite::Connection, table: &str) {
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA foreign_key_list(\"{table}\")"))
+            .unwrap();
+        let fks: Vec<(String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(2)?, row.get::<_, String>(3)?))
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            fks.iter()
+                .any(|(t, from)| t == "store_profiles" && from == "store_id"),
+            "{table} must declare store_id REFERENCES store_profiles(id), got FKs: {fks:?}"
+        );
+    }
+
+    #[test]
+    fn migration_117_creates_store_id_foreign_keys() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // The rebuild must carry the FK on all four ADR #4 domain tables.
+        for table in &["products", "sales", "sale_lines", "customers"] {
+            assert_store_id_fk(&conn, table);
+        }
+
+        // NULL remains the valid global sentinel (per-store DB isolation).
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+             VALUES ('p-null', 'SKU-NULL', 'Global', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+
+        // A store_id that does not exist in store_profiles must be rejected.
+        let orphan = conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-orphan', 'SKU-ORPHAN', 'Orphan', 100, 'USD', 'retail', 'ghost-store')",
+            [],
+        );
+        assert!(
+            orphan.is_err(),
+            "store_id referencing a missing store_profile must fail the FK"
+        );
+
+        // A store_id that exists (migration 025 seeds 'default') must pass.
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-scoped', 'SKU-SCOPED', 'Scoped', 100, 'USD', 'retail', 'default')",
+            [],
+        )
+        .unwrap();
+
+        // Re-running migrations stays idempotent after the rebuild.
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn migration_117_quarantines_orphan_store_ids_on_upgrade() {
+        // Upgrade fixture: a pre-117 database that already carries domain
+        // rows with store_id values that do not exist in store_profiles
+        // (legacy orphans — the exact data the audit flagged). The rebuild
+        // must quarantine them to NULL (the documented global sentinel)
+        // rather than failing the upgrade or dropping the rows.
+        let idx117 = ALL
+            .iter()
+            .position(|m| m.id == "117_scoping_store_id_fk.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx117]).unwrap();
+
+        // Seed rows across all four tables with a mix of valid ('default',
+        // seeded by migration 025) and orphaned store_ids, plus a NULL.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-ok', 'SKU-OK', 'Kept', 100, 'USD', 'retail', 'default'),
+                        ('p-orphan', 'SKU-ORPHAN', 'Orphaned', 100, 'USD', 'retail', 'ghost-store'),
+                        ('p-null', 'SKU-NULL', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO customers (id, name, store_id) VALUES ('c-orphan', 'Orphan Cust', 'ghost-store');
+             INSERT INTO sales (id, total_minor, currency, line_count, status, store_id)
+                 VALUES ('s-orphan', 100, 'USD', 1, 'completed', 'ghost-store');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, store_id)
+                 VALUES ('sl-orphan', 's-orphan', 'SKU-X', 1, 100, 100, 'USD', 1, 'ghost-store');",
+        )
+        .unwrap();
+
+        // Apply 117 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx117..]).unwrap();
+
+        // Orphaned store_ids quarantined to NULL; valid + NULL preserved.
+        let orphan_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            orphan_sid.is_none(),
+            "orphaned store_id must be quarantined to NULL"
+        );
+
+        let ok_sid: Option<String> = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-ok'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            ok_sid.as_deref(),
+            Some("default"),
+            "valid store_id must survive"
+        );
+
+        let null_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-null'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(null_sid.is_none(), "NULL global sentinel must survive");
+
+        // Rows survived the rebuild (not dropped), FK is clean.
+        let cust_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM customers WHERE id = 'c-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(cust_sid.is_none(), "customer orphan store_id quarantined");
+        let sale_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM sales WHERE id = 's-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(sale_sid.is_none(), "sale orphan store_id quarantined");
+        let line_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM sale_lines WHERE id = 'sl-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(line_sid.is_none(), "sale_line orphan store_id quarantined");
+
+        // All four rows still exist, FK enforcement is clean, and the
+        // scoping indexes survived the rebuild.
+        for (table, id) in [
+            ("products", "p-orphan"),
+            ("customers", "c-orphan"),
+            ("sales", "s-orphan"),
+            ("sale_lines", "sl-orphan"),
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE id = ?1"),
+                    rusqlite::params![id],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "{table} row {id} must survive the 117 rebuild");
+        }
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "foreign_key_check must be clean after 117");
+        for index in [
+            "idx_sales_store_status",
+            "idx_sale_lines_store_sale",
+            "idx_products_store_category",
+            "idx_customers_store",
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    rusqlite::params![index],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "scoping index {index} must survive the 117 rebuild");
+        }
     }
 }
