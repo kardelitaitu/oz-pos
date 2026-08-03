@@ -2,7 +2,7 @@
 
 > **Audit date:** 2026-07-31
 > **Sector:** Docker images — image size, layer caching, runtime hardening, health checks, secrets, supply-chain pinning, CI scanning, and E2E reliability
-> **Status:** ✅ **FULLY REMEDIATED** — all 9 original findings DOCKER-01→DOCKER-09 closed, plus 6 post-remediation hardening items DOCKER-10→DOCKER-15 found during live validation and closed; commits `9f8b7739` (DOCKER-03/08), `2d4cecc9` (DOCKER-01/04), `5bcafce2` (DOCKER-05/06), `464fd37d` (DOCKER-02), `556fefb7` (DOCKER-07), `20b7ec3d` (DOCKER-09), `2dfeb177` (DOCKER-10), `2ed566dc` (DOCKER-11/12), `7d3bf00a` (DOCKER-15), `c06b6cde` (DOCKER-13/14), `70dd2590` (runbook disk-space docs)
+> **Status:** ✅ **FULLY REMEDIATED** — all 9 original findings DOCKER-01→DOCKER-09 closed, plus 6 post-remediation hardening items DOCKER-10→DOCKER-15 found during live validation and closed; commits `9f8b7739` (DOCKER-03/08), `2d4cecc9` (DOCKER-01/04), `5bcafce2` (DOCKER-05/06), `464fd37d` (DOCKER-02), `556fefb7` (DOCKER-07), `20b7ec3d` (DOCKER-09), `2dfeb177` (DOCKER-10), `2ed566dc` (DOCKER-11/12), `7d3bf00a` (DOCKER-15), `c06b6cde` (DOCKER-13/14), `70dd2590` (runbook disk-space docs), `c375ecf4` (DOCKER-10→15 audit records), `791aaa8a` (single `verify-docker-all.sh` comprehensive gate)
 > **Production code changed:** Post-remediation hardening touched `apps/cloud-server/src/db.rs` (DOCKER-15) and `apps/license-server/main.go` (DOCKER-10); the original 9 findings were config/docs/workflow-only
 
 ## Scope
@@ -323,18 +323,16 @@ Verified live: the guard fires in the container with the hint, and all 111
 
 ## Test and validation results
 
-This was an evidence-only audit; no Dockerfiles, Compose files, workflows, or production code were changed.
-
-Validation performed:
+The initial audit pass was evidence-only; every finding was subsequently remediated and validated live (commits listed in the header, live results below). The original audit-scope validation performed:
 
 - Source inventory and line-referenced evidence review: **completed**
 - `.dockerignore` review: **completed**
 - Dockerfile/Compose healthcheck and runtime-dependency cross-check: **completed**
 - Local Docker daemon availability: **Docker 29.4.3 detected**
-- Image build, container health smoke test, and vulnerability scan: **not run during this documentation-only audit**
 - `docker compose -f docker-compose.e2e.yml config --quiet`: **passed**
-- External registry availability and digest resolution: **not verified locally**
-- Report whitespace, `git diff --check`, finding count, and audit-only scope review: **passed**
+- Report whitespace, `git diff --check`, finding count, and audit-scope review: **passed**
+
+Image builds, container health smoke tests, vulnerability scans, digest re-resolution, and persistence round-trips were **not run during the initial documentation pass** — they are the substance of the remediation phase and are all covered by the live validation below and by the automated `verify-docker-all.sh` gate (DOCKER-11/12/13/15).
 
 The observed CI failures involving Redis rate limiting and the license-server startup/health path are consistent with DOCKER-05 and DOCKER-06. They should be reproduced after remediation with both the unified `npm run e2e` runner and the PR workflow; a successful cloud-only image build would not validate the license image or the complete Compose stack.
 
@@ -349,6 +347,7 @@ The DOCKER-10→15 hardening was validated against the running stack, not just b
 - **Digest drift (DOCKER-12):** script run live — all six pins current.
 - **`OZ_DB_PATH` guard (DOCKER-15):** container run with the mangled Windows path fails with the actionable `MSYS_NO_PATHCONV=1` message; 111 `oz-cloud-server` tests pass.
 - **Compose smoke:** both endpoints answer (`/api/v1/health` and `/api/health` return 200) on the recreated stack.
+- **Comprehensive gate (`verify-docker-all.sh`):** the DOCKER-11/12/13/15 checks are consolidated into one command (commit `791aaa8a`) — delegates persistence + digest-drift, then asserts log-rotation `max-size`/`max-file` on **every** service across all four compose merge combos (compared against the actual `config --services` count, so a service added without rotation can't slip past) and live-runs the `OZ_DB_PATH` guard with the mangled Windows path under `timeout` (a guard regression fails the gate instead of hanging it). Run twice against the live daemon: all four checks green, exit 0, no stray test containers/volumes left behind. The digest delegate was also hardened to 5 attempts with growing backoff after a real public-ECR 429 rate-limit burst surfaced during the first gate run — all six pins resolve cleanly.
 
 ## Recommended remediation order
 
@@ -375,8 +374,8 @@ The DOCKER-10→15 hardening was validated against the running stack, not just b
 | DOCKER-08 asymmetric build/release | license image built + blocking-scanned + published in release; Compose smoke of both services | `9f8b7739` |
 | DOCKER-09 cache-stage drift | all member manifests in priming stage + workspace↔Dockerfile CI gate + CRLF entrypoint fix | `20b7ec3d` |
 | DOCKER-10 license first boot "healthy but broken" | embed `pb_schema.json` + idempotent `ensureCollections()` on `OnServe` (verified live: 4 collections auto-created, key survives restart) | `2dfeb177` |
-| DOCKER-11 volume persistence unverified | boot → write → replace-container → assert script + weekly/PR workflow | `2ed566dc` |
-| DOCKER-12 pinned digests can drift | weekly re-resolution script, fail-closed, GitHub issue on drift | `2ed566dc` |
-| DOCKER-13 unbounded json-file logs | `max-size 10m` / `max-file 5` (50 MB/service) on all services + runbook disk-space docs | `c06b6cde`, `70dd2590` |
+| DOCKER-11 volume persistence unverified | boot → write → replace-container → assert script + weekly/PR workflow; consolidated under `verify-docker-all.sh` | `2ed566dc`, `791aaa8a` |
+| DOCKER-12 pinned digests can drift | weekly re-resolution script, fail-closed, GitHub issue on drift; retry hardened (5× growing backoff); consolidated under `verify-docker-all.sh` | `2ed566dc`, `791aaa8a` |
+| DOCKER-13 unbounded json-file logs | `max-size 10m` / `max-file 5` (50 MB/service) on all services + runbook disk-space docs; config asserted per service across all merge combos by `verify-docker-all.sh` | `c06b6cde`, `70dd2590`, `791aaa8a` |
 | DOCKER-14 plain HTTP, no TLS recipe | `gateway/Caddyfile.example` (Caddy) + Reverse Proxy & TLS section (`!override` loopback binding) | `c06b6cde` |
-| DOCKER-15 Windows Git Bash path mangling | `looks_like_windows_path()` guard + actionable `MSYS_NO_PATHCONV=1` error + docs | `7d3bf00a` |
+| DOCKER-15 Windows Git Bash path mangling | `looks_like_windows_path()` guard + actionable `MSYS_NO_PATHCONV=1` error + docs; live-fired under `timeout` by `verify-docker-all.sh` | `7d3bf00a`, `791aaa8a` |
