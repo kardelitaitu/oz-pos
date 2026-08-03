@@ -40,17 +40,21 @@ for f in "${FILES[@]}"; do
         tag="${ref%@*}"
         pinned="${ref#*@sha256:}"
         # Resolve the CURRENT multi-arch index digest for the mutable tag.
-        # Retry up to 3x — the weekly job runs against a cold registry
-        # connection and transient network errors must not false-alarm.
+        # Retry up to 5x with growing backoff — the weekly job runs against
+        # a cold registry connection and registries (esp. public ECR) can
+        # 429-rate-limit bursts for 30-60s; transient errors must not
+        # false-alarm. The error is echoed on the last attempt for clarity.
         current=""
-        for attempt in 1 2 3; do
-            current=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag" 2>/dev/null | sed 's/^sha256://' || true)
+        for attempt in 1 2 3 4 5; do
+            err=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag" 2>&1 || true)
+            current=$(echo "$err" | sed 's/^sha256://' | grep -E '^[0-9a-f]{64}$' || true)
             [ -n "$current" ] && break
-            sleep 3
+            [ "$attempt" -eq 5 ] && echo "  (last attempt: $(echo "$err" | tail -1 | head -c 120))"
+            sleep $((attempt * 3))
         done
         if [ -z "$current" ]; then
             # Fail CLOSED: an unpinnable pin is a supply-chain concern.
-            echo "  ✘ $ref — could not resolve after 3 attempts (is the registry reachable?)"
+            echo "  ✘ $ref — could not resolve after 5 attempts (is the registry reachable?)"
             drift=1
             drift_lines+=("$f: $tag  UNRESOLVABLE (network/registry error)")
             continue
