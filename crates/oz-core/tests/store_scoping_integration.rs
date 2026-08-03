@@ -157,3 +157,164 @@ fn create_workspace_instance_for_missing_store_rejected() {
         "creating an instance for a missing store_profile must fail the FK, got: {msg}"
     );
 }
+
+// ── Domain-table scoped listing (migration 117 soft-scoping) ──────────
+//
+// The product/customer/sale catalogs are GLOBAL in the per-store database
+// model (NULL store_id = the shared catalog). The soft-scoping layer for
+// shared/cloud databases is `store_id IS NULL OR store_id = ?1` — a store
+// sees the global rows PLUS its own tagged rows, never another store's.
+// These tests prove the repository APIs enforce exactly that, in both
+// directions.
+
+/// Seed the two store profiles plus domain rows with store_id = store-a,
+/// store-b, and NULL (global) across products, customers, and sales.
+fn seed_domain_rows(conn: &Connection) {
+    let s = store(conn);
+    s.create_store_profile(&make_profile("store-a", "Store A"))
+        .unwrap();
+    s.create_store_profile(&make_profile("store-b", "Store B"))
+        .unwrap();
+
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, store_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params!["p-a", "SKU-A", "Prod A", 100, "USD", "store-a"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, store_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params!["p-b", "SKU-B", "Prod B", 200, "USD", "store-b"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO products (id, sku, name, price_minor, currency, store_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            "p-global",
+            "SKU-G",
+            "Prod Global",
+            300,
+            "USD",
+            Option::<&str>::None
+        ],
+    )
+    .unwrap();
+
+    conn.execute(
+        "INSERT INTO customers (id, name, store_id) VALUES (?1, ?2, ?3)",
+        rusqlite::params!["c-a", "Cust A", "store-a"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO customers (id, name, store_id) VALUES (?1, ?2, ?3)",
+        rusqlite::params!["c-b", "Cust B", "store-b"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO customers (id, name, store_id) VALUES (?1, ?2, ?3)",
+        rusqlite::params!["c-global", "Cust Global", Option::<&str>::None],
+    )
+    .unwrap();
+
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, store_id)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params!["s-a", 1000, "USD", 1, "store-a"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, store_id)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params!["s-b", 2000, "USD", 1, "store-b"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, store_id)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params!["s-global", 3000, "USD", 1, Option::<&str>::None],
+    )
+    .unwrap();
+}
+
+/// `list_products_for_store` returns the global catalog plus that store's
+/// own rows — never another store's rows, in either direction.
+#[test]
+fn list_products_for_store_returns_global_and_own_never_other_store() {
+    let conn = setup();
+    seed_domain_rows(&conn);
+    let s = store(&conn);
+
+    let a = s.list_products_for_store("store-a").unwrap();
+    let mut a_ids: Vec<&str> = a.iter().map(|r| r.product.sku.as_str()).collect();
+    a_ids.sort_unstable();
+    assert_eq!(
+        a_ids,
+        vec!["SKU-A", "SKU-G"],
+        "store-a must see its own row plus the global catalog, never store-b's"
+    );
+
+    let b = s.list_products_for_store("store-b").unwrap();
+    let mut b_ids: Vec<&str> = b.iter().map(|r| r.product.sku.as_str()).collect();
+    b_ids.sort_unstable();
+    assert_eq!(
+        b_ids,
+        vec!["SKU-B", "SKU-G"],
+        "store-b must see its own row plus the global catalog, never store-a's"
+    );
+}
+
+/// `list_customers_for_store` returns the global customer base plus that
+/// store's own rows — never another store's rows, in either direction.
+#[test]
+fn list_customers_for_store_returns_global_and_own_never_other_store() {
+    let conn = setup();
+    seed_domain_rows(&conn);
+    let s = store(&conn);
+
+    let a = s.list_customers_for_store("store-a").unwrap();
+    let mut a_ids: Vec<&str> = a.iter().map(|c| c.id.as_str()).collect();
+    a_ids.sort_unstable();
+    assert_eq!(
+        a_ids,
+        vec!["c-a", "c-global"],
+        "store-a must see its own customers plus the global base, never store-b's"
+    );
+
+    let b = s.list_customers_for_store("store-b").unwrap();
+    let mut b_ids: Vec<&str> = b.iter().map(|c| c.id.as_str()).collect();
+    b_ids.sort_unstable();
+    assert_eq!(
+        b_ids,
+        vec!["c-b", "c-global"],
+        "store-b must see its own customers plus the global base, never store-a's"
+    );
+}
+
+/// `list_sales_for_store` returns the global sales plus that store's own
+/// rows — never another store's rows, in either direction.
+#[test]
+fn list_sales_for_store_returns_global_and_own_never_other_store() {
+    let conn = setup();
+    seed_domain_rows(&conn);
+    let s = store(&conn);
+
+    let a = s.list_sales_for_store("store-a").unwrap();
+    let mut a_ids: Vec<&str> = a.iter().map(|r| r.id.as_str()).collect();
+    a_ids.sort_unstable();
+    assert_eq!(
+        a_ids,
+        vec!["s-a", "s-global"],
+        "store-a must see its own sales plus the global set, never store-b's"
+    );
+
+    let b = s.list_sales_for_store("store-b").unwrap();
+    let mut b_ids: Vec<&str> = b.iter().map(|r| r.id.as_str()).collect();
+    b_ids.sort_unstable();
+    assert_eq!(
+        b_ids,
+        vec!["s-b", "s-global"],
+        "store-b must see its own sales plus the global set, never store-a's"
+    );
+}

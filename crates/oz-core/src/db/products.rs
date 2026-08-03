@@ -110,6 +110,36 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List products visible to one store (soft-scoping layer, migration
+    /// 069/117), ordered by name, with category and stock.
+    ///
+    /// A store sees the shared global catalog (`store_id IS NULL`) plus its
+    /// own tagged rows — never another store's rows. In the per-store
+    /// database model every row is NULL, so this degenerates to the global
+    /// catalog; it is the enforcement surface for shared/cloud databases
+    /// where `store_id` is the soft-scoping column. The strict
+    /// `store_id = ?1` predicate would return nothing there (all rows are
+    /// NULL), which is why the NULL arm is included.
+    pub fn list_products_for_store(
+        &self,
+        store_id: &str,
+    ) -> Result<Vec<ProductWithDetails>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id, p.sku, p.name, p.price_minor, p.currency,
+                     p.category_id, p.barcode, p.created_at, p.updated_at, p.price_updated_at,
+                     p.track_serial, p.product_type, p.version,
+                     c.name AS category_name,
+                     i.qty AS stock_qty
+             FROM products p
+             LEFT JOIN categories c ON p.category_id = c.id
+             LEFT JOIN inventory i ON p.id = i.product_id
+             WHERE p.store_id IS NULL OR p.store_id = ?1
+             ORDER BY p.name",
+        )?;
+        let rows = stmt.query_map(params![store_id], row_to_product_with_details)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
     /// List inventory-tracked products only, ordered by name, with category
     /// and stock. Excludes service-type products (e.g. "car wash") that have
     /// no physical stock. Used by the warehouse/inventory workspace.

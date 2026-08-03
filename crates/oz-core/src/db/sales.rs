@@ -1073,6 +1073,68 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List sales visible to one store (soft-scoping layer, migration
+    /// 069/117), most recent first, without line items.
+    ///
+    /// A store sees the shared global sales (`store_id IS NULL`) plus its
+    /// own tagged rows — never another store's rows. In the per-store
+    /// database model every row is NULL, so this degenerates to the global
+    /// list; it is the enforcement surface for shared/cloud databases
+    /// where `store_id` is the soft-scoping column.
+    pub fn list_sales_for_store(&self, store_id: &str) -> Result<Vec<Sale>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status,
+                    payment_method, tendered_minor, discount_percent, discount_label,
+                    user_id, created_at, updated_at,
+                    subtotal_minor, tax_total_minor, customer_id, version
+             FROM sales
+             WHERE store_id IS NULL OR store_id = ?1
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![store_id], |row| {
+            let cur_str: String = row.get("currency")?;
+            let status_str: String = row.get("status")?;
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
+            let status = SaleStatus::from_stored_str(&status_str).unwrap_or(SaleStatus::Pending);
+            Ok(Sale {
+                id: row.get("id")?,
+                status,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency,
+                },
+                line_count: row.get("line_count")?,
+                currency,
+                payment_method: row.get("payment_method")?,
+                tendered_minor: row.get("tendered_minor")?,
+                discount_percent: row
+                    .get::<_, Option<i64>>("discount_percent")
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0),
+                discount_label: row.get("discount_label")?,
+                user_id: row.get("user_id")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+                lines: Vec::new(),
+                subtotal: Money {
+                    minor_units: row.get("subtotal_minor")?,
+                    currency,
+                },
+                tax_total: Money {
+                    minor_units: row.get("tax_total_minor")?,
+                    currency,
+                },
+                customer_id: row.get("customer_id")?,
+                version: row.get("version").unwrap_or(1),
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
     /// List sales for one customer (most recent first), without line items.
     ///
     /// CUST-05: powers the customer history view. The result is bounded and

@@ -36,6 +36,41 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List customers visible to one store (soft-scoping layer, migration
+    /// 069/117), ordered by name.
+    ///
+    /// A store sees the shared global customer base (`store_id IS NULL`)
+    /// plus its own tagged rows — never another store's rows. In the
+    /// per-store database model every row is NULL, so this degenerates to
+    /// the global list; it is the enforcement surface for shared/cloud
+    /// databases where `store_id` is the soft-scoping column.
+    pub fn list_customers_for_store(&self, store_id: &str) -> Result<Vec<Customer>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, email, phone, loyalty_points, total_spent_minor, currency,
+                    notes, created_at, updated_at
+             FROM customers
+             WHERE store_id IS NULL OR store_id = ?1
+             ORDER BY name",
+        )?;
+        let rows = stmt.query_map(params![store_id], |row| {
+            let email_raw: Option<String> = row.get("email")?;
+            let phone_raw: Option<String> = row.get("phone")?;
+            Ok(Customer {
+                id: row.get("id")?,
+                name: row.get("name")?,
+                email: email_raw.and_then(|s| Email::new(&s).ok()),
+                phone: phone_raw.and_then(|s| Phone::new(&s).ok()),
+                loyalty_points: row.get("loyalty_points")?,
+                total_spent_minor: row.get("total_spent_minor")?,
+                currency: row.get("currency")?,
+                notes: row.get("notes")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
     /// Search customers by name, email, or phone with a bounded page.
     ///
     /// CUST-06: keeps the PII surface delivered to the renderer bounded —
