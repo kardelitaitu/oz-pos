@@ -1,1 +1,8 @@
-1 RT_MANIFEST "app.manifest"
+// RT_MANIFEST must be the NUMERIC type id 24. A bare `.rc` compiled by
+// rc.exe does not include winres.h, so the identifier `RT_MANIFEST` would be
+// emitted as a NAMED resource type (the string "RT_MANIFEST") instead of the
+// numeric 24 the Windows loader looks up for the application manifest. With a
+// named type, the loader cannot find the manifest, treats the exe as
+// manifest-less, and UAC's installer-detection heuristics raise a consent
+// prompt on every run (seen empirically on this harness).
+1 24 "app.manifest"
