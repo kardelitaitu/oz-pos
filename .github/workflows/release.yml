@@ -46,6 +46,15 @@ jobs:
         run: node scripts/check-release-version.mjs "${{ github.ref_name }}"
       - name: Self-test version gate
         run: node scripts/check-release-version.mjs --self-test
+      # RELEASE-04: end-to-end proof that the sign/verify toolchain emits
+      # signatures the REAL Tauri updater client verifier accepts. Builds a
+      # tiny Rust harness pinned to the client's minisign-verify 0.2.5 and
+      # feeds generate-latest-json.mjs output through it (plus tamper +
+      # real-tauri-cli fixture cross-checks). Fails fast, before any build.
+      - name: Install Rust toolchain (compat harness)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Updater client compatibility check
+        run: node scripts/check-updater-compat.mjs
 
   # ── RELEASE-01/03/08: build real installers + Docker images ───────
   release-build:
