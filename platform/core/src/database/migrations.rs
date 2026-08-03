@@ -127,14 +127,12 @@ pub fn rollback(
     })();
     // Restore the caller's FK setting even on failure, but never let a
     // restore error mask the original migration error (DB-05).
-    if fk_was_on {
-        if let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
-            tracing::error!(
-                migration = migration_id,
-                error = %restore_err,
-                "failed to restore foreign_keys=ON after rollback"
-            );
-        }
+    if fk_was_on && let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
+        tracing::error!(
+            migration = migration_id,
+            error = %restore_err,
+            "failed to restore foreign_keys=ON after rollback"
+        );
     }
     if matches!(result, Ok(true)) {
         tracing::info!(migration = migration_id, "rollback complete");
@@ -242,14 +240,12 @@ fn apply_one(conn: &mut Connection, mig: &Migration) -> Result<(), PlatformError
     })();
     // Restore the caller's FK setting even on failure, but never let a
     // restore error mask the original migration error (DB-05).
-    if fk_was_on {
-        if let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
-            tracing::error!(
-                migration = mig.id,
-                error = %restore_err,
-                "failed to restore foreign_keys=ON after migration apply"
-            );
-        }
+    if fk_was_on && let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
+        tracing::error!(
+            migration = mig.id,
+            error = %restore_err,
+            "failed to restore foreign_keys=ON after migration apply"
+        );
     }
     result
 }
