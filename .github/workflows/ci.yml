@@ -33,6 +33,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all -- --check
 
+  # ── Rust: Panic-inventory gate (RUST-07 / ADR #33) — fail-closed ────
+  # Fails when any production unwrap()/expect() lacks a documented
+  # invariant comment (// SAFETY: / // INVARIANT: on the same or preceding
+  # line). Pure python — no toolchain deps, so it stays fast.
+  rust-panic-inventory:
+    name: Rust Panic Inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan production unwrap/expect inventory
+        run: python3 scripts/scan-unwrap-panic.py --fail-on-recoverable
+
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy
@@ -311,6 +323,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # DOCKER-09: fail fast (no image build) if the Dockerfile cache stage
+      # drifts from the Cargo workspace members.
+      - name: Verify Dockerfile cache stage matches Cargo workspace
+        run: python scripts/verify-dockerfile-workspace.py
       - name: Build cloud-server image
         run: docker build -f Dockerfile.server -t oz-pos-cloud:ci .
       - name: Build license-server image

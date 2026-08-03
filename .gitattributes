@@ -20,3 +20,11 @@
 
 # Graphify JSON merge driver (binary, not human-editable)
 graphify-out/graph.json merge=graphify
+
+# Shell entrypoints must stay LF so the `#!/bin/sh` shebang survives
+# Docker builds on Windows checkouts (core.autocrlf would otherwise
+# convert them to CRLF and break container startup with
+# "exec ...: no such file or directory").
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+scripts/*.sh text eol=lf
