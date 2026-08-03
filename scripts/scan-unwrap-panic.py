@@ -15,9 +15,12 @@ or the line above marks a documented invariant panic. The script prints
 intentional setup panics from recoverable runtime panics.
 
 Exit code 0 = inventory generated; the output is the machine-readable list.
+Exit code 1 = `--fail-on-recoverable` set and at least one finding lacks a
+documented invariant comment (the recoverable set must stay at zero, ADR #33).
 Usage:
-    python scripts/scan-unwrap-panic.py            # default roots
-    python scripts/scan-unwrap-panic.py --json     # JSON summary
+    python scripts/scan-unwrap-panic.py                             # default roots
+    python scripts/scan-unwrap-panic.py --json                      # JSON summary
+    python scripts/scan-unwrap-panic.py --fail-on-recoverable       # exit 1 on untagged findings (CI gate)
 """
 
 from __future__ import annotations
@@ -177,6 +180,12 @@ def scan_file(path: Path) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="emit JSON summary")
+    parser.add_argument(
+        "--fail-on-recoverable",
+        action="store_true",
+        help="exit 1 when any production unwrap/expect lacks a documented "
+        "invariant comment (the recoverable set must stay at zero, ADR #33)",
+    )
     parser.add_argument("--roots", nargs="*", default=ROOTS, help="roots to scan")
     args = parser.parse_args()
 
@@ -192,6 +201,25 @@ def main() -> int:
                 continue
             all_findings.extend(scan_file(path))
 
+    recoverable = [f for f in all_findings if not f["invariant"]]
+    if args.fail_on_recoverable and recoverable:
+        print(
+            f"panic-inventory FAIL: {len(recoverable)} recoverable unwrap/expect "
+            "call(s) lack a documented invariant comment (ADR #33):",
+            file=sys.stderr,
+        )
+        for f in recoverable:
+            print(
+                f'{f["path"]}:{f["line"]}: {f["call"]}()  {f["text"]}',
+                file=sys.stderr,
+            )
+        print(
+            "Fix: add a // SAFETY: / // INVARIANT: comment on the same or "
+            "immediately preceding line, or convert the call to a Result path.",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.json:
         by_file: dict[str, int] = {}
         invariant = 0
@@ -204,6 +232,7 @@ def main() -> int:
                 {
                     "total": len(all_findings),
                     "invariant_annotated": invariant,
+                    "recoverable": len(recoverable),
                     "files": len(by_file),
                     "by_file": dict(sorted(by_file.items(), key=lambda kv: -kv[1])),
                 },
@@ -215,7 +244,16 @@ def main() -> int:
     for f in all_findings:
         tag = " [INVARIANT]" if f["invariant"] else ""
         print(f'{f["path"]}:{f["line"]}: {f["call"]}()  {f["text"]}{tag}')
-    print(f"\n# total: {len(all_findings)} production unwrap/expect calls", file=sys.stderr)
+    if args.fail_on_recoverable:
+        # Concise success line for the CI / check.sh gate — plain mode would
+        # otherwise dump the whole inventory into the build log.
+        print(
+            f"{len(all_findings)} production unwrap/expect calls, all documented "
+            "invariants",
+            file=sys.stderr,
+        )
+    else:
+        print(f"\n# total: {len(all_findings)} production unwrap/expect calls", file=sys.stderr)
     return 0
 
 

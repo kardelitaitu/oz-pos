@@ -80,6 +80,7 @@ pub fn try_init_json() -> Result<(), LoggingError> {
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init() {
+    // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init`.
     try_init().expect("logging init failed");
 }
 
@@ -96,6 +97,7 @@ pub fn init() {
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init_json() {
+    // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init_json`.
     try_init_json().expect("logging init_json failed");
 }
 
@@ -141,6 +143,7 @@ fn cleanup_old_log_files(dir: &str, file_prefix: &str, retention_days: u32) {
 /// ```
 pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
     try_init_with_file(log_dir, file_prefix, retention_days)
+        // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init_with_file`.
         .expect("logging init_with_file failed");
 }
 
@@ -191,6 +194,7 @@ pub fn try_init_with_file(
 /// Panics if the global subscriber has already been set.
 pub fn init_json_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
     try_init_json_with_file(log_dir, file_prefix, retention_days)
+        // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init_json_with_file`.
         .expect("logging init_json_with_file failed");
 }
 

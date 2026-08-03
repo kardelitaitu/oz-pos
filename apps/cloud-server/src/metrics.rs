@@ -22,8 +22,8 @@ pub static SYNC_PUSHES_TOTAL: LazyLock<CounterVec> = LazyLock::new(|| {
         Opts::new("sync_pushes_total", "Total items pushed to the server"),
         &["outcome"], // accepted | conflict | rejected
     )
-    .unwrap();
-    REGISTRY.register(Box::new(c.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     c
 });
 
@@ -33,8 +33,8 @@ pub static SYNC_ANCHOR_EXPIRED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
         "sync_anchor_expired_total",
         "Total anchor-expired (410 Gone) responses",
     )
-    .unwrap();
-    REGISTRY.register(Box::new(c.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     c
 });
 
@@ -47,8 +47,8 @@ pub static SYNC_PULL_ROW_DECODE_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::ne
         "sync_pull_row_decode_failures_total",
         "Total offline_queue rows that failed to decode during pull",
     )
-    .unwrap();
-    REGISTRY.register(Box::new(c.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     c
 });
 
@@ -60,8 +60,8 @@ pub static SYNC_PUSH_DURATION_MS: LazyLock<Histogram> = LazyLock::new(|| {
         "sync_push_duration_ms",
         "Push handler duration in milliseconds",
     ))
-    .unwrap();
-    REGISTRY.register(Box::new(h.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(h.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     h
 });
 
@@ -71,8 +71,8 @@ pub static SYNC_PULL_DURATION_MS: LazyLock<Histogram> = LazyLock::new(|| {
         "sync_pull_duration_ms",
         "Pull handler duration in milliseconds",
     ))
-    .unwrap();
-    REGISTRY.register(Box::new(h.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(h.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     h
 });
 
@@ -82,8 +82,8 @@ pub static SYNC_BATCH_SIZE_BYTES: LazyLock<Histogram> = LazyLock::new(|| {
         "sync_batch_size_bytes",
         "Push request body size in bytes",
     ))
-    .unwrap();
-    REGISTRY.register(Box::new(h.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(h.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     h
 });
 
@@ -91,8 +91,8 @@ pub static SYNC_BATCH_SIZE_BYTES: LazyLock<Histogram> = LazyLock::new(|| {
 
 /// Total number of health check requests served.
 pub static HEALTH_CHECKS_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
-    let c = Counter::new("health_checks_total", "Total health check requests served").unwrap();
-    REGISTRY.register(Box::new(c.clone())).unwrap();
+    let c = Counter::new("health_checks_total", "Total health check requests served").unwrap(); // SAFETY: static metric name/help are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     c
 });
 
@@ -102,8 +102,8 @@ pub static HEALTH_CHECK_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
         "health_check_failures_total",
         "Total health check requests where DB ping failed",
     )
-    .unwrap();
-    REGISTRY.register(Box::new(c.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     c
 });
 
@@ -113,8 +113,8 @@ pub static HEALTH_DB_LATENCY_MICROS: LazyLock<Histogram> = LazyLock::new(|| {
         "health_db_latency_micros",
         "Database ping latency in microseconds",
     ))
-    .unwrap();
-    REGISTRY.register(Box::new(h.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(h.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     h
 });
 
@@ -127,8 +127,8 @@ pub static DB_CONTENTION_SECONDS: LazyLock<HistogramVec> = LazyLock::new(|| {
         ),
         &["handler"], // push | pull | snapshot | status
     )
-    .unwrap();
-    REGISTRY.register(Box::new(h.clone())).unwrap();
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(h.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
     h
 });
 

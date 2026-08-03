@@ -125,6 +125,7 @@ impl DriverRegistry {
         // Synchronous insert — only used at startup/test time.
         self.scales
             .try_write()
+            // SAFETY: synchronous startup/test-time insert — `try_write` only fails if a concurrent writer holds the lock.
             .expect("register_mock_scale called concurrently")
             .insert(id.to_owned(), mock);
     }

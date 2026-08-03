@@ -249,33 +249,28 @@ fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffse
         }
         // Common IANA timezones
         "asia/jakarta" | "asia/pontianak" => {
-            // SAFETY: +07:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +07:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(7 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "asia/makassar" | "asia/singapore" | "asia/kuala_lumpur" | "asia/manila"
         | "asia/brunei" => {
-            // SAFETY: +08:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +08:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "asia/tokyo" | "asia/seoul" => {
-            // SAFETY: +09:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +09:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "asia/shanghai" | "asia/taipei" | "asia/hong_kong" => {
-            // SAFETY: +08:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +08:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "australia/sydney" => {
-            // SAFETY: +10:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +10:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(10 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
@@ -284,38 +279,32 @@ fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffse
             Utc::now().into()
         }
         "europe/berlin" | "europe/paris" | "europe/rome" | "europe/madrid" | "europe/amsterdam" => {
-            // SAFETY: +01:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +01:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "europe/moscow" => {
-            // SAFETY: +03:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: +03:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(3 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "america/new_york" | "america/toronto" => {
-            // SAFETY: -05:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: -05:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(-5 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "america/chicago" => {
-            // SAFETY: -06:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: -06:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(-6 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "america/denver" => {
-            // SAFETY: -07:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: -07:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(-7 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }
         "america/los_angeles" | "america/vancouver" => {
-            // SAFETY: -08:00 fixed offset is a compile-time constant within
-            // chrono's ±23:59:59 offset range.
+            // SAFETY: -08:00 fixed offset is a compile-time constant within chrono's ±23:59:59 offset range.
             let offset = chrono::FixedOffset::east_opt(-8 * 3600).unwrap();
             Utc::now().with_timezone(&offset)
         }

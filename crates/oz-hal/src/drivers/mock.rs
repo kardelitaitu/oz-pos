@@ -160,14 +160,14 @@ impl MockReceiptPrinter {
     /// Program the next `print_receipt` to return `err` (and any
     /// subsequent calls until cleared).
     pub fn set_next_error(&self, err: HalError) {
-        *self.fail_with.lock().expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
-            = Some(err);
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+        *self.fail_with.lock().expect("poisoned") = Some(err);
     }
 
     /// Set the printer status returned by `get_status()`.
     pub fn set_status(&self, status: PrinterStatus) {
-        *self.status.lock().expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
-            = status;
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+        *self.status.lock().expect("poisoned") = status;
     }
 }
 
@@ -260,6 +260,7 @@ impl MockCustomerDisplay {
     /// Current brightness level.
     #[must_use]
     pub fn brightness(&self) -> f32 {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         *self.brightness.lock().expect("poisoned")
     }
 }
@@ -335,8 +336,8 @@ impl MockCashDrawer {
 
     /// Program the next `open` to return `err` (consumed on first call).
     pub fn set_next_error(&self, err: HalError) {
-        *self.fail_with.lock().expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
-            = Some(err);
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+        *self.fail_with.lock().expect("poisoned") = Some(err);
     }
 }
 

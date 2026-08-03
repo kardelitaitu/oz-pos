@@ -244,6 +244,8 @@ impl SyncTransport {
     /// Production paths call [`SyncTransport::try_new`] and degrade the
     /// cycle gracefully instead of panicking.
     pub fn new(server_url: &str, api_key: Option<&str>) -> Self {
+        // SAFETY: documented convenience wrapper over `try_new` — panics only when
+        // the client cannot be built with valid config, an impossible invariant (RUST-05).
         Self::try_new(server_url, api_key).expect(
             "sync transport client construction must succeed with valid config (RUST-05 invariant)",
         )

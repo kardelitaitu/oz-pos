@@ -104,6 +104,7 @@ impl MockPaymentProcessor {
     }
 
     fn check_decline(&self) -> Result<(), PaymentError> {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double.
         let mut decline = self.decline_next.lock().unwrap();
         if *decline {
             *decline = false; // one-shot
@@ -113,6 +114,7 @@ impl MockPaymentProcessor {
     }
 
     fn check_timeout(&self) -> Result<(), PaymentError> {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double.
         let mut timeout = self.simulate_timeout.lock().unwrap();
         if *timeout {
             *timeout = false;

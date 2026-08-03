@@ -197,6 +197,7 @@ const CTE_COMMA_PATTERN: &str = r#"(?i),\s*([A-Za-z_][A-Za-z0-9_]*)\s+AS\s*\("#;
 /// unreachable programming error, not a recoverable runtime condition — the
 /// panic is the deliberate RUST-07 policy for impossible invariants.
 fn sql_regex(pattern: &'static str) -> Regex {
+    // SAFETY: compile-time constant literals; `sql_validation_regexes_compile` compiles every production literal at CI time.
     Regex::new(pattern).expect("static SQL-validation regex must compile")
 }
 

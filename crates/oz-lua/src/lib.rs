@@ -108,6 +108,7 @@ unsafe impl Sync for LuaRuntime {}
 
 impl Default for LuaRuntime {
     fn default() -> Self {
+        // SAFETY: `Default` must be infallible; `new()` only fails on VM-init programming errors (memory-limit / hook install).
         Self::new().expect("Failed to initialize LuaRuntime")
     }
 }

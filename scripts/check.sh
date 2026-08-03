@@ -71,15 +71,25 @@ else
     echo -e "${YELLOW}⚠ skill-drift-guard skipped (bash not found)${NC}"
 fi
 
-# ── Panic-inventory gate (RUST-07) — informational, not fail-closed ────────
+# ── Panic-inventory gate (RUST-07 / ADR #33) — fail-closed ────────────────
 # Audits production unwrap()/expect() calls (excludes tests, benches, and
-# cfg(test)-gated helpers) and reports the total. Panics are only acceptable
-# for documented invariant-setup; the recoverable set must stay at zero.
+# cfg(test)-gated helpers). Panics are only acceptable for documented
+# invariant-setup (// SAFETY: / // INVARIANT: on the same or preceding
+# line); the recoverable set must stay at zero. Fails when any finding
+# lacks a verifiable comment.
 # Review the full inventory with: python3 scripts/scan-unwrap-panic.py
 if command -v python3 &>/dev/null; then
     echo -n "panic-inventory scan... "
-    panic_total=$(python3 scripts/scan-unwrap-panic.py --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])" 2>/dev/null || echo "?")
-    echo -e "${GREEN}PASS (${panic_total} production unwrap/expect calls; see \"python3 scripts/scan-unwrap-panic.py --json\" for the inventory)${NC}"
+    # Capture combined output: on success the scanner prints one summary line;
+    # on failure it prints the FAIL header + findings + fix hint, which we
+    # replay below so the failure is self-explanatory.
+    if panic_out=$(python3 scripts/scan-unwrap-panic.py --fail-on-recoverable 2>&1); then
+        echo -e "${GREEN}PASS (${panic_out})${NC}"
+    else
+        echo -e "${RED}FAIL (recoverable unwrap/expect calls found — add // SAFETY: / // INVARIANT: or convert to Result)${NC}"
+        echo "$panic_out"
+        exit 1
+    fi
 else
     echo -e "${YELLOW}⚠ panic-inventory skipped (python3 not found)${NC}"
 fi
