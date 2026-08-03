@@ -68,6 +68,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    logging:
+      # Log rotation — bound the json-file driver so logs can never grow
+      # unbounded and fill the host disk (max 10 MB per file, 5 files).
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     depends_on:
       redis:
         condition: service_healthy
@@ -102,6 +109,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      # Log rotation — bound the json-file driver (max 10 MB per file, 5 files).
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # ── Redis Cache ────────────────────────────────────────────────────
   #
@@ -120,6 +133,12 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    logging:
+      # Log rotation — bound the json-file driver (max 10 MB per file, 5 files).
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
   # ── PostgreSQL Database (optional — docker-compose.pg.yml) ────────

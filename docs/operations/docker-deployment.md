@@ -183,6 +183,86 @@ is merged.
 
 ---
 
+## Reverse Proxy & TLS (Caddy)
+
+OZ-POS services speak **plain HTTP** — they are designed to sit behind a
+reverse proxy that terminates TLS. This is the supported production
+pattern; the stack itself never terminates TLS:
+
+```
+internet ── 443/TLS ──► reverse proxy ──► pos-cloud-server :3099
+                        (Caddy)     └──► license-server   :8080
+```
+
+Any proxy works (nginx, Caddy, Traefik). Caddy is recommended because it
+obtains and renews Let's Encrypt certificates automatically and has no
+runtime dependencies (its healthcheck-style probes are built in).
+
+### 1. Bind the app ports to localhost only
+
+Once the proxy is in front, the app ports no longer need to be reachable
+from the network. Bind them to the loopback interface so the proxy is the
+only thing exposed to the host firewall:
+
+```yaml
+# docker-compose.override.yml — auto-merged when you run plain `docker
+# compose up` (no -f flags). NOTE: `ports` is a multi-value key, so an
+# override APPENDS to the base list unless tagged `!override` — without
+# the tag you would publish both 0.0.0.0:3099 and 127.0.0.1:3099 and the
+# second bind would fail. `!override` REPLACES the base bindings.
+services:
+  pos-cloud-server:
+    ports: !override
+      - "127.0.0.1:3099:3099"
+  license-server:
+    ports: !override
+      - "127.0.0.1:8080:8080"
+```
+
+### 2. Start Caddy
+
+Copy and edit the example config in
+[`gateway/Caddyfile.example`](../../gateway/Caddyfile.example) — replace
+`example.com` with your real domains:
+
+```bash
+sudo cp gateway/Caddyfile.example /etc/caddy/Caddyfile
+sudo systemctl restart caddy        # distro package
+```
+
+Or run Caddy in Docker on the same Compose network (upstreams then resolve
+by service name, as in the example file):
+
+```bash
+docker run -d --name oz-caddy \
+  --network oz-pos_default \
+  -p 80:80 -p 443:443 \
+  -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data \
+  -v caddy_config:/config \
+  caddy:2
+```
+
+> **Host-run Caddy:** if Caddy runs directly on the host instead of inside
+> the Compose network, change the `reverse_proxy` upstreams to
+> `127.0.0.1:3099` and `127.0.0.1:8080`.
+
+### 3. Point clients at the HTTPS base URL
+
+After TLS is live, configure POS terminals to use the `https://` base URL
+of the proxy (`https://api.example.com`) instead of the raw `http://` host
+ports. TLS is transparent to the backend services — they keep speaking
+plain HTTP to the proxy, so no server-side configuration changes are
+needed.
+
+> **Private / non-public deployments:** if the host has no Let's Encrypt
+> reachable DNS name (e.g. a VPN-only install), use `:443` as the site
+> address with `tls internal` in Caddy and distribute Caddy's CA
+> certificate to clients. The `gateway/Caddyfile.example` file documents
+> this in its header comment.
+
+---
+
 ## Environment Variables Reference
 
 ### Required in Production
@@ -426,6 +506,7 @@ path-looking argument.
 
 4. **TLS termination** — These services speak HTTP. Use a reverse proxy
    (nginx, Caddy, Traefik) in front for TLS termination in production.
+   See [Reverse Proxy & TLS (Caddy)](#reverse-proxy--tls-caddy).
 
 5. **License private key** — Treat `oz-license-private.pem` as a
    critical secret. Store it in a password manager or secrets vault.

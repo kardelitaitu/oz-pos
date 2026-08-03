@@ -36,6 +36,11 @@ services:
     cpus: "2.0"
     ports:
       - "${OZ_API_PORT:-3099}:${OZ_API_PORT:-3099}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   license-server:
     read_only: true
@@ -50,6 +55,11 @@ services:
     cpus: "1.0"
     ports:
       - "8080:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   redis:
     read_only: true
@@ -64,6 +74,11 @@ services:
     cpus: "1.0"
     # Not exposed to the host — internal Compose network only.
     ports: !override []
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   # pos-cloud-db lives in docker-compose.pg.yml (merged with `-f`) and is
   # hardened in that file — this override only touches services defined in

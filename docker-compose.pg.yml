@@ -19,6 +19,11 @@ services:
     environment:
       # Connect the cloud server to PostgreSQL instead of SQLite.
       DATABASE_URL: "postgresql://${PG_USER:-ozpos}:${PG_PASSWORD:?PG_PASSWORD is required (docker-compose.pg.yml)}@pos-cloud-db:5432/${PG_DATABASE:-ozpos}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     depends_on:
       pos-cloud-db:
         condition: service_healthy
@@ -52,6 +57,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
 volumes:

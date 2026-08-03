@@ -1,0 +1,44 @@
+# ── OZ-POS Reverse Proxy + TLS (Caddy) — example configuration ────────
+#
+# The OZ-POS services speak plain HTTP; TLS is terminated by a reverse
+# proxy in front of the stack. Caddy is recommended because it obtains
+# and renews Let's Encrypt certificates automatically for public domains.
+#
+#   https://api.example.com      ──► pos-cloud-server :3099
+#   https://license.example.com  ──► license-server   :8080
+#
+# Usage:
+#   1. Replace `example.com` with your real domains.
+#   2. Run Caddy with this file (see docs/operations/docker-deployment.md
+#      § "Reverse Proxy & TLS (Caddy)" for the full setup).
+#   3. When Caddy runs INSIDE the Compose network, upstreams resolve by
+#      service name (pos-cloud-server:3099). When it runs on the host,
+#      use 127.0.0.1:3099 / 127.0.0.1:8080 instead.
+#
+# Private / non-public deployment (no Let's Encrypt reachable DNS):
+#   replace the site address with `:443` and add `tls internal` to use
+#   Caddy's locally-issued CA. Clients must trust that CA.
+
+# includeSubDomains is aggressive — drop it if this domain hosts unrelated
+# subdomains (e.g. a marketing site) that must stay reachable over HTTP.
+api.example.com {
+	reverse_proxy pos-cloud-server:3099
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+}
+
+license.example.com {
+	reverse_proxy license-server:8080
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+}
