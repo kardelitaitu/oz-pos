@@ -247,6 +247,7 @@ export default function StockShortfallDialog({
     discountPercent,
     discountLabel,
     onComplete,
+    l10n,
   ]);
 
   if (shortfallResult.shortfalls.length === 0) {

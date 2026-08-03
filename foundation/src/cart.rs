@@ -288,7 +288,7 @@ impl Cart {
     /// Returns `None` on overflow or currency mismatch.
     #[must_use]
     pub fn discount_amount(&self) -> Option<Money> {
-        if self.discount_percent.get() == 0 {
+        if self.discount_percent.get() == 0 && self.fixed_discount_minor == 0 {
             return Some(Money::zero(self.currency));
         }
         let mut subtotal = Money::zero(self.currency);

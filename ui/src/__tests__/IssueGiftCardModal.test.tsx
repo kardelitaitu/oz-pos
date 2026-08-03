@@ -101,7 +101,7 @@ describe('IssueGiftCardModal', () => {
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Network error');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to issue gift card');
     });
   });
 

@@ -689,6 +689,7 @@ export default function SalesHistoryScreen() {
           <div className="sales-history-empty">
             <ErrorState
               title={loadError}
+              headingLevel={2}
               onRetry={() => { load(); }}
               retryLabel={requiredLocalized(l10n, 'retry')}
             />

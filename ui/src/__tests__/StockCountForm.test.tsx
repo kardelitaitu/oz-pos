@@ -118,7 +118,7 @@ describe('StockCountForm', () => {
     await userEvent.click(screen.getByText('Start Count'));
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Server error');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to create count');
     });
   });
 

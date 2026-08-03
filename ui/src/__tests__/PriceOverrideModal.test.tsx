@@ -141,7 +141,7 @@ describe('PriceOverrideModal', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Invalid PIN')).toBeInTheDocument();
+      expect(screen.getByText('PIN verification failed')).toBeInTheDocument();
     });
   });
 

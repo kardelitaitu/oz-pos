@@ -176,7 +176,7 @@ describe('PriceOverrideModal — keyboard and edge cases', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Server rejected override')).toBeInTheDocument();
+      expect(screen.getByText('PIN verification failed')).toBeInTheDocument();
       expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(0);
     });
   });
@@ -208,7 +208,7 @@ describe('PriceOverrideModal — keyboard and edge cases', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Override rejected')).toBeInTheDocument();
+      expect(screen.getByText('PIN verification failed')).toBeInTheDocument();
     });
 
     clickBack();

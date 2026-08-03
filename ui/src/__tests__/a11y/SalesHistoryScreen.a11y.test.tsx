@@ -20,8 +20,15 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/api/sales', () => ({
-  getSalesHistory: vi.fn(() => Promise.resolve([])),
+  listSales: vi.fn(() => Promise.resolve([])),
   voidSale: vi.fn(),
+}));
+
+// The screen resolves staff from the workspace session token; the global
+// WorkspaceContext stub provides a truthy token, so the staff API must be
+// mocked too or the real IPC call resolves null and crashes staff.map.
+vi.mock('@/api/staff', () => ({
+  listStaffScoped: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('@/api/branding', () => ({

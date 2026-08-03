@@ -159,7 +159,7 @@ describe('FeatureToggleScreen', () => {
     mockInvoke.mockRejectedValue(new Error('network error'));
     render(<FeatureToggleScreen />);
     await waitFor(() => {
-      expect(screen.getByText('network error')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load features')).toBeInTheDocument();
     });
   });
 
@@ -170,7 +170,7 @@ describe('FeatureToggleScreen', () => {
 
     render(<FeatureToggleScreen />);
     await waitFor(() => {
-      expect(screen.getByText('network error')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load features')).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByRole('button', { name: /retry/i }));

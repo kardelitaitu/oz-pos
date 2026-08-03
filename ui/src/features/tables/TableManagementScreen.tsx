@@ -89,7 +89,7 @@ export default function TableManagementScreen() {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [sessionToken, section]);
+  }, [sessionToken, section, l10n]);
 
   useEffect(() => {
     if (!sessionToken) return;
@@ -151,7 +151,7 @@ export default function TableManagementScreen() {
         setPendingId(null);
       }
     },
-    [sessionToken],
+    [sessionToken, l10n],
   );
 
   const showEmpty = !loading && !error && tables.length === 0;

@@ -249,7 +249,7 @@ describe('TransactionLogScreen', () => {
     await waitFor(() => {
       expect(document.querySelector('.log-error')).toBeInTheDocument();
     });
-    expect(document.querySelector('.log-error')!.textContent).toContain('boom');
+    expect(document.querySelector('.log-error')!.textContent).toContain('inv-log-error-load');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 

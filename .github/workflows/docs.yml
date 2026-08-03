@@ -82,13 +82,18 @@ jobs:
       - uses: mozilla/sccache-action@v0.0.10
 
       - name: Install system dependencies
-        # `platform-startup` is a workspace member that depends on `tauri`,
-        # which on Linux pulls in `gdk-sys` (via gtk3). `gdk-sys` requires
-        # `gdk-3.0.pc`, provided by `libgtk-3-dev`. Without these packages
-        # `cargo doc --workspace` fails the `gdk-sys` build script even
-        # with `--no-deps` (the workspace member itself must still compile
-        # to generate its docs). This mirrors the install step in
-        # .github/workflows/nightly.yml.
+        # Two native build-script requirements must be satisfied even with
+        # `--no-deps`, because the workspace members themselves still
+        # compile to generate their docs:
+        #   • `platform-startup` depends on `tauri`, which on Linux pulls
+        #     in `gdk-sys` (via gtk3); `gdk-sys` requires `gdk-3.0.pc`,
+        #     provided by `libgtk-3-dev`.
+        #   • `oz-hal` depends on `serialport`, which pulls in `libudev`
+        #     (libudev-sys); its build script requires `libudev.pc`,
+        #     provided by `libudev-dev`. Without it the build script
+        #     panics: "Package libudev was not found in the pkg-config
+        #     search path".
+        # This mirrors the install step in .github/workflows/nightly.yml.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -96,7 +101,8 @@ jobs:
             libglib2.0-dev \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            libudev-dev
 
       - name: Generate cargo doc
         run: |

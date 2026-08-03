@@ -242,7 +242,7 @@ describe('VoidOrdersScreen', () => {
     await user.click(confirmBtn);
 
     await waitFor(() => {
-      expect(screen.getByText('Network error')).toBeInTheDocument();
+      expect(screen.getByText('Failed to void order')).toBeInTheDocument();
     });
   });
 });

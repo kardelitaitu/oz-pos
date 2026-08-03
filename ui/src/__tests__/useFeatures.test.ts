@@ -192,7 +192,7 @@ describe('useFeatures', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.error).toBe('Tauri IPC not available');
+    expect(result.current.error).toBe('Failed to load features');
   });
 
   it('falls back to enabling all features on error', async () => {

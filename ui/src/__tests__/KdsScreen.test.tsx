@@ -262,7 +262,8 @@ describe('KdsScreen', () => {
     ]);
     renderScreen();
     await waitFor(() => {
-      // All three columns should be empty
+      // Cancelled tickets are terminal history — the board is truly empty
+      // (never surfaces on the kitchen board, history panel only).
       const empties = screen.getAllByText('No orders yet');
       expect(empties.length).toBe(3);
     });

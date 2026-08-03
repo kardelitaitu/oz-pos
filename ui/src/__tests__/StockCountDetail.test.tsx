@@ -292,7 +292,7 @@ describe('StockCountDetail', () => {
 
     await user.click(screen.getByRole('button', { name: /complete count/i }));
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Network failure');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to complete count');
     });
   });
 

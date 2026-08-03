@@ -794,6 +794,34 @@
   line-height: 1.4;
 }
 
+/* OFF-08: storage unavailable — persistence is broken, show a stronger state */
+.kds-offline-banner--storage {
+  background: var(--color-danger-bg);
+  border-bottom-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+/* OFF-05: dead-letter actions need operator attention */
+.kds-offline-banner--deadletter {
+  background: var(--color-danger-bg);
+  border-bottom-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+/* OFF-08: storage unavailable — queued actions are not durable */
+.kds-offline-banner--storage {
+  background: var(--color-info-bg);
+  border-bottom-color: var(--color-info);
+  color: var(--color-info);
+}
+
+/* OFF-05: dead-letter actions exhausted retries — need operator attention */
+.kds-offline-banner--deadletter {
+  background: var(--color-danger-bg);
+  border-bottom-color: var(--color-danger);
+  color: var(--color-danger-dim);
+}
+
 .kds-offline-retry-btn {
   display: inline-flex;
   align-items: center;
@@ -1084,7 +1112,121 @@
 }
 
 /* ── History panel ──────────────────────────────────────────────── */
-/* (reserved for future history UI) */
+
+.kds-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.kds-history-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--kds-ticket-border);
+  padding-bottom: var(--space-2);
+}
+
+.kds-history-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--kds-muted);
+  background: transparent;
+  border: 1px solid var(--kds-ticket-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--duration-100), color var(--duration-100), border-color var(--duration-100);
+}
+
+.kds-history-tab:hover {
+  color: var(--kds-text);
+  background: var(--kds-ticket-bg);
+  border-color: var(--kds-ticket-hover-border);
+}
+
+.kds-history-tab--active {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+
+.kds-history-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.kds-history-loading {
+  margin: var(--space-2) 0;
+}
+
+.kds-history-empty {
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
+  color: var(--kds-dim);
+  font-size: var(--text-md);
+}
+
+.kds-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.kds-history-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--kds-ticket-bg);
+  border: 1px solid var(--kds-ticket-border);
+  border-radius: var(--radius-xl);
+}
+
+.kds-history-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.kds-history-card-number {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--kds-ticket-number);
+}
+
+.kds-history-card-status {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: var(--space-0_25) var(--space-1_5);
+  border-radius: var(--radius-full);
+  background: var(--kds-column-bg);
+  color: var(--kds-muted);
+}
+
+.kds-history-card-status--served {
+  color: var(--kds-ready);
+}
+
+.kds-history-card-status--cancelled {
+  color: var(--kds-red);
+}
+
+.kds-history-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.kds-history-card-time {
+  font-size: var(--text-sm);
+  color: var(--kds-subtle);
+}
 
 /* ── Workspace wrapper (used by AppShell when KDS is standalone) ──── */
 

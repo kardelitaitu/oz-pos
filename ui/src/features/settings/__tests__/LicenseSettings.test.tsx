@@ -175,7 +175,7 @@ describe('LicenseSettings', () => {
       );
       render(<LicenseSettings />);
       await waitFor(() => {
-        expect(screen.getByText('Network offline')).toBeInTheDocument();
+        expect(screen.getByText('Failed to load license info')).toBeInTheDocument();
       });
     });
 
@@ -213,7 +213,7 @@ describe('LicenseSettings', () => {
 
       render(<LicenseSettings />);
       await waitFor(() => {
-        expect(screen.getByText('fail')).toBeInTheDocument();
+        expect(screen.getByText('Failed to load license info')).toBeInTheDocument();
       });
       expect(getLicenseStatus).toHaveBeenCalledTimes(1);
 
@@ -639,7 +639,7 @@ describe('LicenseSettings', () => {
       await waitFor(() => {
         expect(mockAddToast).toHaveBeenCalledWith({
           type: 'error',
-          message: 'Server unreachable',
+          message: 'Server check failed',
         });
       });
     });

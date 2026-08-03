@@ -50,6 +50,20 @@ export default ts.config(
     },
   },
   {
-    ignores: ['dist', 'node_modules', 'coverage', 'playwright-report'],
+    // ESLint flat config does NOT auto-respect .gitignore — every build
+    // output dir must be listed here explicitly or `eslint .` lints the
+    // minified bundles (see ui/.gitignore for the matching set).
+    ignores: [
+      'dist',
+      'dist-ssr',
+      'dist-tablet',
+      'node_modules',
+      'coverage',
+      'playwright-report',
+      'e2e-results',
+      'test-results',
+      '.vite',
+      '.eslintcache',
+    ],
   },
 );

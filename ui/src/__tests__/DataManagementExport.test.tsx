@@ -365,7 +365,7 @@ describe('DataManagement — Export', () => {
     await waitFor(() => {
       expect(screen.getByText('Set encryption password')).toBeInTheDocument();
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Disk full')).toBeInTheDocument();
+      expect(screen.getByText('data-mgmt-toast-export-fail')).toBeInTheDocument();
     });
   });
 

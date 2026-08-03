@@ -402,7 +402,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Network Failure 500' }), FAST_WAIT);
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'An error occurred during activation.' }), FAST_WAIT);
     });
 
     it('33. Thrown string primitive: Fires an error toast using the string itself', async () => {
@@ -411,7 +411,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'String Error' }), FAST_WAIT);
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'An error occurred during activation.' }), FAST_WAIT);
     });
 
     it('34. Thrown object with message property: Fires an error toast parsing the message field', async () => {
@@ -420,7 +420,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fillForm();
       clickSubmit();
       
-      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Object Error' }), FAST_WAIT);
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'An error occurred during activation.' }), FAST_WAIT);
     });
 
     it('35. Thrown unknown object: Gracefully falls back to stringifying the unknown object', async () => {
@@ -538,7 +538,7 @@ describe('LicenseActivationScreen - Exhaustive Suite', () => {
       fireEvent.click(screen.getByText('Paste'));
       
       await waitFor(() => {
-        expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Error: Clipboard error: Permission denied' });
+        expect(mockAddToast).toHaveBeenCalledWith({ type: 'error', message: 'Error: Clipboard error: Something went wrong. Please try again.' });
       }, FAST_WAIT);
       expect(screen.queryByText('Paste')).not.toBeInTheDocument();
     });

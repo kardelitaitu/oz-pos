@@ -320,7 +320,7 @@ describe("FastPINOverlay", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("alert")).toBeInTheDocument();
-        expect(screen.getByText(/Invalid PIN/)).toBeInTheDocument();
+        expect(screen.getByText('PIN verification failed')).toBeInTheDocument();
       });
 
       // Should not have called swap

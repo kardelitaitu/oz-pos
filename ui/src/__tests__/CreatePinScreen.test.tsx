@@ -166,7 +166,7 @@ describe('CreatePinScreen', () => {
       clickSubmit();
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Network error');
+        expect(screen.getByRole('alert')).toHaveTextContent('An error occurred while creating the owner account.');
       });
     });
 
@@ -178,7 +178,7 @@ describe('CreatePinScreen', () => {
       clickSubmit();
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('string error');
+        expect(screen.getByRole('alert')).toHaveTextContent('An error occurred while creating the owner account.');
       });
     });
   });

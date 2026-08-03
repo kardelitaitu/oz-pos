@@ -273,6 +273,8 @@
 .workspace-card::after,
 /* Reusable utility class — recommended for new components */
 .noise-dither::after,
+/* Emergency fallback card — elevated surface (ERR-02) */
+.error-boundary__card::after,
 /* ⚠ DEPRECATED LEGACY SELECTORS — do not add new ones here.
    Instead, add className="noise-dither" to the TSX element. */
 .retail-shift-modal::after,
@@ -385,6 +387,7 @@
   .staff-login-card::after,
   .workspace-card::after,
   .noise-dither::after,
+  .error-boundary__card::after,
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
   .retail-discount-modal::after,
@@ -482,6 +485,7 @@
   .staff-login-card::after,
   .workspace-card::after,
   .noise-dither::after,
+  .error-boundary__card::after,
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
   .retail-discount-modal::after,

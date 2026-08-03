@@ -130,6 +130,9 @@ export default function KdsScreen() {
         !order.store_id || order.store_id === activeStoreId,
       );
     }
+    // A cancelled ticket is terminal history — it must never surface on
+    // the active kitchen board (it would only show in the history panel).
+    filtered = filtered.filter((order) => order.status !== 'cancelled');
 
     // Track new ticket IDs for arrival animation.
     const currentIds = new Set(filtered.map((o) => o.id));
@@ -453,6 +456,7 @@ export default function KdsScreen() {
               role="tablist"
               aria-label={requiredLocalized(l10n, 'kds-zone-filter-aria')}
               onKeyDown={handleZoneTablistKeyDown}
+              tabIndex={0}
             >
               <button
                 className={`kds-zone-chip${!prefs.kdsZone ? ' kds-zone-chip--active' : ''}`}

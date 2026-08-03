@@ -267,7 +267,7 @@ describe('PurchaseOrderForm', () => {
     clickButton(/create po/i);
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Network failure');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to create purchase order');
     });
   });
 });

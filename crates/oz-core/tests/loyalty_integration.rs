@@ -245,7 +245,10 @@ fn redeem_points_returns_discount_value() {
     let conn = setup();
     seed_customer(&conn, "cust-1", "Alice");
     seed_sale(&conn, "sale-1", 5000);
-    seed_customer_sale(&conn, "sale-2", "cust-1", 0);
+    // The redemption target sale must belong to the customer AND have a
+    // total >= the redemption value (audit/02: redemption cannot exceed the
+    // sale total).
+    seed_customer_sale(&conn, "sale-2", "cust-1", 1000);
 
     store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
     // Bronze: 5000 * 10 / 100 * 1.0 = 500 points earned.
@@ -263,7 +266,9 @@ fn redeem_points_returns_discount_value() {
 fn redeem_insufficient_points_fails() {
     let conn = setup();
     seed_customer(&conn, "cust-1", "Alice");
-    seed_sale(&conn, "sale-1", 0);
+    // The sale must belong to the customer and have a total >= 100 so the
+    // insufficient-balance guard is what rejects the redemption (audit/02).
+    seed_customer_sale(&conn, "sale-1", "cust-1", 1000);
 
     store(&conn)
         .get_or_create_loyalty_account("cust-1")

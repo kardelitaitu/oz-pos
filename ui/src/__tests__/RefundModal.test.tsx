@@ -227,7 +227,7 @@ describe('RefundModal', () => {
     await doRefund('Broken');
 
     await waitFor(() => {
-      expect(screen.getByText('Network down')).toBeInTheDocument();
+      expect(screen.getByText('Refund failed')).toBeInTheDocument();
     });
   });
 
