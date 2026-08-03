@@ -20,10 +20,19 @@
 
 name: iOS Build
 
+# AUDIT-28 RELEASE-02/09: on tag pushes the IPA is uploaded directly into
+# the SAME GitHub Release created by release.yml (via gh release upload,
+# waiting for the release to exist) so mobile artifacts are not stranded in
+# a separate workflow run. The concurrency group prevents duplicate-tag
+# upload races.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+
+concurrency:
+  group: release-ios-${{ github.ref_name }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,7 +44,14 @@ jobs:
   ios-build:
     name: iOS IPA
     runs-on: macos-latest
-    timeout-minutes: 45
+    # AUDIT-28 RELEASE-02: the release.yml workflow creates the GitHub
+    # Release only after all matrix builds finish (build timeouts are 60
+    # min each), so this job must survive the build + a long poll window.
+    timeout-minutes: 150
+    # RELEASE-02: contents:write lets the tag step upload straight to the
+    # release created by release.yml; build steps otherwise need nothing.
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -144,6 +160,47 @@ jobs:
             apps/tablet-client/gen/apple/build/**/*.ipa
             target/release/ipa/**/*.ipa
           retention-days: 90
+
+      # ── RELEASE-02: attach IPA to the release.yml GitHub Release ──
+      # The release may still be building (matrix builds + publish job);
+      # poll for it for up to ~60 minutes, then upload with --clobber so
+      # retries are idempotent. Fails only if the release never appears or
+      # no IPA was produced.
+      - name: Upload IPA to GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          found=0
+          for i in $(seq 1 180); do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "Release $TAG found (attempt $i)"
+              found=1
+              break
+            fi
+            if [ $((i % 10)) -eq 0 ]; then echo "Release $TAG not ready yet (attempt $i/180)..."; fi
+            sleep 20
+          done
+          [ "$found" -eq 1 ] || { echo "::error::release $TAG not found after 60 min — release.yml likely failed"; exit 1; }
+          IPA=$(find apps/tablet-client -name '*.ipa' 2>/dev/null | head -1)
+          if [ -z "$IPA" ]; then
+            echo "::error::no IPA produced — cannot attach to release"
+            exit 1
+          fi
+          echo "Uploading to release $TAG:"
+          find apps/tablet-client -name '*.ipa' -exec echo "  {}" \;
+          # Retry the upload (transient API/network failures) with --clobber.
+          for attempt in 1 2 3; do
+            if gh release upload "$TAG" $(find apps/tablet-client -name '*.ipa') --clobber; then
+              echo "Upload succeeded (attempt $attempt)"
+              break
+            fi
+            echo "Upload failed (attempt $attempt/3), retrying..."
+            sleep 15
+            if [ "$attempt" -eq 3 ]; then echo "::error::upload to release $TAG failed"; exit 1; fi
+          done
 
       # ── sccache stats ──────────────────────────────────────────
       - name: sccache stats
