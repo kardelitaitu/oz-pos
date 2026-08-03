@@ -108,6 +108,19 @@ fi
 # ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────
 step "plugin-guide parity" "python3 scripts/verify-plugin-guide-parity.py" python3 scripts/verify-plugin-guide-parity.py
 
+# ── Release toolchain (AUDIT-28 RELEASE-04/05/06) — node self-tests ────
+# Validates the release scripts on every local gate run, not only in CI:
+# the tag↔version gate, the updater-manifest generator, and the signature
+# verifier each carry a --self-test (mirroring release.yml's
+# release-validate + release-publish self-test steps).
+if command -v node &>/dev/null; then
+    step "release version gate" "node scripts/check-release-version.mjs --self-test" node scripts/check-release-version.mjs --self-test
+    step "updater manifest generator" "node scripts/generate-latest-json.mjs --self-test" node scripts/generate-latest-json.mjs --self-test
+    step "updater signature verifier" "node scripts/verify-updater-signature.mjs --self-test" node scripts/verify-updater-signature.mjs --self-test
+else
+    echo -e "${YELLOW}⚠ release toolchain checks skipped (node not found)${NC}"
+fi
+
 # ── Docker build smoke test (optional: --docker-dry-run) ──────────────────
 if [ "${1:-}" = "--docker-dry-run" ]; then
     if command -v docker &>/dev/null; then
