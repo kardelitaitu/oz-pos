@@ -6,6 +6,11 @@ that operators must know how to rotate safely (audit finding **L-4**).
 
 ## Publishing a release
 
+> **First time shipping?** Follow [`first-release-runbook.md`](./first-release-runbook.md)
+> instead — it covers the secrets that must exist, the `release` environment
+> approval gate, and how to hold the release as a draft for inspection before
+> publishing.
+
 1. **Bump version** — run `scripts/bump-version.ps1 <new-version>` from the
    release branch. This rewrites version strings in `Cargo.toml`,
    `tauri.conf.json`, `ui/package.json`, and inserts the `## [X.Y.Z] — date`
@@ -22,8 +27,26 @@ that operators must know how to rotate safely (audit finding **L-4**).
 3. **Tag and push** — `git tag -a vX.Y.Z && git push origin vX.Y.Z`. The
    tag-triggered `.github/workflows/release.yml` runs the same version gate,
    then builds **real Tauri installers** (`cargo tauri build`): AppImage +
-   deb (Linux), NSIS + MSI (Windows, code-signed when `UPDATER_CERT` is
-   configured), and DMG (macOS).
+   deb (Linux), NSIS + MSI (Windows, code-signed when `UPDATER_CERT` or the
+   SignPath route is configured), and DMG (macOS).
+
+   **Windows code signing — the free routes (see the first-release runbook §6):**
+
+   - `UPDATER_CERT` (paid OV/EV cert, optional) — classic signtool signing.
+   - **SignPath** (free public-trust signing for qualifying OSS projects) —
+     the workflow uploads the Windows installers unsigned, submits them to
+     `signpath/github-action-submit-signing-request@v2` (gated on the
+     `SIGNPATH_API_TOKEN` secret + three `SIGNPATH_*` variables), and
+     uploads the signed result. This is the route that removes SmartScreen
+     "unknown publisher" for **end users** without buying a certificate.
+   - `scripts/dev-code-sign.ps1` — self-signed cert for **dev/CI machines**
+     only (trust is local to the machine that installs the root).
+
+   Shipped Tauri app exes (numeric-24 via `tauri-winres`) and
+   `oz-cloud-server.exe` embed an `asInvoker` manifest (numeric RT_MANIFEST
+   type 24), so no UAC elevation prompt appears on launch or install. The
+   `oz` CLI and the committed `license-server.exe` remain the outstanding
+   manifest gaps (tracked in audit/28).
 4. **Signed updater manifest** — the workflow generates `latest.json` and
    `beta.json` (Ed25519 signatures over the raw installer bytes, using the
    `UPDATER_PRIVATE_KEY` secret) and verifies them against the pubkey in

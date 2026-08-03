@@ -124,6 +124,38 @@ The release design has useful pieces—tag-based publishing, scoped `contents: w
 
 **Status:** REMEDIATED — `release-publish` is the only job with `contents: write` + `id-token: write` + `attestations: write` (mobile upload jobs are narrowly tag-scoped). It attaches `SHA256SUMS.txt` over the exact release assets, runs `actions/attest-build-provenance@v2` on the installers + manifests, verifies updater signatures, and asserts the final asset inventory before publishing. Windows code signing is conditional on the `UPDATER_CERT` secret (never invokes signtool without a cert).
 
+**Follow-up (end-user install experience, 2026-08-03):** the Windows
+code-signing story now has a free route for public distribution:
+
+- **SignPath** (`signpath/github-action-submit-signing-request@v2`) is wired
+  into `release.yml` as a Windows-target-only, no-op-until-configured step
+  (gated on a job-level `SIGNPATH_API_TOKEN` env var — step-level env is not
+  visible in a step's own `if:`, and GitHub disallows secrets in `if:`).
+  When configured, the NSIS/MSI installers are uploaded unsigned, signed by
+  SignPath's publicly-trusted cloud HSM (free for qualifying open-source
+  projects), and the signed artifact is uploaded in place of the unsigned
+  one. This removes the SmartScreen "unknown publisher" warning for **end
+  users** without buying a CA certificate.
+- **`scripts/dev-code-sign.ps1`** — self-signed Authenticode signing for
+  dev/CI machines only (CurrentUser store + Trusted Root, no admin,
+  `-YesTrust` silent trust install via the `X509Store` API, bounded signtool
+  with timestamp fallback, null-safe exit-code handling). Trust is local to
+  the machine that installs the root; it does NOT remove SmartScreen for end
+  users — SignPath (or a paid `UPDATER_CERT`) is required for that.
+- **UAC layer:** every shipped Windows exe (Tauri apps via `tauri-winres`
+  numeric-24 emission, plus `oz-cloud-server.exe` via an embedded
+  `asInvoker` manifest in `apps/cloud-server`) carries a loadable manifest
+  (RT_MANIFEST numeric type 24), so no elevation consent prompt appears on
+  launch or install. The updater-compat harness also embeds `asInvoker` via
+  numeric type 24 — a named-type `RT_MANIFEST` (string) resource is ignored
+  by the Windows loader (mt.exe cannot find it), which previously triggered
+  UAC installer-detection heuristics on every run.
+
+  All of this is documented in `docs/releases/first-release-runbook.md` §6
+  (End-user install experience: zero-popup goal) and
+  `docs/releases/release-process.md` (Windows code signing — the free
+  routes).
+
 ### RELEASE-07 — Version-bump and changelog automation does not match its documented contract
 
 **Evidence:** `scripts/bump-version.ps1:71-95` updates manifests, generated version surfaces, and UI display strings, then refreshes `Cargo.lock` and `ui/package-lock.json`; it does not update `CHANGELOG.md` despite the release runbook saying the script keeps `CHANGELOG.md` in sync. `scripts/release.sh:94-114` writes a separate `docs/releases/CHANGELOG-${NEW_VERSION}.md` from the last 100 commit subjects, but it does not update the top-level `CHANGELOG.md` or validate that the generated notes reflect Keep a Changelog sections. The release checklist also asks for `docs/releases/CHANGELOG-{version}.md` at `docs/releases/checklist.md:9`. Separately, `docs/releases/release-process.md:13-20` says `cargo build --release` produces signed installers, but the live workflow and build script show that Tauri bundling/signing is a separate `cargo tauri build` step.
@@ -203,6 +235,7 @@ All findings are closed. The remediation follows the audit's recommended order:
 5. **RELEASE-08 — DONE (automated subset).** Artifact-existence, signature, and inventory gates before the draft is published; tested rollback procedure documented. Launch/install smoke remains manual.
 6. **RELEASE-07 — DONE.** `CHANGELOG.md` is the canonical changelog; `bump-version.ps1` inserts the version heading, `release.sh` writes the reviewed draft + refreshes the canonical heading, and the version gate enforces parity.
 7. **RELEASE-09 — DONE.** Tag-keyed concurrency on all three workflows, draft-then-publish, `release` environment approval gate (configurable), idempotent uploads.
+8. **Windows install experience (follow-up) — DONE.** Free code-signing routes added: SignPath (public trust for end users) wired into `release.yml` (no-op until `SIGNPATH_API_TOKEN` configured) + `scripts/dev-code-sign.ps1` (self-signed for dev/CI). All shipped Windows exes embed a loadable `asInvoker` manifest (numeric RT_MANIFEST type 24), eliminating UAC consent prompts; the updater-compat harness bug (named-type manifest ignored by the Windows loader) was fixed and verified with mt.exe.
 
 ## Audit status
 

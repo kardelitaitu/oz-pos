@@ -21,6 +21,10 @@
 #   UPDATER_PRIVATE_KEY — Ed25519 seed (32 bytes, hex or base64) matching
 #                         apps/desktop-client/tauri.conf.json pubkey
 #   UPDATER_CERT + UPDATER_CERT_PASSWORD — Windows code-signing (optional)
+#   SIGNPATH_API_TOKEN (secret) + SIGNPATH_ORGANIZATION_ID /
+#   SIGNPATH_PROJECT_SLUG / SIGNPATH_SIGNING_POLICY_SLUG (variables) —
+#   FREE public-trust Windows signing via SignPath (optional; see the
+#   SignPath steps in release-build). No-op until the token is configured.
 
 name: Release
 
@@ -62,6 +66,14 @@ jobs:
     needs: release-validate
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # Job-level so step `if:` conditions can gate on it. Step-level env is
+      # NOT visible in a step's own `if:`, and GitHub disallows referencing
+      # secrets directly in `if:` — job-level env is the documented pattern.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -227,8 +239,57 @@ jobs:
             echo "Found $count .$ext artifact(s) for ${{ matrix.target }}"
           done
 
-      - name: Upload desktop installers
-        if: matrix.tauri
+      # Windows only: FREE end-user code signing via SignPath (signpath.org).
+      # Self-signed certs only remove the "unknown publisher" label on machines
+      # that install the root - end users still get SmartScreen popups. SignPath
+      # signs with a PUBLICLY-trusted certificate (cloud HSM) for FREE for
+      # qualifying open-source projects, so downloaded installers show a real
+      # publisher and no SmartScreen warning. Requires one-time onboarding
+      # (create org + project + signing policy, install the GitHub App or mint
+      # an API token) then set the secrets/vars below. The steps are gated on
+      # SIGNPATH_API_TOKEN and are a NO-OP (upload unsigned) until configured.
+      - name: Upload unsigned installers (SignPath candidate)
+        if: matrix.target == 'desktop-windows'
+        id: upload-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned
+          path: ${{ matrix.upload_path }}
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign installers with SignPath (free public trust)
+        # Gated on the JOB-level env var defined above (step-level env is
+        # invisible in a step's own `if:`; secrets cannot go in `if:`).
+        if: matrix.target == 'desktop-windows' && env.SIGNPATH_API_TOKEN != ''
+        id: signpath
+        # MUST continue on error: a SignPath failure (network, approval
+        # timeout, bad token) must degrade to the unsigned fallback upload
+        # below, never abort the job and strand the Windows installer.
+        continue-on-error: true
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-installers
+
+      - name: Upload signed installers
+        if: matrix.target == 'desktop-windows' && steps.signpath.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: signed-installers/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload desktop installers (unsigned fallback)
+        # Non-Windows targets never run the SignPath step, so outcome is
+        # 'skipped' != 'success' and they always land here.
+        if: matrix.tauri && !(matrix.target == 'desktop-windows' && steps.signpath.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
