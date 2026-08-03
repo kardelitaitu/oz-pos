@@ -4058,6 +4058,7 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
+ "embed-resource 2.5.2",
  "foundation",
  "oz-core",
  "oz-hal",

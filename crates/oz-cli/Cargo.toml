@@ -29,3 +29,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 csv = "1.4.0"
+
+[build-dependencies]
+# Embeds the asInvoker application manifest into the Windows `oz.exe` (see
+# build.rs + app.manifest + app.rc). No-op on non-Windows targets.
+embed-resource = "2"

@@ -1,6 +1,15 @@
 // Package main is the entry point for the OZ-POS license server.
 // It extends PocketBase with custom Go hooks for license activation,
 // renewal, and status checks with RSA-2048 signing.
+//
+// Windows manifest: the committed rsrc_windows_amd64.syso embeds
+// app.manifest (asInvoker, numeric RT_MANIFEST type 24) into the Windows
+// build so UAC never raises an elevation consent prompt. Regenerate it with:
+//
+//	go generate ./...          (runs: go-winres make --arch amd64)
+//
+// The .syso is committed so `go build` on Windows needs no extra tooling.
+//go:generate go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
 package main
 
 import (

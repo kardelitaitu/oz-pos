@@ -238,7 +238,7 @@ or first run the app:
 
 | Layer | Mechanism | How it's fixed | Status |
 |---|---|---|---|
-| UAC elevation prompt | Missing/ignored `requestedExecutionLevel` manifest → Windows installer-detection heuristics | Embed a manifest with `<requestedExecutionLevel level="asInvoker"/>` | ✅ **None** — shipped Tauri apps (numeric-24 via `tauri-winres`) and `oz-cloud-server.exe` carry a loadable `asInvoker` manifest. (`oz` CLI and the committed `license-server.exe` are the remaining gaps.) |
+| UAC elevation prompt | Missing/ignored `requestedExecutionLevel` manifest → Windows installer-detection heuristics | Embed a manifest with `<requestedExecutionLevel level="asInvoker"/>` | ✅ **None** — shipped Tauri apps (numeric-24 via `tauri-winres`), `oz-cloud-server.exe` (embed-resource build.rs), the `oz` CLI (`crates/oz-cli`, same pattern), and the license-server Windows build (Go `.syso` via go-winres) all carry a loadable `asInvoker` manifest. |
 | SmartScreen / "Publisher: Unknown" | Unsigned Authenticode | Sign with a **publicly-trusted** certificate | ⚠️ **None only when** `UPDATER_CERT` **or** SignPath is configured |
 
 ### The free routes (no paid CA)

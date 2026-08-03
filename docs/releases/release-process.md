@@ -43,10 +43,13 @@ that operators must know how to rotate safely (audit finding **L-4**).
      only (trust is local to the machine that installs the root).
 
    Shipped Tauri app exes (numeric-24 via `tauri-winres`) and
-   `oz-cloud-server.exe` embed an `asInvoker` manifest (numeric RT_MANIFEST
-   type 24), so no UAC elevation prompt appears on launch or install. The
-   `oz` CLI and the committed `license-server.exe` remain the outstanding
-   manifest gaps (tracked in audit/28).
+   `oz-cloud-server.exe`, the `oz` CLI (`crates/oz-cli`, embed-resource
+   build.rs), and the license-server Windows build (Go `rsrc_windows_amd64.syso`
+   via go-winres, `//go:generate` in main.go) all embed an `asInvoker`
+   manifest (numeric RT_MANIFEST type 24), so no UAC elevation prompt
+   appears on launch or install. (The `license-server.exe` artifact itself is
+   gitignored; the committed `.syso` guarantees any Windows `go build`
+   carries the manifest.)
 4. **Signed updater manifest** — the workflow generates `latest.json` and
    `beta.json` (Ed25519 signatures over the raw installer bytes, using the
    `UPDATER_PRIVATE_KEY` secret) and verifies them against the pubkey in
