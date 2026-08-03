@@ -1,8 +1,21 @@
 //! Migration definitions for OZ-POS.
 //!
 //! Migrations are `.sql` files under `crates/oz-core/migrations/`. They are
-//! embedded at compile time via [`include_str!`] and run in lexicographic
-//! order on first startup by the generic runner in `platform-core`.
+//! embedded at compile time via [`include_str!`] and run in the
+//! compile-time array order of [`ALL`] on first startup by the generic
+//! runner in `platform-core`. The array order is canonical — not
+//! lexicographic filename order — and is enforced by
+//! [`migration_prefixes_are_monotonic_after_legacy_block`] and the
+//! registry↔filesystem parity test [`migration_registry_matches_filesystem`].
+//!
+//! # Forward-only contract
+//!
+//! Production migrations are **forward-only**. They must be written so that
+//! re-running them is a no-op (the runner tracks applied IDs), and they are
+//! never reversed in the field: destructive/data migrations require a
+//! backup-plus-forward-repair procedure, never ad-hoc down SQL (DB-03).
+//! The generic [`platform_core::database::rollback`] helper exists for
+//! synthetic/test tables only — the core registry carries no down SQL.
 
 use platform_core::database::Migration;
 
@@ -648,6 +661,16 @@ pub const ALL: &[Migration] = &[
         id: "115_audit_review_checkpoints.sql",
         sql: include_str!("../migrations/115_audit_review_checkpoints.sql"),
     },
+    // ── DB-08: unique (key, terminal_id, version) (audit/29) ──────
+    // setting_updated's version allocation is MAX(version)+1 in app code;
+    // two concurrent writers could insert the same version. 116 collapses
+    // legacy duplicates and adds a UNIQUE index so the database rejects
+    // duplicate versions (fail closed) instead of corrupting the delta
+    // ledger.
+    Migration {
+        id: "116_setting_updated_unique_version.sql",
+        sql: include_str!("../migrations/116_setting_updated_unique_version.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -701,7 +724,8 @@ pub fn fresh_db() -> rusqlite::Connection {
                 buf.push_str(
                     "CREATE TABLE IF NOT EXISTS schema_migrations (\n\
                      id         TEXT PRIMARY KEY,\n\
-                     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\
+                     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),\n\
+                     checksum   TEXT\n\
                      );\n",
                 );
                 for mig in ALL {
@@ -814,6 +838,56 @@ mod tests {
         for mig in ALL {
             assert!(ids.insert(mig.id), "duplicate migration id: {}", mig.id);
         }
+    }
+
+    #[test]
+    fn migration_registry_matches_filesystem() {
+        // DB-01: the registry is the source of truth. Every `.sql` file under
+        // crates/oz-core/migrations/ must have EXACTLY ONE registry entry,
+        // and every registry entry must resolve to a real file. A new SQL
+        // file that is never registered (or a registered entry whose file
+        // was deleted) silently changes what fresh installs vs upgrades
+        // produce, so this must fail at test time.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .expect("migrations directory must exist")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".sql"))
+            .collect();
+        files.sort();
+
+        let mut registered: Vec<&str> = ALL.iter().map(|m| m.id).collect();
+        registered.sort_unstable();
+
+        // Every file on disk must be registered exactly once.
+        let mut seen_files: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for file in &files {
+            assert!(
+                ALL.iter().any(|m| m.id == file),
+                "DB-01: migration file {file} exists on disk but has NO registry entry in ALL — add it or the runner will skip it"
+            );
+            assert!(
+                seen_files.insert(file),
+                "DB-01: migration file {file} is registered more than once"
+            );
+        }
+
+        // Every registry entry must have a real file on disk.
+        for id in &registered {
+            assert!(
+                files.iter().any(|f| f == id),
+                "DB-01: registry entry {id} has no matching file in migrations/ — remove the entry or restore the file"
+            );
+        }
+
+        assert_eq!(
+            files.len(),
+            registered.len(),
+            "DB-01: registry/file parity broken — {} files vs {} registered entries",
+            files.len(),
+            registered.len()
+        );
     }
 
     /// Extract the numeric prefix from a migration id (`"046_gift_cards.sql"` → `046`).
@@ -1567,5 +1641,267 @@ mod tests {
             [],
         );
         assert!(second.is_err(), "single-default index must still reject");
+    }
+
+    // ── DB-06: populated upgrade fixture (migration 081 rebuild) ───
+
+    #[test]
+    fn upgrade_081_rebuild_preserves_populated_stock_transfer_lines() {
+        // A pre-081 database with real stock_transfers + stock_transfer_lines.
+        // Migration 081 DROPs and recreates stock_transfers while
+        // stock_transfer_lines FK-references it ON DELETE CASCADE — without
+        // the runner's FK isolation (DB-05) the rebuild would cascade-delete
+        // the lines or fail outright.
+        let idx081 = ALL
+            .iter()
+            .position(|m| m.id == "081_stock_transfers_received_partial.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx081]).unwrap();
+
+        // Seed a role + user (stock_transfers.created_by FK) and one
+        // transfer with a line (stock_transfer_lines.transfer_id FK).
+        conn.execute_batch(
+            "INSERT INTO roles (id, name) VALUES ('role-owner', 'Owner');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active)
+                 VALUES ('user-1', 'owner', 'hash', 'Owner', 'role-owner', 1);
+             INSERT INTO stock_transfers (id, transfer_number, status,
+                 source_location, destination_location, created_by)
+                 VALUES ('tf-1', 'TR-0001', 'in_transit', 'Store A', 'Store B', 'user-1');
+             INSERT INTO stock_transfer_lines (id, transfer_id, sku, product_name, qty)
+                 VALUES ('stl-1', 'tf-1', 'SKU-1', 'Widget', 5);",
+        )
+        .unwrap();
+
+        // Upgrade through 081 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx081..]).unwrap();
+
+        // The line survived the rebuild and still points at the transfer.
+        let lines: i64 = conn
+            .query_row("SELECT COUNT(*) FROM stock_transfer_lines", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(lines, 1, "stock_transfer_lines must survive migration 081");
+        let transfer_id: String = conn
+            .query_row(
+                "SELECT transfer_id FROM stock_transfer_lines WHERE id = 'stl-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(transfer_id, "tf-1");
+
+        // Rebuild backfilled the new FK columns to the canonical location.
+        let src_loc: String = conn
+            .query_row(
+                "SELECT source_location_id FROM stock_transfers WHERE id = 'tf-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(src_loc, "01926b3a-0000-7000-8000-000000000001");
+
+        // The extended status CHECK now accepts received_partial.
+        conn.execute(
+            "INSERT INTO stock_transfers (id, transfer_number, status, created_by)
+             VALUES ('tf-2', 'TR-0002', 'received_partial', 'user-1')",
+            [],
+        )
+        .unwrap();
+
+        // No orphaned FKs anywhere in the upgraded schema.
+        let violations: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            violations, 0,
+            "foreign_key_check must be clean after 081 upgrade"
+        );
+    }
+
+    // ── DB-07: 092 rebuild conserves the multi-location ledger ─────
+
+    #[test]
+    fn upgrade_092_rebuild_conserves_multi_location_ledger() {
+        // A pre-092 database with a two-location stock_movements ledger.
+        // Migration 092 DELETEs stock_summary and rebuilds it from the
+        // ledger grouped by (item_id, location_id), then zeroes inventory
+        // for over-sold products. Assert conservation + zero-out.
+        let idx092 = ALL
+            .iter()
+            .position(|m| m.id == "092_rebuild_stock_summary_group_by_location.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx092]).unwrap();
+
+        // Seed products, a second location, movements across both locations
+        // (positive + negative deltas), stale summary rows, and inventory.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency)
+                 VALUES ('p1', 'SKU-1', 'Product 1', 100, 'USD'),
+                        ('p2', 'SKU-2', 'Product 2', 100, 'USD');
+             INSERT INTO inventory_locations (id, name, type)
+                 VALUES ('loc-wh', 'Warehouse', 'warehouse');
+             INSERT INTO stock_movements (id, item_id, delta, reason, location_id) VALUES
+                 ('m1', 'p1',   7, 'restock', '01926b3a-0000-7000-8000-000000000001'),
+                 ('m2', 'p1',  -2, 'sale',    '01926b3a-0000-7000-8000-000000000001'),
+                 ('m3', 'p1',   3, 'restock', 'loc-wh'),
+                 ('m4', 'p2',  -4, 'sale',    '01926b3a-0000-7000-8000-000000000001');
+             INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES
+                 ('p1', '01926b3a-0000-7000-8000-000000000001', 99, '2026-01-01T00:00:00.000Z'),
+                 ('p1', 'loc-wh', 99, '2026-01-01T00:00:00.000Z'),
+                 ('p2', '01926b3a-0000-7000-8000-000000000001', 99, '2026-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty) VALUES ('p1', 8), ('p2', 5);",
+        )
+        .unwrap();
+
+        // Upgrade through 092 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx092..]).unwrap();
+
+        // stock_summary rebuilt = SUM(delta) per (item_id, location_id).
+        let summary: Vec<(String, String, i64)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT item_id, location_id, qty FROM stock_summary ORDER BY location_id, item_id",
+                )
+                .unwrap();
+            stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+        };
+        assert_eq!(
+            summary,
+            vec![
+                (
+                    "p1".to_string(),
+                    "01926b3a-0000-7000-8000-000000000001".to_string(),
+                    5
+                ),
+                (
+                    "p2".to_string(),
+                    "01926b3a-0000-7000-8000-000000000001".to_string(),
+                    -4
+                ),
+                ("p1".to_string(), "loc-wh".to_string(), 3),
+            ]
+        );
+
+        // Inventory zeroed only for the over-sold product (net <= 0).
+        let p2_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'p2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(p2_qty, 0, "over-sold product must have inventory zeroed");
+        let p1_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'p1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(p1_qty, 8, "in-stock product inventory must be preserved");
+
+        // No orphaned FKs after the rebuild.
+        let violations: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            violations, 0,
+            "foreign_key_check must be clean after 092 upgrade"
+        );
+    }
+
+    // ── DB-08: unique (key, terminal_id, version) on setting_updated ─
+
+    #[test]
+    fn migration_116_creates_unique_setting_version_index() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_setting_updated_unique_version'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx, 1, "migration 116 must create the unique version index");
+
+        // Duplicate (key, terminal_id, version) must be rejected.
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'v1', 't1', 1)",
+            [],
+        )
+        .unwrap();
+        let dup = conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'v2', 't1', 1)",
+            [],
+        );
+        assert!(
+            dup.is_err(),
+            "duplicate (key, terminal_id, version) must fail"
+        );
+    }
+
+    #[test]
+    fn migration_116_dedupes_legacy_duplicate_versions() {
+        // Upgrade path: a pre-116 database that already carries duplicate
+        // (key, terminal_id, version) rows (the MAX(version)+1 race).
+        let idx116 = ALL
+            .iter()
+            .position(|m| m.id == "116_setting_updated_unique_version.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx116]).unwrap();
+
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'old', 't1', 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'new', 't1', 1)",
+            [],
+        )
+        .unwrap();
+
+        // Apply 116: duplicate collapsed, keeping the newest row (max id).
+        platform_core::database::run(&mut conn, &ALL[idx116..]).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM setting_updated WHERE key = 'k' AND terminal_id = 't1' AND version = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "legacy duplicate versions must be collapsed to one row"
+        );
+
+        let value: String = conn
+            .query_row(
+                "SELECT value FROM setting_updated WHERE key = 'k' AND terminal_id = 't1' AND version = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "new", "the most recently written row must survive");
     }
 }

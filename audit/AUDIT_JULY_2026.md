@@ -47,7 +47,7 @@
 26. Docker images — size optimization, layer caching, security scanning — ✅ **FULLY REMEDIATED** (all 15 findings DOCKER-01→DOCKER-15; see [26-docker-images.md](26-docker-images.md) — commits `9f8b7739`, `2d4cecc9`, `5bcafce2`, `464fd37d`, `556fefb7`, `20b7ec3d`, `2dfeb177`, `2ed566dc`, `7d3bf00a`, `c06b6cde`, `70dd2590`)
 27. CI pipeline — gate completeness, flaky test quarantine, cache efficiency
 28. Release process — versioning, changelog automation, artifact signing
-29. Database migrations — idempotency, rollback coverage, index coverage, schema docs
+29. Database migrations — idempotency, rollback coverage, index coverage, schema docs — ✅ **FULLY REMEDIATED** (all 8 findings DB-01→DB-08; see [29-database-migrations.md](29-database-migrations.md) — runner checksums + FK isolation, migration 116 unique version, registry parity, populated upgrade fixtures)
 30. API documentation — api-reference.md drift vs actual Tauri commands
 31. Test coverage — files below 50%, untested edge cases, missing integration tests
 32. Flaky tests — quarantine, retry policy, flake root-cause tracking

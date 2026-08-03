@@ -65,6 +65,16 @@ impl Settings {
     /// pair and inserts a new row. Uses a savepoint so the SELECT MAX +
     /// INSERT are atomic and the call is safe from within an existing
     /// transaction (no nested `BEGIN` error).
+    ///
+    /// # Concurrency contract (DB-08, migration 116)
+    ///
+    /// Migration 116 adds `idx_setting_updated_unique_version`, a UNIQUE
+    /// index on `(key, terminal_id, version)`. Two concurrent writers that
+    /// compute the same `MAX(version) + 1` now fail closed with a
+    /// constraint error instead of silently inserting a duplicate version.
+    /// `set_tracked` treats this as a non-fatal, logged delta failure; a
+    /// direct `write_delta` caller must treat the constraint error as the
+    /// signal to retry the version allocation under a serialized lock.
     pub fn write_delta(
         conn: &Connection,
         key: &str,
