@@ -61,13 +61,14 @@ impl MockBarcodeScanner {
     pub fn push(&self, code: Barcode) {
         self.queue
             .lock()
-            .expect("mock queue poisoned")
+            .expect("mock queue poisoned") // SAFETY: mock driver — lock poison is the intended failure signal; data behind it is irrelevant in a test double
             .push_back(code);
     }
 
     /// Number of queued scans (for assertions).
     #[must_use]
     pub fn queue_len(&self) -> usize {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         self.queue.lock().expect("mock queue poisoned").len()
     }
 }
@@ -89,6 +90,7 @@ impl BarcodeScanner for MockBarcodeScanner {
         self.poll_calls.fetch_add(1, Ordering::SeqCst);
         // Honour timeout by short-circuiting when the queue is empty.
         // A real driver would block on a USB/BT channel.
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         if self.queue.lock().expect("mock queue poisoned").is_empty() {
             if timeout_ms == 0 {
                 return Ok(None);
@@ -96,6 +98,7 @@ impl BarcodeScanner for MockBarcodeScanner {
             let sleep_ms = u64::from(timeout_ms.min(50));
             tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
         }
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         Ok(self.queue.lock().expect("mock queue poisoned").pop_front())
     }
 
@@ -157,12 +160,14 @@ impl MockReceiptPrinter {
     /// Program the next `print_receipt` to return `err` (and any
     /// subsequent calls until cleared).
     pub fn set_next_error(&self, err: HalError) {
-        *self.fail_with.lock().expect("poisoned") = Some(err);
+        *self.fail_with.lock().expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+            = Some(err);
     }
 
     /// Set the printer status returned by `get_status()`.
     pub fn set_status(&self, status: PrinterStatus) {
-        *self.status.lock().expect("poisoned") = status;
+        *self.status.lock().expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+            = status;
     }
 }
 
@@ -175,20 +180,23 @@ impl Default for MockReceiptPrinter {
 #[async_trait]
 impl ReceiptPrinter for MockReceiptPrinter {
     async fn print_receipt(&self, body: &str) -> Result<(), HalError> {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         if let Some(err) = self.fail_with.lock().expect("poisoned").take() {
             return Err(err);
         }
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         self.printed.lock().expect("poisoned").push(body.to_owned());
         Ok(())
     }
 
     async fn print_raw(&self, data: &[u8]) -> Result<(), HalError> {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         if let Some(err) = self.fail_with.lock().expect("poisoned").take() {
             return Err(err);
         }
         self.printed_raw
             .lock()
-            .expect("poisoned")
+            .expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
             .push(data.to_vec());
         Ok(())
     }
@@ -199,6 +207,7 @@ impl ReceiptPrinter for MockReceiptPrinter {
     }
 
     async fn get_status(&self) -> Result<PrinterStatus, HalError> {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         Ok(self.status.lock().expect("poisoned").clone())
     }
 
@@ -244,6 +253,7 @@ impl MockCustomerDisplay {
 
     /// The last content that was shown on the display.
     pub fn last_content(&self) -> Option<DisplayContent> {
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         self.last_content.lock().expect("poisoned").clone()
     }
 
@@ -268,18 +278,21 @@ impl CustomerDisplay for MockCustomerDisplay {
 
     async fn show(&self, content: &DisplayContent) -> Result<(), HalError> {
         self.show_calls.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         *self.last_content.lock().expect("poisoned") = Some(content.clone());
         Ok(())
     }
 
     async fn clear(&self) -> Result<(), HalError> {
         self.clear_calls.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         *self.last_content.lock().expect("poisoned") = None;
         Ok(())
     }
 
     async fn set_brightness(&self, level: f32) -> Result<(), HalError> {
         let clamped = level.clamp(0.0, 1.0);
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         *self.brightness.lock().expect("poisoned") = clamped;
         Ok(())
     }
@@ -322,7 +335,8 @@ impl MockCashDrawer {
 
     /// Program the next `open` to return `err` (consumed on first call).
     pub fn set_next_error(&self, err: HalError) {
-        *self.fail_with.lock().expect("poisoned") = Some(err);
+        *self.fail_with.lock().expect("poisoned") // SAFETY: mock driver — lock poison is the intended failure signal in a test double
+            = Some(err);
     }
 }
 
@@ -336,6 +350,7 @@ impl Default for MockCashDrawer {
 impl CashDrawer for MockCashDrawer {
     async fn open(&self) -> Result<(), HalError> {
         self.open_calls.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: mock driver — lock poison is the intended failure signal in a test double
         if let Some(err) = self.fail_with.lock().expect("poisoned").take() {
             return Err(err);
         }

@@ -717,18 +717,18 @@ pub fn fresh_db() -> rusqlite::Connection {
             })
         }
 
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.execute_batch(cached_sql()).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().unwrap(); // SAFETY: in-memory test DB open cannot fail; failure is a harness programming error (see fresh_db # Panics)
+        conn.execute_batch(cached_sql()).unwrap(); // SAFETY: SQL is compile-time embedded from `ALL`; syntax errors fail the test suite, not a live process
         Mutex::new(conn)
     });
 
-    let mut fresh = rusqlite::Connection::open_in_memory().unwrap();
+    let mut fresh = rusqlite::Connection::open_in_memory().unwrap(); // SAFETY: in-memory test DB open cannot fail (fresh_db # Panics)
     {
-        let snapshot = SNAPSHOT.lock().unwrap();
-        let backup = rusqlite::backup::Backup::new(&snapshot, &mut fresh).unwrap();
+        let snapshot = SNAPSHOT.lock().unwrap(); // SAFETY: lock is only poisoned if the snapshot init closure panicked, which is a test harness bug
+        let backup = rusqlite::backup::Backup::new(&snapshot, &mut fresh).unwrap(); // SAFETY: both connections are valid in-memory SQLite handles; Backup::new cannot fail
         backup
             .run_to_completion(100, std::time::Duration::from_millis(0), None)
-            .unwrap();
+            .unwrap(); // SAFETY: page copy between two in-memory DBs cannot fail at runtime
     } // drop Backup (releases &mut fresh borrow), then drop MutexGuard
     fresh
 }

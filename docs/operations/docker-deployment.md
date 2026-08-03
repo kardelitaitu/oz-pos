@@ -154,6 +154,35 @@ before starting (`depends_on: pos-cloud-db: condition: service_healthy`).
 
 ---
 
+## Production Hardening Profile (DOCKER-07)
+
+For a deployment-grade posture, merge `docker-compose.prod.yml` on top of
+the base stack. It never changes the developer defaults — it is a separate
+profile that only applies when explicitly requested:
+
+```bash
+export OZ_API_SECRET=$(openssl rand -hex 32)
+export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+| Hardening | Base stack | `+ docker-compose.prod.yml` |
+|-----------|-----------|-----------------------------|
+| Root filesystem | writable | **read-only** (+ tmpfs `/tmp`, writable volumes) |
+| Capabilities | default | **drop ALL** except `CHOWN, SETUID, SETGID` |
+| `no-new-privileges` | off | **on** (`security_opt`) |
+| PID namespace | default | **`init: true`** (zombie reaping) |
+| Resource limits | none | **CPU/memory caps** per service |
+| Redis port 6379 on host | published | **internal only** (private network) |
+| PostgreSQL port 5432 on host | published | **internal only** (private network) |
+| Public API ports (3099/8080) | published | published (unchanged) |
+
+`pos-cloud-db` in `docker-compose.pg.yml` carries the same hardening
+directly, so the PostgreSQL path is secure whether or not the prod profile
+is merged.
+
+---
+
 ## Environment Variables Reference
 
 ### Required in Production
