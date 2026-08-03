@@ -2299,6 +2299,37 @@ mod tests {
             .collect()
     }
 
+    /// Seed the shared cross-store audit fixture: two store profiles
+    /// (migration 025 already seeds 'default') plus rows owned by
+    /// store-a, store-b, and the NULL global sentinel on every ADR #4
+    /// scoped table. Used by both the SELECT and UPDATE audit tests so
+    /// the fixtures cannot drift apart. `payment_method`/`course` are
+    /// seeded for the UPDATE test's mutable-column sweep but are inert
+    /// for the SELECT test.
+    fn seed_cross_store_fixture(conn: &rusqlite::Connection) {
+        conn.execute_batch(
+            "INSERT INTO store_profiles (id, name)
+                 VALUES ('store-a', 'Store A'), ('store-b', 'Store B');
+             INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail', 'store-a'),
+                        ('p-b', 'SKU-B', 'B', 100, 'USD', 'retail', 'store-b'),
+                        ('p-null', 'SKU-N', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO customers (id, name, store_id)
+                 VALUES ('c-a', 'Cust A', 'store-a'),
+                        ('c-b', 'Cust B', 'store-b'),
+                        ('c-null', 'Cust Global', NULL);
+             INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, store_id)
+                 VALUES ('s-a', 100, 'USD', 1, 'completed', 'cash', 'store-a'),
+                        ('s-b', 100, 'USD', 1, 'completed', 'cash', 'store-b'),
+                        ('s-null', 100, 'USD', 1, 'completed', 'cash', NULL);
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, course, store_id)
+                 VALUES ('sl-a', 's-a', 'SKU-A', 1, 100, 100, 'USD', 1, 'starter', 'store-a'),
+                        ('sl-b', 's-b', 'SKU-B', 1, 100, 100, 'USD', 1, 'starter', 'store-b'),
+                        ('sl-null', 's-null', 'SKU-N', 1, 100, 100, 'USD', 1, 'starter', NULL);",
+        )
+        .unwrap();
+    }
+
     #[test]
     fn store_scoped_query_never_returns_null_or_other_store_rows() {
         // DB-04 query-level audit. Migration 117's FK guarantees a non-NULL
@@ -2311,35 +2342,9 @@ mod tests {
         let mut conn = fresh();
         run(&mut conn).unwrap();
 
-        // Migration 025 seeds 'default'. Add two more stores so there is a
-        // genuine "other store" to leak against.
-        conn.execute_batch(
-            "INSERT INTO store_profiles (id, name)
-                 VALUES ('store-a', 'Store A'), ('store-b', 'Store B');",
-        )
-        .unwrap();
-
-        // Seed every ADR #4 scoped table with rows owned by store-a, rows
-        // owned by store-b, and NULL-sentinel (global shared) rows.
-        conn.execute_batch(
-            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
-                 VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail', 'store-a'),
-                        ('p-b', 'SKU-B', 'B', 100, 'USD', 'retail', 'store-b'),
-                        ('p-null', 'SKU-N', 'Global', 100, 'USD', 'retail', NULL);
-             INSERT INTO customers (id, name, store_id)
-                 VALUES ('c-a', 'Cust A', 'store-a'),
-                        ('c-b', 'Cust B', 'store-b'),
-                        ('c-null', 'Cust Global', NULL);
-             INSERT INTO sales (id, total_minor, currency, line_count, status, store_id)
-                 VALUES ('s-a', 100, 'USD', 1, 'completed', 'store-a'),
-                        ('s-b', 100, 'USD', 1, 'completed', 'store-b'),
-                        ('s-null', 100, 'USD', 1, 'completed', NULL);
-             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, store_id)
-                 VALUES ('sl-a', 's-a', 'SKU-A', 1, 100, 100, 'USD', 1, 'store-a'),
-                        ('sl-b', 's-b', 'SKU-B', 1, 100, 100, 'USD', 1, 'store-b'),
-                        ('sl-null', 's-null', 'SKU-N', 1, 100, 100, 'USD', 1, NULL);",
-        )
-        .unwrap();
+        // Seed the shared cross-store fixture (store-a / store-b / NULL
+        // rows on all four ADR #4 scoped tables).
+        seed_cross_store_fixture(&conn);
 
         // The audit: a store-a scoped query returns EXACTLY the store-a
         // row on every table — no NULL sentinel, no store-b leakage.
@@ -2467,6 +2472,128 @@ mod tests {
             })
             .unwrap();
         assert_eq!(fk_check, 0, "no FK violations after SET NULL reversion");
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn store_scoped_update_never_mutates_other_store_or_null_rows() {
+        // DB-04 UPDATE-path audit. Migration 117's FK guards writes as
+        // well as reads: a store-scoped UPDATE (`WHERE store_id = 'x'`)
+        // must touch exactly store x's rows, and SQLite's three-valued
+        // logic (`NULL = 'x'` is never TRUE) structurally excludes the
+        // NULL-sentinel rows — so unscoped/global data is write-protected
+        // from scoped writers exactly as it is from scoped readers.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Seed the shared cross-store fixture (store-a / store-b / NULL
+        // rows on all four ADR #4 scoped tables).
+        seed_cross_store_fixture(&conn);
+
+        // Sweep all four tables: a store-a scoped UPDATE must affect
+        // exactly one row (the store-a row) and leave the store-b row and
+        // the NULL-sentinel row byte-identical.
+        for (table, mutcol, a_id, b_id, null_id, a_old, b_old, null_old, new_val) in [
+            (
+                "products",
+                "name",
+                "p-a",
+                "p-b",
+                "p-null",
+                "A",
+                "B",
+                "Global",
+                "Renamed-A",
+            ),
+            (
+                "customers",
+                "name",
+                "c-a",
+                "c-b",
+                "c-null",
+                "Cust A",
+                "Cust B",
+                "Cust Global",
+                "Renamed-A",
+            ),
+            (
+                "sales",
+                "payment_method",
+                "s-a",
+                "s-b",
+                "s-null",
+                "cash",
+                "cash",
+                "cash",
+                "card",
+            ),
+            (
+                "sale_lines",
+                "course",
+                "sl-a",
+                "sl-b",
+                "sl-null",
+                "starter",
+                "starter",
+                "starter",
+                "main",
+            ),
+        ] {
+            let affected = conn
+                .execute(
+                    &format!("UPDATE {table} SET {mutcol} = ?1 WHERE store_id = 'store-a'"),
+                    rusqlite::params![new_val],
+                )
+                .unwrap();
+            assert_eq!(
+                affected, 1,
+                "{table} store-a scoped UPDATE must affect exactly the store-a row"
+            );
+            let cell = |id: &str| -> String {
+                conn.query_row(
+                    &format!("SELECT {mutcol} FROM {table} WHERE id = ?1"),
+                    rusqlite::params![id],
+                    |r| r.get(0),
+                )
+                .unwrap()
+            };
+            assert_eq!(cell(a_id), new_val, "{table} store-a row must be updated");
+            assert_eq!(
+                cell(b_id),
+                b_old,
+                "{table} store-b row must be untouched by a store-a scoped UPDATE"
+            );
+            assert_eq!(
+                cell(null_id),
+                null_old,
+                "{table} NULL-sentinel row must be untouched by a store-a scoped UPDATE"
+            );
+        }
+
+        // The FK guards UPDATE writes too: reassigning a row to a store
+        // that does not exist is rejected, while reverting to NULL (the
+        // documented global sentinel) stays legal.
+        let ghost = conn.execute(
+            "UPDATE products SET store_id = 'ghost-store' WHERE id = 'p-a'",
+            [],
+        );
+        assert!(
+            ghost.is_err(),
+            "reassigning a row to a missing store_profile must fail the 117 FK"
+        );
+        conn.execute("UPDATE products SET store_id = NULL WHERE id = 'p-a'", [])
+            .unwrap();
+        let sid: Option<String> = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            sid.is_none(),
+            "reverting a row to the NULL sentinel is legal"
+        );
 
         // Re-running migrations stays idempotent (module convention).
         run(&mut conn).unwrap();
