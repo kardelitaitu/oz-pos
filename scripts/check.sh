@@ -133,6 +133,13 @@ fi
 # ── Plugin guide / API parity (PLG-10 tail; Rust-side, always runs) ─────
 step "plugin-guide parity" "python3 scripts/verify-plugin-guide-parity.py" python3 scripts/verify-plugin-guide-parity.py
 
+# ── Windows config drift (AUDIT-28) — NSIS installMode + asInvoker ─────
+# Static gate that runs on every local pre-CI run: tauri.conf.json must
+# keep NSIS installMode at currentUser (perMachine reintroduces the UAC
+# prompt) and every source app.manifest must carry asInvoker. The PE scan
+# of actually-built Windows exes is enforced in release.yml's Windows job.
+step "windows config drift" "python3 scripts/verify-windows-config.py" python3 scripts/verify-windows-config.py
+
 # ── Release toolchain (AUDIT-28 RELEASE-04/05/06) — node self-tests ────
 # Validates the release scripts on every local gate run, not only in CI:
 # the tag↔version gate, the updater-manifest generator, and the signature

@@ -239,6 +239,17 @@ jobs:
             echo "Found $count .$ext artifact(s) for ${{ matrix.target }}"
           done
 
+      # AUDIT-28: fail the release if the built Windows app exe lost its
+      # loadable asInvoker manifest (numeric RT_MANIFEST type 24). A
+      # named-type or missing manifest reintroduces the UAC installer-
+      # detection prompt for end users even though the NSIS config is
+      # currentUser. Runs BEFORE any upload so a bad binary never ships.
+      # NB: `python` (not python3) — on windows runners python3 has no alias.
+      - name: Verify Windows exe embeds asInvoker manifest
+        if: matrix.target == 'desktop-windows'
+        shell: bash
+        run: python scripts/verify-windows-config.py --exe apps/desktop-client/target/release/oz-pos-app.exe
+
       # Windows only: FREE end-user code signing via SignPath (signpath.org).
       # Self-signed certs only remove the "unknown publisher" label on machines
       # that install the root - end users still get SmartScreen popups. SignPath
