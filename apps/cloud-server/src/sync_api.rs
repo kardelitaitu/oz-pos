@@ -271,10 +271,14 @@ async fn pull_handler(
     };
 
     // P-3: Detect if there are more pages (501st row exists).
+    // RUST-07: the pagination cursor is derived from the last *kept* row.
+    // `get` (not `last().unwrap()`) so an empty slice yields `None` instead
+    // of panicking.
     let next_cursor = if items.len() > 500 {
         items.truncate(500);
-        let last = items.last().unwrap();
-        Some(format!("{}|{}", last.created_at, last.id))
+        items
+            .last()
+            .map(|last| format!("{}|{}", last.created_at, last.id))
     } else {
         None
     };

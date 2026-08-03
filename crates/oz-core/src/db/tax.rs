@@ -702,7 +702,8 @@ mod tests {
             .unwrap();
         s.set_product_tax_rates("A", &[r1.id.clone(), r2.id.clone()])
             .unwrap();
-        s.set_product_tax_rates("B", &[r1.id.clone()]).unwrap();
+        s.set_product_tax_rates("B", std::slice::from_ref(&r1.id))
+            .unwrap();
 
         let map = s
             .get_product_tax_rates_batch(&["A".into(), "B".into(), "NOPE".into()])

@@ -581,7 +581,7 @@ mod tests {
         let mut t = dummy_table("t1");
         t.width = 0.0;
         let err = s.create_table(&t).unwrap_err();
-        assert!(matches!(err, CoreError::Validation { field, .. }));
+        assert!(matches!(err, CoreError::Validation { .. }));
     }
 
     #[test]
@@ -596,7 +596,7 @@ mod tests {
         t.width = 10.0;
         t.height = 0.0;
         let err = s.update_table(&t).unwrap_err();
-        assert!(matches!(err, CoreError::Validation { field, .. }));
+        assert!(matches!(err, CoreError::Validation { .. }));
     }
 
     #[test]

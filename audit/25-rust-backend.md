@@ -140,7 +140,11 @@ The offline system currently has two paths: the general SQLite-backed queue expo
 
 **Recommendation:** Audit production-only `unwrap`/`expect` calls separately from test code. Return `Result` from startup and command boundaries, attach context with `thiserror`/`anyhow` at the application edge, and reserve panics for documented impossible invariants. Add a CI inventory or lint policy with reviewed exceptions rather than a blanket textual ban.
 
-**Status:** ✅ **REMEDIATED (startup boundary)** — commit `d82b133d`: `oz_api::serve()` returns `Result<(), Box<dyn Error + Send + Sync>>` instead of panicking on DB open, pragma, migration, port-bind, or server-loop failures, so startup errors surface as structured errors. Remaining `unwrap`/`expect` calls are confined to `#[cfg(test)]` helpers and documented invariant setup.
+**Status:** ✅ **REMEDIATED (startup boundary + workspace panic inventory)** — commit `d82b133d` made `oz_api::serve()` return `Result<(), Box<dyn Error + Send + Sync>>` instead of panicking on DB open, pragma, migration, port-bind, or server-loop failures. A follow-up commit extended the recoverable→`Result` conversion beyond `oz-api::serve` and added a CI-gateable inventory (`scripts/scan-unwrap-panic.py`):
+
+- **Recoverable runtime/startup panics converted to `Result`/fallback** (16 sites): `oz-cli` import-path `from_utf8` currency decoding (`currency_to_utf8` → `anyhow` error); `oz-core` gift-card post-commit lookups (`ok_or_else(NotFound)` instead of `?.unwrap()`); `oz-cloud-server` `main`/`serve` now return `Result<(), Box<dyn Error + Send + Sync>>` (logging init, DB init, in-memory SQLite, port bind, server loop); `shutdown_signal()` logs and falls back to `pending()` when signal handlers fail to install; sync pagination cursor uses `last().map(...)` instead of `last().unwrap()`; `platform-startup` rate-sync DB locks recover via `unwrap_or_else(|e| e.into_inner())` instead of panicking on poison.
+- **Documented invariant panics retained** (explicit `// SAFETY:` on already-validated `Percentage::new` unwraps in desktop/tablet `pos.rs`; static regex compilation in `oz-plugin/db.rs`; static Prometheus metric registration in `oz-reporting`/`oz-cloud-server` `metrics.rs`; mock-driver poisoned-lock expects; `oz-logging::init()` documented-panic wrappers; `LuaRuntime::default()`; `SyncTransport::new()` convenience wrapper; `fresh_db()` in-memory ops).
+- **Inventory tool:** `scripts/scan-unwrap-panic.py` scans `crates/` `apps/` `platform/` `modules/` for non-test `unwrap`/`expect` (skips `#[cfg(test)]`, `mod tests`, `#[test]`, benches, cfg-gated `test_helpers`), tags documented invariants, and is wired into `scripts/check.sh` as an informational gate. Current production count: 107 (down from 123).
 
 ### RUST-08 — Database transaction discipline is strong but `unchecked_transaction()` obscures composability boundaries
 
@@ -236,6 +240,7 @@ The clippy failure is outside this audit report's Rust files and the staged loya
 | RUST-05 transport fallback | fail-closed `try_new` + auth-wire tests | `90a74c8d` |
 | RUST-06 unsafe policy | crate-level `deny` in oz-hal/oz-lua | `d82b133d` |
 | RUST-07 panic startup | `oz_api::serve()` returns `Result` | `d82b133d` |
+| RUST-07 residual | 16 recoverable panics → `Result`/fallback across cli/core/cloud-server/startup + panic-inventory gate | `(see commit below)` |
 | RUST-08 tx contract | repository transaction contract documented | `d82b133d` |
 | RUST-09 migration registry | unique/monotonic prefix gates + parity test | `a16c3baf` |
 | RUST-10 cross-layer tests | snapshot/backup/migration/transport regression suites | chain above |

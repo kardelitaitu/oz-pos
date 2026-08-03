@@ -135,6 +135,7 @@ pub async fn set_cart_discount_scoped(
             args.percent
         )));
     }
+    // SAFETY: args.percent is validated 0..=100 above, so the unwrap is safe.
     let percent = Percentage::new(args.percent as u8).unwrap();
 
     let session = state.resolve_session(&session_token)?;
@@ -746,6 +747,7 @@ pub async fn complete_sale(
                         pd.percent
                     )));
                 }
+                // SAFETY: pd.percent is validated 0..=100 above.
                 let pct = Percentage::new(pd.percent as u8).unwrap();
                 cart.set_discount(pct, Some(pd.target));
             }
@@ -1157,6 +1159,7 @@ pub async fn complete_sale_scoped(
                         pd.percent
                     )));
                 }
+                // SAFETY: pd.percent is validated 0..=100 above.
                 let pct = Percentage::new(pd.percent as u8).unwrap();
                 cart.set_discount(pct, Some(pd.target));
             }

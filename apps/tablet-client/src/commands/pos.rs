@@ -96,6 +96,7 @@ pub async fn set_cart_discount_scoped(
             args.percent
         )));
     }
+    // SAFETY: args.percent is validated 0..=100 above, so the unwrap is safe.
     let percent = Percentage::new(args.percent as u8).unwrap();
 
     let db = state.db.lock().await;

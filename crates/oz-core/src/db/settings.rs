@@ -364,8 +364,12 @@ mod tests {
         .unwrap();
         let s = store(&conn);
 
-        let tmp = std::env::temp_dir().join("oz-test-backup.db");
-        let _ = std::fs::remove_file(&tmp);
+        // Unique destination per run: the previous hardcoded
+        // `oz-test-backup.db` collided across parallel test processes on
+        // Windows — a stale or still-open file made the backup fail with
+        // os error 32 ("file being used by another process"). A fresh UUID
+        // name means a given run can never hit another run's leftover file.
+        let tmp = std::env::temp_dir().join(format!("oz-test-backup-{}.db", uuid::Uuid::now_v7()));
 
         s.backup(tmp.to_str().unwrap()).unwrap();
 
@@ -374,6 +378,10 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM categories", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+        // Close the backup connection before removing the file — on Windows
+        // an open handle prevents deletion (os error 32) and would leave a
+        // locked stale file behind for the next run.
+        drop(backup_conn);
 
         let _ = std::fs::remove_file(&tmp);
     }

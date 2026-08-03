@@ -80,7 +80,15 @@ impl Store<'_> {
 
         tx.commit()?;
 
-        let card = self.get_gift_card_by_raw_id(&id)?.unwrap();
+        // RUST-07: recoverable — a lookup after commit should succeed, but a
+        // concurrent deletion could race ahead of this read. Surface NotFound
+        // instead of panicking on the `Option`.
+        let card = self
+            .get_gift_card_by_raw_id(&id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "gift_card",
+                id: id.clone(),
+            })?;
         Ok(GiftCardWithTransactions {
             transactions: vec![GiftCardTransaction {
                 id: txn_id,
@@ -418,7 +426,12 @@ impl Store<'_> {
 
         tx.commit()?;
 
-        let updated_card = self.get_gift_card_by_raw_id(&card.id)?.unwrap();
+        let updated_card =
+            self.get_gift_card_by_raw_id(&card.id)?
+                .ok_or_else(|| CoreError::NotFound {
+                    entity: "gift_card",
+                    id: card.id.clone(),
+                })?;
 
         Ok(RedeemGiftCardResult {
             card: updated_card,
@@ -500,7 +513,12 @@ impl Store<'_> {
 
         tx.commit()?;
 
-        let updated_card = self.get_gift_card_by_raw_id(&card.id)?.unwrap();
+        let updated_card =
+            self.get_gift_card_by_raw_id(&card.id)?
+                .ok_or_else(|| CoreError::NotFound {
+                    entity: "gift_card",
+                    id: card.id.clone(),
+                })?;
         let transactions = self.get_transactions_for_card(&card.id, 5)?;
 
         Ok(GiftCardWithTransactions {

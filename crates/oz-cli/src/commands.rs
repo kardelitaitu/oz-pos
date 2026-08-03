@@ -1005,6 +1005,20 @@ pub(crate) fn run_export_ozpkg(
 // ── Import .ozpkg ─────────────────────────────────────────────────────
 
 /// Import data from an encrypted .ozpkg file.
+/// Decode a product's raw currency bytes as UTF-8, returning a recoverable
+/// error instead of panicking when an imported `.ozpkg` carries non-UTF-8
+/// currency bytes (RUST-07: recoverable user-supplied input).
+fn currency_to_utf8(product: &oz_core::Product) -> Result<String> {
+    std::str::from_utf8(&product.price.currency.0)
+        .map(|s| s.to_owned())
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "product {} has invalid (non-UTF-8) currency: {e}",
+                product.sku
+            )
+        })
+}
+
 pub(crate) fn run_import_ozpkg(
     conn: &Connection,
     input: &str,
@@ -1095,16 +1109,14 @@ pub(crate) fn run_import_ozpkg(
                 )
                 .is_ok();
             if exists {
-                let cur_str =
-                    std::str::from_utf8(&product.price.currency.0).expect("valid UTF-8 currency");
+                let cur_str = currency_to_utf8(&product)?;
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "UPDATE products SET name = ?1, price_minor = ?2, currency = ?3, category_id = ?4, barcode = ?5, updated_at = ?6 WHERE sku = ?7",
                     rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode.as_ref().map(|b| b.as_str()), now, product.sku.to_string()],
                 )?;
             } else {
-                let cur_str =
-                    std::str::from_utf8(&product.price.currency.0).expect("valid UTF-8 currency");
+                let cur_str = currency_to_utf8(&product)?;
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)

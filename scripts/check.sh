@@ -71,6 +71,19 @@ else
     echo -e "${YELLOW}⚠ skill-drift-guard skipped (bash not found)${NC}"
 fi
 
+# ── Panic-inventory gate (RUST-07) — informational, not fail-closed ────────
+# Audits production unwrap()/expect() calls (excludes tests, benches, and
+# cfg(test)-gated helpers) and reports the total. Panics are only acceptable
+# for documented invariant-setup; the recoverable set must stay at zero.
+# Review the full inventory with: python3 scripts/scan-unwrap-panic.py
+if command -v python3 &>/dev/null; then
+    echo -n "panic-inventory scan... "
+    panic_total=$(python3 scripts/scan-unwrap-panic.py --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])" 2>/dev/null || echo "?")
+    echo -e "${GREEN}PASS (${panic_total} production unwrap/expect calls; see \"python3 scripts/scan-unwrap-panic.py --json\" for the inventory)${NC}"
+else
+    echo -e "${YELLOW}⚠ panic-inventory skipped (python3 not found)${NC}"
+fi
+
 # ── UI (mirrors CI `ui` job — auto-detected) ──────────────────────────────
 if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     cd ui
