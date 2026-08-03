@@ -11,7 +11,8 @@
 
 # ── Stage 1: Build ────────────────────────────────────────────────────
 # Uses golang:1.25-alpine to satisfy fatih/color@v1.19.0 (requires go >= 1.25)
-FROM golang:1.25-alpine AS builder
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-03).
+FROM golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS builder
 
 RUN apk add --no-cache gcc musl-dev
 
@@ -31,7 +32,9 @@ RUN CGO_ENABLED=1 go build -o /pb/pocketbase -ldflags="-s -w" .
 RUN CGO_ENABLED=0 go build -o /pb/healthcheck -ldflags="-s -w" healthcheck.go
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
-FROM alpine:3.20
+# alpine:3.22 tag — multi-arch index digest (refreshed 2026-08-03). Bumped
+# from 3.20 (EOL per Trivy, no security updates) to a supported release.
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
 # DOCKER-01: non-root runtime. su-exec is Alpine's gosu equivalent and is
 # used by the entrypoint to drop from root (which only fixes volume
