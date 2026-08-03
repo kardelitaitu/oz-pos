@@ -126,8 +126,9 @@ jobs:
               done
               ;;
             apps)
+              # AUDIT-27 CI-01: failures must propagate — no `|| true` swallow.
               for pkg in oz-cloud-server oz-pos-app oz-pos-tablet; do
-                cargo nextest run -p "$pkg" --profile ci 2>/dev/null || true
+                cargo nextest run -p "$pkg" --profile ci || exit 1
               done
               ;;
           esac
@@ -208,6 +209,41 @@ jobs:
       - name: sccache stats
         run: sccache --show-stats
 
+  # ── Rust: App crate tests (dedicated — AUDIT-27 CI-01) ───────────
+  #
+  # The two Tauri app crates are excluded from rust-test-full, nightly,
+  # and release test jobs because their desktop/mobile build targets need
+  # the webkit/gtk system libraries. This dedicated job runs their unit
+  # tests on ubuntu (where the system deps ARE installed) so the app
+  # command surfaces are never silently untested. The old `2>/dev/null
+  # || true` in rust-test-fast's apps shard was removed: failures now
+  # fail fast in BOTH the PR fast track and this push/job run.
+  rust-test-apps:
+    name: Rust Test Apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run app crate tests (nextest, default features)
+        run: cargo nextest run -p oz-cloud-server -p oz-pos-app -p oz-pos-tablet --profile ci
+      - name: sccache stats
+        run: sccache --show-stats
+
   # ── UI: Lint ──────────────────────────────────────────────────────
   ui-lint:
     name: UI Lint
@@ -256,10 +292,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ui/node_modules/.cache/vitest
-          key: vitest-cache-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+          # AUDIT-27 CI-05: shard-scoped save key — concurrent shard
+          # writes no longer contend on one mutable cache entry.
+          key: vitest-cache-${{ runner.os }}-${{ matrix.shard }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: vitest-cache-${{ runner.os }}-
       - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        # AUDIT-27 CI-04: explicit pipefail shell — a failing test before
+        # `tee` must fail the step, not be masked by a successful tee.
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
 
       # Hard-fail on any act() or flushSync warnings. Components
@@ -291,12 +332,18 @@ jobs:
       - name: A11y regression tests
         if: always() && matrix.shard == 1
         continue-on-error: true
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: (cd ui && npm run test:a11y 2>&1) | tee ui/a11y-output.log
 
   # ── Lighthouse a11y audit ─────────────────────────────────────────
+  #
+  # AUDIT-27 CI-08: documented as advisory (docs/ci-pipeline.md and
+  # scripts/gates.json) — a sub-90 score must not block merges. The
+  # continue-on-error is enforced by scripts/verify-ci-docs-drift.py.
   lighthouse:
     name: Lighthouse a11y audit
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 10
     needs: [ui-typecheck, ui-lint]
     steps:
@@ -428,11 +475,15 @@ jobs:
           path: lcov.info
           retention-days: 7
 
-  # ── Dependency audit (non-blocking, informational) ───────────────
+  # ── Dependency audit (required on main push, advisory on PR) ─────
+  # AUDIT-27 CI-03/CI-10: high/critical dependency findings block main
+  # pushes (release gate) and are advisory on PRs until a reviewed
+  # baseline is published. The `|| true` swallows were removed so
+  # findings are always recorded in the job log.
   audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -441,12 +492,73 @@ jobs:
         with:
           tool: cargo-audit
       - name: Run cargo audit
-        run: cargo audit || true
+        run: cargo audit
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
       - name: Run npm audit
-        run: cd ui && npm audit --audit-level=high || true
+        run: cd ui && npm audit --audit-level=high
+
+  # ── PR security baseline (AUDIT-27 CI-10) ────────────────────────
+  #
+  # Lightweight, fail-closed dependency/container audit for PRs that
+  # change manifests. Runs only when Cargo.toml/lock, package files, or
+  # container definitions changed — so PRs touching only library code
+  # don't pay the audit cost, while security-relevant changes are gated
+  # before merge (the weekly security.yml stays for the full tree).
+  security-pr:
+    name: Security (PR baseline)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for changed dependency/container manifests
+        id: deps
+        run: |
+          # AUDIT-27 CI-10: fail CLOSED — if the base ref cannot be
+          # resolved or the diff fails, treat the PR as having changed
+          # manifests and run the audits. Never silently skip.
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::No base SHA available — running baseline audits (fail-closed)"
+            exit 0
+          fi
+          # Ensure the base commit exists locally (checkout may not fetch it).
+          git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Base SHA $BASE not fetchable — running baseline audits (fail-closed)"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null | grep -E '^(Cargo\.toml$|Cargo\.lock$|ui/package\.json$|ui/package-lock\.json$|Dockerfile\.server$|apps/license-server/Dockerfile$|docker-compose\.(e2e|prod)\.yml$)' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Dependency/container manifests changed:"
+            echo "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dependency/container manifests changed — baseline audit skipped."
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.deps.outputs.changed == 'true'
+      - name: Install cargo-audit
+        if: steps.deps.outputs.changed == 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Run cargo audit (blocking)
+        if: steps.deps.outputs.changed == 'true'
+        run: cargo audit
+      - uses: actions/setup-node@v4
+        if: steps.deps.outputs.changed == 'true'
+        with:
+          node-version: '24'
+      - name: Run npm audit (blocking)
+        if: steps.deps.outputs.changed == 'true'
+        run: cd ui && npm audit --audit-level=high
 
   # ── Fuzz tests (non-blocking, informational) ─────────────────────
   fuzz:
@@ -467,7 +579,9 @@ jobs:
         run: |
           for target in sku_parse money_parse cart_deser ozpkg_parse manifest_parse; do
             echo "::group::Fuzzing $target"
-            timeout 65 cargo fuzz run "$target" -- -max_total_time=60 || true
+            # AUDIT-27 CI-03: no `|| true` — fuzz failures surface to the
+            # advisory job and trigger the crash-artifact upload below.
+            timeout 65 cargo fuzz run "$target" -- -max_total_time=60
             echo "::endgroup::"
           done
       - name: Upload crash artifacts
@@ -477,6 +591,34 @@ jobs:
           name: fuzz-crashes-ci
           path: fuzz/artifacts/
           retention-days: 30
+
+  # ── Flaky-test quarantine registry (AUDIT-27 CI-09) ──────────────
+  #
+  # Gates scripts/flaky-quarantine.json: fails when an entry is expired,
+  # lacks an issue reference, or lacks an owner. This closes the loop so
+  # quarantined tests have an enforced lifecycle (see docs/ci-pipeline.md).
+  flaky-quarantine:
+    name: Flaky Quarantine Registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify quarantine manifest
+        run: python3 scripts/verify-flaky-quarantine.py
+
+  # ── Windows config drift (AUDIT-28) ──────────────────────────────
+  #
+  # Rejects future Windows release config drift: fails when a
+  # tauri.conf.json sets NSIS installMode to perMachine (a perMachine
+  # installer requires elevation and reintroduces the UAC prompt) or any
+  # source app.manifest drops the asInvoker execution level. The PE scan
+  # of actually-built Windows exes runs in release.yml's Windows job.
+  windows-config:
+    name: Windows Config Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify NSIS installMode + asInvoker manifests
+        run: python3 scripts/verify-windows-config.py
 
   # ── Skill drift tests ────────────────────────────────────────────
   skill-drift-tests:
@@ -490,6 +632,21 @@ jobs:
         run: bash .agents/skills/skill-drift-guard/scripts/detect.sh
       - name: Bats test suite
         run: bash .agents/skills/skill-drift-guard/scripts/run-tests.sh
+
+  # ── CI docs drift (AUDIT-27 CI-08) ──────────────────────────────
+  #
+  # Gates docs/ci-pipeline.md against the live workflows + local
+  # runners: fails when a documented job no longer exists in
+  # .github/workflows/*.yml, when a documented workflow file is
+  # missing, or when the check.sh / check:all gate vocabulary drifts.
+  # Pure python — no toolchain deps, so it stays fast.
+  ci-docs-drift:
+    name: CI Docs Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify docs/ci-pipeline.md matches workflows + local runners
+        run: python3 scripts/verify-ci-docs-drift.py
 
   # ── E2E: Pre-build Docker image (main only, GHCR push) ───────────
   e2e-docker-image:
@@ -616,6 +773,7 @@ jobs:
           done
       # P28-3: Playwright sharding — each shard runs 1/3 of spec files
       - name: Run E2E tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: |
           cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop --shard=${{ matrix.shard }}/${{ matrix.totalShards }} 2>&1 | tee e2e-output.log
       - name: Upload E2E test results

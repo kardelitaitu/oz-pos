@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "description": "Single source of truth for CI/local-runner gate names and status (AUDIT-27 CI-08). scripts/verify-ci-docs-drift.py enforces that docs/ci-pipeline.md, .github/workflows/*.yml, scripts/check.sh, and scripts/check-ui.mjs all agree with this file. Adding a gate here is the ONLY way to add a gate; renaming/removing one here (plus its runner/CI declarations) is the only way to remove it.",
+  "gates": [
+    {
+      "id": "ui-lint",
+      "label": "UI lint",
+      "status": "required",
+      "runners": { "check.sh": ["ui lint"], "check:all": ["eslint"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-lint" }
+    },
+    {
+      "id": "ui-typecheck",
+      "label": "UI typecheck",
+      "status": "required",
+      "runners": { "check.sh": ["ui typecheck"], "check:all": ["type check"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-typecheck" }
+    },
+    {
+      "id": "ui-unit-tests",
+      "label": "UI unit tests",
+      "status": "required",
+      "runners": { "check.sh": ["ui test"], "check:all": ["unit tests"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-test" }
+    },
+    {
+      "id": "i18n-lint",
+      "label": "i18n lint",
+      "status": "required",
+      "runners": { "check.sh": ["i18n lint"], "check:all": ["i18n lint"] },
+      "ci": { "workflow": "ci.yml", "job": "ui-test" }
+    },
+    {
+      "id": "ftl-dedupe",
+      "label": "FTL dedupe",
+      "status": "required",
+      "runners": { "check.sh": ["ftl dedupe"], "check:all": ["ftl dedupe"] }
+    },
+    {
+      "id": "rust-fmt",
+      "label": "Rust fmt",
+      "status": "required",
+      "runners": { "check.sh": ["cargo fmt"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-fmt" }
+    },
+    {
+      "id": "rust-clippy",
+      "label": "Clippy",
+      "status": "required",
+      "runners": { "check.sh": ["clippy"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-clippy" }
+    },
+    {
+      "id": "rust-tests",
+      "label": "Rust tests",
+      "status": "required",
+      "runners": { "check.sh": ["test workspace", "test doctests"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-test-fast" }
+    },
+    {
+      "id": "no-raw-params",
+      "label": "No raw params (ADR #7 Phase 4)",
+      "status": "required",
+      "runners": { "check.sh": ["no-raw-params"] }
+    },
+    {
+      "id": "docker-dry-run",
+      "label": "Docker build smoke (--docker-dry-run)",
+      "status": "required",
+      "runners": { "check.sh": ["docker build"] }
+    },
+    {
+      "id": "migration",
+      "label": "Migration smoke",
+      "status": "required",
+      "runners": { "check.sh": ["migration"] }
+    },
+    {
+      "id": "skill-drift",
+      "label": "Skill drift guard",
+      "status": "required",
+      "runners": { "check.sh": ["skill-drift"] },
+      "ci": { "workflow": "ci.yml", "job": "skill-drift-tests" }
+    },
+    {
+      "id": "panic-inventory",
+      "label": "Panic inventory",
+      "status": "required",
+      "runners": { "check.sh": ["panic-inventory"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-panic-inventory" }
+    },
+    {
+      "id": "a11y-advisory",
+      "label": "A11y regression (advisory)",
+      "status": "advisory",
+      "runners": { "check.sh": ["a11y"] }
+    },
+    {
+      "id": "feature-registry",
+      "label": "Feature registry parity",
+      "status": "required",
+      "runners": { "check.sh": ["feature registry"] }
+    },
+    {
+      "id": "plugin-guide-parity",
+      "label": "Plugin-guide parity",
+      "status": "required",
+      "runners": { "check.sh": ["plugin-guide parity"] }
+    },
+    {
+      "id": "ci-docs-drift",
+      "label": "CI docs drift",
+      "status": "required",
+      "runners": { "check.sh": ["ci docs drift"] },
+      "ci": { "workflow": "ci.yml", "job": "ci-docs-drift" }
+    },
+    {
+      "id": "windows-config",
+      "label": "Windows config drift (NSIS installMode + asInvoker manifests)",
+      "status": "required",
+      "runners": { "check.sh": ["windows config"] },
+      "ci": { "workflow": "ci.yml", "job": "windows-config" }
+    },
+    {
+      "id": "bundle-budget",
+      "label": "Bundle budget",
+      "status": "required",
+      "runners": { "check:all": ["bundle budget"] }
+    },
+    {
+      "id": "e2e",
+      "label": "E2E tests",
+      "status": "required",
+      "runners": { "check:all": ["e2e"] },
+      "ci": { "workflow": "ci.yml", "job": "e2e" }
+    },
+    {
+      "id": "perf-smoke",
+      "label": "Perf smoke",
+      "status": "required",
+      "runners": { "check:all": ["perf smoke"] }
+    },
+    {
+      "id": "rust-test-apps",
+      "label": "Rust test apps",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "rust-test-apps" }
+    },
+    {
+      "id": "rust-test-full",
+      "label": "Rust test full",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "rust-test-full" }
+    },
+    {
+      "id": "sync-slow-tests",
+      "label": "Sync slow tests",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "sync-slow-tests" }
+    },
+    {
+      "id": "docker-build-scan",
+      "label": "Docker build + blocking scan",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "docker" }
+    },
+    {
+      "id": "security-pr",
+      "label": "Security PR baseline",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "security-pr" }
+    },
+    {
+      "id": "lighthouse",
+      "label": "Lighthouse a11y",
+      "status": "advisory",
+      "ci": { "workflow": "ci.yml", "job": "lighthouse" }
+    },
+    {
+      "id": "coverage",
+      "label": "Coverage",
+      "status": "advisory",
+      "ci": { "workflow": "ci.yml", "job": "coverage" }
+    },
+    {
+      "id": "audit",
+      "label": "Dependency audit",
+      "status": "required-on-push",
+      "ci": { "workflow": "ci.yml", "job": "audit" }
+    },
+    {
+      "id": "fuzz",
+      "label": "Fuzz",
+      "status": "advisory",
+      "ci": { "workflow": "ci.yml", "job": "fuzz" }
+    },
+    {
+      "id": "flaky-quarantine",
+      "label": "Flaky quarantine registry",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "flaky-quarantine" }
+    },
+    {
+      "id": "e2e-docker-image",
+      "label": "E2E Docker image",
+      "status": "required",
+      "ci": { "workflow": "ci.yml", "job": "e2e-docker-image" }
+    },
+    {
+      "id": "nightly-rust-test",
+      "label": "Nightly rust test",
+      "status": "required",
+      "ci": { "workflow": "nightly.yml", "job": "rust-test" }
+    },
+    {
+      "id": "nightly-rust-doc",
+      "label": "Nightly rust doc",
+      "status": "required",
+      "ci": { "workflow": "nightly.yml", "job": "rust-doc" }
+    },
+    {
+      "id": "nightly-ui-test",
+      "label": "Nightly UI tests",
+      "status": "required",
+      "ci": { "workflow": "nightly.yml", "job": "ui-test" }
+    },
+    {
+      "id": "nightly-e2e",
+      "label": "Nightly E2E",
+      "status": "required",
+      "ci": { "workflow": "nightly.yml", "job": "e2e" }
+    },
+    {
+      "id": "nightly-flaky-detect",
+      "label": "Nightly flaky detection",
+      "status": "advisory",
+      "ci": { "workflow": "nightly.yml", "job": "flaky-detect", "advisory_at": "step" }
+    },
+    {
+      "id": "nightly-flaky-registry",
+      "label": "Nightly flaky quarantine registry",
+      "status": "required",
+      "ci": { "workflow": "nightly.yml", "job": "flaky-quarantine-registry" }
+    },
+    {
+      "id": "nightly-benchmarks",
+      "label": "Nightly benchmarks",
+      "status": "required",
+      "ci": { "workflow": "nightly.yml", "job": "benchmarks" }
+    }
+  ]
+}

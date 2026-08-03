@@ -87,8 +87,10 @@ npm run check:all   # full validation: lint → typecheck → test → i18n → 
 > globally available on this machine.
 >
 > The `check:all` runner (`scripts/check-ui.mjs`) detects Docker availability
-> and skips the E2E gate gracefully if Docker is not running. For the full E2E
-> lifecycle with Docker backend provisioning, use `npm run e2e`.
+> and, when Docker is up, provisions the full E2E environment via `npm run e2e`
+> (Docker backend + Vite + Playwright + cleanup — AUDIT-27 CI-07). It skips the
+> E2E gate gracefully when Docker is not running. For the E2E lifecycle alone,
+> use `npm run e2e`.
 
 ### If node_modules is missing
 

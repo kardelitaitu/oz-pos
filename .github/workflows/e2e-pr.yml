@@ -21,9 +21,15 @@ name: E2E (PR)
 on:
   pull_request:
     branches: [main]
+    # AUDIT-27 CI-02: narrowed from `ui/**` so the workflow only fires
+    # when E2E specs or E2E infrastructure actually changed. Main CI's
+    # `e2e` job already runs the FULL 3-shard Playwright suite on every
+    # PR, so this workflow is a fast, changed-spec focused complement —
+    # it must never be the only E2E signal for production-only changes.
     paths:
-      - 'ui/**'
+      - 'ui/e2e/**'
       - 'scripts/run-e2e.mjs'
+      - 'scripts/__tests__/**'
       - 'docker-compose.e2e.yml'
       - 'Dockerfile.server'
       - 'apps/license-server/**'
@@ -119,12 +125,27 @@ jobs:
               ARGS="$ARGS ${{ github.event.inputs.specs }}"
             fi
           else
-            # pull_request: always use --changed-only
+            # pull_request: run the specs that changed (or all if none
+            # match). AUDIT-27 CI-02: main CI's `e2e` job already runs the
+            # full suite on every PR, so this focused run uses the changed
+            # specs — and run-e2e.mjs reports a distinct `skipped-no-spec`
+            # status instead of silently passing with zero tests.
             ARGS="$ARGS --changed-only"
           fi
 
           echo "Running: npm run e2e -- ${ARGS}"
           npm run e2e -- ${ARGS}
+          RC=$?
+          # AUDIT-27 CI-02: run-e2e.mjs exits 2 (SKIPPED-NO-SPEC) when
+          # --changed-only found no spec changes (e.g. an infra-only PR
+          # touching Dockerfile/compose/runner). Main CI's `e2e` job still
+          # runs the FULL suite on every PR, so a skip here is a legitimate
+          # distinct result — annotate it and pass, rather than a red check.
+          if [ "$RC" -eq 2 ]; then
+            echo "::notice::E2E skipped — no changed spec files (main CI runs full E2E on this PR)"
+            exit 0
+          fi
+          exit $RC
 
       - name: Upload E2E test results
         if: always()

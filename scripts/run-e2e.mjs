@@ -326,10 +326,13 @@ function getChangedSpecs() {
     if (!mergeBase) return [];
 
     // git diff --name-only outputs paths relative to repo root,
-    // so we run from ROOT with pattern ui/e2e/*.spec.ts to get
+    // so we run from ROOT with pattern ui/e2e/** to get
     // results like "ui/e2e/auth.spec.ts", then strip ui/ prefix.
+    // AUDIT-27 CI-02: widened from `ui/e2e/*.spec.ts` (top-level only)
+    // to `ui/e2e/**` so spec files in nested directories are found and
+    // the skip path is not silently hit for valid spec locations.
     const changed = execSync(
-      `git diff --name-only "${mergeBase}" -- 'ui/e2e/*.spec.ts'`,
+      `git diff --name-only "${mergeBase}" -- 'ui/e2e/**'`,
       { stdio: 'pipe', timeout: 10_000, cwd: ROOT },
     ).toString().trim().split('\n').filter(Boolean);
 
@@ -359,8 +362,11 @@ function runPlaywright() {
       log('Playwright', `Changed-only: ${changed.length} spec(s) modified`);
       specs = changed;
     } else {
-      log('Playwright', `Changed-only: no E2E specs changed — skipping.`);
-      return true; // Nothing to test = pass
+      // AUDIT-27 CI-02: zero executed tests must NOT report as a full
+      // pass. Return a distinct `skipped` status that main() turns into
+      // a distinct exit code + banner instead of "All E2E tests passed".
+      log('Playwright', `Changed-only: no E2E specs changed — SKIPPED (0 tests executed).`);
+      return 'skipped';
     }
   }
 
@@ -396,10 +402,10 @@ function runPlaywright() {
   try {
     execSync(cmd, { cwd: UI_DIR, stdio: 'inherit', timeout: 600_000 });
     log('Playwright', `${GREEN}All tests passed${NC}`);
-    return true;
+    return 'pass';
   } catch {
     log('Playwright', `${RED}Some tests failed${NC}`);
-    return false;
+    return 'fail';
   }
 }
 
@@ -424,7 +430,7 @@ async function main() {
   process.on('SIGINT', () => { cleanup(); process.exit(1); });
   process.on('SIGTERM', () => { cleanup(); process.exit(1); });
 
-  let allPassed = false;
+  let status = 'fail';
 
   try {
     console.log(`\n${BOLD}${CYAN}═══════════════════════════════════════${NC}`);
@@ -447,7 +453,7 @@ async function main() {
     await startVite();
 
     // ── Step 3: Run Playwright tests ──────────────────────────────
-    allPassed = runPlaywright();
+    status = runPlaywright();
 
   } catch (err) {
     console.error(`\n${RED}${BOLD}✘ Error:${NC} ${err.message || err}`);
@@ -456,9 +462,13 @@ async function main() {
   }
 
   console.log(`\n${BOLD}${CYAN}═══════════════════════════════════════${NC}`);
-  if (allPassed) {
+  if (status === 'pass') {
     console.log(`${GREEN}${BOLD}✔ All E2E tests passed${NC}`);
     process.exit(0);
+  } else if (status === 'skipped') {
+    // AUDIT-27 CI-02: distinct result for zero executed tests.
+    console.log(`${YELLOW}${BOLD}✖ SKIPPED-NO-SPEC: no E2E specs changed — 0 tests executed (distinct from all-pass)${NC}`);
+    process.exit(2);
   } else {
     console.log(`${RED}${BOLD}✘ Some E2E tests failed — check output above${NC}`);
     process.exit(1);

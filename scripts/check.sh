@@ -91,6 +91,15 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     step "ui lint" "cd ui; npm run lint" npm run lint
     step "ui typecheck" "cd ui; npm run typecheck" npm run typecheck
     step "ui test" "cd ui; npm run test" npm run test
+    # AUDIT-27 CI-06: A11y regression suite (advisory, mirrors CI's
+    # continue-on-error since known product-level a11y bugs are tracked
+    # but not yet fixed). Never fails the gate — reports status only.
+    echo -n "ui a11y (advisory)... "
+    if npm run test:a11y >/dev/null 2>&1; then
+        echo -e "${GREEN}PASS${NC}"
+    else
+        echo -e "${YELLOW}WARN (a11y regressions exist — non-blocking, see CI)${NC}"
+    fi
     # i18n lint: runs AFTER ui test (which proves vitest works) but
     # BEFORE ui build (which is ~30s). Fail-fast on a ~1s lint check
     # so contributors don't pay the full build cost for a translation
@@ -98,9 +107,15 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     # `ui/src/locales/*.id.ftl` before they reach CI.
     cd ..
     step "i18n lint" "bash scripts/lint-i18n.sh" bash scripts/lint-i18n.sh
+    # AUDIT-27 CI-06: FTL dedupe — detect duplicate Fluent keys so local
+    # validation matches check-ui.mjs and the pre-commit gate.
+    step "ftl dedupe" "python3 scripts/dedupe-ftl.py" python3 scripts/dedupe-ftl.py
     step "feature registry parity" "python3 scripts/verify-feature-registry.py" python3 scripts/verify-feature-registry.py
     # npm run build skipped — typecheck + vitest already cover correctness;
     # the production vite bundle is validated by CI independently.
+    # AUDIT-27 CI-07: E2E is NOT run here (Docker backend not provisioned).
+    # Run `cd ui && npm run check:all` (uses npm run e2e with full
+    # Docker+Vite provisioning) or `npm run e2e` directly for managed E2E.
 else
     echo -e "${YELLOW}⚠ UI checks skipped (npm not found or ui/package-lock.json missing)${NC}"
 fi
@@ -120,6 +135,15 @@ if command -v node &>/dev/null; then
 else
     echo -e "${YELLOW}⚠ release toolchain checks skipped (node not found)${NC}"
 fi
+
+# ── CI docs drift (AUDIT-27 CI-08) — docs/ci-pipeline.md must stay in
+# sync with the workflows and the local runner gate vocabulary. The gate
+# names + status derive from scripts/gates.json (the single source of
+# truth shared with ci.yml, nightly.yml, and check:all). Mirrors the
+# `ci-docs-drift` CI job; a named-but-missing job, a drifted
+# check.sh/check:all gate, or a status that contradicts a workflow
+# fails the gate.
+step "ci docs drift" "python3 scripts/verify-ci-docs-drift.py" python3 scripts/verify-ci-docs-drift.py
 
 # ── Docker build smoke test (optional: --docker-dry-run) ──────────────────
 if [ "${1:-}" = "--docker-dry-run" ]; then

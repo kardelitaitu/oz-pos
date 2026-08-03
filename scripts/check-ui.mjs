@@ -18,6 +18,7 @@
  */
 
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
@@ -25,6 +26,25 @@ import { dirname, resolve } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = resolve(__dirname, '..', 'ui');
 process.chdir(uiDir);
+
+// ── Gate manifest (AUDIT-27 CI-08) ──────────────────────────────────
+// The `check:all` gate vocabulary derives from scripts/gates.json (the
+// single source of truth shared with ci.yml, nightly.yml, check.sh, and
+// the CI docs-drift verifier). If a manifest `check:all` gate is not
+// declared below, this runner must fail closed — exactly like the CI
+// `ci-docs-drift` gate does.
+const gatesManifestPath = resolve(__dirname, 'gates.json');
+let manifestCheckAllNeedles = [];
+let manifestReadable = true;
+try {
+  const manifest = JSON.parse(readFileSync(gatesManifestPath, 'utf8'));
+  manifestCheckAllNeedles = (manifest.gates ?? [])
+    .map((g) => g.runners?.['check:all'] ?? [])
+    .flat()
+    .map((n) => n.toLowerCase());
+} catch {
+  manifestReadable = false;
+}
 
 /* ── ANSI helpers ───────────────────────────────────────────────────── */
 const GREEN  = '\x1b[32m';
@@ -119,8 +139,12 @@ function main() {
   gate('Bundle budget', 'npm run bundle:check', { timeout: 300_000 });
 
   // ── 7. E2E tests (optional — requires Docker) ──────────────────────────
+  // AUDIT-27 CI-07: use `npm run e2e` (scripts/run-e2e.mjs) which
+  // PROVISIONS the Docker backend (cloud + license + redis), starts Vite,
+  // runs Playwright, and cleans up — rather than bare `playwright test`
+  // which would run against whatever happens to be on port 1420/3099.
   if (dockerAvailable()) {
-    gate('E2E tests (Playwright)', 'npm run test:e2e', { timeout: 600_000 });
+    gate('E2E tests (Playwright, provisioned)', 'npm run e2e', { timeout: 900_000 });
   } else {
     console.log(`  ${YELLOW}SKIP (Docker not available)${NC}`);
     results.push({ gate: 'E2E tests (Playwright)', status: 'skip', duration: '0.0' });
@@ -142,6 +166,26 @@ function main() {
   const skip = results.filter((r) => r.status === 'skip').length;
   const fail = results.filter((r) => r.status === 'fail').length;
 
+  // ── Gate manifest self-audit (AUDIT-27 CI-08) ─────────────────────
+  // The gate vocabulary derives from scripts/gates.json. Every manifest
+  // `check:all` needle must match at least one gate this runner actually
+  // declared; a manifest gate that is not declared is drift and fails
+  // this runner closed — mirroring the CI `ci-docs-drift` gate.
+  let manifestOk = true;
+  if (manifestReadable) {
+    const declared = results.map((r) => r.gate.toLowerCase());
+    const missing = manifestCheckAllNeedles.filter(
+      (needle) => !declared.some((g) => g.includes(needle))
+    );
+    if (missing.length > 0) {
+      manifestOk = false;
+      console.error(`\n${RED}✘ Gate manifest drift: check:all does not declare ${missing.length} manifest gate(s): ${missing.join(', ')}${NC}`);
+      console.error(`  Fix scripts/gates.json or add the missing gate here.`);
+    }
+  } else {
+    console.log(`  ${YELLOW}⚠ Gate manifest unreadable — manifest self-audit skipped (${gatesManifestPath})${NC}`);
+  }
+
   console.log(`\n${BOLD}${CYAN}═══════════════════════════════════════${NC}`);
   console.log(`${BOLD}${CYAN}  Summary${NC}`);
   console.log(`${BOLD}${CYAN}═══════════════════════════════════════${NC}`);
@@ -155,7 +199,7 @@ function main() {
   }
   console.log(`\n  Total: ${totalSec}s  |  ${GREEN}${pass} passed${NC}  ${YELLOW}${skip} skipped${NC}  ${fail > 0 ? `${RED}${fail} failed` : ''}${NC}`);
 
-  if (fail > 0) {
+  if (fail > 0 || !manifestOk) {
     console.error(`\n${RED}${BOLD}✘ Some checks failed. Fix the issues above and re-run.${NC}\n`);
     process.exit(1);
   }
