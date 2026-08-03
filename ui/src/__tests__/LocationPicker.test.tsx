@@ -288,18 +288,17 @@ describe('LocationPicker', () => {
 
   it('shows a persistent error with retry when the locations fetch fails', async () => {
     mockListLocations.mockRejectedValue(new Error('boom'));
-    renderWithProviders(
+    // Await the render so the mount effect's rejected fetch is flushed inside
+    // the act() boundary — the durable error state is then asserted
+    // deterministically instead of racing a polling budget under load.
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
 
     // The error message (loc-picker-error-load = "Failed to load locations")
     // must render persistently instead of silently returning null.
-    // Timeout 10s (was 5s): flaked once under parallel-worker load during the
-    // full 8-file inventory sweep — the alert render raced the 5s budget.
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-    }, { timeout: 10000 });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText('Failed to load locations')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
@@ -307,14 +306,14 @@ describe('LocationPicker', () => {
   it('recovers when Retry succeeds after a failed load', async () => {
     const user = userEvent.setup();
     mockListLocations.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(mockLocations);
-    renderWithProviders(
+    // Await the render so the mount effect's rejected fetch is flushed inside
+    // the act() boundary (same determinism as the persistent-error test).
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-    }, { timeout: 10000 });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
