@@ -84,7 +84,8 @@ Checks are split into **required** (block merges) and **advisory** (informationa
 - **GHCR pre-built images** (`e2e-docker-image` job) on push to main; E2E jobs pull before building.
 
 ### E2E
-- Playwright browsers via `npx playwright install chromium --with-deps`.
+- Playwright browsers via `npx playwright install chromium --with-deps` (desktop-only project runs in ci.yml + nightly).
+- The PR E2E workflow (`e2e-pr.yml`) runs the FULL project matrix (desktop + tablet) via `npm run e2e`, so it installs `chromium webkit --with-deps` — the `tablet` project is iPad Pro 11 emulation (WebKit engine).
 - Docker layer cache pulled from GHCR before local build.
 
 ## Pre-Merge Validation Gates

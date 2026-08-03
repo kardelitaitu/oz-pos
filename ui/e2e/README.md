@@ -9,6 +9,13 @@ required.
 ```bash
 cd ui
 
+# Install browsers for the full project matrix (desktop=Chromium,
+# tablet=iPad Pro 11 emulation=WebKit). `npm run e2e` and the PR
+# workflow run ALL projects, so both are required — chromium-only
+# crashes the tablet specs with "Executable doesn't exist at
+# .../ms-playwright/webkit-*/pw_run.sh".
+npx playwright install chromium webkit --with-deps
+
 # Start the dev server + run tests in one command (webServer auto-start)
 npx playwright test --config e2e/playwright.config.ts
 

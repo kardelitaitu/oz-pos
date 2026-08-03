@@ -77,7 +77,14 @@ jobs:
           node -e "try { require('esbuild'); console.log('esbuild OK'); } catch (e) { console.error('esbuild missing', e); process.exit(1); }"
 
       - name: Install Playwright browsers
-        run: cd ui && npx playwright install chromium --with-deps
+        # The PR workflow runs the FULL project matrix via `npm run e2e`
+        # (run-e2e.mjs passes no --project filter), which includes the
+        # `tablet` project. That project uses devices['iPad Pro 11'], a
+        # WebKit engine — so WebKit must be installed here or the tablet
+        # specs crash with "Executable doesn't exist at
+        # .../ms-playwright/webkit-*/pw_run.sh". (ci.yml + nightly.yml
+        # only run --project=desktop, so Chromium alone suffices there.)
+        run: cd ui && npx playwright install chromium webkit --with-deps
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
