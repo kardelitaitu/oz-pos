@@ -14,8 +14,11 @@ that operators must know how to rotate safely (audit finding **L-4**).
    (or its `--dry-run` variant) to write the reviewed draft to
    `docs/releases/CHANGELOG-<version>.md` and refresh the canonical
    `CHANGELOG.md` heading. The script then runs the AUDIT-28 version gate
-   (`scripts/check-release-version.mjs`), which fails unless the tag, all
-   app version sources, and the `CHANGELOG.md` heading agree.
+   (   `scripts/check-release-version.mjs`), which fails unless the tag, all
+   app version sources, and the `CHANGELOG.md` heading agree. The same
+   three release scripts carry `--self-test` mode and are re-validated on
+   every local pre-CI gate run via `scripts/check.sh` (release version
+   gate / updater manifest generator / updater signature verifier).
 3. **Tag and push** — `git tag -a vX.Y.Z && git push origin vX.Y.Z`. The
    tag-triggered `.github/workflows/release.yml` runs the same version gate,
    then builds **real Tauri installers** (`cargo tauri build`): AppImage +
@@ -25,8 +28,14 @@ that operators must know how to rotate safely (audit finding **L-4**).
    `beta.json` (Ed25519 signatures over the raw installer bytes, using the
    `UPDATER_PRIVATE_KEY` secret) and verifies them against the pubkey in
    `tauri.conf.json::plugins.updater.pubkey` **before** publishing. The
-   release is created as a draft and only published after the asset
-   inventory check passes.
+   release workflow also runs `scripts/check-updater-compat.mjs`, an
+   end-to-end compatibility check that signs a dummy installer with
+   `generate-latest-json.mjs` and feeds the result through a Rust harness
+   pinned to the exact `minisign-verify` version the real Tauri client
+   resolves (`tauri-plugin-updater` 2.10.1 → `minisign-verify 0.2.5`),
+   proving the emitted signatures are accepted by the real client
+   verifier. The release is created as a draft and only published after
+   the asset inventory check passes.
 5. **Mobile** — the Android/iOS workflows (tag-triggered) upload their
    APK/AAB/IPA directly into the same GitHub Release via `gh release upload`.
 6. **Announce** — publish the release notes (mirroring the new
