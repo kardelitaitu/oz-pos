@@ -240,7 +240,7 @@ The clippy failure is outside this audit report's Rust files and the staged loya
 | RUST-05 transport fallback | fail-closed `try_new` + auth-wire tests | `90a74c8d` |
 | RUST-06 unsafe policy | crate-level `deny` in oz-hal/oz-lua | `d82b133d` |
 | RUST-07 panic startup | `oz_api::serve()` returns `Result` | `d82b133d` |
-| RUST-07 residual | 16 recoverable panics → `Result`/fallback across cli/core/cloud-server/startup + panic-inventory gate | `(see commit below)` |
+| RUST-07 residual | 16 recoverable panics → `Result`/fallback across cli/core/cloud-server/startup + panic-inventory gate | `6f7307b3` |
 | RUST-08 tx contract | repository transaction contract documented | `d82b133d` |
 | RUST-09 migration registry | unique/monotonic prefix gates + parity test | `a16c3baf` |
 | RUST-10 cross-layer tests | snapshot/backup/migration/transport regression suites | chain above |
