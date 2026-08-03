@@ -2598,4 +2598,303 @@ mod tests {
         // Re-running migrations stays idempotent (module convention).
         run(&mut conn).unwrap();
     }
+
+    #[test]
+    fn store_scoped_upsert_never_hijacks_other_store_or_null_rows() {
+        // DB-04 upsert-path audit. An `INSERT ... ON CONFLICT(id) DO
+        // UPDATE` is the standard idempotent write (cart/offline/sync all
+        // use it), but without a scope guard it would silently mutate a
+        // row owned by ANOTHER store on conflict — the row is matched by
+        // primary key, not by ownership. This test pins the guarded form:
+        // `DO UPDATE ... WHERE {table}.store_id = 'store-a'` turns a
+        // cross-store conflict into a no-op (affected = 0) instead of a
+        // hijack. The NULL-sentinel row is protected the same way, and a
+        // fresh insert still lands in the writer's own store.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        seed_cross_store_fixture(&conn);
+
+        // 1. A store-a scoped upsert that CONFLICTS with a store-b row must
+        //    NOT overwrite it — the WHERE guard evaluates false and the
+        //    statement becomes a no-op, leaving store-b's row intact.
+        let hijack = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-b', 'SKU-B', 'Hijacked', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            hijack, 0,
+            "scoped upsert conflicting with a store-b row must be a no-op, not a hijack"
+        );
+        let name_b: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_b, "B",
+            "store-b row must be untouched by a store-a scoped upsert"
+        );
+        let sid_b: String = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            sid_b, "store-b",
+            "store-b row must keep its ownership after a conflicting scoped upsert"
+        );
+
+        // 2. Same guard protects the NULL-sentinel row from a scoped upsert.
+        let null_hijack = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-null', 'SKU-N', 'Hijacked', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            null_hijack, 0,
+            "scoped upsert conflicting with the NULL-sentinel row must be a no-op"
+        );
+        let name_null: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-null'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_null, "Global",
+            "NULL-sentinel row must be untouched by a store-a scoped upsert"
+        );
+        let sid_null: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-null'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            sid_null.is_none(),
+            "NULL-sentinel row must keep store_id NULL"
+        );
+
+        // 3. A store-a scoped upsert that conflicts with the writer's OWN
+        //    store-a row DOES update it — the guard is satisfied and the
+        //    legitimate idempotent-write path still works.
+        let mine = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'Updated-A', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            mine, 1,
+            "scoped upsert on the writer's own store-a row must update it"
+        );
+        let name_a: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_a, "Updated-A",
+            "store-a row must receive its own scoped upsert"
+        );
+
+        // 4. A store-a scoped upsert that is a fresh insert (no conflict)
+        //    creates the new row owned by store-a.
+        let fresh = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-new', 'SKU-NEW', 'New A', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            fresh, 1,
+            "fresh scoped upsert must insert the new store-a row"
+        );
+        let new_sid: String = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-new'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            new_sid, "store-a",
+            "fresh upsert row must be owned by store-a"
+        );
+
+        // 5. The 117 FK still guards the upsert insert path: a scoped
+        //    upsert cannot create a row owned by a non-existent store.
+        let ghost = conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-ghost', 'SKU-GHOST', 'Ghost', 100, 'USD', 'retail', 'ghost-store')
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name
+             WHERE products.store_id = 'store-a'",
+            [],
+        );
+        assert!(
+            ghost.is_err(),
+            "upsert referencing a missing store_profile must fail the 117 FK"
+        );
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn cross_store_transaction_mixed_writes_stay_scoped_and_atomic() {
+        // DB-04 transaction audit. Multi-statement transactions are the
+        // real write path (products.rs / sales.rs use
+        // `unchecked_transaction()` everywhere), so the audit must prove:
+        //
+        //   (a) a committed transaction that mixes store-a, store-b, and
+        //       explicit-global writes keeps every write inside its own
+        //       ownership class — a store-a scoped statement can never
+        //       mutate store-b rows or the NULL sentinel even when both
+        //       run in the same transaction, and the NULL row is reachable
+        //       only through the explicit `store_id IS NULL` predicate;
+        //   (b) atomicity: if any statement fails, the whole transaction
+        //       rolls back — a NULL-sentinel row (or any row) is never
+        //       left half-mutated by a partially-applied transaction.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        seed_cross_store_fixture(&conn);
+
+        // ── (a) Committed mixed transaction stays in-scope ────────────
+        conn.execute("BEGIN", []).unwrap();
+        let a = conn
+            .execute(
+                "UPDATE products SET name = 'Tx-A' WHERE store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            a, 1,
+            "store-a scoped UPDATE inside tx must affect exactly 1 row"
+        );
+        let b = conn
+            .execute(
+                "UPDATE products SET name = 'Tx-B' WHERE store_id = 'store-b'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            b, 1,
+            "store-b scoped UPDATE inside tx must affect exactly 1 row"
+        );
+        // Explicit global write — the ONLY way the NULL sentinel is
+        // reachable, and a deliberate opt-in rather than a scoped leak.
+        let g = conn
+            .execute(
+                "UPDATE products SET name = 'Tx-Global' WHERE store_id IS NULL",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            g, 1,
+            "explicit global UPDATE must affect exactly the NULL-sentinel row"
+        );
+        conn.execute("COMMIT", []).unwrap();
+
+        // Post-commit: every row holds exactly its own write.
+        let name_a: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(name_a, "Tx-A", "store-a row must receive its own tx write");
+        let name_b: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(name_b, "Tx-B", "store-b row must receive its own tx write");
+        let name_null: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-null'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_null, "Tx-Global",
+            "NULL-sentinel row must receive only the explicit global write"
+        );
+
+        // ── (b) Failed transaction rolls back atomically ──────────────
+        // A statement that violates the 117 FK fails mid-transaction;
+        // ROLLBACK must restore EVERY prior write, so no row — including
+        // the NULL sentinel — is left half-mutated.
+        conn.execute("BEGIN", []).unwrap();
+        conn.execute(
+            "UPDATE products SET name = 'ShouldRollBack-A' WHERE store_id = 'store-a'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE products SET name = 'ShouldRollBack-Null' WHERE store_id IS NULL",
+            [],
+        )
+        .unwrap();
+        let fail = conn.execute(
+            "UPDATE products SET store_id = 'ghost-store' WHERE id = 'p-a'",
+            [],
+        );
+        assert!(
+            fail.is_err(),
+            "FK-violating statement must fail inside the transaction"
+        );
+        conn.execute("ROLLBACK", []).unwrap();
+
+        // After rollback the DB is byte-identical to the pre-(b) state:
+        // the store-a row and the NULL-sentinel row both revert to their
+        // committed (a) values, and the FK surface is clean.
+        let rb_a: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            rb_a, "Tx-A",
+            "store-a write must be rolled back — no half-mutated state"
+        );
+        let rb_null: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-null'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            rb_null, "Tx-Global",
+            "NULL-sentinel write must be rolled back — never left half-mutated"
+        );
+        let rb_b: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(rb_b, "Tx-B", "store-b write must survive untouched");
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "no FK violations after rollback");
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
 }
