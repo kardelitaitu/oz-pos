@@ -682,6 +682,17 @@ pub const ALL: &[Migration] = &[
         id: "117_scoping_store_id_fk.sql",
         sql: include_str!("../migrations/117_scoping_store_id_fk.sql"),
     },
+    // ── warehouse_id supersession cleanup ────────────────────────
+    // 069 added nullable warehouse_id to inventory/stock_counts as a
+    // speculative multi-warehouse hook. ADR #18 superseded it: warehouses
+    // are inventory_locations rows with type='warehouse' and 079's
+    // inventory.location_id FK is the real catalog link. Zero code reads
+    // or writes warehouse_id, so 118 drops the dead columns + their
+    // unused index (docs: 118_drop_warehouse_id_superseded.sql).
+    Migration {
+        id: "118_drop_warehouse_id_superseded.sql",
+        sql: include_str!("../migrations/118_drop_warehouse_id_superseded.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1144,7 +1155,13 @@ mod tests {
             assert_eq!(count, 1, "{table} missing store_id column");
         }
 
-        // warehouse_id columns exist on inventory and stock_counts.
+        // warehouse_id columns are GONE from the end-state schema. 069
+        // added them to inventory and stock_counts as a speculative
+        // multi-warehouse hook, but migration 118 dropped them as
+        // superseded by ADR #18: warehouses are inventory_locations rows
+        // with type='warehouse' and 079's inventory.location_id FK is the
+        // real catalog link. Asserting absence here pins the cleanup so a
+        // future migration cannot silently resurrect the dead column.
         for table in &["inventory", "stock_counts"] {
             let count: i64 = conn
                 .query_row(
@@ -1155,7 +1172,10 @@ mod tests {
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(count, 1, "{table} missing warehouse_id column");
+            assert_eq!(
+                count, 0,
+                "{table} must not have warehouse_id after migration 118"
+            );
         }
     }
 
@@ -1164,11 +1184,14 @@ mod tests {
         let mut conn = fresh();
         run(&mut conn).unwrap();
 
+        // idx_inventory_warehouse_product is deliberately NOT listed:
+        // migration 118 dropped it together with the superseded
+        // warehouse_id column (the index existed only for a predicate no
+        // query ever issued — see 118_drop_warehouse_id_superseded.sql).
         let expected_indexes = [
             "idx_sales_store_status",
             "idx_sale_lines_store_sale",
             "idx_products_store_category",
-            "idx_inventory_warehouse_product",
             "idx_customers_store",
         ];
 
@@ -2107,5 +2130,141 @@ mod tests {
                 .unwrap();
             assert_eq!(n, 1, "scoping index {index} must survive the 117 rebuild");
         }
+    }
+
+    // ── warehouse_id supersession cleanup (migration 118) ──────────
+
+    #[test]
+    fn migration_118_drops_warehouse_id_columns() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // The dead column is gone from both tables in the end-state schema.
+        for table in &["inventory", "stock_counts"] {
+            let count: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = 'warehouse_id'"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                count, 0,
+                "{table} must not have warehouse_id after migration 118"
+            );
+        }
+
+        // The index that existed only for the dead column is gone too.
+        let idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_inventory_warehouse_product'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx, 0, "idx_inventory_warehouse_product must be dropped");
+
+        // The real location link from migration 079 survives untouched:
+        // the location_id FK column and its query index both remain.
+        let loc_col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('inventory') WHERE name = 'location_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            loc_col, 1,
+            "inventory.location_id must survive migration 118"
+        );
+        let loc_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_inventory_location_product'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            loc_idx, 1,
+            "idx_inventory_location_product must survive migration 118"
+        );
+    }
+
+    #[test]
+    fn migration_118_drop_preserves_inventory_and_count_data_on_upgrade() {
+        // Upgrade fixture: a pre-118 database that already carries
+        // inventory rows and stock counts whose warehouse_id values were
+        // set (the speculative hook never had a writer, but rows may carry
+        // them from tests or hand-imports). The DROP COLUMN must remove the
+        // column while preserving every other column's data — a rebuild
+        // bug here would silently lose qty/count data on upgrade.
+        let idx118 = ALL
+            .iter()
+            .position(|m| m.id == "118_drop_warehouse_id_superseded.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx118]).unwrap();
+
+        // Seed a product (needed for the inventory FK), an inventory row
+        // with a non-NULL warehouse_id, and a stock count with one line.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+                 VALUES ('p-118', 'SKU-118', 'Counted', 100, 'USD', 'retail');
+             INSERT INTO inventory (product_id, qty, warehouse_id)
+                 VALUES ('p-118', 42, 'wh-1');
+             INSERT INTO stock_counts (id, count_number, status, count_type, warehouse_id)
+                 VALUES ('sc-118', 'CN-118', 'draft', 'full', 'wh-1');
+             INSERT INTO stock_count_lines (id, count_id, sku, product_name, expected_qty)
+                 VALUES ('scl-118', 'sc-118', 'SKU-118', 'Counted', 42);",
+        )
+        .unwrap();
+
+        // Apply 118 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx118..]).unwrap();
+
+        // The dead column is gone, but the data it sat beside survived.
+        let inv_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'p-118'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(inv_qty, 42, "inventory qty must survive the 118 drop");
+
+        let count_status: String = conn
+            .query_row(
+                "SELECT status FROM stock_counts WHERE id = 'sc-118'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count_status, "draft",
+            "stock count row must survive the 118 drop"
+        );
+
+        let line_expected: i64 = conn
+            .query_row(
+                "SELECT expected_qty FROM stock_count_lines WHERE id = 'scl-118'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            line_expected, 42,
+            "stock count line must survive the 118 drop"
+        );
+
+        // FK integrity is clean and the runner stays idempotent.
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "foreign_key_check must be clean after 118");
+        run(&mut conn).unwrap();
     }
 }
