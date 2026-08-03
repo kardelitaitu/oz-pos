@@ -182,10 +182,12 @@ jobs:
         env:
           OZ_API_SECRET: ci-test-secret
         run: |
-          # Pre-pull Redis to mitigate transient Docker Hub/rate-limit timeouts
+          # DOCKER-06: pre-pull the PINNED Redis digest (immutable, matches
+          # docker-compose.e2e.yml) to mitigate registry rate-limit timeouts.
+          REDIS_DIGEST="public.ecr.aws/docker/library/redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2"
           for i in 1 2 3; do
-            echo "Pulling public.ecr.aws/docker/library/redis:7-alpine (attempt $i/3)..."
-            docker pull public.ecr.aws/docker/library/redis:7-alpine && break
+            echo "Pulling $REDIS_DIGEST (attempt $i/3)..."
+            docker pull "$REDIS_DIGEST" && break
             echo "Redis pull failed (attempt $i/3), retrying..."
             sleep 15
           done

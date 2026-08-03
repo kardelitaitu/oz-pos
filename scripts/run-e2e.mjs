@@ -50,6 +50,39 @@ let viteProcess = null;
 let dockerStarted = false;
 let cleanupDone = false;
 
+// DOCKER-06: the E2E Redis image is pinned to an immutable digest in
+// docker-compose.e2e.yml. We pre-pull it here with bounded retries so
+// `compose up --wait` never stalls on a transient registry rate limit
+// (the observed `toomanyrequests` CI failures). Keep in sync with the
+// digest in docker-compose.e2e.yml.
+const E2E_REDIS_IMAGE =
+  'public.ecr.aws/docker/library/redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2';
+
+/** Synchronous cross-platform sleep (Node has no sync sleep built in). */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Pull the pinned Redis image, retrying transient failures with backoff. */
+function prePullRedis() {
+  const attempts = 3;
+  for (let i = 1; i <= attempts; i++) {
+    log('Docker', `Pre-pulling Redis (attempt ${i}/${attempts})...`);
+    try {
+      execSync(`docker pull ${E2E_REDIS_IMAGE}`, { stdio: 'pipe', timeout: 120_000 });
+      log('Docker', 'Redis pre-pulled.');
+      return;
+    } catch (err) {
+      if (i === attempts) {
+        log('Docker', `${RED}Redis pre-pull failed after ${attempts} attempts.${NC}`);
+        throw new Error(`Redis pre-pull failed: ${err.message || err}`);
+      }
+      log('Docker', `Retry ${i}/${attempts} in 15s...`);
+      sleepSync(15_000); // bounded backoff
+    }
+  }
+}
+
 function log(label, msg) {
   const ts = new Date().toISOString().slice(11, 19);
   console.log(`  ${CYAN}[${ts}]${NC} ${label} ${msg}`);
@@ -147,8 +180,9 @@ function dumpContainerLogs() {
 function startDocker() {
   log('Docker', 'Starting E2E services...');
   try {
+    prePullRedis();
     execSync(
-      `docker compose -f "${ROOT}/docker-compose.e2e.yml" up -d --wait`,
+      `docker compose -f "${ROOT}/docker-compose.e2e.yml" up -d --wait --pull=missing`,
       { stdio: 'inherit', timeout: 120_000 },
     );
     dockerStarted = true;

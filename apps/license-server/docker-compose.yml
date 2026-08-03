@@ -28,7 +28,9 @@ services:
       - pb_data:/pb/pb_data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      # DOCKER-05: use the compiled Go healthcheck binary (the runtime image
+      # does not install curl) — same endpoint contract as the root compose.
+      test: ["CMD", "/pb/healthcheck", "http://localhost:8080/api/health"]
       interval: 15s
       timeout: 5s
       retries: 3
