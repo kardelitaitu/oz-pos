@@ -124,6 +124,12 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Enable Pages (if the repo has it off) and configure the site to
+          # be built from GitHub Actions. Without this, configure-pages
+          # fails with "Get Pages site failed: Not Found" when the repo has
+          # never had Pages enabled. The workflow already grants pages:write.
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
