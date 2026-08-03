@@ -57,23 +57,31 @@ The fastest way to get the full stack running with no external dependencies:
 bash scripts/generate-license-keys.sh        # Linux/macOS
 powershell -File scripts/generate-license-keys.ps1   # Windows
 
-# 2. Start all services
+# 2. Export required secrets (Compose fails closed if absent — DOCKER-04)
+export OZ_API_SECRET=$(openssl rand -hex 32)
+export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+
+# 3. Start all services
 docker compose up -d
 
-# 3. Verify health
+# 4. Verify health
 curl http://localhost:3099/api/v1/health
 curl http://localhost:8080/api/v1/license/status
 
-# 4. Create admin user for license server
+# 5. Create admin user for license server
 docker compose exec license-server \
   /pb/pocketbase superuser upsert admin@example.com password123
 
-# 5. View logs
+# 6. View logs
 docker compose logs -f
 ```
 
 The cloud server starts with SQLite (default) and connects to Redis at
 `redis://redis:6379`. The license server uses embedded PocketBase SQLite.
+
+`OZ_API_SECRET` and `OZ_LICENSE_PRIVATE_KEY` are required by Compose and
+startup fails fast when either is missing, so the stack never boots with
+an empty or well-known authentication secret.
 
 ### Step-by-Step
 
@@ -81,7 +89,11 @@ The cloud server starts with SQLite (default) and connects to Redis at
    server to sign subscription tokens. The script saves the private key
    to `crates/oz-core/oz-license-private.pem`.
 
-2. **Start the stack** — `docker compose up -d` starts `pos-cloud-server`,
+2. **Export secrets** — `OZ_API_SECRET` (JWT signing) and
+   `OZ_LICENSE_PRIVATE_KEY` are required. `docker compose up` fails fast
+   with a clear message if either is unset.
+
+3. **Start the stack** — `docker compose up -d` starts `pos-cloud-server`,
    `license-server`, and `redis` in the default profile. The cloud server
    waits for Redis to be healthy before starting. The license server starts
    immediately (no external dependencies).
@@ -116,9 +128,11 @@ bash scripts/generate-license-keys.sh
 
 # 2. Set required env vars
 export OZ_API_SECRET=$(openssl rand -hex 32)
+export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+export PG_PASSWORD=$(openssl rand -hex 32)
 
-# 3. Start with pg profile
-docker compose --profile pg up -d
+# 3. Start with the pg override (PG_PASSWORD is required — DOCKER-04)
+docker compose -f docker-compose.yml -f docker-compose.pg.yml up -d
 
 # 4. Verify all services healthy
 curl http://localhost:3099/api/v1/health
@@ -130,12 +144,13 @@ Environment variables for PostgreSQL:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PG_USER` | `ozpos` | PostgreSQL user |
-| `PG_PASSWORD` | `changeme` | PostgreSQL password |
+| `PG_PASSWORD` | *(required)* | PostgreSQL password — Compose fails fast if unset |
 | `PG_DATABASE` | `ozpos` | PostgreSQL database name |
 | `DATABASE_URL` | *(auto-constructed)* | Full connection string |
 
-When the `pg` profile is active, the cloud server waits for PostgreSQL
-to be healthy before starting (`depends_on: pos-cloud-db: condition: service_healthy`).
+When the `pg` override is merged, the cloud server connects to PostgreSQL
+via the auto-constructed `DATABASE_URL` and waits for it to be healthy
+before starting (`depends_on: pos-cloud-db: condition: service_healthy`).
 
 ---
 
@@ -145,8 +160,9 @@ to be healthy before starting (`depends_on: pos-cloud-db: condition: service_hea
 
 | Variable | Default | Service | Description |
 |----------|---------|---------|-------------|
-| `OZ_API_SECRET` | _(empty)_ | pos-cloud-server | JWT signing secret. Generate: `openssl rand -hex 32` |
-| `OZ_LICENSE_PRIVATE_KEY` | _(empty)_ | license-server | PEM-encoded license signing private key |
+| `OZ_API_SECRET` | *(required)* | pos-cloud-server | JWT signing secret. Generate: `openssl rand -hex 32`. Compose fails fast if unset |
+| `OZ_LICENSE_PRIVATE_KEY` | *(required)* | license-server | PEM-encoded license signing private key. Generate with `scripts/generate-license-keys.*`. Compose fails fast if unset |
+| `PG_PASSWORD` | *(required, pg override)* | pos-cloud-db | PostgreSQL password. Required only when `docker-compose.pg.yml` is merged |
 
 ### Optional
 
@@ -159,7 +175,6 @@ to be healthy before starting (`depends_on: pos-cloud-db: condition: service_hea
 | `REDIS_CACHE_TTL` | `300` | pos-cloud-server | Redis cache TTL (seconds) |
 | `DATABASE_URL` | _(empty)_ | pos-cloud-server | PostgreSQL connection string |
 | `PG_USER` | `ozpos` | pos-cloud-db | PostgreSQL user |
-| `PG_PASSWORD` | `changeme` | pos-cloud-db | PostgreSQL password |
 | `PG_DATABASE` | `ozpos` | pos-cloud-db | PostgreSQL database name |
 
 ---
@@ -308,15 +323,16 @@ docker compose exec pos-cloud-server /app/oz-cloud-server --migrate
 | Port 8080 already in use | Another service using the port | Edit `docker-compose.yml` port mapping |
 | Can't access PocketBase admin UI | No superuser created | Run the `superuser upsert` command |
 | Slow product lookups | Redis cache cold | Wait for cache to warm up (first requests are slower) |
-| `docker compose --profile pg up` fails | PG profile depends on `pos-cloud-db` | Ensure `redis` is also running (no profile needed) |
+| `docker compose -f docker-compose.yml -f docker-compose.pg.yml up` fails | `PG_PASSWORD` not set or `pos-cloud-db` unavailable | Export `PG_PASSWORD` (required) and ensure `redis` is healthy |
 
 ---
 
 ## Security Notes
 
-1. **Change default passwords** — The PostgreSQL default credentials
-   (`ozpos` / `changeme`) are for development only. Set `PG_PASSWORD`
-   in production.
+1. **Set strong secrets** — `PG_PASSWORD` is required (no default) in
+   `docker-compose.pg.yml`; `OZ_API_SECRET` and `OZ_LICENSE_PRIVATE_KEY`
+   are required in the base stack. Compose fails fast when any of them
+   is absent, so a stack never boots with an empty/well-known secret.
 
 2. **Do not expose Redis or PostgreSQL ports externally** — Set
    `ports: ["6379:6379"]` only for local development. In production,

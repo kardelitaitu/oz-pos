@@ -1,32 +1,35 @@
 # ── OZ-POS Full Stack — Docker Compose ───────────────────────────────
 #
-# Spins up the entire OZ-POS backend in one command:
+# Spins up the core OZ-POS backend in one command:
 #   • pos-cloud-server — Rust headless sync & API binary
 #   • license-server  — Go/PocketBase license activation server
 #   • redis           — in-memory cache (product lookups, pub/sub)
-#   • pos-cloud-db    — optional PostgreSQL (enterprise profile `pg`)
 #
-# Quick start (SQLite — no external DB needed):
+# Quick start (SQLite — no external DB needed). Secrets are REQUIRED and
+# Compose fails closed if they are absent (DOCKER-04):
 #
+#   export OZ_API_SECRET=$(openssl rand -hex 32)
+#   export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
 #   docker compose up -d
 #   curl http://localhost:3099/api/v1/health
 #   curl http://localhost:8080/api/v1/license/status
 #
-# With PostgreSQL + Redis cache:
+# With PostgreSQL (enterprise — add the pg override, PG_PASSWORD required):
 #
 #   export OZ_API_SECRET=$(openssl rand -hex 32)
-#   docker compose --profile pg up -d
+#   export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+#   export PG_PASSWORD=$(openssl rand -hex 32)
+#   docker compose -f docker-compose.yml -f docker-compose.pg.yml up -d
 #
-# Required env vars in production:
-#   OZ_API_SECRET       — JWT signing secret (generate: openssl rand -hex 32)
+# Required env vars (Compose fails fast when absent):
+#   OZ_API_SECRET          — JWT signing secret (generate: openssl rand -hex 32)
 #   OZ_LICENSE_PRIVATE_KEY — PEM-encoded license signing private key
+#                            (from `scripts/generate-license-keys.ps1/.sh`)
 #
 # Environment overrides:
-#   OZ_LICENSE_PRIVATE_KEY   — from `scripts/generate-license-keys.ps1`
-#   OZ_API_SECRET            — JWT signing secret
-#   RUST_LOG                 — log level (default: info)
-#   PG_USER / PG_PASSWORD / PG_DATABASE — PostgreSQL credentials
-#   REDIS_URL                — Redis connection string (default: redis://redis:6379)
+#   RUST_LOG             — log level (default: info)
+#   PG_USER / PG_PASSWORD / PG_DATABASE — PostgreSQL credentials (docker-compose.pg.yml)
+#   REDIS_URL            — Redis connection string (default: redis://redis:6379)
 
 services:
 
@@ -43,11 +46,12 @@ services:
       OZ_API_PORT: "${OZ_API_PORT:-3099}"
       RUST_LOG: "${RUST_LOG:-info}"
 
-      # JWT signing secret — MUST be set in production.
-      OZ_API_SECRET: "${OZ_API_SECRET:-}"
+      # JWT signing secret — REQUIRED. Compose fails fast if unset so a
+      # stack never starts with an empty/weak auth secret (DOCKER-04).
+      OZ_API_SECRET: "${OZ_API_SECRET:?OZ_API_SECRET is required (generate: openssl rand -hex 32)}"
 
-      # PostgreSQL connection string (set this to switch to PG backend).
-      # Format: postgresql://user:pass@pos-cloud-db:5432/ozpos
+      # PostgreSQL connection string (set this to switch to PG backend via
+      # docker-compose.pg.yml). Format: postgresql://user:pass@pos-cloud-db:5432/ozpos
       DATABASE_URL: "${DATABASE_URL:-}"
 
       # Redis cache connection (default: redis://redis:6379 within Docker
@@ -67,15 +71,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      # When the `pg` profile is active, wait for PostgreSQL before starting.
-      pos-cloud-db:
-        condition: service_healthy
-        required: false  # graceful degradation when pg profile is inactive
-    # The DB service is started only with the `pg` profile. When it's
-    # not active, DATABASE_URL is empty and the server uses SQLite.
-    profiles:
-      - ""
-      - pg
 
   # ── License Server (Go / PocketBase) ───────────────────────────────
   #
@@ -95,7 +90,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      OZ_LICENSE_PRIVATE_KEY: "${OZ_LICENSE_PRIVATE_KEY:-}"
+      # REQUIRED — Compose fails fast if unset (DOCKER-04). Generate keys:
+      # bash scripts/generate-license-keys.sh / .\scripts\generate-license-keys.ps1
+      OZ_LICENSE_PRIVATE_KEY: "${OZ_LICENSE_PRIVATE_KEY:?OZ_LICENSE_PRIVATE_KEY is required (generate: bash scripts/generate-license-keys.sh)}"
     volumes:
       - pb_data:/pb/pb_data
     restart: unless-stopped
@@ -124,33 +121,15 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  # ── PostgreSQL Database (optional, profile: pg) ───────────────────
+  # ── PostgreSQL Database (optional — docker-compose.pg.yml) ────────
   #
-  # Enterprise-grade database backend. Only started when the `pg`
-  # profile is active. Without this profile, the cloud server uses
-  # SQLite (default).
-  pos-cloud-db:
-    image: postgres:16-alpine
-    profiles:
-      - pg
-    environment:
-      POSTGRES_USER: "${PG_USER:-ozpos}"
-      POSTGRES_PASSWORD: "${PG_PASSWORD:-changeme}"
-      POSTGRES_DB: "${PG_DATABASE:-ozpos}"
-    ports:
-      - "5432:5432"
-    volumes:
-      - oz_pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-ozpos} -d ${PG_DATABASE:-ozpos}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    restart: unless-stopped
+  # The enterprise PostgreSQL backend now lives in `docker-compose.pg.yml`
+  # and is merged explicitly (`-f docker-compose.yml -f docker-compose.pg.yml`).
+  # This keeps required-secret validation scoped: PG_PASSWORD is only
+  # required when the pg override is actually in use, while the SQLite
+  # quickstart above still starts with just the two core secrets (DOCKER-04).
 
 volumes:
   oz_cloud_data:
   pb_data:
   redis_data:
-  oz_pg_data:

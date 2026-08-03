@@ -33,13 +33,21 @@ RUN CGO_ENABLED=0 go build -o /pb/healthcheck -ldflags="-s -w" healthcheck.go
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata
+# DOCKER-01: non-root runtime. su-exec is Alpine's gosu equivalent and is
+# used by the entrypoint to drop from root (which only fixes volume
+# ownership for pre-existing root-owned volumes) to the `pb` user before
+# PocketBase serves HTTP — the same pattern Dockerfile.server uses with gosu.
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
-RUN mkdir -p /pb/pb_data
+RUN addgroup -S pb && adduser -S -G pb -h /pb pb
+
+RUN mkdir -p /pb/pb_data && chown -R pb:pb /pb
 VOLUME ["/pb/pb_data"]
 
 COPY --from=builder /pb/pocketbase /pb/pocketbase
 COPY --from=builder /pb/healthcheck /pb/healthcheck
+COPY docker-entrypoint.sh /pb/docker-entrypoint.sh
+RUN chmod +x /pb/docker-entrypoint.sh
 
 EXPOSE 8080
 
@@ -50,4 +58,7 @@ HEALTHCHECK --interval=5s --timeout=5s --retries=3 \
 
 # Explicit HTTP keeps the E2E healthcheck on plain http://localhost:8080.
 # A positional value is treated as an AutoTLS domain by PocketBase v0.39.6.
-ENTRYPOINT ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]
+# The entrypoint drops privileges to `pb` before starting PocketBase
+# (DOCKER-01) so the server never serves HTTP as root.
+ENTRYPOINT ["/pb/docker-entrypoint.sh"]
+CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]

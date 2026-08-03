@@ -25,7 +25,7 @@ Set-Location (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
 if ($Down) {
   Write-Host "👋 Tearing down OZ-POS dev environment..." -ForegroundColor Yellow
   if ($Pg) {
-    docker compose --profile pg down -v
+    docker compose -f docker-compose.yml -f docker-compose.pg.yml down -v
   } else {
     docker compose down -v
   }
@@ -63,7 +63,7 @@ if (-not $env:OZ_LICENSE_PRIVATE_KEY) {
 if ($Build) {
   Write-Host "🔨 Building Docker images..." -ForegroundColor Cyan
   if ($Pg) {
-    docker compose --profile pg build
+    docker compose -f docker-compose.yml -f docker-compose.pg.yml build
   } else {
     docker compose build
   }
@@ -72,7 +72,7 @@ if ($Build) {
 # ── Start services ────────────────────────────────────────────────
 Write-Host "🚀 Starting OZ-POS backend services..." -ForegroundColor Cyan
 if ($Pg) {
-  docker compose --profile pg up -d
+  docker compose -f docker-compose.yml -f docker-compose.pg.yml up -d
 } else {
   docker compose up -d
 }
