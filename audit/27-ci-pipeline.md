@@ -225,4 +225,4 @@ The report distinguishes confirmed configuration defects (CI-01 and CI-07) from 
 \r
 ## Audit status\r
 \r
-**2026-08-03 — ✅ FULLY REMEDIATED.** All 10 findings CI-01→CI-10 are closed; fixes are recorded in the per-finding statuses and the Remediation summary above. Commit hashes will be stamped here when this batch is committed. No behavioral production code changed — the only production-touching changes are the dependency manifests + lockfile for the CI-03 baseline (see header). Line references above reflect the current state of `.github/workflows/` and `scripts/` (re-verified 2026-08-03).
+**2026-08-03 — ✅ FULLY REMEDIATED.** All 10 findings CI-01→CI-10 are closed; fixes are recorded in the per-finding statuses and the Remediation summary above. Remediation batch committed as `fbd83866` (fix(ci): remediate audit/27 CI-01→CI-10 as one coherent batch). No behavioral production code changed — the only production-touching changes are the dependency manifests + lockfile for the CI-03 baseline (see header). Line references above reflect the current state of `.github/workflows/` and `scripts/` (re-verified 2026-08-03).
