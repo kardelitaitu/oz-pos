@@ -2495,7 +2495,7 @@ mod tests {
         // Sweep all four tables: a store-a scoped UPDATE must affect
         // exactly one row (the store-a row) and leave the store-b row and
         // the NULL-sentinel row byte-identical.
-        for (table, mutcol, a_id, b_id, null_id, a_old, b_old, null_old, new_val) in [
+        for (table, mutcol, a_id, b_id, null_id, _a_old, b_old, null_old, new_val) in [
             (
                 "products",
                 "name",
