@@ -570,9 +570,11 @@ mod tests {
     use tempfile::tempdir;
 
     fn fresh_conn() -> Connection {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("test.db");
-        let mut conn = Connection::open(&path).unwrap();
+        // These tests exercise the settings serialization contract, not the
+        // filesystem. An in-memory database keeps the connection self-contained
+        // and avoids leaving SQLite's journal/WAL files in a TempDir that is
+        // dropped when this helper returns.
+        let mut conn = Connection::open_in_memory().unwrap();
         migrations::run(&mut conn).unwrap();
         conn
     }
