@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 /**
  * E2E: POS Workflows — Sales History, Customer Selection, Void
@@ -26,9 +26,13 @@ test.describe('POS Workflows', () => {
   // ── Sales History Screen ──────────────────────────────────
 
   test('sales history screen loads and renders container', async ({ page }) => {
-    await page.waitForSelector('.retail-cart-action-btn--pay', { timeout: 10_000 });
+    // Wait for the POS screen to be fully loaded (pay button visible means
+    // the cart panel + product grid + shift are all initialised).
+    await expect(page.locator('.retail-fn-bar')).toBeVisible({ timeout: 10_000 });
 
-    await navigateTo(page, 'sales-history');
+    // In store-pos workspace, sales history is a sub-view opened via F6.
+    await page.keyboard.press('F6');
+    await page.waitForTimeout(1_000);
 
     // Sales history container must appear.
     await expect(page.locator('.sales-history')).toBeVisible({ timeout: 8_000 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 /**
  * E2E Critical Path #1: Sale → Verify in History
@@ -91,7 +91,10 @@ test.describe('Critical Path: Sale → Sales History', () => {
     await expect(page.locator('.retail-cart-action-btn--pay')).toBeDisabled({ timeout: 5_000 });
 
     // ── Step 7: Navigate to Sales History ───────────────────────────
-    await navigateTo(page, 'sales-history');
+    // In store-pos workspace, sales history is a sub-view. Press F6 or
+    // click the history button in the function bar.
+    await page.keyboard.press('F6');
+    await page.waitForTimeout(1_000);
 
     // Sales History screen must be visible.
     const historyContainer = page.locator('.sales-history');

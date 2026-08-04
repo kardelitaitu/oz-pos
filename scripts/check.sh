@@ -95,9 +95,46 @@ else
 fi
 
 # ── UI (mirrors CI `ui` job — auto-detected) ──────────────────────────────
+# Windows can retain esbuild.exe briefly after a Vite/test process exits,
+# causing npm ci's node_modules cleanup to fail with EPERM. Retry once after
+# terminating only the known native helper; dependency-resolution failures
+# still fail on the retry and remain visible to the caller.
+npm_ci_with_windows_retry() {
+    local npm_log; npm_log=$(mktemp)
+    local first_status
+
+    if npm ci --no-audit --no-fund --ignore-scripts >"$npm_log" 2>&1; then
+        cat "$npm_log"
+        rm -f "$npm_log"
+        return 0
+    else
+        first_status=$?
+    fi
+
+    # Preserve ordinary npm failures verbatim. Only retry the known Windows
+    # native-binary lock signatures; dependency and lockfile errors must fail
+    # immediately instead of killing an unrelated process.
+    if ! grep -q 'EPERM' "$npm_log" || \
+       ! grep -qiE 'esbuild\.exe|rollup[^[:space:]]*\.node' "$npm_log"; then
+        cat "$npm_log" >&2
+        rm -f "$npm_log"
+        return "$first_status"
+    fi
+
+    # esbuild is a standalone native helper and can be safely terminated.
+    # Rollup's native module is loaded by Node itself, so never terminate all
+    # node.exe processes; just allow its transient file handle to clear.
+    if grep -qi 'esbuild\.exe' "$npm_log" && command -v taskkill.exe &>/dev/null; then
+        MSYS_NO_PATHCONV=1 taskkill.exe /F /IM esbuild.exe >/dev/null 2>&1 || true
+    fi
+    sleep 2
+    rm -f "$npm_log"
+    npm ci --no-audit --no-fund --ignore-scripts
+}
+
 if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     cd ui
-    step "npm ci" "cd ui; npm ci --no-audit --no-fund --ignore-scripts" npm ci --no-audit --no-fund --ignore-scripts
+    step "npm ci" "cd ui; npm ci --no-audit --no-fund --ignore-scripts" npm_ci_with_windows_retry
     step "ui lint" "cd ui; npm run lint" npm run lint
     step "ui typecheck" "cd ui; npm run typecheck" npm run typecheck
     step "ui test" "cd ui; npm run test" npm run test

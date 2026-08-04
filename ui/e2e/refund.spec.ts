@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 /**
  * E2E: Refund Flow — Complete a sale, find it in history, and process a refund.
@@ -67,7 +67,9 @@ test.describe('Refund Flow', () => {
 
     // ── Step 2: Navigate to Sales History ──────────────────────
 
-    await navigateTo(page, 'sales-history');
+    // In store-pos workspace, sales history is a sub-view opened via F6.
+    await page.keyboard.press('F6');
+    await page.waitForTimeout(1_000);
 
     // Sales history container must render.
     await expect(page.locator('.sales-history')).toBeVisible({ timeout: TIMEOUT });

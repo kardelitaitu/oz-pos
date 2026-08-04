@@ -5,7 +5,7 @@
 //! front-end so users can rotate encryption keys and monitor key age
 //! from the Settings page.
 
-use oz_security::RotationInfo;
+use oz_security::{Keyring, RotationInfo};
 use serde::Serialize;
 
 use crate::error::AppError;
@@ -26,14 +26,45 @@ pub struct KeyRotationStatus {
     pub age_days: Option<i64>,
 }
 
-/// Get the current key rotation status (key age, creation timestamp).
+/// Run a keyring operation outside the Tokio runtime context.
 ///
-/// Returns the status without exposing the key material itself.
-#[tauri::command]
-pub async fn get_key_rotation_info() -> Result<KeyRotationStatus, AppError> {
-    let keyring = oz_security::default_keyring()
-        .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+/// The Linux Secret Service implementation owns a private Tokio runtime and
+/// calls `block_on` for its synchronous [`Keyring`] methods. Running the
+/// complete operation on a dedicated OS thread prevents that private runtime
+/// from being nested inside Tauri's runtime (including `spawn_blocking`, whose
+/// threads still belong to the Tokio runtime).
+async fn with_keyring<T, C, F>(create: C, operation: F) -> Result<T, AppError>
+where
+    T: Send + 'static,
+    C: FnOnce() -> Result<Box<dyn Keyring>, AppError> + Send + 'static,
+    F: FnOnce(&dyn Keyring) -> Result<T, AppError> + Send + 'static,
+{
+    let (sender, receiver) = tokio::sync::oneshot::channel();
 
+    std::thread::spawn(move || {
+        let result = (|| {
+            let keyring = create()?;
+            operation(keyring.as_ref())
+        })();
+
+        // The command may be cancelled while the keyring operation is still
+        // running; in that case there is no receiver left to notify.
+        let _ = sender.send(result);
+    });
+
+    receiver
+        .await
+        .map_err(|_| AppError::Internal("keyring worker stopped unexpectedly".into()))?
+}
+
+async fn key_rotation_info_with<C>(create: C) -> Result<KeyRotationStatus, AppError>
+where
+    C: FnOnce() -> Result<Box<dyn Keyring>, AppError> + Send + 'static,
+{
+    with_keyring(create, key_rotation_status).await
+}
+
+fn key_rotation_status(keyring: &dyn Keyring) -> Result<KeyRotationStatus, AppError> {
     let created_at: Option<String> = keyring.key_created_at(ENCRYPTION_KEY_NAME)?;
 
     let age_days = created_at.as_ref().and_then(|ts| {
@@ -50,16 +81,19 @@ pub async fn get_key_rotation_info() -> Result<KeyRotationStatus, AppError> {
     })
 }
 
-/// Rotate (re-generate) the encryption key.
+/// Get the current key rotation status (key age, creation timestamp).
 ///
-/// Generates a new random 256-bit AES key, archives the previous key,
-/// and stores the creation timestamp. Returns the [`RotationInfo`] with
-/// the new key's metadata.
+/// Returns the status without exposing the key material itself.
 #[tauri::command]
-pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
-    let keyring = oz_security::default_keyring()
-        .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
+pub async fn get_key_rotation_info() -> Result<KeyRotationStatus, AppError> {
+    key_rotation_info_with(|| {
+        oz_security::default_keyring()
+            .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))
+    })
+    .await
+}
 
+fn rotate_key(keyring: &dyn Keyring) -> Result<RotationInfo, AppError> {
     let info = keyring.rotate_key(ENCRYPTION_KEY_NAME)?;
 
     tracing::info!(
@@ -69,6 +103,23 @@ pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
     );
 
     Ok(info)
+}
+
+/// Rotate (re-generate) the encryption key.
+///
+/// Generates a new random 256-bit AES key, archives the previous key,
+/// and stores the creation timestamp. Returns the [`RotationInfo`] with
+/// the new key's metadata.
+#[tauri::command]
+pub async fn rotate_encryption_key() -> Result<RotationInfo, AppError> {
+    with_keyring(
+        || {
+            oz_security::default_keyring()
+                .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))
+        },
+        rotate_key,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -90,11 +141,26 @@ mod tests {
 
     #[tokio::test]
     async fn get_key_rotation_info_returns_status() {
-        // Use the in-memory keyring (no platform dependencies)
-        let status = get_key_rotation_info().await.unwrap();
-        // Initially no key exists
+        // Exercise the async thread-isolation bridge without platform
+        // dependencies or a Secret Service/D-Bus session.
+        let status = key_rotation_info_with(|| {
+            Ok(Box::new(oz_security::InMemoryKeyring::new()) as Box<dyn Keyring>)
+        })
+        .await
+        .unwrap();
         assert!(!status.has_key);
         assert!(status.created_at.is_none());
         assert!(status.age_days.is_none());
+    }
+
+    #[test]
+    fn key_rotation_info_reports_created_key() {
+        let keyring = oz_security::InMemoryKeyring::new();
+        keyring.rotate_key(ENCRYPTION_KEY_NAME).unwrap();
+
+        let status = key_rotation_status(&keyring).unwrap();
+        assert!(status.has_key);
+        assert!(status.created_at.is_some());
+        assert_eq!(status.age_days, Some(0));
     }
 }
