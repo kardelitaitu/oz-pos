@@ -49,7 +49,9 @@ test.describe('Cloud Server API', () => {
   test('health endpoint returns 200', async () => {
     test.skip(!serverUp, 'Cloud server not running — skip API tests');
 
-    const resp = await fetch(`${CLOUD_SERVER_URL}/api/v1/health`);
+    // Rich health payload (uptime/db info) lives on the cloud-server's own
+    // /api/health handler — oz-api's /api/v1/health is intentionally minimal.
+    const resp = await fetch(`${CLOUD_SERVER_URL}/api/health`);
     expect(resp.ok).toBe(true);
     expect(resp.status).toBe(200);
 
@@ -63,7 +65,7 @@ test.describe('Cloud Server API', () => {
   test('health endpoint includes database info', async () => {
     test.skip(!serverUp, 'Cloud server not running — skip API tests');
 
-    const resp = await fetch(`${CLOUD_SERVER_URL}/api/v1/health`);
+    const resp = await fetch(`${CLOUD_SERVER_URL}/api/health`);
     const body = await resp.json();
 
     // Should have DB connectivity info.

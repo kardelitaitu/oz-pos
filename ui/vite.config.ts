@@ -23,6 +23,14 @@ export default defineConfig({
         replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-api.ts', import.meta.url))}`,
       },
       {
+        // Dev event bridge — the real @tauri-apps/api/event module needs
+        // window.__TAURI_INTERNALS__ (undefined in a plain browser) and
+        // crashes the KDS screen's kds:orders-changed listener. The mock
+        // provides in-memory pub/sub so E2E dev flows work end to end.
+        find: /^@tauri-apps\/api\/event$/,
+        replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-event.ts', import.meta.url))}`,
+      },
+      {
         find: /^@\//,
         replacement: `${fileURLToPath(new URL('./src/', import.meta.url))}/`,
       },

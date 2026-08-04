@@ -51,6 +51,12 @@ export default defineConfig({
     // avoid failures when the dev environment/browser defaults to
     // another language (e.g. Indonesian).
     locale: 'en-US',
+    // ADR #22 E2E-2: workspace-home animates continuously (bg-shift,
+    // particle float), which makes Playwright's "element is stable"
+    // actionability check time out on the workspace-card click. Emulating
+    // reduced motion disables CSS animations/transitions at the browser
+    // level — the standard fix for animation-induced E2E flakiness.
+    reducedMotion: 'reduce',
     // Collect trace on first failure (screenshots + DOM snapshots).
     trace: 'retain-on-failure',
     // Capture screenshot on failure for debugging.

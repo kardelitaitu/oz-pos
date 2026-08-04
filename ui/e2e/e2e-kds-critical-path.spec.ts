@@ -137,16 +137,18 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
   test('switch between Kanban, Focus, and Metro layouts without crashing', async ({ page }) => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
-    // The layout switcher must be in the header-right area.
-    const layoutSwitcher = page.locator('.kds-layout-switcher');
-    await expect(layoutSwitcher).toBeVisible({ timeout: 5_000 });
+    // The layout switcher is a gear-triggered popover in the header-right.
+    const layoutBtn = page.locator('.kds-layout-btn');
+    await expect(layoutBtn).toBeVisible({ timeout: 5_000 });
+    await layoutBtn.click();
 
-    // Get layout buttons.
-    const layoutButtons = layoutSwitcher.locator('button');
+    // The popover portal exposes one option button per layout.
+    const layoutButtons = page.locator('.kds-layout-option');
+    await expect(layoutButtons.first()).toBeVisible({ timeout: 3_000 });
     const btnCount = await layoutButtons.count();
     expect(btnCount).toBeGreaterThanOrEqual(3); // Kanban, Focus, Metro
 
-    // Click each layout button and verify the switch didn't crash.
+    // Click each layout option and verify the switch didn't crash.
     const layoutNames = ['focus', 'metro', 'kanban'];
     for (const name of layoutNames) {
       const btn = layoutButtons.filter({ hasText: new RegExp(name, 'i') }).first();
@@ -156,6 +158,12 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
 
       // No crash after layout switch.
       await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });
+
+      // Reopen the popover for the next selection (it closes after picking).
+      if (name !== layoutNames[layoutNames.length - 1]) {
+        await page.locator('.kds-layout-btn').click();
+        await expect(page.locator('.kds-layout-option').first()).toBeVisible({ timeout: 3_000 });
+      }
     }
   });
 
@@ -163,14 +171,14 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
   test('settings panel opens, shows toggles, and does not crash', async ({ page }) => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
-    // The settings toggle button must be in the header-right.
-    const settingsToggle = page.locator('.kds-settings-toggle, .kds-header-right button[aria-label*="Setting"]').first();
+    // The settings trigger button lives in the header-right.
+    const settingsToggle = page.locator('.kds-settings-btn').first();
     await expect(settingsToggle).toBeVisible({ timeout: 5_000 });
     await settingsToggle.click();
     await page.waitForTimeout(500);
 
-    // Settings panel must open.
-    const settingsPanel = page.locator('.kds-settings-panel');
+    // Settings popover must open.
+    const settingsPanel = page.locator('.kds-settings-popover');
     await expect(settingsPanel).toBeVisible({ timeout: 5_000 });
 
     // Settings panel must contain interactive elements (checkboxes, toggles, inputs).

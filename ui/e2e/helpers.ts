@@ -26,6 +26,14 @@ export async function loginAs(
   username: string,
   pin: string,
 ): Promise<void> {
+  // Emulate reduced motion explicitly. The config's `use.reducedMotion` is
+  // not applied to the merged per-project context (verified via diag:
+  // matchMedia reports false without this call), so the workspace-card's
+  // infinite descendant animations (icon pulse, active dot pulse, hover
+  // sway) keep Playwright's click actionability check retrying "element is
+  // not stable". This guarantees every spec runs with CSS animations
+  // disabled — the standard fix for animation-induced E2E flakiness.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
   // Wait for the login screen using data-testid.

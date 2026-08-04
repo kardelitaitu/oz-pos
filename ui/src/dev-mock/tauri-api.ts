@@ -14,6 +14,8 @@
  *   },
  */
 
+import { emit } from './tauri-event';
+
 // ── Mock staff data ────────────────────────────────────────────
 const MOCK_STAFF: Record<string, {
   user_id: string;
@@ -147,6 +149,22 @@ const _initialKdsOrders = [
 ];
 const mockKdsOrders: Record<string, unknown>[] = [..._initialKdsOrders];
 let kdsDisplayCounter = 104;
+
+// ── Mock KDS line items (course-grouped for per-item advance) ──
+const mockKdsLineItems: Record<string, Array<Record<string, unknown>>> = {
+  'kds-order-1': [
+    { id: 'kds-line-1-1', kds_order_id: 'kds-order-1', sku: 'LATTE', display_name: 'Caffè Latte', qty: 1, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-1-2', kds_order_id: 'kds-order-1', sku: 'CROISS', display_name: 'Butter Croissant', qty: 1, course: 'main', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-2': [
+    { id: 'kds-line-2-1', kds_order_id: 'kds-order-2', sku: 'ESPR', display_name: 'Espresso Shot', qty: 2, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-2-2', kds_order_id: 'kds-order-2', sku: 'ICED', display_name: 'Iced Coffee', qty: 1, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-2-3', kds_order_id: 'kds-order-2', sku: 'TOAST', display_name: 'Avocado Toast', qty: 1, course: 'main', modifiers: [], line_position: 3, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-3': [
+    { id: 'kds-line-3-1', kds_order_id: 'kds-order-3', sku: 'MATCHA', display_name: 'Matcha Latte', qty: 1, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+};
 
 /** Push a new KDS order derived from cart lines into the mock queue. */
 function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
@@ -779,7 +797,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_currencies_scoped': () => MOCK_CURRENCIES,
   'get_default_currency': () => 'IDR',
   'set_default_currency': () => null,
-  'list_exchange_rates': () => [],
+  'list_exchange_rates': () => [
+    { id: 'rate-1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 1_6000000, source: 'manual', effective_date: '2026-08-01', created_at: new Date().toISOString() },
+  ],
   'create_exchange_rate': () => null,
   'delete_exchange_rate': () => null,
 
@@ -800,6 +820,40 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // STAFF MANAGEMENT
   // ═══════════════════════════════════════════════════════════════
+
+  'list_staff_scoped': () => [
+    { id: 'staff-1', username: 'owner', display_name: 'Owner', role_id: '1', role_name: 'owner', is_active: true },
+    { id: 'staff-2', username: 'admin', display_name: 'Admin', role_id: '2', role_name: 'manager', is_active: true },
+    { id: 'staff-3', username: 'kasir', display_name: 'Cashier', role_id: '3', role_name: 'cashier', is_active: true },
+  ],
+  'list_roles_scoped': () => [
+    { id: '1', name: 'Owner', description: 'Full access to all settings' },
+    { id: '2', name: 'Manager', description: 'Daily operations and reports' },
+    { id: '3', name: 'Cashier', description: 'Process sales and refunds' },
+    { id: '4', name: 'Kitchen', description: 'Kitchen display access' },
+  ],
+  'create_staff_scoped': (args) => {
+    const a = (args as { username?: string; display_name?: string; role_id?: string; pin?: string }) ?? {};
+    return {
+      id: `staff-${Date.now()}`,
+      username: a.username ?? 'newstaff',
+      display_name: a.display_name ?? 'New Staff',
+      role_id: a.role_id ?? '3',
+      role_name: a.role_id === '1' ? 'owner' : a.role_id === '2' ? 'manager' : 'cashier',
+      is_active: true,
+    };
+  },
+  'update_staff_scoped': (args) => {
+    const a = (args as { id?: string; username?: string; display_name?: string; role_id?: string; is_active?: boolean }) ?? {};
+    return {
+      id: a.id ?? 'staff-1',
+      username: a.username ?? 'owner',
+      display_name: a.display_name ?? 'Owner',
+      role_id: a.role_id ?? '1',
+      role_name: a.role_id === '1' ? 'owner' : a.role_id === '2' ? 'manager' : 'cashier',
+      is_active: a.is_active ?? true,
+    };
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // SHIFTS
@@ -903,7 +957,12 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'remove_count_line': () => null,
   'complete_stock_count': () => [],
   'update_stock_count_status': () => null,
-  'list_stock_adjustments': () => [],
+  'list_stock_adjustments': () => [
+    { id: 'adj-1', sku: 'CPU-R7-7800X3D', product_name: 'AMD Ryzen 7 7800X3D', qty_change: 5, reason: 'restock', created_at: new Date().toISOString() },
+  ],
+  'list_stock_adjustments_scoped': () => [
+    { id: 'adj-1', sku: 'CPU-R7-7800X3D', product_name: 'AMD Ryzen 7 7800X3D', qty_change: 5, reason: 'restock', created_at: new Date().toISOString() },
+  ],
 
   // ═══════════════════════════════════════════════════════════════
   // STOCK TRANSFERS
@@ -927,19 +986,75 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'list_kds_orders_scoped': () => mockKdsOrders,
   'get_kds_queue': () => mockKdsOrders,
   'get_kds_queue_scoped': () => mockKdsOrders,
-  'update_kds_status': () => null,
-  'update_kds_status_scoped': () => null,
+  'update_kds_status': (args) => {
+    const { id, status } = (args as { id?: string; status?: string }) ?? {};
+    const order = mockKdsOrders.find((o) => o['id'] === id);
+    if (order && status) {
+      order['status'] = status;
+      void emit('kds:orders-changed', null);
+    }
+    return order ?? null;
+  },
+  'update_kds_status_scoped': (args) => {
+    const { id, status } = (args as { id?: string; status?: string }) ?? {};
+    const order = mockKdsOrders.find((o) => o['id'] === id);
+    if (order && status) {
+      order['status'] = status;
+      void emit('kds:orders-changed', null);
+    }
+    return order ?? null;
+  },
   'create_kds_order_from_sale': () => [],
   'create_kds_order_from_sale_scoped': () => [],
   'get_kds_order': () => null,
   'get_kds_order_scoped': () => null,
+  'get_kds_order_lines': (args) => {
+    const { id } = (args as { id?: string }) ?? {};
+    return (id ? mockKdsLineItems[id] : undefined) ?? [];
+  },
+  'get_kds_order_lines_scoped': (args) => {
+    const { orderId } = (args as { orderId?: string }) ?? {};
+    return (orderId ? mockKdsLineItems[orderId] : undefined) ?? [];
+  },
+  'update_kds_line_item_status': (args) => {
+    const { itemId, status } = (args as { itemId?: string; status?: string }) ?? {};
+    const item = Object.values(mockKdsLineItems).flat().find((i) => i['id'] === itemId);
+    if (item && status) {
+      item['item_status'] = status;
+      void emit('kds:orders-changed', null);
+    }
+    return item ?? null;
+  },
+  'update_kds_line_item_status_scoped': (args) => {
+    const { itemId, status } = (args as { itemId?: string; status?: string }) ?? {};
+    const item = Object.values(mockKdsLineItems).flat().find((i) => i['id'] === itemId);
+    if (item && status) {
+      item['item_status'] = status;
+      void emit('kds:orders-changed', null);
+    }
+    return item ?? null;
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // PROMOTIONS
   // ═══════════════════════════════════════════════════════════════
 
-  'list_promotions': () => [],
-  'list_promotions_scoped': () => [],
+  'list_promotions': () => [
+    {
+      id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y',
+      value_minor: 0, min_qty: 1, trigger_sku: 'LATTE', reward_sku: 'CROISS', reward_qty: 1,
+      starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null,
+      active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    },
+  ],
+  'list_promotions_scoped': () => [
+    {
+      id: 'promo-1', name: 'Buy 1 Get 1', description: 'Free croissant with any latte', promo_type: 'buy_x_get_y',
+      value_minor: 0, min_qty: 1, trigger_sku: 'LATTE', reward_sku: 'CROISS', reward_qty: 1,
+      starts_at: new Date().toISOString(), ends_at: null, min_order_minor: 0, category_id: null,
+      active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    },
+  ],
   'get_promotion': () => null,
   'get_promotion_scoped': () => null,
   'create_promotion': () => null,
@@ -957,11 +1072,23 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // PURCHASING / SUPPLIERS
   // ═══════════════════════════════════════════════════════════════
 
-  'list_suppliers': () => [],
+  'list_suppliers': () => [
+    { id: 'supplier-1', name: 'PT Teknologi Maju', contact_person: 'Budi', phone: '021-1234567', email: 'budi@teknologi.com', address: 'Jl. Merdeka No. 1', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'supplier-2', name: 'CV Distribusi Utama', contact_person: 'Siti', phone: '021-7654321', email: 'siti@distribusi.com', address: 'Jl. Sudirman No. 45', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ],
+  'list_suppliers_scoped': () => [
+    { id: 'supplier-1', name: 'PT Teknologi Maju', contact_person: 'Budi', phone: '021-1234567', email: 'budi@teknologi.com', address: 'Jl. Merdeka No. 1', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'supplier-2', name: 'CV Distribusi Utama', contact_person: 'Siti', phone: '021-7654321', email: 'siti@distribusi.com', address: 'Jl. Sudirman No. 45', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ],
   'get_supplier': () => null,
   'create_supplier': () => null,
   'update_supplier': () => null,
-  'list_purchase_orders': () => [],
+  'list_purchase_orders': () => [
+    { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', total_minor: 5000000, tax_minor: 0, line_count: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ],
+  'list_purchase_orders_scoped': () => [
+    { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', total_minor: 5000000, tax_minor: 0, line_count: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  ],
   'get_purchase_order': () => null,
   'create_purchase_order': () => null,
   'update_po_status': () => null,
@@ -1086,6 +1213,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_audit_log': () => [],
+  'list_audit_log_scoped': () => [],
+  'get_audit_review_status_scoped': () => ({ reviewed: false }),
+  'mark_audit_reviewed_scoped': () => null,
+  'export_audit_log_scoped': () => '',
 
   // ═══════════════════════════════════════════════════════════════
   // OFFLINE / SYNC

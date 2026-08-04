@@ -91,10 +91,11 @@ test.describe('ADR #22 — Topology canvas', () => {
     await topologyNav.click();
     await page.waitForTimeout(1_500);
 
-    // Topology screen heading must appear.
-    const heading = page.locator('.settings-section-title')
-      .filter({ hasText: /topology/i });
-    await expect(heading.first()).toBeVisible({ timeout: 5_000 });
+    // Topology screen must render (the dedicated editor, not a settings
+    // section — its own header title carries the "Topology" text).
+    await expect(page.locator('.node-topology-editor')).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator('.node-topology-header-title'))
+      .toContainText(/topology/i);
   });
 
   test('topology screen renders interactive element', async ({ page }) => {
@@ -115,8 +116,10 @@ test.describe('ADR #22 — Topology canvas', () => {
     await topologyNav.click();
     await page.waitForTimeout(2_000);
 
-    // Click on any node in the topology canvas.
-    const node = page.locator('[class*="node"], [class*="topology-node"], g[transform], rect, circle').first();
+    // Click on a real topology node card in the canvas (a bare `[class*="node"]`
+    // match can resolve to an SVG circle inside a sidebar nav icon).
+    const node = page.locator('.topology-node').first();
+    await expect(node).toBeVisible({ timeout: 5_000 });
     await node.click();
     await page.waitForTimeout(1_000);
 
@@ -124,8 +127,7 @@ test.describe('ADR #22 — Topology canvas', () => {
     const inspector = page.locator('[class*="inspector"], [class*="drawer"], [role="complementary"]');
     const _inspectorVisible = await inspector.first().isVisible({ timeout: 5_000 }).catch(() => false);
     // At minimum, the topology screen should still be visible after interaction.
-    await expect(page.locator('.settings-section-title').filter({ hasText: /topology/i }).first())
-      .toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.node-topology-editor')).toBeVisible({ timeout: 5_000 });
   });
 });
 

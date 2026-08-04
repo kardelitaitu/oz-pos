@@ -40,7 +40,27 @@ test.describe('Critical Path: Shift Reconciliation', () => {
 
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
 
-    // Click "Open Shift" button.
+    // The dev-mock may already have an active shift open (needed for the
+    // Pay button in POS tests). If so, close it first before re-opening
+    // with a known opening balance, so the reconciliation flow is deterministic.
+    const closeShiftBtn = page.locator('button:has-text("Close Shift"), button:has-text("Tutup")').first();
+    if (await closeShiftBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      // Close the existing shift first.
+      await closeShiftBtn.click();
+      await page.waitForTimeout(500);
+      const closingInput = page.locator('#close-balance');
+      await expect(closingInput).toBeVisible({ timeout: 3_000 });
+      await closingInput.fill('0');
+      await page.waitForTimeout(200);
+      const confirmCloseBtn = page.locator(
+        '.shift-mgmt-modal-actions button:has-text("Close Shift"), ' +
+        '.shift-mgmt-modal-actions button:has-text("Tutup")',
+      );
+      await confirmCloseBtn.click();
+      await page.waitForTimeout(1_000);
+    }
+
+    // Now click "Open Shift" button.
     const openBtn = page.locator('button:has-text("Open Shift"), button:has-text("Buka")').first();
     await expect(openBtn).toBeVisible({ timeout: 5_000 });
     await openBtn.click();

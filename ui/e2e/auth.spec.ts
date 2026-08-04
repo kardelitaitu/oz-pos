@@ -84,36 +84,26 @@ test.describe('Staff Login', () => {
     await expect(page.locator('.staff-login-screen')).toBeVisible();
   });
 
-  // ── E2E-6: Assert error for unknown username ─────────────────
+  // ── E2E-6: Assert uniform pre-auth for unknown username (STAFF-06) ──
 
-  test('shows error for unknown username', async ({ page }) => {
+  test('unknown username advances to PIN step then errors (STAFF-06)', async ({ page }) => {
     await page.locator('.staff-login-input').fill(UNKNOWN_USER);
     await page.locator('.staff-login-submit-btn').click();
 
-    // The app should show a toast or inline error about user not found.
-    // Dev-mock: staff_check_username returns { found: false }.
-    // The login screen must remain visible.
-    await expect(page.locator('.staff-login-screen')).toBeVisible({ timeout: 5_000 });
+    // STAFF-06: the pre-check returns a uniform { proceed: true } and never
+    // reveals whether the account exists — the screen must advance to the
+    // PIN step for ANY username (no enumeration oracle).
+    await expect(page.locator('.staff-login-pad')).toBeVisible({ timeout: 10_000 });
 
-    // Wait for error toast/inline message — run concurrently.
-    const toastError = page.locator('.toast--error');
-    const inlineError = page.locator('.staff-login-error');
+    // Entering a PIN for an unknown account fails with the uniform error.
+    await enterPin(page, '1234');
 
-    const [toastOk, inlineOk] = await Promise.allSettled([
-      toastError.first().waitFor({ state: 'attached', timeout: 5_000 }),
-      inlineError.first().waitFor({ state: 'attached', timeout: 3_000 }),
-    ]);
-    const toastVisible = toastOk.status === 'fulfilled';
-    const inlineVisible = inlineOk.status === 'fulfilled';
+    const errorAlert = page.locator('.staff-login-error');
+    await expect(errorAlert).toBeVisible({ timeout: 5_000 });
+    await expect(errorAlert).toContainText('Invalid credentials');
 
-    expect(toastVisible || inlineVisible).toBe(true);
-
-    if (inlineVisible) {
-      await expect(inlineError).toContainText(/not found|unknown|invalid/i);
-    }
-    if (toastVisible) {
-      await expect(toastError).toContainText(/not found|unknown|invalid/i);
-    }
+    // Must stay on login screen.
+    await expect(page.locator('.staff-login-screen')).toBeVisible();
   });
 
   // ── E2E-7: Rate-limit lockout UI ─────────────────────────────
