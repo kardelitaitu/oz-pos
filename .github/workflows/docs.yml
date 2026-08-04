@@ -65,6 +65,17 @@ jobs:
   build-and-deploy:
     name: Build & Deploy Docs
     runs-on: ubuntu-latest
+    # AUDIT-29 docs-deploy-pr-isolation: the github-pages environment gates
+    # deployments to repository-protected branches only (refs/heads/main).
+    # PR-triggered runs use refs/pull/N/merge, which the protection rule
+    # rejects with "Branch X is not allowed to deploy to github-pages due to
+    # environment protection rules." — fail-closed and deterministic on every
+    # docs PR. Pushing the build forward on PRs gives no early-warning signal
+    # (cargo doc is unrelated to drift), so we skip the deploy attempt entirely
+    # on non-push events. The `ci-docs-drift` job above still runs on PRs (no
+    # `environment:` block → unconstrained), so a docs-touching PR still
+    # verifies its matrix against the manifest before merge.
+    if: github.event_name == 'push'
     needs: ci-docs-drift
     environment:
       name: github-pages
