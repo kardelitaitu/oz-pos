@@ -288,15 +288,19 @@ describe('LocationPicker', () => {
 
   it('shows a persistent error with retry when the locations fetch fails', async () => {
     mockListLocations.mockRejectedValue(new Error('boom'));
-    renderWithProviders(
+    // Await the render so the initial mount + post-mount sync effects are
+    // fully flushed inside `act()` — without this the component may not even
+    // be on screen when waitFor starts polling. The rejection itself is an
+    // async microtask scheduled inside the effect's catch handler, so we wait
+    // again with `waitFor` for the alert role to appear. The same dual pattern
+    // is used in PaymentModalEdgeCases.test.tsx for retryable-error states.
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
 
     // The error message (loc-picker-error-load = "Failed to load locations")
-    // must render persistently instead of silently returning null. Wait for
-    // the async rejection to propagate through React's microtask queue after
-    // the effect's catch handler sets loadError.
+    // must render persistently instead of silently returning null.
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
     }, { timeout: 5000 });
@@ -307,7 +311,7 @@ describe('LocationPicker', () => {
   it('recovers when Retry succeeds after a failed load', async () => {
     const user = userEvent.setup();
     mockListLocations.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(mockLocations);
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
