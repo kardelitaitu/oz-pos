@@ -82,8 +82,23 @@ export async function selectWorkspace(
   typeKey: string,
   opts?: { force?: boolean },
 ): Promise<void> {
-  // Wait for the workspace picker.
-  await page.getByTestId('workspace-home').waitFor({ timeout: 10_000 });
+  // If already inside a workspace (workspace-home is not visible), navigate
+  // back to the workspace picker first by clicking the "Back to workspaces"
+  // button or pressing Escape.
+  const workspaceHome = page.getByTestId('workspace-home');
+  const isOnPicker = await workspaceHome.isVisible({ timeout: 1_000 }).catch(() => false);
+  if (!isOnPicker) {
+    // Try clicking the "Back to workspaces" button first.
+    const backBtn = page.locator('button[aria-label*="Back to workspaces"], button:has-text("Back to workspaces")').first();
+    const backVisible = await backBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+    if (backVisible) {
+      await backBtn.click();
+    } else {
+      // Press Escape as fallback to return to workspace picker.
+      await page.keyboard.press('Escape');
+    }
+    await workspaceHome.waitFor({ timeout: 10_000 });
+  }
 
   // Map type_key to the display name used in FALLBACK_WORKSPACES.
   const workspaceNames: Record<string, string> = {
