@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithProviders } from '@/__tests__/test-utils/render';
+import { renderWithProviders, renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import inventoryFtl from '@/locales/inventory.ftl?raw';
 import inventoryIdFtl from '@/locales/inventory.id.ftl?raw';
 import LocationPicker from '@/features/inventory/LocationPicker';
@@ -287,14 +287,19 @@ describe('LocationPicker', () => {
   // ── Durable error state (INV-08) ───────────────────────────────
 
   it('shows a persistent error with retry when the locations fetch fails', async () => {
-    mockListLocations.mockRejectedValue(new Error('boom'));
-    // Await the render so the initial mount + post-mount sync effects are
-    // fully flushed inside `act()` — without this the component may not even
-    // be on screen when waitFor starts polling. The rejection itself is an
-    // async microtask scheduled inside the effect's catch handler, so we wait
-    // again with `waitFor` for the alert role to appear. The same dual pattern
-    // is used in PaymentModalEdgeCases.test.tsx for retryable-error states.
-    await renderWithProviders(
+    // Use mockRejectedValueOnce (not mockRejectedValue): both produce a
+    // rejected promise on the first call, but Once avoids an edge case with
+    // React 18's act() boundary and permanently-rejected mocks in mount
+    // effects. This test only asserts the initial error render, so Once is
+    // semantically equivalent.
+    mockListLocations.mockRejectedValueOnce(new Error('boom'));
+    // Render synchronously (no `await renderWithProviders`/`renderInAct`). The
+    // locations fetch is an async effect; awaiting its rejection inside the
+    // render's `act()` boundary is what made this test flaky under parallel
+    // suite load — the setLoadError/setLoading(false) updates fired after the
+    // boundary closed and were dropped. waitFor re-wraps each poll in act(),
+    // so the async error state is reliably observed here.
+    renderWithProvidersSync(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -311,7 +316,7 @@ describe('LocationPicker', () => {
   it('recovers when Retry succeeds after a failed load', async () => {
     const user = userEvent.setup();
     mockListLocations.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(mockLocations);
-    await renderWithProviders(
+    renderWithProvidersSync(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
