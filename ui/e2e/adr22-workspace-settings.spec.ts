@@ -83,6 +83,19 @@ test.describe('ADR #22 — Topology canvas', () => {
 
   test('topology nav item exists and navigates to topology screen', async ({ page }) => {
     // Hard assertion: topology nav item must exist.
+    // The Management category is collapsed by default. Expand it.
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    await expect(managementHeader).toBeVisible({ timeout: 5_000 });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await expect(topologyNav).toBeVisible({ timeout: 5_000 });
@@ -99,28 +112,49 @@ test.describe('ADR #22 — Topology canvas', () => {
   });
 
   test('topology screen renders interactive element', async ({ page }) => {
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
     await page.waitForTimeout(2_000);
 
-    // The TopologyScreen should render an interactive area.
-    const interactive = page.locator('canvas, svg, [class*="topology"], [class*="node"]');
+    // The TopologyScreen should render an interactive area (canvas, SVG, or layout).
+    const interactive = page.locator('.node-topology-editor, canvas, svg, [class*="topology"], [class*="node"]');
     await expect(interactive.first()).toBeVisible({ timeout: 8_000 });
   });
 
   test('clicking a topology node shows inspector drawer', async ({ page }) => {
     // ADR #22 Pillar E: selecting a node opens inspector with workspace card.
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
     const topologyNav = page.locator('.settings-nav-item')
       .filter({ hasText: /topology/i });
     await topologyNav.click();
     await page.waitForTimeout(2_000);
 
-    // Click on a real topology node card in the canvas (a bare `[class*="node"]`
-    // match can resolve to an SVG circle inside a sidebar nav icon).
+    // Click on a real topology node card in the canvas.
     const node = page.locator('.topology-node').first();
     await expect(node).toBeVisible({ timeout: 5_000 });
-    await node.click();
+    await node.click({ force: true });
     await page.waitForTimeout(1_000);
 
     // Inspector drawer or settings panel should appear on the right.

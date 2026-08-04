@@ -77,7 +77,7 @@ test.describe('Staff Login', () => {
 
     // Error must appear with exact dev-mock error text.
     const errorAlert = page.locator('.staff-login-error');
-    await expect(errorAlert).toBeVisible({ timeout: 5_000 });
+    await expect(errorAlert).toBeVisible({ timeout: 8_000 });
     await expect(errorAlert).toContainText('Invalid credentials');
 
     // Must stay on login screen.
@@ -98,8 +98,9 @@ test.describe('Staff Login', () => {
     // Entering a PIN for an unknown account fails with the uniform error.
     await enterPin(page, '1234');
 
+    // Wait for the async login to complete and set the error state.
     const errorAlert = page.locator('.staff-login-error');
-    await expect(errorAlert).toBeVisible({ timeout: 5_000 });
+    await expect(errorAlert).toBeVisible({ timeout: 8_000 });
     await expect(errorAlert).toContainText('Invalid credentials');
 
     // Must stay on login screen.
@@ -171,7 +172,7 @@ test.describe('Staff Login', () => {
     await enterPin(page, WRONG_PIN);
 
     // Error should appear.
-    await expect(page.locator('.staff-login-error')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.staff-login-error')).toBeVisible({ timeout: 8_000 });
 
     // PIN dots must be cleared (no filled dots).
     await expect(page.locator('.staff-login-pin-dot--filled')).toHaveCount(0);

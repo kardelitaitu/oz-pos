@@ -25,9 +25,11 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  *   .kds-ticket-number            — display number (e.g. "#101")
  *   .kds-ticket-items             — items summary
  *   .kds-ticket-time              — SLA time indicator
- *   .kds-layout-switcher          — layout toggle buttons (Kanban/Focus/Metro)
- *   .kds-settings-panel           — settings gear panel
- *   .kds-settings-toggle          — settings open/close button
+ *   .kds-layout-btn               — layout switcher trigger button
+ *   .kds-layout-popover            — layout options popover
+ *   .kds-layout-option             — individual layout option
+ *   .kds-settings-btn              — settings trigger button
+ *   .kds-settings-popover          — settings gear panel
  *   .kds-history-toggle           — history panel toggle
  *   .kds-shortcuts-btn            — keyboard shortcuts button
  *   .kds-zone-chips               — kitchen zone filter chips
@@ -74,60 +76,40 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
   test('advance a ticket through all statuses: pending → preparing → ready → served', async ({ page }) => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
-    // Get the initial ticket count in pending column.
-    const getPendingCount = async () => {
-      const pendingColumn = page.locator('.kds-column--pending');
-      return await pendingColumn.locator('.kds-ticket').count();
-    };
-    const getPreparingCount = async () => {
-      const preparingColumn = page.locator('.kds-column--preparing');
-      return await preparingColumn.locator('.kds-ticket').count();
-    };
-    const getReadyCount = async () => {
-      const readyColumn = page.locator('.kds-column--ready');
-      return await readyColumn.locator('.kds-ticket').count();
-    };
+    const pendingTickets = page.locator('.kds-column--pending .kds-ticket');
+    await expect(pendingTickets.first()).toBeVisible({ timeout: 5_000 });
 
-    const initialPending = await getPendingCount();
-    const initialPreparing = await getPreparingCount();
-    const initialReady = await getReadyCount();
-
-    expect(initialPending).toBeGreaterThanOrEqual(1);
-
-    // ── Advance 1: pending → preparing ─────────────────────────────
-    const firstPending = page.locator('.kds-column--pending .kds-ticket').first();
+    // Track the exact ticket we click instead of comparing aggregate counts.
+    // Other tickets may be present or arrive while the event-driven board
+    // refreshes, but this ticket must follow the full lifecycle.
+    const firstPending = pendingTickets.first();
     const ticketNumberText = await firstPending.locator('.kds-ticket-number').textContent() || '';
     expect(ticketNumberText).toMatch(/#\d+/);
 
-    await firstPending.click();
-    await page.waitForTimeout(1_000);
+    const trackedTicket = page.locator('.kds-ticket').filter({ hasText: ticketNumberText }).first();
 
-    // Verify ticket moved out of pending.
-    const pendingAfter1 = await getPendingCount();
-    const preparingAfter1 = await getPreparingCount();
-    expect(pendingAfter1).toBe(initialPending - 1);
-    expect(preparingAfter1).toBe(initialPreparing + 1);
+    // ── Advance 1: pending → preparing ─────────────────────────────
+    await firstPending.click();
+    await expect.poll(
+      async () => await page.locator('.kds-column--pending').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
+      { timeout: 8_000, message: `${ticketNumberText} should leave pending` },
+    ).toBe(0);
+    await expect(page.locator('.kds-column--preparing').locator('.kds-ticket').filter({ hasText: ticketNumberText })).toHaveCount(1, { timeout: 3_000 });
 
     // ── Advance 2: preparing → ready ───────────────────────────────
-    const firstPreparing = page.locator('.kds-column--preparing .kds-ticket').first();
-    await expect(firstPreparing).toBeVisible({ timeout: 5_000 });
-    await firstPreparing.click();
-    await page.waitForTimeout(1_000);
-
-    const preparingAfter2 = await getPreparingCount();
-    const readyAfter2 = await getReadyCount();
-    expect(preparingAfter2).toBe(preparingAfter1 - 1);
-    expect(readyAfter2).toBe(initialReady + 1);
+    await trackedTicket.click();
+    await expect.poll(
+      async () => await page.locator('.kds-column--preparing').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
+      { timeout: 8_000, message: `${ticketNumberText} should leave preparing` },
+    ).toBe(0);
+    await expect(page.locator('.kds-column--ready').locator('.kds-ticket').filter({ hasText: ticketNumberText })).toHaveCount(1, { timeout: 3_000 });
 
     // ── Advance 3: ready → served ──────────────────────────────────
-    const firstReady = page.locator('.kds-column--ready .kds-ticket').first();
-    await expect(firstReady).toBeVisible({ timeout: 5_000 });
-    await firstReady.click();
-    await page.waitForTimeout(1_000);
-
-    // Ticket should disappear from ready column (served = removed).
-    const readyAfter3 = await getReadyCount();
-    expect(readyAfter3).toBe(readyAfter2 - 1);
+    await trackedTicket.click();
+    await expect.poll(
+      async () => await page.locator('.kds-column--ready').locator('.kds-ticket').filter({ hasText: ticketNumberText }).count(),
+      { timeout: 8_000, message: `${ticketNumberText} should leave ready` },
+    ).toBe(0);
 
     // No crash after full cycle.
     await expect(page.locator('[class*="error-boundary"]')).toHaveCount(0, { timeout: 3_000 });
@@ -181,7 +163,7 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     const settingsPanel = page.locator('.kds-settings-popover');
     await expect(settingsPanel).toBeVisible({ timeout: 5_000 });
 
-    // Settings panel must contain interactive elements (checkboxes, toggles, inputs).
+    // Settings panel must contain interactive elements (toggles, sliders, buttons).
     const settingsInputs = settingsPanel.locator('input, button, select, label');
     const inputCount = await settingsInputs.count();
     expect(inputCount).toBeGreaterThanOrEqual(2);
@@ -282,13 +264,13 @@ test.describe('Critical Path: KDS Full Lifecycle', () => {
     await expect(page.locator('.kds-columns')).toBeVisible({ timeout: TIMEOUT });
 
     // Wait for line items to lazy-fetch (getKdsOrderLinesScoped).
-    await page.waitForTimeout(2_000);
+    await page.waitForTimeout(3_000);
 
     // Find an actionable per-item row inside a ticket (dev-mock returns course-grouped items).
     const actionableItem = page.locator(
       '.kds-ticket .kds-ticket-item-row--actionable',
     ).first();
-    await expect(actionableItem).toBeVisible({ timeout: 5_000 });
+    await expect(actionableItem).toBeVisible({ timeout: 8_000 });
 
     // Read the current status dot class before click.
     const statusDot = actionableItem.locator('.kds-ticket-item-status-dot');

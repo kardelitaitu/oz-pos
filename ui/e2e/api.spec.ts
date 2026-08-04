@@ -59,7 +59,11 @@ test.describe('Cloud Server API', () => {
     expect(body).toHaveProperty('status');
     expect(body.status).toBe('ok');
     expect(body).toHaveProperty('version');
+
+    // The cloud-server's /api/health contract includes runtime and database
+    // health fields. The minimal oz-api route is /api/v1/health, not this URL.
     expect(body).toHaveProperty('uptime_seconds');
+    expect(typeof body.uptime_seconds).toBe('number');
   });
 
   test('health endpoint includes database info', async () => {
@@ -68,9 +72,8 @@ test.describe('Cloud Server API', () => {
     const resp = await fetch(`${CLOUD_SERVER_URL}/api/health`);
     const body = await resp.json();
 
-    // Should have DB connectivity info.
+    // Should have DB connectivity info from the cloud-server health handler.
     expect(body).toHaveProperty('db_connected');
-    // SQLite is always connected (embedded).
     expect(body.db_connected).toBe(true);
   });
 });
@@ -97,8 +100,12 @@ test.describe('License Server API', () => {
     expect(resp.status).toBe(200);
 
     const body = await resp.json();
-    expect(body).toHaveProperty('status');
-    expect(body.status).toBe('ok');
+
+    // PocketBase's built-in /api/health endpoint returns an envelope rather
+    // than the retired custom { status: "ok" } payload. Keep the contract
+    // assertion aligned with the route actually registered by the server.
+    expect(body).toMatchObject({ code: 200, message: 'API is healthy.' });
+    expect(body).toHaveProperty('data');
   });
 
   test('license status endpoint returns status info', async () => {
