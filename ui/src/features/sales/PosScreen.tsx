@@ -219,6 +219,7 @@ function CartLineItem({
         ref={(el) => registerRef?.(line.id, el)}
         tabIndex={0}
         data-line-id={line.id}
+        data-testid="cart-panel-line-item"
         role="group"
         aria-label={l10n.getString('pos-cart-line-aria', { sku: String(line.sku), qty: String(line.qty), amount: formatMoney(line.unit_price) })}
       >

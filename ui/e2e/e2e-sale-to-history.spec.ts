@@ -10,7 +10,7 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  * CSS contract:
  *   .retail-product-btn           — product card in grid
  *   [data-testid="cart-panel-line-item"] — cart line
- *   .retail-cart-action-btn--pay  — Pay button
+ *   .retail-cart-action-btn--pay  — Pay button (Store POS / RetailCartPanel)
  *   [data-testid="payment-modal"] — payment modal
  *   [data-testid="quick-pay-button"] — quick tender button
  *   .receipt-preview-paper        — receipt after completed sale
@@ -26,12 +26,18 @@ test.describe('Critical Path: Sale → Sales History', () => {
   });
 
   test('complete a sale and verify it appears in Sales History', async ({ page }) => {
+    page.on('pageerror', (e) => console.log('PAGEERROR:', e.message));
+    page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE-ERR:', m.text()); });
+
     // ── Step 1: Wait for product grid ───────────────────────────────
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 10_000 });
 
     // Read the product name and price before adding to cart.
-    const productName = await productCards.first().locator('.retail-product-name').textContent() ?? 'Unknown';
+    // The retail grid renders each product as a `.retail-product-btn`
+    // table-row button whose name lives in an unclassed <span>, so read
+    // the button's own textContent (not a non-existent `.retail-product-name`).
+    const productName = (await productCards.first().textContent())?.trim() ?? 'Unknown';
     console.log(`  Selected product: ${productName}`);
 
     // ── Step 2: Add product to cart ─────────────────────────────────
@@ -44,51 +50,71 @@ test.describe('Critical Path: Sale → Sales History', () => {
     expect(await cartLines.count()).toBe(1);
 
     // ── Step 3: Open payment modal ──────────────────────────────────
-    await page.locator('.retail-cart-action-btn--pay').click();
+    // Store POS renders RetailCartPanel; its pay button is
+    // .retail-cart-action-btn--pay (labeled "Pay"). It is enabled once an
+    // active shift is loaded (the mock auto-opens one).
+    const payBtn = page.locator('.retail-cart-action-btn--pay');
+    await expect(payBtn).toBeVisible({ timeout: 8_000 });
+    await payBtn.click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
     // Read the total from the modal.
     const totalText = await page.locator('.payment-total-amount').first().textContent() ?? '';
     console.log(`  Total before payment: ${totalText}`);
 
-    // ── Step 4: Complete cash payment ───────────────────────────────
-    // Click the first quick-pay button (typically Cash).
-    const quickPayButtons = page.locator('[data-testid="quick-pay-button"]');
-    const quickCount = await quickPayButtons.count();
-    expect(quickCount).toBeGreaterThan(0);
-
-    await quickPayButtons.first().click();
-    await page.waitForTimeout(800);
-
-    // Click confirm/settle button.
-    const confirmBtn = page.locator(
-      '[data-testid="settle-button"], ' +
-      'button:has-text("Confirm"), ' +
-      'button:has-text("Settle"), ' +
-      'button:has-text("OK")',
-    ).first();
-
-    if (await confirmBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await confirmBtn.click();
-      await page.waitForTimeout(1_000);
+    // ── Step 4: Complete payment ───────────────────────────────────
+    // Cash is the default method. Set Amount Tendered to a value well above the
+    // total so the Complete Sale button enables (cash requires tendered >= total).
+    const tenderedInput = page.locator('.payment-tendered-input');
+    await expect(tenderedInput).toBeVisible({ timeout: 3_000 });
+    await tenderedInput.click();
+    await tenderedInput.pressSequentially('9999999', { delay: 30 });
+    await page.waitForTimeout(200);
+    const typedVal = await tenderedInput.inputValue();
+    console.log(`  [diag] tendered after type: "${typedVal}"`);
+    if (!typedVal || Number(typedVal.replace(/[^0-9.]/g, '')) < 1000) {
+      const exactBtn = page.locator('.payment-quick-cash .payment-quick-btn').last();
+      await exactBtn.click();
+      await page.waitForTimeout(300);
+      const exactVal = await tenderedInput.inputValue();
+      console.log(`  [diag] tendered after Exact: "${exactVal}"`);
+      if (!exactVal || Number(exactVal.replace(/[^0-9.]/g, '')) < 1000) {
+        await tenderedInput.click();
+        await tenderedInput.pressSequentially('9999999', { delay: 50 });
+        await page.waitForTimeout(300);
+        console.log(`  [diag] tendered after 2nd type: "${await tenderedInput.inputValue()}"`);
+      }
     }
 
+    // Click the Complete Sale button by its label and wait for the modal to close.
+    const completeBtn = page.getByRole('button', { name: /complete/i });
+    await expect(completeBtn).toBeEnabled({ timeout: 5_000 });
+    await completeBtn.click();
+    await expect(page.locator('[data-testid="payment-modal"]')).toBeHidden({ timeout: 10_000 });
+
     // ── Step 5: Dismiss receipt preview if shown ────────────────────
+    // The receipt preview auto-dismisses; guard the click so a detached element
+    // during the close animation doesn't fail the test.
     const receiptPaper = page.locator('.receipt-preview-paper');
     if (await receiptPaper.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      const skipBtn = page.locator('button:has-text("Skip"), button:has-text("Lewati")');
-      const printBtn = page.locator('button:has-text("Print"), button:has-text("Cetak")');
-
-      if (await skipBtn.isVisible().catch(() => false)) {
-        await skipBtn.click();
-      } else if (await printBtn.isVisible().catch(() => false)) {
-        await printBtn.click();
+      for (const sel of [
+        'button:has-text("Skip"), button:has-text("Lewati")',
+        'button:has-text("Print"), button:has-text("Cetak")',
+        'button:has-text("Close"), button:has-text("Done"), button:has-text("Selesai")',
+      ]) {
+        const btn = page.locator(sel).first();
+        if (await btn.isVisible().catch(() => false)) {
+          await btn.click({ timeout: 2_000 }).catch(() => {});
+          break;
+        }
       }
-      await page.waitForTimeout(500);
+      // Wait for the receipt to finish closing regardless.
+      await receiptPaper.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
     }
 
     // ── Step 6: Verify cart is empty (sale completed) ───────────────
-    await expect(page.locator('.retail-cart-action-btn--pay')).toBeDisabled({ timeout: 5_000 });
+    // After a successful sale the cart should have zero line items.
+    await expect(page.locator('[data-testid="cart-panel-line-item"]')).toHaveCount(0, { timeout: 5_000 });
 
     // ── Step 7: Navigate to Sales History ───────────────────────────
     // In store-pos workspace, sales history is a sub-view. Press F6 or
@@ -107,7 +133,7 @@ test.describe('Critical Path: Sale → Sales History', () => {
 
     if (tableVisible) {
       // At least one sale row must exist.
-      const saleRows = page.locator('.sales-history-row');
+      const saleRows = page.locator('.sales-history-row-wrap');
       const rowCount = await saleRows.count();
       expect(rowCount).toBeGreaterThanOrEqual(1);
 

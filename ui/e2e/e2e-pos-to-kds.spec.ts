@@ -9,9 +9,9 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  * appears in the pending column.
  *
  * CSS contract:
- *   .retail-product-btn           — product card in POS grid
+ *   .restaurant-card               — product card in Restaurant POS grid
  *   [data-testid="cart-panel-line-item"] — cart line item
- *   .retail-cart-action-btn--pay  — Pay button
+ *   .pos-cart-pay-btn             — Pay/Charge button (PosScreen cart)
  *   [data-testid="payment-modal"] — payment modal
  *   [data-testid="quick-pay-button"] — quick tender button
  *   .receipt-preview-paper        — receipt after completed sale
@@ -48,11 +48,13 @@ test.describe('Critical Path: POS → KDS', () => {
     await selectWorkspace(page, WORKSPACES.RESTAURANT_POS);
 
     // Wait for product grid.
-    const productCards = page.locator('.retail-product-btn');
+    // Restaurant POS renders the menu as `.restaurant-card` buttons (name in
+    // `.restaurant-card-name`), NOT the retail `.retail-product-btn` table.
+    const productCards = page.locator('.restaurant-card');
     await expect(productCards.first()).toBeVisible({ timeout: TIMEOUT });
 
     // Add a product to cart.
-    const productName = await productCards.first().locator('.retail-product-name').textContent() || 'Unknown';
+    const productName = (await productCards.first().locator('.restaurant-card-name').textContent())?.trim() || 'Unknown';
     console.log(`  Adding product: ${productName}`);
     await productCards.first().click();
     await page.waitForTimeout(500);
@@ -62,26 +64,28 @@ test.describe('Critical Path: POS → KDS', () => {
     await expect(cartLines.first()).toBeVisible({ timeout: 5_000 });
     expect(await cartLines.count()).toBe(1);
 
-    // Open payment modal.
-    await page.locator('.retail-cart-action-btn--pay').click();
+    // The PAY/Charge button is enabled once an active shift is loaded (the mock
+    // auto-opens one). Restaurant POS uses the inline cart (.pos-cart-pay-btn).
+    const payBtn = page.locator('.pos-cart-pay-btn');
+    await expect(payBtn).toBeVisible({ timeout: 8_000 });
+    await payBtn.click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
-    // Complete with quick-pay.
-    const quickPayBtn = page.locator('[data-testid="quick-pay-button"]').first();
-    await expect(quickPayBtn).toBeVisible({ timeout: 3_000 });
-    await quickPayBtn.click();
-    await page.waitForTimeout(800);
+    // Cash is the default method. Set Amount Tendered to a value well above the
+    // total so the Complete Sale button enables (cash requires tendered >= total).
+    // Type char-by-char (pressSequentially) because a single fill() can be
+    // reverted by a re-render of the controlled input, leaving tender at 0.00.
+    const tenderedInput = page.locator('.payment-tendered-input');
+    await expect(tenderedInput).toBeVisible({ timeout: 3_000 });
+    await tenderedInput.click();
+    await tenderedInput.pressSequentially('9999999', { delay: 30 });
+    await page.waitForTimeout(200);
 
-    // Confirm.
-    const confirmBtn = page.locator(
-      '[data-testid="settle-button"], ' +
-      'button:has-text("Confirm"), ' +
-      'button:has-text("Settle")',
-    ).first();
-    if (await confirmBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await confirmBtn.click();
-      await page.waitForTimeout(1_000);
-    }
+    // Click the Complete Sale button by its label and wait for the modal to close.
+    const completeBtn = page.getByRole('button', { name: /complete/i });
+    await expect(completeBtn).toBeEnabled({ timeout: 5_000 });
+    await completeBtn.click();
+    await expect(page.locator('[data-testid="payment-modal"]')).toBeHidden({ timeout: 10_000 });
 
     // Dismiss receipt preview if shown.
     const receiptPaper = page.locator('.receipt-preview-paper');
@@ -94,7 +98,9 @@ test.describe('Critical Path: POS → KDS', () => {
     }
 
     // Verify cart is empty (sale completed).
-    await expect(page.locator('.retail-cart-action-btn--pay')).toBeDisabled({ timeout: 5_000 });
+    // ── Step 6: Verify cart is empty (sale completed) ───────────────
+    // After a successful sale the cart should have zero line items.
+    await expect(page.locator('[data-testid="cart-panel-line-item"]')).toHaveCount(0, { timeout: 5_000 });
 
     // ── Step 4: Switch to KDS and verify the new ticket ─────────────
     await selectWorkspace(page, WORKSPACES.KDS);

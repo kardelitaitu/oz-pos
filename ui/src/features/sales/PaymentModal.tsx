@@ -972,7 +972,7 @@ export default function PaymentModal({
       )}
 
       {!shortfallResult && (
-      <div className={`payment-modal ${modalStateClass}`} ref={(el) => {
+      <div className={`payment-modal ${modalStateClass}`} data-testid="payment-modal" ref={(el) => {
         // Combine panelRef (focus trap) with keyboardAvoidRef (scroll-into-view)
         (panelRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
         (keyboardAvoidRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
@@ -1140,7 +1140,7 @@ export default function PaymentModal({
                   </Localized>
                   <div className="payment-method-options">
                     {(['cash', 'card', 'qris', 'credit'] as const).map((m) => (
-                      <label key={m} className="payment-method-label">
+                      <label key={m} className="payment-method-label" data-testid="quick-pay-button">
                         <input
                           type="radio"
                           name="payment-method"
@@ -1642,6 +1642,7 @@ export default function PaymentModal({
                 loading={processing}
                 disabled={!canComplete}
                 onClick={complete}
+                data-testid="settle-button"
               >
                 {method === 'open_bill' ? (
                   <Localized id="payment-open-bill">
