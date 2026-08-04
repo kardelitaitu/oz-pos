@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
+import { loginAs, selectWorkspace, navigateTo, WORKSPACES } from './helpers';
 
 /**
  * E2E Critical Path #2: Shift Open/Close → Reconciliation
@@ -35,7 +35,7 @@ test.describe('Critical Path: Shift Reconciliation', () => {
     // ── Step 1: Open shift ──────────────────────────────────────────
     await selectWorkspace(page, WORKSPACES.ADMIN);
 
-    await page.evaluate(() => { window.location.hash = '#/shifts'; });
+    await navigateTo(page, 'shifts');
     await page.waitForTimeout(2_000);
 
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
@@ -58,6 +58,17 @@ test.describe('Critical Path: Shift Reconciliation', () => {
       );
       await confirmCloseBtn.click();
       await page.waitForTimeout(1_000);
+
+      // Closing a shift pops the "Shift Closed" summary dialog — dismiss
+      // it (Done) so the "Open Shift" button becomes reachable again.
+      const summaryDoneBtn = page.locator(
+        '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Done"), ' +
+        '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Selesai")',
+      );
+      if (await summaryDoneBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await summaryDoneBtn.click();
+        await page.waitForTimeout(500);
+      }
     }
 
     // Now click "Open Shift" button.
@@ -94,15 +105,18 @@ test.describe('Critical Path: Shift Reconciliation', () => {
     await page.locator('.retail-cart-action-btn--pay').click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
-    // Complete with quick-pay.
-    const quickPayBtn = page.locator('[data-testid="quick-pay-button"]').first();
-    await expect(quickPayBtn).toBeVisible({ timeout: 3_000 });
-    await quickPayBtn.click();
-    await page.waitForTimeout(800);
+    // Tender the payment. NOTE: data-testid "quick-pay-button" is the
+    // payment-METHOD radio (cash) — not a tender control — so the settle
+    // button only enables once the tender input is >= the total.
+    const tenderInput = page.locator('.payment-tendered-input');
+    await expect(tenderInput).toBeVisible({ timeout: 3_000 });
+    await tenderInput.click();
+    await tenderInput.pressSequentially('9999999', { delay: 30 });
+    await page.waitForTimeout(200);
 
     // Confirm.
     const confirmBtn = page.locator(
-      '[data-testid="settle-button"], button:has-text("Confirm"), button:has-text("Settle")',
+      '[data-testid="settle-button"], button:has-text("Confirm"), button:has-text("Settle"), button:has-text("OK")',
     ).first();
     if (await confirmBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await confirmBtn.click();
@@ -119,12 +133,16 @@ test.describe('Critical Path: Shift Reconciliation', () => {
       }
     }
 
-    // Verify cart emptied.
-    await expect(page.locator('.retail-cart-action-btn--pay')).toBeDisabled({ timeout: 5_000 });
+    // Verify cart emptied — the action bar (incl. Pay) unmounts when the
+    // cart has no lines; the empty state renders instead.
+    await expect(page.locator('.retail-cart-empty')).toBeVisible({ timeout: 5_000 });
 
     // ── Step 3: Return to shifts and close shift ────────────────────
     await selectWorkspace(page, WORKSPACES.ADMIN);
-    await page.evaluate(() => { window.location.hash = '#/shifts'; });
+    // navigateTo dispatches hashchange even when the hash is unchanged
+    // (already '#/shifts' from step 1), so the route re-syncs instead of
+    // staying on the admin default 'settings' page.
+    await navigateTo(page, 'shifts');
     await page.waitForTimeout(2_000);
 
     await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
@@ -181,7 +199,9 @@ test.describe('Critical Path: Shift Reconciliation', () => {
     // ── Step 5: Verify shift appears in history table ────────────────
     const historyTable = page.locator('.shift-mgmt-table');
     if (await historyTable.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      const tableRows = page.locator('.shift-mgmt-table-row');
+      // Rows carry shift-mgmt-row--open (open) or no modifier class —
+      // there is no .shift-mgmt-table-row class in the real UI.
+      const tableRows = page.locator('.shift-mgmt-table tbody tr');
       const rowCount = await tableRows.count();
       expect(rowCount).toBeGreaterThanOrEqual(1);
     }

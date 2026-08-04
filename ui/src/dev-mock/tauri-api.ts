@@ -45,7 +45,7 @@ const MOCK_PRODUCTS = [
   { sku: 'MB-Z790-MSI', name: 'MSI MAG Z790 Tomahawk WiFi LGA1700', category: 'Motherboards', price: { minor_units: 4250000, currency: 'IDR' }, barcode: '824142301230', in_stock: true, stock_qty: 7, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
   { sku: 'PSU-RM850X', name: 'Corsair RM850x 850W 80+ Gold Modular', category: 'Power Supply', price: { minor_units: 2150000, currency: 'IDR' }, barcode: '840006601234', in_stock: true, stock_qty: 16, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
   { sku: 'COOL-PA120', name: 'Thermalright Peerless Assassin 120 SE', category: 'Cooling & Cases', price: { minor_units: 580000, currency: 'IDR' }, barcode: '784562098120', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
-  { sku: 'COOL-KRAKEN360', name: 'NZXT Kraken Elite 360 RGB AIO Liquid', category: 'Cooling & Cases', price: { minor_units: 4450000, currency: 'IDR' }, barcode: '815671018900', in_stock: true, stock_qty: 5, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
+  { sku: 'COOL-KRAKEN360', name: 'NZXT Kraken Elite 360 RGB AIO Liquid', category: 'Cooling & Cases', price: { minor_units: 4450000, currency: 'IDR' }, barcode: '815671018900', in_stock: true, stock_qty: 12, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
   { sku: 'PASTE-MX6', name: 'Arctic MX-6 Thermal Paste 4g', category: 'Cooling & Cases', price: { minor_units: 125000, currency: 'IDR' }, barcode: '872767004500', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
   // Restaurant-menu items (product_type: 'restaurant') so the Restaurant POS
   // menu is populated in the E2E dev-mock and a completed restaurant sale
@@ -182,8 +182,9 @@ function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
   const itemsSummary = lines.map((l) => `${l.qty}x ${l.name}`).join(', ');
   const itemCount = lines.reduce((sum, l) => sum + l.qty, 0);
   const now = new Date().toISOString();
+  const orderId = `kds-order-e2e-${Date.now()}`;
   mockKdsOrders.push({
-    id: `kds-order-e2e-${Date.now()}`,
+    id: orderId,
     display_number: displayNumber,
     status: 'pending',
     received_at: now,
@@ -194,6 +195,32 @@ function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
     notes: null,
     store_id: storeId,
   });
+  // Seed course-grouped line items so the KDS ticket renders real item
+  // names (KdsTicketCard fetches via get_kds_order_lines_scoped).
+  // Derive the course from the product category — 'beverage' for hot
+  // drinks, 'main' for food and everything else (incl. retail).
+  const courseForSku = (sku: string): string => {
+    const p = MOCK_PRODUCTS.find((prod) => prod.sku === sku);
+    const category = p?.category ?? '';
+    if (category === 'Hot Drinks') return 'beverage';
+    if (category === 'Food') return 'main';
+    return 'main';
+  };
+  mockKdsLineItems[orderId] = lines.map((l, i) => ({
+    id: `kds-line-e2e-${orderId}-${i}`,
+    kds_order_id: orderId,
+    sku: l.sku,
+    display_name: l.name,
+    qty: l.qty,
+    course: courseForSku(l.sku),
+    modifiers: [],
+    line_position: i + 1,
+    item_status: 'pending',
+    started_at: null,
+    ready_at: null,
+    served_at: null,
+    created_at: now,
+  }));
 }
 
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
@@ -261,6 +288,9 @@ let mockActiveShift: Record<string, unknown> | null = {
   totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
 };
+// Closed-shift history so the reconciliation spec can verify shifts appear
+// in the Shift History table after closing.
+const mockShiftHistory: Array<Record<string, unknown>> = [];
 const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // AUTH / STAFF
@@ -631,48 +661,58 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'start_sale_scoped': () => { cartState = { lines: [] }; return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
 
   'add_line': (args) => {
-    const { productSku, qty } = (args as { productSku?: string; qty?: number }) ?? {};
-    const product = MOCK_PRODUCTS.find(p => p.sku === productSku);
+    // The API sends { args: { cartId, sku, qty, unitPriceMinor } } — read `sku`
+    // (with a `productSku` fallback for older callers). Previously the mock only
+    // read `productSku`, so cartState stayed empty and mock sale totals were 0.
+    const raw = (args as { args?: { sku?: string; productSku?: string; qty?: number } })?.args ?? (args as { sku?: string; productSku?: string; qty?: number });
+    const skuKey = raw?.sku ?? raw?.productSku;
+    const qty = raw?.qty ?? 1;
+    const product = MOCK_PRODUCTS.find(p => p.sku === skuKey);
     if (product) {
-      const existing = cartState.lines.find(l => l.sku === productSku);
+      const existing = cartState.lines.find(l => l.sku === skuKey);
       if (existing) {
-        existing.qty += qty ?? 1;
+        existing.qty += qty;
       } else {
-        cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty: qty ?? 1 });
+        cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty });
       }
     }
-    const lineTotal = product ? product.price.minor_units * (qty ?? 1) : 0;
+    const lineTotal = product ? product.price.minor_units * qty : 0;
     return { lineId: `mock-line-${Date.now()}`, lineTotal };
   },
   'add_line_scoped': (args) => {
-    const { productSku, qty } = (args as { productSku?: string; qty?: number }) ?? {};
-    const product = MOCK_PRODUCTS.find(p => p.sku === productSku);
+    const raw = (args as { args?: { sku?: string; productSku?: string; qty?: number } })?.args ?? (args as { sku?: string; productSku?: string; qty?: number });
+    const skuKey = raw?.sku ?? raw?.productSku;
+    const qty = raw?.qty ?? 1;
+    const product = MOCK_PRODUCTS.find(p => p.sku === skuKey);
     if (product) {
-      const existing = cartState.lines.find(l => l.sku === productSku);
+      const existing = cartState.lines.find(l => l.sku === skuKey);
       if (existing) {
-        existing.qty += qty ?? 1;
+        existing.qty += qty;
       } else {
-        cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty: qty ?? 1 });
+        cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty });
       }
     }
-    const lineTotal = product ? product.price.minor_units * (qty ?? 1) : 0;
+    const lineTotal = product ? product.price.minor_units * qty : 0;
     return { lineId: `mock-line-${Date.now()}`, lineTotal };
   },
 
   'complete_sale': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    // Currency follows the cart (products are IDR) so history totals and
+    // receipts render correctly in E2E.
+    const currency = cartState.lines[0]?.price.currency ?? 'IDR';
     const saleId = `mock-sale-${Date.now()}`;
     // Persist into completed sales so sales history / refund e2e work.
     const now = new Date().toISOString();
     completedSales.push({
-      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      id: saleId, total: { minor_units: minorTotal, currency }, lineCount,
       status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
     });
     saleDetails[saleId] = {
-      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
-      subtotal: { minor_units: minorTotal, currency: 'USD' },
-      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      id: saleId, total: { minor_units: minorTotal, currency },
+      subtotal: { minor_units: minorTotal, currency },
+      taxTotal: { minor_units: 0, currency }, lineCount, status: 'Completed',
       paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
       lines: cartState.lines.map((l, i) => ({
         id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
@@ -683,21 +723,22 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     // Push a KDS mock order so POS → KDS E2E flow works.
     pushKdsOrderFromCart(cartState.lines, 'store-1');
     cartState = { lines: [] };
-    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
   'complete_sale_scoped': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const currency = cartState.lines[0]?.price.currency ?? 'IDR';
     const saleId = `mock-sale-${Date.now()}`;
     const now = new Date().toISOString();
     completedSales.push({
-      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      id: saleId, total: { minor_units: minorTotal, currency }, lineCount,
       status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
     });
     saleDetails[saleId] = {
-      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
-      subtotal: { minor_units: minorTotal, currency: 'USD' },
-      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      id: saleId, total: { minor_units: minorTotal, currency },
+      subtotal: { minor_units: minorTotal, currency },
+      taxTotal: { minor_units: 0, currency }, lineCount, status: 'Completed',
       paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
       lines: cartState.lines.map((l, i) => ({
         id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
@@ -707,21 +748,22 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     };
     pushKdsOrderFromCart(cartState.lines, 'store-1');
     cartState = { lines: [] };
-    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
   'complete_sale_with_resolved_shortfalls_scoped': () => {
     const minorTotal = cartState.lines.reduce((sum, l) => sum + l.price.minor_units * l.qty, 0);
     const lineCount = cartState.lines.length;
+    const currency = cartState.lines[0]?.price.currency ?? 'IDR';
     const saleId = `mock-sale-${Date.now()}`;
     const now = new Date().toISOString();
     completedSales.push({
-      id: saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount,
+      id: saleId, total: { minor_units: minorTotal, currency }, lineCount,
       status: 'Completed', paymentMethod: 'cash', userId: 'admin-1', createdAt: now,
     });
     saleDetails[saleId] = {
-      id: saleId, total: { minor_units: minorTotal, currency: 'USD' },
-      subtotal: { minor_units: minorTotal, currency: 'USD' },
-      taxTotal: { minor_units: 0, currency: 'USD' }, lineCount, status: 'Completed',
+      id: saleId, total: { minor_units: minorTotal, currency },
+      subtotal: { minor_units: minorTotal, currency },
+      taxTotal: { minor_units: 0, currency }, lineCount, status: 'Completed',
       paymentMethod: 'cash', tenderedMinor: minorTotal + 500, userId: 'admin-1', createdAt: now,
       lines: cartState.lines.map((l, i) => ({
         id: `mock-line-${i}-${saleId}`, sku: l.sku, name: l.name, qty: l.qty,
@@ -731,7 +773,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     };
     pushKdsOrderFromCart(cartState.lines, 'store-1');
     cartState = { lines: [] };
-    return { saleId, total: { minor_units: minorTotal, currency: 'USD' }, lineCount };
+    return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
 
   'get_sale': (args) => {
@@ -893,26 +935,30 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   },
   'close_shift': () => {
     mockActiveShift = null;
-    return {
-      id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
+    const closed: Record<string, unknown> = {
+      id: `shift-${mockShiftHistory.length + 1}`, userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
       openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
       totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
       totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
+    mockShiftHistory.push(closed);
+    return closed;
   },
   'close_shift_scoped': () => {
     mockActiveShift = null;
-    return {
-      id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
+    const closed: Record<string, unknown> = {
+      id: `shift-${mockShiftHistory.length + 1}`, userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
       openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
       totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
       totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
+    mockShiftHistory.push(closed);
+    return closed;
   },
-  'list_shifts': () => [],
-  'list_shifts_scoped': () => [],
+  'list_shifts': () => mockShiftHistory,
+  'list_shifts_scoped': () => mockShiftHistory,
   'get_shift': () => null,
   'get_shift_report': () => null,
   'create_cash_payout': () => null,

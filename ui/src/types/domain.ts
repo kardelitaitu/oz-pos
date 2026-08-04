@@ -113,6 +113,21 @@ export type AppError =
 export const isAppError = (e: unknown): e is AppError =>
   typeof e === 'object' && e !== null && 'kind' in e;
 
+/** ISO-4217 minor-unit exponent (decimal places) — IDR/JPY/KRW/VND = 0, KWD = 3, USD/EUR = 2.
+ *  Canonical frontend convention; `formatMoney` and money-input parsing share
+ *  this via `minorUnitExponent`. NOTE: the Rust `Currency::minor_unit_exponent`
+ *  defaults IDR to 2, and `modules/currency` seeds IDR with 2, while `oz-cli`
+ *  seeds 0 — the frontend (and the dev-mock data) treats IDR as 0. Reconcile
+ *  the Rust currency seed in a follow-up. */
+export const MINOR_UNIT_EXPONENT: Record<string, number> = {
+  IDR: 0, JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
+  KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
+};
+
+/** Minor-unit exponent (decimal places) for an ISO-4217 currency code. */
+export const minorUnitExponent = (currency: string): number =>
+  MINOR_UNIT_EXPONENT[currency] ?? 2;
+
 /** Format `Money` for display. Defaults to Indonesian locale (id-ID).
  *  `decimalSep` overrides the per‑store receipt setting (read from
  *  localStorage when omitted). */
@@ -123,12 +138,7 @@ export const formatMoney = (
 ): string => {
   const sep = decimalSep ?? getDecimalSep();
   const hideDecimals = sep === 'none';
-  // ISO-4217 minor-unit exponent: USD/EUR = 2, IDR/JPY/KRW/VND = 0, KWD = 3.
-  const known: Record<string, number> = {
-    IDR: 0, JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-    KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-  };
-  const exp = known[m.currency] ?? 2;
+  const exp = minorUnitExponent(m.currency);
   const major = m.minor_units / 10 ** exp;
   const decimals = hideDecimals || exp === 0 ? 0 : exp;
   const fmt = new Intl.NumberFormat(locale, {

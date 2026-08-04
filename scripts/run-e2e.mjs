@@ -231,6 +231,10 @@ function startVite() {
       cwd: UI_DIR,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true,
+      // Hide the dev-mode DevToolbar overlay during E2E — it floats
+      // bottom-right at tooltip z-index and would intercept clicks on
+      // POS action buttons (App.tsx reads VITE_DEV_TOOLBAR to disable it).
+      env: { ...process.env, VITE_DEV_TOOLBAR: '0' },
     });
 
     let outputBuffer = '';

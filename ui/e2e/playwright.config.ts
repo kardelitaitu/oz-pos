@@ -71,6 +71,10 @@ export default defineConfig({
     reuseExistingServer: true,
     timeout: 120_000,
     cwd: '..',
+    // Hide the dev-mode DevToolbar overlay: it floats bottom-right at
+    // tooltip z-index and would otherwise intercept clicks on POS action
+    // buttons (App.tsx reads VITE_DEV_TOOLBAR to disable it).
+    env: { ...process.env, VITE_DEV_TOOLBAR: '0' },
   },
 
   // Configure projects for desktop and tablet viewports.

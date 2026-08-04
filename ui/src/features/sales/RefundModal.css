@@ -1,6 +1,10 @@
 .refund-overlay {
   position: fixed;
   inset: 0;
+  /* The refund modal layers on top of the sales-history detail modal,
+     which also uses var(--z-modal). Bump one step so the detail overlay
+     (rendered later in the DOM) cannot intercept refund clicks. */
+  z-index: calc(var(--z-modal) + 1);
   background: var(--color-pos-modal-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -9,7 +13,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal);
 }
 
 .refund-modal {

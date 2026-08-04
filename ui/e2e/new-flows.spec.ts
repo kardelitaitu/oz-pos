@@ -149,9 +149,10 @@ test.describe('Audit Log', () => {
   });
 
   test('audit log screen renders with header and filters', async ({ page }) => {
-    // Navigate to audit log.
+    // Navigate to audit log. The registered page route is 'audit-log'
+    // (see src/features/audit/register.tsx) — '#/audit' is not a route.
     await page.evaluate(() => {
-      window.location.hash = '#/audit';
+      window.location.hash = '#/audit-log';
     });
 
     // Audit log container must be visible.

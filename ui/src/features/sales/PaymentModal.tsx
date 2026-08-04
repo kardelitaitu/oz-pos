@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
-import { formatMoney, type Money, type CartLine } from '@/types/domain';
+import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
   listCurrencies,
@@ -101,6 +101,21 @@ export default function PaymentModal({
     },
     [onCustomerChange],
   );
+  // The reset effect below must run ONLY when the modal opens (or the charge
+  // currency changes) — NOT on every parent re-render. Consumers pass
+  // onCustomerChange as an inline arrow, so notifyCustomerChange's identity
+  // changes with every parent render; depending on it directly would re-run
+  // the effect and wipe user input (e.g. the tendered amount) mid-payment.
+  // Route through a ref so the effect body always calls the latest callback
+  // while the effect itself stays stable (same pattern as l10nRef above).
+  const notifyCustomerChangeRef = useRef(notifyCustomerChange);
+  notifyCustomerChangeRef.current = notifyCustomerChange;
+  // Same identity-churn protection for the auto-dismiss timer: consumers
+  // pass onComplete/onClose as inline arrows, and parents that re-render
+  // frequently (e.g. the retail POS 1-second clock) would otherwise keep
+  // re-arming the dismiss timer via the effect dependency below.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<CustomerDto[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
@@ -236,15 +251,18 @@ export default function PaymentModal({
       setShortfallResult(null);
       setReceiptArgs(null);
       setSelectedCurrency(total.currency);
-      notifyCustomerChange(null);
       setCustomerSearchQuery('');
       setCustomerSearchResults([]);
       setSplits([
         { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
         { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
       ]);
+      notifyCustomerChangeRef.current(null);
     }
-  }, [open, total.currency, notifyCustomerChange]);
+    // onCustomerChange is intentionally omitted: it is routed through
+    // notifyCustomerChangeRef, so depending on it here would re-run this
+    // reset (and wipe the tendered amount) on every parent re-render.
+  }, [open, total.currency]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -354,11 +372,7 @@ export default function PaymentModal({
   const tenderedMinor = useMemo(() => {
     const num = parseFloat(tendered);
     if (Number.isNaN(num) || num < 0) return 0n;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
+    const exp = minorUnitExponent(total.currency);
     return BigInt(Math.round(num * 10 ** exp));
   }, [tendered, total.currency]);
 
@@ -554,11 +568,7 @@ export default function PaymentModal({
   const parseSplitMinor = useCallback((val: string): bigint => {
     const num = parseFloat(val);
     if (Number.isNaN(num) || num < 0) return 0n;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
+    const exp = minorUnitExponent(total.currency);
     return BigInt(Math.round(num * 10 ** exp));
   }, [total.currency]);
 
@@ -601,24 +611,21 @@ export default function PaymentModal({
   const autoSplitEvenly = useCallback(() => {
     const count = splits.length;
     if (count === 0) return;
-    const each = Number(totalMinor) / count;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
-    const eachFormatted = (each / 10 ** exp).toFixed(exp);
-    const remainderCents = Number(totalMinor % BigInt(count));
+    const exp = minorUnitExponent(total.currency);
+    // Integer floor division in minor units: every row gets baseMinor, and the
+    // exact remainder lands on the last row — avoids float `toFixed` rounding
+    // that used to over-split non-divisible totals (e.g. 4,450,001 by 2 became
+    // 2,225,001 + 2,225,002 = 4,450,003).
+    const baseMinor = Number(totalMinor / BigInt(count));
+    const remainderMinor = Number(totalMinor % BigInt(count));
+    const fmt = (minor: number) => (minor / 10 ** exp).toFixed(exp);
     setSplits((prev) =>
-      prev.map((s, i) => {
-        const val = exp === 0 ? parseFloat(eachFormatted).toFixed(0) : eachFormatted;
-        return {
-          ...s,
-          amountMinor: i === prev.length - 1
-            ? (parseFloat(val) + remainderCents / 10 ** exp).toFixed(exp)
-            : val,
-        };
-      }),
+      prev.map((s, i) => ({
+        ...s,
+        amountMinor: i === prev.length - 1
+          ? fmt(baseMinor + remainderMinor)
+          : fmt(baseMinor),
+      })),
     );
   }, [splits.length, totalMinor, total.currency]);
 
@@ -696,11 +703,7 @@ export default function PaymentModal({
       let paymentSplits: PaymentSplitArg[] | undefined;
 
       if (splitMode) {
-        const known: Record<string, number> = {
-          JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-          KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-        };
-        const exp = known[total.currency] ?? 2;
+        const exp = minorUnitExponent(total.currency);
         paymentSplits = splits.map((s) => ({
           method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
           amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
@@ -863,10 +866,10 @@ export default function PaymentModal({
   useEffect(() => {
     if (!done) return;
     const timer = setTimeout(() => {
-      animateLeave(onComplete);
+      animateLeave(onCompleteRef.current);
     }, changeDue ? 3000 : 1500);
     return () => clearTimeout(timer);
-  }, [done, changeDue, onComplete, animateLeave]);
+  }, [done, changeDue, animateLeave]); // onComplete via ref — stable deps
 
   // Auto-dismiss after leave animation completes
   useEffect(() => {
@@ -903,11 +906,7 @@ export default function PaymentModal({
   // Reconstruct payment splits from the current split state (for shortfall retry)
   const paymentSplitsFromState = useCallback((): PaymentSplitArg[] | undefined => {
     if (!splitMode) return undefined;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
+    const exp = minorUnitExponent(total.currency);
     return splits.map((s) => ({
       method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
       amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
@@ -1234,15 +1233,19 @@ export default function PaymentModal({
 
                     <div className="payment-quick-cash">
                       {(tenderPresets ?? [5000, 10000, 20000, 50000, 100000]).map((amount) => {
-                        const totalNum = Number(total.minor_units) / 100;
-                        const quickVal = Math.ceil(totalNum / amount) * amount;
+                        // Presets are major-unit denominations (Rp 5.000 / $5).
+                        // Use the currency's minor-unit exponent so the quick
+                        // buttons stay consistent with tenderedMinor's parse.
+                        const exp = minorUnitExponent(total.currency);
+                        const totalMajor = Number(total.minor_units) / 10 ** exp;
+                        const quickVal = Math.ceil(totalMajor / amount) * amount;
                         return (
                           <button
                             key={amount}
                             type="button"
                             className="payment-quick-btn"
-                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(2) }, 'Tender')}
-                            onClick={() => setTendered(quickVal.toFixed(2))}
+                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(exp) }, 'Tender')}
+                            onClick={() => setTendered(quickVal.toFixed(exp))}
                           >
                             {total.currency} {quickVal.toLocaleString('id-ID')}
                           </button>
@@ -1252,7 +1255,10 @@ export default function PaymentModal({
                         type="button"
                         className="payment-quick-btn"
                         aria-label={l10n.getString('payment-tender-exact-aria', null, 'Tend exact amount')}
-                        onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
+                        onClick={() => {
+                          const exp = minorUnitExponent(total.currency);
+                          setTendered((Number(total.minor_units) / 10 ** exp).toFixed(exp));
+                        }}
                       >
                         <Localized id="payment-tender-exact">
                           <span>Exact</span>

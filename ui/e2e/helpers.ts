@@ -138,6 +138,9 @@ export async function selectWorkspace(
 export async function navigateTo(page: Page, route: string): Promise<void> {
   await page.evaluate((hash) => {
     window.location.hash = hash;
+    // Re-assigning the same hash (e.g. navigating to a route twice) fires
+    // no hashchange, so dispatch manually to keep AppShell's route in sync.
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, `#/${route}`);
 }
 

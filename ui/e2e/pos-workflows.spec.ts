@@ -54,8 +54,10 @@ test.describe('POS Workflows', () => {
     await page.locator('.retail-cart-action-btn--pay').click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
-    // Payment modal must have payment content (tabs, tender buttons, or total).
-    const modalContent = page.locator('[data-testid="payment-modal-content"]');
+    // Payment modal must have payment content (tabs, tender buttons, or
+    // total). The modal root carries data-testid="payment-modal" — there
+    // is no payment-modal-content id.
+    const modalContent = page.locator('[data-testid="payment-modal"]');
     await expect(modalContent).toBeVisible({ timeout: 3_000 });
 
     // Verify modal renders payment-relevant elements.
@@ -65,8 +67,10 @@ test.describe('POS Workflows', () => {
     const quickPayVisible = await hasQuickPay.first().isVisible();
     expect(tabsVisible || quickPayVisible).toBe(true);
 
-    // Dismiss modal.
-    const closeBtn = page.locator('[data-testid="modal-close-button"]').first();
+    // Dismiss modal — the real close control is .payment-close (there is
+    // no data-testid="modal-close-button").
+    const closeBtn = page.locator('.payment-close').first();
+    await expect(closeBtn).toBeVisible({ timeout: 3_000 });
     await closeBtn.click();
     await expect(page.locator('[data-testid="payment-modal"]')).not.toBeVisible({ timeout: 5_000 });
   });
@@ -83,16 +87,23 @@ test.describe('POS Workflows', () => {
     // Cart must have a line item.
     await expect(page.locator('[data-testid="cart-panel-line-item"]').first()).toBeVisible({ timeout: 3_000 });
 
-    // Click the void/clear button (F2 or action button).
+    // Click the void/clear button — this opens the Clear Cart confirm
+    // dialog (retail-clear-overlay) instead of clearing immediately.
     const voidBtn = page.locator('.retail-cart-action-btn--void').first();
     await expect(voidBtn).toBeVisible({ timeout: 3_000 });
     await voidBtn.click();
 
+    // Confirm the clear in the dialog.
+    const confirmClear = page.locator('.retail-shift-confirm-btn--danger').first();
+    await expect(confirmClear).toBeVisible({ timeout: 3_000 });
+    await confirmClear.click();
+
     // Cart must be empty (auto-wait handles timing).
     await expect(page.locator('[data-testid="cart-panel-line-item"]')).toHaveCount(0, { timeout: 3_000 });
 
-    // Pay button must be disabled.
-    await expect(page.locator('.retail-cart-action-btn--pay')).toBeDisabled({ timeout: 3_000 });
+    // The action bar (incl. Pay) is not rendered once the cart is empty.
+    await expect(page.locator('.retail-cart-empty')).toBeVisible({ timeout: 3_000 });
+    await expect(page.locator('.retail-cart-action-btn--pay')).toHaveCount(0);
   });
 
   // ── Function Bar Keys ─────────────────────────────────────

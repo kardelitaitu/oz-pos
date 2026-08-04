@@ -75,10 +75,10 @@ test.describe('Complete Sale Flow', () => {
     await expect(cartLines.first()).toBeVisible({ timeout: 5_000 });
     expect(await cartLines.count()).toBe(1);
 
-    // Quantity must be 2 or greater.
-    const qtyInput = page.locator('[data-testid="line-item-qty-input"]').first();
-    const qtyValue = await qtyInput.inputValue();
-    expect(parseInt(qtyValue, 10)).toBeGreaterThanOrEqual(2);
+    // Quantity must be 2 or greater. The retail cart renders qty in a
+    // read-only .retail-cart-qty-value span (no qty input element).
+    const qtyValue = await page.locator('.retail-cart-qty-value').first().textContent();
+    expect(parseInt(qtyValue ?? '0', 10)).toBeGreaterThanOrEqual(2);
   });
 
   // ── E2E-12: Open payment modal ──────────────────────────────
@@ -87,8 +87,9 @@ test.describe('Complete Sale Flow', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
-    // Get the product price.
-    const _priceText = await page.locator('.retail-product-price').first().textContent() ?? '0';
+    // Get the product price. The retail grid renders price in the
+    // .retail-col-price cell (no .retail-product-price element).
+    const _priceText = await page.locator('.retail-col-price').first().textContent() ?? '0';
 
     // Add product.
     await productCards.first().click();
@@ -102,8 +103,9 @@ test.describe('Complete Sale Flow', () => {
     const paymentModal = page.locator('[data-testid="payment-modal"]');
     await expect(paymentModal).toBeVisible({ timeout: 5_000 });
 
-    // Modal must contain payment-related content.
-    const modalContent = page.locator('[data-testid="payment-modal-content"]');
+    // Modal must contain payment-related content. The modal root carries
+    // data-testid="payment-modal" (there is no payment-modal-content id).
+    const modalContent = page.locator('[data-testid="payment-modal"]');
     await expect(modalContent).toBeVisible();
 
     // The modal text should include the product price or a non-zero total.
@@ -125,22 +127,15 @@ test.describe('Complete Sale Flow', () => {
     await page.locator('.retail-cart-action-btn--pay').click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
-    // Click a quick-pay button (Cash tender).
-    const quickPayButtons = page.locator('[data-testid="quick-pay-button"]');
-    const quickCount = await quickPayButtons.count();
-
-    if (quickCount > 0) {
-      // Click first quick-pay (typically Cash).
-      await quickPayButtons.first().click();
-      await page.waitForTimeout(500);
-    } else {
-      // Fallback: try to enter custom amount and confirm.
-      const tenderInput = page.locator('.payment-tendered-input');
-      if (await tenderInput.isVisible().catch(() => false)) {
-        await tenderInput.fill('5.00');
-        await page.waitForTimeout(200);
-      }
-    }
+    // Enter a tender amount well above the total so the settle button
+    // enables (cash requires tendered >= total). NOTE: data-testid
+    // "quick-pay-button" is the payment-METHOD radio (cash/card/qris/
+    // credit) — not a tender control, so clicking it never enables settle.
+    const tenderInput = page.locator('.payment-tendered-input');
+    await expect(tenderInput).toBeVisible({ timeout: 3_000 });
+    await tenderInput.click();
+    await tenderInput.pressSequentially('9999999', { delay: 30 });
+    await page.waitForTimeout(200);
 
     // Find and click confirm / settle button.
     const confirmBtn = page.locator(
@@ -169,9 +164,11 @@ test.describe('Complete Sale Flow', () => {
       await page.waitForTimeout(500);
     }
 
-    // Cart must be empty after completing sale.
-    const payBtn = page.locator('.retail-cart-action-btn--pay');
-    await expect(payBtn).toBeDisabled({ timeout: 5_000 });
+    // Cart must be empty after completing sale — the action bar (incl.
+    // Pay) only renders while the cart has lines; the empty state shows
+    // instead.
+    await expect(page.locator('.retail-cart-empty')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.retail-cart-action-btn--pay')).toHaveCount(0);
   });
 
   // ── E2E-14: Cash payment — over-tender shows change ─────────
@@ -225,9 +222,10 @@ test.describe('Complete Sale Flow', () => {
     const productCards = page.locator('.retail-product-btn');
     await expect(productCards.first()).toBeVisible({ timeout: 5_000 });
 
-    // With no items in cart, pay button must be disabled.
-    const payBtn = page.locator('.retail-cart-action-btn--pay');
-    await expect(payBtn).toBeDisabled({ timeout: 3_000 });
+    // With no items in cart the action bar (incl. Pay) is not rendered;
+    // the empty state is shown instead of a disabled pay button.
+    await expect(page.locator('.retail-cart-empty')).toBeVisible({ timeout: 3_000 });
+    await expect(page.locator('.retail-cart-action-btn--pay')).toHaveCount(0);
   });
 
   // ── Bonus: Hold cart button is visible when cart has items ───
@@ -260,17 +258,18 @@ test.describe('Complete Sale Flow', () => {
     await expect(cartLines.first()).toBeVisible({ timeout: 5_000 });
     expect(await cartLines.count()).toBe(1);
 
-    // Click remove button on the cart line.
-    const removeBtn = page.locator('[data-testid="line-item-remove-button"]').first();
+    // Click remove button on the cart line (real class is
+    // .retail-cart-remove-btn — no line-item-remove-button testid).
+    const removeBtn = page.locator('.retail-cart-remove-btn').first();
     await removeBtn.click();
     await page.waitForTimeout(500);
 
     // Cart must be empty.
     await expect(cartLines).toHaveCount(0);
 
-    // Pay button must be disabled.
-    const payBtn = page.locator('.retail-cart-action-btn--pay');
-    await expect(payBtn).toBeDisabled();
+    // The action bar (incl. Pay) is not rendered once the cart is empty.
+    await expect(page.locator('.retail-cart-empty')).toBeVisible();
+    await expect(page.locator('.retail-cart-action-btn--pay')).toHaveCount(0);
   });
 });
 
@@ -429,11 +428,14 @@ test.describe('Payment Methods', () => {
     await page.locator('.retail-cart-action-btn--pay').click();
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
-    // Enable split tender.
+    // Enable split tender. Click the label (the checkbox input itself is a
+    // native element inside a label with appearance:auto — Playwright's
+    // check() on the input reports "did not change its state", so drive the
+    // same interaction a real user performs via the label).
     const splitCheckbox = page.locator('#payment-split-toggle-cb');
     await expect(splitCheckbox).toBeAttached({ timeout: 5_000 });
-    await splitCheckbox.check({ force: true });
-    await page.waitForTimeout(500);
+    await page.locator('.payment-split-toggle-label').click();
+    await expect(splitCheckbox).toBeChecked({ timeout: 3_000 });
 
     // Split section must render.
     await expect(page.locator('.payment-split-section')).toBeVisible({ timeout: 5_000 });
@@ -458,9 +460,12 @@ test.describe('Payment Methods', () => {
 
     // Fill row 0 (cash) and row 1 (card) with amounts that sum to the total.
     // Read the total from the modal to compute split amounts dynamically.
+    // IDR formats use '.' as the thousand separator ("Rp 4.450.000"), so
+    // strip everything except digits and the minus sign before parsing —
+    // parseFloat('4.450.000') would otherwise yield 4.45.
     const totalText = await page.locator('.payment-total-amount').first().textContent();
-    const totalCleaned = (totalText ?? '0').replace(/[^0-9.,-]/g, '');
-    const totalNum = parseFloat(totalCleaned) || 0;
+    const totalDigits = (totalText ?? '0').replace(/[^0-9-]/g, '');
+    const totalNum = parseFloat(totalDigits) || 0;
     // Split approximately 40/60: 40% cash, 60% card.
     const cashAmount = (totalNum * 0.4).toFixed(2);
     const cardAmount = (totalNum * 0.6).toFixed(2);

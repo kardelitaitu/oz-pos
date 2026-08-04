@@ -12,6 +12,7 @@ import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
 import { NoVariantsIcon } from '@/components/EmptyStateIllustrations';
+import { minorUnitExponent } from '@/types/domain';
 
 interface Props {
   productSku: string;
@@ -443,11 +444,10 @@ export default function VariantManagementScreen({ productSku, productName, onClo
 }
 
 function formatVariantPrice(minorUnits: number, currency: string): string {
-  const known: Record<string, number> = {
-    JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-    KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-  };
-  const exp = known[currency] ?? 2;
+  // Shared exponent helper (types/domain.ts): treats IDR as exp 0 like
+  // formatMoney — the inline map here previously omitted IDR and displayed
+  // IDR variant prices 100x too small (6,250,000 minor → Rp 62,500).
+  const exp = minorUnitExponent(currency);
   const major = minorUnits / 10 ** exp;
   const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency });
   return fmt.format(major);
