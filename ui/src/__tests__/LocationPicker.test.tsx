@@ -288,17 +288,18 @@ describe('LocationPicker', () => {
 
   it('shows a persistent error with retry when the locations fetch fails', async () => {
     mockListLocations.mockRejectedValue(new Error('boom'));
-    // Await the render so the mount effect's rejected fetch is flushed inside
-    // the act() boundary — the durable error state is then asserted
-    // deterministically instead of racing a polling budget under load.
-    await renderWithProviders(
+    renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
 
     // The error message (loc-picker-error-load = "Failed to load locations")
-    // must render persistently instead of silently returning null.
-    expect(screen.getByRole('alert')).toBeInTheDocument();
+    // must render persistently instead of silently returning null. Wait for
+    // the async rejection to propagate through React's microtask queue after
+    // the effect's catch handler sets loadError.
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    }, { timeout: 5000 });
     expect(screen.getByText('Failed to load locations')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
@@ -306,14 +307,14 @@ describe('LocationPicker', () => {
   it('recovers when Retry succeeds after a failed load', async () => {
     const user = userEvent.setup();
     mockListLocations.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(mockLocations);
-    // Await the render so the mount effect's rejected fetch is flushed inside
-    // the act() boundary (same determinism as the persistent-error test).
-    await renderWithProviders(
+    renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
 
-    expect(screen.getByRole('alert')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    }, { timeout: 5000 });
 
     await user.click(screen.getByRole('button', { name: 'Retry' }));
 
