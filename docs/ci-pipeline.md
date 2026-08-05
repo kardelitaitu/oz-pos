@@ -2,7 +2,7 @@
 
 <!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs) -->
 
-> Last updated: 2026-08-03
+> Last updated: 2026-08-05
 
 ## Workflow inventory
 
@@ -13,7 +13,7 @@
 | `nightly.yml` | Daily 03:00 UTC + manual | Full matrix: cross-platform Rust tests, docs, UI shards, E2E shards, release builds, benchmarks, flaky detection |
 | `release.yml` | Tag push `v*` | Build + blocking Trivy scan + publish all artifacts |
 | `security.yml` | Weekly Monday + manual | Full-tree cargo audit, cargo deny, Trivy scans |
-| `docs.yml` | Push to `main` (docs paths) + PR (docs/workflow paths) | cargo doc → GitHub Pages, preceded by the required `ci-docs-drift` gate so a stale job matrix can't be published |
+| `docs.yml` | Push to `main` (docs paths) + PR (docs/workflow paths) | cargo doc → GitHub Pages on push, preceded by the required `ci-docs-drift` gate so a stale job matrix can't be published. PRs also run `build-docs` (cargo doc compile) — deploy stays push-only because the `github-pages` environment rejects PR refs (AUDIT-29/30) |
 | `android.yml` / `ios.yml` | Push to `main` | Mobile build pipelines |
 
 ## Job Matrix (ci.yml)
@@ -26,7 +26,7 @@
 | `rust-clippy` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required |
 | `rust-test-fast` | PR only | ~2min each | rust-cache + sccache | 5-way | ✅ Required |
 | `rust-test-apps` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required (AUDIT-27 CI-01) |
-| `sync-slow-tests` | Push only | ~3min | rust-cache + sccache | — | ✅ Required |
+| `sync-slow-tests` | Push + PR (sync paths) | ~3min | rust-cache + sccache | — | ✅ Required |
 | `rust-test-full` | Push only | ~5min | rust-cache + sccache | 2 OS | ✅ Required |
 | `ui-lint` | PR + push | ~40s | npm cache | — | ✅ Required |
 | `ui-typecheck` | PR + push | ~30s | npm cache | — | ✅ Required |
@@ -36,7 +36,7 @@
 | `coverage` | PR + push | ~5min | rust-cache | — | ⚠️ Advisory |
 | `audit` | PR + push | ~30s | — | — | ⚠️ Advisory on PR, ✅ Required on push (AUDIT-27 CI-03) |
 | `security-pr` | PR only | ~40s | — | — | ✅ Required when manifests changed — fail-closed if base SHA can't be resolved (AUDIT-27 CI-10) |
-| `fuzz` | Push only | ~10min | rust-cache | — | ⚠️ Advisory (crash artifacts uploaded) |
+| `fuzz` | Push + PR (fuzz paths) | ~10min | rust-cache | — | ⚠️ Advisory (crash artifacts uploaded) |
 | `skill-drift-tests` | PR + push | ~20s | — | — | ✅ Required |
 | `flaky-quarantine` | PR + push | ~10s | — | — | ✅ Required (AUDIT-27 CI-09) |
 | `windows-config` | PR + push | ~10s | — | — | ✅ Required (AUDIT-28 — NSIS installMode + asInvoker manifests) |

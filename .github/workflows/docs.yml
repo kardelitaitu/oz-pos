@@ -62,6 +62,73 @@ jobs:
       - name: Verify docs/ci-pipeline.md matches workflows + local runners
         run: python3 scripts/verify-ci-docs-drift.py
 
+  # AUDIT-30 docs-build-pr-validation: cargo doc BUILD validation on PRs.
+  # Previously the doc build lived only inside the push-only deploy job,
+  # so a docs- or workflow-touching PR never compiled the docs — a broken
+  # cargo doc (or a native-dep build-script failure) passed every PR check
+  # and only surfaced after merge. This job mirrors build-and-deploy's
+  # build steps WITHOUT the `environment: github-pages` block (that env
+  # rejects PR refs fail-closed), so docs PRs get a real compile signal.
+  # The deploy job keeps its own build (job artifacts don't cross jobs;
+  # sccache makes the push-side rebuild cheap). Runs on PRs only — main
+  # push validation is already the deploy job's gate.
+  build-docs:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-always: true
+
+      - uses: mozilla/sccache-action@v0.0.10
+
+      - name: Install system dependencies
+        # Two native build-script requirements must be satisfied even with
+        # `--no-deps`, because the workspace members themselves still
+        # compile to generate their docs:
+        #   • `platform-startup` depends on `tauri`, which on Linux pulls
+        #     in `gdk-sys` (via gtk3); `gdk-sys` requires `gdk-3.0.pc`,
+        #     provided by `libgtk-3-dev`.
+        #   • `oz-hal` depends on `serialport`, which pulls in `libudev`
+        #     (libudev-sys); its build script requires `libudev.pc`,
+        #     provided by `libudev-dev`. Without it the build script
+        #     panics: "Package libudev was not found in the pkg-config
+        #     search path".
+        # This mirrors the install step in .github/workflows/nightly.yml.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libglib2.0-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libudev-dev
+
+      - name: Generate cargo doc
+        run: |
+          cargo doc \
+            --workspace \
+            --no-deps \
+            --document-private-items \
+            --exclude oz-pos-app \
+            --exclude oz-pos-tablet
+
+          # Copy the existing doc hub assets alongside cargo doc output.
+          # The cargo doc workspace index (target/doc/index.html) is
+          # preserved — it lists all crates with inter-crate navigation.
+          mkdir -p target/doc/html
+          cp -r docs/html/* target/doc/html/ 2>/dev/null || true
+
+      - name: sccache stats
+        run: sccache --show-stats
+
   build-and-deploy:
     name: Build & Deploy Docs
     runs-on: ubuntu-latest
@@ -74,7 +141,9 @@ jobs:
     # (cargo doc is unrelated to drift), so we skip the deploy attempt entirely
     # on non-push events. The `ci-docs-drift` job above still runs on PRs (no
     # `environment:` block → unconstrained), so a docs-touching PR still
-    # verifies its matrix against the manifest before merge.
+    # verifies its matrix against the manifest before merge. The `build-docs`
+    # job (AUDIT-30) additionally compiles the docs on PRs for a real
+    # build signal.
     if: github.event_name == 'push'
     needs: ci-docs-drift
     environment:

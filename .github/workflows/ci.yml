@@ -158,14 +158,61 @@ jobs:
   sync-slow-tests:
     name: Sync Integration (slow-tests)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    # Runs on every main push (release gate for the slow HTTP sync suite).
+    # On PRs it only runs when sync-relevant code changed (platform/sync +
+    # its deps) — the suite's multi-second integration tests would
+    # otherwise burn ~3 min on every PR commit for no signal. Mirrors the
+    # security-pr fail-closed gate pattern: a missing/unresolvable base
+    # SHA runs the suite rather than silently skipping.
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for the PR diff against base
+      - name: Check for sync-relevant changes
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::No base SHA — running sync slow-tests (fail-closed)"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Base SHA $BASE not fetchable — running sync slow-tests (fail-closed)"
+            exit 0
+          fi
+          # git diff rc: 0 = no differences, 1 = differences, >1 = error.
+          # A failed diff must run the suite (fail-closed), never skip it.
+          git diff --name-only "$BASE"...HEAD > /tmp/oz-changed.txt 2>/dev/null
+          RC=$?
+          if [ "$RC" -gt 1 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::git diff failed (rc=$RC) — running sync slow-tests (fail-closed)"
+            exit 0
+          fi
+          CHANGED=$(grep -E '^(platform/sync/|crates/oz-core/|foundation/|Cargo\.toml$|Cargo\.lock$)' /tmp/oz-changed.txt || true)
+          if [ -n "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Sync-relevant files changed:"
+            echo "$CHANGED"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No sync-relevant changes — slow-tests skipped."
+          fi
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.gate.outputs.run == 'true'
       - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.run == 'true'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install system dependencies
+        if: steps.gate.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -173,16 +220,20 @@ jobs:
             librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
             libdbus-1-dev libudev-dev pkg-config
       - uses: mozilla/sccache-action@v0.0.10
+        if: steps.gate.outputs.run == 'true'
       - name: Install cargo-nextest
+        if: steps.gate.outputs.run == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
       - name: Run platform-sync integration suite (slow-tests feature)
+        if: steps.gate.outputs.run == 'true'
         run: cargo nextest run -p platform-sync --features slow-tests --profile ci
       - name: sccache stats
+        if: steps.gate.outputs.run == 'true'
         run: sccache --show-stats
       - name: Upload JUnit report
-        if: always()
+        if: always() && steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sync-slow-tests-junit
@@ -619,16 +670,64 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 10
-    if: github.event_name == 'push'
+    # Advisory (crash artifacts uploaded). Runs on every main push; on PRs
+    # only when fuzz-relevant code changed (fuzz targets + the crates they
+    # import: foundation, oz-core, oz-lua, oz-plugin). cargo-fuzz install +
+    # 5×60s target runs cost ~10 min, so gating PRs on paths keeps the
+    # signal without taxing every PR commit. Mirrors the security-pr
+    # fail-closed gate pattern.
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for the PR diff against base
+      - name: Check for fuzz-relevant changes
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::No base SHA — running fuzz (fail-closed)"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Base SHA $BASE not fetchable — running fuzz (fail-closed)"
+            exit 0
+          fi
+          # git diff rc: 0 = no differences, 1 = differences, >1 = error.
+          # A failed diff must run the fuzz suite (fail-closed), never skip it.
+          git diff --name-only "$BASE"...HEAD > /tmp/oz-changed.txt 2>/dev/null
+          RC=$?
+          if [ "$RC" -gt 1 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::git diff failed (rc=$RC) — running fuzz (fail-closed)"
+            exit 0
+          fi
+          CHANGED=$(grep -E '^(fuzz/|foundation/|crates/oz-core/|crates/oz-lua/|crates/oz-plugin/|Cargo\.toml$|Cargo\.lock$)' /tmp/oz-changed.txt || true)
+          if [ -n "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Fuzz-relevant files changed:"
+            echo "$CHANGED"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No fuzz-relevant changes — fuzz skipped."
+          fi
       - uses: dtolnay/rust-toolchain@nightly
+        if: steps.gate.outputs.run == 'true'
       - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.run == 'true'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-fuzz
+        if: steps.gate.outputs.run == 'true'
         run: cargo install cargo-fuzz
       - name: Fuzz targets (60s each)
+        if: steps.gate.outputs.run == 'true'
         run: |
           for target in sku_parse money_parse cart_deser ozpkg_parse manifest_parse; do
             echo "::group::Fuzzing $target"
@@ -638,7 +737,7 @@ jobs:
             echo "::endgroup::"
           done
       - name: Upload crash artifacts
-        if: failure()
+        if: failure() && steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-crashes-ci
